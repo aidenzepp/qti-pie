@@ -799,6 +799,133 @@ describe("startTest", () => {
   );
 
   it.effect(
+    'align-54 file references E18: startTest resolves an item ref against its test\'s location, the base openPackage resolves it through, since a test that writes an xml:base on any element from the test to the item ref is refused before a session can start (reading 103 ("an xml:base is a base, resolved and never a file reference"); reading 90 ("an attribute its XSD does not declare is a data- attribute, or the document is refused"))',
+    () =>
+      Effect.gen(function* basedItemRefs() {
+        const encoder = new TextEncoder();
+        const elements = [
+          "qti-assessment-test",
+          "qti-test-part",
+          "qti-assessment-section",
+          "qti-assessment-item-ref",
+        ];
+        const written = yield* Effect.all(
+          elements.map((element) => {
+            const based = testXml("based", [["first", "first.xml"]]).replace(
+              `<${element} `,
+              `<${element} xml:base="../items/" `,
+            );
+
+            return Effect.map(open(`d/tests/${element}.xml`, encoder.encode(based)), (verdict) =>
+              verdict.verdict === "refused"
+                ? verdict.refusals.flatMap((refusal) =>
+                    refusal.rule === "unknown-attribute" ? [refusal.detail] : [],
+                  )
+                : [],
+            );
+          }),
+        );
+
+        assert.deepStrictEqual(
+          written,
+          elements.map((element) => [{ attribute: "xml:base", element, reading: "90" }]),
+        );
+        assert.strictEqual(
+          outcomeName(
+            yield* startedFromPackage({
+              directory: "d",
+              directoryHref: "d",
+              item: "first.xml",
+              itemHref: "first.xml",
+              location: "pkgs/based",
+            }),
+          ),
+          "started",
+        );
+      }),
+  );
+
+  it.effect(
+    "align-54 LTI item ref E21: startTest delivers a package's test whose item ref lti names an LTI link with first and second alone, numbered 1 and 2, since the package marks the link lti-link and leaves it out; the test document's own test, which keeps it, is not deliverable with those items",
+    () =>
+      Effect.gen(function* linkedItemRef() {
+        const encoder = new TextEncoder();
+        const refs = ["first", "second"];
+        const manifest = [
+          `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema>`,
+          "<schemaversion>3.0.1</schemaversion></metadata><organizations/><resources>",
+          '<resource identifier="T" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource>',
+          ...refs.map(
+            (ref) =>
+              `<resource identifier="I-${ref}" type="imsqti_item_xmlv3p0" href="items/${ref}.xml"><file href="items/${ref}.xml"/></resource>`,
+          ),
+          '<resource identifier="L" type="imslti_xmlv1p1" href="links/lti.xml"><file href="links/lti.xml"/></resource>',
+          "</resources></manifest>",
+        ].join("");
+        const texts: readonly (readonly [path: string, text: string])[] = [
+          [manifestFile, manifest],
+          [
+            "test.xml",
+            testXml("linked", [
+              ["first", "items/first.xml"],
+              ["lti", "links/lti.xml"],
+              ["second", "items/second.xml"],
+            ]),
+          ],
+          ...refs.map(
+            (ref) =>
+              [
+                `items/${ref}.xml`,
+                itemXml(ref, { choices: ["A", "B"], defaultValue: false, shuffle: false }),
+              ] as const,
+          ),
+          [
+            "links/lti.xml",
+            '<cartridge_basiclti_link xmlns="http://www.imsglobal.org/xsd/imslticc_v1p0"/>',
+          ],
+        ];
+        const verdict = yield* openPackage(
+          "packages/linked",
+          new Map(texts.map(([path, text]) => [path, encoder.encode(text)] as const)),
+        );
+        const [found] =
+          verdict.verdict === "accepted-with-unsupported" ? verdict.accepted.tests.values() : [];
+        const delivery = found ?? assert.fail(`the package is ${verdict.verdict}`);
+        const alone = Option.getOrUndefined(
+          verdict.resources.find((resource) => resource.identifier === "T")?.verdict ??
+            Option.none(),
+        );
+        const unmarkedTest =
+          alone?.kind === "test" &&
+          (alone.verdict === "accepted" || alone.verdict === "accepted-with-unsupported")
+            ? alone.accepted
+            : assert.fail("the test document's own verdict accepts it");
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration);
+        const unmarked = startTest(unmarkedTest, delivery.items, configuration, {
+          instance,
+          now: startedAt,
+        });
+
+        assert.deepStrictEqual([...delivery.items.keys()], refs);
+        assert.deepStrictEqual(
+          session.items.map((item) => [item.ref, item.sequenceIndex]),
+          [
+            ["first", 1],
+            ["second", 2],
+          ],
+        );
+        assert.deepStrictEqual(
+          [
+            failureTagged(unmarked, "TestNotDeliverable").reason,
+            failureTagged(unmarked, "TestNotDeliverable").ref,
+          ],
+          ["item-missing", "lti"],
+        );
+      }),
+  );
+
+  it.effect(
     "refuses a session instance checkInstance refuses, and an invalid now",
     () =>
       Effect.gen(function* brokenContext() {

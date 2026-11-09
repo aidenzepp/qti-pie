@@ -33,9 +33,12 @@
  *     document (`info.txt:10759`, pantry's `structure-identifier`), given once however many tests
  *     reach it, and is left out of the reach, so the first wins; a section document placed twice
  *     gives its identifiers once;
- *   - Each item ref resolves against its own document's path to an item resource the manifest lists; a
- *     test's own item ref that does not is `item-ref-unresolved`, one that writes no identifier
- *     included (reading 155);
+ *   - Each item ref resolves through the `xml:base` in scope, or else against its own document's path,
+ *     to an item resource the manifest lists, or to an LTI link resource (`ltiLinkTypes`), which an
+ *     item ref may name in place of an item (reading 110); a test's own item ref that does neither is
+ *     `item-ref-unresolved`, one that writes no identifier included (reading 155). A link declares no
+ *     variable, so through it a reading names only a built-in every item has (reading 106), and each
+ *     of its variable mappings and template defaults is `undeclared-variable`;
  *   - Each dotted reference in the test, a name an expression reads, is judged by reading 48 ("a dotted
  *     reference is accepted when exactly one reading names a real item ref, test part or section and
  *     its variable") against the test's own variables, the items the item refs resolve to, their
@@ -73,33 +76,49 @@
  *     it, and the delivered test marks the processing that reads it (see below);
  * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
  *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
- *   62).
+ *   62), every such resource that names the path, whatever type its document is read as (reading
+ *   162);
+ * - Each file reference of each document read as a type plate judges, an attribute reading 103's
+ *   census names, that resolves through the `xml:base` in scope to a path inside the package names
+ *   a file the package holds or the manifest lists, or it is `package-file-missing` with `check:
+ *   "reference"` at the attribute (reading 103, "an xml:base is a base, resolved and never a file
+ *   reference"). An item ref's `href` is one of them, so one that names no such file is refused
+ *   both ways, `item-ref-unresolved` and `package-file-missing`.
  *
  * A resource with no `href` names no document (reading 93), so nothing of it is read. A document
  * resource whose `href` leads outside the package is refused by the manifest's own rules
  * (`package-path-outside`, `check: "document-entry"`, reading 102), and a resource of another type
  * whose `href` does names an external link the package does not hold. The package's verdict follows
  * from its parts: `refused` when anything is refused, `unchecked` when nothing is and some document
- * is, then `accepted-with-unsupported` when some document is or some test is delivered with
- * processing the package marks (see below), and `accepted` otherwise. Only an accepting package's
- * documents are delivered. A test is delivered with the model its document's own verdict holds,
- * except that one whose processing reads an item's context variable through its item ref is
- * delivered with that processing marked, `variable:<name>` at it: its outcome processing `marked`,
- * and each template default that reads one left out, so its template variable starts at its
- * declared default. The test document's own verdict cannot carry those marks, since the document is
- * judged without its items, and it keeps its own; the package's verdict carries them, so a read of
- * the built-in `QTI_CONTEXT`, which marks no item, still makes the package
- * `accepted-with-unsupported`. Like `open`, it runs over the shared reader and the Schema-decoded
- * tables, so it stays server-side.
+ * is, then `accepted-with-unsupported` when some document is or some test is delivered with an item
+ * ref or processing the package marks (see below), and `accepted` otherwise. Only an accepting
+ * package's documents are delivered. A test is delivered with the model its document's own verdict
+ * holds, except that each of its item refs that names an LTI link is marked `lti-link` at it and
+ * left out, since plate launches no LTI link, and one whose processing reads, through an item ref,
+ * an item's context variable or any variable of an LTI link is delivered with that processing
+ * marked, `variable:<name>` at it: its outcome processing `marked`, and each template default that
+ * reads one left out, so its template variable starts at its declared default. The test document's
+ * own verdict cannot carry those marks, since the document is judged without its items, and it
+ * keeps its own; the package's verdict carries them, so a read of the built-in `QTI_CONTEXT`, which
+ * marks no item, still makes the package `accepted-with-unsupported`. Like `open`, it runs over the
+ * shared reader and the Schema-decoded tables, so it stays server-side.
  *
  * @module
  * @see https://www.imsglobal.org/content/packaging/cpv1p2pd2/imscp_infov1p2pd2.html
  */
 import { Brand, Effect, Option, Result } from "effect";
 import type { Array as Arr } from "effect";
-import { resolveInside, schemePrefix } from "#plate/document/href.ts";
+import { resolveInside, schemePrefix, withoutQuery } from "#plate/document/href.ts";
 import { readSource } from "#plate/document/read.ts";
-import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
+import {
+  attributePath,
+  mathmlNamespace,
+  qtiNamespace,
+  ssmlNamespace,
+  walk,
+  xincludeNamespace,
+  xmlNamespace,
+} from "#plate/document/source.ts";
 import type {
   SourceAttribute,
   SourceDocument,
@@ -122,8 +141,8 @@ import type {
 } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import { itemRefsIn, occurrenceOf } from "#plate/model/item-refs.ts";
-import { withUnheldReads } from "#plate/model/test.ts";
-import type { UnheldRead } from "#plate/model/test.ts";
+import { withLtiLinks, withUnheldReads } from "#plate/model/test.ts";
+import type { LtiLink, UnheldRead } from "#plate/model/test.ts";
 import { isNcName, trimXmlSpace } from "#plate/model/values.ts";
 import { readManifest, resourceLom } from "#plate/package/manifest.ts";
 import type { LomGeneral, LomValues, Manifest, ManifestResource } from "#plate/package/manifest.ts";
@@ -140,7 +159,7 @@ import type { CollectedTyper, PrefixedTyper } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptMarkedTest, acceptedItem, check } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedStimulus, AcceptedTest, Verdict } from "#plate/validate/verdict.ts";
-import { resourceRoots, resourceTypes } from "#plate/vocabulary.ts";
+import { ltiLinkTypes, resourceRoots, resourceTypes } from "#plate/vocabulary.ts";
 import type { CpVersion } from "#plate/vocabulary.ts";
 
 /**
@@ -166,15 +185,20 @@ export interface PackageTest {
    * `<package location>/<path>`, which is the location `startTest` resolves the ref's `href` to,
    * by one rule on both sides: against the test's location (RFC 3986, section 5.2), each path
    * segment's percent escapes decoded, a malformed escape left as written, then its dot segments
-   * removed, and its query and fragment set aside.
+   * removed, and its query and fragment set aside. `openPackage` resolves an item ref through the
+   * `xml:base` in scope (reading 103), but a test `check` accepts holds none above an item ref, as
+   * no test element declares `xml:base` (reading 90), so for an accepted test the base is the
+   * test's location on both sides.
    */
   readonly items: ReadonlyMap<string, Accepted>;
   /**
-   * The test, as its document's own verdict accepts it, or, when its processing reads an item's
-   * context variable through its item ref, with that processing marked: the outcome processing
-   * `marked` and each template default that reads one left out, each read `variable:<name>` at the
-   * processing element, after the document's own marks. The test document is judged without its
-   * items, so its own verdict cannot carry those marks, and keeps its own.
+   * The test, as its document's own verdict accepts it, or, when one of its item refs names an LTI
+   * link or its processing reads, through an item ref, an item's context variable or any variable
+   * of an LTI link, with each such item ref marked `lti-link` at it and left out, then that
+   * processing marked: the outcome processing `marked` and each template default that reads one
+   * left out, each read `variable:<name>` at the processing element, after the document's own
+   * marks. The test document is judged without its items, so its own verdict cannot carry those
+   * marks, and keeps its own.
    */
   readonly test: AcceptedTest;
 }
@@ -426,6 +450,14 @@ const qti2Namespaces: ReadonlySet<string> = new Set(
 const lomBoundTypes: ReadonlySet<string> = new Set(["imsqti_item_xmlv3p0", "imsqti_test_xmlv3p0"]);
 
 /**
+ * The roots of the documents reading 62 ties to a resource's LOM metadata: the roots of
+ * {@link lomBoundTypes}, an item's and a test's.
+ */
+const lomBoundRoots: ReadonlySet<string> = new Set(
+  resourceRoots.flatMap(([type, root]) => (lomBoundTypes.has(type) ? [root] : [])),
+);
+
+/**
  * The kind of variable a variable stands as, the declaration kind of its declaration or, for a
  * built-in, the one QTI gives it: what a reference judged by kind (reading 111, "a processing
  * element's `identifier` names a variable of the kind the element reads or sets") reads.
@@ -542,10 +574,10 @@ const processingElements: ReadonlySet<string> = new Set(["qti-outcome-processing
 
 /**
  * The expressions that read a variable by its `identifier`, its value or its default, by local name
- * in QTI's namespace: those a read of an item's context variable through its item ref is found in
- * ({@link contextReadsIn}).
+ * in QTI's namespace: those a read through an item ref that the engine holds no value of is found
+ * in ({@link unheldReadsIn}).
  */
-const contextReadElements: ReadonlySet<string> = new Set(["qti-default", "qti-variable"]);
+const variableReadElements: ReadonlySet<string> = new Set(["qti-default", "qti-variable"]);
 
 /**
  * The item ref, the one element of a test that references an item document, by local name in
@@ -776,19 +808,305 @@ const withheldFiles = (resource: ManifestResource): readonly string[] =>
   });
 
 /**
- * Resolve a reference a document makes against the document's own path through
- * {@link resolveInside}, by the rule the manifest resolves an `href` by and `startTest` an item
- * ref's.
- *
- * @param base The referring document's path from the package's root.
- * @param reference The reference as written.
- * @returns The path it names from the package's root; none for an absolute URI, a path from a
- *   host's root, or one whose `..` climbs above the package's root.
+ * A base a document's references resolve against: the segments of its path from the package's
+ * root, the last the one a reference replaces, or none for a base outside the package, against
+ * which every relative reference stays outside it.
  */
-const resolveReference = (base: string, reference: string): Option.Option<string> =>
+type Base = Option.Option<readonly string[]>;
+
+/**
+ * Resolve a reference a document makes against its base through {@link resolveInside}, by the
+ * rule the manifest resolves an `href` by and `startTest` an item ref's (reading 102).
+ *
+ * @param base The base in scope where the reference is written ({@link basesOf}).
+ * @param reference The reference, read by its attribute's whitespace class.
+ * @returns The path it names from the package's root; none for an absolute URI, a path from a
+ *   host's root, one whose `..` climbs above the package's root, and any reference under a base
+ *   outside the package.
+ */
+const resolveReference = (base: Base, reference: string): Option.Option<string> =>
   schemePrefix.test(reference)
     ? Option.none()
-    : Option.map(resolveInside(base.split("/"), reference), (segments) => segments.join("/"));
+    : base.pipe(
+        Option.flatMap((segments) => resolveInside(segments, reference)),
+        Option.map((segments) => segments.join("/")),
+      );
+
+/**
+ * Give an element's `xml:base`, as written.
+ *
+ * @param element The element.
+ * @returns Its `xml:base`, none when it has none.
+ */
+const xmlBaseOf = (element: SourceElement): Option.Option<string> =>
+  Option.fromUndefinedOr(
+    element.attributes.find(
+      (attribute) => attribute.namespace === xmlNamespace && attribute.local === "base",
+    )?.value,
+  );
+
+/**
+ * Give the base each element of a document resolves its references against (reading 103, "an
+ * `xml:base` is a base, resolved and never a file reference"): the innermost `xml:base` in scope,
+ * the element's own included, each resolved against the base above it, or else the document's own
+ * path.
+ *
+ * An `xml:base` is an `xs:anyURI`, read collapsed. One whose path is empty, a query or a fragment
+ * alone among them, resolves to the base above it (RFC 3986, section 5.2.2). One that is an
+ * absolute URI, starts with `/` or climbs above the package's root leaves the package, so every
+ * relative reference in its scope does too (reading 102).
+ *
+ * @param visits The visits of the document's elements, in document order, each parent before its
+ *   children.
+ * @param path The document's path from the package's root.
+ * @returns Each element's base.
+ * @see https://www.rfc-editor.org/rfc/rfc3986#section-5.1
+ */
+const basesOf = (visits: readonly Visit[], path: string): ReadonlyMap<SourceElement, Base> => {
+  const own: Base = Option.some(path.split("/"));
+  const bases = new Map<SourceElement, Base>();
+  for (const { element, parent } of visits) {
+    const above = Option.match(parent, {
+      onNone: () => own,
+      onSome: (holder) => bases.get(holder) ?? own,
+    });
+    const written = Option.map(xmlBaseOf(element), collapse);
+    bases.set(
+      element,
+      Option.match(written, {
+        onNone: () => above,
+        onSome: (value) =>
+          withoutQuery(value) === ""
+            ? above
+            : Option.map(resolveReference(above, value), (resolved) => resolved.split("/")),
+      }),
+    );
+  }
+
+  return bases;
+};
+
+/**
+ * How a file reference's value is read before it is resolved, by its attribute's type (reading
+ * 102): an `xs:anyURI` collapses (`collapse`); HTML's `URLDType`, an `xs:normalizedString`, turns
+ * each tab, line feed and carriage return into a space (`replace`); an `xs:string`, `object@data`,
+ * keeps them (`preserve`). Each then sets aside the whitespace around it.
+ */
+type ReferenceSpace = "collapse" | "preserve" | "replace";
+
+/**
+ * One attribute that names a file of the package, as reading 103's census lists it: its local name,
+ * how its value is read, and whether its value is HTML's list of image candidate strings, each
+ * candidate's URL one reference.
+ */
+interface FileReference {
+  readonly local: string;
+  readonly space: ReferenceSpace;
+  readonly srcset: boolean;
+}
+
+/**
+ * Name an attribute of the census whose value is one reference.
+ *
+ * @param local The attribute's local name.
+ * @param space How its value is read.
+ * @returns The census entry.
+ */
+const referenceAttribute = (local: string, space: ReferenceSpace = "collapse"): FileReference => ({
+  local,
+  space,
+  srcset: false,
+});
+
+/**
+ * The census's attributes on QTI's elements, its HTML subset's and its own, by local name (reading
+ * 103): HTML's hyperlink, quotation sources and URL attributes, `source@srcset` among them; the
+ * `href` of a stylesheet and of the six refs; a module configuration; a response processing
+ * template's location; and an outcome's long interpretation. The types are the ASI XSD's:
+ * `object@data` is an `xs:string`, `audio`, `video`, `source` and `track`'s URLs a `URLDType`, the
+ * rest an `xs:anyURI`.
+ */
+const qtiReferences: ReadonlyMap<string, readonly FileReference[]> = new Map([
+  ["a", [referenceAttribute("href")]],
+  ["audio", [referenceAttribute("src", "replace")]],
+  ["blockquote", [referenceAttribute("cite")]],
+  ["img", [referenceAttribute("src"), referenceAttribute("longdesc")]],
+  ["object", [referenceAttribute("data", "preserve")]],
+  ["q", [referenceAttribute("cite")]],
+  ["qti-adaptive-engine-ref", [referenceAttribute("href")]],
+  ["qti-adaptive-settings-ref", [referenceAttribute("href")]],
+  ["qti-assessment-item-ref", [referenceAttribute("href")]],
+  ["qti-assessment-section-ref", [referenceAttribute("href")]],
+  ["qti-assessment-stimulus-ref", [referenceAttribute("href")]],
+  [
+    "qti-interaction-modules",
+    [referenceAttribute("primary-configuration"), referenceAttribute("secondary-configuration")],
+  ],
+  ["qti-metadata-ref", [referenceAttribute("href")]],
+  ["qti-outcome-declaration", [referenceAttribute("long-interpretation")]],
+  ["qti-response-processing", [referenceAttribute("template-location")]],
+  ["qti-stylesheet", [referenceAttribute("href")]],
+  ["qti-usagedata-ref", [referenceAttribute("href")]],
+  [
+    "source",
+    [
+      referenceAttribute("src", "replace"),
+      { local: "srcset", space: "replace", srcset: true } satisfies FileReference,
+    ],
+  ],
+  ["track", [referenceAttribute("src", "replace")]],
+  ["video", [referenceAttribute("src", "replace"), referenceAttribute("poster", "replace")]],
+]);
+
+/**
+ * The census's attributes of MathML's elements besides the `href` every one of them may carry, by
+ * local name (reading 103; MathML 3, sections 2.1.6 and 2.2.1).
+ */
+const mathmlReferences: ReadonlyMap<string, readonly FileReference[]> = new Map([
+  ["annotation", [referenceAttribute("src")]],
+  ["annotation-xml", [referenceAttribute("src")]],
+  ["math", [referenceAttribute("altimg"), referenceAttribute("cdgroup")]],
+  ["mglyph", [referenceAttribute("src")]],
+  ["share", [referenceAttribute("src")]],
+]);
+
+/**
+ * The census's attributes of SSML's elements, by local name (reading 103; SSML 1.1).
+ */
+const ssmlReferences: ReadonlyMap<string, readonly FileReference[]> = new Map([
+  ["audio", [referenceAttribute("src")]],
+  ["lexicon", [referenceAttribute("uri")]],
+]);
+
+/**
+ * Give the attributes of reading 103's census an element may carry: by its namespace and local
+ * name, `href` on every MathML element and on an XInclude `include`.
+ *
+ * @param element The element.
+ * @returns The attributes, none for an element the census does not name.
+ */
+const censusOf = (element: SourceElement): readonly FileReference[] => {
+  switch (element.namespace) {
+    case qtiNamespace: {
+      return qtiReferences.get(element.local) ?? [];
+    }
+    case mathmlNamespace: {
+      return [referenceAttribute("href"), ...(mathmlReferences.get(element.local) ?? [])];
+    }
+    case ssmlNamespace: {
+      return ssmlReferences.get(element.local) ?? [];
+    }
+    case xincludeNamespace: {
+      return element.local === "include" ? [referenceAttribute("href")] : [];
+    }
+    default: {
+      return [];
+    }
+  }
+};
+
+/**
+ * A carriage return, a line feed or a tab, each of which an `xs:normalizedString` reads as a space.
+ */
+const replacedWhitespace = /[\t\n\r]/gu;
+
+/**
+ * Give the references one census attribute's value makes, each read by the attribute's whitespace
+ * class (reading 102).
+ *
+ * A `srcset` is split at its commas into image candidates, and each candidate's URL is the text
+ * before its first whitespace. That is the stated limit of this reading of HTML's parsing
+ * algorithm, which lets a URL hold a comma not followed by whitespace; no official package has
+ * a `srcset` of more than one candidate (rule `db2ef322`, recorded here).
+ *
+ * @param reference The census attribute.
+ * @param value Its value, as written.
+ * @returns The references, none empty.
+ */
+const referencesIn = (reference: FileReference, value: string): readonly string[] => {
+  const read =
+    reference.space === "collapse"
+      ? collapse(value)
+      : trimXmlSpace(
+          reference.space === "replace" ? value.replaceAll(replacedWhitespace, " ") : value,
+        );
+
+  return reference.srcset
+    ? read.split(",").flatMap((candidate) => {
+        const [url = ""] = trimXmlSpace(candidate).split(xmlWhitespaceRun);
+
+        return url === "" ? [] : [url];
+      })
+    : [read];
+};
+
+/**
+ * Check each file reference of each document the package judges (E18, reading 103, "a document's
+ * file references are the attributes its vocabularies define as the location of a file, and each
+ * one that resolves within the package names a file the manifest describes; an xml:base is a
+ * base"), in the order the manifest first names each document and then in document order.
+ *
+ * Each attribute {@link censusOf} names is read ({@link referencesIn}) and resolved through the
+ * `xml:base` in scope ({@link basesOf}). One whose path is empty names its own document, and one
+ * that resolves outside the package names an external file, so neither is looked for. One that
+ * resolves to a path inside it that the package neither holds nor lists is `package-file-missing`
+ * with `check: "reference"` at the attribute, its detail the referring `document`'s path, the
+ * `attribute`, the `path` and the `reading`. A path the manifest lists that the package does not
+ * hold is `package-file-missing` at its listing already (`checkFiles`), so it is not given again.
+ *
+ * Only a written attribute is read: `qti-interaction-modules@primary-configuration`'s schema
+ * default, `modules/module_resolution.js`, names no file a document wrote, and is not looked for
+ * (rule `db2ef322`, a limit recorded here; no official package leaves it unwritten without the
+ * file). A document the reader cannot read is its own verdict's.
+ *
+ * @param documents The package's documents.
+ * @param held The paths of the files the package holds, in normal form.
+ * @param listed The paths of the files the manifest lists.
+ * @returns The refusals.
+ */
+const checkReferences = (
+  documents: ReadonlyMap<string, Document>,
+  held: ReadonlySet<string>,
+  listed: ReadonlySet<string>,
+): readonly Refusal[] =>
+  [...documents].flatMap(([path, { source, type }]) => {
+    if (!judgedTypes.has(type) || Result.isFailure(source)) {
+      return [];
+    }
+
+    const visits = [...walk(source.success)];
+    const bases = basesOf(visits, path);
+
+    return visits.flatMap(({ element, path: at }) =>
+      censusOf(element).flatMap((reference) =>
+        Option.toArray(attributeOf(element, reference.local)).flatMap((value) =>
+          referencesIn(reference, value).flatMap((written) => {
+            const target =
+              withoutQuery(written) === ""
+                ? Option.none()
+                : resolveReference(bases.get(element) ?? Option.none(), written);
+
+            return Option.toArray(target)
+              .filter((named) => !held.has(named) && !listed.has(named))
+              .map((named) =>
+                refuse(
+                  source.success.location,
+                  "package-file-missing",
+                  attributePath(at, { local: reference.local, namespace: "" }),
+                  {
+                    attribute: reference.local,
+                    check: "reference",
+                    document: path,
+                    path: named,
+                    reading: "103",
+                  },
+                ),
+              );
+          }),
+        ),
+      ),
+    );
+  });
 
 /**
  * Give the verdict on a document of the package from its reading: the reader's refusal as a
@@ -1001,7 +1319,9 @@ const checkRoots = (
 
 /**
  * Compare each item and test resource's own LOM metadata with its document's `identifier` and
- * `title` (reading 62).
+ * `title` (reading 62), every item and test resource that names a path, whatever type its document
+ * is read as (reading 162, "the records of each item or test resource that names the path still
+ * describe the document").
  *
  * Each `general` of the resource's LOM that gives identifier entries must give one equal to the
  * document's `identifier`, or the resource is `lom-identifier` at the `general`'s first
@@ -1010,8 +1330,9 @@ const checkRoots = (
  * detail names the `resource`, the document's `path`, its `identifier` or `title`, the first LOM
  * value as `metadata`, how many other values there are as `others` when there are any, and the
  * `reading`, each value collapsed. A `general` that gives neither is outside the rule, and so is a
- * document the reader cannot read, one whose root is not the one its type names (`checkRoots`
- * refuses it) and one that lacks the attribute (its own verdict refuses it).
+ * document the reader cannot read, one whose root is no item's or test's ({@link lomBoundRoots};
+ * `checkRoots` refuses a resource whose type it does not bear out) and one that lacks the attribute
+ * (its own verdict refuses it).
  *
  * @param manifest The manifest.
  * @param lom Each resource's LOM generals, keyed by its location.
@@ -1026,11 +1347,10 @@ const checkLom = (
   manifestLocation: string,
 ): readonly Refusal[] =>
   manifest.resources.flatMap((resource) => {
-    const expected = lomBoundTypes.has(resource.type) ? rootOfType.get(resource.type) : undefined;
     const path = Option.getOrUndefined(documentPath(resource));
     const source = path === undefined ? undefined : documents.get(path)?.source;
     if (
-      expected === undefined ||
+      !lomBoundTypes.has(resource.type) ||
       path === undefined ||
       source === undefined ||
       Result.isFailure(source)
@@ -1039,7 +1359,7 @@ const checkLom = (
     }
 
     const { root } = source.success;
-    if (root.namespace !== qtiNamespace || root.local !== expected) {
+    if (root.namespace !== qtiNamespace || !lomBoundRoots.has(root.local)) {
       return [];
     }
 
@@ -1749,7 +2069,10 @@ const judgeReference = (
  * `undeclared-variable` at that attribute, its detail the `element`, the `attribute`, the
  * `identifier` and `expected: "outcome"`, pantry's `variable-mapping-source`. It is judged only
  * through an item ref whose item the package holds and the reader read, as pantry contains a
- * mapping's source in the declarations of the item its item ref resolves to. A second mapping of
+ * mapping's source in the declarations of the item its item ref resolves to, or one that names an
+ * LTI link, which declares no variable, so every source under it is refused (reading 110, "a
+ * variable mapping and a template default name variables an item declares, so under an item ref
+ * that names an LTI link both are refused"). A second mapping of
  * one item ref with the same `target-identifier` is `duplicate-identifier` at that attribute, its
  * detail the `identifier`, the key of a mapping by its item ref and its target. So is a target that
  * names another variable its item holds (reading 97, "a variable mapping's target names no other
@@ -1868,7 +2191,9 @@ interface TemplateDefaults {
  * name it does not declare or one it declares as another kind of variable, is
  * `undeclared-variable` at that attribute, its detail the `element`, the `attribute`, the
  * `identifier` and `expected: "template"`, pantry's `template-default-target`. It is judged only
- * through an item ref whose item the package holds and the reader read. A value that is no NCName,
+ * through an item ref whose item the package holds and the reader read, or one that names an LTI
+ * link, which declares no template variable, so every default under it is refused (reading 110). A
+ * value that is no NCName,
  * or a default without the attribute, is the structure check's refusal, so it is passed over.
  *
  * @param document The document's location.
@@ -2161,18 +2486,33 @@ const waysThrough = (
 };
 
 /**
- * One item ref of a test or a section document whose `href` resolves to an item resource the
- * manifest lists, whether or not it writes an identifier: the item ref and its item's path.
+ * What an item ref's `href` may resolve to, keyed by the path of the document a resource the
+ * manifest lists names: an item resource's, `item`, or an LTI link resource's, `lti-link`
+ * ({@link ltiLinkTypes}), which an item ref may name in place of an item (reading 110). A path both
+ * name is an item's.
+ */
+type RefTargets = ReadonlyMap<string, "item" | "lti-link">;
+
+/**
+ * One item ref of a test or a section document whose `href` resolves to an item resource or an LTI
+ * link resource the manifest lists, whether or not it writes an identifier: the item ref, its
+ * item's or its link's path, and which of the two it names.
  */
 interface ItemRefTarget {
   readonly element: SourceElement;
+  /**
+   * Whether it names an LTI link rather than an item: a link declares no variable, so only the
+   * built-ins every item has are read through it (reading 106), and its variable mappings and
+   * template defaults name nothing it declares (reading 110).
+   */
+  readonly link: boolean;
   readonly path: string;
 }
 
 /**
  * One item ref of a test or a section document that writes an identifier and resolves to an item
- * resource the manifest lists: its identifier, and whether a selection with replacement in its own
- * document can repeat it.
+ * resource or an LTI link resource the manifest lists: its identifier, and whether a selection with
+ * replacement in its own document can repeat it.
  */
 interface ResolvedItemRef extends ItemRefTarget {
   readonly identifier: string;
@@ -2237,21 +2577,28 @@ interface DocumentStructure {
   readonly identifiers: readonly StructureIdentifier[];
   /**
    * Each item ref that writes an identifier and resolves, against the document's path, to an item
-   * resource.
+   * resource or an LTI link resource.
    */
   readonly itemRefs: readonly ResolvedItemRef[];
+  /**
+   * Each item ref that writes an identifier and resolves to an LTI link resource, with its own path
+   * in the document, in document order: what a package marks and leaves out of the test it
+   * delivers (reading 110).
+   */
+  readonly links: readonly LtiLink[];
   /**
    * Each of its section refs whose `href` names a path inside the package, in document order.
    */
   readonly sectionRefs: readonly SectionPlacement[];
   /**
-   * Each item ref that resolves to an item resource, whether or not it writes an identifier, in
-   * document order: what its variable mappings and template defaults are judged against (reading
-   * 155).
+   * Each item ref that resolves to an item resource or an LTI link resource, whether or not it
+   * writes an identifier, in document order: what its variable mappings and template defaults are
+   * judged against (reading 155).
    */
   readonly targets: readonly ItemRefTarget[];
   /**
-   * Each item ref that resolves to no item resource, `item-ref-unresolved` at the item ref.
+   * Each item ref that resolves to neither an item resource nor an LTI link resource,
+   * `item-ref-unresolved` at the item ref.
    */
   readonly unresolved: readonly Refusal[];
   /**
@@ -2300,36 +2647,46 @@ const replacingSections = (visits: readonly Visit[]): ReadonlySet<SourceElement>
 /**
  * Read what a test's reach is built from in one test or section document: its parts', sections' and
  * item refs' identifiers, each with the path of its `identifier` attribute, its item refs, each
- * resolved against the document's path to an item resource the manifest lists, and its section
- * refs, each with the path it names, each item ref and section ref with whether a selection with
- * replacement in the document lies above it ({@link replacingSections}).
+ * resolved against the document's path to an item resource the manifest lists, or to an LTI link
+ * resource, which an item ref may name in place of an item (reading 110, "a variable mapping and a
+ * template default name variables an item declares, so under an item ref that names an LTI link
+ * both are refused"), and its section refs, each with the path it names, each item ref and section
+ * ref with whether a selection with replacement in the document lies above it
+ * ({@link replacingSections}).
  *
- * An item ref that resolves to no listed item resource is `item-ref-unresolved` at the item ref,
+ * An item ref that resolves to no listed item resource and no listed LTI link resource is
+ * `item-ref-unresolved` at the item ref,
  * its detail the `identifier`, the `href` and, when the `href` names a path inside the package,
  * that `path`. An item ref that writes no identifier names nothing, so it holds no place in the
  * document's identifiers and no reading resolves through it; its missing identifier is the test's
  * own verdict's (reading 147). It is otherwise judged like any other (reading 155, "the laws over
  * what an item ref names judge every item ref, whether or not it ... write[s] an identifier"): one
- * that resolves to no listed item resource is `item-ref-unresolved` with `check: "unwritten"`, the
+ * that resolves to neither is `item-ref-unresolved` with `check: "unwritten"`, the
  * missing `attribute`, the `href`, the `path` when there is one, and `reading: "155"`, and one that
  * resolves has its variable mappings and template defaults judged (`targets`). An item ref that
  * writes no `href` names nothing, and is the test's own verdict's (reading 155). Each `href` is
- * collapsed and resolved by {@link resolveReference}.
+ * collapsed and resolved by {@link resolveReference} against the `xml:base` in scope, or else the
+ * document's path ({@link basesOf}, reading 103), so one under an `xml:base` outside the package
+ * names no path inside it.
  *
  * @param source The document's source.
- * @param base The document's path, which its `href`s resolve against.
- * @param itemPaths The path of every item resource's document.
+ * @param base The document's path, which its `href`s resolve against where no `xml:base` is in
+ *   scope.
+ * @param refTargets What an item ref may resolve to: the path of every item resource's document and
+ *   every LTI link resource's.
  * @returns What it holds.
  */
 const structureIn = (
   source: SourceDocument,
   base: string,
-  itemPaths: ReadonlySet<string>,
+  refTargets: RefTargets,
 ): DocumentStructure => {
   const visits = [...walk(source)];
+  const bases = basesOf(visits, base);
   const replacing = replacingSections(visits);
   const identifiers: StructureIdentifier[] = [];
   const itemRefs: ResolvedItemRef[] = [];
+  const links: LtiLink[] = [];
   const sectionRefs: SectionPlacement[] = [];
   const targets: ItemRefTarget[] = [];
   const unresolved: Refusal[] = [];
@@ -2351,27 +2708,37 @@ const structureIn = (
       const written = collapse(href);
       sectionRefs.push(
         ...Option.toArray(
-          Option.map(resolveReference(base, written), (resolved) => ({
-            at: path,
-            element,
-            href: written,
-            path: resolved,
-            replaced: replacing.has(element),
-          })),
+          Option.map(
+            resolveReference(bases.get(element) ?? Option.none(), written),
+            (resolved) => ({
+              at: path,
+              element,
+              href: written,
+              path: resolved,
+              replaced: replacing.has(element),
+            }),
+          ),
         ),
       );
     } else if (href !== undefined && isQti(element, itemRefElements)) {
       const written = collapse(href);
-      const resolved = resolveReference(base, written);
-      if (Option.isSome(resolved) && itemPaths.has(resolved.value)) {
-        targets.push({ element, path: resolved.value });
+      const resolved = resolveReference(bases.get(element) ?? Option.none(), written);
+      const named = Option.getOrUndefined(resolved);
+      const kind = named === undefined ? undefined : refTargets.get(named);
+      if (named !== undefined && kind !== undefined) {
+        const link = kind === "lti-link";
+        targets.push({ element, link, path: named });
         if (identifier !== undefined) {
           itemRefs.push({
             element,
             identifier,
-            path: resolved.value,
+            link,
+            path: named,
             replaced: replacing.has(element),
           });
+          if (link) {
+            links.push({ identifier, path });
+          }
         }
       } else {
         const at = Option.match(resolved, {
@@ -2398,7 +2765,7 @@ const structureIn = (
     }
   }
 
-  return { identifiers, itemRefs, sectionRefs, targets, unresolved, visits };
+  return { identifiers, itemRefs, links, sectionRefs, targets, unresolved, visits };
 };
 
 /**
@@ -2824,14 +3191,15 @@ const countsOf = (
  *
  * @param test The test's own placement.
  * @param sectionPaths The path of every section resource's document.
- * @param itemPaths The path of every item resource's document.
+ * @param refTargets What an item ref may resolve to: the path of every item resource's document and
+ *   every LTI link resource's.
  * @param documents The package's documents.
  * @returns The placements, the cycles' refusals, and how the placements place one another.
  */
 const assemble = (
   test: Placement,
   sectionPaths: ReadonlySet<string>,
-  itemPaths: ReadonlySet<string>,
+  refTargets: RefTargets,
   documents: ReadonlyMap<string, Document>,
 ): Assembly => {
   const read = new Map<string, Option.Option<Omit<Placement, keyof PlacementContext | "path">>>();
@@ -2848,7 +3216,7 @@ const assemble = (
     }
 
     const found = Option.map(sectionDocumentAt(path, sectionPaths, documents), (source) => {
-      const structure = structureIn(source, path, itemPaths);
+      const structure = structureIn(source, path, refTargets);
 
       return { layout: layoutOf(structure.visits), source, structure };
     });
@@ -2933,22 +3301,37 @@ const assemble = (
 };
 
 /**
- * Give the variables of the item each of some resolved item refs names.
+ * Give the variables of what a resolved item ref names: its item's, read from the item's document,
+ * or, for an LTI link, none, since a link declares no variable (reading 110), so a reading through
+ * it names only a built-in every item has (reading 106).
+ *
+ * @param target The resolved item ref.
+ * @param documents The package's documents.
+ * @returns Its variables, none when it names an item the reader did not read.
+ */
+const targetVariables = (
+  target: ItemRefTarget,
+  documents: ReadonlyMap<string, Document>,
+): Option.Option<ItemVariables> =>
+  target.link ? Option.some({ declarations: new Map() }) : variablesOf(documents.get(target.path));
+
+/**
+ * Give the variables of what each of some resolved item refs names ({@link targetVariables}).
  *
  * @param itemRefs The resolved item refs.
  * @param documents The package's documents.
- * @returns What gives an item ref's item's variables, none for an item ref not among them or one
- *   whose item the reader did not read.
+ * @returns What gives an item ref's item's variables, none declared for one that names an LTI
+ *   link, and none for an item ref not among them or one whose item the reader did not read.
  */
 const variablesThrough = (
   itemRefs: readonly ItemRefTarget[],
   documents: ReadonlyMap<string, Document>,
 ): ((itemRef: SourceElement) => Option.Option<ItemVariables>) => {
-  const paths = new Map(itemRefs.map((itemRef) => [itemRef.element, itemRef.path] as const));
+  const targets = new Map(itemRefs.map((itemRef) => [itemRef.element, itemRef] as const));
 
   return (itemRef) =>
-    Option.flatMap(Option.fromUndefinedOr(paths.get(itemRef)), (path) =>
-      variablesOf(documents.get(path)),
+    Option.flatMap(Option.fromUndefinedOr(targets.get(itemRef)), (target) =>
+      targetVariables(target, documents),
     );
 };
 
@@ -2998,23 +3381,24 @@ const repeatsIn = (
 };
 
 /**
- * Give each read of an item's context variable through its item ref in a test document's
- * processing: a `qti-variable` or a `qti-default` ({@link contextReadElements}) that lies in the
+ * Give each read through an item ref in a test document's processing of a variable the engine holds
+ * no value of: a `qti-variable` or a `qti-default` ({@link variableReadElements}) that lies in the
  * test's `qti-outcome-processing` or in a `qti-template-default` of one of its item refs, and whose
  * `identifier` is a name the predicate takes. The test model, built from the document alone, holds
  * such a read and would run it; the engine holds no value of it: the item marks a declared context
- * variable, and the engine holds no item's `QTI_CONTEXT`.
+ * variable, the engine holds no item's `QTI_CONTEXT`, and a session delivers no LTI link.
  *
  * @param source The test's source.
  * @param visits The visits of its elements, in document order.
- * @param readsContext Whether a name reads an item's context variable through its item ref.
+ * @param isUnheld Whether a name reads, through an item ref, a variable the engine holds no value
+ *   of.
  * @returns The reads, in document order, each with the item ref and the path of the processing
  *   element it lies in.
  */
-const contextReadsIn = (
+const unheldReadsIn = (
   source: SourceDocument,
   visits: readonly Visit[],
-  readsContext: (name: string) => boolean,
+  isUnheld: (name: string) => boolean,
 ): readonly UnheldRead[] => {
   const places = new Map<SourceElement, (name: string) => UnheldRead>();
   const reads: UnheldRead[] = [];
@@ -3036,7 +3420,7 @@ const contextReadsIn = (
       places.set(element, inherited);
 
       const name = Option.getOrUndefined(identifierOf(element));
-      if (name !== undefined && isQti(element, contextReadElements) && readsContext(name)) {
+      if (name !== undefined && isQti(element, variableReadElements) && isUnheld(name)) {
         reads.push(inherited(name));
       }
     }
@@ -3503,8 +3887,9 @@ const reachOf = (test: Placement, { counts, placements }: Assembly): Reach => {
 };
 
 /**
- * Give what a reading may name through each item ref of a test's reach: its item's variables, and
- * the targets of its variable mappings whose source the item declares.
+ * Give what a reading may name through each item ref of a test's reach: its item's variables, none
+ * for an LTI link ({@link targetVariables}), and the targets of its variable mappings whose source
+ * the item declares.
  *
  * @param itemRefs Each item ref of the reach, by identifier.
  * @param documents The package's documents.
@@ -3516,7 +3901,7 @@ const itemsOf = (
 ): ReadonlyMap<string, ItemRefVariables> => {
   const items = new Map<string, ItemRefVariables>();
   for (const [identifier, itemRef] of itemRefs) {
-    for (const variables of Option.toArray(variablesOf(documents.get(itemRef.path)))) {
+    for (const variables of Option.toArray(targetVariables(itemRef, documents))) {
       items.set(identifier, {
         ...variables,
         mapped: new Map(
@@ -3568,18 +3953,25 @@ const wholeOf = (source: SourceDocument): ReadonlyMap<string, ReadVariable> =>
 
 /**
  * What judging one test gives: each of its own item refs' item path, keyed by the item ref's
- * identifier, in document order; the section documents it reaches; the test's refusals: the item
- * refs', their variable mappings', their template defaults', the references', those of the test's
+ * identifier, in document order, an item ref that names an LTI link left out; its own item refs
+ * that name an LTI link; the section documents it reaches; the test's refusals: the item refs',
+ * their variable mappings', their template defaults', the references', those of the test's
  * processing that only its typed reach gives, then its branch rules', each in document order; the
- * reads of an item's context variable through its item ref in the test document's processing; and
- * the refusals of the section documents it reaches, judged under it.
+ * reads through its item refs in the test document's processing of a variable the engine holds no
+ * value of; and the refusals of the section documents it reaches, judged under it.
  */
 interface TestJudgement {
+  /**
+   * Each of the test document's own item refs that names an LTI link, which the delivered test
+   * marks and leaves out (reading 110).
+   */
+  readonly links: readonly LtiLink[];
   readonly reached: readonly ReachedSection[];
   /**
-   * Each read of an item's context variable through its item ref in the test document's outcome
-   * processing or in a template default of one of its item refs ({@link contextReadsIn}), which
-   * the delivered test marks.
+   * Each read through an item ref in the test document's outcome processing or in a template
+   * default of one of its item refs of a variable the engine holds no value of, an item's context
+   * variable or any variable of an LTI link ({@link unheldReadsIn}), which the delivered test
+   * marks.
    */
   readonly reads: readonly UnheldRead[];
   readonly refs: ReadonlyMap<string, string>;
@@ -3597,7 +3989,8 @@ interface TestJudgement {
 
 /**
  * Judge one test document of the package: each item ref resolved against the test's path to an item
- * resource the manifest lists ({@link structureIn}), its variable mappings by {@link judgeMappings}
+ * resource or an LTI link resource the manifest lists ({@link structureIn}), its variable mappings
+ * by {@link judgeMappings}
  * and its template defaults by {@link judgeTemplateDefaults}, each dotted reference by reading 48
  * ("a dotted reference is accepted when exactly one reading names a real item ref, test part or
  * section and its variable"), then the test's processing through its typed reach, then its branch
@@ -3660,31 +4053,42 @@ interface TestJudgement {
  * alone, every name unknown, are the section document's own verdict's, and so are the branch
  * refusals its own check already gives.
  *
+ * An item ref that names an LTI link resource in place of an item (reading 110, "a variable mapping
+ * and a template default name variables an item declares, so under an item ref that names an LTI
+ * link both are refused") resolves, and a link declares no variable, so a reading through it names
+ * only a built-in every item has (reading 106) and each of its variable mappings and template
+ * defaults is `undeclared-variable`. The test document's own item refs that name one are its
+ * `links`, which the delivered test marks `lti-link` and leaves out, and none of them is among
+ * its `refs`: plate launches no LTI link, so a session delivers the test without it.
+ *
  * Last, it finds each read in the test document's processing, its outcome processing and its item
- * refs' template defaults, of an item's context variable through its item ref
- * ({@link contextReadsIn}): a name the test does not hold whole whose one counting reading reads a
- * variable the item declares in a `qti-context-declaration`, directly or in the numbered form, or
- * the built-in `QTI_CONTEXT` (reading 106, "a prefixed reference reaches every built-in variable
- * its item ref's item holds, `QTI_CONTEXT` among them"). The engine holds no value of either, so
- * the delivered test marks the processing that reads it. A read in a reached section document is
- * left alone: a session delivers none of its items, and the test model marks a read through one.
+ * refs' template defaults, through an item ref of a variable the engine holds no value of
+ * ({@link unheldReadsIn}): a name the test does not hold whole whose one counting reading reads a
+ * variable the item declares in a `qti-context-declaration`, directly or in the numbered form, the
+ * built-in `QTI_CONTEXT` (reading 106, "a prefixed reference reaches every built-in variable its
+ * item ref's item holds, `QTI_CONTEXT` among them"), or any built-in through an item ref that names
+ * an LTI link, which no session delivers. The engine holds no value of any of them, so the
+ * delivered test marks the processing that reads it. A read in a reached section document is left
+ * alone: a session delivers none of its items, and the test model marks a read through one.
  *
  * @param source The test's source.
  * @param testPath The test's path.
- * @param itemPaths The path of every item resource's document.
+ * @param refTargets What an item ref may resolve to: the path of every item resource's document and
+ *   every LTI link resource's.
  * @param sectionPaths The path of every section resource's document.
  * @param documents The package's documents.
- * @returns Its own item refs' item paths, the section documents it reaches, its refusals and theirs
- *   under it, and its reads of an item's context variable.
+ * @returns Its own item refs' item paths, its own item refs that name an LTI link, the section
+ *   documents it reaches, its refusals and theirs under it, and its reads through an item ref that
+ *   the engine holds no value of.
  */
 const judgeTest = (
   source: SourceDocument,
   testPath: string,
-  itemPaths: ReadonlySet<string>,
+  refTargets: RefTargets,
   sectionPaths: ReadonlySet<string>,
   documents: ReadonlyMap<string, Document>,
 ): TestJudgement => {
-  const own = structureIn(source, testPath, itemPaths);
+  const own = structureIn(source, testPath, refTargets);
   const test: Placement = {
     layout: layoutOf(own.visits),
     mixes: false,
@@ -3694,7 +4098,7 @@ const judgeTest = (
     source,
     structure: own,
   };
-  const assembly = assemble(test, sectionPaths, itemPaths, documents);
+  const assembly = assemble(test, sectionPaths, refTargets, documents);
   const { children, counts, cycles, placements } = assembly;
   const { durations, flags, itemRefs, names, reached, repeats, written } = reachOf(test, assembly);
   const parents = new Map<Placement, Placement[]>();
@@ -3939,15 +4343,16 @@ const judgeTest = (
   );
 
   /**
-   * Report whether a name the test's processing reads names an item's context variable through its
-   * item ref: the test does not hold it whole, and its one counting reading reads a context
-   * variable, one its item declares in a `qti-context-declaration` or the built-in `QTI_CONTEXT`
-   * (reading 106).
+   * Report whether a name the test's processing reads names, through an item ref, a variable the
+   * engine holds no value of: the test does not hold it whole, and its one counting reading reads a
+   * context variable, one its item declares in a `qti-context-declaration` or the built-in
+   * `QTI_CONTEXT` (reading 106), or reads through an item ref that names an LTI link, whose
+   * built-ins no session holds.
    *
    * @param name The name.
    * @returns Whether it does.
    */
-  const readsContext = (name: string): boolean => {
+  const isUnheld = (name: string): boolean => {
     if (whole.has(name)) {
       return false;
     }
@@ -3955,10 +4360,14 @@ const judgeTest = (
     return eachWay(name, () => {
       const [only, ...others] = readingsOf(scope, name);
 
-      return only !== undefined && others.length === 0 && only.variable.kind === "context";
+      return (
+        only !== undefined &&
+        others.length === 0 &&
+        (only.variable.kind === "context" || itemRefs.get(only.prefix)?.link === true)
+      );
     }).includes(true);
   };
-  const reads = contextReadsIn(source, own.visits, readsContext);
+  const reads = unheldReadsIn(source, own.visits, isUnheld);
 
   // What each section document gives the same in every placement: the targets of its template
   // defaults, and its processing's refusals alone.
@@ -4024,9 +4433,14 @@ const judgeTest = (
   }
 
   return {
+    links: own.links,
     reached,
     reads,
-    refs: new Map(own.itemRefs.map(({ identifier, path }) => [identifier, path] as const)),
+    refs: new Map(
+      own.itemRefs.flatMap(({ identifier, link, path }) =>
+        link ? [] : [[identifier, path] as const],
+      ),
+    ),
     refusals: [
       ...own.unresolved,
       ...mappingRefusals,
@@ -4147,22 +4561,24 @@ const byDocument = <A>(
 /**
  * Build the contents of an accepted package from its judged documents.
  *
- * Each test is delivered as its document's own verdict accepted it, unless the test document's
- * processing reads an item's context variable through its item ref: then it is delivered with that
- * processing marked (`withUnheldReads` in `#plate/model/test.ts`), the outcome processing `marked`
- * and each template default that reads one left out.
+ * Each test is delivered as its document's own verdict accepted it, unless one of its item refs
+ * names an LTI link or its processing reads, through an item ref, a variable the engine holds no
+ * value of. Each such item ref is then marked `lti-link` and left out (`withLtiLinks` in
+ * `#plate/model/test.ts`), and each such processing marked (`withUnheldReads`), the outcome
+ * processing `marked` and each template default that reads one left out.
  *
  * @param manifest The manifest.
  * @param documents The package's documents, every judged one accepted.
- * @param tests What judging each test gave, its item paths, by item ref identifier, and its reads
- *   of an item's context variable, keyed by the test's path.
+ * @param tests What judging each test gave, its item paths, by item ref identifier, its item refs
+ *   that name an LTI link, and its reads of a variable the engine holds no value of, keyed by the
+ *   test's path.
  * @param location The package's location.
  * @returns The contents.
  */
 const contentsOf = (
   manifest: Manifest,
   documents: ReadonlyMap<string, Document>,
-  tests: ReadonlyMap<string, Pick<TestJudgement, "reads" | "refs">>,
+  tests: ReadonlyMap<string, Pick<TestJudgement, "links" | "reads" | "refs">>,
   location: string,
 ): PackageContents => {
   /**
@@ -4205,6 +4621,7 @@ const contentsOf = (
         verdictAt(documents, path).pipe(
           Option.flatMap(acceptedTest),
           Option.map((test): PackageTest => {
+            const links = tests.get(path)?.links ?? [];
             const reads = tests.get(path)?.reads ?? [];
 
             return {
@@ -4217,9 +4634,9 @@ const contentsOf = (
                 ),
               ),
               test:
-                reads.length === 0
+                links.length === 0 && reads.length === 0
                   ? test
-                  : acceptMarkedTest(test, withUnheldReads(test.test, reads)),
+                  : acceptMarkedTest(test, withUnheldReads(withLtiLinks(test.test, links), reads)),
             };
           }),
         ),
@@ -4249,9 +4666,14 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
 ): Effect.fn.Return<PackageVerdict> {
   const fileRules = checkFiles(manifest, files, location);
   const documents = yield* readDocuments(manifest, held, location);
-  const itemPaths = new Set(pathsOfType(manifest, "imsqti_item_xmlv3p0"));
+  const refTargets: RefTargets = new Map([
+    ...ltiLinkTypes.flatMap((type) =>
+      pathsOfType(manifest, type).map((path) => [path, "lti-link"] as const),
+    ),
+    ...pathsOfType(manifest, "imsqti_item_xmlv3p0").map((path) => [path, "item"] as const),
+  ]);
   const sectionPaths = new Set(pathsOfType(manifest, "imsqti_section_xmlv3p0"));
-  const tests = new Map<string, Pick<TestJudgement, "reads" | "refs">>();
+  const tests = new Map<string, Pick<TestJudgement, "links" | "reads" | "refs">>();
   const testRefusals: Refusal[] = [];
   const underTests: Refusal[] = [];
   const reached = new Map<string, ReachedSection>();
@@ -4263,7 +4685,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
       source.success.root.namespace === qtiNamespace &&
       source.success.root.local === "qti-assessment-test"
     ) {
-      const judged = judgeTest(source.success, path, itemPaths, sectionPaths, documents);
+      const judged = judgeTest(source.success, path, refTargets, sectionPaths, documents);
       tests.set(path, judged);
       testRefusals.push(...judged.refusals);
       underTests.push(...notHeld(judged.sections, underTests));
@@ -4300,6 +4722,15 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
     ...testRefusals,
     ...sectionRefusals,
     ...underTests,
+    ...checkReferences(
+      documents,
+      new Set(held.keys()),
+      new Set(
+        manifest.resources.flatMap((resource) =>
+          resource.files.flatMap((file) => Option.toArray(file.path)),
+        ),
+      ),
+    ),
     ...verdicts.flatMap((verdict) => (verdict.verdict === "refused" ? verdict.refusals : [])),
   ];
   if (first !== undefined) {
@@ -4316,7 +4747,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
     resources,
     verdict:
       verdicts.some((verdict) => verdict.verdict === "accepted-with-unsupported") ||
-      [...tests.values()].some((judged) => judged.reads.length > 0)
+      [...tests.values()].some((judged) => judged.links.length > 0 || judged.reads.length > 0)
         ? "accepted-with-unsupported"
         : "accepted",
   };

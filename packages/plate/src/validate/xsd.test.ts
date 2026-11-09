@@ -238,8 +238,9 @@ const tableOf = Effect.fnUntraced(function* tableOf(document: SourceDocument, na
  * @param name The built-in's name.
  * @returns Its attribute type.
  */
-const builtin = (name: "boolean" | "int" | "integer" | "NCName" | "normalizedString" | "string") =>
-  ({ kind: "builtin", name }) as const;
+const builtin = (
+  name: "boolean" | "ID" | "IDREF" | "int" | "integer" | "NCName" | "normalizedString" | "string",
+) => ({ kind: "builtin", name }) as const;
 
 /**
  * The table of a global element with only the given attributes and no content, as `p1-08a` leaves
@@ -600,50 +601,59 @@ describe("generateTables", () => {
     }),
   );
 
-  it.effect("an xs:IDREF-derived attribute records as NCName, and xs:IDREFS as a list of it", () =>
-    Effect.gen(function* idref() {
-      const table = yield* tableOf(
-        schema(
-          xs(
-            "simpleType",
-            [attr("name", "UniqueIdentifierRefDType")],
-            [xs("restriction", [attr("base", "xs:IDREF")])],
+  it.effect(
+    "align-54 ID table E16: an xs:ID-derived attribute records as ID, an xs:IDREF-derived one as IDREF, and xs:IDREFS as a list of IDREF",
+    () =>
+      Effect.gen(function* idref() {
+        const table = yield* tableOf(
+          schema(
+            xs(
+              "simpleType",
+              [attr("name", "UniqueIdentifierDType")],
+              [xs("restriction", [attr("base", "xs:ID")])],
+            ),
+            xs(
+              "simpleType",
+              [attr("name", "UniqueIdentifierRefDType")],
+              [xs("restriction", [attr("base", "xs:IDREF")])],
+            ),
+            complexType(
+              "TextEntryDType",
+              attribute({ name: "id", type: "UniqueIdentifierDType" }),
+              attribute({
+                name: "response-identifier",
+                type: "UniqueIdentifierRefDType",
+                use: "required",
+              }),
+              attribute({ name: "refs", type: "xs:IDREFS" }),
+            ),
+            element("text-entry", "TextEntryDType"),
           ),
-          complexType(
-            "TextEntryDType",
-            attribute({
-              name: "response-identifier",
-              type: "UniqueIdentifierRefDType",
-              use: "required",
-            }),
-            attribute({ name: "refs", type: "xs:IDREFS" }),
-          ),
-          element("text-entry", "TextEntryDType"),
-        ),
-        "text-entry",
-      );
+          "text-entry",
+        );
 
-      assert.deepStrictEqual(
-        table,
-        attributesOnly(
-          [
-            {
-              local: "refs",
-              namespace: "",
-              type: { item: builtin("NCName"), kind: "list" },
-              use: "optional",
-            },
-            {
-              local: "response-identifier",
-              namespace: "",
-              type: builtin("NCName"),
-              use: "required",
-            },
-          ],
-          "TextEntryDType",
-        ),
-      );
-    }),
+        assert.deepStrictEqual(
+          table,
+          attributesOnly(
+            [
+              { local: "id", namespace: "", type: builtin("ID"), use: "optional" },
+              {
+                local: "refs",
+                namespace: "",
+                type: { item: builtin("IDREF"), kind: "list" },
+                use: "optional",
+              },
+              {
+                local: "response-identifier",
+                namespace: "",
+                type: builtin("IDREF"),
+                use: "required",
+              },
+            ],
+            "TextEntryDType",
+          ),
+        );
+      }),
   );
 
   it.effect('xs:anyAttribute namespace="##any" processContents="lax" is recorded', () =>
