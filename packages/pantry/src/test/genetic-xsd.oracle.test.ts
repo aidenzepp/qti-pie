@@ -444,14 +444,14 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * `xs:boolean`, and never cvc-elt.3.1, while the law oracle refuses the value and the attribute's
  * presence both; its `libxml2` record is `nilValueRecord`.
  *
- * The last two are the genetic repair's R-X3b and R-X3: two interactions of an item that bind one
+ * The next two are the genetic repair's R-X3b and R-X3: two interactions of an item that bind one
  * response variable, two text entry interactions in one paragraph and a text entry interaction
  * beside a custom interaction. The law oracle refuses the second binding under Binding unique
  * (reading 92, §2.2.2.2: a response variable is bound to one interaction only), which reading 172
  * widened to every interaction kind, and xmllint accepts both, as the XSD resolves no binding;
  * their `beyond` record sits beside reading 75's.
  *
- * The last four are the genetic repair's R-X4 and R-X5, each beside its control, below an element
+ * The next four are the genetic repair's R-X4 and R-X5, each beside its control, below an element
  * of an XInclude's content whose `xsi:type` names `xs:ENTITIES`. Once that element holds an element
  * child, libxml2 refuses it under cvc-type clause 3.1.2 and assesses nothing more of it: neither
  * the text `<` after the child, which the law oracle refuses as no `xs:ENTITIES`, nor an `h2`
@@ -460,6 +460,16 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * matches only at places a document's rows show libxml2 skipped, and the replay reports no
  * difference a record matches, so these controls show the two agree there, not that the record
  * stays narrow.
+ *
+ * The last four are the LOM xml:id class gr-lom-1 found with seed 1281456798, two causes each of
+ * which the law oracle's "DocumentId key" refuses and xmllint accepts. The first two are an
+ * external LOM file holding one `xml:id` twice, padded and plain: the loose LOM binding's set
+ * declares no `xml:id`, so XML Schema keys nothing there, while the grammar types it as a
+ * manifest's set does (reading 81's limit, `outsideSet`). The last two are a section's selection
+ * whose two foreign elements hold `v` and its padded form, and one padded form twice: the ASI set
+ * declares `xml:id`, and libxml2 keys it by its raw value at parse time (`paddedIdRecord`). With
+ * `v` twice there both refuse, which gr-lom-1's controls showed and the replay cannot: it reports
+ * no agreement.
  */
 const keptDocuments: readonly { readonly name: string; readonly text: string }[] = [
   {
@@ -569,6 +579,22 @@ const keptDocuments: readonly { readonly name: string; readonly text: string }[]
   {
     name: "an h2 whose aria-level is no integer, in a stimulus body an untyped element of an XInclude's content holds",
     text: '<qti-response-processing xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-processing-fragment><xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="f.xml"><widget xmlns="" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema"><qti-stimulus-body xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><h2 aria-level="x"/></qti-stimulus-body></widget></xi:include></qti-response-processing-fragment></qti-response-processing>',
+  },
+  {
+    name: "a padded xml:id held twice under an external LOM file's elements, whose set declares no xml:id",
+    text: '<lom xmlns="http://ltsc.ieee.org/xsd/LOM"><lifeCycle><version xml:id="&#x9;vé "/></lifeCycle><lifeCycle><version xml:id="&#x9;vé "/></lifeCycle></lom>',
+  },
+  {
+    name: "an xml:id held twice under an external LOM file's elements, whose set declares no xml:id",
+    text: '<lom xmlns="http://ltsc.ieee.org/xsd/LOM"><lifeCycle><version xml:id="v"/></lifeCycle><lifeCycle><version xml:id="v"/></lifeCycle></lom>',
+  },
+  {
+    name: "an xml:id and its padded form on two foreign elements of a section's selection",
+    text: '<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="s" title="t" visible="true"><qti-selection select="1"><w:config xmlns:w="urn:w"><w:a xml:id="v"/><w:b xml:id="&#x9;v "/></w:config></qti-selection></qti-assessment-section>',
+  },
+  {
+    name: "a padded xml:id held twice on two foreign elements of a section's selection",
+    text: '<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="s" title="t" visible="true"><qti-selection select="1"><w:config xmlns:w="urn:w"><w:a xml:id="&#x9;vé "/><w:b xml:id="&#x9;vé "/></w:config></qti-selection></qti-assessment-section>',
   },
 ];
 

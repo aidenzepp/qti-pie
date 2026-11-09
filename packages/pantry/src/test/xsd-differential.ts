@@ -340,6 +340,73 @@ const invalidIdRecord: Recorded = {
 };
 
 /**
+ * A breach of "DocumentId key" as the comparison writes it: the place of the second element that
+ * holds the ID, and of the first. It names the collapsed ID, not the holders' lexical forms.
+ */
+const documentKeyDetail =
+  /^DocumentId key at (?<second>\/\S*): a second element purports the id [\s\S]*, which (?<first>\/\S*) already holds$/u;
+
+/**
+ * A padded `xml:id` that libxml2 keys apart from its collapsed value: libxml2 2.9.13's parser
+ * registers every `xml:id` by its raw value (`SAX2.c:2128-2147`, `xmlAddID` at
+ * `valid.c:2692-2760`), and the schema validator keys an `xs:ID` by its collapsed value only where
+ * the parser did not register the attribute (`xmlschemastypes.c:2863-2885`). So `v` and `&#x9;v `
+ * are two IDs to it, and so are `&#x9;v ` twice, the second keyed collapsed beside the first's raw
+ * form. XML Schema keys the collapsed value (Part 1, 3.3.4, cvc-id.2; `xs:ID` collapses its
+ * whitespace, Part 2, 3.3.8), and so do the xml:id Recommendation and the law oracle. The detail
+ * names the collapsed ID alone, so a generated document's difference matches only where both
+ * holders carry an `xml:id` and one of the two is padded ({@link holdsPaddedId}).
+ */
+export const paddedIdRecord: Recorded = {
+  class: "identity",
+  detail: documentKeyDetail,
+  direction: "oracle-only",
+  reason: {
+    _tag: "libxml2",
+    why: "libxml2 keys an xml:id by its raw value at parse time and re-keys only an ID the parser did not register, so a padded xml:id never collides with its collapsed value (SAX2.c:2128-2147, valid.c:2692-2760, xmlschemastypes.c:2863-2885 in v2.9.13)",
+  },
+  rule: "document-key",
+};
+
+/**
+ * Find the lexical forms of the two `xml:id`s a "DocumentId key" difference names, where both of
+ * its holders carry one.
+ *
+ * @param difference - The difference.
+ * @param xmlIds - The document's `xml:id`s, by their holders' places ({@link ForeignNames}).
+ * @returns The first holder's and the second's, or `undefined` where the difference is no key
+ *   breach or a holder carries no `xml:id`.
+ */
+const xmlIdsKeyed = (
+  difference: Difference,
+  xmlIds: ReadonlyMap<string, string>,
+): readonly [string, string] | undefined => {
+  const groups = documentKeyDetail.exec(difference.detail)?.groups;
+  const first = xmlIds.get(groups?.["first"] ?? "");
+  const second = xmlIds.get(groups?.["second"] ?? "");
+
+  return first === undefined || second === undefined ? undefined : [first, second];
+};
+
+/**
+ * Decide whether a {@link paddedIdRecord} difference is libxml2's: both holders carry an `xml:id`,
+ * and one of the two lexical forms is not its collapsed value. Two unpadded forms libxml2 keys
+ * alike, so it refuses the second too and the two oracles agree.
+ *
+ * @param difference - The difference.
+ * @param names - The document's names, whose `xmlIds` hold each `xml:id` by its holder's place.
+ * @returns Whether it is.
+ */
+const holdsPaddedId = (difference: Difference, names: Pick<ForeignNames, "xmlIds">): boolean =>
+  xmlIdsKeyed(difference, names.xmlIds)?.some(
+    (lexical) =>
+      lexical
+        .split(/[\t\n\r ]+/u)
+        .filter((part) => part !== "")
+        .join(" ") !== lexical,
+  ) ?? false;
+
+/**
  * The content libxml2 skips: libxml2 2.9.13 assesses nothing more of an element once it refuses the
  * element's type, cvc-type clause 1 ("The type definition is absent.": an `xsi:type` that names no
  * type of the document's schema set, or none at all) or cvc-type clause 3.1.2 ("Element content is
@@ -383,6 +450,7 @@ export const libxml2Records: readonly Recorded[] = [
   base64Record,
   absentTypeRecord,
   invalidIdRecord,
+  paddedIdRecord,
   paddedTypeRecord,
   widenedOtherRecord,
   skippedContentRecord,
@@ -506,7 +574,9 @@ export const isNestedRoot = (difference: Difference, nested: ReadonlySet<string>
  * nothing. A `drd:hazard` beneath a LOM element in an external LOM file is the reading's example.
  *
  * Only a refusal of an element or attribute in a namespace outside the document's set is this
- * class, decided from the law oracle's own rows and the XSDs' imports ({@link isOutsideSet}).
+ * class, decided from the law oracle's own rows and the XSDs' imports ({@link isOutsideSet}). An
+ * `xml:id` held twice in an external LOM file is one, which the reading names: its set declares no
+ * `xml:id`, so XML Schema keys nothing there, and the grammar keys it as a manifest's set types it.
  */
 export const outsideSet: Recorded = {
   direction: "oracle-only",
@@ -712,7 +782,9 @@ export const isSkippedContent = (
  * external LOM file, LOM's kinds reading a manifest's set. An `xsi:` attribute is XML Schema's own,
  * which every set declares, and a foreign kind names no namespace of its own, so neither is this
  * class. An element outside the set that no such kind read is not the limit but the grammar reading
- * it where reading 81 makes it foreign, a defect, and stays unrecorded.
+ * it where reading 81 makes it foreign, a defect, and stays unrecorded. A "DocumentId key" breach
+ * names the elements that hold the ID, not the attribute, so one whose two holders both carry an
+ * `xml:id` is read as an `xml:` attribute's.
  *
  * @param difference - The difference.
  * @param names - The document's names, its schema set and what LOM's kinds read beyond it.
@@ -727,6 +799,14 @@ export const isOutsideSet = (
   const groups = breachDetail.exec(difference.detail)?.groups;
   if (difference.direction !== outsideSet.direction || groups === undefined) {
     return false;
+  }
+
+  if (
+    xmlIdsKeyed(difference, names.xmlIds) !== undefined &&
+    !names.set.has(xmlNamespace) &&
+    names.lomReads.has(xmlNamespace)
+  ) {
+    return true;
   }
 
   const kinds = (groups["path"] ?? "")
@@ -1605,7 +1685,8 @@ const nodeIdOf = (index: number): NodeId =>
  * the document's schema set does not declare (`outside`, reading 81), which a wildcard can only
  * assess laxly; that set's namespaces (`set`); and the namespaces LOM's kinds read beyond it
  * (`lomReads`): in an external LOM file, a manifest's set, since LOM's kinds stand in manifests too
- * (reading 81's limit), and none in any other document.
+ * (reading 81's limit), and none in any other document; and each `xml:id`'s lexical form by its
+ * holder's place (`xmlIds`), which a "DocumentId key" breach names ({@link paddedIdRecord}).
  */
 export interface ForeignNames {
   readonly lax: ReadonlySet<string>;
@@ -1631,6 +1712,7 @@ export interface ForeignNames {
    * value libxml2 never assesses (cvc-type clause 3.1.2).
    */
   readonly skippedValues: ReadonlySet<string>;
+  readonly xmlIds: ReadonlyMap<string, string>;
 }
 
 /**
@@ -1677,6 +1759,7 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
       set: new Set(),
       skippedPaths: new Set(),
       skippedValues: new Set(),
+      xmlIds: new Map(),
     };
   }
 
@@ -1780,6 +1863,15 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
     set,
     skippedPaths: new Set([...typeAbsent, ...below([...typeAbsent, ...simpleHeld])].map(placeOf)),
     skippedValues: new Set(simpleHeld.map(placeOf)),
+    xmlIds: new Map(
+      rows.attributes.flatMap(({ lexical, name, node }) => {
+        const holder = byId.get(node);
+
+        return name === "xml:id" && holder !== undefined
+          ? [[placeOf(holder), lexical] as const]
+          : [];
+      }),
+    ),
   };
 });
 
@@ -2282,8 +2374,9 @@ export interface GeneratedContext {
  * reading 6's nested roots on `xmllint`'s side and on the law oracle's, reading 61's ordering slot,
  * reading 81's schema set by the rows or by an edit the codec refused, reading 60's lax
  * `xsi:type`, and then the corpus's, libxml2's and the generated records, libxml2's unchecked
- * nillability only where the document holds an `xsi:nil` that is no `xs:boolean`, and its skipped
- * content only at the places its rows show libxml2 skipped.
+ * nillability only where the document holds an `xsi:nil` that is no `xs:boolean`, its skipped
+ * content only at the places its rows show libxml2 skipped, and its padded `xml:id` only where the
+ * two holders' `xml:id`s are one padded.
  *
  * @param difference - The difference.
  * @param context - What the classes read of the document.
@@ -2330,7 +2423,9 @@ export const generatedRecordOf = (
     context.version,
     difference,
     [...recorded, ...libxml2Records, ...generatedRecorded].filter(
-      (held) => held !== skippedContentRecord || isSkippedContent(difference, names),
+      (held) =>
+        (held !== skippedContentRecord || isSkippedContent(difference, names)) &&
+        (held !== paddedIdRecord || holdsPaddedId(difference, names)),
     ),
   );
 
