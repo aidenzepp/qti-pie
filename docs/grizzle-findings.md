@@ -2469,3 +2469,34 @@ Found at grizzle trunk `3cc8fbd` (`3cc8fbda540167265f51b94f462d58f1cc2b6bc6`, 20
   grizzle-c5: `#targetUnique` could reuse a planned UNIQUE whose columns are the same set, as PostgreSQL would.
 - **Measured.** `_init` regenerated from zero at `3cc8fbd` holds 568 UNIQUEs (567 at `0c2154c`), seven same-set
   groups, the new one `node`'s.
+
+## A full role's levels drop a level that holds a live derived relation (grizzle defect, type layer, open at `4b0d45e`; lane E)
+
+Found at grizzle `4b0d45e` (`4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a`), the vendored commit, and unchanged on trunk
+`4be9623d` (2026-11-08), when `Qti` became its stored level and the level of its queries (`567e8be0`) and the first
+query, `TypedHref`, joined that level.
+
+- **What happens.** A role whose entries are `wholeEntriesOf(Top)`, over a level `Top` that holds a live derived
+  relation, is typed as holding no level above `Top`'s base whole, so `LevelsOf` of the role is the role and the levels
+  below `Top`. A query over `Top` is then refused as a program of the role's workload (`workload(role, { q })`, TS2322
+  ending "Type '"Base"' is not assignable to type '"Top"'") and by every reader of the role's `Db`, while the runtime
+  accepts it: `workload` builds and lists the program.
+- **Cause.** `FullBaseOf` and `UnheldOf` (`packages/engine/src/types/schema/world.ts:268-283`) count a relation of a
+  level as unheld unless it is a closed relation or the role's entry under its own name. `wholeEntriesOf` leaves every
+  live derived relation out (`WholeEntries`, `:236-240`), as grizzle's README says a role reads one "through the tables
+  its definition reads, never as a whole entry", so the type finds it unheld and falls to the level below. The
+  runtime's `wholeLevel` (`packages/engine/src/schema/world.ts:105-125`) skips every relation `heldRelation`
+  (`packages/engine/src/ir/desc.ts:962-967`) says no role holds, the closed relations and the live derived ones alike,
+  so the runtime finds the role full over `Top`. The type and the runtime disagree.
+- **Reproduction.** `~/.cache/gr8des/integration/grizzle-repros/full-role-live-derived/` (`full-role.ts`, `control.ts`,
+  and their verbatim output in `output.txt`), which needs only `@bjornpagen/grizzle`: `Base` holds `Item`; `Top =
+  schema.extend(Base, "Top", { Items }, [])`, `Items` a live derived relation over `Base`; a full role over `Top`; and
+  `workload(role, { overTop })`, `overTop` a query over `Top`. `tsc` refuses it with TS2322, and `node full-role.ts`
+  prints `runtime accepts: [ 'overTop' ]`. The control, the same `Top` with no derived relation, typechecks.
+- **Fix.** `UnheldOf` skips a live derived relation as `WholeEntries` does: `[BaseRelations[K]] extends
+  [AnyClosedRelation | { readonly storage: "live" } | UnderName<Relations, K>]`.
+- **Where it costs pantry.** Every query over `Qti` the author role runs: the export's reads (`src/export/scan.ts`
+  `exportQueriesOf`), which the login's workload holds (`src/qti/logins.ts`), and the export's db tests. It blocks the
+  cutover's first query, `TypedHref` (lane E's R1), and every query lanes F and G add.
+- **Status.** Sent to grizzle-c5 for a fix hash, beside lane F's finding. pantry holds no workaround: R1 waits for the
+  repin.
