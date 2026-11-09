@@ -2470,7 +2470,7 @@ Found at grizzle trunk `3cc8fbd` (`3cc8fbda540167265f51b94f462d58f1cc2b6bc6`, 20
 - **Measured.** `_init` regenerated from zero at `3cc8fbd` holds 568 UNIQUEs (567 at `0c2154c`), seven same-set
   groups, the new one `node`'s.
 
-## A full role's levels drop a level that holds a live derived relation (grizzle defect, type layer, open at `4b0d45e`; lane E)
+## A full role's levels drop a level that holds a live derived relation (grizzle defect, type layer; fixed in grizzle `80f16c8`, vendored at `ef778e01`; lane E)
 
 Found at grizzle `4b0d45e` (`4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a`), the vendored commit, and unchanged on trunk
 `4be9623d` (2026-11-08), when `Qti` became its stored level and the level of its queries (`567e8be0`) and the first
@@ -2498,10 +2498,9 @@ query, `TypedHref`, joined that level.
 - **Where it costs pantry.** Every query over `Qti` the author role runs: the export's reads (`src/export/scan.ts`
   `exportQueriesOf`), which the login's workload holds (`src/qti/logins.ts`), and the export's db tests. It blocks the
   cutover's first query, `TypedHref` (lane E's R1), and every query lanes F and G add.
-- **Status.** Sent to grizzle-c5 for a fix hash, beside lane F's finding. pantry holds no workaround: R1 waits for the
-  repin.
+- **Status.** Fixed in grizzle `80f16c88`: "held whole" is one type, read by WholeEntries, UnheldOf and EntryCheck, mirroring the runtime's heldRelation. Vendored at qti-pie `ef778e01`. pantry never carried a workaround.
 
-## A rule over a query whose definition binds a literal: its probe puts the literal first (grizzle defect, open; lane F)
+## A rule over a query whose definition binds a literal: its probe puts the literal first (grizzle defect; fixed in grizzle `3e26039`, vendored at `aa6b061e`; lane F)
 
 Found at the vendored grizzle `4b0d45e` (`4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a`, 2026-11-08) by lane F of the
 cutover, writing the metadata naming rules over queries. The three sites below are unchanged at grizzle `origin/main`
@@ -2549,8 +2548,9 @@ cutover, writing the metadata naming rules over queries. The three sites below a
 - **Class.** A grizzle defect, sent to grizzle-c5 by the coordinator on 2026-11-08 with the reproduction. Until its fix
   is vendored, a pantry query states such a constant as a condition, `.where(r.eq(field, value))`, the control's form,
   and goes back to the literal match once it is.
+- **Status.** Fixed in grizzle `3e260390`: the three probe pins share one helper, and a literal binding is never substituted first. Vendored at qti-pie `aa6b061e`. The interim `.where(r.eq(field, value))` form never landed on main, and a query states a constant as a literal match.
 
-## A rule over a query is refused where its containment joins two text patterns a foreign key joins (grizzle defect, open at `4b0d45e`; lane E)
+## A rule over a query is refused where its containment joins two text patterns a foreign key joins (grizzle defect; fixed in grizzle `c2f719c`, vendored at `aa6b061e`; lane E)
 
 Found at grizzle `4b0d45e`, the vendored commit, and unchanged on trunk `76c27633` (2026-11-08), when the first query,
 `TypedHref`, and the rules over it joined `Qti`'s level of queries.
@@ -2579,8 +2579,7 @@ Found at grizzle `4b0d45e`, the vendored commit, and unchanged on trunk `76c2763
   document-typed hrefs into `Entry` and `ResourceDocument`, each a foreign key into a stored copy before the cutover.
   Retyping `ResourceDocument.path` as a key text would dodge two of them, a representation change made only for the
   defect, which pantry does not make.
-- **Status.** Sent to grizzle-c5 with the full role's finding above. pantry holds no workaround: R1 waits for the
-  repin.
+- **Status.** Fixed in grizzle `c2f719c1`: a negation correlates differently refined text, and numerics of different typmods, by PostgreSQL's equality, as a foreign key does. Vendored at qti-pie `aa6b061e`. pantry never carried a workaround, and R1-R3 states both rules directly.
 
 ## A check over a query takes its check's name on every table the query reads, so it collides with a CHECK there (grizzle defect, being fixed as QTIFIX item 5; lanes G and E)
 
