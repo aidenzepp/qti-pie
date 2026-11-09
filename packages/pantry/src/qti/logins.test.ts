@@ -31,8 +31,8 @@ layer(NodeServices.layer)("qti/logins.ts, compiled as the layer compiles it", (i
     "builds the author login's layer, compiling every workload program, the import's write program among them, for the author role",
     () =>
       // Oracle: grizzle itself, `DbLayer.make`'s startup compilation, which refuses a program that
-      // does not compile with `OpenError` and its `CompileError`, and a schema or program the
-      // snapshot does not record with `WorkloadUngenerated`.
+      // does not compile with `OpenError` and its `CompileError`, and compares nothing with the
+      // snapshot (grizzle `cda0ac8b`).
       // Bound: the one login, its one role and its four programs; residual none.
       Effect.gen(function* layerBuilds() {
         const fs = yield* FileSystem.FileSystem;

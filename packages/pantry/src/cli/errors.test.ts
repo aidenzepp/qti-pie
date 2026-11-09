@@ -5,6 +5,7 @@ import {
   EncodingFailure,
   ExecutionFailure,
   OpenError,
+  ReadFailure,
   ServerError,
   Sqlstate,
   TokenError,
@@ -78,7 +79,8 @@ describe("describeFailure, the local set-up", () => {
     }),
   );
 
-  it("a TransportFailure carrying a CredentialError exits 78 as config", () => {
+  it("a ReadFailure or a TransportFailure carrying a CredentialError exits 78 as config", () => {
+    assert.deepStrictEqual(identity(new ReadFailure({ reason: credential })), config);
     assert.deepStrictEqual(identity(new TransportFailure({ reason: credential })), config);
   });
 });
