@@ -16,8 +16,8 @@
  *   exact numeric, a truth value or a set of a roster's handles.
  * - **Terms.** A stored predicate reads into a {@link Term} ({@link termOf}): fields, literals,
  *   comparisons, `in`, `and`, `or`, `not`, a closed relation's three reads, a `Compute.when` over a
- *   `Compute.matches` guard, a cast of a text into a double or a numeric, and the `Compute`
- *   functions of {@link computers}; any other term is `unread`.
+ *   `Compute.matches` guard, a cast of a text into a bigint, a double or a numeric, and the
+ *   `Compute` functions of {@link computers}; any other term is `unread`.
  * - **Evaluation.** {@link evaluate} is SQL's three-valued logic: an absent field, a closed read at a
  *   key its relation holds no tuple at and an unread term are unknown; `and`, `or` and `not` are
  *   Kleene's.
@@ -72,6 +72,11 @@ const DatumSchema = Schema.Union([
 export type Row = Readonly<Record<string, Datum>>;
 
 /**
+ * A type a cast reads a text into: `bigint`, `double precision` or a `numeric`.
+ */
+type CastType = "bigint" | "double" | "numeric";
+
+/**
  * A term of a predicate, the part of grizzle's predicate language a selection, a check or a
  * generated field reads. Any other term is `unread`: a selection that holds one cannot be
  * evaluated, and a check reads it as unknown.
@@ -88,7 +93,7 @@ export type Term =
   | { readonly args: readonly Term[]; readonly kind: "closedHas"; readonly relation: string }
   | { readonly arg: Term; readonly kind: "in"; readonly values: readonly Term[] }
   | { readonly arg: Term; readonly kind: "not" }
-  | { readonly arg: Term; readonly kind: "cast"; readonly to: "double" | "numeric" }
+  | { readonly arg: Term; readonly kind: "cast"; readonly to: CastType }
   | { readonly field: string; readonly kind: "field" }
   | { readonly kind: "compare"; readonly left: Term; readonly op: string; readonly right: Term }
   | { readonly kind: "literal"; readonly value: Datum }
@@ -219,6 +224,36 @@ export const doubleNamed = (text: string): number => {
   }
 
   return text === "-INF" ? Number.NEGATIVE_INFINITY : Number(text);
+};
+
+/**
+ * An integer text: an optional sign and decimal digits, leading zeros included.
+ */
+const integerText = /^[+-]?[0-9]+$/u;
+
+/**
+ * The bounds of `bigint`, a signed 64-bit integer.
+ */
+const [leastBigint, mostBigint] = [-(2n ** 63n), 2n ** 63n - 1n];
+
+/**
+ * The integer a text names, as PostgreSQL's `int8in` reads a text a guard has held to grizzle's
+ * `lexicalForm(pg.bigint)`: an optional sign, any leading zeros and a magnitude within `bigint`'s
+ * range, which is XML Schema 1.1's integer lexical mapping, exact (grizzle-engine's
+ * `scalar/lexical.ts` `integerForm` and `integerValue` at the vendored commit).
+ *
+ * @param text - The text.
+ * @returns The integer, none for a text of no integer form or one outside `bigint`'s range, which
+ *   a predicate reads as unknown.
+ */
+export const integerNamed = (text: string): bigint | undefined => {
+  if (!integerText.test(text)) {
+    return undefined;
+  }
+
+  const value = BigInt(text);
+
+  return value < leastBigint || value > mostBigint ? undefined : value;
 };
 
 /**
@@ -448,6 +483,10 @@ export const termOf = (stored: StoredTerm): Term => {
       () => {
         if (arg === undefined) {
           return unread;
+        }
+
+        if (to?.type === "bigint") {
+          return { arg: termOf(arg), kind: "cast", to: "bigint" };
         }
 
         if (to?.type === "double precision") {
@@ -1054,20 +1093,25 @@ const computers: ReadonlyMap<string, (args: readonly Datum[]) => Datum | undefin
 ]);
 
 /**
- * Cast a text into a float or an exact numeric, as PostgreSQL's `float8in` and `numeric_in` read a
- * text a guard has held to the type's form: {@link doubleNamed}, {@link numericNamed}.
+ * Each type a cast reads a text into, with how PostgreSQL reads a text a guard has held to the
+ * type's form: `int8in`, `float8in` and `numeric_in` ({@link integerNamed}, {@link doubleNamed},
+ * {@link numericNamed}).
+ */
+const casts = {
+  bigint: integerNamed,
+  double: doubleNamed,
+  numeric: numericNamed,
+} satisfies Readonly<Record<CastType, (text: string) => Datum | undefined>>;
+
+/**
+ * Cast a text into an integer, a float or an exact numeric, as {@link casts} reads it.
  *
  * @param to - The type.
  * @param held - The text.
- * @returns The value, unknown for no text or one no numeric names.
+ * @returns The value, unknown for no text or one the type names no value by.
  */
-const castOf = (to: "double" | "numeric", held: Datum | undefined): Datum | undefined => {
-  if (!Predicate.isString(held)) {
-    return undefined;
-  }
-
-  return to === "double" ? doubleNamed(held) : numericNamed(held);
-};
+const castOf = (to: CastType, held: Datum | undefined): Datum | undefined =>
+  Predicate.isString(held) ? casts[to](held) : undefined;
 
 /**
  * Evaluate the operands of a term, the whole unknown where any is.
