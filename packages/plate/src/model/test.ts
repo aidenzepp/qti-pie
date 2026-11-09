@@ -744,9 +744,12 @@ const marksOf = (
  * now gives a test only `duration` and `QTI_CONTEXT` (`builtIns` in
  * `packages/pantry/src/grammar/references.ts`, typed by `builtInTypes` in
  * `packages/pantry/src/grammar/expression.ts`); plate keeps a test's own `numAttempts` and
- * `completionStatus`, accepted and marked, an agreement difference (G-R3 184, pending). Of these
- * the engine holds only the test's own `duration` (G-R3, pending: a test's processing reads only
- * the test's declared outcomes and its own `duration`).
+ * `completionStatus` where the test declares neither, accepted and marked, as ruled (B4), an
+ * agreement difference (G-R3 184, pending). A test may declare either (reading 168, "A test may
+ * declare a variable named `numAttempts` or `completionStatus`; in a test only `duration` is
+ * reserved"), and its processing then reads the declared variable, not this built-in. Of these the
+ * engine holds only the test's own `duration` (G-R3, pending: a test's processing reads only the
+ * test's declared outcomes and its own `duration`).
  */
 const processingBuiltIns: readonly string[] = [
   "completionStatus",
