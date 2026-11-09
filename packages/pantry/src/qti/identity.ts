@@ -127,7 +127,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
-import { ncNamePattern } from "#pantry/grammar/domains.ts";
+import { namingPattern } from "#pantry/grammar/domains.ts";
 import {
   AttributeGrammar,
   AttributeModelOf,
@@ -172,14 +172,6 @@ export const spacePattern = "^[\\t\\n\\r ]*$";
  * TextDomain's over the element's text.
  */
 export const idValuePattern = "^[^\\t\\n\\r ]+$";
-
-/**
- * A lexical form that names something once collapsed: an NCName (`ncNamePattern`) with XML
- * whitespace around it, which collapsing strips. Only such a form of an ID-typed attribute or text
- * is an ID value, `xs:ID` being a restriction of `xs:NCName`; any other form names nothing and has
- * no {@link DocumentId}, so its value domain refuses it alone (spec reading 156).
- */
-export const namingPattern = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
 
 /**
  * A same-document fragment reference: `#` and one or more characters (MathML 3 §4.2.7).

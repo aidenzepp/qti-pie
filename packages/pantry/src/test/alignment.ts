@@ -938,7 +938,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     152,
     {
       owner:
-        "the grammar's one NCName, `ncNamePattern` and its host reading `isNcName` (`src/grammar/domains.ts`), read by the schema's sources of the content references and bindings (`referenceReadOf`, `printedReference`, `sectionFeedbackSource`, `fragmentReferenceOf`, `namedBinding`, `src/qti/interactions.ts`), of the processing references (`namePattern`, `bareReference`, `bracedReference`, `src/qti/expressions.ts`) and of the declaration and field names (`identifiers`, `namedFields`, `src/qti/declarations.ts`), and by the import's readers (`referencesOf`, `sectionNamesOf`, `nameOf`, `src/import/overlays/interactions.ts`; `spelledBy`, `src/import/overlays/expressions.ts`; `namedPiecesOf`, `src/import/overlays/declarations.ts`); the oracle's bare reference and typed values (`referenced`, `typedValueOf`, `src/test/oracle.ts`); held by `src/import/overlays/reference-names.oracle.test.ts`",
+        "the grammar's one NCName, `ncNamePattern` and its host reading `isNcName` (`src/grammar/domains.ts`), read by the schema's sources of the content references and bindings (`referenceReadOf`, `printedReference`, `sectionFeedbackSource`, `fragmentReferenceOf`, `namedBinding`, `src/qti/interactions.ts`), of the processing references (`namePattern`, `bareReference`, `bracedReference`, `src/qti/expressions.ts`), of the declaration and field names (`identifiers`, `namedFields`, `src/qti/declarations.ts`), of the dependency identifierrefs (`namingDependencyRefs`, `src/qti/package.ts`) and of the structure identifiers (`namingIdentifiers`, `src/qti/tests.ts`), and by the import's readers (`referencesOf`, `sectionNamesOf`, `nameOf`, `src/import/overlays/interactions.ts`; `spelledBy`, `src/import/overlays/expressions.ts`; `namedPiecesOf`, `src/import/overlays/declarations.ts`; `rowsOf`, `src/import/overlays/package.ts`; `namedOf`, `src/import/overlays/tests.ts`); the oracle's bare reference and typed values (`referenced`, `typedValueOf`, `src/test/oracle.ts`); held by `src/import/overlays/reference-names.oracle.test.ts`",
       status: "G",
     },
   ],
@@ -970,7 +970,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     156,
     {
       owner:
-        "the schema's copy sources of the IDs into `DocumentId`, `namingIdAttributes` and `idTexts` (`namingPattern` over `ncNamePattern`, `src/qti/identity.ts`), and of a `th`'s ID into `TableHeader`, `headerIds` (`src/qti/html.ts`), under \"DocumentId key\" and \"E1 derived\"; the import's `documentIdOf` (`src/import/overlays/identity.ts`) and `th` headers (`src/import/overlays/html.ts`) by `isNcName`; the oracle's `idsOf` by each ID's value domain and `tableHeadersOf` by `nameForm` (`src/test/oracle.ts`); held by `src/import/overlays/id-names.oracle.test.ts`",
+        "the schema's copy sources of the IDs into `DocumentId`, `namingIdAttributes` and `idTexts` (`namingPattern` over `ncNamePattern`, `src/grammar/domains.ts`), and of a `th`'s ID into `TableHeader`, `headerIds` (`src/qti/html.ts`), under \"DocumentId key\" and \"E1 derived\"; the import's `documentIdOf` (`src/import/overlays/identity.ts`) and `th` headers (`src/import/overlays/html.ts`) by `isNcName`; the oracle's `idsOf` by each ID's value domain and `tableHeadersOf` by `nameForm` (`src/test/oracle.ts`); held by `src/import/overlays/id-names.oracle.test.ts`",
       status: "G",
     },
   ],

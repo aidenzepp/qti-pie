@@ -111,6 +111,45 @@ const knownList = [
 ];
 
 /**
+ * A manifest whose one resource holds `child`, which the import's rows bound only where the
+ * database fills `Attribute.idrefText` from it.
+ *
+ * @param child - The resource's child element.
+ * @returns The manifest's text.
+ */
+const filledManifest = (child: string): string =>
+  `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource>${child}</resource></resources></manifest>`;
+
+/**
+ * An NCName of `bytes` ASCII bytes.
+ *
+ * @param bytes - Its length in bytes.
+ * @returns The name.
+ */
+const nameOf = (bytes: number): string => `K${"x".repeat(bytes - 1)}`;
+
+/**
+ * The manifests whose identifierref the database's fold copies into `Attribute.idrefText`, a field
+ * the import never writes: one byte past the key-text bound (`keyTextBytes`, 2,587) on a cp:variant
+ * and on a cp:dependency, and at the bound on the variant.
+ */
+const filledCases = [
+  {
+    manifest: filledManifest(`<cpx:variant identifierref="${nameOf(2588)}"/>`),
+    name: "a cp:variant's identifierref past the bound",
+  },
+  {
+    manifest: filledManifest(`<dependency identifierref="${nameOf(2588)}"/>`),
+    name: "a cp:dependency's identifierref past the bound",
+  },
+  {
+    manifest: filledManifest(`<cpx:variant identifierref="${nameOf(2587)}"/>`),
+    name: "a cp:variant's identifierref at the bound",
+  },
+] as const;
+
+/**
  * Each relation of `Qti`, and each field of its heading as `Relation.field`, the names a signature
  * may hold.
  */
@@ -306,6 +345,53 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                         `${signature} shows again, which ${entry.owner}'s fix (${entry.fix}) closed`,
                       );
                     }
+                  }
+                }),
+            );
+          }).pipe(Effect.scoped),
+        ),
+      testTimeoutMs,
+    );
+
+    it.effect(
+      "flags no key text past its bound in a field the database fills",
+      (ctx) =>
+        // Oracle: a second implementation, the law oracle, against the laws the import's rows hold
+        // on the host. Bound: a cp:variant's and a cp:dependency's identifierref one byte past the
+        // key-text bound, and the variant's at the bound, each judged once.
+        searched(
+          ctx,
+          Effect.gen(function* filledRuns() {
+            const directory = yield* scratchDirectory("genetic-filled-");
+            const bench = { directory, grammar, laws };
+
+            return yield* exhaust(
+              {
+                box: "an identifierref one byte past the key-text bound, and one at it",
+                caseHang: Duration.minutes(5),
+                coverage: noCoverage,
+                generator: int(0, filledCases.length - 1),
+                limit: filledCases.length,
+                literal: (at) => filledCases[at]?.name ?? String(at),
+                oracle: {
+                  kind: "second-implementation",
+                  name: "the law oracle against the laws the import's rows hold on the host",
+                },
+                suite: "pantry/genetic-filled-key-text",
+              },
+              (at) =>
+                Effect.gen(function* filledCase() {
+                  const held = filledCases[at];
+                  assert.isDefined(held, `no filled case ${String(at)}`);
+                  if (held !== undefined) {
+                    const manifest = new TextEncoder().encode(held.manifest);
+                    const genome = yield* genomeOf(new Map([["imsmanifest.xml", manifest]]));
+                    const judged = yield* judgeOne(genome, bench, at);
+                    assert.notInclude(
+                      judged.disagreements.map(signatureOf),
+                      "oracle-only-law: Key text bound",
+                      `${held.name}: the oracle says ${judged.summary.oracle}, the import's rows ${judged.summary.import}`,
+                    );
                   }
                 }),
             );

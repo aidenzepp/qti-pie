@@ -62,6 +62,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
+import { namingPattern } from "#pantry/grammar/domains.ts";
 import {
   AttributeModelOf,
   AttributeSlotOf,
@@ -70,7 +71,7 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
-import { DocumentId, idValuePattern, namingPattern, spacePattern } from "#pantry/qti/identity.ts";
+import { DocumentId, idValuePattern, spacePattern } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 

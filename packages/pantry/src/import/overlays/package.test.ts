@@ -179,7 +179,9 @@ const expectResource = (
 /**
  * Walk a manifest's tree in document order and collect the overlay rows it implies: each
  * `cp:manifest`, `cp:resource`, `cp:file` and `cp:dependency` with its node's tuple, its parent and
- * its attributes as written.
+ * its attributes as written, each identifier and `identifierref` beside it collapsed as an `xs:ID`
+ * and an `xs:IDREF` are (decision 457 (3)), the value the identifier space and the dependencies
+ * compare.
  *
  * @param doc - The manifest's tree.
  * @returns Every overlay's expected rows.
@@ -236,9 +238,17 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     const ownBase = valueOf("xml:base");
     const bases = ownBase === undefined ? parent.bases : [...parent.bases, ownBase];
 
-    const identifier = valueOf("identifier");
-    if (kind === "cp:manifest" && identifier !== undefined) {
-      expected.ManifestId.set(id, { ...tuple, identifier, package: pkg, parent: parent.id });
+    const identifierLexical = valueOf("identifier");
+    const identifier =
+      identifierLexical === undefined ? undefined : oracleValueOf(identifierLexical, "collapse");
+    if (kind === "cp:manifest" && identifier !== undefined && identifierLexical !== undefined) {
+      expected.ManifestId.set(id, {
+        ...tuple,
+        identifier,
+        lexical: identifierLexical,
+        package: pkg,
+        parent: parent.id,
+      });
       expected.ManifestIdSpace.set(heading([pkg, identifier, kind]), {
         identifier,
         kind,
@@ -255,9 +265,14 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
       };
 
       expectResource(expected, { bases, href: valueOf("href"), row, spelled });
-      if (identifier !== undefined) {
+      if (identifier !== undefined && identifierLexical !== undefined) {
         named.push({ identifier, node: id });
-        expected.ResourceId.set(id, { identifier, node: id, package: pkg });
+        expected.ResourceId.set(id, {
+          identifier,
+          lexical: identifierLexical,
+          node: id,
+          package: pkg,
+        });
         expected.ManifestIdSpace.set(heading([pkg, identifier, kind]), {
           identifier,
           kind,
@@ -285,9 +300,16 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
       });
     }
 
-    const ref = kind === "cp:dependency" ? valueOf("identifierref") : undefined;
-    if (ref !== undefined) {
-      expected.Dependency.set(id, { ...tuple, package: pkg, ref, resource: parent.id });
+    const refLexical = kind === "cp:dependency" ? valueOf("identifierref") : undefined;
+    if (refLexical !== undefined) {
+      const ref = oracleValueOf(refLexical, "collapse");
+      expected.Dependency.set(id, {
+        ...tuple,
+        lexical: refLexical,
+        package: pkg,
+        ref,
+        resource: parent.id,
+      });
       dependencies.push({ node: id, ref, resource: parent.id });
     }
 
@@ -306,7 +328,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
 
   // A dependency names its own resource where that resource's identifier is its ref, and
   // otherwise the first resource in document order that writes the ref (IMS Content Packaging
-  // 1.2, `dependency`), none where none does.
+  // 1.2, `dependency`), none where none does; both collapsed (decision 457 (3)).
   for (const { node, ref, resource } of dependencies) {
     const target = named.some(
       ({ identifier, node: held }) => held === resource && identifier === ref,
@@ -689,6 +711,35 @@ const unreadOf = (
   };
 };
 
+/**
+ * Build a manifest of one resource, `r1`, holding the dependencies given, and read the refs of the
+ * `Dependency` rows the builder writes.
+ *
+ * @param dependencies - Each dependency's `identifierref` as written.
+ * @returns The ref and the written form of each `Dependency` row, in document order.
+ */
+const dependencyRefsOf = (dependencies: readonly string[]) =>
+  [
+    ...rowsOf(
+      treeOf({
+        manifestBase: undefined,
+        manifestIdentifier: "m",
+        resources: [
+          {
+            base: undefined,
+            dependencies,
+            files: [],
+            href: undefined,
+            identifier: "r1",
+            type: "webcontent",
+          },
+        ],
+        resourcesBase: undefined,
+      }),
+      ids,
+    ).Dependency.values(),
+  ].map(({ lexical, ref }) => ({ lexical, ref }));
+
 describe("import/overlays/package.ts", () => {
   it.effect("writes each overlay's rows as the walk of the manifest's tree names them", (ctx) =>
     // Oracle: a second implementation, a direct walk of the XDM document that numbers its nodes in
@@ -786,6 +837,22 @@ describe("import/overlays/package.ts", () => {
       ]).paths,
       ["item.xml"],
       "two unread resources of one path, one UnreadTypePath",
+    );
+  });
+
+  it("writes a Dependency only for a dependency whose identifierref names something once collapsed", () => {
+    // Oracle: spec reading 152 and decision 457 (2), with the genetic repair round 2's class 1
+    // (gr2-2): `xs:IDREF` restricts `xs:NCName`, so `1x` and `x𝔸` name no resource and have no
+    // Dependency row, and their value domain refuses them alone; `r1` and its padded form name the
+    // resource `r1` and keep their row, its ref the collapsed value and its lexical form as
+    // written (decision 457 (3): an `xs:IDREF` is a whiteSpace `collapse` type).
+    assert.deepStrictEqual(dependencyRefsOf(["1x"]), [], "a digit first");
+    assert.deepStrictEqual(dependencyRefsOf(["x𝔸"]), [], "a character no NCName holds");
+    assert.deepStrictEqual(dependencyRefsOf(["r1"]), [{ lexical: "r1", ref: "r1" }], "an NCName");
+    assert.deepStrictEqual(
+      dependencyRefsOf([" r1"]),
+      [{ lexical: " r1", ref: "r1" }],
+      "an NCName once collapsed, its ref collapsed and its lexical form as written",
     );
   });
 });

@@ -5,8 +5,9 @@
  * `#pantry/qti/package.ts` declares, each relation's rows a keyed set.
  *
  * The rows restate what the tree says: each overlay copies its node's tuple as the tree's own rows
- * give it (`flatten` of `#pantry/model/xdm.ts`), each attribute's lexical form as written, and
- * each resource's type as the `ResourceType` handle its lexical form spells. The database proves
+ * give it (`flatten` of `#pantry/model/xdm.ts`), each attribute's lexical form as written, each
+ * identifier and `identifierref` beside it collapsed, and each resource's type as the
+ * `ResourceType` handle its lexical form spells. The database proves
  * every one of them (`packageLaws`), so a row this builder gets wrong is refused, never accepted.
  *
  * Every href is resolved here before a row is written (readings 102 and 103): its value read by
@@ -20,6 +21,7 @@
  */
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Option, Result } from "effect";
+import { collapse, isNcName } from "#pantry/grammar/domains.ts";
 import { documentTypes, grammar, ResourceType } from "#pantry/grammar/install.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
@@ -716,9 +718,10 @@ const attributesOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, ReadonlyMap
   );
 
 /**
- * Name the resource each dependency names: the one whose identifier its `identifierref` is, as
- * written, its own resource where its own resource's identifier is that one, so that "Self
- * dependency" judges it, else the first in document order; none where no resource's is.
+ * Name the resource each dependency names: the one whose identifier its `identifierref` is, both
+ * collapsed (an `xs:ID` and an `xs:IDREF` are whiteSpace `collapse` types, decision 457 (3)), its
+ * own resource where its own resource's identifier is that one, so that "Self dependency" judges
+ * it, else the first in document order; none where no resource's is.
  *
  * @param dependencies - The manifest's dependencies.
  * @param resourceIds - Its resources' identifiers, in document order.
@@ -761,17 +764,23 @@ const unwrittenType = "";
 /**
  * Build the overlay rows of a package's manifest.
  *
- * An element's identifier is a row only where it is written: a `cp:manifest`'s is its
- * `ManifestId`, a `cp:resource`'s its `ResourceId`, each beside its row of the package's
- * identifier space (`ManifestIdSpace`). A row whose existence an attribute's copy proves is left
- * out where the attribute is absent (a `cp:file`'s `href`, a `cp:dependency`'s `identifierref`),
- * and a resource's `href` is a row only where it is written; AL3 refuses an absent required
- * attribute. A resource's absent `type` is held as {@link unwrittenType}. A resource's `href`
- * whose `type` is written and spells no handle has its `UnreadTypeHref`, beside the
- * `UnreadTypePath` of its compared path, where a typed one has its `TypedHref`.
+ * An element's identifier is a row only where it is written: a `cp:manifest`'s is its `ManifestId`,
+ * a `cp:resource`'s its `ResourceId`, each beside its row of the package's identifier space
+ * (`ManifestIdSpace`). A row whose existence an attribute's copy proves is left out where the
+ * attribute is absent (a `cp:file`'s `href`, a `cp:dependency`'s `identifierref`), and a resource's
+ * `href` is a row only where it is written; AL3 refuses an absent required attribute. A
+ * dependency's `Dependency` is left out, too, where its `identifierref` is no NCName once collapsed
+ * ({@link isNcName}): `xs:IDREF` restricts `xs:NCName`, so it names no resource, and its value
+ * domain refuses it alone (spec reading 152, decision 457 (2)). A resource's absent `type` is held
+ * as {@link unwrittenType}. A resource's `href` whose `type` is written and spells no handle has its
+ * `UnreadTypeHref`, beside the `UnreadTypePath` of its compared path, where a typed one has its
+ * `TypedHref`.
  *
- * A dependency names the resource whose identifier its `identifierref` is, its own where its own
- * resource's is (`DependencyTarget`), and none where no resource's is.
+ * Each identifier and `identifierref` row holds its written form (`lexical`) and that form
+ * collapsed, its value (an `xs:ID` and an `xs:IDREF` are whiteSpace `collapse` types, decision 457
+ * (3)): the identifier space and the dependencies compare the values. A dependency names the
+ * resource whose identifier its `identifierref` is, its own where its own resource's is
+ * (`DependencyTarget`), and none where no resource's is.
  *
  * A resource's `href` and a file's are resolved against the manifest's path, the package root,
  * through every `xml:base` of a `cp:manifest`, `cp:resources` or `cp:resource` in scope (IMS
@@ -822,10 +831,12 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
 
   for (const node of rows.nodes) {
     if (node.kind === "cp:manifest") {
-      for (const identifier of Option.toArray(valueOf(node, "identifier"))) {
+      for (const lexical of Option.toArray(valueOf(node, "identifier"))) {
+        const identifier = collapse(lexical);
         manifests.set(node.id, {
           ...tupleOf(node),
           identifier,
+          lexical,
           package: ids.package,
           parent: node.parent,
         });
@@ -843,8 +854,9 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
         parent: node.parent,
         typeLexical,
       });
-      for (const identifier of Option.toArray(valueOf(node, "identifier"))) {
-        resourceIds.set(node.id, { identifier, node: node.id, package: ids.package });
+      for (const lexical of Option.toArray(valueOf(node, "identifier"))) {
+        const identifier = collapse(lexical);
+        resourceIds.set(node.id, { identifier, lexical, node: node.id, package: ids.package });
         spaceOf(identifier, "cp:resource");
       }
 
@@ -910,13 +922,16 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
       });
     }
 
-    for (const ref of node.kind === "cp:dependency"
-      ? Option.toArray(valueOf(node, "identifierref"))
+    for (const lexical of node.kind === "cp:dependency"
+      ? Option.toArray(
+          Option.filter(valueOf(node, "identifierref"), (value) => isNcName(collapse(value))),
+        )
       : []) {
       dependencies.set(node.id, {
         ...tupleOf(node),
+        lexical,
         package: ids.package,
-        ref,
+        ref: collapse(lexical),
         resource: node.parent,
       });
     }

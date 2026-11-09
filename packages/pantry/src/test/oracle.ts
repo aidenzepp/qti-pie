@@ -4812,6 +4812,22 @@ const entryPathAt = ({ resolution }: ResolvedHref): Option.Option<string> =>
   resolution.scope === "entry" ? Option.some(resolution.path) : Option.none();
 
 /**
+ * The "Key text bound" keys of an href that resolves to an entry path past `keyText`'s bound: the
+ * import writes each resolved in-package path into a `keyText` field (reading 133, "every text the
+ * schema copies into a keyText field counts against it"), so an href within the bound that
+ * resolves past it, through its document's folder or an `xml:base`, is refused under
+ * `key-text-bound` all the same.
+ *
+ * @param resolution - The href's resolution.
+ * @param held - The field the import writes the path into, as `Relation.field`.
+ * @returns The keys, none for a path within the bound or one outside the package.
+ */
+const pathBoundKeys = (resolution: ResolvedHref["resolution"], held: string): readonly Keys[] =>
+  resolution.scope === "entry" && utf8Length(resolution.path) > keyTextBytes
+    ? [{ bound: String(keyTextBytes), bytes: String(utf8Length(resolution.path)), field: held }]
+    : [];
+
+/**
  * List a manifest's resources.
  *
  * @param manifest - The manifest's view.
@@ -5036,7 +5052,8 @@ const oneCandidate = (lexical: string): boolean => {
  * `xml:base` values in scope ({@link resolvedAt}); one the representation reads no name from, and a
  * `srcset` of more than one candidate or with a descriptor, breaks "Href form"; and each that
  * resolves in the package names an entry ("File exists", IMS Content Packaging 1.2,
- * InterchangePackage (d)), a stimulus ref's a stimulus.
+ * InterchangePackage (d)), a stimulus ref's a stimulus, and an entry path within `keyText`'s bound,
+ * the `ReferencePath` or `TextReferencePath` the import writes it into ({@link pathBoundKeys}).
  *
  * @param documents - The documents the manifest lists, read.
  * @param entries - The package's entry paths.
@@ -5068,6 +5085,7 @@ const referenceBreaches = (
           const lexical = stringValueOf(view, member);
 
           return {
+            field: "TextReferencePath.path",
             form: "uri" as const,
             lexical,
             member,
@@ -5084,6 +5102,7 @@ const referenceBreaches = (
             version: member.version,
           }),
         ).map(({ form }) => ({
+          field: "ReferencePath.path",
           form,
           lexical,
           member,
@@ -5113,6 +5132,11 @@ const referenceBreaches = (
         resolution.scope !== "entry" || entries.has(resolution.path)
           ? []
           : [breach("File exists", { from: pathOf(view, member.id), path: resolution.path })],
+      ),
+      ...resolved.flatMap(({ field: held, member, resolution }) =>
+        pathBoundKeys(resolution, held).map((keys) =>
+          breach("Key text bound", { ...keys, node: pathOf(view, member.id) }),
+        ),
       ),
       ...resolved.flatMap(({ member, resolution }) =>
         member.kind !== "qti-assessment-stimulus-ref" ||
@@ -5790,7 +5814,9 @@ const documentLangBreaches = (
  * Evaluate the laws of §1.6 and O6 over a package: the stated limit `href-form` first, then
  * `root-type-reverse`, `file-listed`, `href-listed`, `entry-kind`, `file-exists`,
  * `manifest-id-space`, `self-dependency` and `lom-identifier`, and reading 85's `inclusion-cycle`
- * ({@link inclusionCycles}), then R26's `document-lang` ({@link documentLangBreaches}).
+ * ({@link inclusionCycles}), then R26's `document-lang` ({@link documentLangBreaches}); and
+ * `key-text-bound` for a resource's or a file's href that resolves to an entry path past the bound,
+ * the `ResourceHref` or `File` the import writes it into ({@link pathBoundKeys}).
  *
  * @param input - The package.
  * @param input.files - Its entries.
@@ -5919,6 +5945,18 @@ const packageBreaches = (
         .filter((path) => !entryPaths.has(path))
         .map((path) => breach("File exists", { from: pathOf(manifest, member.id), path })),
     ),
+    ...resources.flatMap(({ node, resolved }) =>
+      Option.toArray(resolved).flatMap(({ resolution }) =>
+        pathBoundKeys(resolution, "ResourceHref.path").map((keys) =>
+          breach("Key text bound", { ...keys, node: pathOf(manifest, node.id) }),
+        ),
+      ),
+    ),
+    ...fileNodes.flatMap(({ member, resolved }) =>
+      pathBoundKeys(resolved.resolution, "File.path").map((keys) =>
+        breach("Key text bound", { ...keys, node: pathOf(manifest, member.id) }),
+      ),
+    ),
     ...inclusionCycles(input.documents, grammar).map((chain) =>
       breach("Inclusion cycle", { chain: spaced(chain), path: chain[0] ?? "" }),
     ),
@@ -5931,11 +5969,16 @@ const packageBreaches = (
           node: pathOf(manifest, resource.node.id),
         }),
       ),
+    // A dependency's `identifierref` (`xs:IDREF`) and its resource's `identifier` (`xs:ID`) are
+    // whiteSpace collapse types, so they compare collapsed: `identifierref=" W"` names `W`
+    // (decision 457 (3); IMS Content Packaging 1.2 §6.11.5 B ii).
     ...manifest.members.flatMap((member) => {
       const resource = manifest.byId.get(member.parent);
-      const ref = valueOf(manifest, member.id, "identifierref");
+      const ref = collapsedValueOf(manifest, member.id, "identifierref");
       const own =
-        resource === undefined ? Option.none() : valueOf(manifest, resource.id, "identifier");
+        resource === undefined
+          ? Option.none()
+          : collapsedValueOf(manifest, resource.id, "identifier");
 
       return member.kind === "cp:dependency" &&
         Option.isSome(ref) &&
