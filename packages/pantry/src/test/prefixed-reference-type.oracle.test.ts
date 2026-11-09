@@ -120,23 +120,15 @@ const indexOf = (name: string): string =>
   `<qti-index n="${name}"><qti-ordered><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-ordered></qti-index>`;
 
 /**
- * A side whose summary a case reads.
+ * The sides whose summaries every case reads.
  */
-type Side = "import" | "oracle";
+const sides = ["import", "oracle"] as const;
 
 /**
- * Which sides' summaries a case holds: both, or the oracle's alone where the host still breaks a
- * law on it that another slice lifts.
- */
-type Held = "both" | "oracle";
-
-/**
- * One case: what it is, its package, whether each side it holds names "Reference type", and which
- * sides it holds.
+ * One case: what it is, its package, and whether each side names "Reference type".
  */
 interface Case {
   readonly entries: PackageEntries;
-  readonly held: Held;
   readonly name: string;
   readonly raised: boolean;
 }
@@ -155,7 +147,6 @@ const cases: readonly Case[] = [
       type: itemType,
       version: "3.0.0",
     }),
-    held: "both",
     name: "qti-index n=ref1.N, the item's float outcome (O4-item-idx-float)",
     raised: true,
   },
@@ -169,7 +160,6 @@ const cases: readonly Case[] = [
       type: itemType,
       version: "3.0.0",
     }),
-    held: "both",
     name: "qti-index n=ref1.N, the item's integer outcome (O4-item-idx)",
     raised: false,
   },
@@ -183,7 +173,6 @@ const cases: readonly Case[] = [
       type: itemType,
       version: "3.0.0",
     }),
-    held: "both",
     name: "qti-index n=ref1.N, the item's multiple integer outcome",
     raised: true,
   },
@@ -197,7 +186,6 @@ const cases: readonly Case[] = [
       type: itemType,
       version: "3.0.0",
     }),
-    held: "both",
     name: "qti-index n=ref1.N, the item's integer template",
     raised: false,
   },
@@ -211,7 +199,6 @@ const cases: readonly Case[] = [
       type: itemType,
       version: "3.0.0",
     }),
-    held: "both",
     name: "qti-index n=ref1.N, N mapped from the item's float outcome",
     raised: true,
   },
@@ -225,7 +212,6 @@ const cases: readonly Case[] = [
       type: itemType,
       version: "3.0.0",
     }),
-    held: "both",
     name: "qti-index n=ref1.N, N mapped from the item's integer outcome",
     raised: false,
   },
@@ -237,7 +223,6 @@ const cases: readonly Case[] = [
       type: itemType,
       version: "3.0.0",
     }),
-    held: "both",
     name: "qti-index n=ref1.numAttempts, an item built-in",
     raised: true,
   },
@@ -252,7 +237,6 @@ const cases: readonly Case[] = [
       type: itemType,
       version: "3.0.0",
     }),
-    held: "both",
     name: "qti-round-to figures=ref1.F, the item's float outcome",
     raised: true,
   },
@@ -264,7 +248,6 @@ const cases: readonly Case[] = [
       type: linkType,
       version: "3.0.1",
     }),
-    held: "both",
     name: "qti-index n=ref1.N through an LTI link, 3.0.1 (O4-lti-idx-301)",
     raised: false,
   },
@@ -308,17 +291,13 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                   const judged = yield* judgeOne(yield* genomeOf(of.entries), bench, at);
                   const said = `${of.name}: the oracle ${judged.summary.oracle}; the import ${judged.summary.import}`;
-                  const sides: readonly Side[] =
-                    of.held === "both" ? ["import", "oracle"] : ["oracle"];
-                  if (of.held === "both") {
-                    const apart = judged.disagreements.filter(
-                      (disagreement) =>
-                        (disagreement.kind === "oracle-only-law" ||
-                          disagreement.kind === "import-only-law") &&
-                        disagreement.law === "Reference type",
-                    );
-                    assert.deepStrictEqual(apart.map(shownDisagreement), [], said);
-                  }
+                  const apart = judged.disagreements.filter(
+                    (disagreement) =>
+                      (disagreement.kind === "oracle-only-law" ||
+                        disagreement.kind === "import-only-law") &&
+                      disagreement.law === "Reference type",
+                  );
+                  assert.deepStrictEqual(apart.map(shownDisagreement), [], said);
 
                   for (const side of sides) {
                     if (of.raised) {
