@@ -11,11 +11,10 @@
  * - **The schema's laws, restated on the host** over the import's rows (`readProgram`): the existence
  *   of each template default's `TemplateDefaultTarget` and each mapping's
  *   `MappingSourceDeclaration`, their containments into `ItemRefDocument` and `Declaration`, their
- *   CHECKs, a mapped reading's declaration (its mapping's source's), `MappingLookup`'s forced and
- *   justified rows, `VariableMapping`'s key and session check, and what each item ref names: its
- *   `ItemRefTarget` and `ItemRefDocument`, each a row only where the package holds it, and the
- *   assembly's names' copies of them. Each law carries the name `src/import/refusal.ts` gives the
- *   schema's statement of it ({@link hostLaws}, held to `statedLaws` by the first test).
+ *   CHECKs, a mapped reading's declaration (its mapping's source's), `VariableMapping`'s key and
+ *   session check, and what each item ref names: its `ItemRefTarget` and `ItemRefDocument`, each a
+ *   row only where the package holds it. Each law carries the name `src/import/refusal.ts` gives
+ *   the schema's statement of it ({@link hostLaws}, held to `statedLaws` by the first test).
  *
  * The two must name the same breaches, but one residual the schema states on purpose: the declared
  * half of `Variable mapping target` is judged on a mapping's `MappingSourceDeclaration`, so a
@@ -64,7 +63,6 @@ import {
   smallItemRefPackage,
   sourceName,
   swarmedItemRefPackage,
-  targetName,
 } from "#pantry/test/gen/item-ref-declarations.ts";
 import type { ItemRefPackage, Named } from "#pantry/test/gen/item-ref-declarations.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
@@ -84,7 +82,7 @@ const testTimeoutMs = 1_200_000;
 const laws = lawsOf(grammar);
 
 /**
- * The nil uuid, which no row of the four relations may hold.
+ * The nil uuid, which no row of the three relations may hold.
  */
 const nil = "00000000-0000-0000-0000-000000000000";
 
@@ -237,22 +235,6 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
       from: ["ItemRefDocument", "document", "package", "path"],
       kind: "contained",
       to: ["Document", "node", "package", "path"],
-    },
-    "Item ref target",
-  ],
-  [
-    {
-      from: ["NameLookup", "node", "resourceType"],
-      kind: "contained",
-      to: ["ItemRefTarget", "node", "type"],
-    },
-    "Item ref target",
-  ],
-  [
-    {
-      from: ["NameLookup", "node", "itemDocument"],
-      kind: "contained",
-      to: ["ItemRefDocument", "node", "document"],
     },
     "Item ref target",
   ],
@@ -410,30 +392,6 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "declCardinalities",
         "declBaseTypes",
       ],
-    },
-    "E1 derived",
-  ],
-  [
-    {
-      from: ["MappingSourceDeclaration", "itemDocument", "target", "targetDeclared"],
-      kind: "contained",
-      to: ["VariableLookup", "document", "name", "declared"],
-    },
-    "E1 derived",
-  ],
-  [
-    {
-      from: ["VariableMapping", "parent", "target"],
-      kind: "contained",
-      to: ["MappingLookup", "itemRef", "name"],
-    },
-    "E1 derived",
-  ],
-  [
-    {
-      from: ["MappingLookup", "itemRef", "name"],
-      kind: "contained",
-      to: ["VariableMapping", "parent", "target"],
     },
     "E1 derived",
   ],
@@ -602,7 +560,7 @@ const targetBreaches = (
 
 /**
  * The breaches of one mapping's source declaration: its copy, its item and declaration, its kind,
- * its target's lookup, and the declared half of its target's law.
+ * and the declared half of its target's law, where its item declares its target.
  *
  * @param rows - The rows.
  * @param source - The source declaration.
@@ -613,8 +571,8 @@ const sourceBreaches = (
   source: Addition<typeof MappingSourceDeclaration>,
 ): readonly HostBreach[] => {
   const mapping = rows.inputs.VariableMapping.get(source.node);
-  const lookup = [...rows.inputs.VariableLookup.values()].find(
-    ({ document, name }) => document === source.itemDocument && name === source.target,
+  const targetDeclared = rows.declarations.some(
+    ({ document, identifier }) => document === source.itemDocument && identifier === source.target,
   );
 
   return [
@@ -636,9 +594,8 @@ const sourceBreaches = (
       "Variable mapping source",
       source.source,
     ),
-    ...unless(lookup?.declared === source.targetDeclared, "E1 derived", source.target),
     ...unless(
-      !source.targetDeclared || source.target === source.source,
+      !targetDeclared || source.target === source.source,
       "Variable mapping target",
       source.target,
     ),
@@ -750,44 +707,10 @@ const readingBreaches = (rows: HostRows): readonly HostBreach[] => {
 };
 
 /**
- * The breaches of `MappingLookup`'s forced and justified rows: each mapping's target mapped, and
- * each mapped name a mapping's.
- *
- * @param rows - The rows.
- * @returns The breaches.
- */
-const lookupBreaches = (rows: HostRows): readonly HostBreach[] => {
-  const lookups = [...rows.inputs.MappingLookup.values()];
-
-  return [
-    ...rows.mappings.flatMap((mapping) =>
-      unless(
-        lookups.some((l) => l.itemRef === mapping.parent && l.name === mapping.target && l.mapped),
-        "E1 derived",
-        mapping.target,
-      ),
-    ),
-    ...lookups
-      .filter(({ mapped }) => mapped)
-      .flatMap((lookup) =>
-        unless(
-          rows.mappings.some(
-            ({ parent, target }) => parent === lookup.itemRef && target === lookup.name,
-          ),
-          "E1 derived",
-          lookup.name,
-        ),
-      ),
-  ];
-};
-
-/**
  * The breaches of the laws over what each item ref names (B2, B3, "Item ref target"): each item
  * ref that writes an href has its target, of the item type or an LTI type, named by a resource of
- * the package; each of the item type has its document, whose root is an item, and no other has
- * one; and each found item ref of the assembly's names that names a resource reads its type and
- * its item from them. Each is named by the empty name, as the oracle keys the law by its path
- * alone.
+ * the package; and each of the item type has its document, whose root is an item, and no other
+ * has one. Each is named by the empty name, as the oracle keys the law by its path alone.
  *
  * @param inputs - The import's rows.
  * @returns The breaches.
@@ -810,10 +733,6 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
       path,
       type,
     })),
-  );
-  const found = [...inputs.NameLookup.values()].filter(
-    ({ found: held, kind, resourceType }) =>
-      held && kind === "qti-assessment-item-ref" && resourceType !== "none",
   );
 
   return [
@@ -848,15 +767,6 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
             path === document.path &&
             rootKind === "qti-assessment-item",
         ),
-        law,
-        "",
-      ),
-    ]),
-    ...found.flatMap((name) => [
-      ...unless(inputs.ItemRefTarget.get(name.node)?.type === name.resourceType, law, ""),
-      ...unless(
-        name.resourceType !== itemResourceType ||
-          inputs.ItemRefDocument.get(name.node)?.document === name.itemDocument,
         law,
         "",
       ),
@@ -907,7 +817,6 @@ const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
     ...rows.sources.flatMap((source) => sourceBreaches(rows, source)),
     ...keyBreaches(rows),
     ...readingBreaches(rows),
-    ...lookupBreaches(rows),
     ...itemRefBreaches(inputs),
   ];
 };
@@ -1010,9 +919,9 @@ const resolves = (input: ItemRefPackage, name: Named): boolean =>
   input.target === "item" && declaredKinds[name] !== undefined;
 
 /**
- * Hold the import's rows to the ruling: no row of the four relations holds the nil uuid or stands
- * for an unwritten attribute, each declaration row exists exactly where the item declares its
- * name, and each mapping is forced into its item ref's lookups.
+ * Hold the import's rows to the ruling: no row of the three relations holds the nil uuid or stands
+ * for an unwritten attribute, and each declaration row exists exactly where the item declares its
+ * name.
  *
  * @param input - The package.
  * @param inputs - The import's rows.
@@ -1023,17 +932,15 @@ const assertNoSentinel = (input: ItemRefPackage, inputs: PackageInputs, literal:
     ...[...inputs.TemplateDefaultTarget.values()].flatMap((row) => Object.values(row)),
     ...[...inputs.MappingSourceDeclaration.values()].flatMap((row) => Object.values(row)),
     ...[...inputs.TemplateDefault.values()].flatMap((row) => Object.values(row)),
-    ...[...inputs.MappingLookup.values()].flatMap((row) => Object.values(row)),
   ].filter((value) => value === nil);
 
   assert.deepStrictEqual(nilFields, [], `${literal}: a row holds the nil uuid`);
   assert.deepStrictEqual(
-    [
-      ...[...inputs.ItemRefDocument.values()].flatMap((row) => Object.values(row)),
-      ...[...inputs.NameLookup.values()].flatMap((row) => Object.values(row)),
-    ].filter((value) => value === nil),
+    [...inputs.ItemRefDocument.values()]
+      .flatMap((row) => Object.values(row))
+      .filter((value) => value === nil),
     [],
-    `${literal}: an item ref's item or an assembly's name holds the nil uuid`,
+    `${literal}: an item ref's item holds the nil uuid`,
   );
   assert.isFalse(
     [...inputs.ItemRefTarget.values()].some(({ type }) => type === "none"),
@@ -1060,14 +967,6 @@ const assertNoSentinel = (input: ItemRefPackage, inputs: PackageInputs, literal:
       .toSorted(),
     `${literal}: a mapping's source row exists exactly where its item declares its source, of any kind, so its CHECK judges a wrong kind`,
   );
-  for (const spec of input.mappings) {
-    assert.isTrue(
-      [...inputs.MappingLookup.values()].some(
-        ({ mapped, name }) => mapped && name === targetName(spec),
-      ),
-      `${literal}: the mapping of ${sourceName(spec.source)} is not forced into the lookups`,
-    );
-  }
 };
 
 /**

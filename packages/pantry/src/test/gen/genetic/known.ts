@@ -178,25 +178,6 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref identifier="ref3" href="items/item2.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "NS3: an item ref whose href names no item document is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-    signature: { field: "itemDocument", kind: "dangling-uuid", relation: "NameLookup" },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
 <manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
@@ -1072,75 +1053,6 @@ export const fixed: readonly Known[] = [
           terms: [
             { field: "kind", kind: "field" },
             { field: "base", kind: "field" },
-          ],
-        },
-      },
-    },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section>
-        
-        <qti-assessment-section>
-          
-          <qti-assessment-item-ref identifier="i27">
-          </qti-assessment-item-ref>
-        </qti-assessment-section>
-        
-      </qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-    owner: "NIL",
-    signature: {
-      kind: "import-only-law",
-      law: {
-        from: {
-          relation: "NameLookup",
-          selection: {
-            conjuncts: [
-              {
-                kind: "compare",
-                left: { field: "found", kind: "field" },
-                op: "eq",
-                right: { kind: "literal", type: undefined, value: true },
-              },
-              {
-                kind: "compare",
-                left: { field: "kind", kind: "field" },
-                op: "eq",
-                right: { kind: "literal", type: undefined, value: "qti-assessment-item-ref" },
-              },
-              {
-                kind: "compare",
-                left: { field: "resourceType", kind: "field" },
-                op: "ne",
-                right: { kind: "literal", type: undefined, value: "none" },
-              },
-            ],
-          },
-          terms: [
-            { field: "node", kind: "field" },
-            { field: "resourceType", kind: "field" },
-          ],
-        },
-        kind: "contained",
-        to: {
-          relation: "ItemRefTarget",
-          selection: { conjuncts: [] },
-          terms: [
-            { field: "node", kind: "field" },
-            { field: "type", kind: "field" },
           ],
         },
       },

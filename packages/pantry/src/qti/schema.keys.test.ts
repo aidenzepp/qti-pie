@@ -11,9 +11,9 @@
  * a law column, where a copy's source needs only a plain B-tree for its reverse probe.
  *
  * The keys are read off `lawsOf(Qti)`, every primary key and every key statement as an outcome
- * names it, never off grizzle's statement shapes. A held key a lane still owes the deletion of is a
- * row of {@link owed}, a list that only shrinks: a held key not owed fails, and so does an owed one
- * no longer held.
+ * names it, never off grizzle's statement shapes. No held key is left: the cutover's lanes deleted
+ * the last ones they owed, the expression lookups' with the lookups themselves (R7), so any held
+ * key fails, named with what holds it.
  */
 import { lawsOf } from "@bjornpagen/grizzle";
 import type { Law, LawSide } from "@bjornpagen/grizzle";
@@ -132,21 +132,6 @@ const textOf = (key: Key): string => {
   return `${key.relation}(${terms.join(", ")})${selected}`;
 };
 
-/**
- * The held keys a lane of the grizzle cutover owes the deletion of, by their text, each with its
- * site and holder and how many share the text: the list only shrinks.
- */
-const owed = {
-  "MappingLookup(itemRef, name) where 1 conjunct": [
-    "lane G: expressions.ts, mappedNames, held by MappingLookup's primary key (R7)",
-    1,
-  ],
-  "VariableLookup(document, name) where 1 conjunct": [
-    "lane G: expressions.ts, absentNames, held by VariableLookup's primary key (R7)",
-    1,
-  ],
-} as const satisfies Readonly<Record<string, readonly [site: string, count: number]>>;
-
 describe("qti/schema.ts, its keys", { timeout: compileTimeout }, () => {
   it("states no key that another key of its relation holds", () => {
     // Oracle: implication by selection and terms, the sufficient condition grizzle keys a target
@@ -165,14 +150,8 @@ describe("qti/schema.ts, its keys", { timeout: compileTimeout }, () => {
     });
 
     assert.deepStrictEqual(
-      Object.fromEntries(
-        Object.entries(Arr.groupBy(held, ([text]) => text)).map(([text, rows]) => [
-          text,
-          rows.length,
-        ]),
-      ),
-      Object.fromEntries(Object.entries(owed).map(([text, [, count]]) => [text, count])),
-      held.map(([text, holders]) => `${text}, held by ${holders.join(" and ")}`).join("\n"),
+      held.map(([text, holders]) => `${text}, held by ${holders.join(" and ")}`),
+      [],
     );
   });
 });

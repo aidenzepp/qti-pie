@@ -16,11 +16,12 @@
  * (`E1_derived`: at least one `PlacedReference`), so its cases are judged by a direct SQL writer
  * (`#pantry/test/direct-sql.ts`, README "Direct SQL access"): the reading with the rows its
  * non-deferrable foreign keys read (its `AssembledReference`, that one's `TestReference`, that
- * one's `ReferenceDocument`, and, for a reading through an item ref, its `MappingLookup`), each
- * lawful on its own CHECKs, the rest deferred and rolled back unchecked. A refused case's verdict
- * is the SQLSTATE and the constraint that states the law; a control's is no error. Each breach
- * breaks the one law under test, so the constraint PostgreSQL names is that law's whatever order it
- * checks them in.
+ * one's `ReferenceDocument`), each lawful on its own CHECKs, the rest deferred and rolled back
+ * unchecked: the rules over the queries a reading's scope and source read
+ * (`#pantry/qti/queries.ts`) among them, each a deferred constraint trigger. A refused case's
+ * verdict is the SQLSTATE and the constraint that states the law; a control's is no error. Each
+ * breach breaks the one law under test, so the constraint PostgreSQL names is that law's whatever
+ * order it checks them in.
  *
  * The whole-package cases, each fixture of `src/test/fixtures/processing/` imported and refused
  * under its rule or accepted, need the importer and arrive with it (Q5.15): every `broken`
@@ -42,12 +43,12 @@ import { ruleOfLaw } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import { OperatorArity } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
+import { DeclarationIdentifier } from "#pantry/qti/declarations.ts";
 import {
   AssembledReference,
   Expression,
   ExpressionAttribute,
   LiteralTyped,
-  MappingLookup,
   MappingSourceDeclaration,
   Operand,
   ProcessingTemplate,
@@ -58,14 +59,13 @@ import {
   TemplateDefaultCardinality,
   TemplateDefaultTarget,
   TestReference,
-  VariableLookup,
   VariableRef,
   VariableRefDeclaration,
   VariableRefTable,
 } from "#pantry/qti/expressions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
-import { HeldType } from "#pantry/qti/queries.ts";
+import { DeclaredTarget, HeldType } from "#pantry/qti/queries.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import {
@@ -428,20 +428,16 @@ const names = (outcome: ApplyOutcome<unknown>, relation: string, name: string): 
 const readingRow = (fields: Partial<Addition<typeof Reading>>): Addition<typeof Reading> => ({
   assembly: strayNode,
   attribute: "identifier",
-  declared: true,
   form: "unsplit",
   found: true,
   identifier: "OUT",
   kind: "qti-variable",
-  lookupDocument: strayNode,
-  mapped: false,
   named: strayNode,
   namedKind: "qti-assessment-test",
   node: nodeOf(1),
   number: "",
   placements: 1n,
   replaced: false,
-  resourceType: "none",
   role: "variable",
   scope: "",
   source: "declared",
@@ -467,10 +463,8 @@ const readDeclaration = {
 const throughItem = {
   form: "split",
   identifier: "a.SCORE",
-  lookupDocument: nodeOf(70),
   named: nodeOf(60),
   namedKind: "qti-assessment-item-ref",
-  resourceType: "imsqti_item_xmlv3p0",
   scope: "a",
   split: 1n,
   variable: "SCORE",
@@ -499,22 +493,11 @@ const allDigits = /^[0-9]+$/u;
  *   once less where it is the last; a section's has no segments and is read once), stated since the
  *   case states fewer readings than the name has;
  * - The readings, and each declared or mapped one's `ReadingDeclaration`, {@link readDeclaration}
- *   (every such reading a case states resolves);
- * - The `VariableLookup` row of each reading that reads a document's declarations (an unsplit
- *   reading, the test's, or a split or numbered reading of a found item ref of an item, the
- *   item's), at the reading's lookup document and variable, its verdict the reading's `declared`;
- * - The `MappingLookup` row of each reading through an item ref (a split or numbered reading of a
- *   found item ref), at the item ref and the reading's variable, its verdict the reading's
- *   `mapped`.
+ *   (every such reading a case states resolves).
  *
- * Grizzle installs the reading's foreign key into either lookup immediate, so PostgreSQL judges it
- * at the reading's statement: its deferral rule defers only a foreign key on a cycle or into a
- * replaceable target, one with a field the key does not name (the engine's
- * `src/laws/model/model.ts` `#deferral`), and each key names every field of its lookup, which holds
- * its verdict alone.
- *
- * Every other row they name (the segments, the placements, the other lookups, the test's nodes) is
- * absent, its foreign keys deferred and never checked before the rollback.
+ * Every other row they name (the segments, the placements, the test's names, declarations and
+ * mappings, the test's nodes) is absent, its foreign keys and the rules over the queries that read
+ * it deferred and never checked before the rollback.
  *
  * @param readings - The reference's readings, one at least, all of one reference.
  * @returns The facts.
@@ -565,7 +548,6 @@ const readingFacts = (
           attribute: reading.attribute,
           form: reading.form,
           kind: reading.kind,
-          lookupDocument: reading.lookupDocument,
           named: reading.named,
           node: reading.node,
           source: reading.source,
@@ -573,34 +555,6 @@ const readingFacts = (
           variable: reading.variable,
         },
         relation: ReadingDeclaration,
-      })),
-    ...readings
-      .filter(
-        ({ form, found, namedKind, resourceType }) =>
-          form === "unsplit" ||
-          ((form === "split" || form === "numbered") &&
-            found &&
-            namedKind === "qti-assessment-item-ref" &&
-            resourceType === "imsqti_item_xmlv3p0"),
-      )
-      .map((reading) => ({
-        fact: {
-          declared: reading.declared,
-          document: reading.lookupDocument,
-          name: reading.variable,
-        },
-        relation: VariableLookup,
-      })),
-    ...readings
-      .filter(
-        ({ form, found, namedKind }) =>
-          (form === "split" || form === "numbered") &&
-          found &&
-          namedKind === "qti-assessment-item-ref",
-      )
-      .map((reading) => ({
-        fact: { itemRef: reading.named, mapped: reading.mapped, name: reading.variable },
-        relation: MappingLookup,
       })),
   ];
 };
@@ -1086,7 +1040,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
           // with its reference's owners.
           Effect.gen(function* readingLaws() {
             const client = yield* loginSession;
-            const undeclared = { declared: false, source: "none" } as const;
+            const undeclared = { source: "none" } as const;
             const standIn = readingRow({ attribute: "max", kind: "qti-random-integer" });
             const cardinalityOf = (
               declCardinality: Addition<typeof ReadingCardinality>["declCardinality"],
@@ -1283,9 +1237,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             assertVerdict(
               yield* judged(
                 client,
-                statedInserts(
-                  readingFacts([first, { ...second, declared: false, source: "none" }]),
-                ),
+                statedInserts(readingFacts([first, { ...second, source: "none" }])),
               ),
               key,
               false,
@@ -1299,16 +1251,18 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
         "refuses a template default or a mapping its item's declarations do not admit, and keeps its control",
         () =>
           // Oracle: PostgreSQL, `Template_default_target` and `Template_default_type` (A37, A38,
-          // spec reading 108) and `Variable_mapping_source` and `Variable_mapping_target` (A34,
-          // reading 97), each a CHECK on the declaration's own row (`TemplateDefaultTarget`,
-          // `MappingSourceDeclaration`), `Template_default_type`'s on its cardinality's
-          // (`TemplateDefaultCardinality`, a row of its own where the declaration has one, spec
-          // reading 159), since the declaration's base type, where it has one, is
-          // `DeclarationBaseType`'s, which a containment reads. Bound: one breach of each, breaking
-          // that law alone, since PostgreSQL names the first CHECK a row breaks by name, beside its
-          // repair, which keeps all four.
+          // spec reading 108) and `Variable_mapping_source` (A34), each a CHECK on the
+          // declaration's own row (`TemplateDefaultTarget`, `MappingSourceDeclaration`),
+          // `Template_default_type`'s on its cardinality's (`TemplateDefaultCardinality`, a row of
+          // its own where the declaration has one, spec reading 159), since the declaration's base
+          // type, where it has one, is `DeclarationBaseType`'s, which a containment reads; and
+          // `Variable_mapping_target` (reading 97), a rule over `DeclaredTarget`'s query, a
+          // deferred constraint trigger the direct writer sets immediate. Bound: one breach of each,
+          // breaking that law alone, since PostgreSQL names the first CHECK a row breaks by name,
+          // beside its repair, which keeps all four.
           Effect.gen(function* itemRefLaws() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
+            const client = yield* loginSession;
             const templateDefault: Addition<typeof TemplateDefaultTarget> = {
               declBaseTypes: 1n,
               declCardinalities: 1n,
@@ -1331,7 +1285,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               node: nodeOf(2),
               source: "SCORE",
               target: "X",
-              targetDeclared: true,
             };
             const templateCases: readonly {
               readonly broken: Addition<typeof TemplateDefaultTarget>;
@@ -1384,40 +1337,84 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               "Template_default_type",
             );
 
-            const mappingCases: readonly {
-              readonly broken: Addition<typeof MappingSourceDeclaration>;
-              readonly law: string;
-              readonly repaired: Addition<typeof MappingSourceDeclaration>;
-            }[] = [
-              {
-                broken: {
-                  ...mapping,
-                  declarationKind: "qti-response-declaration",
-                  targetDeclared: false,
-                },
-                law: "Variable_mapping_source",
-                repaired: { ...mapping, targetDeclared: false },
-              },
-              {
-                broken: mapping,
-                law: "Variable_mapping_target",
-                repaired: { ...mapping, targetDeclared: false },
-              },
-            ];
-            for (const { broken, law, repaired } of mappingCases) {
-              const refused = yield* db.apply(
-                ChangeSet.empty(Author).insert(MappingSourceDeclaration, [broken]),
-                {},
-              );
-              const kept = yield* db.apply(
-                ChangeSet.empty(Author).insert(MappingSourceDeclaration, [repaired]),
-                {},
-              );
+            const refusedSource = yield* db.apply(
+              ChangeSet.empty(Author).insert(MappingSourceDeclaration, [
+                { ...mapping, declarationKind: "qti-response-declaration" },
+              ]),
+              {},
+            );
+            const keptSource = yield* db.apply(
+              ChangeSet.empty(Author).insert(MappingSourceDeclaration, [mapping]),
+              {},
+            );
 
-              assert.isTrue(names(refused, "MappingSourceDeclaration", law), law);
-              assert.isFalse(names(kept, "MappingSourceDeclaration", law), law);
+            assert.isTrue(
+              names(refusedSource, "MappingSourceDeclaration", "Variable_mapping_source"),
+              "Variable_mapping_source",
+            );
+            assert.isFalse(
+              names(keptSource, "MappingSourceDeclaration", "Variable_mapping_source"),
+              "Variable_mapping_source",
+            );
+
+            // The mapping's item declares its target `X`, another variable than its source: the
+            // declaration `DeclaredTarget`'s query joins it to; its repair maps the source to
+            // itself, or the item declares no `X`.
+            const targetDeclaration: Fact<typeof DeclarationIdentifier> = {
+              baseTypes: 1n,
+              cardinalities: 1n,
+              declarationKind: "qti-outcome-declaration",
+              document: mapping.itemDocument,
+              identifier: mapping.target,
+              identifierLead: "",
+              identifierLexical: mapping.target,
+              identifierTrail: "",
+              node: nodeOf(82),
+            };
+            const target = checkConstraintOf(Qti, DeclaredTarget.name, "Variable_mapping_target");
+            const targetCases: readonly {
+              readonly declared: boolean;
+              readonly label: string;
+              readonly refused: boolean;
+              readonly row: Addition<typeof MappingSourceDeclaration>;
+            }[] = [
+              { declared: true, label: "broken", refused: true, row: mapping },
+              {
+                declared: true,
+                label: "repaired, its own source",
+                refused: false,
+                row: { ...mapping, target: mapping.source },
+              },
+              { declared: false, label: "repaired, undeclared", refused: false, row: mapping },
+            ];
+            for (const { declared, label, refused, row } of targetCases) {
+              assertVerdict(
+                yield* judged(
+                  client,
+                  statedInserts([
+                    { fact: row, relation: MappingSourceDeclaration },
+                    ...(declared
+                      ? [
+                          {
+                            fact: {
+                              ...targetDeclaration,
+                              identifier: row.target,
+                              identifierLexical: row.target,
+                            },
+                            relation: DeclarationIdentifier,
+                          },
+                        ]
+                      : []),
+                  ]),
+                  [target],
+                ),
+                target,
+                refused,
+                `Variable_mapping_target, ${label}`,
+              );
             }
-          }),
+          }).pipe(Effect.scoped),
+        { timeout: leaseTestTimeoutMs },
       );
     },
   );

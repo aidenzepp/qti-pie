@@ -13,7 +13,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Equal, Option } from "effect";
+import { Effect, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import {
   builtInTypes,
@@ -1454,31 +1454,63 @@ const resolvesOnHost = (r: ReadingRow): boolean =>
   (r.form !== "numbered" || (r.replaced && /^[0-9]*[1-9][0-9]*$/u.test(r.number)));
 
 /**
- * The declaration lookups of a package: each document's, and the probes its documents write
- * together, which must agree where both hold a key.
+ * What a package's readings read of its stored rows, as the queries over them read it
+ * (`#pantry/qti/queries.ts`): each document's declared names by `[document, name]`, the item each
+ * item ref names, the names each item ref maps by `[item ref, name]`, and each test's written
+ * elements by `[assembly, identifier]`, with the instances that place each.
+ */
+interface ReadRows {
+  readonly declared: ReadonlySet<string>;
+  readonly items: ReadonlyMap<string, NodeId>;
+  readonly mapped: ReadonlySet<string>;
+  readonly names: ReadonlyMap<
+    string,
+    { readonly instances: readonly InstanceNameRow[]; readonly node: NodeId }
+  >;
+}
+
+/**
+ * An assembly's `InstanceName` row.
+ */
+type InstanceNameRow =
+  AssembledRows["InstanceName"] extends ReadonlyMap<string, infer R> ? R : never;
+
+/**
+ * Read what a package's readings read of its stored rows ({@link ReadRows}).
  *
  * @param rows - The package's rows.
- * @param breaches - The breaches found so far, which this adds to.
- * @returns The lookups, by `[document, name]`.
+ * @returns The rows read.
  */
-const lookupsOfPackage = (
-  rows: PackageRows,
-  breaches: string[],
-): ReadonlyMap<
-  string,
-  AssembledExpressionRows["VariableLookup"] extends ReadonlyMap<string, infer R> ? R : never
-> => {
-  const lookups = new Map(rows.documents.flatMap((input) => [...input.expressions.VariableLookup]));
-  for (const [at, probe] of rows.together.VariableLookup) {
-    const held = lookups.get(at);
-    if (held !== undefined && !Equal.equals(held, probe)) {
-      breaches.push(`VariableLookup ${at}: a probe beside a document's row`);
-    }
+const readRowsOf = (rows: PackageRows): ReadRows => {
+  const placed = Map.groupBy(rows.assembled.InstanceName.values(), ({ assembly, node }) =>
+    keyOf([assembly, node]),
+  );
 
-    lookups.set(at, probe);
-  }
-
-  return lookups;
+  return {
+    declared: new Set(
+      rows.documents.flatMap((input) =>
+        [...input.declarations.values()].map(({ document, identifier }) =>
+          lookupKey(document, identifier),
+        ),
+      ),
+    ),
+    items: new Map(
+      [...rows.together.ItemRefDocument.values()].map(({ document, node }) => [node, document]),
+    ),
+    mapped: new Set(
+      rows.documents.flatMap((input) =>
+        [...input.tests.VariableMapping.values()].map(({ parent, target }) =>
+          lookupKey(parent, target),
+        ),
+      ),
+    ),
+    names: new Map(
+      [...rows.assembled.AssembledName.values()].map(({ assembly, identifier, node }) => [
+        lookupKey(assembly, identifier),
+        { instances: placed.get(keyOf([assembly, node])) ?? [], node },
+      ]),
+    ),
+  };
 };
 
 /**
@@ -1559,27 +1591,36 @@ const textHolds = (reference: AssembledReferenceOnHost, r: ReadingRow): boolean 
 };
 
 /**
- * Whether a reading's name probe reads its scope's lookup.
+ * Whether a reading's scope is the one its test's assembly holds under its name, as `FoundName`,
+ * `HeldScope` and `Reading`'s `E1_derived` state it: a written element's node, kind and
+ * placements, and one instance's replacement, or, for a name the assembly holds none of, not found
+ * and the null objects.
  *
- * @param rows - The package's rows.
+ * @param read - The rows the readings read.
  * @param r - The reading.
- * @returns Whether it does, or makes none.
+ * @returns Whether it is, or makes none.
  */
-const nameProbeHolds = (rows: PackageRows, r: ReadingRow): boolean => {
+const scopeHolds = (read: ReadRows, r: ReadingRow): boolean => {
   if (r.form === "unsplit") {
     return true;
   }
 
-  const named = rows.together.NameLookup.get(lookupKey(r.assembly, r.scope));
+  const named = read.names.get(lookupKey(r.assembly, r.scope));
+  if (named === undefined) {
+    return (
+      !r.found &&
+      r.named === r.assembly &&
+      r.namedKind === "document" &&
+      r.placements === 0n &&
+      !r.replaced
+    );
+  }
 
   return (
-    named !== undefined &&
-    named.found === r.found &&
+    r.found &&
     named.node === r.named &&
-    named.kind === r.namedKind &&
-    named.placements === r.placements &&
-    named.replaced === r.replaced &&
-    named.itemDocument === r.lookupDocument
+    BigInt(named.instances.length) === r.placements &&
+    named.instances.some(({ kind, replaced }) => kind === r.namedKind && replaced === r.replaced)
   );
 };
 
@@ -1654,33 +1695,41 @@ const rowsReference = (rows: PackageRows, r: ReadingRow): AssembledReferenceOnHo
 };
 
 /**
- * The breaches of one reading's probes: its declaration probe where it reads the test's or an
- * item's declarations, and its mapping probe where it reads an item ref's, each the lookup's
- * verdict.
+ * The document whose declarations a reading reads its variable in, as `DeclaredReading` reads it:
+ * the test's own, unsplit; through a found item ref, its item, where the package holds it.
+ *
+ * @param read - The rows the readings read.
+ * @param r - The reading.
+ * @param itemScoped - Whether its scope is a found item ref.
+ * @returns The document, or none.
+ */
+const documentReadBy = (read: ReadRows, r: ReadingRow, itemScoped: boolean): NodeId | undefined => {
+  if (r.form === "unsplit") {
+    return r.assembly;
+  }
+
+  return itemScoped ? read.items.get(r.named) : undefined;
+};
+
+/**
+ * The breaches of one reading's text, scope and source: its variable declared where the document
+ * it reads declares it, the test's or its item ref's item's, mapped where its item ref maps it,
+ * and its source the first of those, else a built-in of its scope, else none.
  *
  * @param rows - The package's rows.
- * @param lookups - The declaration lookups.
+ * @param read - The rows the readings read.
  * @param r - The reading.
  * @returns The breaches.
  */
-const probeBreaches = (
-  rows: PackageRows,
-  lookups: ReturnType<typeof lookupsOfPackage>,
-  r: ReadingRow,
-): readonly string[] => {
+const readingBreaches = (rows: PackageRows, read: ReadRows, r: ReadingRow): readonly string[] => {
   const where = `${keyOf([r.assembly, r.node, r.attribute])} ${r.form} ${String(r.split)}`;
   const itemScoped =
     (r.form === "split" || r.form === "numbered") &&
     r.found &&
     r.namedKind === "qti-assessment-item-ref";
-  const readsDeclarations =
-    r.form === "unsplit" || (itemScoped && r.resourceType === "imsqti_item_xmlv3p0");
-  const declared = readsDeclarations
-    ? (lookups.get(lookupKey(r.lookupDocument, r.variable))?.declared ?? false)
-    : false;
-  const mapped = itemScoped
-    ? (rows.together.MappingLookup.get(lookupKey(r.named, r.variable))?.mapped ?? false)
-    : false;
+  const document = documentReadBy(read, r, itemScoped);
+  const declared = document !== undefined && read.declared.has(lookupKey(document, r.variable));
+  const mapped = itemScoped && read.mapped.has(lookupKey(r.named, r.variable));
 
   const builtIn = builtInStated(r, itemScoped);
   const source = sourceStated(declared, mapped, builtIn);
@@ -1688,41 +1737,31 @@ const probeBreaches = (
   return [
     ...(source === r.source ? [] : [`${where}: its source`]),
     ...(textHolds(rowsReference(rows, r), r) ? [] : [`${where}: its text`]),
-    ...(nameProbeHolds(rows, r) ? [] : [`${where}: its name probe`]),
-    ...(declared === r.declared ? [] : [`${where}: its declaration probe`]),
-    ...(mapped === r.mapped ? [] : [`${where}: its mapping probe`]),
+    ...(scopeHolds(read, r) ? [] : [`${where}: its scope`]),
   ];
 };
 
 /**
  * The breaches of the structural laws over a package's reference rows: each the law's statement,
  * read on the host: the name's pieces and the readings' count (`AssembledReference`'s and
- * `ReferenceSegment`'s `E1_derived`), each reading's text and each probe it makes, and the lookups'
- * forced and absent rows (M2).
+ * `ReferenceSegment`'s `E1_derived`), and each reading's text, scope and source.
  *
  * @param rows - The package's rows.
  * @returns The breaches, as text.
  */
 const structuralBreaches = (rows: PackageRows): readonly string[] => {
   const breaches: string[] = [];
-  const lookups = lookupsOfPackage(rows, breaches);
+  const read = readRowsOf(rows);
   const readings = Map.groupBy(rows.together.Reading.values(), ({ assembly, attribute, node }) =>
     keyOf([assembly, node, attribute]),
   );
   for (const reference of rows.together.AssembledReference.values()) {
-    const read =
+    const held =
       readings.get(keyOf([reference.assembly, reference.node, reference.attribute])) ?? [];
     breaches.push(
-      ...pieceBreaches(reference, read),
-      ...read.flatMap((r) => probeBreaches(rows, lookups, r)),
+      ...pieceBreaches(reference, held),
+      ...held.flatMap((r) => readingBreaches(rows, read, r)),
     );
-  }
-
-  for (const name of rows.assembled.AssembledName.values()) {
-    const found = rows.together.NameLookup.get(lookupKey(name.assembly, name.identifier));
-    if (found?.found !== true || found.node !== name.node) {
-      breaches.push(`NameLookup ${name.identifier}: not forced in`);
-    }
   }
 
   return breaches;
@@ -1818,6 +1857,96 @@ describe("import/overlays/expressions.ts, a test's references", () => {
     assert.strictEqual(judged, 1536);
     assert.isAbove(accepted, 0);
     assert.isBelow(accepted, judged);
+  });
+
+  it("reads no declaration through an item ref whose item the package lacks, whatever the test declares", () => {
+    // Oracle: the law oracle's readings (`#pantry/test/oracle-laws/tests.ts` `readingsOf`): an
+    // item ref reads the declarations of the item it names only where the package holds its
+    // document, so a reading through one whose item file is missing is declared by nothing, the
+    // test's own declarations of the same name among them, as `DeclaredReading` joins it
+    // (`#pantry/qti/queries.ts`); every structural law over the rows holds.
+    // Bound: item ref `a` of the item type whose file the package lacks, the test declaring each
+    // subset of {SCORE, b.SCORE, QTI_CONTEXT}, under five names read through `a`: 40 packages.
+    const names = ["a.SCORE", "a.b.SCORE", "a.1.SCORE", "a.QTI_CONTEXT", "a.duration"];
+    let judged = 0;
+    for (const declared of subsets(["SCORE", "b.SCORE", "QTI_CONTEXT"])) {
+      for (const reference of names) {
+        const test = el(
+          "qti-assessment-test",
+          [
+            ["identifier", "T"],
+            ["title", "T"],
+          ],
+          [
+            ...["OUT", ...declared].map((identifier) =>
+              el("qti-outcome-declaration", [
+                ["identifier", identifier],
+                ["cardinality", "single"],
+                ["base-type", "float"],
+              ]),
+            ),
+            el(
+              "qti-test-part",
+              [
+                ["identifier", "P"],
+                ["navigation-mode", "linear"],
+                ["submission-mode", "individual"],
+              ],
+              [
+                el(
+                  "qti-assessment-section",
+                  [
+                    ["identifier", "S"],
+                    ["title", "S"],
+                    ["visible", "true"],
+                  ],
+                  [
+                    el("qti-selection", [
+                      ["select", "1"],
+                      ["with-replacement", "true"],
+                    ]),
+                    el("qti-assessment-item-ref", [
+                      ["identifier", "a"],
+                      ["href", "a.xml"],
+                    ]),
+                  ],
+                ),
+              ],
+            ),
+            el(
+              "qti-outcome-processing",
+              [],
+              [
+                el(
+                  "qti-set-outcome-value",
+                  [["identifier", "OUT"]],
+                  [el("qti-variable", [["identifier", reference]])],
+                ),
+              ],
+            ),
+          ],
+        );
+        const rows = packageRowsOf(
+          [["test.xml", documentOfRoot(test)]],
+          [{ path: "a.xml", type: "imsqti_item_xmlv3p0" }],
+        );
+        const where = JSON.stringify({ declared, reference });
+        const throughA = [...rows.together.Reading.values()].filter(
+          ({ form, scope }) => (form === "split" || form === "numbered") && scope === "a",
+        );
+
+        assert.strictEqual(rows.together.ItemRefDocument.size, 0, where);
+        assert.isNotEmpty(throughA, where);
+        assert.isFalse(
+          throughA.some(({ source }) => source === "declared"),
+          `${where}: a reading through a missing item is declared`,
+        );
+        assert.deepStrictEqual(structuralBreaches(rows), [], where);
+        judged += 1;
+      }
+    }
+
+    assert.strictEqual(judged, 40);
   });
 
   it("refuses a name a section document placed twice gives twice, reads that document's own reference once, and accepts it placed once", () => {
@@ -2134,14 +2263,14 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
   });
 
   it.effect(
-    "probes every name a reference claims undeclared, types every unwritten base type unknown, and reads every table a declaration holds",
+    "resolves a reference to a declaration exactly where its document declares its name, types every unwritten base type unknown, and reads every table a declaration holds",
     () =>
       // Oracle: each document's own tree (`declarationsInTree`), a second reading of what it
-      // declares and which tables each declaration holds, against the lookups the builder writes
-      // (M2): a reference that names no declaration has an absent row, every row says what the
-      // document declares, every test variables' unwritten `base-type` is `unknown`, and every
-      // table a map response claims is the table its declaration holds, no claim row where it
-      // holds none.
+      // declares and which tables each declaration holds, against the references the builder
+      // writes (M2, `DeclaredReference` of `#pantry/qti/queries.ts`): a reference is declared
+      // exactly where its document declares its name, every test variables' unwritten `base-type`
+      // is `unknown`, and every table a map response claims is the table its declaration holds, no
+      // claim row where it holds none.
       // Bound: every fixture, 37 documents.
       Effect.gen(function* claimsProved() {
         for (const { file } of frozen) {
@@ -2150,19 +2279,10 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
           const declared = declarationsInTree(tree);
 
           for (const reference of rows.VariableRef.values()) {
-            const lookup = rows.VariableLookup.get(
-              lookupKey(reference.document, reference.identifier),
-            );
-            if (reference.resolution !== "declared") {
-              assert.strictEqual(lookup?.declared, false, `${file} ${reference.identifier}`);
-            }
-          }
-
-          for (const lookup of rows.VariableLookup.values()) {
             assert.strictEqual(
-              lookup.declared,
-              declared.has(lookup.name),
-              `${file} ${lookup.name}`,
+              reference.resolution === "declared",
+              declared.has(reference.identifier),
+              `${file} ${reference.identifier}`,
             );
           }
 
@@ -2352,8 +2472,10 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
       ["T"],
     );
     assert.deepStrictEqual(
-      [...rows.together.MappingLookup.values()].map(({ mapped, name }) => [name, mapped]),
-      [["S2", true]],
+      rows.documents.flatMap(({ tests }) =>
+        [...tests.VariableMapping.values()].map(({ target }) => target),
+      ),
+      ["S2"],
     );
   });
 
@@ -2382,6 +2504,11 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
               ...tests.VariableMapping.values(),
             ]);
             const mappingSource = together.MappingSourceDeclaration.get(mapping?.node ?? "");
+            const targetDeclared =
+              mappingSource !== undefined &&
+              readRowsOf(rows).declared.has(
+                lookupKey(mappingSource.itemDocument, mappingSource.target),
+              );
             const where = JSON.stringify(c);
 
             assert.isFalse(
@@ -2412,9 +2539,7 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
               where,
             );
             assert.strictEqual(
-              mappingSource === undefined ||
-                !mappingSource.targetDeclared ||
-                mappingSource.target === mappingSource.source,
+              !targetDeclared || mappingSource.target === mappingSource.source,
               source === "MISSING" || target === "S2" || target === source,
               where,
             );

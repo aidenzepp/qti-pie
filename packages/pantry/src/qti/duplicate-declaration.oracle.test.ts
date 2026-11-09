@@ -1,10 +1,9 @@
 /**
  * A second declaration of a name is refused by `Declaration key` alone, on the import's rows as in
- * the law oracle (spec reading 74): `VariableLookup` forces in each name a document declares, never
- * each declaration's node, so the lookup, keyed by the document and the name, holds one row for
- * the name and states the key no second time (`#pantry/qti/expressions.ts`). The force-in of every
- * declaration's node broke "E1 derived" beside the key on every second declaration, a law the
- * oracle never raises.
+ * the law oracle (spec reading 74): what a reference or a reading reads of a document's names is a
+ * query over its `DeclarationIdentifier` rows (`#pantry/qti/queries.ts`), which states the key no
+ * second time. A lookup that once forced in every declaration's node broke "E1 derived" beside the
+ * key on every second declaration, a law the oracle never raises.
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`): no

@@ -250,7 +250,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     48,
     {
       owner:
-        "PE's RG4 (`src/qti/expressions.ts`): `ReferenceSegment`'s pieces, `Reading`'s readings counted exactly, `NameLookup`, `VariableLookup` and `MappingLookup` (M2), and the key and the containment over the resolving readings (M3); the oracle's Prefixed reference",
+        "PE's RG4 (`src/qti/expressions.ts`): `ReferenceSegment`'s pieces, `Reading`'s readings counted exactly, its scope and source read through `FoundName`, `DeclaredReading` and `MappedReading` (M2, `src/qti/queries.ts`), and the key and the containment over the resolving readings (M3); the oracle's Prefixed reference",
       status: "G",
     },
   ],
@@ -416,7 +416,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     88,
     {
       owner:
-        "PE's numbered `Reading` (`src/qti/expressions.ts`): its item ref's `InstanceName.replaced` through `NameLookup`, and a number of at least 1; the oracle's Prefixed reference",
+        "PE's numbered `Reading` (`src/qti/expressions.ts`): its item ref's `InstanceName.replaced` through `FoundName` (`src/qti/queries.ts`), and a number of at least 1; the oracle's Prefixed reference",
       status: "G",
     },
   ],
@@ -474,7 +474,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     97,
     {
       owner:
-        "Q5.13's `VariableMapping` (`src/qti/tests.ts`): the key (item ref, target) and `Variable_mapping_target`, no session variable; PE's `MappingSource` (`src/qti/expressions.ts`): no other variable of the item, through `ItemRefDocument` and `VariableLookup`",
+        "Q5.13's `VariableMapping` (`src/qti/tests.ts`): the key (item ref, target) and `Variable_mapping_target`, no session variable; PE's `MappingSource` (`src/qti/expressions.ts`): no other variable of the item, through `ItemRefDocument` and `DeclaredTarget` (`src/qti/queries.ts`)",
       status: "G",
     },
   ],
@@ -554,7 +554,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     107,
     {
       owner:
-        "PE's `MappingSource` and `MappingLookup` (`src/qti/expressions.ts`): a mapped name and its source both resolve; the oracle's Variable mapping source and Prefixed reference",
+        "PE's `MappingSource` (`src/qti/expressions.ts`) and `MappedReading` (`src/qti/queries.ts`): a mapped name and its source both resolve; the oracle's Variable mapping source and Prefixed reference",
       status: "G",
     },
   ],
