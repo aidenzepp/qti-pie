@@ -25,8 +25,8 @@ import { required } from "@grizzle/testing/features";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
-import { faultOf, roster } from "#pantry/grammar/closed.ts";
+import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
+import { faultOf, repeatOf, roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import {
@@ -84,15 +84,13 @@ const composeTimeout = 60_000;
  * `AttributeName` rosters.
  */
 const production = grammar.pipe(
-  Effect.flatMap(({ kinds }) =>
-    Effect.fromResult(
-      references({
-        facets: [asiReferences],
-        kinds: kinds.nodeKind,
-        names: kinds.attributeName,
-        versions: kinds.versions,
-      }),
-    ),
+  Effect.map(({ kinds }) =>
+    references({
+      facets: [asiReferences],
+      kinds: kinds.nodeKind,
+      names: kinds.attributeName,
+      versions: kinds.versions,
+    }),
   ),
 );
 
@@ -588,43 +586,41 @@ describe("references", () => {
             suite: "grammar/references/coding",
           },
           ({ facets, fault }, c) =>
-            Effect.gen(function* coding() {
+            Effect.sync(() => {
               c.note(fault);
 
-              const kinds = yield* Effect.fromResult(roster("NodeKind", toyKinds));
-              const names = yield* Effect.fromResult(roster("AttributeName", toyNames));
-              const versions = yield* Effect.fromResult(roster("SchemaVersion", schemaVersions));
-              const outcome = references({ facets, kinds, names, versions });
-              // A roster's refusal is the generator's; a row outside its code space or a key stated
-              // twice is a fault of the rows, which `faultOf` finds and grizzle refuses.
-              const found = Result.match(outcome, {
-                onFailure: ({ _tag }) => _tag,
-                onSuccess: (held) =>
-                  Option.match(
-                    Arr.findFirst(
-                      [
-                        held.builtIn,
-                        held.builtInBaseType,
-                        held.choiceBound,
-                        held.choiceCount,
-                        held.contentReference,
-                        held.declares,
-                        held.referenceAttribute,
-                        held.sectionPart,
-                        held.variableReference,
-                      ],
-                      faultOf,
-                    ),
-                    { onNone: () => "succeeded", onSome: ({ _tag }) => _tag },
+              const kinds = roster("NodeKind", toyKinds);
+              const names = roster("AttributeName", toyNames);
+              const versions = roster("SchemaVersion", schemaVersions);
+              const relations = references({ facets, kinds, names, versions });
+              // The generator refuses nothing: a handle a roster lists twice is the roster's fault
+              // (`repeatOf`), and a row outside its code space or a key stated twice the rows'
+              // (`faultOf`), which the tests find and grizzle refuses.
+              const found = Option.match(
+                Option.orElse(repeatOf(relations.declarationKind), () =>
+                  Arr.findFirst(
+                    [
+                      relations.builtIn,
+                      relations.builtInBaseType,
+                      relations.choiceBound,
+                      relations.choiceCount,
+                      relations.contentReference,
+                      relations.declares,
+                      relations.referenceAttribute,
+                      relations.sectionPart,
+                      relations.variableReference,
+                    ],
+                    faultOf,
                   ),
-              });
+                ),
+                { onNone: () => "succeeded", onSome: ({ _tag }) => _tag },
+              );
 
               assert.strictEqual(found, refusalOf[fault]);
-              if (Result.isFailure(outcome) || found !== "succeeded") {
+              if (found !== "succeeded") {
                 return;
               }
 
-              const relations = outcome.success;
               const rows = facets.flatMap((facet) => facet.references);
               const declarations = facets.flatMap((facet) => facet.declarations);
               const builtIns = facets.flatMap((facet) => facet.builtIns);

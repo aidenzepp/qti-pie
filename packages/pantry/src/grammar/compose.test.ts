@@ -5,7 +5,8 @@ import { array, element as choice, int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
-import { faultOf } from "#pantry/grammar/closed.ts";
+import { faultOf, repeatOf } from "#pantry/grammar/closed.ts";
+import type { Roster } from "#pantry/grammar/closed.ts";
 import { composed, layerAttributeNames, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
 import { foreignKinds, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -61,6 +62,44 @@ const isRelation = (value: unknown): value is Relation =>
   "lookup" in value;
 
 /**
+ * Whether a value of a grammar is a roster: its handles and their codes.
+ *
+ * @param value - A value the grammar holds.
+ * @returns Whether it is one.
+ */
+const isRoster = (value: unknown): value is Roster<string> =>
+  typeof value === "object" &&
+  value !== null &&
+  "handles" in value &&
+  "codeOf" in value &&
+  "has" in value;
+
+/**
+ * Collect every roster a grammar holds, at any depth of its records, each relation's fields'
+ * among them: a relation's key and payload are lists of fields, which are walked, and its rows and
+ * a roster's handles lists of values, which are not.
+ *
+ * @param value - The grammar, or a value it holds.
+ * @param seen - The records walked already.
+ * @returns The rosters, each once.
+ */
+const rostersIn = (value: unknown, seen: Set<object> = new Set()): readonly Roster<string>[] => {
+  if (typeof value !== "object" || value === null || Array.isArray(value) || seen.has(value)) {
+    return [];
+  }
+
+  seen.add(value);
+
+  return isRoster(value)
+    ? [value]
+    : Object.entries(value).flatMap(([name, held]: readonly [string, unknown]) =>
+        (name === "key" || name === "payload") && Array.isArray(held)
+          ? held.flatMap((field: unknown) => rostersIn(field, seen))
+          : rostersIn(held, seen),
+      );
+};
+
+/**
  * Collect every closed relation a grammar holds, at any depth of its records: a roster's handles
  * and a relation's rows are lists, which hold none.
  *
@@ -105,6 +144,24 @@ describe("the composition", () => {
 
         assert.isAtLeast(relations.length, 45);
         assert.deepStrictEqual(faults, []);
+      }),
+    testTimeoutMs,
+  );
+
+  it.effect(
+    "lists every roster's handles once each, the rosters grizzle never declares among them",
+    () =>
+      // Oracle: `repeatOf`. No load checks a roster (`closed.ts`): grizzle refuses a repeated handle
+      // in a roster `install.ts` declares, and this test is where a vocabulary that lists a kind,
+      // a name or a handle twice fails, in a roster only the host reads as in any other.
+      Effect.gen(function* distinct() {
+        const rosters = rostersIn(yield* grammar);
+        const repeated = rosters.flatMap((held) =>
+          Option.toArray(repeatOf(held)).map(({ message }) => message),
+        );
+
+        assert.isAtLeast(rosters.length, 20);
+        assert.deepStrictEqual(repeated, []);
       }),
     testTimeoutMs,
   );

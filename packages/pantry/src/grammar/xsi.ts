@@ -34,13 +34,7 @@
  */
 import { Option, Result, Schema } from "effect";
 import { idField, roster, sourced, sourceIn } from "#pantry/grammar/closed.ts";
-import type {
-  IdField,
-  RepeatedValue,
-  Roster,
-  Sourced,
-  SourcedRow,
-} from "#pantry/grammar/closed.ts";
+import type { IdField, Roster, Sourced, SourcedRow } from "#pantry/grammar/closed.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { ContentModel, ExpandedName, TypeDerivation } from "#pantry/vocab/inventory/types.ts";
 import {
@@ -209,7 +203,7 @@ export class UnderivedType extends Schema.TaggedError<UnderivedType>()("Underive
  * The ways the `xsi:type` relations are not generated: a roster that lists a handle twice, or a
  * declared type no derivation lists.
  */
-export type XsiTypeError = RepeatedValue | UnderivedType;
+export type XsiTypeError = UnderivedType;
 
 /**
  * The derivations read for lookup: each (version, type)'s derived names, the `TypeName` roster's
@@ -275,8 +269,7 @@ const derivationIndexOf = (derivations: readonly TypeDerivation[]): DerivationIn
  * @param input.models - The content models, each with its declared type and the namespace of its
  *   kind's elements, in which a derived type stands with no schema set's help.
  * @param input.versions - The `SchemaVersion` roster.
- * @returns The relations, or the first model whose type no derivation lists, or a `RepeatedValue`
- *   from the `TypeName` roster.
+ * @returns The relations, or the first model whose type no derivation lists.
  */
 export const xsiTypesOf = (input: {
   readonly derivations: readonly TypeDerivation[];
@@ -321,7 +314,7 @@ export const xsiTypesOf = (input: {
       }
     }
 
-    const typeName = yield* roster("TypeName", names);
+    const typeName = roster("TypeName", names);
 
     return {
       anonymousType: sourced({

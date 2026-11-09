@@ -54,7 +54,7 @@ import type {
 import { barredByOf } from "#pantry/grammar/children.ts";
 import type { BarredBy, ChildError, LastWhere } from "#pantry/grammar/children.ts";
 import { idField, roster, rowsAt, sourced } from "#pantry/grammar/closed.ts";
-import type { RepeatedValue, Roster } from "#pantry/grammar/closed.ts";
+import type { Roster } from "#pantry/grammar/closed.ts";
 import { compositions } from "#pantry/grammar/compositions.ts";
 import {
   bindingFit,
@@ -661,12 +661,7 @@ export type ComposedGrammar = Grammar<Kind, Name>;
 /**
  * The ways a composition has no grammar: a generator's refusal of its rows.
  */
-export type ComposeError =
-  | AttributeGrammarError
-  | ChildError
-  | ContentError
-  | RepeatedValue
-  | XsiTypeError;
+export type ComposeError = AttributeGrammarError | ChildError | ContentError | XsiTypeError;
 
 /**
  * Read a `TypeName` handle's namespace.
@@ -706,7 +701,7 @@ export const compose = <const V extends readonly Vocabulary[]>(
     compositions.publish(list);
 
     const stated = list.map((entry) => entry.facets);
-    const base = yield* generateKinds({
+    const base = generateKinds({
       interactions: stated.flatMap((facet) => facet.interactions),
       layer: [...open.xsiAttributes, ...open.xmlAttributes, ...open.xlinkAttributes].map(
         ({ name }) => name,
@@ -734,7 +729,7 @@ export const compose = <const V extends readonly Vocabulary[]>(
       versions: base.versions,
     });
     const stating = list.flatMap((entry) => entry.admission);
-    const kinds = yield* resolution(base, [...installed.admitted, ...stating]);
+    const kinds = resolution(base, [...installed.admitted, ...stating]);
     // A child the models admit carries its position's particle, or its model's at 0; a triple a
     // vocabulary states beside them carries its own source.
     const admission = sourced({
@@ -797,14 +792,14 @@ export const compose = <const V extends readonly Vocabulary[]>(
         ),
       ),
     ];
-    const baseTypeRoster = yield* roster("BaseType", baseTypes);
-    const cardinalities = yield* roster("TypedCardinality", typedCardinalities);
+    const baseTypeRoster = roster("BaseType", baseTypes);
+    const cardinalities = roster("TypedCardinality", typedCardinalities);
     const expression = stated.map((facet) => facet.expression);
     const fitRosters = { baseTypes: baseTypeRoster, cardinalities, kinds: kinds.nodeKind };
 
     return {
       admission,
-      ancestry: yield* generateAncestry({
+      ancestry: generateAncestry({
         facets: stated.map((facet) => facet.ancestry),
         interactions: kinds.interaction.rows.map(({ kind }) => kind),
         kinds: kinds.nodeKind,
@@ -839,7 +834,7 @@ export const compose = <const V extends readonly Vocabulary[]>(
         ),
         versions: kinds.versions,
       }),
-      include: yield* includeGrammar({
+      include: includeGrammar({
         alternatives: includeAlternativesOf(list.flatMap((entry) => entry.models)),
         kinds: kinds.nodeKind,
         versions: kinds.versions,
@@ -854,12 +849,12 @@ export const compose = <const V extends readonly Vocabulary[]>(
       lastWhere: stated.flatMap((facet) => facet.children.lastWhere),
       mappableBaseType: mappableBaseType(baseTypeRoster),
       operatorArity: operatorArity({ facets: expression, kinds: kinds.nodeKind }),
-      package: yield* packageGrammar({
+      package: packageGrammar({
         facets: stated.map((facet) => facet.package),
         kinds: kinds.nodeKind,
       }),
       recordBindingFit: recordBindingFit({ facets: expression, kinds: kinds.nodeKind }),
-      references: yield* references({
+      references: references({
         facets: stated.map((facet) => facet.references),
         kinds: kinds.nodeKind,
         names: kinds.attributeName,

@@ -43,7 +43,8 @@ import { admits, step } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { accepts } from "#pantry/grammar/content.ts";
+import { accepts, mixedEndingsOf } from "#pantry/grammar/content.ts";
+import type { ModelEdit } from "#pantry/grammar/content.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -52,6 +53,7 @@ import { xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";
 import { namespaceClassOf, namespaceNameOf } from "#pantry/vocab/namespaces.ts";
+import { automatonOf } from "#pantry/vocab/sequencing.ts";
 import {
   resolverOf,
   toyFacets,
@@ -1256,19 +1258,34 @@ describe("the ending edit, which lambda's restatement reads (content.ts, endedBy
       }),
   );
 
-  it("refuses an ending that lists some of one position's kinds, and states one that lists them all", () => {
+  it("finds an ending that lists some of one position's kinds, and none in one that lists them all", () => {
     // Oracle: the edit's contract, a position's state cannot tell which of its kinds ended the
-    // family. Bound: `([a, b] | c)*`, ended by `a`, by `a` and `b`, and by `c`.
+    // family. A load checks no ending; `mixedEndingsOf` is the tests' check, which
+    // `content.test.ts` runs over every ending of the composition. Bound: `([a, b] | c)*`, ended by
+    // `a`, by `a` and `b`, and by `c`.
     const mixed = repeatedChoice([["a", "b"], ["c"]]);
+    const automaton = automatonOf(
+      mixed.content._tag === "element-only"
+        ? mixed.content.particle
+        : assert.fail("the toy model holds a particle"),
+    );
+    const endingOf = (kinds: readonly [string, ...string[]]): ModelEdit => ({
+      _tag: "ends",
+      kinds,
+      parent: "p",
+      source: "a toy ending",
+    });
 
-    assert.strictEqual(
-      Result.match(endedToy(mixed, ["a"]), {
-        onFailure: (error) => error._tag,
-        onSuccess: () => "composed",
-      }),
-      "MixedEnding",
+    assert.deepStrictEqual(
+      mixedEndingsOf(automaton, [endingOf(["a"])], "p").map(({ kinds }) => kinds),
+      [["a", "b"]],
     );
     for (const ending of [["a", "b"], ["c"]] as const) {
+      assert.deepStrictEqual(
+        mixedEndingsOf(automaton, [endingOf(ending)], "p"),
+        [],
+        ending.join(" "),
+      );
       assert.isTrue(Result.isSuccess(endedToy(mixed, ending)), ending.join(" "));
     }
   });

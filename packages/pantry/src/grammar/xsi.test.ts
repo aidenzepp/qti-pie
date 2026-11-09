@@ -108,8 +108,8 @@ describe("XsiType", () => {
             Effect.gen(function* model() {
               // Oracle: §3.3.4 clause 4 read over the toy derivations by hand: an element may name
               // its declared type or a type derived from it, and nothing for an anonymous type.
-              const kinds = yield* Effect.fromResult(roster("NodeKind", ["k0", "k1", "k2"]));
-              const versions = yield* Effect.fromResult(roster("SchemaVersion", schemaVersions));
+              const kinds = roster("NodeKind", ["k0", "k1", "k2"]);
+              const versions = roster("SchemaVersion", schemaVersions);
               const models: readonly (ContentModel & { readonly namespace: NamespaceOfKind })[] =
                 declared.map((at, index) => ({
                   content: { _tag: "empty" },
@@ -161,27 +161,23 @@ describe("XsiType", () => {
     // own, and no ASI type. Bound: one kind, each of the four namespaces' types; residual none.
     const declared: ExpandedName = { local: "GUID.Type", namespace: setNamespaces.csmd };
     const derived = Object.values(setNamespaces).map((namespace) => ({ local: "T", namespace }));
-    const result = Result.flatMap(roster("NodeKind", ["csmd:GUID"]), (kinds) =>
-      Result.flatMap(roster("SchemaVersion", schemaVersions), (versions) =>
-        xsiTypesOf({
-          derivations: [
-            { derived: [declared, ...derived], type: declared, versions: schemaVersions },
-          ],
-          kinds,
-          models: [
-            {
-              content: { _tag: "empty" },
-              kind: "csmd:GUID",
-              namespace: namespaceNameOf(setNamespaces.csmd),
-              sources: toySources(schemaVersions),
-              type: Option.some(declared),
-              versions: schemaVersions,
-            },
-          ],
-          versions,
-        }),
-      ),
-    );
+    const kinds = roster("NodeKind", ["csmd:GUID"]);
+    const versions = roster("SchemaVersion", schemaVersions);
+    const result = xsiTypesOf({
+      derivations: [{ derived: [declared, ...derived], type: declared, versions: schemaVersions }],
+      kinds,
+      models: [
+        {
+          content: { _tag: "empty" },
+          kind: "csmd:GUID",
+          namespace: namespaceNameOf(setNamespaces.csmd),
+          sources: toySources(schemaVersions),
+          type: Option.some(declared),
+          versions: schemaVersions,
+        },
+      ],
+      versions,
+    });
 
     assert.deepStrictEqual(
       result.pipe(
@@ -198,25 +194,23 @@ describe("XsiType", () => {
   });
 
   it("refuses a declared type no derivation lists", () => {
-    const result = Result.flatMap(roster("NodeKind", ["k0"]), (kinds) =>
-      Result.flatMap(roster("SchemaVersion", schemaVersions), (versions) =>
-        xsiTypesOf({
-          derivations: [],
-          kinds,
-          models: [
-            {
-              content: { _tag: "empty" },
-              kind: "k0",
-              namespace: toyNamespace,
-              sources: toySources(schemaVersions),
-              type: Option.some({ local: "Lost", namespace: "urn:toy" }),
-              versions: schemaVersions,
-            },
-          ],
-          versions,
-        }),
-      ),
-    );
+    const kinds = roster("NodeKind", ["k0"]);
+    const versions = roster("SchemaVersion", schemaVersions);
+    const result = xsiTypesOf({
+      derivations: [],
+      kinds,
+      models: [
+        {
+          content: { _tag: "empty" },
+          kind: "k0",
+          namespace: toyNamespace,
+          sources: toySources(schemaVersions),
+          type: Option.some({ local: "Lost", namespace: "urn:toy" }),
+          versions: schemaVersions,
+        },
+      ],
+      versions,
+    });
 
     assert.strictEqual(
       Result.isFailure(result) ? result.failure._tag : "generated",

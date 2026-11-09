@@ -492,16 +492,12 @@ const toyInput = (declarations: readonly Declared[]): AttributeGrammarInput => (
   declarations,
   governed: [],
   governors: [],
-  kinds: Result.getOrThrow(
-    roster("NodeKind", [...new Set(Object.values(toyPairs).map(({ kind }) => kind))]),
-  ),
-  names: Result.getOrThrow(
-    roster("AttributeName", [...new Set(Object.values(toyPairs).map(({ name }) => name))]),
-  ),
+  kinds: roster("NodeKind", [...new Set(Object.values(toyPairs).map(({ kind }) => kind))]),
+  names: roster("AttributeName", [...new Set(Object.values(toyPairs).map(({ name }) => name))]),
   texts: [],
-  typeName: Result.getOrThrow(roster("TypeName", ["Toy"])),
+  typeName: roster("TypeName", ["Toy"]),
   typeTexts: [],
-  versions: Result.getOrThrow(roster("SchemaVersion", schemaVersions)),
+  versions: roster("SchemaVersion", schemaVersions),
 });
 
 /**

@@ -47,16 +47,12 @@ const cached = await Effect.runPromise(
 /**
  * The package relations of production's facets, over a roster of the kinds their roots name.
  */
-const relations = Effect.gen(function* packageRelations() {
-  const kinds = yield* Effect.fromResult(roster("NodeKind", [...documentRoots]));
-
-  return yield* Effect.fromResult(
-    packageGrammar({
-      facets: [asi, cp, lom, ud, xi].map(({ package: stated }) => stated),
-      kinds,
-    }),
-  );
-});
+const relations = Effect.sync(() =>
+  packageGrammar({
+    facets: [asi, cp, lom, ud, xi].map(({ package: stated }) => stated),
+    kinds: roster("NodeKind", [...documentRoots]),
+  }),
+);
 
 /**
  * The composed grammar, whose attribute grammar states which resource types each version admits:

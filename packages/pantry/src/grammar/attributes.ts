@@ -42,7 +42,7 @@ import {
   roster,
   valueField,
 } from "#pantry/grammar/closed.ts";
-import type { Closed, IdField, RepeatedValue, Roster, ValueField } from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, Roster, ValueField } from "#pantry/grammar/closed.ts";
 import {
   compile,
   boundFacets,
@@ -1213,11 +1213,11 @@ export class UncompiledDomain extends Schema.TaggedError<UncompiledDomain>()("Un
 
 /**
  * The ways a composition's declarations have no attribute grammar: a domain that does not
- * compile, a roster that lists a handle twice, or an attribute name outside `AttributeName`, which
- * an attribute's position is read from. A kind outside its roster, or a kind that declares a name
+ * compile, or an attribute name outside `AttributeName`, which an attribute's position is read
+ * from. A kind outside its roster, or a kind that declares a name
  * twice in a version, is a fault of the rows (`faultOf`), which the tests find and grizzle refuses.
  */
-export type AttributeGrammarError = OutsideCodeSpace | RepeatedValue | UncompiledDomain;
+export type AttributeGrammarError = OutsideCodeSpace | UncompiledDomain;
 
 /**
  * The key of `AttributeGrammar`: version, kind, then attribute name, each over its roster.
@@ -1861,7 +1861,7 @@ export const generate = (
       }
     }
 
-    const domainRoster = yield* roster("ValueDomain", [
+    const domainRoster = roster("ValueDomain", [
       ...domains.ordered.map(({ handle }) => handle),
       ...domains.empty.values(),
     ]);
@@ -1886,13 +1886,11 @@ export const generate = (
       "AttributePosition",
       Math.max(0, ...[...kindRows, ...governorRows].map(({ position: at }) => at + 1)),
     );
-    const use = idField("use", yield* roster("Use", uses));
+    const use = idField("use", roster("Use", uses));
     const position = idField("position", positions);
     const name = idField("name", input.names);
     const governs = idField("governs", input.typeName);
-    const governorRoster = yield* roster("Governor", [
-      ...new Set(input.governors.map(governorHandle)),
-    ]);
+    const governorRoster = roster("Governor", [...new Set(input.governors.map(governorHandle))]);
     const governorField = idField("governor", governorRoster);
     const admission = closed({
       key: [version, kind, name],
@@ -1911,7 +1909,7 @@ export const generate = (
       key: [domain],
       name: "ValueDomain",
       payload: [
-        idField("primitive", yield* roster("DomainPrimitive", domainPrimitives)),
+        idField("primitive", roster("DomainPrimitive", domainPrimitives)),
         valueField(
           "pattern",
           domains.ordered.map(({ pattern }) => pattern),
@@ -1930,7 +1928,7 @@ export const generate = (
       key: [domain],
       name: "DoubleBound",
       payload: [
-        idField("facet", yield* roster("BoundFacet", boundFacets)),
+        idField("facet", roster("BoundFacet", boundFacets)),
         valueField(
           "value",
           bounded.map(({ value }) => value),
@@ -1941,7 +1939,7 @@ export const generate = (
     const identity = closed({
       key: [domain],
       name: "ValueIdentity",
-      payload: [idField("identity", yield* roster("Identity", identities))],
+      payload: [idField("identity", roster("Identity", identities))],
       rows: domains.ordered.flatMap((held) =>
         Option.toArray(held.identity).map((value) => ({ domain: held.handle, identity: value })),
       ),

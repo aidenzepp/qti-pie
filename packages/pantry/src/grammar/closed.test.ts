@@ -6,13 +6,14 @@ import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Option, Result } from "effect";
+import { Duration, Effect, Formatter, Option } from "effect";
 import {
   closed,
   dependentField,
   faultOf,
   fin,
   idField,
+  repeatOf,
   roster,
   sourced,
   valueField,
@@ -673,21 +674,22 @@ describe("rosters and value fields", () => {
                 c.note(distinct ? "distinct" : "repeated");
               }
 
-              assert.strictEqual(Result.isSuccess(result), distinct);
-              if (Result.isSuccess(result)) {
+              // A roster checks nothing when it is built; `repeatOf` finds a repeated handle.
+              assert.strictEqual(Option.isNone(repeatOf(result)), distinct);
+              if (distinct) {
                 const absent = ["a", "b", "c", "d", "z", ""].filter(
                   (value) => !handles.some((handle) => handle === value),
                 );
                 assert.deepStrictEqual(
-                  handles.map((handle) => result.success.codeOf(handle)),
+                  handles.map((handle) => result.codeOf(handle)),
                   handles.map((_, at) => Option.some(at)),
                 );
                 assert.deepStrictEqual(
-                  absent.map((value) => result.success.codeOf(value)),
+                  absent.map((value) => result.codeOf(value)),
                   absent.map(() => Option.none()),
                 );
                 assert.deepStrictEqual(
-                  [...handles, ...absent].map((value) => result.success.has(value)),
+                  [...handles, ...absent].map((value) => result.has(value)),
                   [...handles.map(() => true), ...absent.map(() => false)],
                 );
               }

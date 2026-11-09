@@ -12,7 +12,15 @@ import { Array as Arr, Duration, Effect, FileSystem, Formatter, Option, Result }
 import { int8Max } from "#pantry/grammar/closed.ts";
 import { composed, namespaceOfKind, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { accepts, contentModelOf, editedBy, followPairsOf } from "#pantry/grammar/content.ts";
+import {
+  accepts,
+  contentModelOf,
+  editedBy,
+  finds,
+  followPairsOf,
+  mixedEndingsOf,
+} from "#pantry/grammar/content.ts";
+import type { ModelEdit } from "#pantry/grammar/content.ts";
 import {
   documentLayer,
   fragmentRoots,
@@ -1847,7 +1855,7 @@ describe("the cap edit, which spec reading 130's LOM caps read (content.ts, capp
       }),
   );
 
-  it("refuses a cap of a kind its model names at two positions or beside another kind, and one of a kind it names nowhere", () => {
+  it("refuses a cap of a kind its model names at two positions or beside another kind, and finds none in a model that names its kind nowhere", () => {
     // Oracle: the edit's contract, a cap counts one position, which names the kind alone.
     const shared = toyModel(
       toyGroup("sequence", false, toyGroup("choice", true, toyElement("a", "b"), toyElement("c"))),
@@ -1866,7 +1874,19 @@ describe("the cap edit, which spec reading 130's LOM caps read (content.ts, capp
 
     assert.strictEqual(refusal(shared, "a"), "UncountedCap");
     assert.strictEqual(refusal(twice, "a"), "UncountedCap");
-    assert.strictEqual(refusal(without, "c"), "UnreadEdit");
+    // A cap of a kind the model names nowhere leaves the model as it is; `finds` is the tests'
+    // check, which the composition's test runs over every edit.
+    const capOf = (kind: string): ModelEdit => ({
+      _tag: "cap",
+      kind,
+      parent: "p",
+      source: "a toy cap",
+    });
+    const particleOf = ({ content }: ContentModel) =>
+      content._tag === "element-only" ? content.particle : assert.fail("a toy model's particle");
+    assert.isFalse(finds(particleOf(without), capOf("c")));
+    assert.isTrue(finds(particleOf(without), capOf("a")));
+    assert.strictEqual(refusal(without, "c"), "composed");
     assert.strictEqual(refusal(shared, "c"), "composed");
     assert.strictEqual(refusal(twice, "b"), "composed");
   });
@@ -2040,7 +2060,7 @@ describe("the installed automata", () => {
           .flatMap(({ content, kind, versions }) =>
             content._tag === "element-only" || content._tag === "mixed"
               ? breachesOf(
-                  automatonOf(editedBy(content.particle, edits, kind, new Set())),
+                  automatonOf(editedBy(content.particle, edits, kind)),
                   namespaceOf,
                   namespaceOf(kind),
                 ).map(
@@ -2053,6 +2073,55 @@ describe("the installed automata", () => {
       }),
     testTimeoutMs,
   );
+
+  it("find in every reading's edit what it names in its parent's model, as the edits before it leave the model", () => {
+    // Oracle: each edit's contract (`finds`): a leading kind, a capped or ending kind, the kind an
+    // edit admits another beside, is one its parent's model names; an edit that finds nothing
+    // leaves the model as it is, so it states nothing. The composition never checks it: the
+    // readings are fixed, so this test is where a reading that names the wrong kind or parent fails.
+    const edits = vocabularies.flatMap(({ facets }) => facets.content.edits);
+    const read = new Set<ModelEdit>();
+    for (const { content, kind } of vocabularies.flatMap((entry) => [
+      ...entry.models,
+      ...entry.facets.content.models,
+    ])) {
+      if (content._tag === "element-only" || content._tag === "mixed") {
+        const own = edits.filter(({ parent }) => parent === kind);
+        for (const [at, edit] of own.entries()) {
+          if (finds(editedBy(content.particle, own.slice(0, at), kind), edit)) {
+            read.add(edit);
+          }
+        }
+      }
+    }
+
+    assert.isAbove(edits.length, 0);
+    assert.deepStrictEqual(
+      edits.filter((edit) => !read.has(edit)).map(({ parent, source }) => `${parent}: ${source}`),
+      [],
+    );
+  });
+
+  it("list, in every reading's ending, all or none of the kinds of each position of its model", () => {
+    // Oracle: the ending's contract (`mixedEndingsOf`): a family's last state is its last child's
+    // position, so an ending that lists some of one position's kinds cannot tell a family that
+    // ends there with one of them from one that ends with another. The composition never checks
+    // it: the readings are fixed, so this test is where such an ending fails.
+    const edits = vocabularies.flatMap(({ facets }) => facets.content.edits);
+    const mixed = vocabularies
+      .flatMap((entry) => [...entry.models, ...entry.facets.content.models])
+      .flatMap(({ content, kind, versions }) =>
+        content._tag === "element-only" || content._tag === "mixed"
+          ? mixedEndingsOf(automatonOf(editedBy(content.particle, edits, kind)), edits, kind).map(
+              ({ ending, kinds }) =>
+                `${kind} in ${versions.join(" and ")}: ${ending.source} lists part of ${kinds.join(", ")}`,
+            )
+          : [],
+      );
+
+    assert.isTrue(edits.some(({ _tag }) => _tag === "ends"));
+    assert.deepStrictEqual(mixed, []);
+  });
 });
 
 describe.skipIf(!cached)("spec reading 40 in ssml:speak", () => {

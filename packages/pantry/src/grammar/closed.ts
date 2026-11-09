@@ -15,7 +15,7 @@
  * closed id or an open-typed value, the latter coded by its active domain within the relation in
  * value order (fin.md §17, "Codes").
  */
-import { Array as Arr, Option, Result, Schema } from "effect";
+import { Array as Arr, Option, Schema } from "effect";
 import type { Source, Sources } from "#pantry/vocab/inventory/types.ts";
 
 /**
@@ -302,7 +302,8 @@ export class OutsideCodeSpace extends Schema.TaggedError<OutsideCodeSpace>()("Ou
 }
 
 /**
- * A roster that lists one handle twice, so the handle has no single code.
+ * A roster that lists one handle twice, so the handle has no single code: a fault {@link repeatOf}
+ * finds.
  */
 export class RepeatedValue extends Schema.TaggedError<RepeatedValue>()("RepeatedValue", {
   field: Schema.String,
@@ -318,30 +319,47 @@ export class RepeatedValue extends Schema.TaggedError<RepeatedValue>()("Repeated
 }
 
 /**
- * Construct a roster from its handles in code order.
+ * Construct a roster from its handles in code order. It checks no handle: grizzle refuses a roster
+ * that lists a handle twice when it declares one (`closed(name, handles)`), and {@link repeatOf}
+ * is the same check for the tests over a composition, a roster grizzle never sees among them.
  *
  * @param name - The roster's name.
  * @param handles - The handles, in code order.
- * @returns The roster, or the first handle it lists twice.
+ * @returns The roster.
  */
 export const roster = <const Handle extends string>(
   name: string,
   handles: readonly Handle[],
-): Result.Result<Roster<Handle>, RepeatedValue> => {
+): Roster<Handle> => {
   const codes = new Map<Primitive, number>(handles.map((handle, code) => [handle, code]));
 
-  return Arr.findFirst(handles, (handle, code) => codes.get(handle) !== code).pipe(
-    Option.match({
-      onNone: () =>
-        Result.succeed({
-          codeOf: (handle: Primitive) => Option.fromNullishOr(codes.get(handle)),
-          handles,
-          has: (value: string): value is Handle => codes.has(value),
-          name,
-        }),
-      onSome: (handle) =>
-        Result.fail(new RepeatedValue({ field: "handle", relation: name, value: handle })),
-    }),
+  return {
+    codeOf: (handle: Primitive) => Option.fromNullishOr(codes.get(handle)),
+    handles,
+    has: (value: string): value is Handle => codes.has(value),
+    name,
+  };
+};
+
+/**
+ * Find the first handle a roster lists twice, which has no single code. A composition's rosters are
+ * fixed data, so this is the tests' reading of them (`compose.test.ts`), never a load's.
+ *
+ * @param held - The roster.
+ * @returns The fault, or none.
+ */
+export const repeatOf = (held: Roster<string>): Option.Option<RepeatedValue> => {
+  const seen = new Set<string>();
+
+  return Arr.findFirst(held.handles, (handle) => {
+    const repeated = seen.has(handle);
+    seen.add(handle);
+
+    return repeated;
+  }).pipe(
+    Option.map(
+      (handle) => new RepeatedValue({ field: "handle", relation: held.name, value: handle }),
+    ),
   );
 };
 

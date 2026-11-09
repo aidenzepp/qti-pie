@@ -73,18 +73,14 @@ const testTimeoutMs = 300_000;
  * the two versions.
  */
 const rosters = {
-  kinds: Result.getOrThrow(
-    roster("NodeKind", [
-      ...new Set([
-        ...attributeDeclarations.map(({ kind }) => kind),
-        ...textTypes.map(({ kind }) => kind),
-      ]),
+  kinds: roster("NodeKind", [
+    ...new Set([
+      ...attributeDeclarations.map(({ kind }) => kind),
+      ...textTypes.map(({ kind }) => kind),
     ]),
-  ),
-  names: Result.getOrThrow(
-    roster("AttributeName", [...new Set(attributeDeclarations.map(({ name }) => name))]),
-  ),
-  versions: Result.getOrThrow(roster("SchemaVersion", schemaVersions)),
+  ]),
+  names: roster("AttributeName", [...new Set(attributeDeclarations.map(({ name }) => name))]),
+  versions: roster("SchemaVersion", schemaVersions),
 } as const;
 
 /**
@@ -93,7 +89,7 @@ const rosters = {
 const ungoverned = {
   governed: [],
   governors: [],
-  typeName: Result.getOrThrow(roster("TypeName", [])),
+  typeName: roster("TypeName", []),
   typeTexts: [],
 } as const;
 
@@ -1962,14 +1958,14 @@ const toyGenerate = (declarations: readonly Declared[], kinds: Roster<string>) =
   generate({
     declarations,
     kinds,
-    names: Result.getOrThrow(roster("AttributeName", ["a", "b"])),
+    names: roster("AttributeName", ["a", "b"]),
     texts: [],
     versions: rosters.versions,
     ...ungoverned,
   });
 
 describe("The attribute grammar's refusals", () => {
-  const kinds = Result.getOrThrow(roster("NodeKind", ["k"]));
+  const kinds = roster("NodeKind", ["k"]);
 
   it("state a kind that declares a name twice in a version as a fault of AttributeGrammar's rows", () => {
     // The generator checks no row (`closed.ts`, `faultOf`): grizzle refuses the key when it

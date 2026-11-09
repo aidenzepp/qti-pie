@@ -3,7 +3,7 @@ import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage, requiredInSpace } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import { roster } from "#pantry/grammar/closed.ts";
@@ -364,8 +364,8 @@ describe("HeldRootsUnder", () => {
       ["3.0.1"],
       ["3.0.0", "3.0.1"],
     ];
-    const versions = Result.getOrThrow(roster("SchemaVersion", schemaVersions));
-    const kinds = Result.getOrThrow(roster("NodeKind", ["host", "foreign-element"]));
+    const versions = roster("SchemaVersion", schemaVersions);
+    const kinds = roster("NodeKind", ["host", "foreign-element"]);
     const wrong: string[] = [];
     for (const first of subsets) {
       for (const second of subsets) {

@@ -6,8 +6,8 @@ import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
-import { closed, faultOf, idField, roster as rosterOf } from "#pantry/grammar/closed.ts";
+import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
+import { closed, faultOf, idField, repeatOf, roster as rosterOf } from "#pantry/grammar/closed.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
 import {
   fixedKinds,
@@ -217,49 +217,41 @@ describe("the kinds generator against a naive model", () => {
                 c.note("layer name shared");
               }
 
-              const result = Result.flatMap(
+              const kinds = resolution(
                 generate({ interactions: list.interactions, layer: list.layer, vocabularies }),
-                (rosters) =>
-                  resolution(
-                    rosters,
-                    all.flatMap(({ handle, parents }) =>
-                      parents.map((parent) => ({ child: handle, parent })),
-                    ),
-                  ),
+                all.flatMap(({ handle, parents }) =>
+                  parents.map((parent) => ({ child: handle, parent })),
+                ),
               );
-              // A roster's refusal is the generator's; a row outside its code space or a key stated
-              // twice is a fault of the rows, which the generator states and `faultOf` finds.
-              const outcome = Result.match(result, {
-                onFailure: ({ _tag }) => _tag,
-                onSuccess: (kinds) =>
-                  Option.match(Arr.findFirst([kinds.interaction, kinds.byName], faultOf), {
-                    onNone: () => "generated",
-                    onSome: ({ _tag }) => _tag,
-                  }),
-              });
+              // The generators refuse nothing: a handle a roster lists twice is the roster's fault
+              // (`repeatOf`), and a row outside its code space or a key stated twice the rows'
+              // (`faultOf`), which the tests find and grizzle refuses.
+              const outcome = Option.match(
+                Option.orElse(Arr.findFirst([kinds.nodeKind, kinds.attributeName], repeatOf), () =>
+                  Arr.findFirst([kinds.interaction, kinds.byName], faultOf),
+                ),
+                { onNone: () => "generated", onSome: ({ _tag }) => _tag },
+              );
               if (reasons.size > 0) {
                 assert.include([...reasons], outcome);
               } else {
                 assert.strictEqual(outcome, "generated");
-                if (Result.isSuccess(result)) {
-                  const kinds = result.success;
-                  assert.deepStrictEqual(kinds.nodeKind.handles, [...fixedKinds, ...handles]);
-                  assert.deepStrictEqual(kinds.attributeName.handles, names);
-                  assert.deepStrictEqual(
-                    kinds.isElement.rows.map(({ kind }) => kind),
-                    [...fixedKinds.filter(isForeignKind), ...elements.map(({ handle }) => handle)],
-                  );
-                  for (const local of ["a", "b", "c", "d"]) {
-                    for (const parent of ["document", ...handles]) {
-                      const under = elements.find(
-                        (kind) => kind.local === local && kind.parents.includes(parent),
-                      );
-                      assert.deepStrictEqual(
-                        kinds.resolve("urn:toy", local, parent),
-                        Option.map(Option.fromNullishOr(under), ({ handle }) => handle),
-                        `${local} under ${parent}`,
-                      );
-                    }
+                assert.deepStrictEqual(kinds.nodeKind.handles, [...fixedKinds, ...handles]);
+                assert.deepStrictEqual(kinds.attributeName.handles, names);
+                assert.deepStrictEqual(
+                  kinds.isElement.rows.map(({ kind }) => kind),
+                  [...fixedKinds.filter(isForeignKind), ...elements.map(({ handle }) => handle)],
+                );
+                for (const local of ["a", "b", "c", "d"]) {
+                  for (const parent of ["document", ...handles]) {
+                    const under = elements.find(
+                      (kind) => kind.local === local && kind.parents.includes(parent),
+                    );
+                    assert.deepStrictEqual(
+                      kinds.resolve("urn:toy", local, parent),
+                      Option.map(Option.fromNullishOr(under), ({ handle }) => handle),
+                      `${local} under ${parent}`,
+                    );
                   }
                 }
               }
@@ -278,13 +270,13 @@ describe("KindByNameUnder's kind payload", () => {
         namespace: namespaceNameOf("urn:toy"),
       },
     ] as const;
-    const rosters = Result.getOrThrow(generate({ interactions: [], layer: [], vocabularies }));
+    const rosters = generate({ interactions: [], layer: [], vocabularies });
     const anyKind: Roster<string> = rosters.nodeKind;
     const relationOver = <K extends string>(kinds: Roster<K>, kind: K) =>
       closed({
         key: [
-          idField("namespace", Result.getOrThrow(rosterOf("Namespace", ["urn:toy"]))),
-          idField("local", Result.getOrThrow(rosterOf("LocalName", ["a"]))),
+          idField("namespace", rosterOf("Namespace", ["urn:toy"])),
+          idField("local", rosterOf("LocalName", ["a"])),
           idField("parent", anyKind),
         ],
         name: "KindByNameUnder",
@@ -309,7 +301,7 @@ describe("KindByNameUnder's kind payload", () => {
       [Option.some("k1"), Option.some("k1")],
     );
     assert.deepStrictEqual(
-      Result.getOrThrow(resolution(rosters, [{ child: "k1", parent: "document" }])).resolve(
+      resolution(rosters, [{ child: "k1", parent: "document" }]).resolve(
         "urn:toy",
         "a",
         "document",

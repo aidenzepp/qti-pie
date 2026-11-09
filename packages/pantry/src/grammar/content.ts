@@ -54,7 +54,6 @@ import type {
   Closed,
   DependentField,
   IdField,
-  RepeatedValue,
   Roster,
   Sourced,
   ValueField,
@@ -302,40 +301,6 @@ export interface ContentGrammar {
 }
 
 /**
- * A spec reading names a kind or a parent the models do not hold.
- */
-export class UnreadEdit extends Schema.TaggedError<UnreadEdit>()("UnreadEdit", {
-  kind: Schema.String,
-  parent: Schema.String,
-  source: Schema.String,
-}) {
-  /**
-   * The reading, the kind and parent, and the repair.
-   */
-  override get message(): string {
-    return `The spec reading ${this.source} edits ${this.kind} under ${this.parent}, which no particle of ${this.parent}'s model names. Correct the reading's kind or parent.`;
-  }
-}
-
-/**
- * A spec reading's ending names some kinds of one of its model's positions and not the others, so
- * no position state tells a family that ends there with a listed kind from one that ends with
- * another.
- */
-export class MixedEnding extends Schema.TaggedError<MixedEnding>()("MixedEnding", {
-  kinds: Schema.String,
-  parent: Schema.String,
-  source: Schema.String,
-}) {
-  /**
-   * The reading, the position's kinds, and the repair.
-   */
-  override get message(): string {
-    return `The spec reading ${this.source} ends ${this.parent}'s families with some of the kinds ${this.kinds}, which one position of its model names together, so the ending is not decided by the last child's position. Restate the model so that position is split, or list all its kinds or none.`;
-  }
-}
-
-/**
  * A spec reading caps a kind that its model names at several positions, or beside other kinds at
  * one, so no one position's count is the kind's count.
  */
@@ -355,7 +320,7 @@ export class UncountedCap extends Schema.TaggedError<UncountedCap>()("UncountedC
 /**
  * The ways the content models have no content grammar.
  */
-export type ContentError = MixedEnding | RepeatedValue | UncountedCap | UnreadEdit;
+export type ContentError = UncountedCap;
 
 /**
  * The kinds of character data, comments, instructions and entity references: the XDM's nodes
@@ -401,14 +366,6 @@ const dataOf = (
     : characterData[content._tag];
 
 /**
- * A particle tree after an edit, and whether the edit found what it names.
- */
-interface Edited {
-  readonly found: boolean;
-  readonly particle: Particle;
-}
-
-/**
  * Collect the element and wildcard particles within a particle, in document order.
  *
  * @param particle - The particle.
@@ -433,14 +390,14 @@ const leavesOf = (particle: Particle): readonly Exclude<Particle, { readonly _ta
  * @param particle - The model's particle.
  * @param leading - The kinds that come first.
  * @param source - The reading, which the restated groups and the text position cite.
- * @returns The restated model, and whether the model names every leading kind; the model as it
- *   is where it names one not, which leaves the reading unread ({@link UnreadEdit}).
+ * @returns The restated model; the model as it is where it names a leading kind not, which leaves
+ *   the reading unread ({@link finds}).
  */
-const leadingFirst = (particle: Particle, leading: readonly string[], source: string): Edited => {
+const leadingFirst = (particle: Particle, leading: readonly string[], source: string): Particle => {
   const leaves = leavesOf(particle).filter(({ occurs }) => !Option.contains(occurs.max, 0));
   const named = leaves.flatMap((leaf) => (leaf._tag === "element" ? leaf.kinds : []));
   if (!leading.every((kind) => named.includes(kind))) {
-    return { found: false, particle };
+    return particle;
   }
 
   const others = [...new Set(named)].filter((kind) => !leading.includes(kind));
@@ -481,49 +438,46 @@ const leadingFirst = (particle: Particle, leading: readonly string[], source: st
     );
 
   return {
-    found: true,
-    particle: {
-      _tag: "group",
-      compositor: "sequence",
-      occurs: once,
-      particles: [
-        {
-          _tag: "group",
-          compositor: "choice",
-          occurs: many,
-          particles: [
-            ...leading.map(restated),
-            ...wildcards.map((wildcard) => ({ ...wildcard, occurs: once })),
-          ],
-          sources,
-        },
-        {
-          _tag: "group",
-          compositor: "choice",
-          occurs: many,
-          particles: [
-            {
-              _tag: "group",
-              compositor: "sequence",
-              occurs: once,
-              particles: [
-                {
-                  _tag: "group",
-                  compositor: "choice",
-                  occurs: once,
-                  particles: [element("text", sources), ...others.map(restated)],
-                  sources,
-                },
-                ...wildcards.map((wildcard) => ({ ...wildcard, occurs: many })),
-              ],
-              sources,
-            },
-          ],
-          sources,
-        },
-      ],
-      sources,
-    },
+    _tag: "group",
+    compositor: "sequence",
+    occurs: once,
+    particles: [
+      {
+        _tag: "group",
+        compositor: "choice",
+        occurs: many,
+        particles: [
+          ...leading.map(restated),
+          ...wildcards.map((wildcard) => ({ ...wildcard, occurs: once })),
+        ],
+        sources,
+      },
+      {
+        _tag: "group",
+        compositor: "choice",
+        occurs: many,
+        particles: [
+          {
+            _tag: "group",
+            compositor: "sequence",
+            occurs: once,
+            particles: [
+              {
+                _tag: "group",
+                compositor: "choice",
+                occurs: once,
+                particles: [element("text", sources), ...others.map(restated)],
+                sources,
+              },
+              ...wildcards.map((wildcard) => ({ ...wildcard, occurs: many })),
+            ],
+            sources,
+          },
+        ],
+        sources,
+      },
+    ],
+    sources,
   };
 };
 
@@ -532,9 +486,9 @@ const leadingFirst = (particle: Particle, leading: readonly string[], source: st
  *
  * @param particle - The model's particle.
  * @param edit - The edit.
- * @returns The edited particle, and whether the edit found what it names.
+ * @returns The edited particle.
  */
-const edited = (particle: Particle, edit: ModelEdit): Edited => {
+const edited = (particle: Particle, edit: ModelEdit): Particle => {
   if (edit._tag === "first") {
     return leadingFirst(particle, edit.kinds, edit.source);
   }
@@ -543,27 +497,19 @@ const edited = (particle: Particle, edit: ModelEdit): Edited => {
     // A restatement is the reading's whole model: it replaces the XSD's particle, narrowing or
     // widening its language, and the reading's own recognizer (`#pantry/test/gen/relaxng.ts`,
     // `relaxNgModels`) is what it is checked against.
-    return { found: true, particle: edit.particle };
+    return edit.particle;
   }
 
   if (edit._tag === "ends" || edit._tag === "cap") {
     // An ending narrows the automaton and a cap counts beside it, neither the particle
-    // (`contentOf`); each is found when the model names one of its kinds.
-    const named = new Set(
-      leavesOf(particle).flatMap((leaf) => (leaf._tag === "element" ? leaf.kinds : [])),
-    );
-    const kinds = edit._tag === "cap" ? [edit.kind] : edit.kinds;
-
-    return { found: kinds.some((kind) => named.has(kind)), particle };
+    // (`contentOf`).
+    return particle;
   }
 
-  let found = false;
   const walk = (node: Particle): Particle => {
     switch (node._tag) {
       case "element": {
         if (node.kinds.includes(edit.with)) {
-          found = true;
-
           return {
             ...node,
             kinds: [...node.kinds, edit.kind],
@@ -587,49 +533,85 @@ const edited = (particle: Particle, edit: ModelEdit): Edited => {
       }
     }
   };
-  const result = walk(particle);
-
-  return { found, particle: result };
+  return walk(particle);
 };
 
 /**
- * Apply every spec reading's edit of a kind's model, in order, and record each edit that found what
- * it names: the particle {@link contentOf} builds the model's automaton from, which the tests read
- * too (`content.test.ts`, Unique Particle Attribution over every model of a composition).
+ * Whether a spec reading's edit finds what it names in its parent's model, as the particle stands
+ * when the edit is applied: every leading kind among the particles that may occur (`first`), its
+ * model (`restate`), one of its kinds (`ends`, `cap`), or the kind it is admitted beside
+ * (`beside`). The readings are fixed data, so this is the tests' reading of them
+ * (`content.test.ts`, every edit of a composition), never a load's: an edit that finds nothing
+ * leaves its model as it is.
+ *
+ * @param particle - The model's particle, the edits before this one applied.
+ * @param edit - The edit.
+ * @returns Whether it finds what it names.
+ */
+export const finds = (particle: Particle, edit: ModelEdit): boolean => {
+  const named = (leaves: readonly Exclude<Particle, { readonly _tag: "group" }>[]) =>
+    new Set(leaves.flatMap((leaf) => (leaf._tag === "element" ? leaf.kinds : [])));
+  switch (edit._tag) {
+    case "first": {
+      const occurring = named(
+        leavesOf(particle).filter(({ occurs }) => !Option.contains(occurs.max, 0)),
+      );
+
+      return edit.kinds.every((kind) => occurring.has(kind));
+    }
+    case "restate": {
+      return true;
+    }
+    case "ends": {
+      const held = named(leavesOf(particle));
+
+      return edit.kinds.some((kind) => held.has(kind));
+    }
+    case "cap": {
+      return named(leavesOf(particle)).has(edit.kind);
+    }
+    case "beside": {
+      return named(leavesOf(particle)).has(edit.with);
+    }
+    default: {
+      return edit satisfies never;
+    }
+  }
+};
+
+/**
+ * Apply every spec reading's edit of a kind's model, in order: the particle {@link contentOf}
+ * builds the model's automaton from, which the tests read too (`content.test.ts`, Unique Particle
+ * Attribution over every model of a composition, and {@link finds} over every edit).
  *
  * @param particle - The model's particle.
  * @param edits - Every reading's edits.
  * @param kind - The model's kind.
- * @param used - The edits that found what they name, added to.
  * @returns The edited particle.
  */
-export const editedBy = (
-  particle: Particle,
+export const editedBy = (particle: Particle, edits: readonly ModelEdit[], kind: string): Particle =>
+  edits.reduce((tree, edit) => (edit.parent === kind ? edited(tree, edit) : tree), particle);
+
+/**
+ * The endings a kind's readings state.
+ *
+ * @param edits - Every reading's edits.
+ * @param kind - The model's kind.
+ * @returns Its endings, in the readings' order.
+ */
+const endingsOf = (
   edits: readonly ModelEdit[],
   kind: string,
-  used: Set<ModelEdit>,
-): Particle => {
-  let tree = particle;
-  for (const edit of edits) {
-    if (edit.parent === kind) {
-      const result = edited(tree, edit);
-      if (result.found) {
-        used.add(edit);
-      }
-
-      tree = result.particle;
-    }
-  }
-
-  return tree;
-};
+): readonly Extract<ModelEdit, { readonly _tag: "ends" }>[] =>
+  edits.flatMap((edit) => (edit._tag === "ends" && edit.parent === kind ? [edit] : []));
 
 /**
  * Narrow an automaton by the readings' endings of its kind: a family may end only at a position
  * whose kinds an ending lists, every ending's, and never empty. The follow sets are untouched, so
  * the family's other children keep the model's order. A family's last state is its last child's
  * position, so an ending is exact only where each position names kinds all of which or none of
- * which it lists; a position it lists in part is refused as {@link MixedEnding}.
+ * which it lists: the readings are fixed, so the tests check that every ending is
+ * ({@link mixedEndingsOf}), and no load does.
  *
  * An ending states a language no deterministic expression does: MathML's `lambda` is
  * `bvar*, DomainQ, ContExp` with `interval` in both `DomainQ` and `ContExp` (spec reading 2), whose
@@ -641,39 +623,13 @@ export const editedBy = (
  * @param automaton - The model's automaton.
  * @param edits - Every reading's edits.
  * @param kind - The model's kind.
- * @returns The automaton, its `Last` narrowed by the kind's endings, or the first ending a position
- *   is listed in only in part by.
+ * @returns The automaton, its `Last` narrowed by the kind's endings.
  * @see {@link https://doi.org/10.1006/inco.1997.2695 | Brüggemann-Klein and Wood, One-Unambiguous Regular Languages (Information and Computation 142(2), 1998)}
  */
-const endedBy = (
-  automaton: Automaton,
-  edits: readonly ModelEdit[],
-  kind: string,
-): Result.Result<Automaton, MixedEnding> => {
-  const endings = edits.flatMap((edit) =>
-    edit._tag === "ends" && edit.parent === kind ? [edit] : [],
-  );
-  for (const ending of endings) {
-    const listed = new Set<string>(ending.kinds);
-    for (const { symbol } of automaton.positions) {
-      if (
-        symbol._tag === "kinds" &&
-        symbol.kinds.some((held) => listed.has(held)) &&
-        !symbol.kinds.every((held) => listed.has(held))
-      ) {
-        return Result.fail(
-          new MixedEnding({
-            kinds: symbol.kinds.join(", "),
-            parent: kind,
-            source: ending.source,
-          }),
-        );
-      }
-    }
-  }
-
+const endedBy = (automaton: Automaton, edits: readonly ModelEdit[], kind: string): Automaton => {
+  const endings = endingsOf(edits, kind);
   if (endings.length === 0) {
-    return Result.succeed(automaton);
+    return automaton;
   }
 
   // A state is the position its family's last child stands at; state 0, the empty family, has no
@@ -686,8 +642,41 @@ const endedBy = (
         endings.every(({ kinds }) => symbol.kinds.every((held) => kinds.includes(held))),
     );
 
-  return Result.succeed({ ...automaton, ends: new Set([...automaton.ends].filter(listed)) });
+  return { ...automaton, ends: new Set([...automaton.ends].filter(listed)) };
 };
+
+/**
+ * Find the endings of a kind's readings that list some of one position's kinds and not the others,
+ * so that no position state tells a family that ends there with a listed kind from one that ends
+ * with another. The readings are fixed data, so this is the tests' reading of them
+ * (`content.test.ts`, every ending of a composition), never a load's.
+ *
+ * @param automaton - The kind's model's automaton.
+ * @param edits - Every reading's edits.
+ * @param kind - The model's kind.
+ * @returns Each such ending, with the kinds of the first position it lists in part.
+ */
+export const mixedEndingsOf = (
+  automaton: Automaton,
+  edits: readonly ModelEdit[],
+  kind: string,
+): readonly { readonly ending: ModelEdit; readonly kinds: readonly string[] }[] =>
+  endingsOf(edits, kind).flatMap((ending) => {
+    const listed = new Set<string>(ending.kinds);
+
+    return Arr.findFirst(
+      automaton.positions,
+      ({ symbol }) =>
+        symbol._tag === "kinds" &&
+        symbol.kinds.some((held) => listed.has(held)) &&
+        !symbol.kinds.every((held) => listed.has(held)),
+    ).pipe(
+      Option.flatMap(({ symbol }) =>
+        symbol._tag === "kinds" ? Option.some({ ending, kinds: symbol.kinds }) : Option.none(),
+      ),
+      Option.toArray,
+    );
+  });
 
 /**
  * One position a reading caps: at most one child of a family stands there.
@@ -702,7 +691,7 @@ interface Cap {
  * that names its kind and no other kind, so the count of the family's children there is the count
  * of the kind. A kind a model names at several positions, or beside another kind at one, has no
  * such position, and its cap is refused as {@link UncountedCap}. A kind no particle of the model
- * names leaves the cap unread, which {@link contentOf} refuses as {@link UnreadEdit}, and one whose
+ * names leaves the cap unread, which the tests find ({@link finds}), and one whose
  * particles never occur has no child to count.
  *
  * @param automaton - The model's automaton.
@@ -1011,16 +1000,15 @@ export const contentOf = (input: {
       );
     };
     const installed: Installed[] = [];
-    const used = new Set<ModelEdit>();
     for (const model of [...input.models, ...input.facets.flatMap((facet) => facet.models)]) {
       const { content } = model;
       const own = input.namespaceOf(model.kind);
       const data = dataOf(content, own);
       const particle: Option.Option<Particle> =
         content._tag === "element-only" || content._tag === "mixed"
-          ? Option.some(editedBy(content.particle, edits, model.kind, used))
+          ? Option.some(editedBy(content.particle, edits, model.kind))
           : Option.none();
-      const automaton = yield* endedBy(
+      const automaton = endedBy(
         Option.match(particle, {
           onNone: () => noAutomaton,
           onSome: automatonOf,
@@ -1121,40 +1109,6 @@ export const contentOf = (input: {
           version,
         });
       }
-    }
-
-    const unused = edits.find((edit) => !used.has(edit));
-    if (unused !== undefined) {
-      return yield* Result.fail(
-        new UnreadEdit({
-          kind: ((): string => {
-            switch (unused._tag) {
-              case "ends":
-              case "first": {
-                return unused.kinds.join(", ");
-              }
-              case "restate": {
-                return [
-                  ...new Set(
-                    leavesOf(unused.particle).flatMap((leaf) =>
-                      leaf._tag === "element" ? leaf.kinds : [],
-                    ),
-                  ),
-                ].join(", ");
-              }
-              case "beside":
-              case "cap": {
-                return unused.kind;
-              }
-              default: {
-                return unused satisfies never;
-              }
-            }
-          })(),
-          parent: unused.parent,
-          source: unused.source,
-        }),
-      );
     }
 
     const widest = Math.max(0, ...installed.map(({ automaton }) => automaton.positions.length));
@@ -1260,8 +1214,8 @@ export const contentOf = (input: {
         }),
       ),
     );
-    const model = idField("model", yield* roster("ContentModel", contentModels.handles));
-    const sharedModel = idField("model", yield* roster("SharedModel", sharedModels.handles));
+    const model = idField("model", roster("ContentModel", contentModels.handles));
+    const sharedModel = idField("model", roster("SharedModel", sharedModels.handles));
     const modelSizes = new Map(
       contentModels.models.map(({ handle, value }) => [handle, value.follows.length]),
     );
@@ -1281,7 +1235,7 @@ export const contentOf = (input: {
         }),
       })),
     );
-    const followSet = idField("set", yield* roster("FollowSet", [...setOf.values()]));
+    const followSet = idField("set", roster("FollowSet", [...setOf.values()]));
     const sharedSizes = new Map(
       sharedModels.models.map(({ handle, value }) => [handle, value.positions]),
     );

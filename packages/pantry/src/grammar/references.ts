@@ -19,9 +19,9 @@
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info | QTI 3.0 ASI Information Model}
  */
-import { Array as Arr, Option, Result } from "effect";
+import { Array as Arr, Option } from "effect";
 import { closed, idField, roster, rowsAt, valueField } from "#pantry/grammar/closed.ts";
-import type { Closed, IdField, RepeatedValue, Roster, ValueField } from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, Roster, ValueField } from "#pantry/grammar/closed.ts";
 import type { KindSet, SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { attributeDeclarations, textTypes } from "#pantry/vocab/inventory/attributes.ts";
 import { contentModels } from "#pantry/vocab/inventory/models.ts";
@@ -1065,132 +1065,131 @@ const restrictionOf = (reference: ReferenceRow): readonly string[] =>
  * @param input.kinds - The `NodeKind` roster.
  * @param input.names - The `AttributeName` roster.
  * @param input.versions - The `SchemaVersion` roster.
- * @returns The relations, or a declaration kind or built-in variable stated twice
- *   (`RepeatedValue`). Two rows at one key, such as two spellings of one reference or two bounds on
- *   one kind, and a kind, attribute or declaration kind outside its roster are faults of the rows
- *   (`faultOf`), which the tests find and grizzle refuses.
+ * @returns The relations. A declaration kind stated twice is a fault of its roster (`repeatOf`);
+ *   two rows at one key, such as two spellings of one reference, two bounds on one kind or a
+ *   built-in variable stated twice, and a kind, attribute or declaration kind outside its roster
+ *   are faults of the rows (`faultOf`): the tests find each, and grizzle refuses each.
  */
 export const references = (input: {
   readonly facets: readonly ReferenceFacet[];
   readonly kinds: Roster<string>;
   readonly names: Roster<string>;
   readonly versions: Roster<SchemaVersion>;
-}): Result.Result<References, RepeatedValue> =>
-  Result.gen(function* generateReferences() {
-    const { facets } = input;
-    const kind = idField("kind", input.kinds);
-    const attribute = idField("attribute", input.names);
-    const declarationKind = yield* roster(
-      "DeclarationKind",
-      facets.flatMap((facet) => facet.declarations),
-    );
-    const declaration = idField("declaration", declarationKind);
-    const stated = facets.flatMap((facet) => facet.builtIns);
-    const typedBuiltIns = stated.flatMap(({ baseType, root, variable }) =>
-      baseType.pipe(
-        Option.map((typed) => ({ baseType: typed, root, variable })),
-        Option.toArray,
-      ),
-    );
-    const builtInVariable = yield* roster("BuiltInVariable", [
-      ...new Set(stated.map(({ variable }) => variable)),
-    ]);
-    const spelling = yield* roster("ReferenceSpelling", spellings);
-    const referenceForm = yield* roster("ReferenceForm", referenceForms);
-    const rows = facets.flatMap((facet) => facet.references);
+}): References => {
+  const { facets } = input;
+  const kind = idField("kind", input.kinds);
+  const attribute = idField("attribute", input.names);
+  const declarationKind = roster(
+    "DeclarationKind",
+    facets.flatMap((facet) => facet.declarations),
+  );
+  const declaration = idField("declaration", declarationKind);
+  const stated = facets.flatMap((facet) => facet.builtIns);
+  const typedBuiltIns = stated.flatMap(({ baseType, root, variable }) =>
+    baseType.pipe(
+      Option.map((typed) => ({ baseType: typed, root, variable })),
+      Option.toArray,
+    ),
+  );
+  const builtInVariable = roster("BuiltInVariable", [
+    ...new Set(stated.map(({ variable }) => variable)),
+  ]);
+  const spelling = roster("ReferenceSpelling", spellings);
+  const referenceForm = roster("ReferenceForm", referenceForms);
+  const rows = facets.flatMap((facet) => facet.references);
 
-    return {
-      builtIn: closed({
-        key: [idField("root", input.kinds), idField("variable", builtInVariable)],
-        name: "BuiltInVariable",
-        payload: [
-          declaration,
-          valueField(
-            "cardinality",
-            stated.map(({ cardinality }) => cardinality),
-          ),
-        ],
-        rows: stated.map(({ cardinality, declaration: standsAs, root, variable }) => ({
-          cardinality,
-          declaration: standsAs,
-          root,
-          variable,
-        })),
-      }),
-      builtInBaseType: closed({
-        key: [idField("root", input.kinds), idField("variable", builtInVariable)],
-        name: "BuiltInBaseType",
-        payload: [
-          valueField(
-            "baseType",
-            typedBuiltIns.map(({ baseType }) => baseType),
-          ),
-        ],
-        rows: typedBuiltIns,
-      }),
-      builtInVariable,
-      choiceBound: closed({
-        key: [kind],
-        name: "ChoiceBound",
-        payload: [
-          idField("min", input.names),
-          idField("max", input.names),
-          idField("zero", yield* roster("BoundZero", boundZeros)),
-        ],
-        rows: facets.flatMap((facet) => facet.choiceBounds),
-      }),
-      choiceCount: closed({
-        key: [kind],
-        name: "ChoiceCount",
-        payload: [idField("choice", input.kinds)],
-        rows: facets.flatMap((facet) => facet.choiceCounts),
-      }),
-      contentReference: closed({
-        key: [kind, attribute, declaration],
-        name: "ContentReference",
-        payload: [],
-        rows: rows.flatMap((reference) =>
-          restrictionOf(reference).map((named) => ({
-            attribute: reference.attribute,
-            declaration: named,
-            kind: reference.kind,
-          })),
+  return {
+    builtIn: closed({
+      key: [idField("root", input.kinds), idField("variable", builtInVariable)],
+      name: "BuiltInVariable",
+      payload: [
+        declaration,
+        valueField(
+          "cardinality",
+          stated.map(({ cardinality }) => cardinality),
         ),
-      }),
-      declarationKind,
-      declares: closed({
-        key: [kind],
-        name: "Declares",
-        payload: [declaration],
-        rows: declarationKind.handles.map((handle) => ({ declaration: handle, kind: handle })),
-      }),
-      referenceAttribute: closed({
-        key: [idField("version", input.versions), kind, idField("name", input.names)],
-        name: "ReferenceAttribute",
-        payload: [idField("form", referenceForm)],
-        rows: facets
-          .flatMap((facet) => facet.fileReferences)
-          .flatMap(({ form, kind: owner, name, versions }) =>
-            versions.map((version) => ({ form, kind: owner, name, version })),
-          ),
-      }),
-      referenceForm,
-      sectionPart: closed({
-        key: [kind],
-        name: "SectionPart",
-        payload: [],
-        rows: facets.flatMap((facet) => facet.sectionParts).map((part) => ({ kind: part })),
-      }),
-      spelling,
-      variableReference: closed({
-        key: [kind, attribute],
-        name: "VariableReference",
-        payload: [idField("spelling", spelling)],
-        rows: rows.map((reference) => ({
+      ],
+      rows: stated.map(({ cardinality, declaration: standsAs, root, variable }) => ({
+        cardinality,
+        declaration: standsAs,
+        root,
+        variable,
+      })),
+    }),
+    builtInBaseType: closed({
+      key: [idField("root", input.kinds), idField("variable", builtInVariable)],
+      name: "BuiltInBaseType",
+      payload: [
+        valueField(
+          "baseType",
+          typedBuiltIns.map(({ baseType }) => baseType),
+        ),
+      ],
+      rows: typedBuiltIns,
+    }),
+    builtInVariable,
+    choiceBound: closed({
+      key: [kind],
+      name: "ChoiceBound",
+      payload: [
+        idField("min", input.names),
+        idField("max", input.names),
+        idField("zero", roster("BoundZero", boundZeros)),
+      ],
+      rows: facets.flatMap((facet) => facet.choiceBounds),
+    }),
+    choiceCount: closed({
+      key: [kind],
+      name: "ChoiceCount",
+      payload: [idField("choice", input.kinds)],
+      rows: facets.flatMap((facet) => facet.choiceCounts),
+    }),
+    contentReference: closed({
+      key: [kind, attribute, declaration],
+      name: "ContentReference",
+      payload: [],
+      rows: rows.flatMap((reference) =>
+        restrictionOf(reference).map((named) => ({
           attribute: reference.attribute,
+          declaration: named,
           kind: reference.kind,
-          spelling: reference.spelling,
         })),
-      }),
-    };
-  });
+      ),
+    }),
+    declarationKind,
+    declares: closed({
+      key: [kind],
+      name: "Declares",
+      payload: [declaration],
+      rows: declarationKind.handles.map((handle) => ({ declaration: handle, kind: handle })),
+    }),
+    referenceAttribute: closed({
+      key: [idField("version", input.versions), kind, idField("name", input.names)],
+      name: "ReferenceAttribute",
+      payload: [idField("form", referenceForm)],
+      rows: facets
+        .flatMap((facet) => facet.fileReferences)
+        .flatMap(({ form, kind: owner, name, versions }) =>
+          versions.map((version) => ({ form, kind: owner, name, version })),
+        ),
+    }),
+    referenceForm,
+    sectionPart: closed({
+      key: [kind],
+      name: "SectionPart",
+      payload: [],
+      rows: facets.flatMap((facet) => facet.sectionParts).map((part) => ({ kind: part })),
+    }),
+    spelling,
+    variableReference: closed({
+      key: [kind, attribute],
+      name: "VariableReference",
+      payload: [idField("spelling", spelling)],
+      rows: rows.map((reference) => ({
+        attribute: reference.attribute,
+        kind: reference.kind,
+        spelling: reference.spelling,
+      })),
+    }),
+  };
+};

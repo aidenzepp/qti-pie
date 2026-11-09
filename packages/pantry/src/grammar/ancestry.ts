@@ -11,9 +11,9 @@
  * Each set is keyed by (kind, flag), kind first, so kind k's row is the 10 cells from k·10,
  * `substring(S FROM k·10 + 1 FOR 10)`: a `bit(10)` laid out as an ancestry is, `fb` leftmost.
  */
-import { Option, Result } from "effect";
+import { Option } from "effect";
 import { closed, idField, roster } from "#pantry/grammar/closed.ts";
-import type { Closed, IdField, RepeatedValue, Roster } from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, Roster } from "#pantry/grammar/closed.ts";
 
 /**
  * The ancestry flags in code order. A flag's code is its bit's position in the `bit(10)`, the first
@@ -133,38 +133,34 @@ const rowsOf = (
  * @param vocabulary.kinds - The `NodeKind` roster, the sets' first key field.
  * @param vocabulary.interactions - The interaction kinds.
  * @param vocabulary.facets - Each vocabulary's blocks.
- * @returns The three sets, or a `RepeatedValue` from the `Flag` roster. A kind a block names that
- *   the roster lacks is a fault of the rows (`faultOf`), which the tests find and grizzle refuses.
+ * @returns The three sets. A kind a block names that the roster lacks is a fault of the rows
+ *   (`faultOf`), which the tests find and grizzle refuses.
  */
 export const generate = (vocabulary: {
   readonly facets: readonly AncestryFacet[];
   readonly interactions: readonly string[];
   readonly kinds: Roster<string>;
-}): Result.Result<AncestrySets, RepeatedValue> =>
-  Result.gen(function* generateAncestry() {
-    const { facets, interactions } = vocabulary;
-    const key: KindFlag = [
-      idField("kind", vocabulary.kinds),
-      idField("flag", yield* roster("Flag", flags)),
-    ];
-    const set = (name: string, blocks: readonly Block[]) =>
-      closed({ key, name, payload: [], rows: rowsOf(blocks) });
+}): AncestrySets => {
+  const { facets, interactions } = vocabulary;
+  const key: KindFlag = [idField("kind", vocabulary.kinds), idField("flag", roster("Flag", flags))];
+  const set = (name: string, blocks: readonly Block[]) =>
+    closed({ key, name, payload: [], rows: rowsOf(blocks) });
 
-    const enters = set("Enters", [
-      { flags: ["int"], kinds: interactions },
-      ...facets.flatMap((facet) => facet.entering),
-    ]);
-    const banned = set("Banned", [
-      { flags: interactionBans, kinds: interactions },
-      ...facets.flatMap((facet) => facet.banning),
-    ]);
-    const needs = set(
-      "Needs",
-      facets.flatMap((facet) => facet.needing),
-    );
+  const enters = set("Enters", [
+    { flags: ["int"], kinds: interactions },
+    ...facets.flatMap((facet) => facet.entering),
+  ]);
+  const banned = set("Banned", [
+    { flags: interactionBans, kinds: interactions },
+    ...facets.flatMap((facet) => facet.banning),
+  ]);
+  const needs = set(
+    "Needs",
+    facets.flatMap((facet) => facet.needing),
+  );
 
-    return { banned, enters, needs };
-  });
+  return { banned, enters, needs };
+};
 
 /**
  * Read a kind's row of a kind × flag set, the `bit(10)` as the host shows it.
