@@ -48,6 +48,7 @@ import {
   trimXmlSpace,
 } from "#plate/model/values.ts";
 import type { InvalidValue, ModelledBaseType, Single } from "#plate/model/values.ts";
+import { decodeDataSsml } from "#plate/validate/data-ssml.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { governingTables } from "#plate/validate/structure.ts";
@@ -4741,6 +4742,59 @@ const quotation = (source: SourceDocument, visit: Visit): readonly Refusal[] => 
 };
 
 /**
+ * Report whether an element's kind declares `data-ssml`: a QTI element whose name's table holds the
+ * attribute in no namespace. The XSD declares it on exactly the 45 elements the Data-SSML binding
+ * lists (§5); on any other, only an attribute wildcard admits a `data-ssml`, laxly and unchecked,
+ * so nothing the standard states makes its value Data-SSML and it is not refused (rule
+ * `5b8ee08b`).
+ *
+ * @param tables The tables generated from the QTI XSD.
+ * @param element The element.
+ * @returns Whether its kind declares `data-ssml`.
+ */
+const declaresDataSsml = (tables: Tables, element: SourceElement): boolean =>
+  element.namespace === qtiNamespace &&
+  Option.exists(Option.fromUndefinedOr(tables.elements[element.local]), (table) =>
+    table.attributes.some(
+      (attribute) => attribute.namespace === "" && attribute.local === "data-ssml",
+    ),
+  );
+
+/**
+ * Apply `attribute-type` with `check: "data-ssml"` to a `data-ssml` value that is not Data-SSML
+ * JSON (the operator's P3), where the element's kind declares the attribute
+ * ({@link declaresDataSsml}): the value, with its entities replaced, decodes as the Data-SSML
+ * binding's JSON ({@link decodeDataSsml}). The XSD types it `xs:string`, so the binding alone
+ * judges it. A value that decodes keeps the `data-ssml` feature mark every body element carrying
+ * the attribute gets (`#plate/vocabulary.ts`).
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param tables The tables generated from the QTI XSD.
+ * @returns One refusal at the attribute's path, naming the first `problem` the decoding found;
+ *   none when the value is Data-SSML JSON, and for an element that carries no `data-ssml` or whose
+ *   kind does not declare it.
+ */
+const dataSsml = (source: SourceDocument, visit: Visit, tables: Tables): readonly Refusal[] => {
+  const attribute = attributeOf(visit.element, "data-ssml");
+  if (Option.isNone(attribute) || !declaresDataSsml(tables, visit.element)) {
+    return [];
+  }
+
+  return Result.match(decodeDataSsml(attribute.value.value), {
+    onFailure: ({ problem }) => [
+      refusal(source, "attribute-type", attributePath(visit.path, attribute.value), {
+        attribute: attribute.value.local,
+        check: "data-ssml",
+        element: visit.element.local,
+        problem,
+      }),
+    ],
+    onSuccess: () => [],
+  });
+};
+
+/**
  * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier`,
  * `binding`, `count-range`, `template-requirements`, `value-type`, `undeclared-variable`,
  * `expression-type`, and the body content's `missing-attribute`, `misplaced-element`,
@@ -4765,7 +4819,9 @@ const quotation = (source: SourceDocument, visit: Visit): readonly Refusal[] => 
  * 128, E31a); an interaction a `qti-template-block` holds, `misplaced-element`
  * ({@link templateBlockInteraction}, reading 143, E37); a cell's `headers` that names no header of
  * its table, or one twice, `attribute-type` ({@link tableHeaders}, reading 126, E29); and a
- * quotation mark against a `q`, `text-not-allowed` ({@link quotation}, reading 127, E30).
+ * quotation mark against a `q`, `text-not-allowed` ({@link quotation}, reading 127, E30); and a
+ * `data-ssml` value that is not Data-SSML JSON, `attribute-type` ({@link dataSsml}, the operator's
+ * P3).
  * `template-requirements` judges the declarations a standard template, an inline `qti-map-response`
  * or `qti-map-response-point` and a `qti-lookup-outcome-value` need, and a mapping expression of a
  * built-in response, which has none. `undeclared-variable` judges
@@ -4880,6 +4936,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
       ...templateBlockInteraction(source, visit, placing),
       ...tableHeaders(source, visit, placing),
       ...quotation(source, visit),
+      ...dataSsml(source, visit, tables),
     );
   }
 
