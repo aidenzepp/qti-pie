@@ -757,6 +757,49 @@ const portable = (declarations: readonly SourceElement[], contextVariables: read
   );
 
 /**
+ * Construct an item whose body holds a Portable Custom Interaction bound to its declared
+ * `RESPONSE`, naming its module by the forms given (R10-a, "A PCI names its module by `module`, by
+ * `qti-interaction-modules`, or by both").
+ *
+ * @param forms Whether it carries a `module` attribute and whether it holds a
+ *   `qti-interaction-modules`.
+ * @param forms.module Whether it carries a `module` attribute.
+ * @param forms.modules Whether it holds a `qti-interaction-modules`.
+ * @returns The item.
+ */
+const moduleNamed = (forms: { readonly module: boolean; readonly modules: boolean }) =>
+  item(
+    [response("RESPONSE", "single", "string")],
+    [
+      el(
+        "qti-portable-custom-interaction",
+        [
+          attr("custom-interaction-type-identifier", "urn:example:pci"),
+          ...(forms.module ? [attr("module", "pci")] : []),
+          attr("response-identifier", "RESPONSE"),
+        ],
+        [
+          ...(forms.modules
+            ? [
+                el(
+                  "qti-interaction-modules",
+                  [],
+                  [
+                    el("qti-interaction-module", [
+                      attr("id", "pci"),
+                      attr("primary-path", "modules/pci"),
+                    ]),
+                  ],
+                ),
+              ]
+            : []),
+          el("qti-interaction-markup", [], [el("div")]),
+        ],
+      ),
+    ],
+  );
+
+/**
  * Construct an interaction bound to a response, with its counts and its children.
  *
  * @param local The interaction's local name.
@@ -1876,6 +1919,37 @@ describe("checkRules", () => {
         ),
         [],
       );
+    });
+  });
+
+  describe("align-54 R3 PCI module: a PCI names its module by module, by qti-interaction-modules, or by both", () => {
+    const pci = "qti-assessment-item/qti-item-body/qti-portable-custom-interaction";
+
+    it("align-54 R3 PCI module F6: refuses a PCI with neither a module nor a qti-interaction-modules, as missing-attribute pci-module-source at the PCI (R10-a, info.txt:37583)", () => {
+      assert.deepStrictEqual(judged(moduleNamed({ module: false, modules: false })), [
+        {
+          detail: {
+            attribute: "module",
+            check: "pci-module-source",
+            element: "qti-portable-custom-interaction",
+            source: "info.txt:37583",
+          },
+          path: pci,
+          rule: "missing-attribute",
+        },
+      ]);
+    });
+
+    it("align-54 R3 PCI module F6: accepts a PCI naming its module by a module attribute alone (R10-a)", () => {
+      assert.deepStrictEqual(judged(moduleNamed({ module: true, modules: false })), []);
+    });
+
+    it("align-54 R3 PCI module F6: accepts a PCI naming its module by a qti-interaction-modules alone (R10-a)", () => {
+      assert.deepStrictEqual(judged(moduleNamed({ module: false, modules: true })), []);
+    });
+
+    it("align-54 R3 PCI module F6: accepts a PCI naming its module by both a module attribute and a qti-interaction-modules (R10-a)", () => {
+      assert.deepStrictEqual(judged(moduleNamed({ module: true, modules: true })), []);
     });
   });
 

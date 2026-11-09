@@ -1216,6 +1216,45 @@ const contextVariableReference = (
 };
 
 /**
+ * Apply R10-a ("A PCI names its module by `module`, by `qti-interaction-modules`, or by both") to a
+ * Portable Custom Interaction: it carries a `module` attribute, holds a `qti-interaction-modules`
+ * child, or both. The information model's `module` (§5.106.2, in 3.0.0 and 3.0.1): "If this
+ * characteristic is provided the qti-interaction-modules child attribute is not required, if
+ * omitted then the modules child element is mandatory" (`info.txt:37583`). The XSD makes both
+ * optional, so the structural walk refuses neither, and a PCI with neither is `missing-attribute`
+ * with `check: "pci-module-source"` here. Any written `module` counts, whatever its value: the
+ * structural walk judges its value. Every version is judged alike, with no version seam.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @returns The refusal at the PCI, or none when it names its module by either form, or when it is
+ *   no `qti-portable-custom-interaction`.
+ */
+const pciModuleSource = (source: SourceDocument, visit: Visit): readonly Refusal[] => {
+  if (!isQti(visit.element, (local) => local === "qti-portable-custom-interaction")) {
+    return [];
+  }
+
+  const named =
+    Option.isSome(attributeOf(visit.element, "module")) ||
+    visit.element.children.some(
+      (child) =>
+        child.kind === "element" && isQti(child, (local) => local === "qti-interaction-modules"),
+    );
+
+  return named
+    ? []
+    : [
+        refusal(source, "missing-attribute", visit.path, {
+          attribute: "module",
+          check: "pci-module-source",
+          element: visit.element.local,
+          source: "info.txt:37583",
+        }),
+      ];
+};
+
+/**
  * Type a name a test's processing reads with a `.` in it that the test does not declare whole: a
  * prefixed read (`ITEMREF.VAR`, `ITEMREF.N.VAR`, a part's or a section's `duration`; readings 4
  * and 37), which only the test's items can type.
@@ -4840,7 +4879,8 @@ const dataSsml = (source: SourceDocument, visit: Visit, tables: Tables): readonl
  * `#plate/model/expressions/read.ts`). The variable, type and reference rules judge inline response
  * processing and template processing alike, as the qti package does. A field of a record
  * declaration's value that lacks its `field-identifier` or its `base-type` is `missing-attribute`
- * ({@link recordFieldAttributes}).
+ * ({@link recordFieldAttributes}), and so is a Portable Custom Interaction that names its module by
+ * neither a `module` nor a `qti-interaction-modules` ({@link pciModuleSource}, R10-a).
  *
  * The rules judge exactly what the structural walk checks, and only an item they can read whole:
  *
@@ -4912,6 +4952,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
       ...responseRules(source, visit, context.responses, bound),
       ...countRules(source, visit),
       ...contextVariableReference(source, visit, contexts),
+      ...pciModuleSource(source, visit),
       ...templateRequirements(source, visit, context),
       ...mapResponseRequirements(source, visit, context),
       ...attributeValueType(source, visit, context),
