@@ -51,7 +51,6 @@ import type {
   ObjectIdentifier,
   ObjectLang,
   ObjectTitle,
-  ResourceLomGeneral,
   StatisticDate,
   UsageValue,
 } from "#pantry/qti/metadata.ts";
@@ -107,7 +106,6 @@ export interface MetadataRows {
   readonly ObjectIdentifier: ReadonlyMap<string, Addition<typeof ObjectIdentifier>>;
   readonly ObjectLang: ReadonlyMap<string, Addition<typeof ObjectLang>>;
   readonly ObjectTitle: ReadonlyMap<string, Addition<typeof ObjectTitle>>;
-  readonly ResourceLomGeneral: ReadonlyMap<string, Addition<typeof ResourceLomGeneral>>;
   readonly StatisticDate: ReadonlyMap<string, Addition<typeof StatisticDate>>;
   readonly UsageValue: ReadonlyMap<string, Addition<typeof UsageValue>>;
 }
@@ -494,30 +492,16 @@ const recordRowsOf = (
   );
 
 /**
- * Build a document's {@link LomGeneral} rows: one per `lom:general`, with its record's owner and
- * owner's parent.
+ * Build a document's {@link LomGeneral} rows: one per `lom:general`, its node's tuple.
  *
  * @param tree - The document's tree.
- * @param records - The document's {@link LomRecord} rows.
  * @returns The rows, by their node's id.
  */
-const generalRowsOf = (
-  tree: Tree,
-  records: ReadonlyMap<string, Addition<typeof LomRecord>>,
-): ReadonlyMap<string, Addition<typeof LomGeneral>> =>
+const generalRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomGeneral>> =>
   new Map(
-    tree.nodes.flatMap((node) => {
-      const record = node.kind === "lom:general" ? records.get(node.parent) : undefined;
-
-      return record === undefined
-        ? []
-        : [
-            [
-              node.id,
-              { ...tree.tupleOf(node), owner: record.owner, ownerParent: record.ownerParent },
-            ] as const,
-          ];
-    }),
+    tree.nodes.flatMap((node) =>
+      node.kind === "lom:general" ? [[node.id, tree.tupleOf(node)] as const] : [],
+    ),
   );
 
 /**
@@ -894,7 +878,6 @@ const noRecordRows = {
   LomStringLanguage: new Map(),
   LomTitle: new Map(),
   LomTitleString: new Map(),
-  ResourceLomGeneral: new Map(),
 } as const satisfies Omit<
   MetadataRows,
   | "AssessmentObject"
@@ -913,8 +896,7 @@ const noRecordRows = {
  * and a `cp:metadata` of another document describes no part of the package (170356bd's ruling), so
  * a document of another type writes no record. In a document of a record type, every `lom:lom`,
  * `lom:general`, `lom:entry`, `lom:title` and `lom:string` has its row, every
- * `cp:resource` its {@link LomResource}, every general category under a resource's `cp:metadata`
- * its {@link ResourceLomGeneral}, every title's string its {@link LomTitleString}, and every
+ * `cp:resource` its {@link LomResource}, every title's string its {@link LomTitleString}, and every
  * learning resource type its {@link LomResourceType} where it holds a value and its
  * {@link LomResourceTypeSource} where it writes a source. In every document, an item's or
  * test's root has its {@link AssessmentObject}, a usage statistic its {@link StatisticDate} where
@@ -939,14 +921,13 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRo
   const namedOf = resourceNamer(tree, resourcePathsOf(flatten(doc, ids.idOf)), ids.targetAt);
   const resources = resourceRowsOf(tree, namedOf);
   const records = recordRowsOf(tree, namedOf);
-  const generals = generalRowsOf(tree, records);
   const titles = titleRowsOf(tree, records);
   const strings = stringRowsOf(tree);
 
   return {
     ...everyDocument,
     LomEntry: entryRowsOf(tree, records),
-    LomGeneral: generals,
+    LomGeneral: generalRowsOf(tree),
     LomRecord: records,
     LomResource: resources,
     LomResourceType: termRowsOf(tree, "lom:value"),
@@ -955,11 +936,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRo
     LomStringLanguage: strings.languages,
     LomTitle: titles,
     LomTitleString: titleStringRowsOf(tree, titles),
-    ResourceLomGeneral: new Map(
-      [...generals.values()].flatMap(({ node, owner, ownerParent }) =>
-        owner === resourceMetadata ? [[node, { node, resource: ownerParent }] as const] : [],
-      ),
-    ),
   };
 };
 

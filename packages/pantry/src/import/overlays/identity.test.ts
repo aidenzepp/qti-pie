@@ -460,7 +460,6 @@ describe(
                   [documentNode],
                 );
                 assert.strictEqual(rows.IdentityText.size, 0);
-                assert.strictEqual(rows.GeneralNamed.size, 0);
                 assert.strictEqual(rows.GeneralObject.size, 0);
                 assert.deepStrictEqual(
                   asSet(
@@ -1074,7 +1073,6 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
               });
               const witnesses = languageRowsOf([manifestRows, itemRows]).GeneralLang;
 
-              const record = idOf(5);
               const generals: { readonly langs: readonly string[]; readonly node: string }[] = [];
               let next = 6;
               for (const langs of drawn.generals) {
@@ -1118,19 +1116,11 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
 
               assert.deepStrictEqual(
                 asSet(
-                  [...manifestRows.GeneralNamed.values()].map(
-                    (row) => `${row.general} ${row.record} ${row.named}`,
-                  ),
-                ),
-                generals.map(({ node }) => `${node} ${record} ${named}`).toSorted(),
-              );
-              assert.deepStrictEqual(
-                asSet(
                   [...manifestRows.GeneralObject.values()].map(
-                    (row) => `${row.general} ${row.record} ${row.document}`,
+                    (row) => `${row.general} ${row.document}`,
                   ),
                 ),
-                naming.map(({ node }) => `${node} ${record} ${itemDocument}`).toSorted(),
+                naming.map(({ node }) => `${node} ${itemDocument}`).toSorted(),
               );
               assert.deepStrictEqual(
                 asSet(

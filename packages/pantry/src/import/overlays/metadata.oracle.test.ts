@@ -920,11 +920,6 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
 
               assert.strictEqual(recordsByStart.length, listed.length, "one LomRecord a lom:lom");
               assert.strictEqual(manifest.LomGeneral.size, listed.length, "one LomGeneral each");
-              assert.strictEqual(
-                manifest.ResourceLomGeneral.size,
-                sketch.resources.flatMap(({ records: of }) => of).length,
-                "one ResourceLomGeneral a resource's general",
-              );
               assert.strictEqual(manifest.LomResource.size, sketch.resources.length);
               assert.strictEqual(
                 manifest.LomTitle.size,
@@ -986,10 +981,6 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
                       )),
                   `${resource.named} is none or an assessment object's type`,
                 );
-              }
-
-              for (const general of manifest.ResourceLomGeneral.values()) {
-                assert.isTrue(manifest.LomResource.has(general.resource), "its resource's row");
               }
             }),
         ),

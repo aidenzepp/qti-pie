@@ -47,7 +47,6 @@ import {
   ObjectIdentifier,
   ObjectLang,
   ObjectTitle,
-  ResourceLomGeneral,
   StatisticDate,
   statisticKinds,
   trimmedPattern,
@@ -105,7 +104,6 @@ const metadataRelations = {
   ObjectIdentifier,
   ObjectLang,
   ObjectTitle,
-  ResourceLomGeneral,
   StatisticDate,
   UsageValue,
 };

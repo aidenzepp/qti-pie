@@ -70,8 +70,7 @@
  * The record's facts are copied down its tree once, by the nodes' {@link nodeRef} tuples:
  * {@link LomRecord} climbs from each `lom:lom` to its owner and the owner's parent (the
  * `cp:resource` where the owner is a resource's `cp:metadata`), and each element below copies from
- * its record. {@link ResourceLomGeneral} is the shared interface: each resource's general category
- * and that resource, which Q5.07's `ResourceLomLanguageSet` and the `document-lang` law join.
+ * its record.
  *
  * The other metadata the package carries has no overlay, since no law reads it across rows: QTI
  * metadata, curriculum standards metadata and the rest of LOM are judged by their content models
@@ -272,7 +271,7 @@ export const LomObject = relation(
 
 /**
  * A LOM general category, keyed by its `lom:general` node: its {@link nodeRef} tuple, its parent
- * the record, and the record's owner and owner's parent, copied from {@link LomRecord}.
+ * the record.
  */
 export const LomGeneral = relation(
   "LomGeneral",
@@ -281,24 +280,12 @@ export const LomGeneral = relation(
     kind: closedId(NodeKind),
     nearest: uuid,
     node: uuid,
-    owner: closedId(NodeKind),
-    ownerParent: uuid,
     parent: uuid,
     start: natural,
     version: closedId(SchemaVersion),
   },
   ["node"],
 );
-
-/**
- * A resource's LOM general category, keyed by its `lom:general` node: one row for each general
- * category of a record under a resource's `cp:metadata`, and `resource`, that `cp:resource` node
- * (`Resource.node`). It is exactly the {@link LomGeneral} rows whose owner is a resource's
- * metadata, both ways, so a read joined to it reads every resource's category and no other.
- */
-export const ResourceLomGeneral = relation("ResourceLomGeneral", { node: uuid, resource: uuid }, [
-  "node",
-]);
 
 /**
  * A LOM identifier's entry, keyed by its `lom:entry` node (a `CharacterString`, whose parent is
@@ -644,7 +631,6 @@ export const metadataRelations = {
   ObjectIdentifier,
   ObjectLang,
   ObjectTitle,
-  ResourceLomGeneral,
   StatisticDate,
   UsageValue,
 };
@@ -749,11 +735,6 @@ const resourceRecords = select(LomRecord, (r) => r.eq(r.owner, resourceMetadata)
 const namingRecords = select(LomRecord, (r) => r.ne(r.named, "none"));
 
 /**
- * The general categories whose record's owner is a resource's metadata.
- */
-const resourceGenerals = select(LomGeneral, (g) => g.eq(g.owner, resourceMetadata));
-
-/**
  * The entries of general categories, among which a record names its document.
  */
 const generalEntries = select(LomEntry, (e) => e.eq(e.holderKind, "lom:general"));
@@ -850,9 +831,8 @@ const spelledUsageBaseTypes = select(Attribute, (a) =>
  *   nodes'; its `named` is its resource's where its owner is a resource's metadata, else `none`;
  *   and each naming record has its {@link LomObject}, the document at its resource's `href`'s
  *   path.
- * - **the general categories:** each `lom:general` has its {@link LomGeneral}, whose owner and
- *   owner's parent are its record's; {@link ResourceLomGeneral} is exactly those of a resource's
- *   records, with the resource.
+ * - **the general categories:** each `lom:general` has its {@link LomGeneral}, whose tuple is its
+ *   node's.
  * - **the entries:** each `lom:entry` has its {@link LomEntry}, whose `text` is its string value,
  *   whose three tuples are its nodes', whose pieces concatenate to its text, and whose `named` is
  *   its record's for a general category's entry, else `none`.
@@ -944,15 +924,7 @@ export const metadataLawsByName = {
       nodeRef,
     ),
     contained(on(generalNodes, "id"), on(LomGeneral, "node")),
-    contained(
-      on(LomGeneral, "parent", "owner", "ownerParent"),
-      on(LomRecord, "node", "owner", "ownerParent"),
-    ),
     check("E1_derived", LomGeneral, (g) => g.eq(g.kind, "lom:general")),
-    mirrors(
-      on(ResourceLomGeneral, "node", "resource"),
-      on(resourceGenerals, "node", "ownerParent"),
-    ),
     contained(
       on(LomEntry, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,

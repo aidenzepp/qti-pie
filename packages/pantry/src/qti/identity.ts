@@ -40,7 +40,7 @@
  *   §2.7.1.3, "There must be one value for each of the languages referred to by the language
  *   attributes on the associated assessmentItem, test or object bank and its 'bodyElements'",
  *   normative by its §1.2. Each language an item's or a test's `xml:lang` states is listed by every
- *   general category of each record that names the document (Q5.12's `LomObject`: a `lom:lom` of
+ *   general category of each record that names the document ({@link GeneralObject}: a `lom:lom` of
  *   the `cp:metadata` of a resource of an item or a test type whose `href` names it). A document no
  *   such category describes states nothing, so a resource whose record has no general category is
  *   not judged. It is a universal over pairs, stated by counts: {@link DocumentGenerals} counts the
@@ -130,7 +130,6 @@ import {
   Governor,
   Identity,
   NodeKind,
-  ResourceType,
   SchemaVersion,
   TextDomain,
   toolLabelKinds,
@@ -139,14 +138,7 @@ import {
 import { Attribute, Idref, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import {
-  LomGeneral,
-  LomObject,
-  LomRecord,
-  ObjectLang,
-  recordDocumentTypes,
-  ResourceLomGeneral,
-} from "#pantry/qti/metadata.ts";
+import { ObjectLang, recordDocumentTypes } from "#pantry/qti/metadata.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 import { ManifestId, ResourceId } from "#pantry/qti/package.ts";
 import { Instance, itemKind, testKind } from "#pantry/qti/tests.ts";
@@ -339,26 +331,20 @@ export const ResourceLomLanguageSet = relation(
 );
 
 /**
- * A resource's LOM general category, keyed by its `lom:general` node: its record, and `named`, the
- * type of the document the record names (Q5.12's `LomRecord.named`), `none` for a record that
- * names none. It is exactly Q5.12's `ResourceLomGeneral` rows, both ways, so a selection reads the
- * categories R26 binds.
+ * A general category of a record that names a document, keyed by its `lom:general` node, with that
+ * document, the item or test whose languages it lists: exactly the rows of `NamingGeneral`
+ * (`#pantry/qti/queries.ts`), both ways.
+ *
+ * It is a stored copy of that query, which the import writes, for one reason, gap G2 of the
+ * grizzle cutover: {@link generalObjectFamily} counts it into `DocumentGenerals.generals`, and a
+ * grizzle family reads tables only, so no family counts a live derived relation. R26 compares those
+ * counts ({@link documentLang}, {@link assembledLang}), a universal over pairs that no containment
+ * states. Once a counted family may read a derived relation, this is that query and nothing stores
+ * it.
  */
-export const GeneralNamed = relation(
-  "GeneralNamed",
-  { general: uuid, named: closedId(ResourceType), record: uuid },
-  ["general"],
-);
-
-/**
- * A general category of a record that names a document, keyed by its `lom:general` node: its
- * record and that document (Q5.12's `LomObject`), the item or test whose languages it lists.
- */
-export const GeneralObject = relation(
-  "GeneralObject",
-  { document: uuid, general: uuid, record: uuid },
-  ["general"],
-);
+export const GeneralObject = relation("GeneralObject", { document: uuid, general: uuid }, [
+  "general",
+]);
 
 /**
  * A document, keyed by its node, with `generals`, the count of the general categories that describe
@@ -619,7 +605,6 @@ export const identityRelations = {
   DocumentLang,
   FragmentValue,
   GeneralLang,
-  GeneralNamed,
   GeneralObject,
   IdBinding,
   IdentityText,
@@ -835,12 +820,6 @@ const lomLanguages = select(Node, (n) =>
 );
 
 /**
- * The general categories of the records that name a document: each has its
- * {@link GeneralObject}.
- */
-const namingGenerals = select(GeneralNamed, (g) => g.ne(g.named, "none"));
-
-/**
  * The forms that state a language ({@link statedLanguagePattern}): every `xml:lang` that is a
  * language tag once collapsed.
  */
@@ -1022,12 +1001,13 @@ export const ssmlLexiconReference = contained(
  *   row, its category its parent and its language its string value, and each row an element's; its
  *   tag the value case-folded, the counted family over the tags, and each language listed
  *   (`E1_derived`);
- * - **R26:** each resource's general category with its record's `named`, both ways; each one of a
- *   naming record with its document; each document with its count of categories; each witness a
- *   category's of its document, listing its form's value collapsed and case-folded; and
- *   {@link documentLang}; in place, each item instance's carriers placed and counted against its
- *   document's, each assembly form's carriers and listing categories counted, each witness a
- *   category's of the item, listing its form's value; and {@link assembledLang};
+ * - **R26:** each document with its count of the categories that describe it, each a
+ *   {@link GeneralObject} (held to the records that name it by the rule over `NamingGeneral` in
+ *   `#pantry/qti/queries.ts`); each witness a category's of its document, listing its form's value
+ *   collapsed and case-folded; and {@link documentLang}; in place, each item instance's carriers
+ *   placed and counted against its document's, each assembly form's carriers and listing categories
+ *   counted, each witness a category's of the item, listing its form's value; and
+ *   {@link assembledLang};
  * - **Reading 3:** each read SSML attribute copied into its {@link SsmlAttribute} row, both ways, its
  *   value its lexical form collapsed, and placed in its element's fragment; each fragment's values
  *   counted; each scope on its node's {@link nodeRef} tuple, a `speak` its own fragment, a root
@@ -1147,12 +1127,6 @@ export const identityLawsByName = {
     check("E1_derived", LomLanguage, (l) => l.eq(l.tag, Compute.lowerAscii(l.lang))),
     lomLanguageFamily,
     check("E1_derived", ResourceLomLanguageSet, (s) => s.gt(s.carriers, 0n)),
-    mirrors(on(GeneralNamed, "general"), on(ResourceLomGeneral, "node")),
-    contained(on(GeneralNamed, "general", "record"), on(LomGeneral, "node", "parent")),
-    contained(on(GeneralNamed, "record", "named"), on(LomRecord, "node", "named")),
-    contained(on(namingGenerals, "general", "record"), on(GeneralObject, "general", "record")),
-    contained(on(GeneralObject, "general", "record"), on(GeneralNamed, "general", "record")),
-    contained(on(GeneralObject, "record", "document"), on(LomObject, "record", "document")),
     mirrors(on(DocumentGenerals, "document"), on(Document, "node")),
     generalObjectFamily,
     generalLangFamily,

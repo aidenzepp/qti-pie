@@ -35,6 +35,8 @@ import * as operators from "#pantry/qti/operators.ts";
 import { operatorLaws } from "#pantry/qti/operators.ts";
 import * as pkg from "#pantry/qti/package.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
+import * as queries from "#pantry/qti/queries.ts";
+import { queryLaws } from "#pantry/qti/queries.ts";
 import * as quotation from "#pantry/qti/quotation.ts";
 import { quotationLaws } from "#pantry/qti/quotation.ts";
 import { Author } from "#pantry/qti/roles.ts";
@@ -61,6 +63,7 @@ const composedLaws: readonly (readonly [string, readonly Statement[]])[] = [
   ["src/qti/quotation.ts quotationLaws", quotationLaws],
   ["src/qti/operators.ts operatorLaws", operatorLaws],
   ["src/qti/cdn.ts installedCdnLawsByName", Object.values(installedCdnLawsByName).flat()],
+  ["src/qti/queries.ts queryLaws", queryLaws],
 ];
 
 /**
@@ -84,12 +87,26 @@ const composedModules = [
   ["src/qti/html.ts", html],
   ["src/qti/quotation.ts", quotation],
   ["src/qti/operators.ts", operators],
+  ["src/qti/queries.ts", queries],
 ] as const;
 
 /**
- * The kinds of a schema member's value: a stored relation, a roster, and a closed relation.
+ * The kinds of a schema member's value: a stored relation, a roster, a closed relation, and a
+ * derived one, a query of the level of queries (`#pantry/qti/queries.ts`).
  */
-const memberKinds: ReadonlySet<unknown> = new Set(["closed", "closedRelation", "relation"]);
+const memberKinds: ReadonlySet<unknown> = new Set([
+  "closed",
+  "closedRelation",
+  "derived",
+  "relation",
+]);
+
+/**
+ * The kinds of a member the author role holds no entry of: a closed relation, whose rows the role
+ * reads inline, and a derived one, which a role reads through the tables its definition reads,
+ * never whole (grizzle's README, "Derived tables").
+ */
+const unheldKinds: ReadonlySet<unknown> = new Set(["closedRelation", "derived"]);
 
 describe("qti/schema.ts, composed", () => {
   it("holds every roster, closed relation and relation each composed module exports, under its own name", () => {
@@ -136,17 +153,17 @@ describe("qti/schema.ts, composed", () => {
 });
 
 describe("qti/roles.ts, the author role", () => {
-  it("holds every stored relation and roster of Qti whole, and no closed relation", () => {
+  it("holds every stored relation and roster of Qti whole, and no closed or derived relation", () => {
     for (const [name, member] of Object.entries(Qti.relations)) {
       const entry: unknown = Object.getOwnPropertyDescriptor(Author.relations, name)?.value;
 
-      assert.strictEqual(entry, member.kind === "closedRelation" ? undefined : member, name);
+      assert.strictEqual(entry, unheldKinds.has(member.kind) ? undefined : member, name);
     }
 
     assert.sameMembers(
       Object.keys(Author.relations),
       Object.entries(Qti.relations).flatMap(([name, member]) =>
-        member.kind === "closedRelation" ? [] : [name],
+        unheldKinds.has(member.kind) ? [] : [name],
       ),
     );
   });
