@@ -1255,13 +1255,97 @@ const noticesOf = (item: Item, values: Option.Option<RedactRecord>): readonly st
 };
 
 /**
+ * Decide whether the page sees a template or feedback block's or inline's content: where the
+ * values show it, never where they hide or withhold it.
+ *
+ * @param node The block or inline.
+ * @param showing The values and the outcome values its feedback reads.
+ * @returns Whether its content is seen where the block or inline is.
+ */
+const contentShown = (
+  node: Extract<
+    BodyNode,
+    { readonly kind: "feedback-block" | "feedback-inline" | "template-block" | "template-inline" }
+  >,
+  showing: Showing,
+): boolean =>
+  Option.getOrElse(
+    "feedbackVisibility" in node
+      ? feedbackDecided(showing.feedback, node.feedbackVisibility, node.identifier)
+      : decided(showing.values, node.templateVisibility, node.identifier),
+    () => false,
+  );
+
+/**
+ * Give the responses only content the page does not see binds, decided from the values alone:
+ * each response a template or feedback block or inline the values hide or withhold binds, or one
+ * inside content the page does not see, by its source content (`responses`, interactions shown as
+ * notices included), and each rendered interaction's there, less every response a rendered
+ * interaction on content the page sees binds. An interaction in hidden feedback "must also be
+ * hidden. The candidate must not be able to set or update the value of the associated response
+ * variables" (the information model's FeedbackBlock, section 5.49), as one in hidden template
+ * content is, so the redaction lists none of them among its responses.
+ *
+ * @param body The item's body.
+ * @param showing The values, the outcome values its feedback reads and its template declarations.
+ * @returns The hidden-only responses.
+ */
+const hiddenOnlyOf = (body: readonly BodyNode[], showing: Showing): ReadonlySet<string> => {
+  const unseen = new Set<string>();
+  const seenBound = new Set<string>();
+  const walk = (nodes: readonly BodyNode[], seen: boolean): void => {
+    for (const node of nodes) {
+      switch (node.kind) {
+        case "element": {
+          walk(node.children, seen);
+          break;
+        }
+        case "choice":
+        case "extended-text":
+        case "inline-choice":
+        case "text-entry": {
+          (seen ? seenBound : unseen).add(node.response);
+          break;
+        }
+        case "feedback-block":
+        case "feedback-inline":
+        case "template-block":
+        case "template-inline": {
+          const visible = seen && contentShown(node, showing);
+          if (!visible) {
+            for (const response of node.responses) {
+              unseen.add(response);
+            }
+          }
+
+          walk(node.content, visible);
+          break;
+        }
+        case "printed-variable":
+        case "text":
+        case "unsupported": {
+          break;
+        }
+        default: {
+          node satisfies never;
+        }
+      }
+    }
+  };
+  walk(body, true);
+
+  return new Set([...unseen].filter((response) => !seenBound.has(response)));
+};
+
+/**
  * Report whether redacted fields are the item's as the page may see them (P7§4.9): the document,
- * identifier, `lang`, title and response bindings as the item holds them; a body that
+ * identifier, `lang` and title as the item holds them; a body that
  * {@link fits} the nodes {@link slotsOf} decides, so a template value shows only as the text a
  * printed variable prints from the values, and no hidden template content, template visibility,
- * template-set correct response or default, seed or template rule shows at all; each modal
- * feedback {@link modalDecided} shows, its content fitting the item's as the body does, a withheld
- * one as its notice, and no other; no record of a
+ * template-set correct response or default, seed or template rule shows at all; the response
+ * bindings but the hidden-only ones ({@link hiddenOnlyOf}); each modal feedback
+ * {@link modalDecided} shows, its content fitting the item's as the body does, a withheld one as
+ * its notice with no title, and no other; no record of a
  * text past its bound, since no corpus item prints one; and notices that are, as a multiset, the
  * ones {@link noticesOf} decides.
  *
@@ -1282,6 +1366,7 @@ const fieldsFit = (
     templates: item.templates,
     values,
   };
+  const hiddenOnly = hiddenOnlyOf(item.body, showing);
   const modal = (item.modalFeedback ?? []).flatMap((feedback) =>
     Option.match(modalDecided(values, showing.feedback, feedback), {
       onNone: () => [
@@ -1289,7 +1374,7 @@ const fieldsFit = (
           content: [
             { feature: modalNotice, kind: "unsupported", path: feedback.path } satisfies BodyNode,
           ],
-          title: feedback.title,
+          title: Option.none<string>(),
         },
       ],
       onSome: (shown) =>
@@ -1306,11 +1391,9 @@ const fieldsFit = (
         lang: item.lang,
         modalFeedback: fields.modalFeedback,
         notices: fields.notices,
-        responses: Array.from(item.responses.values(), ({ baseType, cardinality, identifier }) => ({
-          baseType,
-          cardinality,
-          identifier,
-        })),
+        responses: [...item.responses.values()].flatMap(({ baseType, cardinality, identifier }) =>
+          hiddenOnly.has(identifier) ? [] : [{ baseType, cardinality, identifier }],
+        ),
         title: item.title,
         unprinted: Option.none(),
       },
