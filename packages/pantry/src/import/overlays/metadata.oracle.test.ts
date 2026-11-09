@@ -1047,6 +1047,64 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
 });
 
 /**
+ * Count a document's metadata rows by relation, the relations it writes no row of left out.
+ *
+ * @param rows - The document's rows.
+ * @returns Each written relation's row count.
+ */
+const countsOf = (rows: MetadataRows): Readonly<Record<string, number>> =>
+  Object.fromEntries(
+    Object.entries(rows).flatMap(([relation, { size }]: [string, ReadonlyMap<string, unknown>]) =>
+      size === 0 ? [] : [[relation, size] as const],
+    ),
+  );
+
+/**
+ * Shred one document from its text, as the importer reads it.
+ *
+ * @param xml - The document's text.
+ * @returns Its tree; dies when it does not shred, which no case builds.
+ */
+const shreddedText = Effect.fn("test.metadata.shreddedText")(function* shreddedDocument(
+  xml: string,
+) {
+  const read = yield* Effect.orDie(readXml(new TextEncoder().encode(xml)));
+
+  return yield* Effect.orDie(shred(read, "3.0.1", shredGrammar));
+});
+
+describe("import/overlays/metadata.ts, the manifest's resources", () => {
+  it.effect(
+    "writes a LomResource for each cp:resource of the manifest, and none for a cp:resource of a record file whose root is a cp:manifest",
+    () =>
+      // Oracle: the specification as a checker, IMS Content Packaging 1.2: a package's resources are
+      // its one manifest's, so a `cp:resource` of any other document, a record file's included,
+      // names no resource of the package and has no `LomResource` (E1 derived, a `LomResource` the
+      // node of a `Resource`, which the manifest alone writes).
+      // Bound: R-O3s, its manifest listing two resources and its record file a `cp:manifest` root
+      // holding one `cp:resource`.
+      Effect.gen(function* manifestResources() {
+        const manifest = yield* shreddedText(
+          [
+            `<manifest xmlns="${namespaces.cp}" identifier="M300"><resources>`,
+            '<resource identifier="R1" type="imsqti_outcomes_xmlv3p0" href="test.xml"/>',
+            '<resource identifier="R2" type="resourcemetadata/xml" href="test.xml"/>',
+            "</resources></manifest>",
+          ].join(""),
+        );
+        const recordFile = yield* shreddedText(
+          `<manifest xmlns="${namespaces.cp}"><resources><resource/></resources></manifest>`,
+        );
+
+        assert.deepStrictEqual(countsOf(rowsOf(manifest, idsFor(0, "none"))), {
+          LomResource: 2,
+        });
+        assert.deepStrictEqual(countsOf(rowsOf(recordFile, idsFor(1, "resourcemetadata/xml"))), {});
+      }),
+  );
+});
+
+/**
  * The `metaData` package's one entry, which names no document: its item is `choice`.
  */
 const metaDataEntry = "<imsmd:entry>qti_v2_item_01</imsmd:entry>";
