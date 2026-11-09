@@ -38,6 +38,7 @@ import { buildItem } from "#plate/model/item.ts";
 import type {
   BodyNode,
   Item,
+  OutcomeDeclaration,
   SimpleChoice,
   Unsupported,
   UnsupportedFeature,
@@ -893,14 +894,49 @@ const summarise = (source: SourceDocument, mark: TestMark): Result.Result<RootSu
   });
 
 /**
+ * Give the outcome declarations of a document under its QTI version: in a QTI 3.0.1 document, each
+ * that writes no `normal-minimum` has 0.0, numeric or not, and keeps every other value it has.
+ *
+ * Reading 149 ("an outcome declaration's `normal-minimum` is 0.0 where a QTI 3.0.1 document writes
+ * none, and has no value where a QTI 3.0 document writes none"; B3a) follows 3.0.1's information
+ * model and ASI XSD, which default it to 0.0, so every reader of the model sees it: the engine's
+ * `qti-outcome-minimum` and the results' `normalMinimum`. A 3.0.0 document and a document of no
+ * stated version, which a lone `open` checks, keep none where none is written.
+ *
+ * @param outcomes The outcome declarations the builder gave, keyed by identifier.
+ * @param version The document's QTI version, none when it states none.
+ * @returns The declarations in the same order, the same map when none changes.
+ */
+const withDefaultMinimum = (
+  outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  version: Option.Option<CpVersion>,
+): ReadonlyMap<string, OutcomeDeclaration> =>
+  Option.exists(version, (stated) => stated === "3.0.1")
+    ? new Map(
+        Array.from(outcomes, ([identifier, declaration]) => [
+          identifier,
+          Option.isNone(declaration.normalMinimum)
+            ? { ...declaration, normalMinimum: Option.some(0) }
+            : declaration,
+        ]),
+      )
+    : outcomes;
+
+/**
  * Give the verdict on an item that every validator accepted and plate can judge: secure it, build
- * it, and accept it.
+ * it, give its outcomes the `normal-minimum` its version defaults ({@link withDefaultMinimum}), and
+ * accept it.
  *
  * @param source The item.
  * @param tables The tables it was checked against.
+ * @param version The document's QTI version, none when it states none.
  * @returns `refused` when the builder refuses it, else `accepted` or `accepted-with-unsupported`.
  */
-const checkItem = (source: SourceDocument, tables: Tables): Verdict => {
+const checkItem = (
+  source: SourceDocument,
+  tables: Tables,
+  version: Option.Option<CpVersion>,
+): Verdict => {
   const document = source.location;
   const secured = secure(source, tables);
   const built = Effect.runSync(Effect.result(buildItem(secured.source)));
@@ -908,7 +944,8 @@ const checkItem = (source: SourceDocument, tables: Tables): Verdict => {
     return { document, kind: "item", refusals: [built.failure], verdict: "refused" };
   }
 
-  const item = complete(built.success, secured);
+  const completed = complete(built.success, secured);
+  const item = { ...completed, outcomes: withDefaultMinimum(completed.outcomes, version) };
   const accepted = accept({ document, item, unsupported: item.unsupported });
 
   return item.unsupported.length > 0
@@ -918,20 +955,25 @@ const checkItem = (source: SourceDocument, tables: Tables): Verdict => {
 
 /**
  * Give the verdict on a test that every validator accepted and plate can judge: build the test
- * model and accept it.
+ * model, give its own outcomes the `normal-minimum` its version defaults
+ * ({@link withDefaultMinimum}), and accept it.
  *
  * @param source The test.
+ * @param version The document's QTI version, none when it states none.
  * @returns `refused` when the builder refuses it, else `accepted-with-unsupported` when it holds a
  *   feature M2 marks and `accepted` when it holds none.
  */
-const checkTest = (source: SourceDocument): Verdict => {
+const checkTest = (source: SourceDocument, version: Option.Option<CpVersion>): Verdict => {
   const document = source.location;
   const built = Effect.runSync(Effect.result(buildTest(source)));
   if (Result.isFailure(built)) {
     return { document, kind: "test", refusals: [built.failure], verdict: "refused" };
   }
 
-  const test = built.success;
+  const test = {
+    ...built.success,
+    outcomes: withDefaultMinimum(built.success.outcomes, version),
+  };
   const accepted = acceptTest({ document, test, unsupported: test.unsupported });
 
   return test.unsupported.length > 0
@@ -987,12 +1029,13 @@ const checkUndelivered = (source: SourceDocument, kind: "section" | "stimulus"):
  * 4. An item: each attribute only a wildcard admitted is removed and marked `attribute:<name>` (E3),
  *    and each URL attribute goes through `url.ts`: a kept value is written in its parsed form, and
  *    a dropped one goes, with its notice beside its element. The item is built from the secured
- *    source. A refusal of the builder, such as `value-type` or `count-range`, makes the document
- *    `refused`. Otherwise it is `accepted-with-unsupported` when anything is unsupported, the
- *    builder's `variable:<identifier>` marks included, and `accepted` when nothing is.
- * 5. A test: the test model is built. A refusal of the builder makes the document `refused`; otherwise
- *    it is `accepted-with-unsupported` when the test holds a feature M2 marks and `accepted` when
- *    it holds none.
+ *    source, and in a QTI 3.0.1 document each outcome that writes no `normal-minimum` has 0.0
+ *    (reading 149). A refusal of the builder, such as `value-type` or `count-range`, makes the
+ *    document `refused`. Otherwise it is `accepted-with-unsupported` when anything is unsupported,
+ *    the builder's `variable:<identifier>` marks included, and `accepted` when nothing is.
+ * 5. A test: the test model is built, its own outcomes defaulted as an item's are. A refusal of the
+ *    builder makes the document `refused`; otherwise it is `accepted-with-unsupported` when the
+ *    test holds a feature M2 marks and `accepted` when it holds none.
  * 6. A section or a stimulus is `accepted-with-unsupported`, marked `root:qti-assessment-section` or
  *    `root:qti-assessment-stimulus`.
  *
@@ -1033,10 +1076,10 @@ export const check = (
 
   switch (kind) {
     case "item": {
-      return checkItem(source, tables);
+      return checkItem(source, tables, version);
     }
     case "test": {
-      return checkTest(source);
+      return checkTest(source, version);
     }
     case "section":
     case "stimulus": {
@@ -2070,8 +2113,10 @@ const multipleCardinality = code('cardinality="multiple"');
  *   as its XSD default, which the detail's `count` holds.
  * - `gap-match-single` (the operator's P7): a gap match interaction of several `gaps` bound to a
  *   single response.
- * - `string-binding` (reading 14, D3a): a text entry's `string-identifier` names a response that is
- *   not a single `string`, the only response it binds.
+ * - `string-binding` (reading 14, D3a): an `interaction`'s `string-identifier` names a response of a
+ *   type it cannot bind, worded by the `interaction`: a text entry's binds a single `string`
+ *   response, and an extended text's a `string` response of the cardinality of the response its
+ *   `response-identifier` binds, a cardinality the detail does not carry.
  * - None: an interaction bound to a response of a base type or cardinality it does not accept.
  *
  * @param refusal The refusal.
@@ -2112,12 +2157,25 @@ const interactionBinding = (refusal: Refusal): string => {
     }
     case "string-binding": {
       const stringIdentifier = code("string-identifier");
+      const naming = `${interaction}'s attribute ${stringIdentifier} names ${response}, ${responseType}`;
+      const remedy = `or change the declaration of ${response}`;
+
+      if (fact(refusal, "interaction", "") === "qti-extended-text-interaction") {
+        const own = `a ${code("string")} response of the cardinality of the response`;
+
+        return sentence(
+          refusal,
+          `${naming}, and its ${stringIdentifier} binds ${own} its ${code("response-identifier")} binds${settled(refusal)}.`,
+          `name in ${stringIdentifier} ${own} ${code("response-identifier")} binds, ${remedy}`,
+        );
+      }
+
       const single = `a single ${code("string")} response`;
 
       return sentence(
         refusal,
-        `${interaction}'s attribute ${stringIdentifier} names ${response}, ${responseType}, and a ${stringIdentifier} binds ${single}${settled(refusal)}.`,
-        `name ${single} in ${stringIdentifier}, or change the declaration of ${response}`,
+        `${naming}, and a ${stringIdentifier} binds ${single}${settled(refusal)}.`,
+        `name ${single} in ${stringIdentifier}, ${remedy}`,
       );
     }
     default: {

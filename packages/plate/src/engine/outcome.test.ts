@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { attr, doc, el, text } from "#plate/document/source.ts";
+import { configure } from "#plate/configuration.ts";
+import { attr, doc, el, qtiNamespace, text } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { Declarations } from "#plate/engine/evaluate.ts";
 import {
@@ -29,9 +30,14 @@ import type { ItemRecord } from "#plate/model/record.ts";
 import { absentControl, buildTest } from "#plate/model/test.ts";
 import type { ItemRef, OutcomeProcessing, Section, Test, TestPart } from "#plate/model/test.ts";
 import type { ModelledBaseType, RecordValue, Value } from "#plate/model/values.ts";
+import { openPackage } from "#plate/package/open.ts";
+import { fileLocation, manifestFile } from "#plate/package/store.ts";
 import type { SessionItem } from "#plate/session/session.ts";
+import { startTest } from "#plate/session/start.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
+import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
+import type { CpVersion } from "#plate/vocabulary.ts";
 
 /**
  * Construct a single identifier value.
@@ -1330,6 +1336,88 @@ describe("runOutcomes over a record response through its item ref", () => {
         );
         // The control: qti-sum over the item's float outcome through the same item ref runs.
         assert.isTrue(Result.isSuccess(summing("ITEM1.SCORE")));
+      }),
+  );
+});
+
+/**
+ * Where the minimum packages are opened.
+ */
+const minimumLocation = "minimum";
+
+/**
+ * Write the files of a package that holds one item and one test, under a manifest that names a
+ * version: the item `items/scored.xml` declares the single float outcome `SCORE` with no
+ * `normal-minimum`, and the test `test.xml` holds one item ref to it, `scored`, and its outcome
+ * processing sets the multiple float `MINIMA` to the `qti-outcome-minimum` of `SCORE`.
+ *
+ * @param version The version the manifest's `schemaversion` names.
+ * @returns The package's files, keyed by path.
+ */
+const minimumPackage = (version: CpVersion): ReadonlyMap<string, Uint8Array> =>
+  new Map(
+    (
+      [
+        [
+          manifestFile,
+          `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>${version}</schemaversion></metadata><organizations/><resources><resource identifier="T" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource><resource identifier="I" type="imsqti_item_xmlv3p0" href="items/scored.xml"><file href="items/scored.xml"/></resource></resources></manifest>`,
+        ],
+        [
+          "items/scored.xml",
+          `<qti-assessment-item xmlns="${qtiNamespace}" identifier="scored" title="Scored" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>Scored</p></qti-item-body></qti-assessment-item>`,
+        ],
+        [
+          "test.xml",
+          `<qti-assessment-test xmlns="${qtiNamespace}" identifier="T" title="T"><qti-outcome-declaration identifier="MINIMA" cardinality="multiple" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="S" visible="true"><qti-assessment-item-ref identifier="scored" href="items/scored.xml"/></qti-assessment-section></qti-test-part><qti-outcome-processing><qti-set-outcome-value identifier="MINIMA"><qti-outcome-minimum outcome-identifier="SCORE"/></qti-set-outcome-value></qti-outcome-processing></qti-assessment-test>`,
+        ],
+      ] as const
+    ).map(([file, written]) => [file, new TextEncoder().encode(written)] as const),
+  );
+
+describe("runOutcomes over a package's items, by its version (reading 149)", () => {
+  it.effect(
+    "align-54 default minimum B3a: a 3.0.1 package's test takes the qti-outcome-minimum of an item outcome that writes no normal-minimum as a container holding 0.0, through openPackage and startTest, and a 3.0.0 package's ignores the item",
+    () =>
+      Effect.gen(function* defaultMinimum() {
+        const configuration = yield* configure({});
+        const minima = yield* Effect.all(
+          cpVersions.map((version) =>
+            Effect.gen(function* minimaUnder() {
+              const verdict = yield* openPackage(minimumLocation, minimumPackage(version));
+              assert.strictEqual(verdict.verdict, "accepted", version);
+
+              const held =
+                verdict.verdict === "accepted"
+                  ? verdict.accepted.tests.get(fileLocation(minimumLocation, "test.xml"))
+                  : undefined;
+              if (held === undefined) {
+                return assert.fail(`The ${version} package holds no accepted test.`);
+              }
+
+              const begun = yield* Effect.fromResult(
+                startTest(held.test, held.items, configuration, {
+                  instance: "sitting",
+                  now: new Date("2026-11-08T10:00:00.000Z"),
+                  seed: "minimum",
+                }),
+              );
+              const ran = yield* Effect.fromResult(
+                runOutcomes(
+                  held.test.test,
+                  testScopeOf(held.test.test, held.items, begun, new Map(), Option.none()),
+                  drawStream(begun.seed, outcomeLabel(begun.instance, 1)),
+                ),
+              );
+
+              return ran["MINIMA"];
+            }),
+          ),
+        );
+
+        assert.deepStrictEqual(minima, [
+          { baseType: "float", cardinality: "multiple", values: [] },
+          { baseType: "float", cardinality: "multiple", values: [{ baseType: "float", value: 0 }] },
+        ]);
       }),
   );
 });
