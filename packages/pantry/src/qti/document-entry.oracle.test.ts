@@ -10,6 +10,10 @@
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`).
+ * "Document entry" over a document-typed href is a rule over a query (`TypedHref`,
+ * `#pantry/qti/queries.ts`), which the host judge leaves to the database, so the oracle's side
+ * alone is held to it here, and `#pantry/qti/package.db.test.ts` holds the database to it; neither
+ * side raises `RootOfType`.
  *
  * Bound: the every-relation package with one resource added whose href, and its one file, names
  * no entry: for each of the 10 resource types `RootOfType` maps, at a path in the package with no
@@ -114,7 +118,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
   "a document-typed href that names no entry",
   (it) => {
     it.effect(
-      "is Document entry on the import's rows as in the law oracle, and never RootOfType",
+      "is Document entry in the law oracle, and RootOfType on neither side",
       (ctx) =>
         searched(
           ctx,
@@ -166,7 +170,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                   assert.deepStrictEqual(apart.map(shownDisagreement), [], said);
                   assert.match(judged.summary.oracle, /\bDocument entry\b/u, said);
-                  assert.match(judged.summary.import, /\bDocument entry\b/u, said);
                   assert.notMatch(judged.summary.oracle, /\bRootOfType\b/u, said);
                   assert.notMatch(judged.summary.import, /\bRootOfType\b/u, said);
                 }),

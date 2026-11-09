@@ -13,7 +13,9 @@
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`), and
  * the specification as a checker for the documents each side reads: one per path, the manifest's
- * of no type, no site's target.
+ * of no type, no site's target. "Document entry" over a document-typed href is a rule over a query
+ * (`TypedHref`, `#pantry/qti/queries.ts`), which the host judge leaves to the database, so the
+ * oracle's side alone is held to it here.
  *
  * Bound: a manifest with 0 to 2 item resources, each listing as files a subset of
  * {`imsmanifest.xml`, `item.xml`} and naming one of them by its href or none (8 resources), and
@@ -150,7 +152,7 @@ const distinct = (paths: readonly string[]): boolean => new Set(paths).size === 
 
 layer(NodeServices.layer, { excludeTestServices: true })("the manifest", (it) => {
   it.effect(
-    "is one document, of no type, read once and no site's target, and a document-typed href naming it is Document entry on both sides",
+    "is one document, of no type, read once and no site's target, and a document-typed href naming it is Document entry in the law oracle",
     (ctx) =>
       searched(
         ctx,
@@ -221,7 +223,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("the manifest", (it) =>
 
                 if (of.resources.some(({ href }) => Option.contains(href, manifestPath))) {
                   assert.match(judged.summary.oracle, /\bDocument entry\b/u, said);
-                  assert.match(judged.summary.import, /\bDocument entry\b/u, said);
                 }
               }).pipe(Effect.scoped),
           );
