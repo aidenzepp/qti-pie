@@ -491,7 +491,13 @@ export const generatedNames: readonly (readonly [string, LawName])[] = [
     "SectionSelection.select",
   ),
   ...namedBy("value domain", "StatisticDate.date"),
-  ...namedBy("E1 derived", "DocumentLang.value", "AssembledLang.value"),
+  ...namedBy(
+    "E1 derived",
+    "DocumentLang.value",
+    "AssembledLang.value",
+    "MapKeyItems.ordered",
+    "MapKeyItems.unordered",
+  ),
 ];
 
 /**

@@ -916,23 +916,21 @@ export const queriesOf = (base: QtiBase) => {
   );
 
   /**
-   * A point map key's typed value, one row per entry of a point mapping whose key splits into two
-   * runs ({@link MapKeyItems}) that are each in `xs:integer`'s lexical space: its entry's `node`,
-   * its `mapping`, and `x` and `y`, the integers its two items name, each PostgreSQL's
-   * `Compute.parseDecimal` of the item's text, as `MapKeyInteger` reads one. A point is "an
-   * integer tuple" (information model §8.13), so the key over `(mapping, x, y)` is uniqueness by
-   * typed value: `1 2`, `01 +2` and `1`, a tab, `2` are one point.
-   *
-   * The `where` selects by the matches the parses need as their guards, restated, so no row holds
-   * a `Compute.when`'s third argument.
+   * A point map key's value, one row per entry of a point mapping whose key splits into two runs
+   * ({@link MapKeyItems}) that are each in `xs:integer`'s lexical space: its entry's `node`, its
+   * `mapping`, and `value`, the split's `ordered` text, its two runs with one space between, so
+   * a probe of the key over `(mapping, value)` reads one key text (mapping 16 and value 2,591
+   * bytes, under PostgreSQL's 2,704). It is no canonical point: `1 2` and `01 +2` are two values
+   * here, where the law oracle reads one point, a regression owed a single-text canonical form
+   * that no `Compute` term builds from the runs.
    */
   const MapKeyPoint = derived(
     "MapKeyPoint",
     query(base).rule((r) => {
-      const { first, mapping, node, second } = v(MapKeyItems, "items");
+      const { first, mapping, node, ordered, second } = v(MapKeyItems, "items");
 
       return r
-        .match(MapKeyItems, { first, mapping, node, second })
+        .match(MapKeyItems, { first, mapping, node, ordered, second })
         .match(MapKeyType, { baseType: "point", node })
         .where(
           r.and(
@@ -940,67 +938,49 @@ export const queriesOf = (base: QtiBase) => {
             Compute.matches(second, integerKeyPattern),
           ),
         )
-        .find({
-          mapping,
-          node,
-          x: Compute.when(
-            Compute.matches(first, integerKeyPattern),
-            (integer) => Compute.parseDecimal(integer),
-            0n,
-          ),
-          y: Compute.when(
-            Compute.matches(second, integerKeyPattern),
-            (integer) => Compute.parseDecimal(integer),
-            0n,
-          ),
-        });
+        .find({ mapping, node, value: ordered });
     }),
   );
 
   /**
    * A pair map key's typed value, one row per entry of a pair mapping whose key splits into two
    * runs ({@link MapKeyItems}) that are each an item (`itemPattern`): its entry's `node`, its
-   * `mapping`, and `low` and `high`, its two items in code-point order, their least and their
-   * greatest. A pair's association "is undirected so (A,B) and (B,A) are equivalent" (information
-   * model §8.13), so the key over `(mapping, low, high)` is uniqueness by typed value: `A B`, `B A`
-   * and `A`, a tab, `B` are one pair. Text compares by code point, its collation `pg_c_utf8`.
+   * `mapping`, and `value`, the split's `unordered` text, its least and greatest item with one
+   * space between. A pair's association "is undirected so (A,B) and (B,A) are equivalent"
+   * (information model §8.13), so the key over `(mapping, value)` is uniqueness by typed value:
+   * `A B`, `B A` and `A`, a tab, `B` are one pair.
    */
   const MapKeyPair = derived(
     "MapKeyPair",
     query(base).rule((r) => {
-      const { first, mapping, node, second } = v(MapKeyItems, "items");
+      const { first, mapping, node, second, unordered } = v(MapKeyItems, "items");
 
       return r
-        .match(MapKeyItems, { first, mapping, node, second })
+        .match(MapKeyItems, { first, mapping, node, second, unordered })
         .match(MapKeyType, { baseType: "pair", node })
         .where(r.and(Compute.matches(first, itemPattern), Compute.matches(second, itemPattern)))
-        .find({
-          high: Compute.greatest(first, second),
-          low: Compute.least(first, second),
-          mapping,
-          node,
-        });
+        .find({ mapping, node, value: unordered });
     }),
   );
 
   /**
    * A directed pair map key's typed value, one row per entry of a directed pair mapping whose key
    * splits into two runs ({@link MapKeyItems}) that are each an item (`itemPattern`): its entry's
-   * `node`, its `mapping`, and `source` and `target`, its two items in order. A directed pair's
-   * association "is directed so (A,B) and (B,A) are not equivalent" (information model §8.13), so
-   * the key over `(mapping, source, target)` keeps the order and reads the whitespace between as
-   * none: `A B` and `A`, a tab, `B` are one directed pair, and `B A` another.
+   * `node`, its `mapping`, and `value`, the split's `ordered` text. A directed pair's association
+   * "is directed so (A,B) and (B,A) are not equivalent" (information model §8.13), so the key over
+   * `(mapping, value)` keeps the order and reads the whitespace between as one space: `A B` and
+   * `A`, a tab, `B` are one directed pair, and `B A` another.
    */
   const MapKeyDirectedPair = derived(
     "MapKeyDirectedPair",
     query(base).rule((r) => {
-      const { first, mapping, node, second } = v(MapKeyItems, "items");
+      const { first, mapping, node, ordered, second } = v(MapKeyItems, "items");
 
       return r
-        .match(MapKeyItems, { first, mapping, node, second })
+        .match(MapKeyItems, { first, mapping, node, ordered, second })
         .match(MapKeyType, { baseType: "directedPair", node })
         .where(r.and(Compute.matches(first, itemPattern), Compute.matches(second, itemPattern)))
-        .find({ mapping, node, source: first, target: second });
+        .find({ mapping, node, value: ordered });
     }),
   );
 
@@ -1015,9 +995,9 @@ export const queriesOf = (base: QtiBase) => {
     "Map key": [
       key(on(MapKeyInteger, "mapping", "value")),
       key(on(MapKeyFloat, "mapping", "value")),
-      key(on(MapKeyPoint, "mapping", "x", "y")),
-      key(on(MapKeyPair, "mapping", "low", "high")),
-      key(on(MapKeyDirectedPair, "mapping", "source", "target")),
+      key(on(MapKeyPoint, "mapping", "value")),
+      key(on(MapKeyPair, "mapping", "value")),
+      key(on(MapKeyDirectedPair, "mapping", "value")),
     ],
   } as const;
 

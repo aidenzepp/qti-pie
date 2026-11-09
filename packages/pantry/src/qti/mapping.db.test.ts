@@ -581,17 +581,17 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               directedPair: yield* typedKeyRule(
                 client,
                 MapKeyItems.name,
-                `${Qti.relations.MapKeyDirectedPair.name}(mapping, source, target)`,
+                `${Qti.relations.MapKeyDirectedPair.name}(mapping, value)`,
               ),
               pair: yield* typedKeyRule(
                 client,
                 MapKeyItems.name,
-                `${Qti.relations.MapKeyPair.name}(mapping, low, high)`,
+                `${Qti.relations.MapKeyPair.name}(mapping, value)`,
               ),
               point: yield* typedKeyRule(
                 client,
                 MapKeyItems.name,
-                `${Qti.relations.MapKeyPoint.name}(mapping, x, y)`,
+                `${Qti.relations.MapKeyPoint.name}(mapping, value)`,
               ),
             };
             for (const { baseType, keys, refused } of [

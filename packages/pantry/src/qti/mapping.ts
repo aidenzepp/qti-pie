@@ -58,6 +58,7 @@ import {
   closedId,
   Compute,
   contained,
+  generated,
   key,
   mirrors,
   natural,
@@ -219,10 +220,20 @@ export const Run = str.bytes(keyTextBytes, str.regex("^[^\\t\\n\\r ]+$"));
  * `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair` (`#pantry/qti/queries.ts`) select the
  * items of their base type's form and read the value from them.
  */
-export const MapKeyItems = relation(
+export const MapKeyItems = relation.generated(
   "MapKeyItems",
   { first: Run, gap: Gap, key: keyText, mapping: uuid, node: uuid, second: Run },
   ["node"],
+  (r) => ({
+    ordered: generated(keyText, Compute.concat(Compute.concat(r.first, " "), r.second)),
+    unordered: generated(
+      keyText,
+      Compute.concat(
+        Compute.concat(Compute.least(r.first, r.second), " "),
+        Compute.greatest(r.first, r.second),
+      ),
+    ),
+  }),
 );
 
 /**
