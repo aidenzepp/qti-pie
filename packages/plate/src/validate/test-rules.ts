@@ -20,9 +20,10 @@
  * A field of a record declaration's value is judged as an item's is (`recordFieldRefusals`): it
  * carries `field-identifier` and `base-type`, and its text is a value of its own `base-type`.
  *
- * A branch rule's target is judged as far as the document alone shows it (reading 87): a test's
- * targets whole, and a section document's only where they lie inside it. The assembled test judges
- * the rest (`openPackage`), with the same refusal for what both see.
+ * A branch rule's target is judged as far as the document alone shows it (reading 87): a target
+ * only where it lies inside the document, and one no name of it gives only in a test that places
+ * no section document and holds no include. The assembled test judges the rest (`openPackage`),
+ * with the same refusal for what both see.
  *
  * Two things a test may hold are valid here and are never refused. A dotted reference
  * (`ITEMREF.VAR`, `ITEMREF.N.VAR`, a part's or a section's `duration`) is valid in pre-conditions,
@@ -763,8 +764,9 @@ interface BranchContext {
   readonly placed: boolean;
   /**
    * Whether every target the document can reach is one of its names, so a target no name gives is
-   * `unknown`: true for a test holding no XInclude element, false for a section document, whose
-   * test may supply the target, and where an include may stand for it.
+   * `unknown`: true for a test holding no section ref and no XInclude element. It is false for a
+   * section document, whose test may supply the target, and for any document holding a section ref,
+   * whose placed document may supply it, or an include, which may stand for it.
    */
   readonly resolvesAll: boolean;
 }
@@ -952,10 +954,11 @@ const branchFault = (
  * in its own test part, never the source, an ancestor or a descendant ({@link branchFault}), with
  * section refs as leaves, since from outside a section document no target lies inside it.
  *
- * A target no name of the document gives is `unknown` in a test, but not where the test holds an
- * XInclude element, which may stand for it (E23); in a section document it is left to the
- * assembled test, which may supply it. So is what only the placement of a section document decides:
- * a replacement or a shuffle above the section ref that places it. `openPackage` judges the same
+ * A target no name of the document gives is `unknown` in a test, but not where the test holds a
+ * section ref, since the section document it places may supply the target once or twice, or an
+ * XInclude element, which may stand for it (E23); in a section document it is left to the assembled
+ * test, which may supply it. So is what only the placement of a section document decides: a
+ * replacement or a shuffle above the section ref that places it. `openPackage` judges the same
  * rule over the assembled test (E8b), with the same detail at the same path, and does not give
  * again what this gives. A rule on an owner that writes no identifier is the structural
  * validator's.
@@ -1080,7 +1083,13 @@ export const checkTestRules = (source: SourceDocument, tables: Tables): readonly
   const scope = test ? Option.some(testScope(source)) : Option.none();
   const outcomes = declarationsOf(source, "qti-outcome-declaration");
   const rootIncludes = holdsInclude(source.root);
-  const branches = branchContext(visits, { placed: !test, resolvesAll: test && !includes });
+  const placesSections = visits.some((visit) =>
+    isQti(visit.element, (local) => local === "qti-assessment-section-ref"),
+  );
+  const branches = branchContext(visits, {
+    placed: !test,
+    resolvesAll: test && !includes && !placesSections,
+  });
   const processing = Map.groupBy(processingRefusals(source, tables, unknownPrefix), elementPathOf);
   const placed = visits.flatMap((visit) => {
     const atVisit = processing.get(visit.path) ?? [];

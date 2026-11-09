@@ -1885,6 +1885,20 @@ describe("checkTestRules", () => {
       );
     });
 
+    it("align-54 test rules E8a: leaves a test's target that no name of it gives to the assembled test where a section ref may supply it, placed once or twice", () => {
+      assert.deepStrictEqual(judged(oneSection([branching("I1", "I9"), sectionRef("R1")])), []);
+      assert.deepStrictEqual(
+        judged(
+          oneSection([
+            branching("I1", "I9"),
+            sectionRef("R1"),
+            sectionRef("R2", "sections/R1.xml"),
+          ]),
+        ),
+        [],
+      );
+    });
+
     it("align-54 test rules E8a: leaves an unknown target unjudged where an include may supply it (E23)", () => {
       assert.deepStrictEqual(judged(oneSection([branching("I1", "I9"), include()])), []);
     });
