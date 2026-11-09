@@ -655,8 +655,24 @@ const numericText = (value: Numeric): string => {
 };
 
 /**
- * Write a datum as a key's text: a text as itself, a natural, a float or a boolean as it prints, a
- * set as its members, and an absent value as nothing.
+ * Order two texts by their UTF-16 code units.
+ *
+ * @param left - One text.
+ * @param right - The other.
+ * @returns Negative, zero or positive as `left` sorts before, with or after `right`.
+ */
+const byCodeUnit = (left: string, right: string): number => {
+  if (left === right) {
+    return 0;
+  }
+
+  return left < right ? -1 : 1;
+};
+
+/**
+ * Write a datum as a key's text: a text as itself, a natural, a float or a boolean as it prints, an
+ * exact numeric as `numeric_out` writes it, a set as its members in code-unit order, since a set
+ * has none of its own and two equal sets write one text, and an absent value as nothing.
  *
  * @param datum - The datum.
  * @returns Its text.
@@ -672,7 +688,7 @@ export const datumText = (datum: Datum | undefined): string => {
 
   return Predicate.isBigInt(datum) || Predicate.isNumber(datum) || Predicate.isBoolean(datum)
     ? String(datum)
-    : [...datum].join(" ");
+    : [...datum].toSorted(byCodeUnit).join(" ");
 };
 
 /**
