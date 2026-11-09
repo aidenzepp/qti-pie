@@ -4,8 +4,7 @@ import { decode } from "#crust/decode.ts";
 import type { Decoded } from "#crust/decode.ts";
 import { PREDEFINED, lexProlog, positionOf, substitute, undeclaredEntity } from "#crust/dtd.ts";
 import type { AttlistEntry, Prolog, ValuePiece } from "#crust/dtd.ts";
-import { WellFormednessError } from "#crust/errors.ts";
-import type { ReaderRefusal } from "#crust/errors.ts";
+import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
 import { NAME_CHAR, NAME_START, isNCName, productionViolation } from "#crust/names.ts";
 import { namespacesVersionOf, resolved, rootScope } from "#crust/namespaces.ts";
 import type { Scope } from "#crust/namespaces.ts";
@@ -199,6 +198,28 @@ const toElement = (open: OpenElement): Element => ({
 });
 
 /**
+ * The most elements a document may hold open at once unless its reader says otherwise: 256, the
+ * stated limit "Element depth" of spec reading 1's list. Neither XML 1.0 nor QTI bounds an
+ * element's depth (production [39] of section 3 and [43] of section 3.1), no official package
+ * comes near it, and the bound keeps the recursive walks over a tree, crust's and plate's, within
+ * their stacks. libxml2 2.9.13's `xmllint` bounds depth near it too: it reads 257 open elements
+ * and refuses 258 ("Excessive depth in document").
+ */
+export const defaultElementDepth = 256;
+
+/**
+ * How {@link readXml} reads a document.
+ */
+export interface ReadOptions {
+  /**
+   * The most elements open at once before the document is refused under rule `element-depth`:
+   * {@link defaultElementDepth} when absent, and `Number.POSITIVE_INFINITY` for a document of any
+   * depth.
+   */
+  readonly elementDepth?: number;
+}
+
+/**
  * Run `saxes` over `substituted` and build the root element with the comments and processing
  * instructions around it, its names unresolved.
  *
@@ -206,20 +227,23 @@ const toElement = (open: OpenElement): Element => ({
  * default, which `saxes` never sees, so every namespace constraint is judged after the defaults are
  * added ({@link assemble}). It throws its first well-formedness error; that error becomes a
  * `WellFormednessError` at the position the parser had reached, as does a processing instruction
- * target holding a colon, which Namespaces in XML section 7 forbids. XML 1.0 bounds no element's
- * depth (production [39] of section 3 and [43] of section 3.1: an element's content holds
- * elements), so no depth is refused: the tree is built on a stack of open elements, so a document
- * of any depth is read without recursion.
+ * target holding a colon, which Namespaces in XML section 7 forbids. A document that nests more
+ * than `elementDepth` elements is refused with a `ReaderRefusal` under rule `element-depth`. The
+ * tree is built on a stack of open elements, so a document of any depth within that bound is read
+ * without recursion.
  *
  * @param substituted - The document text with its declared entities substituted.
  * @param sentinels - The stand-in character of each undeclared entity name.
+ * @param elementDepth - The most elements open at once.
  * @returns The root element, the comments and processing instructions around it and where each
- *   start tag ended; or the `WellFormednessError` for the first error `saxes` raises.
+ *   start tag ended; the `ReaderRefusal` for an element past `elementDepth`, or the
+ *   `WellFormednessError` for the first error `saxes` raises.
  */
 const parse = (
   substituted: string,
   sentinels: ReadonlyMap<string, string>,
-): Effect.Effect<Built, WellFormednessError> => {
+  elementDepth: number,
+): Effect.Effect<Built, WellFormednessError | ReaderRefusal> => {
   const parser = new SaxesParser({ position: true });
   for (const [name, sentinel] of sentinels) {
     parser.ENTITIES[name] = sentinel;
@@ -227,11 +251,13 @@ const parse = (
 
   return Effect.try({
     catch: (error) =>
-      new WellFormednessError({
-        column: parser.column,
-        line: parser.line,
-        message: error instanceof Error ? error.message : String(error),
-      }),
+      error instanceof ReaderRefusal
+        ? error
+        : new WellFormednessError({
+            column: parser.column,
+            line: parser.line,
+            message: error instanceof Error ? error.message : String(error),
+          }),
     try: () => {
       const open: OpenElement[] = [];
       const starts = new Map<Element, StartTag>();
@@ -248,6 +274,13 @@ const parse = (
       };
 
       parser.on("opentag", (tag) => {
+        if (open.length >= elementDepth) {
+          throw new ReaderRefusal({
+            detail: `The document nests elements more than ${elementDepth} deep: element <${tag.name}> at line ${parser.line}, column ${parser.column} opens past the reader's limit. Flatten the structure so at most ${elementDepth} elements are open at once.`,
+            rule: "element-depth",
+          });
+        }
+
         // The attribute record's insertion order is the order the attributes were written in,
         // namespace declarations included.
         open.push({
@@ -599,23 +632,27 @@ const assemble = (
  * character becomes the reference it stood for: an `EntityRef` in content, `&name;` with a recorded
  * offset in an attribute value.
  *
- * A document of any depth or width is read, as XML 1.0 bounds neither: the tree is built, and then
- * rewritten, on stacks of its own, never by recursion.
+ * At most `options.elementDepth` elements may be open at once, {@link defaultElementDepth} (256,
+ * as in `xmllint`) unless the caller gives another bound; a deeper document is refused under rule
+ * `element-depth`. Within the bound, a document of any depth or width is read: the tree is built,
+ * and then rewritten, on stacks of its own, never by recursion.
  *
  * @param bytes - The document as read from storage.
- * @returns The tree; a `ReaderRefusal` from decoding, the prolog or an entity reference, or a
- *   `WellFormednessError` whose position is the parser's, or the end of the start tag of an
- *   element that breaks a namespace constraint, in the text with its declared entities
- *   substituted.
+ * @param options - How to read it: the element depth it is refused past.
+ * @returns The tree; a `ReaderRefusal` from decoding, the prolog, an entity reference or the
+ *   element depth, or a `WellFormednessError` whose position is the parser's, or the end of the
+ *   start tag of an element that breaks a namespace constraint, in the text with its declared
+ *   entities substituted.
  */
 export const readXml = Effect.fn("xml.read")(function* readXml(
   bytes: Uint8Array,
+  options: ReadOptions = {},
 ): Effect.fn.Return<XmlDocument, WellFormednessError | ReaderRefusal> {
   const decoded = yield* decode(bytes);
   const prolog = yield* lexProlog(decoded.text);
   const substituted = yield* substitute(decoded.text, prolog);
   const sentinels = yield* assignSentinels(substituted, prolog);
-  const built = yield* parse(substituted, sentinels);
+  const built = yield* parse(substituted, sentinels, options.elementDepth ?? defaultElementDepth);
   const names = new Map([...sentinels].map(([name, sentinel]) => [sentinel, name]));
 
   return yield* assemble(decoded, prolog, built, names);

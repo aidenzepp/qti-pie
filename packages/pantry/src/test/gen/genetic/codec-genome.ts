@@ -1602,8 +1602,7 @@ const declarationOf =
 
 /**
  * Draw how many elements a wrap nests a node in: one, a few, or enough to reach and pass the
- * 257 elements libxml2 2.9.13 holds open (its `xmlParserMaxDepth` of 256, checked after the push),
- * where crust reads on.
+ * 256 elements a reader holds open by default.
  *
  * @param depth - The depth the node stands at.
  * @returns The generator.
@@ -2487,8 +2486,8 @@ const nameClass = (name: string): string => {
 };
 
 /**
- * Bucket an element depth: the root alone, shallow, deep, near libxml2 2.9.13's bound (its
- * `xmlParserMaxDepth` of 256), at it, and past it.
+ * Bucket an element depth: the root alone, shallow, deep, near the 256 a reader holds open by
+ * default, at it, and past it.
  *
  * @param depth - The depth.
  * @returns The bucket.
