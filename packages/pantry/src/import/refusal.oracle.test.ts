@@ -30,50 +30,42 @@ import {
   tree,
   uuid,
 } from "@bjornpagen/grizzle";
-import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";
+import type { Law, LawSide, RegexText } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import {
-  Array as Arr,
-  Duration,
-  Effect,
-  Formatter,
-  Option,
-  pipe,
-  Predicate,
-  Result,
-  Schema,
-} from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Result, Schema } from "effect";
 import { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import {
   checkNameOf,
+  contractNames,
   explain,
+  generatedNames,
   ImportRefused,
   ImportRule,
+  keyNames,
   lawNameOf,
   limitRules,
-  namedPatternLaws,
   owedRules,
+  patternNameIn,
+  patternTypeOf,
   refusalOf,
   ruleOfError,
   ruleOfLaw,
   rulesOf,
   schemaLawsOf,
   statedLaws,
-  statementLawsOf,
   textLaws,
 } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
-import { anyText } from "#pantry/qti/limits.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
-import { beginsWith, mergedAxes, primaryKeysOf } from "#pantry/test/merged-axes.ts";
+import { beginsWith, mergedAxes } from "#pantry/test/merged-axes.ts";
 import type { Axis } from "#pantry/test/merged-axes.ts";
-import type { ReadRefusal, Rule } from "#pantry/import/refusal.ts";
+import type { LawName, ReadRefusal, Rule } from "#pantry/import/refusal.ts";
 import {
   NotQti3,
   notQti3Reasons,
@@ -100,7 +92,7 @@ const grammar = Result.getOrThrow(composed());
  * A scratch schema, in the shapes `node.ts` and `attributes.ts` state, built with grizzle's own
  * constructors: a tree with its parent copy, predecessor copy, last slot, `Follow` step and two
  * count folds, an ordered family with its owner copy and `or` fold, and a counted family whose
- * owner copy rides its owner axis; its laws as grizzle's `lawsByStatement` names them, and the law
+ * owner copy rides its owner axis; its laws as grizzle's `lawsOf` lists them, and the law
  * of each statement an axis carries, by the statement's name.
  *
  * `grizzle generate` compiled this schema at 4016b69, with no database, and its foreign keys carry
@@ -249,7 +241,7 @@ const scratch = (() => {
     );
 
   return {
-    laws: built.statements.flatMap(lawsOfStatement),
+    laws: schemaLawsOf(built),
     named: {
       attributeFamily: lawOf(attributeFamily),
       attributeOwner: lawOf(attributeOwner),
@@ -263,7 +255,6 @@ const scratch = (() => {
       parentCopy: lawOf(parentCopy),
       predecessorCopy: lawOf(predecessorCopy),
     },
-    relations,
   };
 })();
 
@@ -715,9 +706,20 @@ describe("the law table", () => {
   );
 });
 
+/**
+ * Write a set of laws as one value to compare: each law's text, sorted. An axis's laws are a set,
+ * the laws one `some` refusal names together, and `lawsOf` lists them in its canonical order, not
+ * as the schema declares them.
+ *
+ * @param laws - The laws.
+ * @returns Their texts, sorted.
+ */
+const asSet = (laws: readonly Law[]): readonly string[] =>
+  laws.map((law) => Formatter.format(law)).toSorted();
+
 describe("the merged axes and the laws no row states", () => {
   it("reads every merged axis of the scratch schema as grizzle generates its foreign key", () => {
-    const axes = mergedAxes(scratch.laws, scratch.relations);
+    const axes = mergedAxes(scratch.laws);
     const {
       attributeFamily,
       attributeOwner,
@@ -732,16 +734,19 @@ describe("the merged axes and the laws no row states", () => {
       predecessorCopy,
     } = scratch.named;
 
-    assert.deepStrictEqual(Object.fromEntries(axes.map(({ label, laws }) => [label, laws])), {
-      "Attribute last": [attributeFamily, attrsFold],
-      "Attribute owner": [attributeFamily, attributeOwner],
-      "Attribute predecessor": [attributeFamily, attrsFold],
-      "Choice owner": [choiceFamily, choiceOwner],
-      "Choice predecessor and last": [choiceFamily],
-      "Node last": [nodeTree, lastSlot, elementCount, countedCount],
-      "Node owner": [nodeTree, parentCopy],
-      "Node predecessor": [nodeTree, predecessorCopy, elementCount, countedCount],
-    });
+    assert.deepStrictEqual(
+      Object.fromEntries(axes.map(({ label, laws }) => [label, asSet(laws)])),
+      {
+        "Attribute last": asSet([attributeFamily, attrsFold]),
+        "Attribute owner": asSet([attributeFamily, attributeOwner]),
+        "Attribute predecessor": asSet([attributeFamily, attrsFold]),
+        "Choice owner": asSet([choiceFamily, choiceOwner]),
+        "Choice predecessor and last": asSet([choiceFamily]),
+        "Node last": asSet([nodeTree, lastSlot, elementCount, countedCount]),
+        "Node owner": asSet([nodeTree, parentCopy]),
+        "Node predecessor": asSet([nodeTree, predecessorCopy, elementCount, countedCount]),
+      },
+    );
   });
 
   it("names no rule for laws no row states, and still carries each law as the outcome names it", () => {
@@ -1499,95 +1504,6 @@ describe("the refusals made before the database", () => {
 });
 
 /**
- * Every text field of a schema's ordinary relations, a generated or accumulated one included, with
- * its type and its pattern law, one per field as grizzle states it: its relation and field, and its
- * type's patterns, each a source and flags, in declared order. A field's type is the one
- * `generated(type, term)` or `accumulated(type, start)` declares, or its descriptor itself. A
- * field's descriptor is read as any value, as {@link generatedLaws} reads it, so a relation with a
- * function-valued type (`MapKeyFloat`'s `pg["double precision"]`) is read, and patterns of another
- * shape throw.
- *
- * @param relations - The schema's `relations`.
- * @returns Each relation's text fields.
- */
-const textFields = (
-  relations: AnySchema["relations"],
-): readonly { readonly law: Law; readonly type: unknown }[] => {
-  const Patterns = Schema.NonEmptyArray(
-    Schema.Struct({ flags: Schema.Literals(["u", "su"]), source: Schema.String }),
-  );
-  const Stored = Schema.Struct({
-    fields: Schema.Record(Schema.String, Schema.Unknown),
-    kind: Schema.Literal("relation"),
-    name: Schema.String,
-  });
-  const Written = Schema.Union([
-    Schema.Struct({ type: Schema.Unknown, writing: Schema.Literal("generated") }),
-    Schema.Struct({ field: Schema.Unknown, writing: Schema.Literal("accumulated") }),
-  ]);
-
-  return Object.values(relations).flatMap((value) =>
-    Option.toArray(Schema.decodeUnknownOption(Stored)(value)).flatMap(({ fields, name }) =>
-      Object.entries(fields).flatMap(([field, descriptor]) => {
-        const type = Option.match(Schema.decodeUnknownOption(Written)(descriptor), {
-          onNone: () => descriptor,
-          onSome: (written) => (written.writing === "generated" ? written.type : written.field),
-        });
-
-        return Predicate.hasProperty(type, "patterns")
-          ? [
-              {
-                law: {
-                  field,
-                  kind: "pattern",
-                  patterns: Schema.decodeUnknownSync(Patterns)(type.patterns),
-                  relation: name,
-                } satisfies Law,
-                type,
-              },
-            ]
-          : [];
-      }),
-    ),
-  );
-};
-
-/**
- * The text types of Qti whose pattern every text matches and that carry no byte bound, so a field
- * of one states no pattern law: `anyText` (`src/qti/limits.ts`), `str.regex("^.*$", "su")` built
- * without `str.bytes`, the type of a text no law reads. Stated here by hand from its declaration,
- * apart from grizzle's erasure of a tautology (`text/refinement.ts` of the vendored engine), for
- * the census to hold grizzle's reading to; a bounded text of the same pattern, such as `keyText`,
- * is another object and states its law.
- */
-const tautologies: ReadonlySet<unknown> = new Set([anyText]);
-
-/**
- * File a law for {@link missingFrom}: a pattern law by its field, any other by its kind.
- *
- * @param law - The law.
- * @returns Its bucket.
- */
-const censusBucket = (law: Law): string =>
-  law.kind === "pattern" ? `${law.relation}.${law.field}` : law.kind;
-
-/**
- * Write each law of `laws` that no law of `among` is, by grizzle's `sameLaw`, for a census's
- * message. Laws are matched within their bucket ({@link censusBucket}), so the scan stays linear.
- *
- * @param laws - The laws looked for.
- * @param among - The laws they are looked for among.
- * @returns The laws not found, as `Formatter` writes them.
- */
-const missingFrom = (laws: readonly Law[], among: readonly Law[]): readonly string[] => {
-  const held = Arr.groupBy(among, censusBucket);
-
-  return laws
-    .filter((law) => !(held[censusBucket(law)] ?? []).some((other) => sameLaw(other, law)))
-    .map((law) => Formatter.format(law));
-};
-
-/**
  * The pattern law of a field of the small schema of the per-field test, `Club`'s, of `^[a-z]*$`.
  *
  * @param field - The field.
@@ -1620,40 +1536,16 @@ const statedPatternLaw = (
   );
 
 /**
- * The law of every generated field of a schema's stored relations, which grizzle names when the
- * field's column is NULL at a row (23502): it maps every generated column, whatever its term reads.
- * A field's type is read as any value, since some are functions (`pg["double precision"]` is
- * `pg.float(p)`'s), so every stored relation decodes and none drops out of the census unread.
+ * The keys a table names more than once, for a census's message.
  *
- * @param relations - The schema's `relations`.
- * @returns Each generated field's law.
+ * @param rows - The table's rows, each a key and its law's name.
+ * @returns Each repeated key, once.
  */
-const generatedLaws = (relations: AnySchema["relations"]): readonly Law[] => {
-  const Stored = Schema.Struct({
-    fields: Schema.Record(Schema.String, Schema.Unknown),
-    kind: Schema.Literal("relation"),
-    name: Schema.String,
-  });
+const repeatedIn = (rows: readonly (readonly [string, LawName])[]): readonly string[] => {
+  const keys = rows.map(([named]) => named);
 
-  return Object.values(relations).flatMap((value) =>
-    Option.toArray(Schema.decodeUnknownOption(Stored)(value)).flatMap(({ fields, name }) =>
-      Object.entries(fields).flatMap(([field, type]): readonly Law[] =>
-        Predicate.hasProperty(type, "writing") && type.writing === "generated"
-          ? [{ field, kind: "generated", relation: name }]
-          : [],
-      ),
-    ),
-  );
+  return Arr.dedupe(keys.filter((named, at) => keys.indexOf(named) !== at));
 };
-
-/**
- * The generated laws of a schema's relations that no row of the table owns.
- *
- * @param relations - The schema's `relations`.
- * @returns The laws, which an outcome naming one would refuse to rule.
- */
-const unownedGenerated = (relations: AnySchema["relations"]): readonly Law[] =>
-  generatedLaws(relations).filter((law) => Option.isNone(lawNameOf(law)));
 
 /**
  * The composed `Qti` schema, loaded by the census alone: it composes every `src/qti/` module that
@@ -1663,18 +1555,8 @@ const composedQti = Effect.promise(() => import("#pantry/qti/schema.ts")).pipe(
   Effect.map(({ Qti }) => Qti),
 );
 
-/**
- * Every law a schema's statements state, as grizzle's `lawsByStatement` names them, through the one
- * lookup `refusal.ts` builds per schema (its `statementLawsOf`).
- *
- * @param built - The schema, `Qti`.
- * @returns The laws, in statement order.
- */
-const lawsStatedBy = (built: Parameters<typeof statementLawsOf>[0]): readonly Law[] =>
-  statementLawsOf(built).flatMap(({ laws }) => laws);
-
 describe("the pattern laws, one per field", () => {
-  it("names each law grizzle states by its field's own type's row, a generated field's included, and refuses a law whose field's type no row holds", () => {
+  it("names each law grizzle states by its field's own type's row, a generated field's included, and none whose field's type no row holds", () => {
     // Oracle: grizzle's pattern laws (`lawsOf`), one pattern law per stored field whose pattern states
     // one, by relation name and declared field order, a tautology's field none. Live: two types of
     // one pattern under two names, a generated field of one of them, a tautology's field, which
@@ -1689,25 +1571,26 @@ describe("the pattern laws, one per field", () => {
       (r) => ({ joined: generated(code, Compute.concat(r.code, r.alias)) }),
     );
     const club = schema("Club", { Club }, []);
+    const laws = schemaLawsOf(club).flatMap((law) => (law.kind === "pattern" ? [law] : []));
+    const namesBy = (rows: readonly (readonly [RegexText<string>, LawName])[]) =>
+      laws.map((law) => [law, patternNameIn(club.relations, new Map(rows), law)] as const);
 
     assert.deepStrictEqual(
-      namedPatternLaws(
-        club,
-        new Map([
-          [code, "Key text bound"],
-          [alias, "XML production"],
-        ]),
-      ),
-      Result.succeed([
-        [clubLaw("alias"), "XML production"],
-        [clubLaw("code"), "Key text bound"],
-        [clubLaw("joined"), "Key text bound"],
+      namesBy([
+        [code, "Key text bound"],
+        [alias, "XML production"],
       ]),
+      [
+        [clubLaw("alias"), Option.some<LawName>("XML production")],
+        [clubLaw("code"), Option.some<LawName>("Key text bound")],
+        [clubLaw("joined"), Option.some<LawName>("Key text bound")],
+      ],
     );
-    assert.deepStrictEqual(
-      namedPatternLaws(club, new Map([[code, "Key text bound"]])),
-      Result.fail({ field: "alias", relation: "Club" }),
-    );
+    assert.deepStrictEqual(namesBy([[code, "Key text bound"]]), [
+      [clubLaw("alias"), Option.none<LawName>()],
+      [clubLaw("code"), Option.some<LawName>("Key text bound")],
+      [clubLaw("joined"), Option.some<LawName>("Key text bound")],
+    ]);
   });
 
   it(
@@ -1737,18 +1620,20 @@ describe("the pattern laws, one per field", () => {
 
 describe("the census of the composed Qti schema", () => {
   it.effect(
-    "owns every statement and primary key of Qti, and lists every merged axis's rules each once, most specific first",
+    "names every law Qti states, and lists every merged axis's rules each once, most specific first",
     (ctx) =>
+      // Oracle: grizzle's laws (`lawsOf`), every law an outcome over Qti can name: each primary
+      // key, each statement's laws, each contract, each pattern law and each generated field's law.
       Effect.gen(function* census() {
         const Qti = yield* composedQti;
-        const laws = [...lawsStatedBy(Qti), ...primaryKeysOf(Qti.relations)];
+        const laws = schemaLawsOf(Qti);
         const unowned = laws
           .filter((law) => Option.isNone(lawNameOf(law)))
           .map((law) => Formatter.format(law));
 
         assert.deepStrictEqual(unowned, [], "laws Qti states that no row of the table owns");
 
-        const axes = mergedAxes(lawsStatedBy(Qti), Qti.relations);
+        const axes = mergedAxes(laws);
         for (const { laws: carried } of axes) {
           assertRules(carried);
         }
@@ -1764,30 +1649,43 @@ describe("the census of the composed Qti schema", () => {
   );
 
   it.effect(
-    "states the pattern law of every text field of Qti's stored relations but a tautology's, one per field, and no other",
+    "names in each table only what Qti states, each once: a stored relation, a generated field, a contract, a pattern law's field's type",
     () =>
-      // Oracle: the schema read here apart from grizzle's reading, one pattern law per text field
-      // of a stored relation, a generated or accumulated field included, but a field of
-      // `tautologies`, held both ways to grizzle's pattern laws (`lawsOf`) and to the laws the table
-      // names, so a law either drops or invents fails here.
-      Effect.gen(function* patterns() {
+      // Oracle: grizzle's laws (`lawsOf`): each primary key's relation, each generated field's
+      // relation and field, each contract's name, and each pattern law's field's type, read from
+      // the schema's own descriptor. A row the schema no longer states, a key named twice, and a
+      // text type that types no field with a pattern law each fail here.
+      Effect.gen(function* rows() {
         const Qti = yield* composedQti;
-        const fields = textFields(Qti.relations);
-        const owed = fields.flatMap(({ law, type }) => (tautologies.has(type) ? [] : [law]));
-        const granted = schemaLawsOf(Qti).filter((law) => law.kind === "pattern");
-        const stated = statedLaws().flatMap(([law]) => (law.kind === "pattern" ? [law] : []));
+        const laws = schemaLawsOf(Qti);
+        const held = {
+          contract: new Set(laws.flatMap((law) => (law.kind === "contract" ? [law.contract] : []))),
+          generated: new Set(
+            laws.flatMap((law) =>
+              law.kind === "generated" ? [`${law.relation}.${law.field}`] : [],
+            ),
+          ),
+          primaryKey: new Set(
+            laws.flatMap((law) => (law.kind === "primaryKey" ? [law.relation] : [])),
+          ),
+        };
         const typed: ReadonlySet<unknown> = new Set(
-          fields.flatMap(({ type }) => (tautologies.has(type) ? [] : [type])),
+          laws.flatMap((law) =>
+            law.kind === "pattern" ? Option.toArray(patternTypeOf(Qti.relations, law)) : [],
+          ),
         );
 
-        assert.isNotEmpty(owed, "Qti declares no text field the census reads");
-        for (const [laws, among, missing] of [
-          [owed, granted, "text fields whose pattern law grizzle states not"],
-          [granted, owed, "pattern laws grizzle states of no text field"],
-          [granted, stated, "pattern laws grizzle states that the table names not"],
-          [stated, granted, "pattern laws the table names that grizzle states not"],
+        for (const [table, named, stated] of [
+          ["keyNames", keyNames, held.primaryKey],
+          ["generatedNames", generatedNames, held.generated],
+          ["contractNames", contractNames, held.contract],
         ] as const) {
-          assert.deepStrictEqual(missingFrom(laws, among), [], missing);
+          assert.deepStrictEqual(repeatedIn(named), [], `${table}: keys named twice`);
+          assert.deepStrictEqual(
+            named.flatMap(([row]) => (stated.has(row) ? [] : [row])),
+            [],
+            `${table}: rows that name no law Qti states`,
+          );
         }
         assert.deepStrictEqual(
           [...textLaws.keys()]
@@ -1795,31 +1693,6 @@ describe("the census of the composed Qti schema", () => {
             .map((type) => Formatter.format(type.patterns)),
           [],
           "rows of textLaws that type no field with a pattern law",
-        );
-      }),
-    testTimeoutMs,
-  );
-
-  it.effect(
-    "owns the law of every generated field of Qti's stored relations, and states no other generated law",
-    () =>
-      Effect.gen(function* generations() {
-        const Qti = yield* composedQti;
-        const raised = generatedLaws(Qti.relations);
-        const stated = statedLaws().flatMap(([law]) => (law.kind === "generated" ? [law] : []));
-
-        assert.isNotEmpty(raised, "Qti declares no generated field the census reads");
-        assert.deepStrictEqual(
-          unownedGenerated(Qti.relations),
-          [],
-          "generated fields whose law no row of the table owns",
-        );
-        assert.deepStrictEqual(
-          stated
-            .filter((law) => !raised.some((held) => sameLaw(held, law)))
-            .map((law) => Formatter.format(law)),
-          [],
-          "generated laws the table states for no generated field of Qti",
         );
       }),
     testTimeoutMs,
@@ -1837,7 +1710,7 @@ describe("the census of the composed Qti schema", () => {
       // states, under its own rule, so a dangling site of either kind is refused under one rule.
       Effect.gen(function* siteKinds() {
         const Qti = yield* composedQti;
-        const stated = lawsStatedBy(Qti);
+        const stated = schemaLawsOf(Qti);
         const kinds: readonly (readonly [LawSide, LawSide, Rule])[] = [
           [sideOf("SitePath", "node"), sideOf("SiteTarget", "node"), "include-target"],
           [sideOf("Site", "node", "kind"), sideOf("SitePath", "node", "kind"), "include-target"],
@@ -1869,16 +1742,20 @@ describe("the census of the composed Qti schema", () => {
     testTimeoutMs,
   );
 
-  it("names a generated field no row owns, so a field Qti gains without one fails the census", () => {
+  it("names no generated field no row owns, so a field Qti gains without one fails the census", () => {
+    // Oracle: grizzle's laws (`lawsOf`) of a schema of one generated field no row of
+    // `generatedNames` names: its law is listed, and named none, never another law's name.
     const Planted = relation.generated(
       "Planted",
       { form: lexical(pg.bigint), node: uuid },
       ["node"],
       (r) => ({ value: generated(pg.bigint, Compute.cast(r.form, pg.bigint)) }),
     );
+    const raised = schemaLawsOf(schema("Planted", { Planted }, [])).filter(
+      (law) => law.kind === "generated",
+    );
 
-    assert.deepStrictEqual(unownedGenerated({ Planted }), [
-      { field: "value", kind: "generated", relation: "Planted" },
-    ]);
+    assert.deepStrictEqual(raised, [{ field: "value", kind: "generated", relation: "Planted" }]);
+    assert.deepStrictEqual(raised.map(lawNameOf), [Option.none()]);
   });
 });

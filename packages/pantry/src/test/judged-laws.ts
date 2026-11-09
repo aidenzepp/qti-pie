@@ -12,7 +12,7 @@ import type { Law } from "@bjornpagen/grizzle";
 import { Function as Fn } from "effect";
 import { containmentsIn, statedAs } from "#pantry/test/host-judge.ts";
 import type { Containment } from "#pantry/test/host-judge.ts";
-import { statementLawsOf } from "#pantry/import/refusal.ts";
+import { schemaLawsOf, statementLawsOf } from "#pantry/import/refusal.ts";
 import type { Qti } from "#pantry/qti/schema.ts";
 
 /**
@@ -36,15 +36,14 @@ export const containmentsOf = (schema: typeof Qti, from: string): readonly Conta
 type CheckLaw = Extract<Law, { readonly kind: "check" }>;
 
 /**
- * Each check a schema states, as `lawsOf` names it, by its relation and declared name
+ * Each check a schema states, as `lawsOf` lists it, by its relation and declared name
  * (`JSON.stringify([relation, name])`): the index {@link checkConstraintOf} reads, built once per
  * schema.
  */
 const checksOf = Fn.memoize(
   (schema: typeof Qti): ReadonlyMap<string, CheckLaw> =>
     new Map(
-      statementLawsOf(schema)
-        .flatMap(({ laws }) => laws)
+      schemaLawsOf(schema)
         .filter((law): law is CheckLaw => law.kind === "check")
         .map((law) => [JSON.stringify([law.relation, law.name]), law]),
     ),
@@ -56,9 +55,9 @@ const checksOf = Fn.memoize(
  * states on a relation under a declared name, as `lawsOf` names it, so a test takes the name from
  * the installation's own naming and never spells it.
  *
- * The first call compiles the schema's law model (`statementLawsOf` of
- * `#pantry/import/refusal.ts`), so a test calls this in its body, under its own timeout, never
- * where a run without the lease loads the file.
+ * The first call compiles the schema's law model (`schemaLawsOf` of `#pantry/import/refusal.ts`),
+ * so a test calls this in its body, under its own timeout, never where a run without the lease
+ * loads the file.
  *
  * @param schema - The schema, `Qti`.
  * @param relation - The relation the check is declared on, by name.

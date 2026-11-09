@@ -2,22 +2,8 @@
  * A schema's families' axes, each with every law its foreign key carries, as grizzle's riding rule
  * merges them ({@link mergedAxes}): the laws one `some` refusal of a family's axis names together.
  */
-import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";
+import type { Law, LawSide } from "@bjornpagen/grizzle";
 import type { Array as Arr } from "effect";
-
-/**
- * The primary key of every stored relation of a schema, as its law, read off each relation's typed
- * `kind`, `name` and `primaryKey`.
- *
- * @param relations - The schema's `relations`.
- * @returns The laws.
- */
-export const primaryKeysOf = (relations: AnySchema["relations"]): readonly Law[] =>
-  Object.values(relations).flatMap((relation): readonly Law[] =>
-    relation.kind === "relation"
-      ? [{ fields: relation.primaryKey, kind: "primaryKey", relation: relation.name }]
-      : [],
-  );
 
 /**
  * One axis of a family and every law its foreign key carries.
@@ -60,19 +46,27 @@ const selects = (side: LawSide): boolean => side.selection.conjuncts.length > 0;
  * whose index is a field. A tree's member ends read its members, a selection, and every other end
  * reads every fact; the reader takes any selection of a tree's member for the members.
  *
- * @param laws - The schema's laws, as grizzle's `lawsOf` names them.
- * @param relations - Its relations, for each owner's primary key.
+ * An owner's key is its primary key, as `lawsOf` lists it beside the statements' laws.
+ *
+ * @param laws - The schema's laws, as grizzle's `lawsOf` lists them, every primary key included.
  * @returns The axes.
+ * @throws {Error} When a family's owner has no primary key among the laws: laws read from the
+ *   statements alone, never `lawsOf`'s, a defect of the caller.
  */
-export const mergedAxes = (
-  laws: readonly Law[],
-  relations: AnySchema["relations"],
-): readonly Axis[] => {
+export const mergedAxes = (laws: readonly Law[]): readonly Axis[] => {
   const keys = new Map(
-    primaryKeysOf(relations).flatMap((law) =>
-      law.kind === "primaryKey" ? [[law.relation, law.fields] as const] : [],
-    ),
+    laws.flatMap((law) => (law.kind === "primaryKey" ? [[law.relation, law.fields] as const] : [])),
   );
+  const keyOf = (owner: string): readonly string[] => {
+    const key = keys.get(owner);
+    if (key === undefined) {
+      throw new Error(
+        `The laws list no primary key of ${owner}, a family's owner. Pass mergedAxes every law grizzle's lawsOf lists, the primary keys included.`,
+      );
+    }
+
+    return key;
+  };
   const containments = laws.flatMap((law) => (law.kind === "contained" ? [law] : []));
 
   return laws.flatMap((own): readonly Axis[] => {
@@ -87,7 +81,7 @@ export const mergedAxes = (
     const { terms } = member;
     const group = byCount ? [...terms] : terms.slice(0, -1);
     const index = byCount ? undefined : terms.at(-1);
-    const ownerKey = (keys.get(owner) ?? []).map((field) => ({ field, kind: "field" as const }));
+    const ownerKey = keyOf(owner).map((field) => ({ field, kind: "field" as const }));
     const folds = laws.filter(
       (other) =>
         other.kind === "fold" && other.family.owner === owner && other.family.count === slots.count,

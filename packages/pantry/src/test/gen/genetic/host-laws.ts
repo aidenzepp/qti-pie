@@ -584,11 +584,15 @@ const unreadChecks: ReadonlySet<LawName> = new Set(
 );
 
 /**
- * The laws no statement states, as `refusal.ts` writes them out: the primary keys, the patterns and
- * the generated fields, each with its name.
+ * The laws no statement states, as grizzle's `lawsOf` lists them, each with the name `refusal.ts`
+ * gives it (`statedLaws`): the primary keys, the contracts, the patterns and the generated fields.
  */
 const writtenLaws = statedLaws().filter(
-  ([law]) => law.kind === "generated" || law.kind === "pattern" || law.kind === "primaryKey",
+  ([law]) =>
+    law.kind === "contract" ||
+    law.kind === "generated" ||
+    law.kind === "pattern" ||
+    law.kind === "primaryKey",
 );
 
 /**
