@@ -34,13 +34,13 @@
  *     and sections: the unsplit reading, the test's own variable of the whole name, counts among the
  *     readings, and a numbered one only through an item ref a selection with replacement can repeat
  *     (reading 88). A reading through an element of a section document placed twice reads one
- *     placement each time: the reference's own, from inside it, and each, from outside it (reading
- *     86). One no reading counts for is `undeclared-variable`, and one two readings count for is
- *     `ambiguous-reference`. A name an outcome rule sets is the test's own variable (reading 112), so
- *     one the test does not declare is `undeclared-variable`. An item's `duration` resolves whether
- *     or not the item is time dependent (reading 150). A variable read through a prefix is judged by
- *     its kind, a built-in by the kind it stands as (reading 111): a reference attribute reads only a
- *     template or outcome variable (`expression-type`), a `qti-correct` only a response
+ *     placement each time: the one that holds the reference, from inside it, and each, from outside
+ *     it (reading 86). One no reading counts for is `undeclared-variable`, and one two readings count
+ *     for is `ambiguous-reference`. A name an outcome rule sets is the test's own variable (reading
+ *     112), so one the test does not declare is `undeclared-variable`. An item's `duration` resolves
+ *     whether or not the item is time dependent (reading 150). A variable read through a prefix is
+ *     judged by its kind, a built-in by the kind it stands as (reading 111): a reference attribute
+ *     reads only a template or outcome variable (`expression-type`), a `qti-correct` only a response
  *     (`undeclared-variable`), and a mapping expression only a response its item declares
  *     (`undeclared-variable`) with the mapping it needs (`template-requirements`);
  *   - Each item ref's variable mappings, the test's own and a reached section document's, name an
@@ -966,6 +966,16 @@ interface ItemRefVariables extends ItemVariables {
 }
 
 /**
+ * How a placement reads the placements of another document (reading 86, "a reference that names an
+ * item ref or a section through such a document, or one of their variables, resolves once for each
+ * placement"): from inside the one placement of it that holds the reading's placement, with whether
+ * a selection with replacement lies above that one, or from outside it, reading every placement.
+ */
+type DocumentView =
+  | { readonly from: "inside"; readonly replaced: boolean }
+  | { readonly from: "outside" };
+
+/**
  * What a test's dotted references resolve against, its reach, from where a reference stands: the
  * variables of each resolved item ref, the identifiers of the parts and sections of the test and of
  * each section document it places through its section refs, as if each section document were
@@ -978,11 +988,12 @@ interface ReferenceScope {
   /**
    * The placements a reading through an item ref, part or section of the reach reads from where the
    * reference stands, each with whether a selection with replacement can repeat the item ref there:
-   * the placement being judged, when the element is the reference's own document's, and otherwise
-   * every placement of the element's document, counted up to 2 for each answer (reading 86, "a
-   * reference that names an item ref or a section through such a document, or one of their
-   * variables, resolves once for each placement"). A numbered reading counts only through a
-   * placement that can repeat its item ref (reading 88).
+   * the placement being judged, when the element is the reference's own document's; the one
+   * placement of the element's document that holds it, read from inside ({@link DocumentView});
+   * and otherwise every placement of the element's document, counted up to 2 for each answer
+   * (reading 86, "a reference that names an item ref or a section through such a document, or one
+   * of their variables, resolves once for each placement"). A numbered reading counts only through
+   * a placement that can repeat its item ref (reading 88).
    */
   readonly placements: (identifier: string) => readonly boolean[];
   /**
@@ -1755,6 +1766,22 @@ const notHeld = (refusals: readonly Refusal[], held: readonly Refusal[]): readon
   }
 
   return kept;
+};
+
+/**
+ * Give the refusals several ways of judging one thing give, each refusal once, in the order the
+ * ways first give it.
+ *
+ * @param ways What each way gives.
+ * @returns The refusals.
+ */
+const unionOf = (ways: readonly (readonly Refusal[])[]): readonly Refusal[] => {
+  const union: Refusal[] = [];
+  for (const way of ways) {
+    union.push(...notHeld(way, union));
+  }
+
+  return union;
 };
 
 /**
@@ -3212,14 +3239,16 @@ interface TestJudgement {
  * hold `.`), or holds as a built-in, is its unsplit reading, which counts beside every other
  * (reading 48, "the unsplit reading counts among them"). A reading through an item ref, part or
  * section reads one placement of its document: from inside that document, the placement being
- * judged, and from any other document each placement, so a reference from outside a section
- * document placed twice reads it twice and is `ambiguous-reference` (reading 86; pantry refuses a
- * reading through a name two placements give wherever the reference stands, `Prefixed_reference`,
- * an agreement difference). Another document's placements are counted up to 2, once or more than
- * once, which is all reading 48 asks of them, so a document that places one of its own placements'
- * documents twice reads that document's names twice too. An item ref a selection with replacement
- * can repeat in that placement, in its own document or above the section ref that places it, is
- * repeatable there, and only through one does a numbered reading count (reading 88). A name with no
+ * judged; from inside a placement of it that holds the placement being judged, that one; and from
+ * outside it, each placement, so a reference from outside a section document placed twice reads it
+ * twice and is `ambiguous-reference` (reading 86; pantry refuses a reading through a name two
+ * placements give wherever the reference stands, `Prefixed_reference`, an agreement difference).
+ * Which of these a placement reads from is one reachability over the placements (`viewsAt`
+ * within it), and a placement that stands for several chains of documents is judged each way they
+ * give. Another document's placements are counted up to 2, once or more than once, which is all
+ * reading 48 asks of them. An item ref a selection with replacement can repeat in that placement,
+ * in its own document or above the section ref that places it, is repeatable there, and only
+ * through one does a numbered reading count (reading 88). A name with no
  * `.` is the test's own check's; every other is judged by {@link judgeReference}. An item ref
  * resolves a reading only through an item whose document the package holds and the reader read, so
  * a reference through any other names nothing, as pantry's reach holds no such item ref. Only the
@@ -3306,9 +3335,43 @@ const judgeTest = (
   const mappingRefusals = judgeMappings(source.location, own.visits, variablesFor);
   const defaults = judgeTemplateDefaults(source.location, own.visits, variablesFor);
   const whole = wholeOf(source);
-  // The placement being judged: the scope reads it, so it is read only while that placement is
-  // judged, the test's first.
+  const placedAt = new Map<string, Placement[]>();
+  for (const placement of placements) {
+    placedAt.set(placement.path, [...(placedAt.get(placement.path) ?? []), placement]);
+  }
+
+  const avoiding = new Map<string, ReadonlySet<Placement>>();
+  const reachers = new Map<Placement, ReadonlySet<Placement>>();
+  // The placement being judged, the test's first, and the view each reading takes of each document
+  // it reads for one way that placement may read them ({@link assignmentsOf}): the scope reads
+  // both, so it is read only while that placement is judged.
   let here = test;
+  let chosen: ReadonlyMap<string, DocumentView> = new Map();
+  /**
+   * Give the ways the placement being judged may read the placements of another document (reading
+   * 86): from inside each placement of it that lies above this one, by its replacement, and from
+   * outside it when the test reaches this placement through no placement of it. Once loops are
+   * refused the placements form no cycle, so each is one reachability over them: the placements of
+   * the document removed, is this one still reached, and which of them reach this one.
+   *
+   * @param path The document's path.
+   * @returns The views, at least one.
+   */
+  const viewsAt = (path: string): readonly DocumentView[] => {
+    const there = placedAt.get(path) ?? [];
+    const outside = avoiding.get(path) ?? reachedAvoiding(graph, new Set(there));
+    avoiding.set(path, outside);
+
+    const above = reachers.get(here) ?? reachingAny(graph, [here]);
+    reachers.set(here, above);
+
+    return [
+      ...(outside.has(here) ? [{ from: "outside" } as const] : []),
+      ...[false, true]
+        .filter((replaced) => there.some((one) => one.replaced === replaced && above.has(one)))
+        .map((replaced) => ({ from: "inside", replaced }) as const),
+    ];
+  };
   const scope: ReferenceScope = {
     durations,
     items,
@@ -3318,21 +3381,70 @@ const judgeTest = (
         return [];
       }
 
-      return (at.document === here.path ? [here.replaced] : (flags.get(at.document) ?? [])).map(
+      if (at.document === here.path) {
+        return [here.replaced || at.replaced];
+      }
+
+      const view = chosen.get(at.document) ?? viewsAt(at.document)[0] ?? { from: "outside" };
+
+      return (view.from === "inside" ? [view.replaced] : (flags.get(at.document) ?? [])).map(
         (replaced) => at.replaced || replaced,
       );
     },
     whole,
   };
   /**
+   * Give each way the placement being judged may read the documents a name's readings read through
+   * ({@link viewsAt}): one view of each such document other than its own, every combination of
+   * them. A placement's ways are the union of those of the chains of documents it stands for, so a
+   * name whose readings read one document, as one almost always does, is judged by exactly the
+   * readings each such chain gives it.
+   *
+   * @param name The name.
+   * @returns The assignments of a view to each document, at least one.
+   */
+  const assignmentsOf = (name: string): readonly ReadonlyMap<string, DocumentView>[] => {
+    let assignments: readonly ReadonlyMap<string, DocumentView>[] = [new Map()];
+    const met = new Set<string>();
+    for (let dot = name.indexOf("."); dot !== -1; dot = name.indexOf(".", dot + 1)) {
+      const path = written.get(name.slice(0, dot))?.document;
+      if (path !== undefined && path !== here.path && !met.has(path)) {
+        met.add(path);
+
+        const views = viewsAt(path);
+        assignments = assignments.flatMap((assignment) =>
+          views.map((view) => new Map([...assignment, [path, view] as const])),
+        );
+      }
+    }
+
+    return assignments;
+  };
+  /**
+   * Read a name each way the placement being judged may read it ({@link assignmentsOf}).
+   *
+   * @param name The name.
+   * @param read What to read of it, under one way.
+   * @returns What each way gives.
+   */
+  const eachWay = <A>(name: string, read: () => A): readonly A[] =>
+    assignmentsOf(name).map((assignment) => {
+      chosen = assignment;
+      const result = read();
+      chosen = new Map();
+
+      return result;
+    });
+  /**
    * Report whether the test holds a variable by a name, as it must for a `pattern`'s braced name to
    * reference it (ruling R1).
    *
    * @param name The name.
    * @returns Whether the test declares it whole, holds it as a built-in, or resolves it by a
-   *   reading.
+   *   reading, some way the placement being judged may read it.
    */
-  const held = (name: string): boolean => whole.has(name) || readingsOf(scope, name).length > 0;
+  const held = (name: string): boolean =>
+    whole.has(name) || eachWay(name, () => readingsOf(scope, name).length > 0).includes(true);
 
   /**
    * Judge each dotted reference of a test or section document's elements by reading 48 ("a dotted
@@ -3347,7 +3459,13 @@ const judgeTest = (
   const judgeReferences = (document: string, visits: readonly Visit[]): readonly Refusal[] =>
     visits.flatMap((visit) =>
       referencesOf(visit.element, held).flatMap((reference) =>
-        reference.identifier.includes(".") ? judgeReference(document, visit, reference, scope) : [],
+        reference.identifier.includes(".")
+          ? unionOf(
+              eachWay(reference.identifier, () =>
+                judgeReference(document, visit, reference, scope),
+              ),
+            )
+          : [],
       ),
     );
   const references = judgeReferences(source.location, own.visits);
@@ -3359,11 +3477,9 @@ const judgeTest = (
    * @param name The prefixed read.
    * @returns Its type, unknown when no reading or two readings resolve it.
    */
-  const typed: PrefixedTyper = (name) => {
-    const [only, ...others] = readingsOf(scope, name);
-
-    return only === undefined || others.length > 0 ? unknownType : only.variable.type;
-  };
+  const typed: PrefixedTyper = (name) =>
+    eachWay(name, () => readingsOf(scope, name)).find((readings) => readings.length === 1)?.[0]
+      ?.variable.type ?? unknownType;
   /**
    * Type what an unweighted `qti-test-variables` with no `base-type` collects, from the reach's
    * items (G-R3 199).
@@ -3402,9 +3518,11 @@ const judgeTest = (
       return false;
     }
 
-    const [only, ...others] = readingsOf(scope, name);
+    return eachWay(name, () => {
+      const [only, ...others] = readingsOf(scope, name);
 
-    return only !== undefined && others.length === 0 && only.variable.kind === "context";
+      return only !== undefined && others.length === 0 && only.variable.kind === "context";
+    }).includes(true);
   };
   const reads = contextReadsIn(source, own.visits, readsContext);
 

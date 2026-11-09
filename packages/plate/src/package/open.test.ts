@@ -1422,6 +1422,40 @@ const doublingPackage = (length: number): ReadonlyMap<string, Uint8Array> => {
   });
 };
 
+/**
+ * The files of a package whose test `T`, {@link referringTestXml} with no processing, places the
+ * section document `S0` at `sections/s0.xml` twice, by `R1` and `R2`, and the given further part
+ * content: `S0` holds the item ref `I0`, then the section ref `RU` to `sections/u.xml`, whose
+ * section `U` holds the item ref `IU` with a pre-condition over `I0.SCORE`.
+ *
+ * @param more The test part's content after its two section refs to `S0`, as written.
+ * @returns The package's files.
+ */
+const holdingFiles = (more: string): ReadonlyMap<string, Uint8Array> =>
+  packageOf({
+    "items/a.xml": reachedItemXml,
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+      resourceXml("S0", "imsqti_section_xmlv3p0", "sections/s0.xml"),
+      resourceXml("U", "imsqti_section_xmlv3p0", "sections/u.xml"),
+    ),
+    "sections/s0.xml": sectionDocumentXml(
+      "S0",
+      `${itemRefXml("I0", "../items/a.xml")}${sectionRefXml("RU", "u.xml")}`,
+    ),
+    "sections/u.xml": sectionDocumentXml(
+      "U",
+      itemRefXml("IU", "../items/a.xml", preConditionXml(greaterXml("I0.SCORE"))),
+    ),
+    "test.xml": referringTestXml(
+      "",
+      `${sectionRefXml("R1", "sections/s0.xml")}${sectionRefXml("R2", "sections/s0.xml")}${more}`,
+    ),
+  });
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -3867,6 +3901,37 @@ describe("package/open.ts", () => {
               rule: "ambiguous-reference",
             },
           ]);
+        }),
+    );
+
+    it.effect(
+      'align-54 test assembly B6: a reference in section document U through item ref I0 of S0, the document that places U, reads the placement of S0 that holds it, so it is accepted though the test places S0 twice; placed by the test too, U reads I0 from outside S0 as well, and the reference is refused as ambiguous-reference (reading 86 ("a section document a test places twice is written once"))',
+      () =>
+        Effect.gen(function* holdingPlacement() {
+          acceptedOf(yield* openPackage(location, holdingFiles("")));
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(location, holdingFiles(sectionRefXml("R3", "sections/u.xml"))),
+            ),
+            [
+              {
+                detail: {
+                  firstPrefix: "I0",
+                  firstVariable: "SCORE",
+                  reading: "86",
+                  reference: "I0.SCORE",
+                  secondPrefix: "I0",
+                  secondVariable: "SCORE",
+                },
+                document: fileLocation(location, "sections/u.xml"),
+                location: {
+                  kind: "path",
+                  path: "qti-assessment-section/qti-assessment-item-ref/qti-pre-condition/qti-gt/qti-variable/@identifier",
+                },
+                rule: "ambiguous-reference",
+              },
+            ],
+          );
         }),
     );
 
