@@ -3543,6 +3543,91 @@ describe("checkStructure", () => {
       );
     });
 
+    it("align-54 R3 test declarations F2: admits a test's outcome declarations numAttempts and completionStatus, and its context declaration numAttempts, which shadow no built-in of a test (reading 168)", () => {
+      const context = el("qti-context-declaration", [
+        attr("identifier", "numAttempts"),
+        attr("cardinality", "single"),
+        attr("base-type", "integer"),
+      ]);
+
+      assert.deepStrictEqual(
+        found(
+          testDeclaring([
+            outcomeOf("numAttempts", "integer"),
+            outcomeOf("completionStatus", "identifier"),
+            outcomeOf(" numAttempts ", "integer"),
+          ]),
+          generatedTables,
+        ),
+        [],
+      );
+      assert.deepStrictEqual(found(testDeclaring([context]), generatedTables), []);
+    });
+
+    it("align-54 R3 test declarations F2: refuses a test's outcome or context declaration named duration as attribute-type, its expected naming duration alone (reading 168)", () => {
+      for (const [name, line] of reservations.filter(
+        ([kind]) => kind === "qti-context-declaration" || kind === "qti-outcome-declaration",
+      )) {
+        for (const identifier of ["duration", " duration "]) {
+          const source = testDeclaring([
+            el(name, [
+              attr("identifier", identifier),
+              attr("cardinality", "single"),
+              attr("base-type", "float"),
+            ]),
+          ]);
+
+          assert.deepStrictEqual(found(source, generatedTables), [
+            ["attribute-type", at(`qti-assessment-test/${name}/@identifier`)],
+          ]);
+          assert.deepStrictEqual(first(source, generatedTables)?.detail, {
+            attribute: "identifier",
+            check: "reserved-identifier",
+            element: name,
+            expected: "an identifier other than the built-in variable duration",
+            pantry: "DeclarationNotReserved",
+            source: line,
+            value: identifier,
+          });
+        }
+      }
+    });
+
+    it("align-54 R3 test declarations F2: still refuses an item's declaration of each kind named completionStatus, numAttempts or duration, its expected naming all three (reading 168)", () => {
+      for (const [name, line] of reservations) {
+        for (const identifier of ["completionStatus", "numAttempts", "duration"]) {
+          assert.deepStrictEqual(
+            declarationRefusals(
+              item([
+                el(name, [
+                  attr("identifier", identifier),
+                  attr("cardinality", "single"),
+                  attr("base-type", "identifier"),
+                ]),
+              ]),
+            ),
+            [
+              [
+                "attribute-type",
+                at(`qti-assessment-item/${name}/@identifier`),
+                {
+                  attribute: "identifier",
+                  check: "reserved-identifier",
+                  element: name,
+                  expected:
+                    "an identifier other than the built-in variables' completionStatus, numAttempts and duration",
+                  pantry: "DeclarationNotReserved",
+                  source: line,
+                  value: identifier,
+                },
+              ],
+            ],
+            `${name} ${identifier}`,
+          );
+        }
+      }
+    });
+
     it("[I-9a] refuses an outcome named SCORE or MAXSCORE that is not a float, and one named PASSED that is not a boolean, as attribute-type at its base-type (pantry ReservedOutcomeTypes; info.txt:8478, :8480, :8482)", () => {
       for (const [identifier, fixed, line] of typedOutcomes) {
         for (const written of [identifier, ` ${identifier} `]) {

@@ -869,6 +869,37 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
   );
 
   it.effect(
+    "align-54 R3 test declarations F2: one that declares an outcome numAttempts and reads it has no structural refusal and runs, the declared outcome held (reading 168)",
+    () =>
+      Effect.gen(function* declaresAttempts() {
+        const document = processed(
+          [
+            el(
+              "qti-outcome-condition",
+              [],
+              [
+                el(
+                  "qti-outcome-if",
+                  [],
+                  [
+                    el("qti-gte", [], [variable("numAttempts"), baseValue("integer", "1")]),
+                    setting("qti-set-outcome-value", "SCORE", baseValue("float", "1")),
+                  ],
+                ),
+              ],
+            ),
+          ],
+          [outcome("numAttempts", "integer")],
+        );
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.strictEqual(built.outcomeProcessing.kind, "runs");
+      }),
+  );
+
+  it.effect(
     "[T-9] absent, marked or runs: one that reads a part's, a section's or an item ref's duration is marked by each name, unless the test declares it whole",
     () =>
       Effect.gen(function* readsDurations() {
