@@ -375,4 +375,11 @@ describe("the core, from src/index.ts", () => {
     assert.notProperty(dependencies, "playwright");
     assert.notProperty(dependencies, "@vitest/browser-playwright");
   });
+
+  it("holds axe-core at exactly 4.14.0 among the devDependencies, never the dependencies", () => {
+    const { dependencies, devDependencies } = readManifest();
+
+    assert.strictEqual(devDependencies["axe-core"], "4.14.0");
+    assert.notProperty(dependencies, "axe-core");
+  });
 });
