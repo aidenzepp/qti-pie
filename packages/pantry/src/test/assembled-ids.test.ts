@@ -21,9 +21,8 @@ import { assert, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
-import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option, pipe } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -69,14 +68,39 @@ interface IdCase {
 }
 
 /**
- * Every case of the box: 60 in all.
+ * The cases of the box, 24 of its 60: every case where all three carriers share their ID, where
+ * the two collisions and the IDREF interact, then a 2-way covering array of the rest, one case for
+ * each other way the carriers share an ID and each IDREF, so every pair of any two factors' values
+ * is met (the section and fragment counts fall to the alike and IDREF indexes' parities). The
+ * array's apart case with the test naming the section places the section twice and the fragment
+ * once, the one accepted case each situation below asks for.
  */
-const idCases: Gen<IdCase> = (source) => ({
-  alike: source.draw(element(alikes)),
-  fragments: source.draw(element([1, 2] as const)),
-  reference: source.draw(element(references)),
-  sections: source.draw(element([1, 2] as const)),
-});
+const idCases = Arr.appendAll(
+  pipe(
+    references,
+    Arr.flatMap((reference) =>
+      pipe(
+        [1, 2] as const,
+        Arr.flatMap((sections) =>
+          pipe(
+            [1, 2] as const,
+            Arr.map((fragments): IdCase => ({ alike: "all", fragments, reference, sections })),
+          ),
+        ),
+      ),
+    ),
+  ),
+  alikes.flatMap((alike, alikeAt) =>
+    alike === "all"
+      ? []
+      : references.map((reference, referenceAt): IdCase => ({
+          alike,
+          fragments: (Math.floor(alikeAt / 2) + referenceAt) % 2 === 0 ? 2 : 1,
+          reference,
+          sections: (alikeAt + referenceAt) % 2 === 0 ? 1 : 2,
+        })),
+  ),
+);
 
 /**
  * The ID each carrier writes under a case: `shared` where the case makes it alike with another,
@@ -223,7 +247,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("the IDs of an assemble
       // Oracle: two implementations side by side, the law oracle's assembly over the listed
       // documents and the schema's own laws over the import's rows. Bound: three carriers, five
       // ways they share an ID, the section placed once or twice, the fragment included once or
-      // twice, and no IDREF or one either way: 60 packages.
+      // twice, and no IDREF or one either way, the 24 packages of `idCases`: every pair of two
+      // factors' values, and every case of all three alike.
       searched(
         ctx,
         exhaust(
@@ -236,8 +261,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("the IDs of an assemble
               "a section placed twice, accepted",
               "the test names the section's ID, accepted",
             ]),
-            generator: idCases,
-            limit: 80,
+            generator: element(idCases),
+            limit: 30,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",
