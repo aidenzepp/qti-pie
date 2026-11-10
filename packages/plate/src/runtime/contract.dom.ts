@@ -7,6 +7,9 @@
  * - The runtime finds an interaction's root by its `data-slot` marker, `<kind>-interaction` (the
  *   `<component>` spelling `emit/parts.ts` gives a Root), and attaches the one {@link Controller}
  *   its kind has in a closed {@link Registry}: delegation by kind, not extensible by a host.
+ * - A content module that needs script owns a {@link ContentController} the same way: the runtime
+ *   finds its root by the module's slot, `data-slot="<slot>"` ({@link contentRuntimeSlots}), and
+ *   attaches the one controller that slot has in the registry's `content` map.
  * - Upgrading never calls `focus()` and never moves focus; a controller acts only on the user's
  *   input.
  * - Every announcement goes through the item's live region ({@link LiveRegion}, the item chrome's
@@ -84,22 +87,73 @@ export interface Controller<K extends RuntimeKind = RuntimeKind> {
 }
 
 /**
- * The closed registry: at most one controller per runtime kind, keyed by the kind it upgrades. A
- * kind without one stays as the SSR rendered it.
+ * The slots of the content roots that have a browser runtime: the content whose behaviour its
+ * native element cannot give alone. A slot is the `data-slot` value of the content's root, which
+ * the module's render writes. `item` is the item chrome's own Root, which every rendered item has:
+ * the one place a page-wide display preference reaches an item.
  */
-export type Registry = { readonly [K in RuntimeKind]?: Controller<K> };
+export const contentRuntimeSlots = ["item"] as const;
 
 /**
- * One interaction an upgrade attached a controller to.
+ * A content slot that has a runtime, as {@link contentRuntimeSlots} lists it.
  */
-export interface UpgradedRoot {
-  readonly kind: RuntimeKind;
-  readonly root: HTMLElement;
+export type ContentSlot = (typeof contentRuntimeSlots)[number];
+
+/**
+ * The behaviour of one content module in the page: what a native element cannot give alone, such
+ * as the focus a modal feedback's dialog takes and returns.
+ *
+ * It follows the contract's decision D1 as {@link Controller} does: no custom element is
+ * registered, and the controller upgrades the root the server rendered, found by its slot, never
+ * building markup. `m5-01`, modal feedback, is the first content module to give a slot a
+ * controller.
+ *
+ * @template S The slot it upgrades.
+ */
+export interface ContentController<S extends ContentSlot = ContentSlot> {
+  readonly slot: S;
+
+  /**
+   * Whether the controller gives the slot its behaviour. A stub declares `false` and marks its
+   * root `data-runtime="stub"`; the issue that fills a slot flips this to `true` and drops the
+   * mark, as an interaction's does.
+   */
+  readonly implemented: boolean;
+
+  /**
+   * Attach the slot's behaviour to one rendered content root, without moving focus.
+   *
+   * A root may lack the parts the server would write, and the upgrade tolerates it: it attaches
+   * nothing to a missing part, moves no focus, announces nothing, and still returns a teardown that
+   * undoes what it did.
+   *
+   * @param root The content's root, `data-slot="<slot>"`.
+   * @param live The live region of the item the root sits in, the only place it announces.
+   * @returns The teardown that undoes the upgrade.
+   */
+  readonly upgrade: (root: HTMLElement, live: LiveRegion) => Teardown;
 }
 
 /**
- * What an upgrade did: the interactions it attached a controller to, in document order, and the one
- * teardown that undoes them all.
+ * The closed registry: at most one controller per runtime kind, keyed by the kind it upgrades, and
+ * at most one per content slot in its `content` map, keyed by the slot. A kind or slot without one
+ * stays as the SSR rendered it.
+ */
+export type Registry = { readonly [K in RuntimeKind]?: Controller<K> } & {
+  readonly content?: { readonly [S in ContentSlot]?: ContentController<S> };
+};
+
+/**
+ * One root an upgrade attached a controller to: an interaction, reported with its kind, or a
+ * content root, reported with its slot.
+ */
+export type UpgradedRoot =
+  | { readonly kind: RuntimeKind; readonly root: HTMLElement }
+  | { readonly root: HTMLElement; readonly slot: ContentSlot };
+
+/**
+ * What an upgrade did: the roots it attached a controller to, the interactions in document order
+ * and then the content roots, and the one teardown that undoes them all.
  */
 export interface Upgraded {
   readonly controllers: readonly UpgradedRoot[];
@@ -144,55 +198,93 @@ export const runtimeKindOf = (slot: string | undefined): RuntimeKind | undefined
 };
 
 /**
- * The interaction roots an upgrade has attached a controller to and not yet torn down, so a second
- * upgrade of the same page (a host's re-render, React's double effect) never attaches twice.
+ * The roots an upgrade has attached a controller to and not yet torn down, interactions and content
+ * alike, so a second upgrade of the same page (a host's re-render, React's double effect) never
+ * attaches twice.
  */
 const attached = new WeakSet<HTMLElement>();
 
 /**
- * List the interaction roots in or at a node, in document order.
+ * List the roots in or at a node that match a selector, in document order.
  *
  * @param root The node to search: a document, a fragment, or an element, which is included when it
- *   is itself an interaction root.
+ *   itself matches.
+ * @param selector The selector of the roots.
  * @returns The roots.
  */
-const interactionRoots = (root: ParentNode): readonly HTMLElement[] => [
-  ...(root instanceof HTMLElement && root.matches(interactionRootSelector) ? [root] : []),
-  ...root.querySelectorAll<HTMLElement>(interactionRootSelector),
+const rootsMatching = (root: ParentNode, selector: string): readonly HTMLElement[] => [
+  ...(root instanceof HTMLElement && root.matches(selector) ? [root] : []),
+  ...root.querySelectorAll<HTMLElement>(selector),
 ];
 
 /**
- * Upgrade every interaction under a node through a registry: each root whose kind has a controller,
- * and that no live upgrade holds, gets that controller, given the live region of the item it sits
- * in. Nothing else in the page changes, and focus does not move.
+ * Give the live region of the item a root sits in.
+ *
+ * @param element The root.
+ * @returns The region of the item that holds it, or of the root itself when no item does.
+ */
+const liveRegionAround = (element: HTMLElement): LiveRegion =>
+  liveRegionOf(element.closest<HTMLElement>(`[data-slot="${itemSlot}"]`) ?? element);
+
+/**
+ * One controller an upgrade attached: the root it reports and the teardown that undoes it.
+ */
+interface Attachment {
+  readonly reported: UpgradedRoot;
+  readonly teardown: Teardown;
+}
+
+/**
+ * Upgrade every interaction and content root under a node through a registry: each interaction root
+ * whose kind has a controller, and each content root whose slot has one, and that no live upgrade
+ * holds, gets that controller, given the live region of the item it sits in. The interaction roots
+ * go first, in document order, then the content roots, by slot. Nothing else in the page changes,
+ * and focus does not move.
  *
  * The page's entry binds this to its one closed registry; it takes the registry as an argument so
  * the walk is testable with a controller of the test's own.
  *
- * @param registry The controllers by kind.
+ * @param registry The controllers by kind, and by content slot in its `content` map.
  * @param root The node to upgrade under.
- * @returns The attached interactions and their teardown.
+ * @returns The attached roots and their teardown.
  */
 export const upgradeWith = (registry: Registry, root: ParentNode): Upgraded => {
-  const done = interactionRoots(root).flatMap((element) => {
-    const kind = runtimeKindOf(element.dataset["slot"]);
-    const controller = kind === undefined ? undefined : registry[kind];
+  const interactions = rootsMatching(root, interactionRootSelector).flatMap(
+    (element): readonly Attachment[] => {
+      const kind = runtimeKindOf(element.dataset["slot"]);
+      const controller = kind === undefined ? undefined : registry[kind];
 
-    if (kind === undefined || controller === undefined || attached.has(element)) {
-      return [];
-    }
+      if (kind === undefined || controller === undefined || attached.has(element)) {
+        return [];
+      }
 
-    const item = element.closest<HTMLElement>(`[data-slot="${itemSlot}"]`) ?? element;
-    const teardown = controller.upgrade(element, liveRegionOf(item));
+      const teardown = controller.upgrade(element, liveRegionAround(element));
 
-    attached.add(element);
+      attached.add(element);
 
-    return [{ kind, root: element, teardown }];
-  });
+      return [{ reported: { kind, root: element }, teardown }];
+    },
+  );
+  const contents = contentRuntimeSlots.flatMap((slot) =>
+    rootsMatching(root, `[data-slot="${slot}"]`).flatMap((element): readonly Attachment[] => {
+      const controller = registry.content?.[slot];
+
+      if (controller === undefined || attached.has(element)) {
+        return [];
+      }
+
+      const teardown = controller.upgrade(element, liveRegionAround(element));
+
+      attached.add(element);
+
+      return [{ reported: { root: element, slot }, teardown }];
+    }),
+  );
+  const done = [...interactions, ...contents];
   let open = true;
 
   return {
-    controllers: done.map(({ kind, root: element }) => ({ kind, root: element })),
+    controllers: done.map(({ reported }) => reported),
     teardown: () => {
       if (!open) {
         return;
@@ -200,9 +292,9 @@ export const upgradeWith = (registry: Registry, root: ParentNode): Upgraded => {
 
       open = false;
 
-      for (const { root: element, teardown } of done.toReversed()) {
+      for (const { reported, teardown } of done.toReversed()) {
         teardown();
-        attached.delete(element);
+        attached.delete(reported.root);
       }
     },
   };
