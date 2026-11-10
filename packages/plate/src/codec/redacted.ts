@@ -72,6 +72,11 @@ interface BodyAttributeJson {
  */
 interface BodyElementJson {
   readonly attributes: readonly BodyAttributeJson[];
+  /**
+   * The element's catalog reference, the author's `data-catalog-idref`, present only when it
+   * carries one.
+   */
+  readonly catalog?: string;
   readonly children: readonly BodyNodeJson[];
   readonly kind: "element";
   readonly tag: string;
@@ -243,7 +248,9 @@ const OptionalText = Schema.OptionFromOptionalKey(Schema.String);
  * input, as JSON written before the form dropped it holds, is dropped whatever its value, as
  * {@link decodeRedacted} drops any key the form does not hold. The type side keeps `path:
  * string`, so the codec's body-node union stays the model's `BodyNode`, and `redact`'s own result
- * keeps its paths on the server.
+ * keeps its paths on the server. An element's `catalog` key is no path: it is the author's own
+ * catalog identifier, the `data-catalog-idref` they wrote, which names a `qti-catalog` and nothing
+ * about where the element sits, so the form keeps it for the emitter's attachment hook.
  */
 const NoPath = Schema.optionalKey(Schema.Unknown).pipe(
   Schema.decodeTo(Schema.String, {
@@ -537,6 +544,7 @@ const kit: SchemaKit = {
 const BodyNodeSchema = Schema.Union([
   Schema.Struct({
     attributes: Schema.Array(Schema.Struct({ name: Schema.String, value: Schema.String })),
+    catalog: Schema.optionalKey(Schema.String),
     children: BodyNodes,
     kind: Schema.Literal("element"),
     path: NoPath,

@@ -5722,3 +5722,47 @@ describe("align-54 built-ins by kind: the engine holds a built-in a rule names b
       }),
   );
 });
+
+describe("buildItem, catalog references", () => {
+  it.effect(
+    "keeps a body element's data-catalog-idref as its catalog, drops and marks the attribute, and gives an element without one no catalog key",
+    () =>
+      Effect.gen(function* keepsCatalogIdref() {
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "p",
+                  [attr("id", "term"), attr("data-catalog-idref", "glossary")],
+                  [text("tern")],
+                ),
+                el("div", [], [text("No catalog.")]),
+              ],
+              declarations: [],
+            }),
+          ),
+        );
+
+        assert.deepStrictEqual(built.body[0], {
+          attributes: [{ name: "id", value: "term" }],
+          catalog: "glossary",
+          children: [{ kind: "text", text: "tern" }],
+          kind: "element",
+          path: `${body}/p`,
+          tag: "p",
+        });
+        assert.deepStrictEqual(built.body[1], {
+          attributes: [],
+          children: [{ kind: "text", text: "No catalog." }],
+          kind: "element",
+          path: `${body}/div`,
+          tag: "div",
+        });
+        assert.isFalse(Object.hasOwn(built.body[1] ?? {}, "catalog"));
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "data-catalog-idref", path: `${body}/p`, shown: "mark" },
+        ]);
+      }),
+  );
+});
