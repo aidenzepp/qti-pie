@@ -1019,6 +1019,43 @@ const ScopeContext = createContext<Scope | undefined>(undefined);
 const PlacementContext = createContext<Placement | undefined>(undefined);
 
 /**
+ * The props of {@link ItemScope}: one item, with the configuration and instance its tree is built
+ * with, `render`'s options, the React part replacements, and the components that read it.
+ *
+ * The scope builds the tree once and builds it again when any prop changes identity, so a host
+ * that composes an item by hand passes `options` and `parts` that stay the same object between
+ * its renders.
+ */
+export interface ItemScopeProps {
+  /**
+   * The components that read the item, each through {@link useInteraction}.
+   */
+  readonly children?: ReactNode;
+  /**
+   * The configuration `renderTree` takes.
+   */
+  readonly configuration: Configuration;
+  /**
+   * The instance token the tree is built with, one `checkInstance` passes.
+   */
+  readonly instance: string;
+  /**
+   * `render`'s options but its `parts`, which {@link ItemScopeProps.parts} gives as components. The
+   * tree is always built with {@link ItemScopeProps.instance}, so an `instance` here never reaches
+   * it.
+   */
+  readonly options?: Omit<Options, "parts">;
+  /**
+   * The React part replacements, keyed as the core's `parts` option is; none when absent.
+   */
+  readonly parts?: PartOverrides;
+  /**
+   * The item, as `redact` or `decodeRedacted` made it.
+   */
+  readonly redacted: Redacted;
+}
+
+/**
  * Hold one item for the interaction components inside: build its tree once through `renderTree`,
  * with the instance given and `options` (no core `parts`), and find each interaction root and the
  * response it binds. `Item` renders inside one; a test mounts a component inside one to reach its
@@ -1049,14 +1086,7 @@ export const ItemScope = ({
   options = noOptions,
   parts = noParts,
   redacted,
-}: {
-  readonly children?: ReactNode;
-  readonly configuration: Configuration;
-  readonly instance: string;
-  readonly options?: Omit<Options, "parts">;
-  readonly parts?: PartOverrides;
-  readonly redacted: Redacted;
-}): ReactNode => {
+}: ItemScopeProps): ReactNode => {
   const scope = useMemo((): Scope => {
     const { parts: _core, ...rest }: Options = options;
     const tree = treeOf({ configuration, instance, options: rest, redacted });
