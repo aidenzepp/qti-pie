@@ -28,6 +28,7 @@ import { ledgerHtml } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
 import type { MessageKey } from "#plate/messages.ts";
 import type { Item } from "#plate/model/item.ts";
+import { format } from "#plate/model/values.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import { checkTree, nameOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
@@ -643,6 +644,40 @@ const returnOf = (html: string): string | true | undefined =>
   fieldOf(themeBoxOf(html), "return").attrs["value"];
 
 /**
+ * Read the item form's element children of an item page: the hidden default submit, the item's
+ * root and the visible Submit, in that order, asserting the shape of each.
+ *
+ * @param html The page.
+ * @returns The hidden default and the visible Submit.
+ */
+const submitsOf = (html: string) => {
+  const form = find(
+    html,
+    (element) => element.tag === "form" && String(element.attrs["action"]).startsWith("/item?"),
+  );
+  const [first, root, last, ...others] = form.children.filter(
+    (child): child is Element => child.kind === "element",
+  );
+
+  assert.lengthOf(others, 0);
+  assert.isDefined(first);
+  assert.isDefined(last);
+  assert.strictEqual(first.tag, "button");
+  assert.strictEqual(first.attrs["type"], "submit");
+  assert.isTrue(Object.hasOwn(first.attrs, "hidden"));
+  assert.isFalse(Object.hasOwn(first.attrs, "name"));
+  assert.isFalse(Object.hasOwn(first.attrs, "aria-hidden"));
+  assert.isFalse(Object.hasOwn(first.attrs, "tabindex"));
+  assert.isTrue(Object.hasOwn(root?.attrs ?? {}, "lang"));
+  assert.strictEqual(last.tag, "button");
+  assert.strictEqual(last.attrs["type"], "submit");
+  assert.isFalse(Object.hasOwn(last.attrs, "hidden"));
+  assert.strictEqual(textOf(last.children), message("en", "submit"));
+
+  return { first, last };
+};
+
+/**
  * The state a page after a submit names in its title.
  */
 type State = Extract<MessageKey, "notAccepted" | "responseRecorded" | "scored">;
@@ -1080,6 +1115,29 @@ describe("dev/page.ts", { tags: ["corpus"] }, () => {
         assert.isTrue(limited.every((element) => Object.hasOwn(element.attrs, "disabled")));
         assert.isAbove(unlimited.length, 2);
         assert.isTrue(unlimited.every((element) => !Object.hasOwn(element.attrs, "disabled")));
+      }),
+  );
+
+  it.effect(
+    "[W0-DEFAULT-SUBMIT] the item page's form begins with a hidden default submit, disabled exactly when the Submit is",
+    () =>
+      Effect.gen(function* defaultSubmit() {
+        const open = playground();
+        const opened = yield* get(open, itemTarget(paths.bg007));
+        const fresh = submitsOf(opened.html);
+
+        assert.isFalse(Object.hasOwn(fresh.first.attrs, "disabled"));
+        assert.isFalse(Object.hasOwn(fresh.last.attrs, "disabled"));
+
+        const limited = playground({ configuration: { maxAttempts: 1 } });
+        const limitedOpen = yield* get(limited, itemTarget(paths.bg007));
+        const answered = yield* post(limited, actionOf(limitedOpen.html), [
+          [entryName(instanceOf(limitedOpen.html), "RESPONSE"), "false"],
+        ]);
+        const done = submitsOf(answered.html);
+
+        assert.isTrue(Object.hasOwn(done.last.attrs, "disabled"));
+        assert.isTrue(Object.hasOwn(done.first.attrs, "disabled"));
       }),
   );
 
@@ -2248,10 +2306,10 @@ const begunUnder = Effect.fnUntraced(function* begunUnder(accepted: Accepted, se
  * Write a value's members as text, for comparing two template values.
  *
  * @param value The value, none when the record holds none.
- * @returns Its members' values, each through `String`, space-separated.
+ * @returns Its members' values, each in its lexical form, space-separated.
  */
 const written = (value: Value | undefined): string =>
-  (value?.values ?? []).map((member) => String(member.value)).join(" ");
+  (value?.values ?? []).map((member) => format(member)).join(" ");
 
 /**
  * Give the Notice parts of a page, each a `role="note"` element.

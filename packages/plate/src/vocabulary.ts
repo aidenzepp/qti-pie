@@ -19,7 +19,8 @@ import { testFeatureKeys } from "#plate/test-features/table.ts";
 /**
  * The eleven QTI base types, as the `base-type` attribute spells them.
  *
- * The value model holds ten of them; a declaration of `file` is a mark (see {@link renders}).
+ * The value model holds all eleven; a `file` is its name, size and type, never its bytes
+ * (`FileValue` in `#plate/model/values.ts`).
  */
 export const baseTypes = [
   "identifier",
@@ -267,10 +268,9 @@ export interface Renders {
   readonly engine: readonly string[];
   /**
    * The features recorded on the verdict with no body notice. A declaration the model does not hold
-   * carries one: its base type (`file`, or `base-type=""` when it has none) or
-   * `cardinality="record"`, which an outcome or template declaration of that cardinality carries,
-   * and a record response declaration only when the item model marks it, for a `file` base type of
-   * its own or of a field, since the model holds every other. Beyond these, a `qti-*` element
+   * carries one: `base-type=""` when it has no base type, or `cardinality="record"`, which an
+   * outcome or template declaration of that cardinality carries; the model holds every record
+   * response and every base type, `file` included. Beyond these, a `qti-*` element
    * outside the item body and outside `elements` is a mark keyed by its own name, response
    * processing by a template URI outside the built-ins is a mark keyed `template="<uri>"`, inline
    * response processing with an element outside `engine` and the expression kinds is a mark keyed
@@ -364,15 +364,9 @@ export const renders = {
       on: ["qti-assessment-item"],
       when: { kind: "attribute-true", name: "adaptive" },
     },
-    {
-      feature: 'base-type="file"',
-      on: declarations,
-      when: { kind: "attribute-value", name: "base-type", value: "file" },
-    },
-    // A record response declaration is the item model's to mark, since this condition cannot see a
-    // field's base type: it holds one in `Item.records` with no mark, and marks one itself
-    // (`buildItem`) when its own base type, or a field's, is `file`. A test's outcome declarations
-    // take this rule too.
+    // A record response declaration is never marked: the item model holds every one in
+    // `Item.records`, a field of `file` as a single of `file`. An outcome or template declaration
+    // of that cardinality is marked, and a test's outcome declarations take this rule too.
     {
       feature: 'cardinality="record"',
       on: ["qti-outcome-declaration", "qti-template-declaration"],
@@ -625,6 +619,19 @@ export const behaviourClasses: Readonly<Record<ClassOwner, readonly string[]>> =
    */
   "text-entry-interaction": [],
 };
+
+/**
+ * The reserved `data-*` table and its predicates (decision D24), defined in `#plate/emit/parts.ts`
+ * and exported here as their declared home: the emitter is a browser module and must not
+ * value-import this file, whose own imports reach `Schema` from `effect`, which the browser
+ * modules' allowlist refuses. See {@link reservedDataNames} there for D24's text.
+ */
+export {
+  isAuthorData,
+  isReservedData,
+  reservedDataNames,
+  reservedDataPrefix,
+} from "#plate/emit/parts.ts";
 
 /**
  * The two navigation modes of a test part, as its `navigation-mode` attribute spells them.

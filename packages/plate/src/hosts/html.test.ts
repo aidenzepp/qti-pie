@@ -219,8 +219,15 @@ describe("the plain-HTML host", () => {
         assert.strictEqual(form?.attrs["method"], "post");
         assert.lengthOf(slotted(inside, rowFor("item", "root").slot), 1);
         assert.deepStrictEqual(
-          inside.flatMap((element) => (element.tag === "button" ? [element.attrs["type"]] : [])),
-          ["submit"],
+          inside.flatMap((element) =>
+            element.tag === "button"
+              ? [[element.attrs["type"], Object.hasOwn(element.attrs, "hidden")]]
+              : [],
+          ),
+          [
+            ["submit", true],
+            ["submit", false],
+          ],
         );
         assert.lengthOf(slotted(elements, rowFor("item", "status").slot), 0);
       }),
@@ -415,6 +422,62 @@ describe("the plain-HTML host", () => {
         ]);
       }),
     { tags: ["corpus"] },
+  );
+
+  it.effect(
+    "[W0-DEFAULT-SUBMIT] the HTML host's form begins with a hidden default submit and ends with the visible Submit",
+    () =>
+      Effect.gen(function* defaultSubmitFirst() {
+        const handler = yield* htmlHost(hexItem.location, hexItem.bytes);
+        const { elements } = yield* pageOf(
+          yield* Effect.promise(() => handler(new Request(`${origin}/`))),
+        );
+        const form = elements.find((element) => element.tag === "form");
+        const children = (form?.children ?? []).filter(
+          (child): child is Element => child.kind === "element",
+        );
+        const [first, root, last, ...others] = children;
+
+        assert.lengthOf(others, 0);
+        assert.strictEqual(first?.tag, "button");
+        assert.strictEqual(first?.attrs["type"], "submit");
+        assert.isTrue(Object.hasOwn(first?.attrs ?? {}, "hidden"));
+        assert.isFalse(Object.hasOwn(first?.attrs ?? {}, "name"));
+        assert.isFalse(Object.hasOwn(first?.attrs ?? {}, "aria-hidden"));
+        assert.isFalse(Object.hasOwn(first?.attrs ?? {}, "tabindex"));
+        assert.isTrue(Object.hasOwn(root?.attrs ?? {}, "lang"));
+        assert.strictEqual(last?.tag, "button");
+        assert.strictEqual(last?.attrs["type"], "submit");
+        assert.strictEqual(textOf(last ?? assert.fail("the form has no last button")), "Submit");
+        assert.isFalse(Object.hasOwn(last?.attrs ?? {}, "hidden"));
+      }),
+  );
+
+  it.effect("[W0-DEFAULT-SUBMIT] a form-urlencoded post with no button entry still scores", () =>
+    Effect.gen(function* postWithoutButton() {
+      const { locale } = yield* configure({});
+      const handler = yield* htmlHost(hexItem.location, hexItem.bytes);
+      const page = yield* pageOf(yield* Effect.promise(() => handler(new Request(`${origin}/`))));
+      const buttons = page.elements.filter((element) => element.tag === "button");
+
+      // No button of the form names an entry, so a post through either submit carries only the
+      // Text Entry's entry, which is what this post sends.
+      assert.isAbove(buttons.length, 0);
+      assert.isTrue(buttons.every((button) => !Object.hasOwn(button.attrs, "name")));
+
+      const response = yield* Effect.promise(() =>
+        handler(formPost([[textEntryName(page.elements), "ff"]])),
+      );
+      const { elements } = yield* pageOf(response);
+      const [status] = slotted(elements, rowFor("item", "status").slot);
+
+      assert.strictEqual(response.status, 200);
+      assert.lengthOf(slotted(elements, rowFor("item", "message").slot), 0);
+      assert.include(
+        textOf(status ?? assert.fail("the page holds no Status part")),
+        message(locale, "score", { score: "1" }),
+      );
+    }),
   );
 
   it.effect("scores a Text Entry's integer in the base it declares: ff in base 16 scores 1", () =>

@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
+import { htmlSubset } from "#plate/emit/body.ts";
 import {
   classifyUrl,
   formatUrl,
@@ -83,6 +84,10 @@ describe("urlAttributes", () => {
       "img@src resource",
       "object@data embed",
       "q@cite link",
+      "qti-interaction-module@fallback-path package",
+      "qti-interaction-module@primary-path package",
+      "qti-interaction-modules@primary-configuration package",
+      "qti-interaction-modules@secondary-configuration package",
       "source@src resource",
       "source@srcset srcset",
       "track@src resource",
@@ -97,6 +102,39 @@ describe("urlAttributes", () => {
     assert.deepStrictEqual(urlContextOf("object", "data"), Option.some<UrlContext>("embed"));
     assert.deepStrictEqual(urlContextOf("param", "value"), Option.none());
     assert.deepStrictEqual(urlContextOf("a", "src"), Option.none());
+  });
+
+  it("[W0-AZ] the URL table names the four PCI module locations as package-only", () => {
+    const rows = [
+      ["qti-interaction-modules", "primary-configuration"],
+      ["qti-interaction-modules", "secondary-configuration"],
+      ["qti-interaction-module", "primary-path"],
+      ["qti-interaction-module", "fallback-path"],
+    ] as const;
+
+    for (const [element, attribute] of rows) {
+      assert.deepStrictEqual(
+        urlContextOf(element, attribute),
+        Option.some<UrlContext>("package"),
+        `${element}@${attribute}`,
+      );
+    }
+
+    assert.deepStrictEqual(urlContextOf("qti-interaction-module", "id"), Option.none());
+    assert.deepStrictEqual(urlContextOf("qti-interaction-modules", "primary-path"), Option.none());
+  });
+
+  it("[W0-AZ] the body emitter meets none of the new rows", () => {
+    // A pin: every `package` row names an element outside the HTML subset the body emitter writes,
+    // so the emitter classifies no value in that context and the rendered HTML does not change.
+    const packageRows = urlAttributes.filter((row) => row.context === "package");
+
+    assert.lengthOf(packageRows, 4);
+    assert.deepStrictEqual(
+      packageRows.filter((row) => htmlSubset.has(row.element)),
+      [],
+    );
+    assert.isTrue(packageRows.every((row) => row.element.startsWith("qti-")));
   });
 });
 
@@ -196,6 +234,61 @@ describe("classifyUrl", () => {
       }
     }
     assert.strictEqual(schemeFeature("mailto"), "url-scheme:mailto");
+  });
+
+  it("[W0-AZ] the package context keeps a package-relative path and an https location and drops the rest", () => {
+    assert.deepStrictEqual(
+      classifyUrl("package", "modules/counter.js"),
+      inPackage("modules/counter.js"),
+    );
+    assert.deepStrictEqual(
+      classifyUrl("package", "modules/lib/handlebars.min"),
+      inPackage("modules/lib/handlebars.min"),
+    );
+    assert.deepStrictEqual(classifyUrl("package", "./config.json"), inPackage("config.json"));
+    assert.deepStrictEqual(
+      classifyUrl("package", "https://cdn.example/x.js"),
+      remote("https://cdn.example/x.js"),
+    );
+    assert.deepStrictEqual(
+      classifyUrl("package", "HTTPS://CDN.Example/a b.js"),
+      remote("https://cdn.example/a%20b.js"),
+    );
+    assert.deepStrictEqual(
+      classifyUrl("package", "http://cdn.example/x.js"),
+      dropped(schemeFeature("http")),
+    );
+    assert.deepStrictEqual(
+      classifyUrl("package", "http:evil.com/x"),
+      dropped(schemeFeature("http")),
+    );
+    assert.deepStrictEqual(
+      // oxlint-disable-next-line eslint/no-script-url -- the value is test input the classifier must drop, never a URL this code navigates to.
+      classifyUrl("package", "javascript:alert(1)"),
+      dropped(schemeFeature("javascript")),
+    );
+    assert.deepStrictEqual(
+      classifyUrl("package", "data:text/javascript,1"),
+      dropped(schemeFeature("data")),
+    );
+    assert.deepStrictEqual(
+      classifyUrl("package", "//cdn.example/x.js"),
+      dropped(outsidePackageFeature),
+    );
+    assert.deepStrictEqual(classifyUrl("package", "../x.js"), dropped(outsidePackageFeature));
+    assert.deepStrictEqual(classifyUrl("package", "/x.js"), dropped(outsidePackageFeature));
+    assert.deepStrictEqual(classifyUrl("package", ""), dropped(invalidUrlFeature));
+    assert.deepStrictEqual(classifyUrl("package", "#q1"), inPackage("./#q1"));
+    // A kept value's written form reads back as the same classification, as in every context.
+    for (const value of ["modules/counter.js", "https://cdn.example/x.js"]) {
+      const kept = classifyUrl("package", value);
+
+      if (kept.kind === "dropped") {
+        assert.fail(`${value} was dropped`);
+      }
+
+      assert.deepStrictEqual(classifyUrl("package", formatUrl(kept)), kept);
+    }
   });
 
   it("keeps #q1 as a same-document fragment in the link context", () => {

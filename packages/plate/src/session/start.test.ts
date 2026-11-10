@@ -9,6 +9,7 @@ import type { AdaptivePolicy } from "#plate/engine/adaptive.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
 import { decode } from "#plate/form/encoding.ts";
 import { defaultLabel, drawBelow, drawStream, templateLabel } from "#plate/engine/random.ts";
+import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
@@ -29,6 +30,10 @@ import {
 } from "#plate/session/start.ts";
 import type { Current, ItemView } from "#plate/session/start.ts";
 import { submitItem } from "#plate/session/submit.ts";
+import { stub } from "#plate/test-features/contract.ts";
+import type { EnterContext, EnterVerdict } from "#plate/test-features/contract.ts";
+import { testFeatures } from "#plate/test-features/table.ts";
+import type { TestFeatureTable } from "#plate/test-features/table.ts";
 import { open } from "#plate/validate/open.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { acceptedItem, acceptForTest } from "#plate/validate/verdict.ts";
@@ -1178,6 +1183,7 @@ describe("current", () => {
         );
 
         assert.deepStrictEqual(shown, {
+          content: [],
           items: guideRefs.map(([ref], index) => ({
             numAttempts: 0,
             permits: { review: true, solution: false },
@@ -3886,6 +3892,165 @@ describe("a package whose item ref's template default reads a field of an item's
           [mismatch.identifier, mismatch.actual, mismatch.expected],
           ["T", "float single", "integer single"],
         );
+      }),
+  );
+});
+
+/**
+ * Build a table of stubs with a pre-condition module, landed for these tests alone, whose `enter`
+ * is the function given.
+ *
+ * @param enter What it answers when a place is entered.
+ * @returns The table.
+ */
+const entering = (
+  enter: (context: EnterContext) => Option.Option<EnterVerdict>,
+): TestFeatureTable =>
+  testFeatures.map((module) =>
+    module.key === "qti-pre-condition"
+      ? {
+          ...stub({
+            element: module.element,
+            feature: module.feature,
+            issue: module.issue,
+            key: module.key,
+            namespace: module.namespace,
+          }),
+          enter,
+          implemented: true,
+        }
+      : module,
+  );
+
+/**
+ * The hand-built items the entering tests deliver: three Choices in one linear part.
+ */
+const enteringRefs: readonly DefaultedRef[] = ["one", "two", "three"].map(
+  (ref) =>
+    [ref, "", itemXml(ref, { choices: ["A", "B"], defaultValue: false, shuffle: false })] as const,
+);
+
+describe("[W0-BE] the entering gate at the start", () => {
+  it.effect(
+    "[W0-BE] a first place the modules skip is never presented: the session starts on the place after it, with the skipped item's record untouched",
+    () =>
+      Effect.gen(function* skipsFirst() {
+        const delivery = yield* linearDelivery("entering", enteringRefs);
+        const configuration = yield* configure({});
+        const asked: EnterContext[] = [];
+        const features = entering((context) => {
+          asked.push(context);
+
+          return context.sequenceIndex === 1 ? Option.some({ kind: "skip" }) : Option.none();
+        });
+        const session = Result.getOrElse(
+          startTest(delivery.test, delivery.items, configuration, {
+            features,
+            instance,
+            now: startedAt,
+          }),
+          (failure) => assert.fail(`startTest refused: ${failure.message}`),
+        );
+        const plain = started(delivery, configuration);
+
+        assert.strictEqual(session.position, 1);
+        assert.deepStrictEqual(
+          session.items.map((item) => item.presented),
+          [false, true, false],
+        );
+        assert.deepStrictEqual(
+          session.items[0]?.record,
+          fresh((delivery.items.get("one") ?? assert.fail("no item one")).item, `${instance}.1`),
+        );
+        assert.notDeepEqual(session.items[0]?.record, plain.items[0]?.record);
+        assert.deepStrictEqual(
+          asked.map((context) => context.sequenceIndex),
+          [1, 2],
+        );
+        assert.deepStrictEqual(
+          (asked[0]?.items ?? Option.none()).pipe(Option.map((items) => [...items.keys()])),
+          Option.some(["one", "two", "three"]),
+        );
+        assert.deepStrictEqual(asked[0]?.now, Option.some(startedAt));
+        assert.strictEqual(asked[0]?.session.status, "interacting");
+        assert.deepStrictEqual(session.parts, [{ identifier: "part", status: "current" }]);
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] a test whose every place is skipped starts closed; an exit from the test at the first place does the same; and the default table enters the first place",
+    () =>
+      Effect.gen(function* skipsAll() {
+        const delivery = yield* linearDelivery("entering", enteringRefs);
+        const configuration = yield* configure({});
+        const skipping = entering(() => Option.some({ kind: "skip" }));
+        const exiting = entering(() =>
+          Option.some({ kind: "exit", scope: { identifier: "entering", kind: "test" } }),
+        );
+        const closed = Result.getOrElse(
+          startTest(delivery.test, delivery.items, configuration, {
+            features: skipping,
+            instance,
+            now: startedAt,
+          }),
+          (failure) => assert.fail(`startTest refused: ${failure.message}`),
+        );
+        const exited = Result.getOrElse(
+          startTest(delivery.test, delivery.items, configuration, {
+            features: exiting,
+            instance,
+            now: startedAt,
+          }),
+          (failure) => assert.fail(`startTest refused: ${failure.message}`),
+        );
+
+        for (const session of [closed, exited]) {
+          assert.strictEqual(session.status, "closed");
+          assert.deepStrictEqual(session.parts, [{ identifier: "part", status: "ended" }]);
+          assert.deepStrictEqual(
+            session.items.map((item) => item.presented),
+            [false, false, false],
+          );
+        }
+
+        assert.strictEqual(started(delivery, configuration).items[0]?.presented, true);
+      }),
+  );
+});
+
+describe("the test-feature modules' content", () => {
+  it.effect(
+    "[W0-BF] every stub presents nothing: content is empty on every view and the summary",
+    () =>
+      Effect.gen(function* stubsPresentNothing() {
+        const choices = ["A", "B"];
+        const delivery = yield* builtDelivery("stubs", [
+          ["first", itemXml("first", { choices, defaultValue: false, shuffle: false })],
+          ["second", itemXml("second", { choices, defaultValue: false, shuffle: false })],
+        ]);
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration);
+        const closed: TestSession = {
+          ...session,
+          parts: session.parts.map((part) => ({ ...part, status: "ended" })),
+          status: "closed",
+        };
+        const views = Result.getOrElse(
+          itemViews(delivery.test, session, configuration, [1, 2]),
+          (failure) => assert.fail(failure.message),
+        );
+        const summary = Result.getOrElse(current(delivery.test, closed, configuration), (failure) =>
+          assert.fail(failure.message),
+        );
+
+        assert.deepStrictEqual(
+          views.map((view) => view.content),
+          [[], []],
+        );
+        assert.deepStrictEqual(currentItem(delivery, session, configuration).content, []);
+        assert.deepStrictEqual(viewAt(delivery, session, configuration, 2).content, []);
+        assert.strictEqual(summary.kind, "summary");
+        assert.deepStrictEqual(summary.content, []);
       }),
   );
 });

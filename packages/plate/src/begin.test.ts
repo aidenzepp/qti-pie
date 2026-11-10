@@ -7,6 +7,7 @@ import type { SourceChild, SourceElement } from "#plate/document/source.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
 import { drawBelow, drawStream, templateLabel } from "#plate/engine/random.ts";
 import { fresh } from "#plate/model/record.ts";
+import type { ItemRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { restore } from "#plate/restore.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
@@ -174,13 +175,13 @@ const isNullVariable = (identifier: string): SourceElement =>
   el("qti-is-null", [], [el("qti-variable", [attr("identifier", identifier)])]);
 
 /**
- * The seven shapes of template processing `check` accepts whose first attempt reads or sets a
+ * The four shapes of template processing `check` accepts whose first attempt reads or sets a
  * name the engine does not hold while template processing runs (review `079e8c44` P1-1), each
  * beside {@link answered} and {@link scored}: a read of `QTI_CONTEXT`; a read of a context
- * variable through `qti-variable`, then through `qti-default`; a read of a template variable of
- * cardinality `record`; a set of one of base type `file`; a `qti-set-correct-response` of a `file`
- * response; and a `qti-set-default-value` of a `file` outcome. `check` marks each, so its template
- * processing does not run.
+ * variable through `qti-variable`, then through `qti-default`; and a read of a template variable
+ * of cardinality `record`. `check` marks each, so its template processing does not run. A set of a
+ * `file` declaration was a shape here until `[W0-AY]` held the file type; those are
+ * {@link fileTemplating}.
  */
 const unheldTemplating: readonly Accepted[] = [
   accepted(
@@ -218,6 +219,16 @@ const unheldTemplating: readonly Accepted[] = [
     declaration("qti-template-declaration", "B", "boolean"),
     processingOf(setFrom("qti-set-template-value", "B", isNullVariable("R"))),
   ),
+];
+
+/**
+ * The three shapes of template processing that set a `file` declaration to NULL, each beside
+ * {@link answered} and {@link scored}: a `qti-set-template-value` of a `file` template variable,
+ * a `qti-set-correct-response` of a `file` response, and a `qti-set-default-value` of a `file`
+ * outcome. `[W0-AY]` holds the file type, so `check` marks none and each template processing
+ * runs.
+ */
+const fileTemplating: readonly Accepted[] = [
   accepted(
     "sets-file-template",
     answered,
@@ -372,6 +383,35 @@ describe("begin", () => {
             { ...fresh(document.item, instance), responses: { RESPONSE: integer(7n) }, seed: "42" },
             label,
           );
+        }
+      }),
+  );
+
+  it.effect(
+    "[W0-AY] begins each item whose template processing sets a file declaration to NULL, unmarked, its template processing run, and the NULL file set where the rule names it",
+    () =>
+      Effect.gen(function* beginsFileTemplating() {
+        const nullFile: Value = { baseType: "file", cardinality: "single", values: [] };
+        const set: readonly (readonly [
+          string,
+          keyof Pick<ItemRecord, "correct" | "defaults" | "templates">,
+          string,
+        ])[] = [
+          ["sets-file-template", "templates", "F"],
+          ["sets-file-correct", "correct", "RF"],
+          ["sets-file-default", "defaults", "OF"],
+        ];
+
+        for (const [index, document] of fileTemplating.entries()) {
+          const label = document.item.identifier;
+          const [, field, identifier] = set[index] ?? assert.fail(`${label} has no expectation.`);
+          const { record } = yield* begun(document, "42");
+
+          assert.isTrue(Option.isSome(document.item.templateProcessing), label);
+          assert.deepStrictEqual(document.unsupported, [], label);
+          assert.deepStrictEqual(record[field], { [identifier]: nullFile }, label);
+          assert.deepStrictEqual(record.responses["RESPONSE"], integer(7n), label);
+          assert.deepStrictEqual(record.outcomes["SCORE"], float(1), label);
         }
       }),
   );

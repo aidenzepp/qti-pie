@@ -4,16 +4,16 @@
  *
  * It holds the public surface of `.` under the same names, with each function that returns a
  * `Result` (and `acceptedItem`, which returns an `Option`) replaced by its Effect version:
- * `render`, `renderStatus`, `renderNavigation`, `current`, `itemView`, `redact` and
- * `checkResponses` read the {@link Configuration} service in place of a configuration argument;
- * `begin`, `startTest`, `advance` and `results` take time from `Clock` and draw an absent seed
- * through {@link Randomness}; the rest lift the plain call's `Result` unchanged. Each mirror calls
- * its plain function, so a given input succeeds and fails as it does from `.`. `open`,
- * `openPackage` and `configure` already return Effects, and the functions that cannot fail are the
- * plain ones, so all of these are the same values `.` exports. Beside them are the service and its
- * layers ({@link ConfigurationFromEnv}, {@link configurationLayer}), {@link Randomness} and its
- * draws, the stored forms' Schemas and their JSON Schema documents, {@link Refused} and
- * {@link PlateError}.
+ * `render`, `renderStatus`, `renderNavigation`, `renderTestContent`, `current`, `itemView`,
+ * `redact` and `checkResponses` read the {@link Configuration} service in place of a configuration
+ * argument; `begin`, `startTest`, `advance` and `results` take time from `Clock` and draw an absent
+ * seed through {@link Randomness}; the rest lift the plain call's `Result` unchanged. Each mirror
+ * calls its plain function, so a given input succeeds and fails as it does from `.`. `open`,
+ * `openPackage`, `configure` and `readPnp` already return Effects, and the functions that cannot
+ * fail are the plain ones, so all of these are the same values `.` exports. Beside them are the
+ * service and its layers ({@link ConfigurationFromEnv}, {@link configurationLayer}),
+ * {@link Randomness} and its draws, the stored forms' Schemas and their JSON Schema documents,
+ * {@link Refused} and {@link PlateError}.
  *
  * One name of `.` means something else here: `Configuration` is the service, not the plain settings
  * type. A host names that type as the service's shape, `(typeof Configuration)["Service"]`, equally
@@ -50,6 +50,7 @@ export {
   render,
   renderNavigation,
   renderStatus,
+  renderTestContent,
   restore,
   score,
 } from "#plate/effect/operations.ts";
@@ -148,6 +149,7 @@ export {
   InvalidConfiguration,
   InvalidHeadingLevel,
   InvalidInstance,
+  InvalidPnp,
   InvalidRecord,
   InvalidRedacted,
   InvalidResponses,
@@ -170,8 +172,11 @@ export {
   partition,
   PartSwapRefused,
   PlaintextElement,
+  PnpSupportsSchema,
+  postedStrings,
   postings,
   RawTextChildren,
+  readPnp,
   RecordMismatch,
   RecordOperandError,
   RecordRequired,
@@ -180,6 +185,7 @@ export {
   SessionMismatch,
   solution,
   StepResponseMisfit,
+  SupportsSchema,
   TestNotDeliverable,
   UnknownIdentifierError,
   UnknownItemRef,
