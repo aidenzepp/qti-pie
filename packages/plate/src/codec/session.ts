@@ -24,16 +24,24 @@ import type { NavigationMode } from "#plate/vocabulary.ts";
 const ValuesSchema = Schema.Record(Schema.String, ValueSchema);
 
 /**
- * An item's saved responses by identifier, each a value or, for a record response, a record, as
- * the session's `Responses` holds them.
+ * An item's saved responses by identifier, each a value or, for a record response, a record, as the
+ * session's `Responses` holds them. {@link SavedResponsesJson} is the form {@link encodeSession}
+ * stores under an item's `saved`, and the form an item view carries as its `values`.
  */
-const SavedSchema = Schema.Record(Schema.String, ResponseValueSchema);
+export const SavedResponsesSchema = Schema.Record(Schema.String, ResponseValueSchema);
 
 /**
- * The Schema of one item of a test session. `saved`, `firstOutcomes` and `templateDefaults` are
- * left out of the stored form when there are none.
+ * An item's saved responses in the JSON form {@link SavedResponsesSchema} writes: plain data, which
+ * `JSON.stringify` writes without loss.
+ */
+export type SavedResponsesJson = Schema.Codec.Encoded<typeof SavedResponsesSchema>;
+
+/**
+ * The Schema of one item of a test session. `adaptive` and `locked` are always written; `saved`,
+ * `firstOutcomes` and `templateDefaults` are left out of the stored form when there are none.
  */
 const SessionItemSchema = Schema.Struct({
+  adaptive: Schema.Boolean,
   datestamp: Schema.String,
   duration: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
   firstOutcomes: Schema.OptionFromOptionalKey(ValuesSchema),
@@ -41,7 +49,7 @@ const SessionItemSchema = Schema.Struct({
   presented: Schema.Boolean,
   record: ItemRecordSchema,
   ref: Schema.String,
-  saved: Schema.OptionFromOptionalKey(SavedSchema),
+  saved: Schema.OptionFromOptionalKey(SavedResponsesSchema),
   sequenceIndex: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   templateDefaults: Schema.OptionFromOptionalKey(ValuesSchema),
 });
@@ -102,13 +110,14 @@ export const TestSessionSchema = Schema.Struct({
 );
 
 /**
- * A test session in the form the host stores: JSON-safe data that names its version, `5`. Every
+ * A test session in the form the host stores: JSON-safe data that names its version, `6`. Every
  * value is written as the stored item record writes it, integers as their decimal digits, so no
  * integer is rounded on the way through the host, the test's `outcomes` among them; each item's
  * `record` is a stored item record, its seed, template values, correct responses and defaults with
  * it, so it is server data as the record is, and so is the session's own `seed`, which keys every
- * value an item draws; an item's `saved`, `firstOutcomes` and `templateDefaults`, and the
- * session's `shuffleSeed`, are absent when there are none.
+ * value an item draws; each item carries `adaptive` and `locked`; an item's `saved`,
+ * `firstOutcomes` and `templateDefaults`, and the session's `shuffleSeed`, are absent when there
+ * are none.
  */
 export type StoredTestSession = typeof TestSessionSchema.Encoded;
 
@@ -200,7 +209,7 @@ export class InvalidSession extends Data.TaggedError("InvalidSession")<{
    */
   readonly stage: SessionStage;
   /**
-   * The value the stored session holds under `version`, which is `5` when something else is
+   * The value the stored session holds under `version`, which is `6` when something else is
    * wrong; none when it is not an object or names no version, and at stage `encode`, where no
    * stored session was read.
    */

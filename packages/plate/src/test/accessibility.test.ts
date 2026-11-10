@@ -186,6 +186,13 @@ const status = h(
 const submit = h("button", { type: "submit" }, [text("Submit")]);
 
 /**
+ * The host's hidden default submit: the form's first submit button in tree order, `hidden`, so
+ * implicit submission posts through the host's own button and never through a submit button the
+ * item holds.
+ */
+const hiddenDefault = h("button", { hidden: true, type: "submit" }, [text("Submit")]);
+
+/**
  * The test navigation a native form post renders: each button part keeps its marker and has its
  * `type` swapped to `submit`, Previous, Next, Submit and End in that order.
  */
@@ -393,6 +400,16 @@ describe("isFocusable", () => {
       h("fieldset", { disabled: true }, [h("legend", {}, [shielded])]),
     ]);
     assert.isFalse(isFocusable(shielded, outer));
+  });
+
+  it("[W0-DEFAULT-SUBMIT] refuses an element carrying hidden, or one below it, which is not rendered", () => {
+    const hiddenButton = h("button", { hidden: true, type: "submit" }, [text("Submit")]);
+    const inHidden = h("input", { type: "text" });
+    const shown = h("button", { type: "submit" }, [text("Submit")]);
+    const form = h("form", {}, [hiddenButton, h("div", { hidden: true }, [inHidden]), shown]);
+    assert.isFalse(isFocusable(hiddenButton, form));
+    assert.isFalse(isFocusable(inHidden, form));
+    assert.isTrue(isFocusable(shown, form));
   });
 });
 
@@ -703,6 +720,24 @@ describe("checkTree", () => {
 
   it("submit-order: passes a form whose submit button is last", () => {
     assert.deepStrictEqual(checksOf(item([status, capital, submit])), []);
+  });
+
+  it("[W0-DEFAULT-SUBMIT] submit-order: a hidden submit button first in its form, before the controls, is the default button and passes", () => {
+    assert.deepStrictEqual(checksOf(item([hiddenDefault, status, capital, submit])), []);
+  });
+
+  it("[W0-DEFAULT-SUBMIT] submit-order: a hidden default first does not excuse a later submit button before a control", () => {
+    assert.deepStrictEqual(
+      checkTree(item([hiddenDefault, status, submit, capital]), { baseLevel: 2 }),
+      [{ check: "submit-order", path: ["qti-assessment-item", "form", "button"] }],
+    );
+  });
+
+  it("[W0-DEFAULT-SUBMIT] submit-order: a hidden submit button that is not the first submit button is held to the order", () => {
+    assert.deepStrictEqual(checksOf(item([status, submit, hiddenDefault, capital])), [
+      "submit-order",
+      "submit-order",
+    ]);
   });
 
   it("submit-order: passes a Choice, then a Save button, then four navigation submit buttons", () => {

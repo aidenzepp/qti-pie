@@ -1,5 +1,6 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The generated documents spell the XML encoding labels (`UTF-8`) as crust's reader reports them. */
 import { schema } from "@bjornpagen/grizzle";
+import type { RegexText } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
@@ -16,9 +17,12 @@ import type { Child } from "@qti-pie/crust/tree.ts";
 import {
   AttributeSlot,
   Flag,
+  GoverningOf,
+  Governor,
   grammar,
   HeldRootsUnder,
   KindByNameUnder,
+  KindGovernor,
   KindNamespace,
   NodeKind,
   nonElementKinds,
@@ -46,6 +50,7 @@ import {
   entityRefChars,
   Namespace,
   OpenElementName,
+  OpenElementType,
   Pi,
   SdDecl,
   textChars,
@@ -64,23 +69,23 @@ import { mathmlNamespace, namespaceClassOf, namespaceNameOf } from "#pantry/voca
 /**
  * A text field's pattern compiled as grizzle reads it: `str.regex`'s grammar is ECMAScript's under
  * the field's own flags, so JavaScript's `RegExp` decides exactly the language PostgreSQL's CHECK
- * holds the column to.
+ * holds the column to. Each field read here is a `str.regex` text, whose `patterns` are its one
+ * pattern (grizzle's `RegexText`, `text/field.ts` at `3cc8fbd`).
  *
- * @param field - The field.
- * @param field.desc - Its description, the pattern's source and flags.
+ * @param field - The field's type.
  * @returns The compiled pattern.
  */
-const patternOf = (field: { readonly desc: { readonly flags: string; readonly source: string } }) =>
-  new RegExp(field.desc.source, field.desc.flags);
+const patternOf = (field: RegexText<string>) =>
+  new RegExp(field.patterns[0].source, field.patterns[0].flags);
 
 /**
  * The patterns of `Node.chars` by kind that the arm checks match, under `Compute.matches`'s flags,
  * `u`.
  */
 const charsPatterns = {
-  entityRef: new RegExp(entityRefChars, "u"),
-  text: new RegExp(textChars, "u"),
-  ws: new RegExp(whitespaceChars, "u"),
+  entityRef: new RegExp(entityRefChars.source, "u"),
+  text: new RegExp(textChars.source, "u"),
+  ws: new RegExp(whitespaceChars.source, "u"),
 } as const;
 
 /**
@@ -201,7 +206,7 @@ const vocabularies = new RegExp(vocabularyNamespacePattern, "u");
  * A foreign element's name row with the fields of its node the checks read.
  */
 interface ForeignRow {
-  readonly governs: string;
+  readonly governs: Option.Option<string>;
   readonly kind: string;
   readonly local: string;
   readonly namespace: string;
@@ -233,8 +238,9 @@ const classHolds = (row: ForeignRow): boolean => {
 };
 
 /**
- * Decide whether a foreign element's row meets `Strictly_held`: it is no strictly held kind, it has
- * a governing type, or its expanded name is a root `HeldRootsUnder` names under its parent.
+ * Decide whether a foreign element's row meets "Strictly held": it is no strictly held kind, it has
+ * a governing type (its `OpenElementType`), or its expanded name is a root `HeldRootsUnder` names
+ * under its parent.
  *
  * @param row - The element's name row and its node's fields.
  * @returns Whether it meets the check.
@@ -242,24 +248,34 @@ const classHolds = (row: ForeignRow): boolean => {
 const heldHolds = (row: ForeignRow): boolean =>
   !isForeignKind(row.kind) ||
   !strictlyHeld.has(`${row.version} ${row.parentKind} ${row.kind}`) ||
-  row.governs !== "none" ||
+  Option.isSome(row.governs) ||
   heldRootsUnder.get(`${row.version} ${row.parentKind}`)?.test(`${row.namespace}}${row.local}`) ===
     true;
 
 /**
- * Judge a foreign element by the checks `chardata.ts` states over its row and its node, each term
- * read as PostgreSQL reads it: a closed read of a key no row holds is null, which a CHECK's
- * `IS TRUE` refuses, and a pattern is matched as `RegExp` under the `u` flag.
+ * Judge a foreign element by the laws `chardata.ts` states over its row, its node and its type's
+ * row, each term read as PostgreSQL reads it: a closed read of a key no row holds is null, which a
+ * CHECK's `IS TRUE` refuses, and a pattern is matched as `RegExp` under the `u` flag. A type's row
+ * is judged only where the element has one.
  *
  * @param row - The element's name row and its node's fields.
- * @returns The checks it breaks, each `<relation>.<name>`, in the order `chardataLaws` states them.
+ * @returns The laws it breaks, each check as `<relation>.<name>` and "Strictly held", a
+ *   containment of its name row into its type's, by its name, in the order `chardataLaws` states
+ *   them.
  */
 const brokenChecks = (row: ForeignRow): readonly string[] => {
   const names = namesUnder.get(`${row.version} ${row.parentKind}`);
-  const types = typesAvailable.get(row.governs);
-  const typed =
-    types !== undefined &&
-    (types.test(row.parentNamespace) || !vocabularies.test(row.parentNamespace));
+  const typed = Option.match(row.governs, {
+    onNone: () => true,
+    onSome: (type) => {
+      const types = typesAvailable.get(type);
+
+      return (
+        types !== undefined &&
+        (types.test(row.parentNamespace) || !vocabularies.test(row.parentNamespace))
+      );
+    },
+  });
 
   return [
     ...(classHolds(row) ? [] : ["OpenElementName.Foreign_element_class"]),
@@ -269,8 +285,8 @@ const brokenChecks = (row: ForeignRow): readonly string[] => {
     ...(names !== undefined && !names.test(`${row.namespace}}${row.local}`)
       ? []
       : ["OpenElementName.OpenElementName_canonical"]),
-    ...(typed ? [] : ["OpenElementName.XsiType_available"]),
-    ...(heldHolds(row) ? [] : ["OpenElementName.Strictly_held"]),
+    ...(heldHolds(row) ? [] : ["Strictly held"]),
+    ...(typed ? [] : ["OpenElementType.XsiType_available"]),
   ];
 };
 
@@ -605,13 +621,17 @@ describe("qti/chardata.ts", () => {
         Document,
         EncodingDecl,
         Flag,
+        GoverningOf,
+        Governor,
         HeldRootsUnder,
         KindByNameUnder,
+        KindGovernor,
         KindNamespace,
         Namespace,
         Node,
         NodeKind,
         OpenElementName,
+        OpenElementType,
         Pi,
         Position,
         ResourceType,
@@ -641,8 +661,7 @@ describe("qti/chardata.ts", () => {
       "Node.Foreign_element_class",
       "OpenElementName.Foreign_element_class",
       "OpenElementName.OpenElementName_canonical",
-      "OpenElementName.Strictly_held",
-      "OpenElementName.XsiType_available",
+      "OpenElementType.XsiType_available",
     ]);
   });
 
@@ -1059,11 +1078,11 @@ describe("qti/chardata.ts", () => {
                     row: { ...own, local: "div" },
                   },
                   "a foreign element governed by a type of another schema set": {
-                    broken: ["OpenElementName.XsiType_available"],
-                    row: { ...other, governs: otherSetType },
+                    broken: ["OpenElementType.XsiType_available"],
+                    row: { ...other, governs: Option.some(otherSetType) },
                   },
                   "a foreign element only a strict slot holds, with no type": {
-                    broken: ["OpenElementName.Strictly_held"],
+                    broken: ["Strictly held"],
                     row: { ...other, parentKind: "qti-companion-materials-info" },
                   },
                   "a held root its set declares, with no type": {

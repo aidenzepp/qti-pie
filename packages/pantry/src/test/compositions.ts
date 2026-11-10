@@ -65,6 +65,6 @@ afterAll(async () => {
   assert.isAtMost(
     times,
     1,
-    `This test file composed production's grammar ${times} times, and a test file composes it once. Read it through \`composed()\` from \`#pantry/grammar/compose.ts\`, which composes it on its first call and returns that result after, rather than through \`compose(vocabularies)\`.`,
+    `This test file composed production's grammar ${times} times, and a test file composes it once. Read it through \`composed()\` from \`#pantry/grammar/compose.ts\`, which returns the one composition its module made as it loaded, rather than through \`compose(vocabularies)\`.`,
   );
 });

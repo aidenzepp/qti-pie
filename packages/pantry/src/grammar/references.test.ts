@@ -25,8 +25,8 @@ import { required } from "@grizzle/testing/features";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
-import { roster } from "#pantry/grammar/closed.ts";
+import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
+import { faultOf, indexed, repeatOf, roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import {
@@ -40,7 +40,7 @@ import {
   textReferenceKinds,
   xiCensus,
 } from "#pantry/grammar/references.ts";
-import type { Spelling } from "#pantry/grammar/references.ts";
+import type { References, Spelling } from "#pantry/grammar/references.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations, textTypes } from "#pantry/vocab/inventory/attributes.ts";
@@ -63,6 +63,24 @@ import {
   typedAttributesOf,
 } from "#pantry/test/gen/references.ts";
 import type { Fault } from "#pantry/test/gen/references.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
+
+/**
+ * Index the reference relations this file reads by key, none of which a serving path does.
+ *
+ * @param relations - The relations.
+ * @returns Each, indexed.
+ */
+const lookedUp = (relations: References) => ({
+  builtIn: indexed(relations.builtIn),
+  builtInBaseType: indexed(relations.builtInBaseType),
+  choiceBound: indexed(relations.choiceBound),
+  choiceCount: indexed(relations.choiceCount),
+  contentReference: indexed(relations.contentReference),
+  declares: indexed(relations.declares),
+  sectionPart: indexed(relations.sectionPart),
+  variableReference: indexed(relations.variableReference),
+});
 
 /**
  * The composed grammar of production, whose rosters the reference relations are coded in. It is
@@ -84,15 +102,13 @@ const composeTimeout = 60_000;
  * `AttributeName` rosters.
  */
 const production = grammar.pipe(
-  Effect.flatMap(({ kinds }) =>
-    Effect.fromResult(
-      references({
-        facets: [asiReferences],
-        kinds: kinds.nodeKind,
-        names: kinds.attributeName,
-        versions: kinds.versions,
-      }),
-    ),
+  Effect.map(({ kinds }) =>
+    references({
+      facets: [asiReferences],
+      kinds: kinds.nodeKind,
+      names: kinds.attributeName,
+      versions: kinds.versions,
+    }),
   ),
 );
 
@@ -415,9 +431,13 @@ describe("the reference relations of production", () => {
       // model admits in every version that holds it (`Admission`).
       Effect.gen(function* countsAreChildren() {
         const relations = yield* production;
-        const { admission } = yield* grammar;
+        const looked = lookedUp(relations);
+        const { content } = yield* grammar;
         const parents = new Map<string, Set<string>>();
-        for (const { child, parent, version } of admission.rows) {
+        for (const { child, parent, version } of admittedOf(
+          content.contentModelOf,
+          content.admissionIn,
+        )) {
           const key = keyed(version, parent);
           parents.set(key, (parents.get(key) ?? new Set()).add(child));
         }
@@ -425,10 +445,7 @@ describe("the reference relations of production", () => {
         assert.isNotEmpty(relations.choiceCount.rows);
         assert.deepStrictEqual(
           relations.choiceCount.rows.flatMap(({ choice, kind }) => [
-            ...(Option.exists(
-              relations.choiceBound.lookup({ kind }),
-              ({ zero }) => zero === "counted",
-            )
+            ...(Option.exists(looked.choiceBound.lookup({ kind }), ({ zero }) => zero === "counted")
               ? []
               : [`${kind} has no counted bound`]),
             ...schemaVersions
@@ -442,7 +459,7 @@ describe("the reference relations of production", () => {
           relations.choiceBound.rows
             .filter(({ zero }) => zero === "counted")
             .map(({ kind }) => kind)
-            .filter((kind) => Option.isNone(relations.choiceCount.lookup({ kind }))),
+            .filter((kind) => Option.isNone(looked.choiceCount.lookup({ kind }))),
           [],
         );
       }),
@@ -588,23 +605,42 @@ describe("references", () => {
             suite: "grammar/references/coding",
           },
           ({ facets, fault }, c) =>
-            Effect.gen(function* coding() {
+            Effect.sync(() => {
               c.note(fault);
 
-              const kinds = yield* Effect.fromResult(roster("NodeKind", toyKinds));
-              const names = yield* Effect.fromResult(roster("AttributeName", toyNames));
-              const versions = yield* Effect.fromResult(roster("SchemaVersion", schemaVersions));
-              const outcome = references({ facets, kinds, names, versions });
-
-              assert.strictEqual(
-                Result.isSuccess(outcome) ? "succeeded" : outcome.failure._tag,
-                refusalOf[fault],
+              const kinds = roster("NodeKind", toyKinds);
+              const names = roster("AttributeName", toyNames);
+              const versions = roster("SchemaVersion", schemaVersions);
+              const relations = references({ facets, kinds, names, versions });
+              const looked = lookedUp(relations);
+              // The generator refuses nothing: a handle a roster lists twice is the roster's fault
+              // (`repeatOf`), and a row outside its code space or a key stated twice the rows'
+              // (`faultOf`), which the tests find and grizzle refuses.
+              const found = Option.match(
+                Option.orElse(repeatOf(relations.declarationKind), () =>
+                  Arr.findFirst(
+                    [
+                      relations.builtIn,
+                      relations.builtInBaseType,
+                      relations.choiceBound,
+                      relations.choiceCount,
+                      relations.contentReference,
+                      relations.declares,
+                      relations.referenceAttribute,
+                      relations.sectionPart,
+                      relations.variableReference,
+                    ],
+                    faultOf,
+                  ),
+                ),
+                { onNone: () => "succeeded", onSome: ({ _tag }) => _tag },
               );
-              if (Result.isFailure(outcome)) {
+
+              assert.strictEqual(found, refusalOf[fault]);
+              if (found !== "succeeded") {
                 return;
               }
 
-              const relations = outcome.success;
               const rows = facets.flatMap((facet) => facet.references);
               const declarations = facets.flatMap((facet) => facet.declarations);
               const builtIns = facets.flatMap((facet) => facet.builtIns);
@@ -619,14 +655,14 @@ describe("references", () => {
               assert.deepStrictEqual([...relations.spelling.handles], [...spellings]);
               for (const { baseType, cardinality, declaration, root, variable } of builtIns) {
                 assert.deepStrictEqual(
-                  Option.map(relations.builtIn.lookup({ root, variable }), (row) =>
+                  Option.map(looked.builtIn.lookup({ root, variable }), (row) =>
                     keyed(row.declaration, row.cardinality),
                   ),
                   Option.some(keyed(declaration, cardinality)),
                 );
                 assert.deepStrictEqual(
                   Option.map(
-                    relations.builtInBaseType.lookup({ root, variable }),
+                    looked.builtInBaseType.lookup({ root, variable }),
                     (row) => row.baseType,
                   ),
                   baseType,
@@ -635,15 +671,15 @@ describe("references", () => {
 
               for (const kind of toyKinds) {
                 assert.deepStrictEqual(
-                  Option.map(relations.declares.lookup({ kind }), (row) => row.declaration),
+                  Option.map(looked.declares.lookup({ kind }), (row) => row.declaration),
                   declarations.includes(kind) ? Option.some(kind) : Option.none(),
                 );
                 assert.strictEqual(
-                  Option.isSome(relations.sectionPart.lookup({ kind })),
+                  Option.isSome(looked.sectionPart.lookup({ kind })),
                   parts.has(kind),
                 );
                 assert.deepStrictEqual(
-                  Option.map(relations.choiceBound.lookup({ kind }), ({ max, min, zero }) =>
+                  Option.map(looked.choiceBound.lookup({ kind }), ({ max, min, zero }) =>
                     keyed(min, max, zero),
                   ),
                   Option.map(
@@ -652,7 +688,7 @@ describe("references", () => {
                   ),
                 );
                 assert.deepStrictEqual(
-                  Option.map(relations.choiceCount.lookup({ kind }), ({ choice }) => choice),
+                  Option.map(looked.choiceCount.lookup({ kind }), ({ choice }) => choice),
                   Option.map(
                     Arr.findFirst(counts, (count) => count.kind === kind),
                     ({ choice }) => choice,
@@ -664,7 +700,7 @@ describe("references", () => {
                     (row) => row.kind === kind && row.attribute === attribute,
                   );
                   assert.deepStrictEqual(
-                    relations.variableReference
+                    looked.variableReference
                       .lookup({ attribute, kind })
                       .pipe(Option.map((row) => row.spelling)),
                     stated.pipe(Option.map((row) => row.spelling)),
@@ -672,7 +708,7 @@ describe("references", () => {
                   for (const declaration of declarations) {
                     assert.strictEqual(
                       Option.isSome(
-                        relations.contentReference.lookup({ attribute, declaration, kind }),
+                        looked.contentReference.lookup({ attribute, declaration, kind }),
                       ),
                       Option.exists(
                         stated,

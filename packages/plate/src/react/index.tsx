@@ -38,6 +38,10 @@ export { Associate } from "#plate/react/associate.tsx";
 
 export { Choice } from "#plate/react/choice.tsx";
 
+export type { DefaultSubmitProps } from "#plate/react/default-submit.tsx";
+
+export { DefaultSubmit } from "#plate/react/default-submit.tsx";
+
 export { Drawing } from "#plate/react/drawing.tsx";
 
 export { EndAttempt } from "#plate/react/end-attempt.tsx";

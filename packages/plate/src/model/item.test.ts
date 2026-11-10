@@ -20,10 +20,12 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { adaptivePolicy } from "#plate/engine/adaptive.ts";
 import { runAttempt } from "#plate/engine/attempt.ts";
 import { runRules } from "#plate/engine/evaluate.ts";
 import { validateChoice } from "#plate/interactions/choice.ts";
 import { message } from "#plate/messages.ts";
+import { valueOf, xsBooleanOf } from "#plate/model/attributes.ts";
 import type { IntegerOrRef, TemplateRule } from "#plate/model/expression.ts";
 import { modules } from "#plate/model/interactions.ts";
 import { buildItem } from "#plate/model/item.ts";
@@ -2133,6 +2135,39 @@ describe("buildItem", () => {
             built.unsupported,
             on ? [{ feature: 'adaptive="true"', path: root, shown: "mark" }] : [],
             written,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    '[W0-BD] adaptive="true" is read into Item.adaptive and, while the policy is a stub, marked; an item without the attribute is neither',
+    () =>
+      Effect.gen(function* adaptiveFact() {
+        const cases: readonly (readonly [readonly SourceAttribute[], boolean])[] = [
+          [[attr("adaptive", "true")], true],
+          [[attr("adaptive", "1")], true],
+          [[attr("adaptive", "false")], false],
+          [[], false],
+        ];
+
+        assert.isFalse(adaptivePolicy.implemented);
+        for (const [attributes, adaptive] of cases) {
+          const built = yield* Effect.fromResult(
+            buildItem(
+              item({
+                attributes,
+                body: [el("p", [], [text("Read on.")])],
+                declarations: [],
+              }),
+            ),
+          );
+
+          assert.strictEqual(built.adaptive, adaptive, JSON.stringify(attributes));
+          assert.deepStrictEqual(
+            built.unsupported,
+            adaptive ? [{ feature: 'adaptive="true"', path: root, shown: "mark" }] : [],
+            JSON.stringify(attributes),
           );
         }
       }),
@@ -5623,6 +5658,39 @@ describe("buildItem over the corpus", { tags: ["corpus"] }, () => {
       }),
     corpusTimeoutMs,
   );
+
+  it.effect(
+    '[W0-BD] every corpus item that writes adaptive="true" keeps its mark and reads adaptive, and every other item has neither',
+    () =>
+      Effect.gen(function* adaptiveCorpus() {
+        let adaptiveItems = 0;
+        let seen = 0;
+        for (const member of yield* openCorpus) {
+          const accepted = acceptedOf(member);
+          if (Option.isNone(accepted)) {
+            continue;
+          }
+
+          const source = yield* readSource(member.location, member.bytes);
+          const written = Option.getOrElse(
+            Option.flatMap(valueOf(source.root, "adaptive"), xsBooleanOf),
+            () => false,
+          );
+          const marked = accepted.value.item.unsupported.some(
+            (entry) => entry.feature === 'adaptive="true"',
+          );
+
+          seen += 1;
+          adaptiveItems += written ? 1 : 0;
+          assert.strictEqual(accepted.value.item.adaptive, written, `${member.location}: adaptive`);
+          assert.strictEqual(marked, written, `${member.location}: the mark`);
+        }
+
+        assert.isAbove(seen, 0);
+        assert.isAbove(adaptiveItems, 0);
+      }),
+    corpusTimeoutMs,
+  );
 });
 
 /**
@@ -5765,6 +5833,55 @@ describe("buildItem, catalog references", () => {
           tag: "div",
         });
         assert.isFalse(Object.hasOwn(built.body[1] ?? {}, "catalog"));
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "data-catalog-idref", path: `${body}/p`, shown: "mark" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[W0-AU] the D22 names and data-catalog-idref are unchanged beside an author data-*",
+    () =>
+      Effect.gen(function* specialCasesStand() {
+        const ssml = '{"say-as":{"interpret-as":"characters"}}';
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "p",
+                  [
+                    attr("data-catalog-idref", "glossary"),
+                    attr("data-author-note", "x"),
+                    attr("data-ssml", ssml),
+                  ],
+                  [el("span", [attr("data-qti-suppress-tts", "true")], [text("QTI")])],
+                ),
+              ],
+              declarations: [],
+            }),
+          ),
+        );
+
+        assert.deepStrictEqual(built.body[0], {
+          attributes: [
+            { name: "data-author-note", value: "x" },
+            { name: "data-ssml", value: ssml },
+          ],
+          catalog: "glossary",
+          children: [
+            {
+              attributes: [{ name: "data-qti-suppress-tts", value: "true" }],
+              children: [{ kind: "text", text: "QTI" }],
+              kind: "element",
+              path: `${body}/p/span`,
+              tag: "span",
+            },
+          ],
+          kind: "element",
+          path: `${body}/p`,
+          tag: "p",
+        });
         assert.deepStrictEqual(built.unsupported, [
           { feature: "data-catalog-idref", path: `${body}/p`, shown: "mark" },
         ]);

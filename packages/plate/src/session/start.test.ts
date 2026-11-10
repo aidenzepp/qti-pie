@@ -1,12 +1,15 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { decodeSession, encodeSession } from "#plate/codec/session.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
+import type * as Adaptive from "#plate/engine/adaptive.ts";
+import type { AdaptivePolicy } from "#plate/engine/adaptive.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
 import { decode } from "#plate/form/encoding.ts";
 import { defaultLabel, drawBelow, drawStream, templateLabel } from "#plate/engine/random.ts";
+import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
@@ -27,6 +30,10 @@ import {
 } from "#plate/session/start.ts";
 import type { Current, ItemView } from "#plate/session/start.ts";
 import { submitItem } from "#plate/session/submit.ts";
+import { stub } from "#plate/test-features/contract.ts";
+import type { EnterContext, EnterVerdict } from "#plate/test-features/contract.ts";
+import { testFeatures } from "#plate/test-features/table.ts";
+import type { TestFeatureTable } from "#plate/test-features/table.ts";
 import { open } from "#plate/validate/open.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { acceptedItem, acceptForTest } from "#plate/validate/verdict.ts";
@@ -1225,6 +1232,111 @@ describe("a locked item", () => {
       );
       assert.deepStrictEqual(session.expired, []);
     }),
+  );
+});
+
+/**
+ * Write the text of a hand-built adaptive item: one Choice over `A` and `B` bound to the single
+ * identifier `RESPONSE`, with `adaptive="true"` on its root.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const adaptiveXml = (identifier: string): string =>
+  itemXml(identifier, { choices: ["A", "B"], defaultValue: false, shuffle: false }).replace(
+    'adaptive="false"',
+    'adaptive="true"',
+  );
+
+/**
+ * The adaptive policy's module file, which {@link withUnlimitedAdaptive} mocks.
+ */
+const policyFile = "#plate/engine/adaptive.ts";
+
+/**
+ * Run an effect with an adaptive policy under which an adaptive item's attempts never close it,
+ * every module that reads the policy loaded afresh, and the stub restored after. A non-adaptive
+ * item keeps the stub's answers.
+ *
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withUnlimitedAdaptive = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(policyFile, async (importOriginal) => {
+      const actual = await importOriginal<typeof Adaptive>();
+      const unlimited: AdaptivePolicy = {
+        ...actual.adaptivePolicy,
+        closed: (adaptive, record, limit) =>
+          adaptive ? false : actual.adaptivePolicy.closed(adaptive, record, limit),
+        limit: (adaptive, limit) => (adaptive ? 0 : limit),
+      };
+
+      return { ...actual, adaptivePolicy: unlimited };
+    });
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(policyFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+describe("the adaptive fact on a session item", () => {
+  it.effect(
+    "[W0-BD] startTest writes the adaptive fact on each session item from its item, and inspect closes through the policy: the stub closes an adaptive item at its limit, a policy that lifts the limit does not",
+    () =>
+      Effect.gen(function* adaptiveFact() {
+        const delivery = yield* builtDelivery("adaptive", [
+          ["first", adaptiveXml("first")],
+          [
+            "second",
+            itemXml("second", { choices: ["A", "B"], defaultValue: false, shuffle: false }),
+          ],
+        ]);
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration);
+        const attempted: TestSession = {
+          ...session,
+          items: session.items.map((item) => ({
+            ...item,
+            record: { ...item.record, attempt: "submitted", numAttempts: 1 },
+          })),
+        };
+
+        assert.deepStrictEqual(
+          session.items.map((item) => item.adaptive),
+          [true, false],
+        );
+        assert.deepStrictEqual(
+          [1, 2].map(
+            (sequenceIndex) => viewAt(delivery, session, configuration, sequenceIndex).disabled,
+          ),
+          [false, false],
+        );
+        assert.deepStrictEqual(
+          [1, 2].map(
+            (sequenceIndex) => viewAt(delivery, attempted, configuration, sequenceIndex).disabled,
+          ),
+          [true, true],
+        );
+
+        yield* withUnlimitedAdaptive(
+          Effect.gen(function* underUnlimited() {
+            const sessions = yield* Effect.promise(() => import("#plate/session/start.ts"));
+            const disabledAt = (sequenceIndex: number): boolean =>
+              Result.getOrElse(
+                sessions.itemView(delivery.test, attempted, configuration, sequenceIndex),
+                (failure) => assert.fail(`itemView failed: ${failure.message}`),
+              ).disabled;
+
+            assert.deepStrictEqual([disabledAt(1), disabledAt(2)], [false, true]);
+          }),
+        );
+      }),
   );
 });
 
@@ -3779,6 +3891,128 @@ describe("a package whose item ref's template default reads a field of an item's
           [mismatch.identifier, mismatch.actual, mismatch.expected],
           ["T", "float single", "integer single"],
         );
+      }),
+  );
+});
+
+/**
+ * Build a table of stubs with a pre-condition module, landed for these tests alone, whose `enter`
+ * is the function given.
+ *
+ * @param enter What it answers when a place is entered.
+ * @returns The table.
+ */
+const entering = (
+  enter: (context: EnterContext) => Option.Option<EnterVerdict>,
+): TestFeatureTable =>
+  testFeatures.map((module) =>
+    module.key === "qti-pre-condition"
+      ? {
+          ...stub({
+            element: module.element,
+            feature: module.feature,
+            issue: module.issue,
+            key: module.key,
+            namespace: module.namespace,
+          }),
+          enter,
+          implemented: true,
+        }
+      : module,
+  );
+
+/**
+ * The hand-built items the entering tests deliver: three Choices in one linear part.
+ */
+const enteringRefs: readonly DefaultedRef[] = ["one", "two", "three"].map(
+  (ref) =>
+    [ref, "", itemXml(ref, { choices: ["A", "B"], defaultValue: false, shuffle: false })] as const,
+);
+
+describe("[W0-BE] the entering gate at the start", () => {
+  it.effect(
+    "[W0-BE] a first place the modules skip is never presented: the session starts on the place after it, with the skipped item's record untouched",
+    () =>
+      Effect.gen(function* skipsFirst() {
+        const delivery = yield* linearDelivery("entering", enteringRefs);
+        const configuration = yield* configure({});
+        const asked: EnterContext[] = [];
+        const features = entering((context) => {
+          asked.push(context);
+
+          return context.sequenceIndex === 1 ? Option.some({ kind: "skip" }) : Option.none();
+        });
+        const session = Result.getOrElse(
+          startTest(delivery.test, delivery.items, configuration, {
+            features,
+            instance,
+            now: startedAt,
+          }),
+          (failure) => assert.fail(`startTest refused: ${failure.message}`),
+        );
+        const plain = started(delivery, configuration);
+
+        assert.strictEqual(session.position, 1);
+        assert.deepStrictEqual(
+          session.items.map((item) => item.presented),
+          [false, true, false],
+        );
+        assert.deepStrictEqual(
+          session.items[0]?.record,
+          fresh((delivery.items.get("one") ?? assert.fail("no item one")).item, `${instance}.1`),
+        );
+        assert.notDeepEqual(session.items[0]?.record, plain.items[0]?.record);
+        assert.deepStrictEqual(
+          asked.map((context) => context.sequenceIndex),
+          [1, 2],
+        );
+        assert.deepStrictEqual(
+          (asked[0]?.items ?? Option.none()).pipe(Option.map((items) => [...items.keys()])),
+          Option.some(["one", "two", "three"]),
+        );
+        assert.deepStrictEqual(asked[0]?.now, Option.some(startedAt));
+        assert.strictEqual(asked[0]?.session.status, "interacting");
+        assert.deepStrictEqual(session.parts, [{ identifier: "part", status: "current" }]);
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] a test whose every place is skipped starts closed; an exit from the test at the first place does the same; and the default table enters the first place",
+    () =>
+      Effect.gen(function* skipsAll() {
+        const delivery = yield* linearDelivery("entering", enteringRefs);
+        const configuration = yield* configure({});
+        const skipping = entering(() => Option.some({ kind: "skip" }));
+        const exiting = entering(() =>
+          Option.some({ kind: "exit", scope: { identifier: "entering", kind: "test" } }),
+        );
+        const closed = Result.getOrElse(
+          startTest(delivery.test, delivery.items, configuration, {
+            features: skipping,
+            instance,
+            now: startedAt,
+          }),
+          (failure) => assert.fail(`startTest refused: ${failure.message}`),
+        );
+        const exited = Result.getOrElse(
+          startTest(delivery.test, delivery.items, configuration, {
+            features: exiting,
+            instance,
+            now: startedAt,
+          }),
+          (failure) => assert.fail(`startTest refused: ${failure.message}`),
+        );
+
+        for (const session of [closed, exited]) {
+          assert.strictEqual(session.status, "closed");
+          assert.deepStrictEqual(session.parts, [{ identifier: "part", status: "ended" }]);
+          assert.deepStrictEqual(
+            session.items.map((item) => item.presented),
+            [false, false, false],
+          );
+        }
+
+        assert.strictEqual(started(delivery, configuration).items[0]?.presented, true);
       }),
   );
 });

@@ -13,6 +13,15 @@ import { allowedIntents } from "#plate/session/intents.ts";
 import { SubmissionRefused } from "#plate/session/submit.ts";
 import type { Intent, Responses, Step, TestSession } from "#plate/session/session.ts";
 import { startTest } from "#plate/session/start.ts";
+import { stub } from "#plate/test-features/contract.ts";
+import type {
+  EnterContext,
+  EnterVerdict,
+  GateContext,
+  GateVerdict,
+} from "#plate/test-features/contract.ts";
+import { testFeatures } from "#plate/test-features/table.ts";
+import type { TestFeatureTable } from "#plate/test-features/table.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
@@ -1010,6 +1019,285 @@ describe("advance and the test's outcome processing", () => {
             : [],
           ["record", "SCORE", "outcome"],
         );
+      }),
+  );
+});
+
+/**
+ * Build a table of stubs with a pre-condition module, landed for these tests alone, whose `gate`
+ * and `enter` are the functions given.
+ *
+ * @param hooks The module's hooks; a stub's where a hook is left out.
+ * @param hooks.enter What it answers when a place is entered.
+ * @param hooks.gate What it answers an intent with.
+ * @returns The table.
+ */
+const branching = (hooks: {
+  readonly enter?: (context: EnterContext) => Option.Option<EnterVerdict>;
+  readonly gate?: (context: GateContext) => Option.Option<GateVerdict>;
+}): TestFeatureTable =>
+  testFeatures.map((module) =>
+    module.key === "qti-pre-condition"
+      ? {
+          ...stub({
+            element: module.element,
+            feature: module.feature,
+            issue: module.issue,
+            key: module.key,
+            namespace: module.namespace,
+          }),
+          ...hooks,
+          implemented: true,
+        }
+      : module,
+  );
+
+/**
+ * Advance a session under a table, failing the test when `advance` refuses.
+ *
+ * @param given The test and its items.
+ * @param features The table.
+ * @param configuration The host's configuration.
+ * @param session The session.
+ * @param step The step.
+ * @param seconds When it happens, in seconds after {@link startedAt}.
+ * @returns The session after the step.
+ */
+const advancedUnder = (
+  given: Delivery,
+  features: TestFeatureTable,
+  configuration: Configuration,
+  session: TestSession,
+  step: Step,
+  seconds: number,
+): TestSession =>
+  accepted(
+    advance(given.test, given.items, session, step, configuration, {
+      features,
+      now: after(seconds),
+    }),
+  );
+
+describe("[W0-BE] a submission's target", () => {
+  it.effect(
+    "[W0-BE] submit-item with a target submits the item, then moves to the target and presents it",
+    () =>
+      Effect.gen(function* submissionTarget() {
+        const given = yield* delivery({ navigation: "nonlinear", submission: "individual" });
+        const configuration = yield* configure({});
+        const features = branching({
+          gate: (context) =>
+            context.intent.kind === "submit-item"
+              ? Option.some({ kind: "target", sequenceIndex: 3 })
+              : Option.none(),
+        });
+        const session = started(given, configuration);
+        const landed = advancedUnder(
+          given,
+          features,
+          configuration,
+          session,
+          { intent: { kind: "submit-item" }, responses: { RESPONSE: chosen("A") } },
+          10,
+        );
+
+        assert.strictEqual(landed.items[0]?.record.attempt, "submitted");
+        assert.strictEqual(landed.position, 2);
+        assert.deepStrictEqual(
+          landed.items.map((item) => item.presented),
+          [true, false, true, false],
+        );
+        assert.strictEqual(landed.items[2]?.datestamp, after(10).toISOString());
+      }),
+  );
+});
+
+describe("[W0-BE] the entering gate", () => {
+  it.effect(
+    "[W0-BE] a skipped place is never presented: a move that lands on it goes on to the item after, whose record is started, and the skipped item's record is untouched",
+    () =>
+      Effect.gen(function* skipsLanded() {
+        const given = yield* delivery({ navigation: "linear", submission: "individual" });
+        const configuration = yield* configure({});
+        const asked: number[] = [];
+        const features = branching({
+          enter: (context) => {
+            asked.push(context.sequenceIndex);
+
+            return context.sequenceIndex === 2 ? Option.some({ kind: "skip" }) : Option.none();
+          },
+        });
+        const session = started(given, configuration);
+        const landed = advancedUnder(
+          given,
+          features,
+          configuration,
+          session,
+          { intent: { kind: "next" }, responses: { RESPONSE: chosen("A") } },
+          10,
+        );
+
+        assert.strictEqual(landed.position, 2);
+        assert.deepStrictEqual(
+          landed.items.map((item) => item.presented),
+          [true, false, true, false],
+        );
+        assert.deepStrictEqual(landed.items[1]?.record, session.items[1]?.record);
+        assert.deepStrictEqual(landed.items[1]?.datestamp, session.items[1]?.datestamp);
+        assert.deepStrictEqual(asked, [2, 3]);
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] a skipped last place ends an individual part, and the next part's first place is asked for in turn",
+    () =>
+      Effect.gen(function* skipsLast() {
+        const given = yield* delivery({ navigation: "linear", submission: "individual" });
+        const configuration = yield* configure({});
+        const asked: number[] = [];
+        const features = branching({
+          enter: (context) => {
+            asked.push(context.sequenceIndex);
+
+            return context.sequenceIndex === 3 ? Option.some({ kind: "skip" }) : Option.none();
+          },
+        });
+        const second = advancedUnder(
+          given,
+          features,
+          configuration,
+          started(given, configuration),
+          { intent: { kind: "next" }, responses: { RESPONSE: chosen("A") } },
+          10,
+        );
+        const landed = advancedUnder(
+          given,
+          features,
+          configuration,
+          second,
+          { intent: { kind: "next" }, responses: { RESPONSE: chosen("A") } },
+          20,
+        );
+
+        assert.deepStrictEqual(
+          landed.parts.map((part) => part.status),
+          ["ended", "current"],
+        );
+        assert.strictEqual(landed.position, 3);
+        assert.deepStrictEqual(
+          landed.items.map((item) => item.presented),
+          [true, true, false, true],
+        );
+        assert.deepStrictEqual(asked, [2, 3, 4]);
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] an exit on entering leaves the scope from the place not yet presented, and the place landed on after is entered; a closed test asks nothing more",
+    () =>
+      Effect.gen(function* exitsOnEnter() {
+        const given = yield* delivery({ navigation: "linear", submission: "individual" });
+        const configuration = yield* configure({});
+        const asked: number[] = [];
+        const features = branching({
+          enter: (context) => {
+            asked.push(context.sequenceIndex);
+
+            return context.sequenceIndex === 2
+              ? Option.some({ kind: "exit", scope: { identifier: "P1", kind: "part" } })
+              : Option.none();
+          },
+        });
+        const landed = advancedUnder(
+          given,
+          features,
+          configuration,
+          started(given, configuration),
+          { intent: { kind: "next" }, responses: { RESPONSE: chosen("A") } },
+          10,
+        );
+
+        assert.deepStrictEqual(
+          landed.parts.map((part) => part.status),
+          ["ended", "current"],
+        );
+        assert.deepStrictEqual(
+          landed.items.map((item) => [item.presented, item.locked, item.record.attempt]),
+          [
+            [true, false, "submitted"],
+            [false, false, "none"],
+            [false, false, "none"],
+            [true, false, "none"],
+          ],
+        );
+        assert.deepStrictEqual(asked, [2, 4]);
+
+        const closing = branching({
+          enter: (context) => {
+            asked.push(context.sequenceIndex);
+
+            return Option.some({ kind: "exit", scope: { identifier: "T", kind: "test" } });
+          },
+        });
+        const closed = advancedUnder(
+          given,
+          closing,
+          configuration,
+          landed,
+          { intent: { kind: "next" }, responses: { RESPONSE: chosen("A") } },
+          20,
+        );
+
+        assert.strictEqual(closed.status, "closed");
+        assert.deepStrictEqual(asked, [2, 4]);
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] the hub hands enter the items, the time and no intent, and an expiry's landing place is asked for too",
+    () =>
+      Effect.gen(function* contextSeen() {
+        const given = yield* delivery({ navigation: "nonlinear", submission: "individual" });
+        const configuration = yield* configure({});
+        const seen: EnterContext[] = [];
+        const features = branching({
+          enter: (context) => {
+            seen.push(context);
+
+            return Option.none();
+          },
+          gate: (context) =>
+            context.intent.kind === "submit-item"
+              ? Option.some({
+                  kind: "expire",
+                  scope: { identifier: "P1-section", kind: "section" },
+                })
+              : Option.none(),
+        });
+        const landed = advancedUnder(
+          given,
+          features,
+          configuration,
+          started(given, configuration),
+          { intent: { kind: "submit-item" } },
+          10,
+        );
+
+        assert.deepStrictEqual(
+          landed.parts.map((part) => part.status),
+          ["ended", "current"],
+        );
+        assert.strictEqual(seen.length, 1);
+
+        const [context] = seen;
+        assert.strictEqual(context?.sequenceIndex, 4);
+        assert.deepStrictEqual(
+          (context?.items ?? Option.none()).pipe(Option.map((items) => [...items.keys()])),
+          Option.some(["i1", "i2", "i3", "i4"]),
+        );
+        assert.deepStrictEqual(context?.now, Option.some(after(10)));
+        assert.isFalse(context !== undefined && "intent" in context);
+        assert.strictEqual(context?.session.items[3]?.presented, false);
       }),
   );
 });
