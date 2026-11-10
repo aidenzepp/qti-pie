@@ -5,8 +5,8 @@ import { configure } from "#plate/configuration.ts";
 import { defaultView } from "#plate/content/contract.ts";
 import { attr, doc, el, qtiNamespace, text, xincludeNamespace } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { h } from "#plate/emit/node.ts";
-import { scopedId } from "#plate/emit/parts.ts";
+import { h, text as textNode } from "#plate/emit/node.ts";
+import { resolveOverrides, scopedId } from "#plate/emit/parts.ts";
 import { parseContextOf, pathsOf } from "#plate/model/item.ts";
 import type { BodyNode } from "#plate/model/item.ts";
 import { readersOf } from "#plate/model/reader.ts";
@@ -14,10 +14,10 @@ import { buildTest } from "#plate/model/test.ts";
 import type { Test } from "#plate/model/test.ts";
 import type { EmitState } from "#plate/payload.ts";
 import { advance } from "#plate/session/advance.ts";
+import { renderTestContent } from "#plate/session/content.ts";
 import { moveTargets } from "#plate/session/navigate.ts";
-import { startTest } from "#plate/session/start.ts";
+import { itemViews, startTest } from "#plate/session/start.ts";
 import type { TestSession } from "#plate/session/session.ts";
-import { noSupports } from "#plate/supports.ts";
 import { TestFeatureNotImplemented, stub, testFeatureKeys } from "#plate/test-features/contract.ts";
 import type {
   EnterContext,
@@ -43,6 +43,8 @@ import type { AnyTestFeature, TestFeatureTable } from "#plate/test-features/tabl
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
+import { noSupports } from "#plate/supports.ts";
+import { parseHtml } from "#plate/test/round-trip.ts";
 import { testMarks } from "#plate/vocabulary.ts";
 
 /**
@@ -256,7 +258,8 @@ interface TimeLimitsNode {
 
 /**
  * A time-limits module as it would land, for this test alone: it reads `max-time`, reverses the
- * sequence, refuses `next`, and retitles the delivered test, each a visible effect at one hub.
+ * sequence, refuses `next`, retitles the delivered test, and presents one paragraph at every item
+ * place, each a visible effect at one hub.
  */
 const landedTimeLimits: TestFeatureModule<"qti-time-limits", TimeLimitsNode> = {
   ...stub({
@@ -280,6 +283,35 @@ const landedTimeLimits: TestFeatureModule<"qti-time-limits", TimeLimitsNode> = {
 
       return Option.some({ maxTime: maxTime.value, path: context.path });
     }),
+  present: (context) =>
+    context.place.kind === "item" ? [{ maxTime: 60, path: context.place.ref }] : [],
+  render: (node) =>
+    Result.succeed(h("p", {}, [textNode(`${node.maxTime} seconds at ${node.path}`)])),
+  sequence: (context) => context.places.toReversed(),
+};
+
+/**
+ * The node the landed stylesheet module reads a `qti-stylesheet` into.
+ */
+interface StylesheetNode {
+  readonly href: string;
+}
+
+/**
+ * A test-level stylesheet module as it would land, for this test alone: its `render` reads the file
+ * the host hands through the kit and writes a rule confined to the item's Root, or marks the file
+ * as absent. It writes the rule in a `data-rule` attribute, since the serialiser refuses text in a
+ * `style` element.
+ */
+const landedStylesheet: TestFeatureModule<"qti-stylesheet", StylesheetNode> = {
+  ...stub({
+    element: "qti-stylesheet",
+    feature: ["T-3"],
+    issue: "m5-06",
+    key: "qti-stylesheet",
+    namespace: qtiNamespace,
+  }),
+  implemented: true,
   render: (_node, _state, kit) =>
     Result.succeed(
       Option.match(kit.files("style/test.css"), {
@@ -287,7 +319,6 @@ const landedTimeLimits: TestFeatureModule<"qti-time-limits", TimeLimitsNode> = {
         onSome: (css) => h("style", { "data-rule": `#${scopedId(kit.instance, "item")} ${css}` }),
       }),
     ),
-  sequence: (context) => context.places.toReversed(),
 };
 
 /**
@@ -591,6 +622,44 @@ describe("a test-feature module not implemented", () => {
       }),
   );
 
+  it.effect(
+    "[W0-BF] presents nothing at any place, and its render throws, naming its key and issue",
+    () =>
+      Effect.gen(function* presentsNothing() {
+        const { session, test } = yield* startedSession;
+        const configuration = yield* configure({});
+        const views = yield* Effect.fromResult(
+          itemViews(test, session, configuration, [1, 2], stubbed),
+        );
+        const state: EmitState = {
+          assetBase: "",
+          headingLevel: 2,
+          locale: "en",
+          parts: Result.getOrElse(resolveOverrides(), (failure) => assert.fail(failure.message)),
+        };
+        const kit: TestContentRenderKit = {
+          files: () => Option.none(),
+          instance: "q1",
+          nodes: () => Result.succeed([]),
+          supports: noSupports,
+          view: "candidate",
+        };
+
+        assert.deepStrictEqual(
+          views.map((view) => view.content),
+          [[], []],
+        );
+
+        const erased: readonly AnyModule[] = stubs;
+
+        for (const module of erased) {
+          assert.throws(() => {
+            module.render(undefined, state, kit);
+          }, module.key);
+        }
+      }),
+  );
+
   it("[W0-BH] throws TestFeatureNotImplemented from its render, naming its key and the issue that fills it", () => {
     for (const module of stubbed) {
       const ran = Result.try({
@@ -750,6 +819,39 @@ describe("a test-feature module that has landed", () => {
       }),
   );
 
+  it.effect(
+    "[W0-BF] the landed fake presents and renders: its node reaches the session's views and renders to a p",
+    () =>
+      Effect.gen(function* presented() {
+        const { session, test } = yield* startedSession;
+        const configuration = yield* configure({});
+        const views = yield* Effect.fromResult(
+          itemViews(test, session, configuration, [1, 2], landed),
+        );
+        const [first] = views;
+        const rendered = yield* Effect.fromResult(
+          renderTestContent(first?.content ?? [], configuration, {
+            features: landed,
+            instance: "sitting.1",
+          }),
+        );
+        const [root] = parseHtml(rendered.html);
+        const written = root?.kind === "element" ? root.children : [];
+
+        assert.deepStrictEqual(
+          views.map((view) => view.content),
+          [
+            [{ key: "qti-time-limits", node: { maxTime: 60, path: "i1" } }],
+            [{ key: "qti-time-limits", node: { maxTime: 60, path: "i2" } }],
+          ],
+        );
+        assert.deepStrictEqual(
+          written.map((node) => (node.kind === "element" ? node.tag : "text")),
+          ["p"],
+        );
+      }),
+  );
+
   it("reaches the package's delivery: the delivered test is what its deliver hook gives", () => {
     const test = built(testOf(["a"]), stubbed);
 
@@ -760,10 +862,10 @@ describe("a test-feature module that has landed", () => {
   });
 
   it("[W0-BH] a test-feature module's render reads files and the item's instance", () => {
-    const node = { maxTime: 60, path: "x" };
-    const first = landedTimeLimits.render(node, emitState, renderKit("sitting.1", holdsStyle));
-    const second = landedTimeLimits.render(node, emitState, renderKit("sitting.2", holdsStyle));
-    const absent = landedTimeLimits.render(
+    const node = { href: "style/test.css" };
+    const first = landedStylesheet.render(node, emitState, renderKit("sitting.1", holdsStyle));
+    const second = landedStylesheet.render(node, emitState, renderKit("sitting.2", holdsStyle));
+    const absent = landedStylesheet.render(
       node,
       emitState,
       renderKit("sitting.1", () => Option.none()),
