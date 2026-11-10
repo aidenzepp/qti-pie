@@ -141,6 +141,10 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "pantry/src/levels/cdn-origin.test.ts",
     "measurement owed: its laws case ran 113.6 s, 83.7 s and 117.1 s at load averages of 22.5 to 66.2 and 259.1 s at 32 to 84, and its compile case 67.6 s, 158.9 s and 57.2 s at 22.5 to 66.2 and 118.5 s at 43 to 84, in pa1-15's and pa1-15.2's runs of 2026-11-10, never at 60 or more throughout; the load average stood at 12.85 12.06 12.44 when the wait stopped (decision 490); its 600_000 and 360_000 stay in place until they are remeasured at a load average of at least 60",
   ],
+  [
+    "pantry/src/levels/cdn-data.test.ts",
+    "measurement owed: its lawsOf case ran 79.6 s, 102.8 s, 115.8 s and 265.7 s, the slowest at a load average of 31 to 63, and its installation compile ran 53.7 s to 136.6 s, the slowest at a load average of 24 to 59, in pa1-16's runs of 2026-11-10, after which the load average fell to 12 to 13 and stayed there; its 600_000 and 360_000 stay in place until they are remeasured at a load average of at least 60",
+  ],
 ]);
 
 /**
