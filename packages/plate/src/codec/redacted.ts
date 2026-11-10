@@ -35,14 +35,13 @@ import { positionObjectModule } from "#plate/interactions/position-object.ts";
 import { selectPointModule } from "#plate/interactions/select-point.ts";
 import { sliderModule } from "#plate/interactions/slider.ts";
 import { uploadModule } from "#plate/interactions/upload.ts";
-import type { ModuleKind } from "#plate/interactions/contract.ts";
+import type { ModuleInteraction, ModuleKind } from "#plate/interactions/contract.ts";
 import { isInteraction, regionsOf } from "#plate/model/interactions.ts";
 import type { Modules, Region } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
-  StubInteraction,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { modelledBaseTypes, modelledCardinalities } from "#plate/model/values.ts";
@@ -374,21 +373,22 @@ const textControlFields = {
 };
 
 /**
- * The placeholder node of an interaction plate parses through a stub module, which the JSON form
- * never holds: the stub's `parse` gives the notice, so `redact` never writes one, and its module
- * has no step past `parse`. Its encoded side is `Never`, so decoding refuses a body node of its
- * kind, as for a printed variable ({@link NoPrintedVariable}), and `render` never meets one. Its
- * type side holds every field of the model's placeholder, so the codec's body-node union stays the
- * model's `BodyNode`. A stub's `payloadSchema` gives it, through {@link SchemaKit}.
+ * The node of an interaction plate parses through a stub module, which the JSON form never holds:
+ * the stub's `parse` gives the notice, so `redact` never writes one, and its module has no step
+ * past `parse`. Its encoded side is `Never`, so decoding refuses a body node of its kind, as for a
+ * printed variable ({@link NoPrintedVariable}), and `render` never meets one. Its type side holds
+ * the fields every module's node shares (`ModuleInteraction`), a stub's whole node, so the codec's
+ * body-node union stays the model's `BodyNode`. A stub's `payloadSchema` gives it, through
+ * {@link SchemaKit}.
  *
  * @param stub The kind's stub module, by the kind, its feature and its element.
  * @returns The kind's member of {@link BodyNodeSchema}.
  */
-const unimplemented = <K extends string>(stub: {
+const unimplemented = <K extends ModuleKind>(stub: {
   readonly element: string;
   readonly feature: string;
   readonly kind: K;
-}): Schema.Codec<StubInteraction<K>, never> => {
+}): Schema.Codec<ModuleInteraction<K>, never> => {
   const refusal = `a redacted body holds no ${stub.kind} interaction (${stub.feature}): plate reads ${stub.element} as its notice until its module lands, so redact never writes one`;
 
   return Schema.Never.pipe(
@@ -396,10 +396,8 @@ const unimplemented = <K extends string>(stub: {
       Schema.Struct({
         ariaLabel: Schema.Option(Schema.String),
         ariaLabelledby: Schema.Option(Schema.String),
-        class: Schema.String,
         kind: Schema.Literal(stub.kind),
         path: Schema.String,
-        prompt: Schema.Option(BodyNodes),
         response: Schema.String,
       }),
       {
@@ -718,8 +716,19 @@ interface PendingNode {
 }
 
 /**
+ * The words that name a region of an interaction by its part, where no choice names it.
+ */
+const regionWords = {
+  choice: "content",
+  content: "content",
+  label: "Label",
+  prompt: "Prompt",
+} as const satisfies { readonly [P in Region["part"]]: string };
+
+/**
  * Name where a region of an interaction sits, as an issue of {@link misplacedInteraction} says it:
- * the Prompt or the Label of its owner, or the content of one of its owner's choices.
+ * the Prompt, the Label or the other content of its owner, or the content of one of its owner's
+ * choices.
  *
  * @param region The region, with its owner ({@link regionsOf}).
  * @returns The words that name it.
@@ -728,7 +737,7 @@ const withinWords = (region: Region): string => {
   const owner = `the ${region.owner.kind} interaction for the response ${JSON.stringify(region.owner.response)}`;
 
   return Option.match(region.choice, {
-    onNone: () => `the ${region.part === "label" ? "Label" : "Prompt"} of ${owner}`,
+    onNone: () => `the ${regionWords[region.part]} of ${owner}`,
     onSome: (identifier) => `the content of the choice ${JSON.stringify(identifier)} of ${owner}`,
   });
 };

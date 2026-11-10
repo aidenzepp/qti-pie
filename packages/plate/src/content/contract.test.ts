@@ -14,7 +14,7 @@ import { attr, doc, el, mathmlNamespace, qtiNamespace, text } from "#plate/docum
 import type { SourceElement } from "#plate/document/source.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
 import type { ParseContext } from "#plate/interactions/contract.ts";
-import { buildItem } from "#plate/model/item.ts";
+import { buildItem, parseContextOf } from "#plate/model/item.ts";
 import type { Unsupported } from "#plate/model/item.ts";
 import type { EmitState } from "#plate/payload.ts";
 import { noSupports } from "#plate/supports.ts";
@@ -204,22 +204,34 @@ const noticeOf = (module: AnyContentModule): string =>
   module.namespace === qtiNamespace ? module.element : `{${module.namespace}}${module.element}`;
 
 /**
- * Construct a parse context that records every notice it is asked for.
+ * Construct the parse context the body walk hands a module for one element placed alone in an
+ * item body, its notice recording every feature it is asked for.
  *
- * @param path The element's path.
+ * @param element The element.
  * @returns The context and the features its notices named.
  */
-const recording = (path: string): Recording => {
+const recording = (element: SourceElement): Recording => {
   const noticed: string[] = [];
+  const { context } = parseContextOf(
+    doc(
+      "items/test.xml",
+      el(
+        "qti-assessment-item",
+        [attr("identifier", "item"), attr("title", "Item")],
+        [el("qti-item-body", [], [element])],
+      ),
+    ),
+    element,
+  );
 
   return {
     context: {
+      ...context,
       notice: (feature) => {
         noticed.push(feature);
 
-        return Result.succeed({ feature, kind: "unsupported", path });
+        return Result.succeed({ feature, kind: "unsupported", path: context.path });
       },
-      path,
     },
     noticed,
   };
@@ -298,11 +310,13 @@ describe("a content module not implemented", () => {
       if (module.placement === "body") {
         const notice = noticeOf(module);
         const path = `qti-assessment-item/qti-item-body/${notice}`;
-        const { context, noticed } = recording(path);
+        const element = elementOf(module);
+        const { context, noticed } = recording(element);
         const unsupported: Unsupported = { feature: notice, kind: "unsupported", path };
 
+        assert.strictEqual(context.path, path, module.element);
         assert.deepStrictEqual(
-          module.parse(elementOf(module), context),
+          module.parse(element, context),
           Result.succeed(unsupported),
           module.element,
         );

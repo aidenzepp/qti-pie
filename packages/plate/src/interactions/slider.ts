@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { SliderInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every Slider part in the part table.
@@ -39,7 +38,7 @@ const notImplemented = (): never => {
 /**
  * The Slider module, a stub.
  */
-export const sliderModule: InteractionModule<"slider", SliderInteraction, never> = {
+export const sliderModule: InteractionModule<"slider", ModuleInteraction<"slider">, never> = {
   /**
    * The responses Slider binds, which `postings` reads: not implemented; issue ei-16 fills it.
    */

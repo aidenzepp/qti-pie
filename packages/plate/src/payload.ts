@@ -38,6 +38,7 @@ import {
   interactionsIn,
   isInteraction,
   isStubbed,
+  mapRegions,
   regionsOf,
   stubSteps,
 } from "#plate/model/interactions.ts";
@@ -1238,7 +1239,7 @@ type Printer = (bound: number) => Option.Option<string>;
  */
 const copyNode = (node: BodyNode, build: Build): PayloadNode => {
   if (isStubbed(node)) {
-    return stubSteps(node).redact();
+    return stubSteps(node).redact({ nodes: (nodes) => copyNodes(nodes, build) });
   }
 
   switch (node.kind) {
@@ -1791,7 +1792,7 @@ const printBody = (
         reach(node.path, () => true, seen);
         bind([node.response], seen);
 
-        return [{ ...node, prompt: node.prompt.pipe(Option.map((lead) => nodesOf(lead, seen))) }];
+        return [mapRegions(node, (region) => nodesOf(region.nodes, seen))];
       }
 
       switch (node.kind) {

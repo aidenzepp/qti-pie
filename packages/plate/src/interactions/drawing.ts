@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { DrawingInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every Drawing part in the part table.
@@ -39,7 +38,7 @@ const notImplemented = (): never => {
 /**
  * The Drawing module, a stub.
  */
-export const drawingModule: InteractionModule<"drawing", DrawingInteraction, never> = {
+export const drawingModule: InteractionModule<"drawing", ModuleInteraction<"drawing">, never> = {
   /**
    * The responses Drawing binds, which `postings` reads: not implemented; issue ei-17 fills it.
    */

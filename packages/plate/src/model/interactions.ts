@@ -9,8 +9,14 @@
  * {@link stubSteps} is the one place that hands a module kind's model node to its module, and
  * {@link renderModule} and {@link moduleContent} the ones that hand its payload node to its
  * module's render and content, so each hub delegates a module's kind in one line, and a module that
- * lands changes neither. As it loads, it hands the part table every module's part names
- * (`adoptModuleParts` in `#plate/emit/parts.ts`), which cannot import the modules itself.
+ * lands changes neither. The types the hubs read of a module kind, its model node
+ * ({@link ModelOf}) and its payload node ({@link PayloadOf}), are read from the table of modules
+ * ({@link modules}), and the item model reads its union of module nodes ({@link ModuleModel}) from
+ * the same table, so a module declares both in its own file and no shared file names a kind's
+ * fields. The table-generic forms ({@link ModelOfIn}, {@link PayloadOfIn}, {@link SteppedIn}) let a
+ * test type a module against the hubs through a table that holds it. As it loads, it hands the part
+ * table every module's part names (`adoptModuleParts` in `#plate/emit/parts.ts`), which cannot
+ * import the modules itself.
  *
  * It lives apart from the item model because the model builder value-imports the Effect runtime,
  * and its callers are browser modules: this module value-imports only `Option`, the part table and
@@ -50,8 +56,9 @@ import type {
   ModuleKind,
   OwnRegion,
   PartSpec,
+  RedactKit,
 } from "#plate/interactions/contract.ts";
-import type { BodyNode, Interaction, SimpleChoice, StubbedInteraction } from "#plate/model/item.ts";
+import type { BodyNode, Interaction, SimpleChoice } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import type {
   EmitState,
@@ -75,10 +82,10 @@ export interface Region {
    */
   readonly owner: Interaction;
   /**
-   * Which of the owner's content it is: a `prompt`, an Inline Choice's `label`, or a `choice`'s
-   * content.
+   * Which of the owner's content it is: a `prompt`, an Inline Choice's `label`, a `choice`'s
+   * content, or a module's other `content`, such as a Gap Match's gapped text.
    */
-  readonly part: "choice" | "label" | "prompt";
+  readonly part: "choice" | "content" | "label" | "prompt";
   /**
    * How the emitter writes it: as `nodes`, the body's elements and text, or as `text` only, as an
    * Inline Choice's choice is written as the one text of an `option`, so no element of it, and no
@@ -88,12 +95,24 @@ export interface Region {
 }
 
 /**
+ * What the hubs read of a table of modules: each kind's module, naming its kind, with the `redact`
+ * its model and payload node types are read from. The table of modules is one; a test's table that
+ * holds a module in place of a stub is another.
+ */
+export type ModuleTable = {
+  readonly [K in ModuleKind]: {
+    readonly kind: K;
+    readonly redact: (interaction: never, kit: RedactKit) => { readonly response: string };
+  };
+};
+
+/**
  * The module of each kind plate parses through one, by kind: a record over {@link ModuleKind}, so
  * a kind added to it or taken from it changes this table or fails to compile. The types a hub reads
  * of a module ({@link ModelOf}, {@link PayloadOf}) are read from it, so a module that lands
  * declares them in its own file.
  */
-const modules = {
+export const modules = {
   associate: associateModule,
   drawing: drawingModule,
   "end-attempt": endAttemptModule,
@@ -119,31 +138,66 @@ const modules = {
 export type Modules = typeof modules;
 
 /**
- * The model node of a module's kind, as its module's `redact` reads it.
+ * The model node of a module's kind in a table, as its module's `redact` reads it.
  *
+ * @template T The table.
  * @template K The kind.
  */
-export type ModelOf<K extends ModuleKind> = Parameters<Modules[K]["redact"]>[0];
+export type ModelOfIn<T extends ModuleTable, K extends ModuleKind> = Parameters<T[K]["redact"]>[0];
 
 /**
- * The payload node of a module's kind, as its module's `redact` gives it: `never` for a stub. It
- * names the response it binds, as the contract requires of every module's payload node.
+ * The payload node of a module's kind in a table, as its module's `redact` gives it: `never` for a
+ * stub. It names the response it binds, as the contract requires of every module's payload node.
  *
+ * @template T The table.
  * @template K The kind.
  */
-export type PayloadOf<K extends ModuleKind> = Extract<
-  ReturnType<Modules[K]["redact"]>,
+export type PayloadOfIn<T extends ModuleTable, K extends ModuleKind> = Extract<
+  ReturnType<T[K]["redact"]>,
   { readonly response: string }
 >;
 
 /**
- * The members of a module the hubs call through {@link stubSteps} and {@link renderModule}, typed
- * by its kind's model and payload nodes.
+ * The model node of every module kind in a table, one member per kind.
+ *
+ * @template T The table.
+ */
+export type ModuleModelIn<T extends ModuleTable> = {
+  readonly [K in ModuleKind]: ModelOfIn<T, K>;
+}[ModuleKind];
+
+/**
+ * The model node of a module's kind, as its module's `redact` reads it.
  *
  * @template K The kind.
  */
-type Stepped<K extends ModuleKind> = Pick<
-  InteractionModule<K, ModelOf<K>, PayloadOf<K>>,
+export type ModelOf<K extends ModuleKind> = ModelOfIn<Modules, K>;
+
+/**
+ * The payload node of a module's kind, as its module's `redact` gives it: `never` for a stub.
+ *
+ * @template K The kind.
+ */
+export type PayloadOf<K extends ModuleKind> = PayloadOfIn<Modules, K>;
+
+/**
+ * The model node of any interaction plate parses through a module, one member per kind, each as
+ * its module declares it: the item model's `Interaction` union holds this, so a module that lands
+ * changes the model through its own file. While every module is a stub, each member is the shared
+ * fields alone (`ModuleInteraction` in `#plate/interactions/contract.ts`), which the model never
+ * holds.
+ */
+export type ModuleModel = ModuleModelIn<Modules>;
+
+/**
+ * The members of a module the hubs call through {@link stubSteps} and {@link renderModule}, typed
+ * by its kind's model and payload nodes in a table.
+ *
+ * @template T The table.
+ * @template K The kind.
+ */
+type SteppedOf<T extends ModuleTable, K extends ModuleKind> = Pick<
+  InteractionModule<K, ModelOfIn<T, K>, PayloadOfIn<T, K>>,
   | "bindings"
   | "content"
   | "controls"
@@ -158,15 +212,20 @@ type Stepped<K extends ModuleKind> = Pick<
 >;
 
 /**
- * Each kind's {@link Stepped} members, by kind: a mapped type, so that indexing it by a kind gives
- * that kind's members, which correlates a node's kind with its module's types.
+ * Each kind's {@link SteppedOf} members in a table, by kind: a mapped type, so that indexing it by
+ * a kind gives that kind's members, which correlates a node's kind with its module's types. A table
+ * assigned to its own `SteppedIn` is the check that every module's steps take and give its own
+ * model and payload nodes, which {@link stepped} makes of {@link modules} and a test makes of a
+ * table that holds a module in place of a stub.
+ *
+ * @template T The table.
  */
-type SteppedModules = { readonly [K in ModuleKind]: Stepped<K> };
+export type SteppedIn<T extends ModuleTable> = { readonly [K in ModuleKind]: SteppedOf<T, K> };
 
 /**
- * {@link modules} as {@link SteppedModules}.
+ * {@link modules} as {@link SteppedIn} of itself.
  */
-const stepped: SteppedModules = modules;
+const stepped: SteppedIn<Modules> = modules;
 
 /**
  * Name each of a module's parts by its owner and its key. It reads any module alike, so the table
@@ -213,8 +272,7 @@ const replaceModuleRegions = <K extends ModuleKind>(
 
 /**
  * Tell whether a node is one of an interaction plate parses through a module: a model node
- * ({@link StubbedInteraction}) or a payload node (`ModulePayload`), whichever the node's own type
- * holds.
+ * ({@link ModuleModel}) or a payload node (`ModulePayload`), whichever the node's own type holds.
  *
  * @param node A body or payload node.
  * @returns Whether its kind is a {@link ModuleKind}.
@@ -268,7 +326,7 @@ const choiceRegions = (
  * Give the regions of an interaction, first in the document first: a Choice's Prompt then its
  * choices' content; an Extended Text's Prompt; an Inline Choice's Label then its choices' content,
  * which is written as text; nothing of a Text Entry's; and a module kind's ({@link isStubbed}) as
- * its module's `regions` gives them, none for a stub.
+ * its module's `regions` gives them, its other `content` among them, none for a stub.
  *
  * @param interaction The interaction.
  * @returns Its regions, each with the interaction as its owner.
@@ -424,9 +482,12 @@ export interface StubSteps<K extends ModuleKind> {
   readonly nullValue: () => Value;
   /**
    * Copy the node into its payload node, the module's `redact`, as the payload's
-   * {@link ModulePayloadOf} member.
+   * {@link ModulePayloadOf} member, its content copied through the kit.
+   *
+   * @param kit The payload's copy of body nodes.
+   * @returns The payload node, at its kind.
    */
-  readonly redact: () => ModulePayloadOf<K>;
+  readonly redact: (kit: RedactKit) => ModulePayloadOf<K>;
   readonly sequence: (seed: Option.Option<string>, instance: string) => Option.Option<string>;
   readonly unnamed: (unauthored: boolean) => boolean;
   readonly validate: (
@@ -449,7 +510,7 @@ const stepsOf = <K extends ModuleKind>(kind: K, interaction: ModelOf<K>): StubSt
     bindings: () => module.bindings(interaction),
     controls: () => module.controls(interaction),
     nullValue: () => module.nullValue(interaction),
-    redact: () => ({ kind, payload: module.redact(interaction) }),
+    redact: (kit) => ({ kind, payload: module.redact(interaction, kit) }),
     sequence: (seed, instance) => module.sequence(interaction, seed, instance),
     unnamed: (unauthored) => module.unnamed(interaction, unauthored),
     validate: (input, configuration) => module.validate(interaction, input, configuration),
@@ -465,7 +526,7 @@ const stepsOf = <K extends ModuleKind>(kind: K, interaction: ModelOf<K>): StubSt
  * @returns Its module's steps, bound to it.
  */
 export const stubSteps = (
-  interaction: StubbedInteraction,
+  interaction: ModuleModel,
 ): { readonly [K in ModuleKind]: StubSteps<K> }[ModuleKind] => {
   switch (interaction.kind) {
     case "associate": {

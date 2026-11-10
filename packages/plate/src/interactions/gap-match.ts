@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { GapMatchInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every Gap Match part in the part table.
@@ -39,7 +38,11 @@ const notImplemented = (): never => {
 /**
  * The Gap Match module, a stub.
  */
-export const gapMatchModule: InteractionModule<"gap-match", GapMatchInteraction, never> = {
+export const gapMatchModule: InteractionModule<
+  "gap-match",
+  ModuleInteraction<"gap-match">,
+  never
+> = {
   /**
    * The responses Gap Match binds, which `postings` reads: not implemented; issue m3d-03 fills it.
    */

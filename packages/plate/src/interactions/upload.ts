@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { UploadInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every Upload part in the part table.
@@ -39,7 +38,7 @@ const notImplemented = (): never => {
 /**
  * The Upload module, a stub.
  */
-export const uploadModule: InteractionModule<"upload", UploadInteraction, never> = {
+export const uploadModule: InteractionModule<"upload", ModuleInteraction<"upload">, never> = {
   /**
    * The responses Upload binds, which `postings` reads: not implemented; issue ei-01 fills it.
    */

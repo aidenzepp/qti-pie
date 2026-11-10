@@ -76,6 +76,21 @@ export type RenderModule = (interaction: ModulePayload) => Result.Result<Element
 export type ModuleContent = (interaction: ModulePayload) => readonly PayloadNode[];
 
 /**
+ * Render an element of a module's own content that the module owns, such as a Gap Match's
+ * `qti-gap`: the body walk reads one as an element (`ReaderKit.nodes` in
+ * `#plate/interactions/contract.ts`), the payload and the codec carry it as one, and the emitter,
+ * which drops any element outside its HTML subset, hands it here first. A module's render gives
+ * this to {@link nestedInteraction} for the content it emits.
+ *
+ * @param element An element of the content outside the HTML subset.
+ * @returns The nodes it renders as, or none for an element the module does not own, which the
+ *   emitter then drops as it drops any element outside the subset.
+ */
+export type OwnedElements = (
+  element: ElementPayload,
+) => Option.Option<Result.Result<readonly Node[], PartSwapRefused>>;
+
+/**
  * Render one interaction of the body: the interaction module's render function, with the payload
  * and the state already applied.
  */
@@ -101,6 +116,12 @@ export interface RenderInteraction {
    * none.
    */
   readonly moduleContent?: ModuleContent;
+  /**
+   * Render the elements a module owns among the content it emits ({@link OwnedElements}): set by
+   * the module's render through {@link nestedInteraction}. A render function without it drops them,
+   * as the emitter drops any element outside its HTML subset.
+   */
+  readonly owned?: OwnedElements;
 }
 
 /**
@@ -178,14 +199,21 @@ export class NestedInteractionDefect extends Data.TaggedError("NestedInteraction
 /**
  * Give the render function for content where QTI's schema admits no interaction, a Prompt's, a
  * choice's or an Inline Choice's Label's, or the content of an interaction a module parses: meeting
- * one is a defect, since only a payload built by hand can hold one.
+ * one is a defect, since only a payload built by hand can hold one. A module's render gives it the
+ * renderer of its own elements, so a `qti-gap` in the content it emits renders through the module.
  *
  * @param within Where the content sits.
+ * @param owned The renderer of the elements the module that owns the content owns, none for a
+ *   shipped kind, which owns no element.
  * @returns A render function that throws {@link NestedInteractionDefect}, naming the interaction
- *   and `within`, for any interaction it is handed, a module's included.
+ *   and `within`, for any interaction it is handed, a module's included, and renders the module's
+ *   own elements through `owned`.
  */
-export const nestedInteraction = (within: NestedWithin): RenderInteraction =>
-  Object.assign(
+export const nestedInteraction = (
+  within: NestedWithin,
+  owned?: OwnedElements,
+): RenderInteraction => {
+  const render: RenderInteraction = Object.assign(
     (nested: InteractionPayload): never => {
       throw new NestedInteractionDefect({ kind: nested.kind, response: nested.response, within });
     },
@@ -199,6 +227,9 @@ export const nestedInteraction = (within: NestedWithin): RenderInteraction =>
       },
     },
   );
+
+  return owned === undefined ? render : Object.assign(render, { owned });
+};
 
 /**
  * The attributes the XSD declares as references to ids (`xs:IDREF`, `xs:IDREFS`, and `headers`, a
@@ -765,10 +796,11 @@ const elementOf = (
  *
  * @param node The payload node.
  * @param walk What the walk carries.
- * @returns The node as it renders, a module's payload node through `renderInteraction.modules`;
- *   none when the second line drops it (an element outside {@link htmlSubset}, a node of no kind
- *   the payload defines, or a module's payload node for a render function without `modules`); or
- *   the refusal of a part swap.
+ * @returns The node as it renders, a module's payload node through `renderInteraction.modules`, an
+ *   element outside {@link htmlSubset} through `renderInteraction.owned`; none when the second line
+ *   drops it (an element outside {@link htmlSubset} no `owned` renders, a node of no kind the
+ *   payload defines, or a module's payload node for a render function without `modules`); or the
+ *   refusal of a part swap.
  */
 const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], PartSwapRefused> => {
   if (isModulePayload(node)) {
@@ -781,7 +813,13 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
   switch (node.kind) {
     case "element": {
       return Option.match(Option.fromUndefinedOr(htmlSubset.get(node.tag)), {
-        onNone: () => Result.succeed([]),
+        onNone: () =>
+          Option.getOrElse(
+            Option.flatMap(Option.fromUndefinedOr(walk.renderInteraction.owned), (owned) =>
+              owned(node),
+            ),
+            () => Result.succeed([]),
+          ),
         onSome: (declared) => Result.map(elementOf(node, declared, walk), (element) => [element]),
       });
     }

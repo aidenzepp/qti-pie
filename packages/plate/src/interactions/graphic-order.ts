@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { GraphicOrderInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every Graphic Order part in the part table.
@@ -41,7 +40,7 @@ const notImplemented = (): never => {
  */
 export const graphicOrderModule: InteractionModule<
   "graphic-order",
-  GraphicOrderInteraction,
+  ModuleInteraction<"graphic-order">,
   never
 > = {
   /**

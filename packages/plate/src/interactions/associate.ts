@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { AssociateInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every Associate part in the part table.
@@ -39,7 +38,11 @@ const notImplemented = (): never => {
 /**
  * The Associate module, a stub.
  */
-export const associateModule: InteractionModule<"associate", AssociateInteraction, never> = {
+export const associateModule: InteractionModule<
+  "associate",
+  ModuleInteraction<"associate">,
+  never
+> = {
   /**
    * The responses Associate binds, which `postings` reads: not implemented; issue ei-04 fills it.
    */

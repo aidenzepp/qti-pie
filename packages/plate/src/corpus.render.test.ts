@@ -4,7 +4,7 @@ import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import { configure } from "#plate/index.ts";
 import type { Accepted, Configuration, Element, Node, Verdict } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
-import { isStubbed } from "#plate/model/interactions.ts";
+import { isStubbed, regionsOf } from "#plate/model/interactions.ts";
 import type {
   BodyElement,
   BodyNode,
@@ -224,7 +224,7 @@ const withheldOf = (item: Item, values: Option.Option<RedactRecord>): readonly s
   const walk = (nodes: readonly BodyNode[]): readonly string[] =>
     nodes.flatMap((node): readonly string[] => {
       if (isStubbed(node)) {
-        return walk(Option.getOrElse(node.prompt, () => []));
+        return regionsOf(node).flatMap((region) => walk(region.nodes));
       }
 
       switch (node.kind) {

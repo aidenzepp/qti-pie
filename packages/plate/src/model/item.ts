@@ -71,7 +71,7 @@ import { positionObjectModule } from "#plate/interactions/position-object.ts";
 import { selectPointModule } from "#plate/interactions/select-point.ts";
 import { sliderModule } from "#plate/interactions/slider.ts";
 import { uploadModule } from "#plate/interactions/upload.ts";
-import type { ParseContext } from "#plate/interactions/contract.ts";
+import type { BoundDeclaration, ParseContext, ReaderKit } from "#plate/interactions/contract.ts";
 import type { AttributeRefusal, ModelWalk } from "#plate/model/attributes.ts";
 import type {
   Branch,
@@ -88,6 +88,8 @@ import type {
 import { expressionKinds, integerOrRefOf } from "#plate/model/expression.ts";
 import { kindRules, readExpression } from "#plate/model/expressions/read.ts";
 import type { ExpressionReading } from "#plate/model/expressions/read.ts";
+import type { ModuleModel } from "#plate/model/interactions.ts";
+import { readersOf } from "#plate/model/reader.ts";
 import { translate } from "#plate/model/regex.ts";
 import { templateRules } from "#plate/model/template.ts";
 import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
@@ -381,7 +383,10 @@ export interface BodyAttribute {
 
 /**
  * An HTML element of the QTI namespace in the item body (I-8), with its attributes as written but
- * for the ones marked unsupported.
+ * for the ones marked unsupported; or an element an interaction module owns inside its own content,
+ * such as a Gap Match's `qti-gap`, which the body walk reads the same way where the module claims
+ * it (`ReaderKit.nodes` in `#plate/interactions/contract.ts`) and the module's render writes
+ * (`OwnedElements` in `#plate/emit/body.ts`), so the payload and the codec carry it as any element.
  */
 export interface BodyElement {
   readonly attributes: readonly BodyAttribute[];
@@ -626,114 +631,6 @@ export interface ExtendedTextInteraction extends Omit<
 }
 
 /**
- * The placeholder model node of an interaction plate parses through a stub module in
- * `#plate/interactions/`: the fields every interaction the model holds shares, the bound response,
- * the authored names and `class`, the path and the Prompt. A stub's `parse` gives the notice, so
- * the model holds no node of this shape; the issue that lands a kind's module replaces its
- * placeholder by the kind's own fields.
- */
-export interface StubInteraction<K extends string> {
-  readonly ariaLabel: Option.Option<string>;
-  readonly ariaLabelledby: Option.Option<string>;
-  /**
-   * The author's `class` value, empty when absent.
-   */
-  readonly class: string;
-  readonly kind: K;
-  readonly path: string;
-  readonly prompt: Option.Option<readonly BodyNode[]>;
-  /**
-   * The identifier of the response it binds, `response-identifier`.
-   */
-  readonly response: string;
-}
-
-/**
- * A `qti-associate-interaction`, which plate parses through its stub module as its notice.
- */
-export type AssociateInteraction = StubInteraction<"associate">;
-
-/**
- * A `qti-drawing-interaction`, which plate parses through its stub module as its notice.
- */
-export type DrawingInteraction = StubInteraction<"drawing">;
-
-/**
- * A `qti-end-attempt-interaction`, which plate parses through its stub module as its notice.
- */
-export type EndAttemptInteraction = StubInteraction<"end-attempt">;
-
-/**
- * A `qti-gap-match-interaction`, which plate parses through its stub module as its notice.
- */
-export type GapMatchInteraction = StubInteraction<"gap-match">;
-
-/**
- * A `qti-graphic-associate-interaction`, which plate parses through its stub module as its notice.
- */
-export type GraphicAssociateInteraction = StubInteraction<"graphic-associate">;
-
-/**
- * A `qti-graphic-gap-match-interaction`, which plate parses through its stub module as its notice.
- */
-export type GraphicGapMatchInteraction = StubInteraction<"graphic-gap-match">;
-
-/**
- * A `qti-graphic-order-interaction`, which plate parses through its stub module as its notice.
- */
-export type GraphicOrderInteraction = StubInteraction<"graphic-order">;
-
-/**
- * A `qti-hotspot-interaction`, which plate parses through its stub module as its notice.
- */
-export type HotspotInteraction = StubInteraction<"hotspot">;
-
-/**
- * A `qti-hottext-interaction`, which plate parses through its stub module as its notice.
- */
-export type HottextInteraction = StubInteraction<"hottext">;
-
-/**
- * A `qti-match-interaction`, which plate parses through its stub module as its notice.
- */
-export type MatchInteraction = StubInteraction<"match">;
-
-/**
- * A `qti-media-interaction`, which plate parses through its stub module as its notice.
- */
-export type MediaInteraction = StubInteraction<"media">;
-
-/**
- * A `qti-order-interaction`, which plate parses through its stub module as its notice.
- */
-export type OrderInteraction = StubInteraction<"order">;
-
-/**
- * A `qti-portable-custom-interaction`, which plate parses through its stub module as its notice.
- */
-export type PortableCustomInteraction = StubInteraction<"portable-custom">;
-
-/**
- * A `qti-position-object-interaction`, which plate parses through its stub module as its notice.
- */
-export type PositionObjectInteraction = StubInteraction<"position-object">;
-
-/**
- * A `qti-select-point-interaction`, which plate parses through its stub module as its notice.
- */
-export type SelectPointInteraction = StubInteraction<"select-point">;
-
-/**
- * A `qti-slider-interaction`, which plate parses through its stub module as its notice.
- */
-export type SliderInteraction = StubInteraction<"slider">;
-
-/**
- * A `qti-upload-interaction`, which plate parses through its stub module as its notice.
- */
-export type UploadInteraction = StubInteraction<"upload">;
-
-/**
  * A `qti-printed-variable` (the information model's PrintedVariable): the place in the body where
  * the value of an outcome or a template variable is written as text, with the attributes that say
  * how. The validator has judged what it names (`printed-variable-ref`) and its `format` (R38).
@@ -833,37 +730,16 @@ export interface Unsupported {
 }
 
 /**
- * An interaction plate parses through a stub module, by its placeholder node
- * ({@link StubInteraction}), which the model never holds.
- */
-export type StubbedInteraction =
-  | AssociateInteraction
-  | DrawingInteraction
-  | EndAttemptInteraction
-  | GapMatchInteraction
-  | GraphicAssociateInteraction
-  | GraphicGapMatchInteraction
-  | GraphicOrderInteraction
-  | HotspotInteraction
-  | HottextInteraction
-  | MatchInteraction
-  | MediaInteraction
-  | OrderInteraction
-  | PortableCustomInteraction
-  | PositionObjectInteraction
-  | SelectPointInteraction
-  | SliderInteraction
-  | UploadInteraction;
-
-/**
  * An interaction of the item model: the four plate renders, Choice, Extended Text, Inline Choice
- * and Text Entry, and the seventeen it parses through a stub module ({@link StubbedInteraction}).
+ * and Text Entry, and the seventeen it parses through a module, each node as its module declares
+ * it (`ModuleModel` in `#plate/model/interactions.ts`, read from the table of modules), so this
+ * union names no module kind's fields and a module that lands changes it through its own file.
  */
 export type Interaction =
   | ChoiceInteraction
   | ExtendedTextInteraction
   | InlineChoiceInteraction
-  | StubbedInteraction
+  | ModuleModel
   | TextEntryInteraction;
 
 /**
@@ -1952,21 +1828,37 @@ const bodyAttributes = (element: SourceElement): readonly BodyAttribute[] =>
   );
 
 /**
- * Read the children of a body element, the item body included.
+ * The `qti-*` elements a module owns inside the content the walk reads for it, by local name: the
+ * walk reads each as an element in place of the notice it gives any other `qti-*` element. Empty
+ * for the item body and for the content of the four shipped kinds, which own none.
+ */
+type Owned = ReadonlySet<string>;
+
+/**
+ * No owned element: what every walk but a module's reads under.
+ */
+const noneOwned: Owned = new Set();
+
+/**
+ * Read children of a body element, the item body included.
  *
  * @param build The build.
  * @param parent The element.
- * @returns Its children's body nodes, in document order, or a refusal.
+ * @param own The `qti-*` elements the module reading this content owns, none by default.
+ * @param children The children to read, all of `parent`'s by default.
+ * @returns Their body nodes, in document order, or a refusal.
  */
 const bodyNodes = (
   build: Build,
   parent: SourceElement,
+  own: Owned = noneOwned,
+  children: readonly SourceChild[] = parent.children,
 ): Result.Result<readonly BodyNode[], Refusal> =>
   Result.gen(function* readBodyNodes() {
     const nodes: BodyNode[] = [];
-    for (const child of parent.children) {
+    for (const child of children) {
       // oxlint-disable-next-line eslint/no-use-before-define -- `bodyNodes` and `bodyNode` are mutually recursive, as body elements nest; the call runs only after both are defined.
-      nodes.push(yield* bodyNode(build, parent, child));
+      nodes.push(yield* bodyNode(build, parent, child, own));
     }
 
     return nodes;
@@ -1984,7 +1876,7 @@ const bodyNodes = (
 const firstContent = (
   build: Build,
   interaction: SourceElement,
-  local: "qti-label" | "qti-prompt",
+  local: string,
 ): Result.Result<Option.Option<readonly BodyNode[]>, Refusal> =>
   Result.transposeOption(
     Option.map(Arr.head(childrenNamed(interaction, local)), (child) => {
@@ -2401,17 +2293,19 @@ const printedVariable = (
  *
  * @param build The build.
  * @param block The template block.
+ * @param own The `qti-*` elements the module reading this content owns.
  * @returns Its content, or a refusal.
  */
 const templateBlockContent = (
   build: Build,
   block: SourceElement,
+  own: Owned,
 ): Result.Result<readonly BodyNode[], Refusal> =>
   Result.gen(function* readTemplateBlockContent() {
     const parts: (readonly BodyNode[])[] = [];
     for (const part of elementsOf(block)) {
       if (isQti(part, "qti-content-body")) {
-        parts.push(yield* bodyNodes(build, part));
+        parts.push(yield* bodyNodes(build, part, own));
       } else {
         record(build, { feature: nameOf(part), path: pathOf(build, part), shown: "mark" });
         parts.push([]);
@@ -2464,6 +2358,8 @@ const boundResponses = (
  * @param build The build.
  * @param element The template block or inline.
  * @param kind Which of the two it is.
+ * @param own The `qti-*` elements the module reading this content owns, which its content is read
+ *   under too, so a module's element inside template content reaches the module.
  * @returns Its body node, or the refusal `missing-attribute` when it has no `identifier` or no
  *   `template-identifier`, or `attribute-type` when `show-hide` is neither `show` nor `hide`; the
  *   validator refuses each first.
@@ -2472,6 +2368,7 @@ const templateContent = (
   build: Build,
   element: SourceElement,
   kind: TemplateContent["kind"],
+  own: Owned,
 ): Result.Result<TemplateContent, Refusal> =>
   Result.gen(function* readTemplateContent() {
     markElement(build, element, true);
@@ -2480,8 +2377,8 @@ const templateContent = (
     const templateIdentifier = yield* identifierAttribute(build, element, "template-identifier");
     const templateVisibility = yield* templateVisibilityOf(build, element, templateIdentifier);
     const content = yield* kind === "template-block"
-      ? templateBlockContent(build, element)
-      : bodyNodes(build, element);
+      ? templateBlockContent(build, element, own)
+      : bodyNodes(build, element, own);
 
     return {
       content,
@@ -2494,13 +2391,76 @@ const templateContent = (
   });
 
 /**
- * Read a QTI interaction element plate parses through a stub module, by its module's `parse`,
- * which the element's notice and path are handed to.
+ * Give the declaration an element's `response-identifier` names, as a module's kit gives it: its
+ * base type and cardinality as written, each none when absent or outside the vocabulary.
+ *
+ * @param build The build.
+ * @param element An interaction.
+ * @returns The bound declaration, or none when the element binds none the item declares.
+ */
+const boundOf = (build: Build, element: SourceElement): Option.Option<BoundDeclaration> =>
+  Option.map(boundDeclaration(build, element), (declaration) => ({
+    baseType: Option.flatMap(valueOf(declaration, "base-type"), (written) =>
+      Arr.findFirst(baseTypes, (baseType) => baseType === written),
+    ),
+    cardinality: Option.flatMap(valueOf(declaration, "cardinality"), (written) =>
+      Arr.findFirst(cardinalities, (cardinality) => cardinality === written),
+    ),
+    element: declaration,
+    identifier: Option.getOrElse(
+      Option.map(valueOf(declaration, "identifier"), identifierOf),
+      () => "",
+    ),
+  }));
+
+/**
+ * Build the kit a module's `parse` reads one element with: the attribute readers bound to the
+ * build, the body walk for the element's content with the module's own elements let through, the
+ * two ways to record a mark, and the declaration the element binds.
+ *
+ * @param build The build.
+ * @param element The element being parsed.
+ * @returns The kit.
+ */
+const readerKitOf = (build: Build, element: SourceElement): ReaderKit => ({
+  ...readersOf(build),
+  bound: boundOf(build, element),
+  content: (parent, local) => firstContent(build, parent, local),
+  mark: (marked, feature) => {
+    record(build, { feature, path: pathOf(build, marked), shown: "mark" });
+  },
+  markElement: (marked) => {
+    markElement(build, marked, true);
+  },
+  nodes: (parent, options = {}) =>
+    bodyNodes(build, parent, new Set(options.own), options.children ?? parent.children),
+});
+
+/**
+ * Build the context the body walk hands a module's or a body-placed content module's `parse` for
+ * one element: its path, its notice, and the kit it is read with.
+ *
+ * @param build The build.
+ * @param element The element being parsed.
+ * @returns The context.
+ */
+const contextOf = (build: Build, element: SourceElement): ParseContext => {
+  const path = pathOf(build, element);
+
+  return {
+    notice: (feature) => notice(build, feature, path),
+    path,
+    read: readerKitOf(build, element),
+  };
+};
+
+/**
+ * Read a QTI interaction element plate parses through a module, by its module's `parse`, which
+ * the element's notice, path and kit are handed to.
  *
  * @param build The build.
  * @param element The element.
- * @returns Its body node, or a refusal; none when the element is no interaction a stub module
- *   reads.
+ * @returns Its body node, or a refusal; none when the element is no interaction a module reads.
  */
 const stubNode = (
   build: Build,
@@ -2510,8 +2470,7 @@ const stubNode = (
     return Option.none();
   }
 
-  const path = pathOf(build, element);
-  const context: ParseContext = { notice: (feature) => notice(build, feature, path), path };
+  const context = contextOf(build, element);
 
   switch (element.local) {
     case associateModule.element: {
@@ -2640,8 +2599,8 @@ const itemContent = contentModules.filter(
 );
 
 /**
- * Read a body element a content module reads, by its module's `parse`, which the element's notice
- * and path are handed to.
+ * Read a body element a content module reads, by its module's `parse`, which the element's notice,
+ * path and kit are handed to.
  *
  * @param build The build.
  * @param element The element.
@@ -2658,11 +2617,7 @@ const contentNode = (
     return Option.none();
   }
 
-  const path = pathOf(build, element);
-
-  return Option.some(
-    module.parse(element, { notice: (feature) => notice(build, feature, path), path }),
-  );
+  return Option.some(module.parse(element, contextOf(build, element)));
 };
 
 /**
@@ -2764,15 +2719,17 @@ const withItemContent = (item: Item, content: ItemContentBuild): Item =>
  * @param build The build.
  * @param parent The element that holds it.
  * @param child The child.
+ * @param own The `qti-*` elements the module reading this content owns, each read as an element.
  * @returns Its body node: text as itself, an HTML element with its subtree, an interaction's model
- *   or, for one a stub module or a body-placed content module reads, what its `parse` gives, a
- *   printed variable's, a template block's or inline's with its content, or a notice for anything
- *   else, its subtree dropped; or a refusal.
+ *   or, for one a module or a body-placed content module reads, what its `parse` gives, a printed
+ *   variable's, a template block's or inline's with its content, a module's own element as an
+ *   element with its subtree, or a notice for anything else, its subtree dropped; or a refusal.
  */
 const bodyNode = (
   build: Build,
   parent: SourceElement,
   child: SourceChild,
+  own: Owned,
 ): Result.Result<BodyNode, Refusal> => {
   if (child.kind === "text") {
     return Result.succeed({ kind: "text", text: child.text });
@@ -2802,21 +2759,21 @@ const bodyNode = (
   }
 
   if (isQti(child, "qti-template-block")) {
-    return templateContent(build, child, "template-block");
+    return templateContent(build, child, "template-block", own);
   }
 
   if (isQti(child, "qti-template-inline")) {
-    return templateContent(build, child, "template-inline");
+    return templateContent(build, child, "template-inline", own);
   }
 
-  if (!isQti(child) || child.local.startsWith("qti-")) {
+  if (!isQti(child) || (child.local.startsWith("qti-") && !own.has(child.local))) {
     return notice(build, nameOf(child), pathOf(build, child));
   }
 
   return Result.gen(function* bodyElement() {
     markElement(build, child, true);
 
-    const children = yield* bodyNodes(build, child);
+    const children = yield* bodyNodes(build, child, own);
 
     return {
       attributes: bodyAttributes(child),
@@ -4362,3 +4319,42 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
 
     return withItemContent(unheld.size === 0 ? withRecords : { ...withRecords, unheld }, content);
   });
+
+/**
+ * The context {@link buildItem} would hand a module's `parse` for one element of an item, and the
+ * features that parse records: for a module's own tests, which read an element through the kit
+ * without building the item around it. The build is fresh, so the features hold what the one parse
+ * records, in order.
+ */
+export interface ParseContextOf {
+  readonly context: ParseContext;
+  /**
+   * The features recorded through the context so far, each once per feature and path, in the
+   * order recorded: a live view of the build the context writes to.
+   */
+  readonly unsupported: readonly UnsupportedFeature[];
+}
+
+/**
+ * Build the parse context {@link buildItem} hands a module's `parse` for one element of an item
+ * document, over a fresh build of the document: its declarations, its names and every element's
+ * path.
+ *
+ * @param source The item document the element sits in.
+ * @param element The element, one of the document's.
+ * @returns The context, and the features parsing through it records.
+ */
+export const parseContextOf = (source: SourceDocument, element: SourceElement): ParseContextOf => {
+  const build: Build = {
+    builder: "buildItem",
+    declarations: declarationsOf(source),
+    document: source,
+    names: declaredNames(source.root),
+    paths: pathsOf(source),
+    recorded: new Map(),
+    records: new Map(),
+    unsupported: [],
+  };
+
+  return { context: contextOf(build, element), unsupported: build.unsupported };
+};

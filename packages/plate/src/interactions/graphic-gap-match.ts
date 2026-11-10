@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { GraphicGapMatchInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every Graphic Gap Match part in the part table.
@@ -41,7 +40,7 @@ const notImplemented = (): never => {
  */
 export const graphicGapMatchModule: InteractionModule<
   "graphic-gap-match",
-  GraphicGapMatchInteraction,
+  ModuleInteraction<"graphic-gap-match">,
   never
 > = {
   /**

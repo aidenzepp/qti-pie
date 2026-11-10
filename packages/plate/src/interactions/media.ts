@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { MediaInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every Media part in the part table.
@@ -39,7 +38,7 @@ const notImplemented = (): never => {
 /**
  * The Media module, a stub.
  */
-export const mediaModule: InteractionModule<"media", MediaInteraction, never> = {
+export const mediaModule: InteractionModule<"media", ModuleInteraction<"media">, never> = {
   /**
    * The responses Media binds, which `postings` reads: not implemented; issue ei-03 fills it.
    */
