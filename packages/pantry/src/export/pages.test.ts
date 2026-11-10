@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, explore } from "@grizzle/testing/explore";
 import { required } from "@grizzle/testing/features";
-import { element, increasing, int } from "@grizzle/testing/gen";
+import { element, increasing } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
@@ -280,13 +280,6 @@ type PagingFeature =
   | "one page"
   | "a page per row";
 
-/**
- * The named ways a page stream departs from the scan: one page served twice in a row, as a page
- * whose lookahead repeats a boundary would; one page left out; and a `Document` row on a node
- * besides the document node, which the mirror law of `Document` refuses in the database.
- */
-type PageVariant = "repeatedPage" | "droppedPage" | "secondDocumentRow";
-
 describe("export/pages.ts", { timeout: searchTimeout }, () => {
   it.effect(
     "assembles every generated document to itself from its scan cut into pages at any boundaries, as from one page",
@@ -378,88 +371,56 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
       ),
   );
 
-  it.effect(
-    "refuses the document when a page of its scan is served twice or left out, or a second node carries a Document row",
-    (ctx) =>
-      // Oracle: the specification as a checker: a document's rows are a set keyed by start, so a
-      // page served twice repeats every start it holds and a page left out leaves its starts
-      // empty, and assemble refuses both; and a document holds one Document row, on its document
-      // node. No defect of the page stream is absorbed. An XmlDecl row's version is the database's
-      // to hold, by its pattern law (`#pantry/export/trusted-laws.db.test.ts`), so no variant breaks
-      // it here.
-      // Bound: the generator's drawn bounds, one drawn cut set, variant and page a case.
-      searched(
-        ctx,
-        explore(
-          {
-            caseHang,
-            concurrency: 1,
-            coverage: required<PageVariant>(["repeatedPage", "droppedPage", "secondDocumentRow"], {
-              cases: 200,
-              sense: notesOnly,
-            }),
-            draw: drawn(documents),
-            kept: [],
-            literal: Formatter.format,
-            oracle: {
-              kind: "specification",
-              name: "a document's rows are a set keyed by start, with one Document row",
-            },
-            runs: 200,
-            shrink: completeShrink,
-            steerEvery: 16,
-            suite: "export/pages-variants",
+  it.effect("refuses the document when a second node carries a Document row", (ctx) =>
+    // Oracle: the specification as a checker: a document holds one Document row, on its document
+    // node, which the read takes the document's charsets from. A page stream is the database's,
+    // read as grizzle's cursors give it (the cuts above), so no page variant is judged here; an
+    // XmlDecl row's version is the database's to hold, by its pattern law
+    // (`#pantry/export/trusted-laws.db.test.ts`), so no case breaks it.
+    // Bound: the generator's drawn bounds, one document a case.
+    searched(
+      ctx,
+      explore(
+        {
+          caseHang,
+          concurrency: 1,
+          coverage: required<"secondDocumentRow">(["secondDocumentRow"], {
+            cases: 200,
+            sense: notesOnly,
+          }),
+          draw: drawn(documents),
+          kept: [],
+          literal: Formatter.format,
+          oracle: {
+            kind: "specification",
+            name: "a document's scan holds one Document row, on its document node",
           },
-          (generated, c) =>
-            Effect.gen(function* pageVariant() {
-              const rows = flatten(generated.document, idOf);
-              const scan = scanOf(rows);
-              const cuts = c.draw(increasing(1, scan.length - 1, { max: scan.length - 1, min: 1 }));
-              const pages = pagesOf(scan, cuts);
-              const variant = c.draw(
-                element(["repeatedPage", "droppedPage", "secondDocumentRow"] as const),
-              );
-              const at = c.draw(int(0, pages.length - 1));
-              c.note(variant);
+          runs: 200,
+          shrink: completeShrink,
+          steerEvery: 16,
+          suite: "export/pages-variants",
+        },
+        (generated, c) =>
+          Effect.gen(function* secondDocumentRow() {
+            const rows = flatten(generated.document, idOf);
+            const [root, ...below] = scanOf(rows);
+            const last = below.at(-1);
+            if (root === undefined || last === undefined) {
+              assert.fail("a scan holds the document node and its root element");
+            }
 
-              switch (variant) {
-                case "repeatedPage":
-                case "droppedPage": {
-                  const served =
-                    variant === "repeatedPage"
-                      ? [...pages.slice(0, at + 1), ...pages.slice(at)]
-                      : [...pages.slice(0, at), ...pages.slice(at + 1)];
-                  const assembled = yield* assembledFrom(rows.document.node, served);
+            c.note("secondDocumentRow");
 
-                  assert.isTrue(
-                    Result.isFailure(assembled),
-                    `${variant} of page ${String(at)} of ${String(pages.length)} assembled`,
-                  );
-                  break;
-                }
-                case "secondDocumentRow": {
-                  const [root, ...below] = scan;
-                  const last = below.at(-1);
-                  if (root === undefined || last === undefined) {
-                    assert.fail("a scan holds the document node and its root element");
-                  }
+            const assembled = yield* assembledFrom(rows.document.node, [
+              [root, ...below.slice(0, -1), { ...last, documentRow: root.documentRow }],
+            ]);
 
-                  const assembled = yield* assembledFrom(rows.document.node, [
-                    [root, ...below.slice(0, -1), { ...last, documentRow: root.documentRow }],
-                  ]);
-
-                  assert.deepStrictEqual(
-                    Result.isFailure(assembled) ? assembled.failure : undefined,
-                    new DocumentRowCount({ document: rows.document.node, found: 2 }),
-                  );
-                  break;
-                }
-                default: {
-                  assert.fail(`drew ${String(variant satisfies never)}, which is no variant`);
-                }
-              }
-            }),
-        ),
+            assert.deepStrictEqual(
+              Result.isFailure(assembled) ? assembled.failure : undefined,
+              new DocumentRowCount({ document: rows.document.node, found: 2 }),
+            );
+          }),
       ),
+    ),
   );
 });

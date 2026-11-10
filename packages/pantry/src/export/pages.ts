@@ -11,13 +11,13 @@
  * gives is the scan's rows, whatever the cuts.
  *
  * Every row is folded by its own key, never by where it arrives: a node by its `start`, an
- * attribute or a namespace declaration by its `at`, an entity reference by its offset, as
- * `assemble` places them. So paging is invisible: the same rows cut into any pages give the same
- * document, and a page repeated or left out leaves rows `assemble` refuses.
+ * attribute or a namespace declaration by its `at`, an entity reference by its offset, as the read
+ * (`readDocument` of `#pantry/model/assemble.ts`) places them. So paging is invisible: the same
+ * rows cut into any pages give the same document.
  */
 import { Effect, Option, Result, Schema, Stream } from "effect";
 import type { Page, PageCursor, PageRequest } from "@bjornpagen/grizzle";
-import { assemble } from "#pantry/model/assemble.ts";
+import { readDocument } from "#pantry/model/assemble.ts";
 import type { AssembleError } from "#pantry/model/assemble.ts";
 import type {
   AttributeEntityRow,
@@ -278,7 +278,7 @@ export class DocumentRowCount extends Schema.TaggedError<DocumentRowCount>()("Do
 }
 
 /**
- * Read an `XmlDecl` row as `assemble` reads it, its version a `VersionNum`.
+ * Read an `XmlDecl` row as the read takes it, its version a `VersionNum`.
  *
  * @param row - The row as the scan delivered it.
  * @returns The row, its version typed as the `VersionNum` it is.
@@ -297,13 +297,14 @@ const xmlDeclOf = ({ node, version }: Scan<XdmVocabulary>["xmlDecls"][number]): 
  * Assemble a document from the rows its scan folded.
  *
  * Each row is as the database holds it, every law the schema states held of it, so no law is read
- * again here: an `XmlDecl` row's version is a `VersionNum` by its pattern law ({@link xmlDeclOf}).
+ * again here: the rows are read into the tree (`readDocument`), never held to `flatten`'s image of
+ * it, and an `XmlDecl` row's version is a `VersionNum` by its pattern law ({@link xmlDeclOf}).
  * Only the scan's own paging is checked, its one `Document` row.
  *
  * @param document - The id of the document's node, which its scan was filtered by.
  * @param scan - The rows the whole scan folded.
  * @returns The document the rows stand for; or `DocumentRowCount` when the scan did not hold
- *   exactly one `Document` row, or `assemble`'s refusal of rows that are not one document's.
+ *   exactly one `Document` row, or the read's refusal of rows it cannot build the tree from.
  */
 export const assembleScan = <V extends XdmVocabulary>(
   document: NodeId,
@@ -314,7 +315,7 @@ export const assembleScan = <V extends XdmVocabulary>(
     return Result.fail(new DocumentRowCount({ document, found: scan.documents.length }));
   }
 
-  return assemble<V>({
+  return readDocument<V>({
     attributeEntities: scan.attributeEntities,
     attributes: scan.attributes,
     comments: scan.comments,

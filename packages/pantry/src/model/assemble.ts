@@ -27,9 +27,14 @@
  * slots, and each attribute's offsets, order its rows as they were written. So the second flatten
  * writes them again, drawing the ids they were written under.
  *
+ * {@link assemble} is that inverse of `flatten`, the specification the tests hold every writer of
+ * a document's rows to. The export reads a document with {@link readDocument}, the read alone: its
+ * rows are a database's, whose laws hold every agreement the image states, so serving them checks
+ * the image again nowhere (the stored data was checked once, where it entered).
+ *
  * Every relation is grouped by its owner once, and the read keeps its own stack, so a tree of any
  * depth or width assembles in time linear in its rows. Each refusal ({@link AssembleError}) is a
- * defect wherever the rows are a database's, whose laws hold every agreement the image states.
+ * defect wherever the rows are a database's.
  */
 import { Array as Arr, Option, Order, Record, Result, Schema } from "effect";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
@@ -951,7 +956,21 @@ const readOf = <V extends XdmVocabulary>(
   });
 
 /**
- * Assemble a document's rows back into its tree.
+ * Read a lawful document's rows back into its tree: the read of {@link assemble}, without the
+ * keying and the image it holds the rows to. Rows a database holds for one document are that
+ * image by its laws, so the export reads them with this.
+ *
+ * @param rows - Every row of one document, in any order, as a database holds them.
+ * @returns The document the rows stand for; or the refusal of a row the read needs and does not
+ *   find, a node of a kind its place cannot hold, or no root element.
+ */
+export const readDocument = <V extends XdmVocabulary>(
+  rows: FlatRows<V>,
+): Result.Result<XdmDocument<V>, AssembleError> =>
+  Result.map(readOf(rows), ({ document }) => document);
+
+/**
+ * Assemble a document's rows back into its tree, holding them to `flatten`'s image of it.
  *
  * Each list is keyed, the rows are read into a tree, and that tree is flattened again under the
  * ids it was read under and held to the rows.

@@ -1,10 +1,11 @@
 /**
- * The two laws the export trusts, held by the database alone, on the lease: "Document entry", each
- * document's path an entry's (`Document` ⊆ `Entry` over package and path,
+ * Two of the laws the export trusts, held by the database alone, on the lease: "Document entry",
+ * each document's path an entry's (`Document` ⊆ `Entry` over package and path,
  * `#pantry/qti/package.ts`), and `XmlDecl.version`'s pattern law, a `VersionNum` (`XmlVersion` of
- * `#pantry/qti/chardata.ts`, "XML production"). The export checks neither again
- * (`#pantry/export/package.ts` `exportEntries`, `#pantry/export/pages.ts` `assembleScan`): serving
- * trusts the stored rows, which the database judged once, when the import wrote them.
+ * `#pantry/qti/chardata.ts`, "XML production"). The export checks no law again
+ * (`#pantry/export/package.ts` `exportEntries`, `#pantry/export/pages.ts` `assembleScan`, which
+ * reads a document's rows into its tree and never holds them to `flatten`'s image): serving trusts
+ * the stored rows, which the database judged once, when the import wrote them.
  *
  * Each case writes the every-relation package, which PostgreSQL accepts whole
  * (`#pantry/import/pattern-laws.db.test.ts`), with one fault planted in its inputs past the reader,
