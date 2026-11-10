@@ -1,8 +1,8 @@
 -- grizzle: no-transaction
 
-DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_key_node_rmoe3heakj";
+DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_key_node_hroly2h3wu";
 
-CREATE UNIQUE INDEX CONCURRENTLY "__attribute_key_node_rmoe3heakj" ON "qti"."attribute" USING btree ("__node_kvvtz4aokl");
+CREATE UNIQUE INDEX CONCURRENTLY "__attribute_key_node_hroly2h3wu" ON "qti"."attribute" USING btree ("__node_hiye4nbsxr");
 
 DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_key_node_name_vdtl6ykgf4";
 
@@ -12,25 +12,21 @@ DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_key_node_53cd4wzjhe";
 
 CREATE UNIQUE INDEX CONCURRENTLY "__attribute_key_node_53cd4wzjhe" ON "qti"."attribute" USING btree ("__node_k7q6ze3fvq");
 
-DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_key_node_z3fpxb33wr";
+DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_key_node_6v7u4jhu67";
 
-CREATE UNIQUE INDEX CONCURRENTLY "__attribute_key_node_z3fpxb33wr" ON "qti"."attribute" USING btree ("__node_h7ktnl7tci");
+CREATE UNIQUE INDEX CONCURRENTLY "__attribute_key_node_6v7u4jhu67" ON "qti"."attribute" USING btree ("__node_bxkt3vhspy");
+
+DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_key_node_kind_fhjz7em3nm";
+
+CREATE UNIQUE INDEX CONCURRENTLY "__attribute_key_node_kind_fhjz7em3nm" ON "qti"."attribute" USING btree ("__node_bxkt3vhspy", "kind");
 
 DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_key_node_j3nl2tgoep";
 
 CREATE UNIQUE INDEX CONCURRENTLY "__attribute_key_node_j3nl2tgoep" ON "qti"."attribute" USING btree ("__node_tblig6omlm");
 
-DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_key_node_xtyjppptnf";
-
-CREATE UNIQUE INDEX CONCURRENTLY "__attribute_key_node_xtyjppptnf" ON "qti"."attribute" USING btree ("__node_ienld3knlc");
-
 DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_key_node_j5k5x63vk5";
 
 CREATE UNIQUE INDEX CONCURRENTLY "__attribute_key_node_j5k5x63vk5" ON "qti"."attribute" USING btree ("__node_tsiudobb4f");
-
-DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_key_node_cyiabcbfjg";
-
-CREATE UNIQUE INDEX CONCURRENTLY "__attribute_key_node_cyiabcbfjg" ON "qti"."attribute" USING btree ("__node_aqtwqbqjlb");
 
 DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_key_node_tsbrtp3osw";
 
@@ -52,6 +48,14 @@ DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_ix_node_7_iuvvf_6_ijd_767bk
 
 CREATE INDEX CONCURRENTLY "__attribute_ix_node_7_iuvvf_6_ijd_767bkvdhgt" ON "qti"."attribute" USING btree ("__node_7iuvvf6ijd");
 
+DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_ix_node_aqtwqbqjlb_document_ge_3_mktvjzq_5okbatcijq";
+
+CREATE INDEX CONCURRENTLY "__attribute_ix_node_aqtwqbqjlb_document_ge_3_mktvjzq_5okbatcijq" ON "qti"."attribute" USING btree ("__node_aqtwqbqjlb", "__document_ge3mktvjzq");
+
+DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_ix_node_eddcgu_2_sqo_7qnv72nwmj";
+
+CREATE INDEX CONCURRENTLY "__attribute_ix_node_eddcgu_2_sqo_7qnv72nwmj" ON "qti"."attribute" USING btree ("__node_eddcgu2sqo");
+
 DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_ix_node_qfrusbccpg_m6oxpykpwf";
 
 CREATE INDEX CONCURRENTLY "__attribute_ix_node_qfrusbccpg_m6oxpykpwf" ON "qti"."attribute" USING btree ("__node_qfrusbccpg");
@@ -59,3 +63,7 @@ CREATE INDEX CONCURRENTLY "__attribute_ix_node_qfrusbccpg_m6oxpykpwf" ON "qti"."
 DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_ix_node_vakq_25_d_2_th_dq3p5mlkpj";
 
 CREATE INDEX CONCURRENTLY "__attribute_ix_node_vakq_25_d_2_th_dq3p5mlkpj" ON "qti"."attribute" USING btree ("__node_vakq25d2th");
+
+DROP INDEX CONCURRENTLY IF EXISTS "qti"."__attribute_ix_node_w_5_o_5_vamebp_xeqsclfn5z";
+
+CREATE INDEX CONCURRENTLY "__attribute_ix_node_w_5_o_5_vamebp_xeqsclfn5z" ON "qti"."attribute" USING btree ("__node_w5o5vamebp");

@@ -3943,7 +3943,7 @@
     "AssembledReference.identifier": "Key text bound",
     "AssembledReference.joined": "Key text bound",
     "Attribute.idrefText": "Key text bound",
-    "Attribute.lexical": "XML production",
+    "Attribute.lexical": "Regex text bound",
     "Attribute.prefix": "Key text bound",
     "AttributeEntity.name": "XML production",
     "BindingDeclaration.identifier": "Key text bound",
