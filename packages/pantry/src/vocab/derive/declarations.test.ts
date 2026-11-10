@@ -20,6 +20,7 @@ import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { constraintAdmits, probeText, probeValueOf } from "#pantry/test/gen/vocab.ts";
+import { settings } from "#pantry/test/settings.ts";
 import { vpFmt } from "#pantry/test/vp-fmt.ts";
 import {
   attributeDeclarationsOf,
@@ -413,108 +414,114 @@ if (Option.isSome(absence)) {
   });
 }
 
-describe.skipIf(Option.isSome(absence))("vocab/derive/declarations.ts over the pinned XSDs", () => {
-  layer(SuiteLayer, { timeout: hookTimeoutMs })("from the cache", (cached) => {
-    cached.effect(
-      "regenerates both leaves byte for byte after vp fmt",
-      () =>
-        Effect.gen(function* regenerate() {
-          const fs = yield* FileSystem.FileSystem;
-          const readings = yield* loadDeclarations();
-          const leaves = [
-            [
-              "src/vocab/inventory/vocabularies.ts",
-              renderVocabularies(rostersOf(readings), globalKindsOf(readings)),
-            ],
-            [
-              "src/vocab/inventory/attributes.ts",
-              renderAttributes(
-                attributeDeclarationsOf(readings),
-                attributeWildcardsOf(readings),
-                textTypesOf(readings),
-                yield* loadGlobalAttributes(),
-                governingRowsOf(readings),
-              ),
-            ],
-          ] as const;
+// Committed-leaf guards, as the served and verdict files are, with xmllint's reading of the leaves
+// beside them: they run at merge time, under GR8DES_CORPUS=1, beside the corpus witness, and out
+// of the default run.
+describe.skipIf(Option.isSome(absence) || !settings.corpusRequested)(
+  "vocab/derive/declarations.ts over the pinned XSDs",
+  () => {
+    layer(SuiteLayer, { timeout: hookTimeoutMs })("from the cache", (cached) => {
+      cached.effect(
+        "regenerates both leaves byte for byte after vp fmt",
+        () =>
+          Effect.gen(function* regenerate() {
+            const fs = yield* FileSystem.FileSystem;
+            const readings = yield* loadDeclarations();
+            const leaves = [
+              [
+                "src/vocab/inventory/vocabularies.ts",
+                renderVocabularies(rostersOf(readings), globalKindsOf(readings)),
+              ],
+              [
+                "src/vocab/inventory/attributes.ts",
+                renderAttributes(
+                  attributeDeclarationsOf(readings),
+                  attributeWildcardsOf(readings),
+                  textTypesOf(readings),
+                  yield* loadGlobalAttributes(),
+                  governingRowsOf(readings),
+                ),
+              ],
+            ] as const;
 
-          for (const [file, text] of leaves) {
-            assert.strictEqual(
-              yield* vpFmt(text, file),
-              yield* fs.readFileString(`${packageRoot}/${file}`),
-              file,
-            );
-          }
-        }),
-      hookTimeoutMs,
-    );
+            for (const [file, text] of leaves) {
+              assert.strictEqual(
+                yield* vpFmt(text, file),
+                yield* fs.readFileString(`${packageRoot}/${file}`),
+                file,
+              );
+            }
+          }),
+        hookTimeoutMs,
+      );
 
-    cached.effect(
-      "agrees with xmllint on every kind's required, declared and undeclared attributes",
-      (ctx) =>
-        Effect.gen(function* oracle() {
-          const judged = yield* Judgements;
+      cached.effect(
+        "agrees with xmllint on every kind's required, declared and undeclared attributes",
+        (ctx) =>
+          Effect.gen(function* oracle() {
+            const judged = yield* Judgements;
 
-          const byKind = [
-            ...Map.groupBy(judged, ({ kind, version }) => `${version} ${kind}`).values(),
-          ];
+            const byKind = [
+              ...Map.groupBy(judged, ({ kind, version }) => `${version} ${kind}`).values(),
+            ];
 
-          return yield* searched(
-            ctx,
-            exhaust(
-              {
-                box: `every (version, kind) of the leaf, each probed with its required, declared and undeclared attributes: ${byKind.length} probes`,
-                caseHang,
-                coverage: requiredInSpace<
-                  | "admitted"
-                  | "declared"
-                  | "oracle-departure"
-                  | "refused"
-                  | "required"
-                  | "undeclared"
-                >([
-                  "required",
-                  "declared",
-                  "undeclared",
-                  "admitted",
-                  "refused",
-                  "oracle-departure",
-                ]),
-                generator: int(0, byKind.length - 1),
-                limit: byKind.length,
-                literal: Formatter.format,
-                oracle: {
-                  kind: "second-implementation",
-                  name: "libxml2's schema validator over the pinned XSDs, but its departure under a lax ##other (isOracleDeparture)",
+            return yield* searched(
+              ctx,
+              exhaust(
+                {
+                  box: `every (version, kind) of the leaf, each probed with its required, declared and undeclared attributes: ${byKind.length} probes`,
+                  caseHang,
+                  coverage: requiredInSpace<
+                    | "admitted"
+                    | "declared"
+                    | "oracle-departure"
+                    | "refused"
+                    | "required"
+                    | "undeclared"
+                  >([
+                    "required",
+                    "declared",
+                    "undeclared",
+                    "admitted",
+                    "refused",
+                    "oracle-departure",
+                  ]),
+                  generator: int(0, byKind.length - 1),
+                  limit: byKind.length,
+                  literal: Formatter.format,
+                  oracle: {
+                    kind: "second-implementation",
+                    name: "libxml2's schema validator over the pinned XSDs, but its departure under a lax ##other (isOracleDeparture)",
+                  },
+                  suite: "vocab/derive-declarations-xmllint",
                 },
-                suite: "vocab/derive-declarations-xmllint",
-              },
-              (index, c) =>
-                Effect.sync(() => {
-                  const disagreements = Arr.getUnsafe(byKind, index).flatMap((probe) => {
-                    c.note(probe.question._tag);
-                    if (probe.question._tag === "undeclared") {
-                      c.note(probe.question.admitted ? "admitted" : "refused");
-                      if (probe.question.underOtherLax) {
-                        c.note("oracle-departure");
+                (index, c) =>
+                  Effect.sync(() => {
+                    const disagreements = Arr.getUnsafe(byKind, index).flatMap((probe) => {
+                      c.note(probe.question._tag);
+                      if (probe.question._tag === "undeclared") {
+                        c.note(probe.question.admitted ? "admitted" : "refused");
+                        if (probe.question.underOtherLax) {
+                          c.note("oracle-departure");
+                        }
                       }
-                    }
 
-                    return Option.toArray(disagreementOf(probe)).map(
-                      (found) => `${probe.version} ${probe.kind}: ${found}`,
+                      return Option.toArray(disagreementOf(probe)).map(
+                        (found) => `${probe.version} ${probe.kind}: ${found}`,
+                      );
+                    });
+
+                    assert.strictEqual(
+                      disagreements.slice(0, 12).join("\n"),
+                      "",
+                      `${disagreements.length} disagreements`,
                     );
-                  });
-
-                  assert.strictEqual(
-                    disagreements.slice(0, 12).join("\n"),
-                    "",
-                    `${disagreements.length} disagreements`,
-                  );
-                }),
-            ),
-          );
-        }),
-      hookTimeoutMs,
-    );
-  });
-});
+                  }),
+              ),
+            );
+          }),
+        hookTimeoutMs,
+      );
+    });
+  },
+);
