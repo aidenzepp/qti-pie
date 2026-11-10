@@ -842,4 +842,105 @@ describe("[Q-9] Graphic Order", () => {
         assert.isTrue(Result.isFailure(refused));
       }),
   );
+
+  it.effect("[Q-9] no element of a rendered Graphic Order carries a style attribute", () =>
+    Effect.gen(function* unstyled() {
+      const states: readonly (readonly [string, Value])[] = [
+        ["graphic-order.xml", ordered("H3", "H1")],
+        ["graphic-order-subset.xml", ordered("H4", "H1")],
+      ];
+
+      for (const [file, value] of states) {
+        const page = yield* rendered(yield* fixture(file), { values: { RESPONSE: value } });
+
+        assert.isAbove(parts(page.root, "-badge").length, 0, `${file} shows a badge`);
+        assert.isTrue(
+          elementsOf([page.root]).every((element) => element.attrs["style"] === undefined),
+          `${file} carries no style attribute`,
+        );
+        assert.notInclude(page.html, "style=", `${file} writes no style attribute`);
+      }
+    }),
+  );
+
+  it.effect(
+    "[Q-9] a badge is an SVG text inside its hotspot's outline, after the shape, at the centre of its area",
+    () =>
+      Effect.gen(function* inOutline() {
+        const page = yield* rendered(yield* fixture("graphic-order.xml"), {
+          values: { RESPONSE: ordered("H3", "H1") },
+        });
+        const house = outlineOf(page.root, "H1") ?? assert.fail("H1 has no outline");
+        const sun = outlineOf(page.root, "H2") ?? assert.fail("H2 has no outline");
+        const [figure, badge, ...rest] = childrenOf(house.svg);
+        const placed = badge ?? assert.fail("the outline of H1 holds no badge");
+
+        assert.lengthOf(rest, 0, "the outline holds the shape and the badge");
+        assert.strictEqual(figure?.tag, "rect");
+        assert.strictEqual(placed.tag, "text");
+        assert.strictEqual(attr(placed, "data-slot"), `${owner}-badge`);
+        assert.strictEqual(attr(placed, "data-position"), "2");
+        assert.strictEqual(attr(placed, "x"), "65");
+        assert.strictEqual(attr(placed, "y"), "65");
+        assert.strictEqual(textOf(placed), "2");
+        assert.deepStrictEqual(
+          childrenOf(sun.svg).map((child) => child.tag),
+          ["circle"],
+          "a hotspot that is not ordered has no badge",
+        );
+        assert.deepStrictEqual(drawnOf(house.figure), {
+          attrs: { height: "50", width: "70", x: "30", y: "40" },
+          tag: "rect",
+        });
+        assert.lengthOf(parts(page.root, "-badge"), 2);
+        assert.isTrue(
+          parts(page.root, "-badge").every((each) =>
+            parts(page.root, "-outline").some((svg) => elementsOf([svg]).includes(each)),
+          ),
+          "every badge lies inside an outline",
+        );
+      }),
+  );
+
+  it.effect("[Q-9] a badge on the default hotspot sits at the image's centre", () =>
+    Effect.gen(function* centred() {
+      const page = yield* rendered(yield* fixture("graphic-order-subset.xml"), {
+        values: { RESPONSE: ordered("H4", "H1") },
+      });
+      const everywhere = outlineOf(page.root, "H4") ?? assert.fail("H4 has no outline");
+      const [figure, badge, ...rest] = childrenOf(everywhere.svg);
+      const placed = badge ?? assert.fail("the outline of H4 holds no badge");
+
+      assert.lengthOf(rest, 0, "the outline holds the shape and the badge");
+      assert.deepStrictEqual(drawnOf(figure), {
+        attrs: { height: "100%", width: "100%", x: "0", y: "0" },
+        tag: "rect",
+      });
+      assert.strictEqual(placed.tag, "text");
+      assert.strictEqual(attr(placed, "x"), "50%");
+      assert.strictEqual(attr(placed, "y"), "50%");
+      assert.strictEqual(attr(placed, "data-position"), "1");
+      assert.strictEqual(textOf(placed), "1");
+    }),
+  );
+
+  it.effect("[Q-9] the fixture image sits beside the items, where the rendered img points", () =>
+    Effect.gen(function* beside() {
+      const page = yield* rendered(yield* fixture("graphic-order.xml"));
+      const image = elementsOf([page.root]).find((element) => element.tag === "img");
+
+      for (const file of ["graphic-order-map.svg", "graphic-associate-map.svg"]) {
+        const written = yield* Effect.tryPromise(() =>
+          readFile(path.join(fixtureFolder, "images", file), "utf-8"),
+        );
+
+        assert.include(written, "<svg", `${file} sits beside the items`);
+      }
+
+      assert.strictEqual(
+        attr(image ?? assert.fail("no img"), "src"),
+        "images/graphic-order-map.svg",
+      );
+    }),
+  );
 });

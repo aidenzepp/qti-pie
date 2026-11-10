@@ -1411,7 +1411,7 @@
 
 /*
  * The outline fills the image's box, so its coordinates scale with the image. A default area lies
- * under the others, which it would hide; every Badge lies over them all.
+ * under the others, which it would hide.
  */
 :where([data-slot="graphic-order-interaction-outline"]) {
   position: absolute;
@@ -1449,29 +1449,22 @@
 }
 
 /*
- * The Badge, a hotspot's position: a round chip centred on its area, where the page's own `left`
- * and `top` place it. With none it sits at the image's corner. Its number is text, so it is read.
+ * The Badge, a hotspot's position: an SVG text inside the outline, centred on its area by the `x`
+ * and `y` the page writes in the outline's own units, so it takes no inline style. Its fill is the
+ * primary colour and the halo, a stroke in the card colour painted under the fill, keeps the number
+ * legible over any image, as the chip's border did (1.4.11). The number is text, so the order never
+ * shows by colour alone (1.4.1). It scales with the image, as the outline's viewBox does.
  */
 :where([data-slot="graphic-order-interaction-badge"]) {
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-start: 0;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  min-inline-size: 1.5rem;
-  min-block-size: 1.5rem;
-  padding: 0 0.25rem;
-  border: 2px solid var(--card, oklch(1 0 0));
-  border-radius: 9999px;
-  background-color: var(--primary, oklch(0.205 0 0));
-  color: var(--primary-foreground, oklch(0.985 0 0));
+  fill: var(--primary, oklch(0.205 0 0));
+  stroke: var(--card, oklch(1 0 0));
+  stroke-width: 4px;
+  paint-order: stroke;
   font-size: 0.875rem;
   font-weight: 600;
-  line-height: 1;
-  translate: -50% -50%;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
 }
 
 /* The positions: a numbered list beside the image. */
