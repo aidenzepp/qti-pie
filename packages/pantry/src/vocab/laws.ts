@@ -22,8 +22,8 @@
  *    counts it relaxes, the family's end and admission;
  * 5. A package-media install's policy (`#pantry/qti/media.ts`), which only such an install states: a
  *    `data:` address, an address that names no file of the package, a file of a type the policy
- *    does not list, a style that fetches, then markup pantry cannot read, so content that is not
- *    valid QTI is named by the rule that says so first;
+ *    does not list, a style that fetches, markup pantry cannot read, then a file nothing names, so
+ *    content that is not valid QTI is named by the rule that says so first;
  * 6. The document layer: the stated bound on a key's text, foreign names, derived fields and the tree.
  *
  * A specific law says what in the content to change, and a general one only that the representation
@@ -141,6 +141,7 @@ export const precedence = [
   "media-type",
   "media-style",
   "media-foreign",
+  "entry-used",
   // The document layer: its stated limit, then its laws.
   "key-text-bound",
   "href-form",
@@ -394,6 +395,11 @@ export const lawTable = {
     rule: "reachability",
     source:
       "plan §1.6: the package's entries in listing order, an ordered family under Package at entries, one entry per path; the record the model is rebuilt from",
+  },
+  "Entry used": {
+    rule: "entry-used",
+    source:
+      "a package-media install's policy (#pantry/db/install.ts, policy.json): every entry is the manifest, a document or the path a reference or a text reference resolves to in the package (package.ts Document, ReferencePath, TextReferencePath), the converse of File exists, so the files the install serves are exactly those its documents name; IMS Content Packaging 1.2 (imscp_infov1p2pd2.txt:409 and :411, InterchangePackage (b) and (d)) requires every file the manifest or a document names to be in the package and never the reverse, so this package's own install, which reads packages as the specifications do, states no such law (media.ts Entry_used over UnusedEntry)",
   },
   "Equal tolerance": {
     rule: "P36",

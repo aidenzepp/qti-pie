@@ -17,17 +17,17 @@ import { schema } from "@bjornpagen/grizzle";
 import type { Option } from "effect";
 import type { MediaPolicy } from "#pantry/db/install.ts";
 import { qtiBaseOf } from "#pantry/qti/base.ts";
-import { mediaLawsByName } from "#pantry/qti/media.ts";
+import { mediaLawsByName, mediaQueriesOf } from "#pantry/qti/media.ts";
 import { queriesOf } from "#pantry/qti/queries.ts";
 
 /**
  * Build the QTI 3.0 schema's levels for an install's policy, or none for this package's own
  * install: the stored level, every module's relations and laws and the policy's package-media laws
- * (`#pantry/qti/media.ts`); over it the level `QtiQueries`, every query and every rule over one,
- * each defined over that stored level; and the groups of the statements this call built, the
- * policy's and the queries', by the law each states, which the schema's own naming of its laws
- * reads (`#pantry/test/law-namer.ts` `namedLaws`, the source of the committed law-name dictionary),
- * since it knows a statement by its identity.
+ * over its tables (`#pantry/qti/media.ts`); over it the level `QtiQueries`, every query and every
+ * rule over one, each defined over that stored level, the policy's rule over a query last; and the
+ * groups of the statements this call built, the policy's and the queries', by the law each states,
+ * which the schema's own naming of its laws reads (`#pantry/test/law-namer.ts` `namedLaws`, the
+ * source of the committed law-name dictionary), since it knows a statement by its identity.
  *
  * Each call builds its own schema, statements and queries: one install builds once and holds the
  * result.
@@ -40,11 +40,15 @@ export const qtiLevelsOf = (policy: Option.Option<MediaPolicy>) => {
   const media = mediaLawsByName(policy);
   const base = qtiBaseOf(Object.values(media).flat());
   const queries = queriesOf(base);
+  const mediaQueries = mediaQueriesOf(policy, base);
 
   return {
     base,
-    lawsByName: [media, ...queries.lawsByName] as const,
-    qti: schema.extend(base, "QtiQueries", queries.relations, queries.laws),
+    lawsByName: [media, ...queries.lawsByName, mediaQueries.lawsByName] as const,
+    qti: schema.extend(base, "QtiQueries", { ...queries.relations, ...mediaQueries.relations }, [
+      ...queries.laws,
+      ...Object.values(mediaQueries.lawsByName).flat(),
+    ]),
   };
 };
 

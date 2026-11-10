@@ -3,9 +3,11 @@
  * fetch of anything but a file of the package whose type the policy lists
  * (`#pantry/db/install.ts` `MediaPolicy`), and pantry's importer states nothing of them. A player
  * fetches each such file from wherever the install serves the package's files, by the entry's
- * digest (`Entry.digest`), with the media type the policy gives its extension. Each law is a row
- * check, a CHECK constraint the migration compiles from the policy, so every writer meets it, and a
- * refused import names its law and rule as any other refusal does.
+ * digest (`Entry.digest`), with the media type the policy gives its extension, and holds no file
+ * nothing names. Each law is a check the migration compiles from the policy, a row's CHECK
+ * constraint or, for Entry used, a check over a query, which deferred triggers judge at commit
+ * (README, "Rules over queries"), so every writer meets it, and a refused import names its law and
+ * rule as any other refusal does.
  *
  * - **Media path** (rule `media-path`): every address a player fetches, each field
  *   `#pantry/vocab/fetched.ts` declares, names a file of the package, which `file-exists` holds to
@@ -49,10 +51,23 @@
  *   classes (`foreignKinds` of `#pantry/grammar/kinds.ts`), and no attribute of an open class but
  *   `data-*`, so no `foreign`, `no-namespace` or `own-namespace` attribute. A `data-*` attribute is
  *   kept, as QTI writes them (`data-catalog-idref`).
+ * - **Entry used** (rule `entry-used`): every entry is the manifest, a document (`Document`), or the
+ *   path a reference resolves to in the package (`ReferencePath`) or a text reference does
+ *   (`TextReferencePath`). "File exists" holds every resolved path to an entry, so the package's
+ *   files and what its documents name match one to one, and a file nothing names, a stray schema or
+ *   an unused picture, is refused, naming the law. It is a check over {@link UnusedEntry}, the
+ *   entries no document and no resolved reference names, which holds each to be the manifest, so a
+ *   refused import names it by its check's name as it names every law of the policy. It is the
+ *   policy's and not `Qti`'s own: IMS Content Packaging 1.2 has every file a manifest or a document
+ *   names be in the package, never the reverse, and QTI packages list files no document references
+ *   (the 1EdTech examples list their XSDs and unused media), so this package's own install keeps
+ *   them, as the spec readings read the specifications. An install that serves only what its items
+ *   name states it, and imports only what it serves.
  *
- * The laws read only the fields `#pantry/vocab/fetched.ts` declares: a manifest's `href`, an item,
- * section or stimulus ref's, an `xi:include`'s, a link's and every other reference that names a
- * document rather than fetched media stays `file-exists`'s alone, whatever its extension.
+ * The laws read only the fields `#pantry/vocab/fetched.ts` declares, but Entry used: a manifest's
+ * `href`, an item, section or stimulus ref's, an `xi:include`'s, a link's and every other reference
+ * that names a document rather than fetched media stays `file-exists`'s alone, whatever its
+ * extension, and Entry used reads every resolved reference.
  *
  * Every check is named by its law with spaces written as underscores, as every check of the schema
  * is (`#pantry/import/refusal.ts` `checkNameOf`).
@@ -60,7 +75,7 @@
  * @see {@link https://url.spec.whatwg.org/#concept-basic-url-parser | URL Standard, the basic URL parser}
  * @see {@link https://nodejs.org/api/path.html#pathextnamepath | Node.js, path.extname}
  */
-import { check, Compute } from "@bjornpagen/grizzle";
+import { check, Compute, derived, query, v } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import { Array as Arr, Option } from "effect";
 import type { MediaPolicy } from "#pantry/db/install.ts";
@@ -68,9 +83,18 @@ import { grammar, ReferenceAttribute, TextDomain } from "#pantry/grammar/install
 import { foreignKinds, openClasses } from "#pantry/grammar/kinds.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { admitted, Attribute, domainOf } from "#pantry/qti/attributes.ts";
+import type { QtiBase } from "#pantry/qti/base.ts";
+import { Document } from "#pantry/qti/chardata.ts";
 import { Node } from "#pantry/qti/node.ts";
-import { Reference, ReferencePath, TextReference, TextReferencePath } from "#pantry/qti/package.ts";
+import {
+  Entry,
+  Reference,
+  ReferencePath,
+  TextReference,
+  TextReferencePath,
+} from "#pantry/qti/package.ts";
 import { addressLists, fetchedAttributes, fetchedTexts } from "#pantry/vocab/fetched.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * The characters the URL Standard strips before a URL, the C0 controls and the space, as the body
@@ -386,3 +410,53 @@ type MediaLaws = ReturnType<typeof lawsOfPolicy>;
  */
 export const mediaLawsByName = (policy: Option.Option<MediaPolicy>): Partial<MediaLaws> =>
   Option.match(policy, { onNone: () => ({}), onSome: lawsOfPolicy });
+
+/**
+ * Build the query a policy's rule over a query reads, over a stored level: `UnusedEntry`, the
+ * entries no document is at and no reference resolves to, by package and path, a query no table
+ * stores (README, "Rules over queries"). Each negation stands alone as a filter, since grizzle
+ * states a rule over a query whose relational negation is no part of a conjunction. It is a
+ * relation of every build, a policy's or none, so `Qti`'s relations are one shape whatever the
+ * policy (`QtiSchema` of `#pantry/qti/schema.ts`); only a policy's build states a law over it
+ * ({@link mediaQueriesOf}).
+ *
+ * @param base - The stored level the query reads.
+ * @returns The derived relation.
+ */
+const unusedEntryOf = (base: QtiBase) =>
+  derived(
+    "UnusedEntry",
+    query(base).rule((r) => {
+      const { package: pkg, path } = v(Entry, "entry");
+
+      return r
+        .match(Entry, { package: pkg, path })
+        .where(r.not(Document, { package: pkg, path }))
+        .where(r.not(ReferencePath, { package: pkg, path }))
+        .where(r.not(TextReferencePath, { package: pkg, path }))
+        .find({ package: pkg, path });
+    }),
+  );
+
+/**
+ * Build what a policy states over the queries of a stored level, beside the checks
+ * {@link mediaLawsByName} states over its tables: the relation `UnusedEntry`, in every build, and,
+ * for a policy, the rule over it by its law, "Entry used" (the module's header). Its check holds
+ * every unused entry to be the manifest, which a document always is, so a package whose every file
+ * is the manifest, a document or a resolved reference's path has no row of it, and any other
+ * entry breaks the check. None states no rule, and this package's own install none, so its
+ * schema, migrations and snapshot hold the relation and no law over it.
+ *
+ * @param policy - The install's policy, none for this package's own install.
+ * @param base - The stored level, built for the same policy.
+ * @returns The relations by name, and the statements by law, empty for none.
+ */
+export const mediaQueriesOf = (policy: Option.Option<MediaPolicy>, base: QtiBase) => {
+  const UnusedEntry = unusedEntryOf(base);
+  const stated = {
+    "Entry used": [check("Entry_used", UnusedEntry, (u) => u.eq(u.path, manifestPath))],
+  } as const;
+  const lawsByName: Partial<typeof stated> = Option.isSome(policy) ? stated : {};
+
+  return { lawsByName, relations: { UnusedEntry } };
+};

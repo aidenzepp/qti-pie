@@ -159,6 +159,8 @@ export const statedInParts = {
  * their readings in `src/qti/media.test.ts`, and the database of such an install is their judge.
  */
 export const policyLaws = {
+  "Entry used":
+    "the policy refuses a file no document is and no reference resolves to, which this package's own install keeps, as IMS Content Packaging lets a package hold; media.test.ts holds the check to the entries a package's rows leave unnamed",
   "Media data":
     "the policy refuses a data: address, which this package's own install admits as any URI; media.test.ts holds its patterns to the URL Standard's reading of a scheme",
   "Media foreign":

@@ -33,14 +33,14 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import type { Law, Statement } from "@bjornpagen/grizzle";
-import { Array as Arr, Duration, Effect, Formatter, Option, Predicate } from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option, Predicate, Schema } from "effect";
 import type { MediaPolicy } from "#pantry/db/install.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { checkNameOf, lawNames, refusalOf } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/own.ts";
-import { governorsOf, mediaLawsByName } from "#pantry/qti/media.ts";
+import { governorsOf, mediaLawsByName, mediaQueriesOf } from "#pantry/qti/media.ts";
 import { qtiLevelsOf, qtiSchema } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
@@ -48,6 +48,14 @@ import { hostRowsOf, judge, judgedLaws, judgedOf } from "#pantry/test/host-judge
 import type { HostRows } from "#pantry/test/host-judge.ts";
 import { refusedOf } from "#pantry/test/law-names.ts";
 import { policyLaws } from "#pantry/test/oracle-laws.ts";
+import {
+  closedOf,
+  StoredTermSchema,
+  subtermsOf,
+  termOf,
+  truthOf,
+  unreadIn,
+} from "#pantry/test/predicates.ts";
 import type { Datum } from "#pantry/test/predicates.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { addressLists, fetchedAttributes, fetchedTexts } from "#pantry/vocab/fetched.ts";
@@ -95,9 +103,9 @@ const policies = [
 const [ownPolicy] = policies;
 
 /**
- * The laws a policy states, each by its name.
+ * The laws a policy states over its tables, each by its name.
  */
-type MediaLawName = keyof typeof policyLaws;
+type MediaLawName = keyof ReturnType<typeof mediaLawsByName>;
 
 /**
  * A check's verdict over a row: true where it holds, false where it refuses, as a CHECK refuses a
@@ -1048,12 +1056,14 @@ describe("qti/media.ts, Media foreign", () => {
 /**
  * Write a package as an install publishes one: a manifest whose resources name `.xml` documents, a
  * test whose item ref names its item, and an item that fetches two pictures of the package, each a
- * file of its resource, and, with `stylesheet`, a stylesheet too.
+ * file of its resource, and, with `stylesheet`, a stylesheet too; with `stray`, a third picture its
+ * item's resource lists as a file and no document names.
  *
  * @param stylesheet - Whether the item fetches a `.css` stylesheet as well.
+ * @param stray - Whether the package holds the third picture, listed and named by nothing.
  * @returns Its entries, each encoded as UTF-8.
  */
-const publishedPackage = (stylesheet: boolean): PackageEntries => {
+const publishedPackage = (stylesheet: boolean, stray = false): PackageEntries => {
   const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
   const declaration = '<?xml version="1.0" encoding="UTF-8"?>';
   const text = new TextEncoder();
@@ -1077,6 +1087,7 @@ const publishedPackage = (stylesheet: boolean): PackageEntries => {
           '      <file href="items/media/stars/1.svg"/>',
           '      <file href="items/media/stars/2.svg"/>',
           stylesheet ? '      <file href="items/media/item.css"/>' : "",
+          stray ? '      <file href="items/media/stars/3.svg"/>' : "",
           "    </resource>",
           '    <resource identifier="test-res" type="imsqti_test_xmlv3p0" href="test.xml">',
           '      <file href="test.xml"/>',
@@ -1106,6 +1117,7 @@ const publishedPackage = (stylesheet: boolean): PackageEntries => {
     ],
     ["items/media/stars/1.svg", star("5,0 6,4 10,4 7,6 8,10 5,7 2,10 3,6 0,4 4,4")],
     ["items/media/stars/2.svg", star("0,0 10,0 10,10 0,10")],
+    ...(stray ? [["items/media/stars/3.svg", star("0,0 10,5 0,10")] as const] : []),
     ...(stylesheet
       ? [["items/media/item.css", text.encode("img { width: 4em; }\n")] as const]
       : []),
@@ -1225,6 +1237,138 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 );
 
 /**
+ * Read the rows of `UnusedEntry` (`#pantry/qti/media.ts`) from a package's rows, as the definition
+ * states the query: each entry whose package holds no document, no resolved reference and no
+ * resolved text reference at its path.
+ *
+ * @param rows - The package's rows, as the database holds them.
+ * @returns Each such entry's package and path, in listing order.
+ */
+const unusedEntriesOf = (rows: HostRows): readonly Readonly<Record<string, Datum>>[] => {
+  const named = new Set(
+    ["Document", "ReferencePath", "TextReferencePath"].flatMap((relation) =>
+      (rows.get(relation) ?? []).map((row) => JSON.stringify([row["package"], row["path"]])),
+    ),
+  );
+
+  return (rows.get("Entry") ?? []).flatMap(({ package: pkg, path: at }) =>
+    pkg === undefined || at === undefined || named.has(JSON.stringify([pkg, at]))
+      ? []
+      : [{ package: pkg, path: at }],
+  );
+};
+
+/**
+ * A check over a query as grizzle keeps its statement: its name, its predicate and its relation's
+ * name. The host judge reads no statement over a derived relation (`judgedKinds`), so this test
+ * reads its predicate itself, as the judge reads a check over a table.
+ */
+const CheckOverQuery = Schema.Struct({
+  desc: Schema.Struct({ name: Schema.String, predicate: StoredTermSchema }),
+  kind: Schema.Literal("check"),
+  relation: Schema.Struct({ name: Schema.String }),
+});
+
+/**
+ * Read the policy's one check of Entry used, its predicate evaluated over a row as the host judge
+ * evaluates a check's.
+ *
+ * @returns The law a refusal of it names, its relation's name, the terms the host cannot read, and
+ *   its verdict over a row.
+ */
+const entryUsedCheck = () => {
+  const policy = Option.some(ownPolicy);
+  const statements =
+    mediaQueriesOf(policy, qtiLevelsOf(policy).base).lawsByName["Entry used"] ?? [];
+  const read = statements.flatMap((statement) =>
+    Option.toArray(Schema.decodeUnknownOption(CheckOverQuery)(statement)),
+  );
+  const [only] = read;
+  if (only === undefined || read.length !== 1) {
+    return assert.fail(`Entry used states ${String(read.length)} checks over a query`);
+  }
+
+  const term = termOf(only.desc.predicate);
+  const law: Law = { kind: "check", name: only.desc.name, relation: only.relation.name };
+
+  return {
+    law,
+    relation: only.relation.name,
+    unread: unreadIn(subtermsOf(term)),
+    value: truthOf(Option.some(term), closedOf(Qti.relations)),
+  };
+};
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "qti/media.ts, Entry used over a package as an install publishes it",
+  (withServices) => {
+    withServices.effect(
+      "refuses a file its manifest lists and no document names under Entry used alone, naming the law, and accepts its twin without the file",
+      () =>
+        // Oracle: the specification as a checker, the law as the module states it: every entry is
+        // the manifest, a document or a resolved reference's path, read here from the import's
+        // rows apart from the query (`unusedEntriesOf`), and the policy's own check over those
+        // rows as the host judge reads it; and the refusal the importer names from a refusal of
+        // that check. The policy's table checks and this package's own install keep both twins,
+        // so the stray file is refused by Entry used and nothing else. Bound: one package, with the
+        // stray file and without, under the nine-type roster.
+        Effect.scoped(
+          Effect.gen(function* strayFile() {
+            const judged = entryUsedCheck();
+
+            assert.strictEqual(judged.relation, "UnusedEntry");
+            assert.deepStrictEqual(judged.unread, []);
+
+            const twin = hostRowsOf(
+              (yield* readProgram(yield* scopedPackage(publishedPackage(false)))).inputs,
+            );
+            const stray = hostRowsOf(
+              (yield* readProgram(yield* scopedPackage(publishedPackage(false, true)))).inputs,
+            );
+
+            for (const [rows, what] of [
+              [twin, "the twin"],
+              [stray, "the package with the stray file"],
+            ] as const) {
+              assert.deepStrictEqual(policyRefusals(ownPolicy, rows).refusals, [], what);
+              assert.deepStrictEqual(
+                judge(rows, judgedLaws(Qti)).broken.map(({ law }) => Formatter.format(law)),
+                [],
+                `this package's own install keeps ${what}`,
+              );
+            }
+
+            assert.isAbove((twin.get("Entry") ?? []).length, 1);
+            assert.deepStrictEqual(unusedEntriesOf(twin), [], "every file of the twin is named");
+
+            const unused = unusedEntriesOf(stray);
+
+            assert.deepStrictEqual(
+              unused.map(({ path: at }) => at),
+              ["items/media/stars/3.svg"],
+            );
+            assert.isFalse(
+              unused.some((row) => judged.value(row) === true),
+              "the check refuses it",
+            );
+            assert.isTrue(judged.value({ path: "imsmanifest.xml" }) === true, "the manifest");
+
+            const refusal = refusalOf(
+              { kind: "every", laws: [refusedOf(judged.law)] },
+              { kind: "unreported" },
+              grammar,
+            );
+
+            assert.deepStrictEqual(refusal.rules, ["entry-used"]);
+            assert.include(refusal.message, "Entry used");
+          }),
+        ),
+      300_000,
+    );
+  },
+);
+
+/**
  * Every statement of a record of statements by law, in the record's order.
  *
  * @param byName - The statements by law.
@@ -1236,7 +1380,10 @@ const flat = (byName: Readonly<Partial<Record<string, readonly Statement[]>>>) =
 describe("qti/media.ts, the laws a policy states", () => {
   it("names each law by a row of the law table, each check by its law, and a refusal under any one by the table's rule, so an import refused by one is reported, never unowned", () => {
     for (const policy of policies) {
-      const byName = mediaLawsByName(Option.some(policy));
+      const byName = {
+        ...mediaLawsByName(Option.some(policy)),
+        ...mediaQueriesOf(Option.some(policy), qtiLevelsOf(Option.some(policy)).base).lawsByName,
+      };
 
       assert.sameMembers(Object.keys(byName), Object.keys(policyLaws), JSON.stringify(policy));
       for (const [name, statements] of Object.entries(byName)) {
@@ -1277,7 +1424,7 @@ describe("qti/media.ts, the laws a policy states", () => {
     assert.isTrue(refuses({ kind: "qti-assessment-item-ref", name: "href", path: "item.xml" }));
   });
 
-  it("builds Qti for no policy and for a policy, each call its own: every module's statements, then the policy's, then its queries' rules", () => {
+  it("builds Qti for no policy and for a policy, each call its own: every module's statements, then the policy's, then its queries' rules, the policy's rule over a query last", () => {
     const own = qtiLevelsOf(Option.none());
     const built = qtiLevelsOf(Option.some(ownPolicy));
     const [ownMedia, ...ownQueries] = own.lawsByName;
@@ -1294,7 +1441,13 @@ describe("qti/media.ts, the laws a policy states", () => {
       builtStatements.every((statement, at) => statement === expected[at]),
       "every module's statements, then the policy's, then the queries' rules, each the very statement this build holds",
     );
-    assert.strictEqual(builtQueries.flatMap(flat).length, ownQueries.flatMap(flat).length);
+    assert.strictEqual(
+      builtQueries.flatMap(flat).length,
+      ownQueries.flatMap(flat).length + 1,
+      "the queries' rules, and the policy's one rule over a query, Entry used",
+    );
+    assert.deepStrictEqual(Object.keys(builtQueries.at(-1) ?? {}), ["Entry used"]);
+    assert.deepStrictEqual(Object.keys(ownQueries.at(-1) ?? {}), [], "no policy, no rule");
     assert.sameOrderedMembers(Object.keys(built.qti.relations), Object.keys(own.qti.relations));
     assert.isTrue(
       Object.entries(built.base.relations).every(

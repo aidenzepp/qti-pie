@@ -459,7 +459,7 @@ const tiers: readonly (readonly Rule[])[] = [
     "attribute-admission",
   ],
   ["ancestry-ban", "owner-copy", "ordering", "child-set", "union-count", "admission"],
-  ["media-data", "media-path", "media-type", "media-style", "media-foreign"],
+  ["media-data", "media-path", "media-type", "media-style", "media-foreign", "entry-used"],
   [
     "key-text-bound",
     "href-form",
@@ -1179,6 +1179,11 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   ],
   [
     "media-foreign",
+    "entry-used",
+    "the install's policy: what a document holds before a file no document names (media.ts)",
+  ],
+  [
+    "entry-used",
     "key-text-bound",
     "the tiers: a package-media install's policy before the document layer",
   ],

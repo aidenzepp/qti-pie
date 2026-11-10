@@ -202,6 +202,7 @@ export const oracleRules = [
   "document-key",
   "document-lang",
   "entry-kind",
+  "entry-used",
   "feedback-ref",
   "file-exists",
   "file-listed",
