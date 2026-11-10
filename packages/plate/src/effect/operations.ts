@@ -16,7 +16,8 @@
  * record value, the item's body or HTML, a stored form or a validation message's text, since a
  * program may export its telemetry where the page's data must not go; a failure is recorded by its
  * span, never logged. The short glue (`current`, `itemView`, `permits`, `allowedIntents`,
- * `navigationState`, `renderNavigation`, `decode` and `acceptedItem`) runs in no span of its own.
+ * `navigationState`, `renderNavigation`, `renderTestContent`, `decode` and `acceptedItem`) runs in
+ * no span of its own.
  *
  * @module
  */
@@ -93,6 +94,8 @@ import type {
   ResponsesRefused,
 } from "#plate/score.ts";
 import type { IntentRefused, StepResponseMisfit } from "#plate/session/advance.ts";
+import { renderTestContent as plainRenderTestContent } from "#plate/session/content.ts";
+import type { TestContentOptions } from "#plate/session/content.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { allowedIntents as plainAllowedIntents } from "#plate/session/intents.ts";
 import type { Intent, Responses, TestSession } from "#plate/session/session.ts";
@@ -110,6 +113,7 @@ import type {
   Permits,
   TestNotDeliverable,
 } from "#plate/session/start.ts";
+import type { TestContent } from "#plate/test-features/contract.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import { acceptedItem as plainAcceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest, Verdict, VerdictKind } from "#plate/validate/verdict.ts";
@@ -290,6 +294,37 @@ export const renderNavigation = Effect.fnUntraced(function* renderNavigation(
   const configuration = yield* Configuration;
 
   return yield* Effect.fromResult(plainRenderNavigation(state, configuration, options));
+});
+
+/**
+ * Render the content a test shows beside an item or beside the summary, as the plain
+ * `renderTestContent` does, under the {@link Configuration} service, drawing an instance through
+ * `Randomness` when the host gives none.
+ *
+ * A host's instance is used as given, and then nothing is drawn. Absent, it is
+ * {@link drawnInstance}'s, drawn before the plain call and logged at the debug level, so the same
+ * content, configuration, options and drawn bytes give the HTML the plain call gives under that
+ * instance.
+ *
+ * @param content The `content` of an item view or of the summary.
+ * @param options The author's further inputs, none by default.
+ * @returns The Root's HTML and the instance it used, or the plain `renderTestContent`'s failure:
+ *   {@link UnknownPart}, {@link InvalidInstance}, {@link PartSwapRefused} or {@link MarkupRefused}.
+ */
+export const renderTestContent = Effect.fnUntraced(function* renderTestContent(
+  content: readonly TestContent[],
+  options: TestContentOptions = {},
+): Effect.fn.Return<
+  Rendered,
+  InvalidInstance | MarkupRefused | PartSwapRefused | UnknownPart,
+  Configuration
+> {
+  const configuration = yield* Configuration;
+  const instance = options.instance ?? (yield* drawnInstanceOf({}));
+
+  return yield* Effect.fromResult(
+    plainRenderTestContent(content, configuration, { ...options, instance }),
+  );
 });
 
 /**
