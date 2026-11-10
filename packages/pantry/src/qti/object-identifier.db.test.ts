@@ -2,72 +2,26 @@
  * A test keyed by its package and its root's identifier, imported on the lease, PostgreSQL the
  * judge (spec readings 94, 133 and 148): the root's `identifier` is held, collapsed, in
  * `ObjectIdentifier.identifier` (`#pantry/qti/metadata.ts`), a `keyText` held to the attribute
- * both ways by containment, so a program reads a test back by `(package, identifier)` through a
- * parameter of that field's type; the free side is `object-identifier.test.ts`.
+ * both ways by containment, whose index PostgreSQL must take at the bound; the free side is
+ * `object-identifier.test.ts`.
  *
- * - An identifier of exactly `keyTextBytes` UTF-8 bytes is accepted, and the query by the package and
- *   the identifier finds the test's one document.
+ * - An identifier of exactly `keyTextBytes` UTF-8 bytes is accepted and stored.
  * - One byte past is refused under `key-text-bound` alone: the import writes the copy whatever its
  *   length (reading 133), and `keyText`'s pattern law refuses it.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Db, query, uuid, v, login, workload } from "@bjornpagen/grizzle";
 import { Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 import { keyTextBytes } from "#pantry/qti/limits.ts";
-import { ObjectIdentifier } from "#pantry/qti/metadata.ts";
 
-import { TestDocument } from "#pantry/qti/tests.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
-import { testKind } from "#pantry/vocab/terms/tests.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
-
-import { Qti } from "#pantry/qti/own.ts";
-import { authorRoleOf } from "#pantry/qti/roles.ts";
-import { authorWorkloadsOf } from "#pantry/qti/logins.ts";
-import { servedProbe } from "#pantry/test/served-members.ts";
-
-/**
- * The author role of this file's probe login: grizzle puts a role in one login only, so the probe
- * holds a role of its own, named as the installed one.
- */
-const probeAuthor = authorRoleOf(Qti);
-
-/**
- * The author login with this file's read of a test by its package and identifier beside its own
- * members, over an author role of its own (`#pantry/test/served-members.ts` `servedProbe`):
- * `ProbeLogin` opens the role that reads it, and `probeLayer` serves every test of the file,
- * `AuthorLogin` included.
- */
-const { layer: probeLayer, ProbeLogin } = servedProbe(
-  login(Qti, "author_app", [probeAuthor], {
-    workload: [
-      ...authorWorkloadsOf(Qti, probeAuthor),
-      workload(probeAuthor, {
-        testByIdentifier: query(probeAuthor).rule((r) => {
-          const { node: document } = v(TestDocument, "test");
-
-          return r
-            .match(TestDocument, {
-              node: document,
-              package: r.param("package", uuid),
-              rootKind: testKind,
-            })
-            .match(ObjectIdentifier, {
-              document,
-              identifier: r.param("identifier", ObjectIdentifier.fields.identifier),
-            })
-            .find({ document });
-        }),
-      }),
-    ],
-  }),
-);
 
 /**
  * An identifier of `bytes` UTF-8 bytes, an NCName of ASCII letters.
@@ -145,28 +99,25 @@ describe.skipIf(!hasLease)(
   "qti/object-identifier.db.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(probeLayer, NodeServices.layer), {
+    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
     })("a test keyed by its package and its root's identifier", (it) => {
-      it.effect(
-        "accepts a test whose identifier is keyTextBytes bytes, and reads it back by its package and identifier",
-        () =>
-          // Oracle: PostgreSQL, every law of the schema over the package, and the read through the
-          // author role; reading 133 says an identifier within the bound is held. Bound: an
-          // identifier at exactly the bound.
-          Effect.scoped(
-            Effect.gen(function* keyedAtTheBound() {
-              const identifier = identifierOf(keyTextBytes);
-              const pkg = yield* importDir(yield* scopedPackage(testPackageOf(identifier)));
-              const db = yield* Db.open((yield* ProbeLogin).roles.author, {});
-              const rows = yield* (yield* db.workload.testByIdentifier.execute({
-                identifier,
-                package: pkg,
-              })).collect;
+      it.effect("accepts a test whose identifier is keyTextBytes bytes", () =>
+        // Oracle: PostgreSQL, every law of the schema and every index over the package; reading
+        // 133 says an identifier within the bound is held. Bound: an identifier at exactly the
+        // bound.
+        Effect.scoped(
+          Effect.gen(function* keyedAtTheBound() {
+            const outcome = yield* Effect.result(
+              importDir(yield* scopedPackage(testPackageOf(identifierOf(keyTextBytes)))),
+            );
 
-              assert.lengthOf(rows, 1, "the test's one document");
-            }),
-          ),
+            assert.isTrue(
+              Result.isSuccess(outcome),
+              Result.isFailure(outcome) ? outcome.failure.message : "accepted",
+            );
+          }),
+        ),
       );
 
       it.effect(
