@@ -40,6 +40,7 @@ import { authoredId, authoredIdrefs, headings, positionUnder, rowFor } from "#pl
 import type { Position, Resolved } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
+import type { ContentPayload } from "#plate/content/modules.ts";
 import { isModuleKind } from "#plate/interactions/contract.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
@@ -74,6 +75,18 @@ export type RenderModule = (interaction: ModulePayload) => Result.Result<Element
  * @returns The nodes its module's render writes as content, in document order.
  */
 export type ModuleContent = (interaction: ModulePayload) => readonly PayloadNode[];
+
+/**
+ * Render the payload node of a body-placed content element through its module's render, with the
+ * emit state and the render kit already applied.
+ */
+export type RenderContent = (node: ContentPayload) => Result.Result<Element, PartSwapRefused>;
+
+/**
+ * Give the payload nodes a content element's module writes as content, through its `content`, so
+ * the headings in them count in the item's heading shift.
+ */
+export type ContentNodes = (node: ContentPayload) => readonly PayloadNode[];
 
 /**
  * Render an element of a module's own content that the module owns, such as a Gap Match's
@@ -115,6 +128,19 @@ export interface RenderInteraction {
    * render function without it reads no content for one, as one without {@link modules} writes
    * none.
    */
+  /**
+   * Render the payload node of a body-placed content element ({@link ContentPayload}) through its
+   * module, as `render`'s renderer does. A render function without it writes nothing for one, as
+   * the walk writes nothing for a node of no kind the payload defines: only a payload built by hand
+   * reaches it so.
+   */
+  readonly content?: RenderContent;
+  /**
+   * Give the content of a body-placed content element's payload node, as `render`'s renderer does
+   * through its module, so the headings in it count in the item's heading shift
+   * ({@link headingLevelsIn}). A render function without it reads no content for one.
+   */
+  readonly contentNodes?: ContentNodes;
   readonly moduleContent?: ModuleContent;
   /**
    * Render the elements a module owns among the content it emits ({@link OwnedElements}): set by
@@ -133,6 +159,16 @@ export interface RenderInteraction {
  */
 const contentOf = (renderInteraction: RenderInteraction): ModuleContent =>
   renderInteraction.moduleContent ?? (() => []);
+
+/**
+ * Give the content a render function reads for a body-placed content element's payload node.
+ *
+ * @param renderInteraction The render function.
+ * @returns Its `contentNodes`, or, for a render function without one, a function that gives no
+ *   content.
+ */
+const contentNodesOf = (renderInteraction: RenderInteraction): ContentNodes =>
+  renderInteraction.contentNodes ?? (() => []);
 
 /**
  * Where a nested interaction was met: inside a Choice's Prompt or choice content, an Extended
@@ -829,6 +865,12 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
     case "notice": {
       return Result.map(noticeOf(node, walk), (notice) => [notice]);
     }
+    case "content": {
+      return Option.match(Option.fromUndefinedOr(walk.renderInteraction.content), {
+        onNone: () => Result.succeed([]),
+        onSome: (renderContent) => Result.map(renderContent(node), (root) => [root]),
+      });
+    }
     case "choice":
     case "extended-text":
     case "inline-choice":
@@ -860,10 +902,11 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
 const headingLevelsIn = (
   nodes: readonly PayloadNode[],
   content: ModuleContent,
+  contentNodes: ContentNodes,
 ): readonly number[] =>
   nodes.flatMap((node): readonly number[] => {
     if (isModulePayload(node)) {
-      return headingLevelsIn(content(node), content);
+      return headingLevelsIn(content(node), content, contentNodes);
     }
 
     switch (node.kind) {
@@ -872,7 +915,7 @@ const headingLevelsIn = (
           return [];
         }
 
-        const nested = headingLevelsIn(node.children, content);
+        const nested = headingLevelsIn(node.children, content, contentNodes);
 
         return headings.has(node.tag) ? [Number(node.tag.slice(1)), ...nested] : nested;
       }
@@ -883,19 +926,25 @@ const headingLevelsIn = (
             ...node.choices.flatMap((choice) => choice.content),
           ],
           content,
+          contentNodes,
         );
       }
       case "extended-text": {
         return headingLevelsIn(
           Option.getOrElse(node.prompt, () => []),
           content,
+          contentNodes,
         );
       }
       case "inline-choice": {
         return headingLevelsIn(
           Option.getOrElse(node.label, () => []),
           content,
+          contentNodes,
         );
+      }
+      case "content": {
+        return headingLevelsIn(contentNodes(node), content, contentNodes);
       }
       case "notice":
       case "text":
@@ -937,16 +986,22 @@ const shallowestLevels = new WeakMap<readonly PayloadNode[], number>();
  *
  * @param body The payload's body, which holds every heading the emitter writes for the item.
  * @param content The content of an interaction a module parses, read on the first call only.
+ * @param contentNodes The content of a body-placed content element's node, read on the first call
+ *   only.
  * @returns The least level {@link headingLevelsIn} gives for the body, or 1 when it gives none.
  */
-const shallowestLevelOf = (body: readonly PayloadNode[], content: ModuleContent): number => {
+const shallowestLevelOf = (
+  body: readonly PayloadNode[],
+  content: ModuleContent,
+  contentNodes: ContentNodes,
+): number => {
   const known = shallowestLevels.get(body);
 
   if (known !== undefined) {
     return known;
   }
 
-  const levels = headingLevelsIn(body, content);
+  const levels = headingLevelsIn(body, content, contentNodes);
   let shallowest = levels[0] ?? 1;
 
   for (const level of levels) {
@@ -970,13 +1025,15 @@ const shallowestLevelOf = (body: readonly PayloadNode[], content: ModuleContent)
  * @param headingLevel The configured heading level, 1 to 6.
  * @param content The content of an interaction a module parses, as {@link shallowestLevelOf}
  *   reads it.
+ * @param contentNodes The content of a body-placed content element's node, as it reads it.
  * @returns The offset {@link tagFor} adds to an authored level.
  */
 const headingOffsetOf = (
   body: readonly PayloadNode[],
   headingLevel: number,
   content: ModuleContent,
-): number => headingLevel - shallowestLevelOf(body, content);
+  contentNodes: ContentNodes,
+): number => headingLevel - shallowestLevelOf(body, content, contentNodes);
 
 /**
  * Tell whether a body writes a heading whose tag names no heading level, because its level, shifted
@@ -999,7 +1056,7 @@ const headingOffsetOf = (
  * @param body The payload's body, which holds every heading the emitter writes for the item.
  * @param headingLevel The configured heading level, as the emit state holds it.
  * @param renderInteraction The render function the body is emitted with, whose `moduleContent`
- *   gives a module kind's content.
+ *   gives a module kind's content and whose `contentNodes` a content element's.
  * @returns Whether a heading the body writes would get a level that is not an integer.
  */
 export const writesMalformedHeading = (
@@ -1008,9 +1065,10 @@ export const writesMalformedHeading = (
   renderInteraction: RenderInteraction,
 ): boolean => {
   const content = contentOf(renderInteraction);
-  const headingOffset = headingOffsetOf(body, headingLevel, content);
+  const contentNodes = contentNodesOf(renderInteraction);
+  const headingOffset = headingOffsetOf(body, headingLevel, content, contentNodes);
 
-  return headingLevelsIn(body, content).some(
+  return headingLevelsIn(body, content, contentNodes).some(
     (level) => !Number.isInteger(shiftedLevel(level, headingOffset)),
   );
 };
@@ -1034,7 +1092,12 @@ const walkOf = (
   position: Position,
 ): Walk => ({
   assetBase: state.assetBase,
-  headingOffset: headingOffsetOf(payload.body, state.headingLevel, contentOf(renderInteraction)),
+  headingOffset: headingOffsetOf(
+    payload.body,
+    state.headingLevel,
+    contentOf(renderInteraction),
+    contentNodesOf(renderInteraction),
+  ),
   instance: payload.instance,
   locale: state.locale,
   parts: state.parts,

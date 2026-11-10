@@ -8,7 +8,7 @@
  * @module
  */
 import { ContentNotImplemented } from "#plate/content/contract.ts";
-import type { ContentModule } from "#plate/content/contract.ts";
+import type { BodyContentModule } from "#plate/content/contract.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
 
 /**
@@ -29,7 +29,15 @@ const notImplemented = (): never => {
 /**
  * The Inline Feedback module, a stub.
  */
-export const feedbackInlineModule: ContentModule<typeof element, never> = {
+export const feedbackInlineModule: BodyContentModule<typeof element, never> = {
+  /**
+   * Inline Feedback's payload copy: not implemented; issue m5-02 fills it.
+   */
+  /**
+   * No content: a stub has no payload node, so the heading shift reads none.
+   */
+  content: () => [],
+  copy: notImplemented,
   element,
   feature: [],
   /**
@@ -42,9 +50,14 @@ export const feedbackInlineModule: ContentModule<typeof element, never> = {
    * so the verdict and the HTML stay what they were until issue m5-02 reads the element.
    */
   parse: (_source, context) => context.notice(element),
+  /**
+   * Refuse the element in a redacted item, as the codec refused every node of it before: the model
+   * holds none until issue m5-02 reads the element.
+   */
+  payloadSchema: ({ unimplementedContent }) => unimplementedContent({ element }),
   placement: "body",
   /**
-   * Inline Feedback's payload copy: not implemented; issue m5-02 fills it.
+   * Inline Feedback's redaction: not implemented; issue m5-02 fills it.
    */
   redact: notImplemented,
   /**
