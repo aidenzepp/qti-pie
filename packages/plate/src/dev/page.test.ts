@@ -28,6 +28,7 @@ import { ledgerHtml } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
 import type { MessageKey } from "#plate/messages.ts";
 import type { Item } from "#plate/model/item.ts";
+import { format } from "#plate/model/values.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import { checkTree, nameOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
@@ -2305,10 +2306,10 @@ const begunUnder = Effect.fnUntraced(function* begunUnder(accepted: Accepted, se
  * Write a value's members as text, for comparing two template values.
  *
  * @param value The value, none when the record holds none.
- * @returns Its members' values, each through `String`, space-separated.
+ * @returns Its members' values, each in its lexical form, space-separated.
  */
 const written = (value: Value | undefined): string =>
-  (value?.values ?? []).map((member) => String(member.value)).join(" ");
+  (value?.values ?? []).map((member) => format(member)).join(" ");
 
 /**
  * Give the Notice parts of a page, each a `role="note"` element.
