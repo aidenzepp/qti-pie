@@ -22,6 +22,7 @@ import {
   splitTokens,
 } from "#plate/emit/parts.ts";
 import type { PartRow } from "#plate/emit/parts.ts";
+import { partRow } from "#plate/interactions/contract.ts";
 import { modules } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
@@ -330,6 +331,20 @@ describe("partTable", () => {
       const met = Object.keys(row.defaults).filter((name) => row.merged.includes(name));
       assert.deepStrictEqual(met, [], `${row.interaction} ${row.part}`);
     }
+  });
+
+  it("[W0-AU.2] keeps a module Root's merged and defaults as they were: a passed-through data-* is neither", () => {
+    const root = partRow(modules["gap-match"], "root");
+
+    assert.deepStrictEqual(root.merged, [
+      "aria-describedby",
+      "aria-label",
+      "aria-labelledby",
+      "class",
+      "data-entry-name",
+      "role",
+    ]);
+    assert.deepStrictEqual(root.defaults, {});
   });
 
   it("records the attributes I1 merges onto the Choice Control", () => {

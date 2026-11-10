@@ -222,7 +222,9 @@ export interface PartRow {
    *
    * `parts.test.ts` renders every row to hold this list equal to what the connect function
    * computes, the Option's and Placeholder's `disabled` and `hidden` aside; the merge itself
-   * writes whatever the props carry.
+   * writes whatever the props carry. An author's `data-*` passed through to a module's Root
+   * (`ModuleInteraction.data` in `#plate/interactions/contract.ts`) is neither merged nor a
+   * default: the Root write adds it after the merge, under the module's own attributes.
    */
   readonly merged: readonly string[];
   readonly part: PartKey;

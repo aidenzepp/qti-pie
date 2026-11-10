@@ -28,10 +28,11 @@ import {
 import type { ContentPayload } from "#plate/content/modules.ts";
 import { emitBody, emitNodes, writesMalformedHeading } from "#plate/emit/body.ts";
 import type { DockStimulus, ReferencingElement, RenderInteraction } from "#plate/emit/body.ts";
-import type { Node } from "#plate/emit/node.ts";
+import { h } from "#plate/emit/node.ts";
+import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { emitItem, emitStatus, itemPart } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
-import { resolveOverrides } from "#plate/emit/parts.ts";
+import { isReservedData, resolveOverrides } from "#plate/emit/parts.ts";
 import type { PartOverrides, Resolved, UnknownPart } from "#plate/emit/parts.ts";
 import { toHtml, toHtmlWithin } from "#plate/emit/serialise.ts";
 import type { MarkupRefused } from "#plate/emit/serialise.ts";
@@ -497,6 +498,34 @@ const contentKitOf = (
 });
 
 /**
+ * Write the author's `data-*` a module's payload node carries onto the module's Root, under the
+ * module's own attributes (decision D24): an attribute the Root already carries keeps the module's
+ * value, and a reserved name (`isReservedData`) is dropped here too, whatever payload carried it,
+ * so a name plate writes for itself never comes from an author. A part other than the Root never
+ * carries one, and nothing in plate reads them.
+ *
+ * @param root The Root as the module's render gave it.
+ * @param data The payload node's `data`, absent for none.
+ * @returns The Root, the kept attributes added after the module's own.
+ */
+const withAuthorData = (root: Element, data: ModulePayload["data"]): Element => {
+  if (data === undefined) {
+    return root;
+  }
+
+  const added: Record<string, string> = {};
+  for (const { name, value } of data) {
+    if (!isReservedData(name) && !Object.hasOwn(root.attrs, name) && !Object.hasOwn(added, name)) {
+      added[name] = value;
+    }
+  }
+
+  const attributes: Attributes = { ...root.attrs, ...added };
+
+  return h(root.tag, attributes, root.children);
+};
+
+/**
  * Answer `RenderInteraction.dock` over the payload's content: the first node of a module whose
  * `dock.key` gives the element's idref (`dockedBy`), rendered through the module's `render` with
  * the content kit and recorded as docked, so `renderItemContent` emits it nowhere else; none when
@@ -561,7 +590,10 @@ const interactionRenderer = (
     contentNodes,
     dock: (reference: ReferencingElement) => dockOver(reference, built, state, renderer, docked),
     moduleContent,
-    modules: (interaction: ModulePayload) => renderModule(interaction, built, state),
+    modules: (interaction: ModulePayload) =>
+      Result.map(renderModule(interaction, built, state), (root) =>
+        withAuthorData(root, interaction.data),
+      ),
   });
 
   return renderer;

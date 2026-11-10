@@ -55,7 +55,13 @@ import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import type { Malformed } from "#plate/form/encoding.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { Region } from "#plate/model/interactions.ts";
-import type { BodyNode, ContainerNode, Interaction, Unsupported } from "#plate/model/item.ts";
+import type {
+  BodyAttribute,
+  BodyNode,
+  ContainerNode,
+  Interaction,
+  Unsupported,
+} from "#plate/model/item.ts";
 import type { AttributeReaders } from "#plate/model/reader.ts";
 import type { ResponseValue, Single, Value } from "#plate/model/values.ts";
 import type {
@@ -160,6 +166,15 @@ export interface ModuleInteraction<K extends ModuleKind> {
    * has no Prompt.
    */
   readonly ariaLabelledby: Option.Option<string>;
+  /**
+   * The author's `data-*` attributes on the interaction's root that plate does not reserve
+   * (`isReservedData` in `#plate/vocabulary.ts`), in document order, as the verdict kept them. The
+   * model hub sets it after the module's `parse`, when the root carries any; a module never reads
+   * or writes it, and the payload hub copies it past the module's `redact`. The Root write puts
+   * each onto the module's Root under the module's own attributes; nothing in plate reads them.
+   * Absent when the root carries none.
+   */
+  readonly data?: readonly BodyAttribute[];
   readonly kind: K;
   readonly path: string;
   /**

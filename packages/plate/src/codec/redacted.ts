@@ -16,7 +16,17 @@
  * @see `redactItem` in `#plate/payload.ts`, the allowlist that decides which fields a `Redacted`
  *   holds.
  */
-import { Data, Option, Predicate, Result, Schema, SchemaGetter } from "effect";
+import {
+  Data,
+  Effect,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  SchemaGetter,
+  SchemaIssue,
+  SchemaParser,
+} from "effect";
 import { catalogInfoModule } from "#plate/content/catalog-info.ts";
 import { companionMaterialsModule } from "#plate/content/companion-materials.ts";
 import { feedbackBlockModule } from "#plate/content/feedback-block.ts";
@@ -52,6 +62,7 @@ import type { ModuleInteraction, ModuleKind } from "#plate/interactions/contract
 import { containerKinds, isInteraction, regionsOf } from "#plate/model/interactions.ts";
 import type { Modules, Region } from "#plate/model/interactions.ts";
 import type {
+  BodyAttribute,
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
@@ -190,11 +201,20 @@ interface UnsupportedJson {
 }
 
 /**
- * An interaction a module parses, in the JSON form: the encoded side of its module's
- * `payloadSchema`, read from the module, so a module that lands needs no line here; none while
- * every module is a stub, whose encoded side is `Never`.
+ * The author's `data-*` on an interaction root in the JSON form, which the hub adds beside every
+ * module's `payloadSchema` ({@link withAuthorData}): present only when the node carries any.
  */
-type ModuleJson = ReturnType<Modules[ModuleKind]["payloadSchema"]>["Encoded"];
+interface AuthorDataJson {
+  readonly data?: readonly BodyAttributeJson[];
+}
+
+/**
+ * An interaction a module parses, in the JSON form: the encoded side of its module's
+ * `payloadSchema`, read from the module, so a module that lands needs no line here, with the
+ * author's `data-*` the hub adds ({@link AuthorDataJson}); none while every module is a stub,
+ * whose encoded side is `Never`.
+ */
+type ModuleJson = ReturnType<Modules[ModuleKind]["payloadSchema"]>["Encoded"] & AuthorDataJson;
 
 /**
  * The node of a body-placed content element, in the JSON form: the module's element, the kind and
@@ -431,6 +451,12 @@ const textControlFields = {
 };
 
 /**
+ * The author's `data-*` on an interaction root, in the JSON form as in the model: each a name and
+ * a value.
+ */
+const AuthorData = Schema.Array(Schema.Struct({ name: Schema.String, value: Schema.String }));
+
+/**
  * The node of an interaction plate parses through a stub module, which the JSON form never holds:
  * the stub's `parse` gives the notice, so `redact` never writes one, and its module has no step
  * past `parse`. Its encoded side is `Never`, so decoding refuses a body node of its kind, as for a
@@ -454,6 +480,7 @@ const unimplemented = <K extends ModuleKind>(stub: {
       Schema.Struct({
         ariaLabel: Schema.Option(Schema.String),
         ariaLabelledby: Schema.Option(Schema.String),
+        data: Schema.optionalKey(AuthorData),
         kind: Schema.Literal(stub.kind),
         path: Schema.String,
         response: Schema.String,
@@ -552,6 +579,53 @@ export interface SchemaKit {
 }
 
 /**
+ * Wrap a module's `payloadSchema` so the hub's `data` field (`ModuleInteraction.data` in
+ * `#plate/interactions/contract.ts`) travels through the JSON form beside the module's own fields
+ * (decision D24): an optional array of name and value, absent when the node carries none. The
+ * module's codec reads the node without `data`, so no module declares the field; a `data` entry
+ * without a `value` is refused as the module's own fields are. One parser serves both directions,
+ * since the type parameters it is handed are flipped with it.
+ *
+ * @template I The module's model node.
+ * @template J The module's JSON form.
+ * @param member The module's codec, as its `payloadSchema` gave it.
+ * @returns The kind's member of {@link BodyNodeSchema}.
+ */
+const withAuthorData = <I extends ModuleInteraction<ModuleKind>, J>(
+  member: Schema.Codec<I, J>,
+): Schema.Codec<I, J & AuthorDataJson> =>
+  Schema.declareConstructor<I, J & AuthorDataJson>()(
+    [member, AuthorData],
+    ([node, data]) =>
+      (input, ast, options) => {
+        if (!Predicate.isObject(input) || Array.isArray(input)) {
+          return Effect.fail(new SchemaIssue.InvalidType(ast, input, options));
+        }
+
+        const { data: attributes, ...rest } = input;
+        const kept: Effect.Effect<
+          Option.Option<readonly BodyAttribute[]>,
+          SchemaIssue.Issue
+        > = attributes === undefined
+          ? Effect.succeed(Option.none())
+          : Effect.mapBoth(SchemaParser.decodeUnknownEffect(data)(attributes, options), {
+              onFailure: (issue) => new SchemaIssue.Pointer(["data"], issue),
+              onSuccess: Option.some,
+            });
+
+        return Effect.map(
+          Effect.all([SchemaParser.decodeUnknownEffect(node)(rest, options), kept]),
+          ([parsed, added]) =>
+            Option.match(added, {
+              onNone: () => parsed,
+              onSome: (values) => ({ ...parsed, data: values }),
+            }),
+        );
+      },
+    { expected: "an interaction a module parses, with the author's data-*" },
+  );
+
+/**
  * The one {@link SchemaKit} every module's `payloadSchema` is handed.
  */
 const kit: SchemaKit = {
@@ -648,23 +722,23 @@ const BodyNodeSchema = Schema.Union([
   }),
   NoPrintedVariable,
   NoTemplateContent,
-  associateModule.payloadSchema(kit),
-  drawingModule.payloadSchema(kit),
-  endAttemptModule.payloadSchema(kit),
-  gapMatchModule.payloadSchema(kit),
-  graphicAssociateModule.payloadSchema(kit),
-  graphicGapMatchModule.payloadSchema(kit),
-  graphicOrderModule.payloadSchema(kit),
-  hotspotModule.payloadSchema(kit),
-  hottextModule.payloadSchema(kit),
-  matchModule.payloadSchema(kit),
-  mediaModule.payloadSchema(kit),
-  orderModule.payloadSchema(kit),
-  portableCustomModule.payloadSchema(kit),
-  positionObjectModule.payloadSchema(kit),
-  selectPointModule.payloadSchema(kit),
-  sliderModule.payloadSchema(kit),
-  uploadModule.payloadSchema(kit),
+  withAuthorData(associateModule.payloadSchema(kit)),
+  withAuthorData(drawingModule.payloadSchema(kit)),
+  withAuthorData(endAttemptModule.payloadSchema(kit)),
+  withAuthorData(gapMatchModule.payloadSchema(kit)),
+  withAuthorData(graphicAssociateModule.payloadSchema(kit)),
+  withAuthorData(graphicGapMatchModule.payloadSchema(kit)),
+  withAuthorData(graphicOrderModule.payloadSchema(kit)),
+  withAuthorData(hotspotModule.payloadSchema(kit)),
+  withAuthorData(hottextModule.payloadSchema(kit)),
+  withAuthorData(matchModule.payloadSchema(kit)),
+  withAuthorData(mediaModule.payloadSchema(kit)),
+  withAuthorData(orderModule.payloadSchema(kit)),
+  withAuthorData(portableCustomModule.payloadSchema(kit)),
+  withAuthorData(positionObjectModule.payloadSchema(kit)),
+  withAuthorData(selectPointModule.payloadSchema(kit)),
+  withAuthorData(sliderModule.payloadSchema(kit)),
+  withAuthorData(uploadModule.payloadSchema(kit)),
   contentMember(ssmlModule, kit),
   contentMember(mathmlModule, kit),
   contentMember(feedbackBlockModule, kit),

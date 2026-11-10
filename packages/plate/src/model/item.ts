@@ -125,6 +125,7 @@ import {
   baseTypes,
   cardinalities,
   interactionNames,
+  isReservedData,
   outcomeViews,
   renders,
   templateName,
@@ -2544,17 +2545,46 @@ const contextOf = (build: Build, element: SourceElement): ParseContext => {
 };
 
 /**
- * Read a QTI interaction element plate parses through a module, by its module's `parse`, which
- * the element's notice, path and kit are handed to.
+ * Read the author's `data-*` attributes an interaction root carries, after the module's `parse`:
+ * the ones plate does not reserve, in document order, as the verdict kept them. A reserved name
+ * (`isReservedData`) is plate's own, so it is dropped here and marked `attribute:<name>`, as the
+ * verdict marks an attribute it removes.
+ *
+ * @param build The build.
+ * @param element The interaction root.
+ * @returns The kept attributes, empty when the root carries none.
+ */
+const authorData = (build: Build, element: SourceElement): readonly BodyAttribute[] =>
+  element.attributes.flatMap((attribute) => {
+    if (attribute.namespace !== "" || !attribute.local.startsWith("data-")) {
+      return [];
+    }
+
+    if (isReservedData(attribute.local)) {
+      record(build, {
+        feature: `attribute:${attribute.local}`,
+        path: pathOf(build, element),
+        shown: "mark",
+      });
+
+      return [];
+    }
+
+    return [{ name: attribute.local, value: attribute.value }];
+  });
+
+/**
+ * Hand a QTI interaction element to its module's `parse`, with the element's notice, path and kit.
  *
  * @param build The build.
  * @param element The element.
- * @returns Its body node, or a refusal; none when the element is no interaction a module reads.
+ * @returns What the module read, or a refusal; none when the element is no interaction a module
+ *   reads.
  */
-const stubNode = (
+const moduleNode = (
   build: Build,
   element: SourceElement,
-): Option.Option<Result.Result<BodyNode, Refusal>> => {
+): Option.Option<Result.Result<ModuleModel | Unsupported, Refusal>> => {
   if (!isQti(element)) {
     return Option.none();
   }
@@ -2618,6 +2648,34 @@ const stubNode = (
     }
   }
 };
+
+/**
+ * Read a QTI interaction element plate parses through a module, by its module's `parse`, which
+ * the element's notice, path and kit are handed to, then set the author's `data-*` on the node it
+ * gives (decision D24): the module never sees them, and a notice carries none.
+ *
+ * @param build The build.
+ * @param element The element.
+ * @returns Its body node, or a refusal; none when the element is no interaction a module reads.
+ */
+const stubNode = (
+  build: Build,
+  element: SourceElement,
+): Option.Option<Result.Result<BodyNode, Refusal>> =>
+  Option.map(moduleNode(build, element), (parsed) =>
+    pipe(
+      parsed,
+      Result.map((node) => {
+        if (node.kind === "unsupported") {
+          return node;
+        }
+
+        const data = authorData(build, element);
+
+        return data.length > 0 ? { ...node, data } : node;
+      }),
+    ),
+  );
 
 /**
  * The element of an item-placed content module.
