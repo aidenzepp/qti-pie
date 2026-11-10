@@ -1288,7 +1288,7 @@ const withUnlimitedAdaptive = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect
 
 describe("the adaptive fact on a session item", () => {
   it.effect(
-    "[W0-BD] startTest writes the adaptive fact on each session item from its item, and inspect closes through the policy: the stub closes an adaptive item at its limit, a policy that lifts the limit does not",
+    "[W0-BD] startTest writes the adaptive fact on each session item from its item, and inspect closes through the policy: the filled policy keeps an adaptive item open at its limit and closes it at completed, and a policy that lifts the limit keeps it open too",
     () =>
       Effect.gen(function* adaptiveFact() {
         const delivery = yield* builtDelivery("adaptive", [
@@ -1321,6 +1321,31 @@ describe("the adaptive fact on a session item", () => {
         assert.deepStrictEqual(
           [1, 2].map(
             (sequenceIndex) => viewAt(delivery, attempted, configuration, sequenceIndex).disabled,
+          ),
+          [false, true],
+        );
+
+        const completedAt: TestSession = {
+          ...attempted,
+          items: attempted.items.map((item) => ({
+            ...item,
+            record: {
+              ...item.record,
+              outcomes: {
+                ...item.record.outcomes,
+                completionStatus: {
+                  baseType: "identifier",
+                  cardinality: "single",
+                  values: [{ baseType: "identifier", value: "completed" }],
+                },
+              },
+            },
+          })),
+        };
+
+        assert.deepStrictEqual(
+          [1, 2].map(
+            (sequenceIndex) => viewAt(delivery, completedAt, configuration, sequenceIndex).disabled,
           ),
           [true, true],
         );

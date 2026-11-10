@@ -28,6 +28,7 @@ import { rubricModule } from "#plate/content/rubric.ts";
 import { ssmlModule } from "#plate/content/ssml.ts";
 import { stimulusRefModule } from "#plate/content/stimulus-ref.ts";
 import { stylesheetModule } from "#plate/content/stylesheet.ts";
+import { ValueSchema } from "#plate/codec/values.ts";
 import { greatestCount } from "#plate/count-range.ts";
 import { associateModule } from "#plate/interactions/associate.ts";
 import { drawingModule } from "#plate/interactions/drawing.ts";
@@ -80,6 +81,11 @@ interface BodyElementJson {
   readonly catalog?: string;
   readonly children: readonly BodyNodeJson[];
   readonly kind: "element";
+  /**
+   * The element's stimulus reference, the author's `data-stimulus-idref`, present only when it
+   * carries one.
+   */
+  readonly stimulus?: string;
   readonly tag: string;
 }
 
@@ -263,7 +269,9 @@ const OptionalText = Schema.OptionFromOptionalKey(Schema.String);
  * string`, so the codec's body-node union stays the model's `BodyNode`, and `redact`'s own result
  * keeps its paths on the server. An element's `catalog` key is no path: it is the author's own
  * catalog identifier, the `data-catalog-idref` they wrote, which names a `qti-catalog` and nothing
- * about where the element sits, so the form keeps it for the emitter's attachment hook.
+ * about where the element sits, so the form keeps it for the emitter's attachment hook. Nor is an
+ * element's `stimulus` key: it is the author's own stimulus identifier, the `data-stimulus-idref`
+ * they wrote, no path, kept for the emitter's dock hook.
  */
 const NoPath = Schema.optionalKey(Schema.Unknown).pipe(
   Schema.decodeTo(Schema.String, {
@@ -577,6 +585,7 @@ const BodyNodeSchema = Schema.Union([
     children: BodyNodes,
     kind: Schema.Literal("element"),
     path: NoPath,
+    stimulus: Schema.optionalKey(Schema.String),
     tag: Schema.String,
   }),
   Schema.Struct({ kind: Schema.Literal("text"), text: Schema.String }),
@@ -707,10 +716,19 @@ const ResponseBindingSchema = Schema.Union([
 ]);
 
 /**
+ * The template values a redaction holds for its modules' nodes (`HeldValues` in
+ * `#plate/payload.ts`): by the node's response, then by the template variable's identifier, a
+ * value as {@link ValueSchema} writes it.
+ */
+const HeldValuesSchema = Schema.Record(Schema.String, Schema.Record(Schema.String, ValueSchema));
+
+/**
  * The Schema of a redacted item's fields; its type is {@link RedactedFields}, and its encoded form
  * the {@link RedactedJson} a host sends to a page. `content` holds the nodes the item-placed
  * content modules read that the redaction kept, by element, each through its module's
- * `payloadSchema`; the key is absent when none was kept.
+ * `payloadSchema`; the key is absent when none was kept. `held` holds the template values the
+ * redaction held for the modules' nodes, by response, then identifier ({@link HeldValuesSchema});
+ * the key is absent when nothing was held.
  */
 export const RedactedSchema = Schema.Struct({
   body: BodyNodes,
@@ -730,6 +748,7 @@ export const RedactedSchema = Schema.Struct({
     }),
   ),
   document: Schema.String,
+  held: Schema.optionalKey(HeldValuesSchema),
   identifier: Schema.String,
   lang: OptionalText,
   notices: Schema.Array(Schema.String),
