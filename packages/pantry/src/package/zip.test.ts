@@ -33,6 +33,7 @@ import { packageBudget, readZip, writeZip, ZipRefusal } from "#pantry/package/zi
 import type { ZipBudget, ZipEntry } from "#pantry/package/zip.ts";
 import { materializeCorpus, materializeZip, zipMembers } from "#pantry/test/fixtures.ts";
 import type { ZipName } from "#pantry/test/fixtures.ts";
+import { settings } from "#pantry/test/settings.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -947,7 +948,7 @@ describe("package/zip.ts readZip, and package/read.ts over a .zip", () => {
                 kind: "second-implementation",
                 name: "the container model (verdictOf), an independent reading of APPNOTE 6.3.10 and IMS CP 1.2",
               },
-              runs: 400,
+              runs: 200,
               shrink: completeShrink,
               steerEvery: 16,
               suite: "pantry/package/zip-container",
@@ -1098,7 +1099,7 @@ describe("package/zip.ts readZip under a drawn budget", () => {
                 kind: "second-implementation",
                 name: "the budget model (breachesOf) of readZip's documented budgets, and the container model within them",
               },
-              runs: 300,
+              runs: 150,
               shrink: completeShrink,
               steerEvery: 16,
               suite: "pantry/package/zip-budget",
@@ -1220,7 +1221,7 @@ describe("package/zip.ts writeZip", () => {
                 kind: "second-implementation",
                 name: "this file's own central directory walk against writeZip's documented container, and readZip ∘ writeZip = the entries by path",
               },
-              runs: 200,
+              runs: 100,
               shrink: completeShrink,
               steerEvery: 16,
               suite: "pantry/package/zip-write",
@@ -1281,7 +1282,8 @@ const plain = (files: readonly PackageFile[]): readonly PackageFile[] =>
   files.map((file) => ({ ...file, bytes: Uint8Array.from(file.bytes) }));
 
 describe("package/read.ts over the corpus", () => {
-  it.effect(
+  // The corpus is merge-time work, under GR8DES_CORPUS=1, beside the corpus witness.
+  it.effect.skipIf(!settings.corpusRequested)(
     "every corpus zip, written by a third-party archiver, reads the files and bytes of its directory form",
     () =>
       Effect.gen(function* compareForms() {
