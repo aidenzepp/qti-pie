@@ -726,7 +726,7 @@ const itemPage = (
 
 /**
  * Write the score a stored record holds, as the candidate reads it in the locale. A duration is
- * written as its seconds, as a float is.
+ * written as its seconds, as a float is; a file as its name, the one field text carries.
  *
  * @param accepted The accepted document.
  * @param stored The record `score` returned.
@@ -764,6 +764,9 @@ const scoreText = (
     case "string":
     case "uri": {
       return Option.some(String(single.value));
+    }
+    case "file": {
+      return Option.some(single.value.name);
     }
     default: {
       return single satisfies never;

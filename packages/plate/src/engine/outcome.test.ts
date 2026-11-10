@@ -919,7 +919,7 @@ const durationGap = new UnknownIdentifierError({
 
 describe("testScopeOf over built models", () => {
   it.effect(
-    "[T-9] the outcome interpreter's scope of a session reads an item's file and record declarations as NULL of their type, and never splits a test's context name",
+    "[T-9] [W0-AY] the outcome interpreter's scope of a session reads an item's file response as its held NULL file value, its record declaration as NULL of its type, and never splits a test's context name",
     () =>
       Effect.gen(function* builtScope() {
         const item = yield* Effect.fromResult(buildItem(unheldItem));
@@ -949,10 +949,11 @@ describe("testScopeOf over built models", () => {
         const scope = testScopeOf(plain, items, sitting, new Map(), Option.none());
         const withContext = testScopeOf(contextual, items, sitting, new Map(), Option.none());
 
-        assert.deepStrictEqual(Result.getOrThrow(prefixedVariable(scope, "ITEM1.F")).reading, {
-          kind: "unheld",
-          type: { baseType: "file", cardinality: "single" },
-        });
+        // A file response is held (`[W0-AY]`): a fresh record holds its NULL file value.
+        assert.deepStrictEqual(
+          heldValue(Result.getOrThrow(prefixedVariable(scope, "ITEM1.F")).reading),
+          { baseType: "file", cardinality: "single", values: [] },
+        );
         assert.deepStrictEqual(Result.getOrThrow(prefixedVariable(scope, "ITEM1.R")).reading, {
           kind: "unheld",
           type: { baseType: "file", cardinality: "record" },
@@ -968,7 +969,7 @@ describe("testScopeOf over built models", () => {
   );
 
   it.effect(
-    "[T-9] testScopeOf holds each file or record response of an item with whether it declares a correct response, and no outcome",
+    "[T-9] [W0-AY] testScopeOf holds no file response as unheld, since the item model holds one, and no outcome",
     () =>
       Effect.gen(function* unheldResponsesScope() {
         const item = yield* Effect.fromResult(
@@ -1011,9 +1012,15 @@ describe("testScopeOf over built models", () => {
           Option.none(),
         );
 
+        // `FR` was the one unheld response here before `[W0-AY]`; a file response is held now, so
+        // the entry has none, and the record outcome `R` is no response.
         assert.deepStrictEqual(
           scope.items.map((entry) => entry.unheldResponses),
-          [new Map([["FR", false]])],
+          [new Map()],
+        );
+        assert.deepStrictEqual(
+          scope.items.map((entry) => [...entry.declarations.responses.keys()]),
+          [["RESPONSE", "FR"]],
         );
       }),
   );

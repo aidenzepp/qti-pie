@@ -87,7 +87,8 @@ export const patternMessage = (
  * for a numeric binding's `number`, whose message {@link malformedMessage} gives itself.
  *
  * A file (`file`) and a second entry (`single-many`) get their own messages on every binding.
- * `identifier`, `boolean` and `point` on any binding, `character`, which a browser never posts, and
+ * `identifier`, `boolean` and `point` on any binding, `character`, which a browser never posts,
+ * `file-text`, which no text control's binding takes since none binds a `file` response, and
  * `number` on a `string` binding, which only a {@link Malformed} built by hand carries, get the
  * general `notAccepted`.
  */
@@ -95,6 +96,7 @@ const refusals = {
   boolean: "notAccepted",
   character: "notAccepted",
   file: "malformedFile",
+  "file-text": "notAccepted",
   identifier: "notAccepted",
   number: "notAccepted",
   point: "notAccepted",
