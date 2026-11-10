@@ -28,6 +28,7 @@ import {
   referenceRowsOf,
   rowsOf as packageRowsOf,
 } from "#pantry/import/overlays/package.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 import { packageNameOf } from "#pantry/import/record.ts";
 import { ruleOfError } from "#pantry/import/rules.ts";
 import type { ImportRefused } from "#pantry/import/rules.ts";
@@ -184,7 +185,7 @@ const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(
   const manifestTree = yield* shred(manifestXml, version, shredGrammarOf(grammar));
   const byPath = new Map(entries.map((entry) => [entry.path, entry] as const));
   const named = namedDocuments(
-    packageRowsOf(manifestTree, { idOf: provisionalIdOf, package: provisionalIdOf(0) }),
+    packageRowsOf(ownViewOf(manifestTree, provisionalIdOf), { package: provisionalIdOf(0) }),
   );
   // A path is one document, of one type (reading 93): the manifest's, `manifest`, read before any
   // resource names a path (reading 146), else the type its root bears out among those resources
@@ -237,8 +238,8 @@ const referencedOf = (documents: readonly ListedDocument[]): ReadonlySet<Package
   new Set(
     documents.flatMap(({ path, tree }) => {
       const rows = referenceRowsOf(
-        tree,
-        { idOf: provisionalIdOf, package: provisionalIdOf(0), path },
+        ownViewOf(tree, provisionalIdOf),
+        { package: provisionalIdOf(0), path },
         referenceCensus,
       );
 

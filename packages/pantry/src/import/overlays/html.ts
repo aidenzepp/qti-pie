@@ -1,7 +1,7 @@
 /**
- * The HTML overlays' rows (spec reading 126, §C's `rowsOf`): from one document's XDM tree and the
- * ids its nodes are written under, the rows of every relation `#pantry/qti/html.ts` declares, each
- * a keyed set.
+ * The HTML overlays' rows (spec reading 126, §C's `rowsOf`): from one document's view
+ * (`DocumentView` of `#pantry/import/fold.ts`), the rows of every relation `#pantry/qti/html.ts`
+ * declares, each a keyed set.
  *
  * The rows restate what the tree says and nothing else: each table cell's `headers` as written,
  * split into its tokens; each `th`'s `id` that is an NCName, its value as `DocumentId` holds it;
@@ -10,28 +10,13 @@
  * accepted. Readings 124 and 125 read `Node` and `Attribute` alone, so they have no rows here.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import type { DocumentContext } from "#pantry/import/context.ts";
 import { isNcName } from "#pantry/grammar/domains.ts";
-import { foldAt, foldOf } from "#pantry/import/fold.ts";
+import { foldAt } from "#pantry/import/fold.ts";
+import type { DocumentView } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type { CellHeaders, HeaderToken, TableHeader, TableScope } from "#pantry/qti/html.ts";
 import { cellKinds } from "#pantry/vocab/terms/html.ts";
-
-/**
- * The ids a document's rows are written under: each of its tree's nodes' and attributes', drawn by
- * the number `flatten` gives it, and the document's context (spec reading 117), whose interaction
- * an included fragment's nodes take as their nearest: `ownContext` of its document node for a
- * document no site names.
- *
- * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
- * the tree's rows name each node by one id.
- */
-export interface HtmlIds {
-  readonly context: DocumentContext;
-  readonly idOf: (index: number) => NodeId;
-}
 
 /**
  * One token of a cell's `headers` as its cell's family nests it: without the `node` the nesting
@@ -178,12 +163,12 @@ const tableWalkOf = (
  * `documentIdOf` (`#pantry/import/overlays/identity.ts`) keeps the same test for the reading's
  * other half.
  *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
+ * @param view - The document's view: its rows, and their folds under its context (spec reading
+ *   117), whose interaction an included fragment's nodes take as their nearest.
  * @returns Every HTML relation's rows.
  */
-export const rowsOf = (doc: XdmDocument<Composed>, ids: HtmlIds): HtmlRows => {
-  const rows = flatten(doc, ids.idOf);
+export const rowsOf = (view: DocumentView): HtmlRows => {
+  const { folds, rows } = view;
   const document = rows.document.node;
   const lexicals = new Map(rows.attributes.map((row) => [`${row.node} ${row.name}`, row.lexical]));
   const valueOf = (node: NodeRow<Composed>, name: string): string | undefined =>
@@ -197,7 +182,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: HtmlIds): HtmlRows => {
   }
 
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
-  const folds = foldOf(rows.nodes, ids.context);
   const tableOf = (cell: NodeRow<Composed>): NodeId => {
     const { table, walk } = tableWalkOf(byId, document, cell);
     for (const node of walk) {

@@ -27,8 +27,7 @@ import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import { entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import { assembledRoots } from "#pantry/vocab/terms/tests.ts";
 
 /**
@@ -74,16 +73,17 @@ export const isSiteKind = (kind: string, parentKind: string): boolean =>
   (kind === "xi:include" && includeParents.has(parentKind));
 
 /**
- * One listed document as the contexts read it.
+ * One listed document as the contexts read it: its tree, and its rows as `flatten` writes them
+ * under the ids they are written under.
  */
 interface Listed {
-  readonly idOf: (index: number) => NodeId;
   /**
    * Whether the document is a resource's, so a site may name it: every listed document but the
    * manifest, which is no resource's (spec reading 146).
    */
   readonly named: boolean;
   readonly path: string;
+  readonly rows: FlatRows<Composed>;
   readonly tree: XdmDocument<Composed>;
 }
 
@@ -144,12 +144,14 @@ interface Judging<L extends Listed> {
  * path).
  *
  * @param document - The document.
+ * @param document.path - Its path in the package.
+ * @param document.rows - Its rows.
+ * @param document.tree - Its tree.
  * @returns Its reading.
  * @throws {Error} When a node's parent is no node of the document's rows, which `flatten` rules
  *   out: it writes every node's parent, the document node as its own.
  */
-const readOf = ({ idOf, path, tree }: Listed): Read => {
-  const rows = flatten(tree, idOf);
+const readOf = ({ path, rows, tree }: Listed): Read => {
   const kindOf = new Map(rows.nodes.map((node) => [node.id, node.kind] as const));
   const parentKindOf = (node: NodeRow<Composed>): Kind =>
     Option.getOrThrowWith(
@@ -218,7 +220,8 @@ const contextUnder = (self: NodeId, reaches: readonly Reach[]): DocumentContext 
 
 /**
  * Take one step of the fixpoint: each document's context under every site's, read through its
- * including document's present context.
+ * including document's present context. Only a document that holds a site is folded: no other
+ * document's fold reaches a context.
  *
  * @param judging - The documents, each with its present context.
  * @param byPath - The document node at each path.
@@ -230,6 +233,10 @@ const stepOf = <L extends Listed>(
 ): readonly Judging<L>[] => {
   const reached = Map.groupBy(
     judging.flatMap(({ context, read: { nodes, sites } }): readonly Reach[] => {
+      if (sites.length === 0) {
+        return [];
+      }
+
       const folds = foldOf(nodes, context);
 
       return sites.flatMap(({ node, path }) =>

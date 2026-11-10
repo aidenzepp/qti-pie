@@ -3,10 +3,10 @@
  * `readPackage` read (`#pantry/import/read.ts`) and build every row it writes (plan W5, Q5.15; the
  * W5 amendment's C19).
  *
- * One id is minted per package, node and attribute ({@link nodeIdsOf}), and the rows are built from
- * the documents the read shredded: each document's tree, its document layer's flat rows, every
- * overlay's, and the package's record, each entry's content the bytes the read holds. Nothing is
- * read from the package's directory again.
+ * One id is minted per package, node and attribute, and each document flattened and folded once
+ * ({@link nodeIdsOf}); the rows are built from those views: each document's tree, its document
+ * layer's flat rows, every overlay's, and the package's record, each entry's content the bytes the
+ * read holds. Nothing is read from the package's directory again.
  *
  * The import (`#pantry/import/package.ts`) and the dry run (`#pantry/import/preview.ts`) build
  * through {@link programOf}, so a dry run builds exactly what an import writes. Nothing here
@@ -28,7 +28,8 @@ import type { NodeMember, NodeRoot, PackageInputs, PlacedDocument } from "#pantr
 import type { NodeId } from "#pantry/model/xdm.ts";
 
 /**
- * One document of the package as the import writes it: as listed, and under its ids.
+ * One document of the package as the import writes it: as listed, where it stands in its package,
+ * and its view.
  */
 export type ProgramDocument = PlacedDocument;
 
@@ -61,11 +62,11 @@ export const programOf = Effect.fn("import.programOf")(function* programOf(
   const ids = nodeIdsOf([pkg.manifest, ...pkg.documents], pkg.files.keys(), mint);
   const placed = ids.documents;
   const overlays = yield* Effect.orDie(Effect.fromResult(overlayRowsOf(placed, mint)));
-  const layers = placed.map(({ ids: held, listed }) => documentRowsOf(listed, held));
+  const layers = placed.map(documentRowsOf);
   const layer = yield* Effect.orDie(Effect.fromResult(unionsOf(documentLayer, layers)));
   const roots = new Map<string, NodeRoot>(
-    placed.map(({ ids: held, listed }) => {
-      const root = rootInsertOf(listed.tree, held);
+    placed.map(({ ids: held, view }) => {
+      const root = rootInsertOf(view, held);
 
       return [root.id, root] as const;
     }),

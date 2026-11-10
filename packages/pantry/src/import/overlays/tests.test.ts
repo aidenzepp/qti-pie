@@ -28,7 +28,8 @@ import type { Addition } from "@bjornpagen/grizzle";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { contextsOf } from "#pantry/import/context.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { ownContext, ownViewOf } from "#pantry/import/fold.ts";
+import type { DocumentView } from "#pantry/import/fold.ts";
 import {
   assembledRowsOf,
   itemRefPathsOf,
@@ -134,31 +135,33 @@ const listedTypeOf = (doc: XdmDocument<Composed>): TestIds["documentType"] =>
   grammar.package.rootOfType.rows.find(({ root }) => root === doc.root.kind)?.type ?? "none";
 
 /**
- * Give each of a package's documents its ids: its own nodes' and its own context, every site's
- * target found among the documents by path, and each in an assembly as the importer's contexts
- * read it.
+ * View each of a package's documents and place it: its own nodes' ids, in its own context, every
+ * site's target found among the documents by path, and each in an assembly as the importer's
+ * contexts read it.
  *
  * @param documents - The documents by path, in order.
- * @returns Each document with its ids, in the same order.
+ * @returns Each document's view and where it stands, in the same order.
  */
 const idsOfPackage = (
   documents: readonly (readonly [string, XdmDocument<Composed>])[],
-): readonly (readonly [XdmDocument<Composed>, TestIds])[] => {
-  const listed = documents.map(([path, tree], n) => ({ idOf: idsOf(n), named: true, path, tree }));
+): readonly (readonly [DocumentView, TestIds])[] => {
+  const listed = documents.map(([path, tree], n) => {
+    const view = ownViewOf(tree, idsOf(n));
+
+    return { named: true, path, rows: view.rows, tree, view };
+  });
   const roots = new Map(
-    listed.map(({ idOf: ids, path, tree }) => [path, { node: ids(0), tree }] as const),
+    listed.map(({ path, rows, tree }) => [path, { node: rows.document.node, tree }] as const),
   );
   const rootAt = (at: string) => Option.fromNullishOr(roots.get(at));
 
-  return contextsOf(listed).map(({ assembled, listed: { idOf: ids, path, tree } }) => [
-    tree,
+  return contextsOf(listed).map(({ assembled, listed: { path, tree, view } }) => [
+    view,
     {
       assembled,
-      context: ownContext(ids(0)),
       documentAt: (at) => Option.map(rootAt(at), ({ node }) => node),
       documentType: listedTypeOf(tree),
       entryAt: (at) => roots.has(at),
-      idOf: ids,
       package: packageId,
       path,
       targetAt: (at) =>
@@ -172,14 +175,14 @@ const idsOfPackage = (
 };
 
 /**
- * Read the rows of a package's documents, each under its {@link idsOfPackage} ids.
+ * Read the rows of a package's documents, each viewed and placed by {@link idsOfPackage}.
  *
  * @param documents - The documents by path, in order.
  * @returns Each document's rows, in the same order.
  */
 const rowsOfPackage = (
   documents: readonly (readonly [string, XdmDocument<Composed>])[],
-): readonly TestRows[] => idsOfPackage(documents).map(([tree, ids]) => rowsOf(tree, ids));
+): readonly TestRows[] => idsOfPackage(documents).map(([view, ids]) => rowsOf(view, ids));
 
 /**
  * A `qti-selection`, an `xs:int` select and maybe a `with-replacement`, both possibly padded.
@@ -1095,8 +1098,8 @@ describe("import/overlays/tests.ts, hrefs", () => {
                 ),
               );
               assert.deepStrictEqual(
-                idsOfPackage([[document, test]]).flatMap(([tree, ids]) =>
-                  itemRefPathsOf(tree, ids).map(({ path, resolved: entry }) => ({ entry, path })),
+                idsOfPackage([[document, test]]).flatMap(([view, ids]) =>
+                  itemRefPathsOf(view, ids).map(({ path, resolved: entry }) => ({ entry, path })),
                 ),
                 [
                   {

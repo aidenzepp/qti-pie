@@ -27,9 +27,8 @@ import {
   grammar,
   interactionKinds,
 } from "#pantry/grammar/install.ts";
-import { ownContext } from "#pantry/import/fold.ts";
 import { piecesOf, rowsOf } from "#pantry/import/overlays/declarations.ts";
-import type { DeclarationRows, DocumentIds } from "#pantry/import/overlays/declarations.ts";
+import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
@@ -47,6 +46,7 @@ import { declarationKinds, valueSetKinds } from "#pantry/qti/declarations.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { settings } from "#pantry/test/settings.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 
 /**
  * The file system and processes the fixtures' materializer and `readEntries` need.
@@ -54,12 +54,6 @@ import { settings } from "#pantry/test/settings.ts";
 const TestLayer = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
 );
-
-/**
- * The ids every case writes its rows under: each node's by its number, the document its own
- * context.
- */
-const ids: DocumentIds = { context: ownContext(idOf(0)), idOf };
 
 /**
  * One overlay's expected rows: its relation and its rows by node id.
@@ -508,7 +502,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     ValueSet: new Map(),
     ValueSetCardinality: new Map(),
   };
-  const document = ids.idOf(0);
+  const document = idOf(0);
   const interactions = new Set<string>(interactionKinds);
   let next = 1;
   const visit = (
@@ -516,7 +510,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     parent: Parent,
     rank: bigint,
   ): void => {
-    const id = ids.idOf(next);
+    const id = idOf(next);
     const start = BigInt(next);
     next += 1;
     if (child._tag !== "element" && !("attributes" in child)) {
@@ -917,7 +911,7 @@ describe("import/overlays/declarations.ts", () => {
             c.noteAll(situationsOf(input));
 
             const doc = treeOf(input);
-            assertRows(rowsOf(doc, ids), walk(doc), "generated");
+            assertRows(rowsOf(ownViewOf(doc, idOf)), walk(doc), "generated");
           }),
       ),
     ),
@@ -1037,7 +1031,7 @@ const documentsOf = (dir: string) =>
  * @returns The number of declarations it holds.
  */
 const checkDocument = (path: string, tree: XdmDocument<Composed>): number => {
-  const rows = rowsOf(tree, ids);
+  const rows = rowsOf(ownViewOf(tree, idOf));
   assertRows(rows, walk(tree), path);
 
   return rows.Declaration.size;

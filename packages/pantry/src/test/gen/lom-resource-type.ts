@@ -19,7 +19,7 @@
  *   database folds it, under every statement `metadataLaws` adds for the law: the copies both ways,
  *   the keys over each term, and the law's containment.
  */
-import type { Addition, Uuid } from "@bjornpagen/grizzle";
+import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import { array, element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
@@ -28,7 +28,7 @@ import type { Swarm } from "@grizzle/testing/swarm";
 import { collapse } from "#pantry/grammar/domains.ts";
 import { rowsOf } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataRows } from "#pantry/import/overlays/metadata.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 import { rootInsertOf } from "#pantry/import/write.ts";
 import type { NodeMember, NodeRoot } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -574,15 +574,9 @@ export const documentRowsOf = (
   tree: XdmDocument<Composed>,
   idOf: (index: number) => NodeId,
 ): DocumentRows => {
-  const rows: MetadataRows = rowsOf(tree, {
-    context: ownContext(idOf(0)),
-    documentType: "manifest",
-    idOf,
-    package: "00000000-0000-4000-8000-00000000c0de" satisfies Uuid,
-  });
-  const nodes = writtenNodes(
-    rootInsertOf(tree, { context: ownContext(idOf(0)), documentType: "manifest", idOf }),
-  );
+  const view = ownViewOf(tree, idOf);
+  const rows: MetadataRows = rowsOf(view, { documentType: "manifest" });
+  const nodes = writtenNodes(rootInsertOf(view, { documentType: "manifest" }));
   const folded = new Map<string, string>();
   for (const node of nodes) {
     folded.set(node.parent, `${folded.get(node.parent) ?? ""}${node.chars}`);

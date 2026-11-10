@@ -26,7 +26,6 @@ import type { ImportProgram } from "#pantry/import/program.ts";
 import { assemble } from "#pantry/model/assemble.ts";
 import { names } from "#pantry/model/names.ts";
 import { unshred } from "#pantry/model/unshred.ts";
-import { flatten } from "#pantry/model/xdm.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
@@ -217,7 +216,7 @@ const exportedItem = ({ documents, inputs }: ImportProgram) =>
       assert.fail("the import lists no item document");
     }
 
-    const tree = flatten(placed.listed.tree, placed.ids.idOf);
+    const tree = placed.view.rows;
     const self = tree.document.node;
     const document = inputs.Document.get(self);
     if (document === undefined) {

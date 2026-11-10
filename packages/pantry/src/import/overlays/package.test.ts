@@ -62,6 +62,7 @@ import { hrefParamsPattern, hrefPathPattern, srcsetCandidatePattern } from "#pan
 import { comparedPath, oracleValueOf, resolve, resolveAttribute } from "#pantry/test/resolution.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 
 /**
  * The file system and processes the fixtures' materializer and `readEntries` need.
@@ -71,9 +72,9 @@ const TestLayer = NodeChildProcessSpawner.layer.pipe(
 );
 
 /**
- * The ids every case writes its rows under: the package's, and each node's by its number.
+ * The package every case writes its rows under; each node's id is `idOf` of its number.
  */
-const ids: ManifestIds = { idOf, package: "00000000-0000-4000-8000-0000000000aa" };
+const ids: ManifestIds = { package: "00000000-0000-4000-8000-0000000000aa" };
 
 /**
  * One overlay row as the walk expects it: its relation and its fields, and the rows of the two
@@ -217,7 +218,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     TypedHref: new Map(),
     UnreadTypeHref: new Map(),
   };
-  const document = ids.idOf(0);
+  const document = idOf(0);
   const interactions = new Set<string>(interactionKinds);
   let next = 1;
   const named: { readonly identifier: string; readonly node: NodeId }[] = [];
@@ -232,7 +233,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
       readonly nearest: NodeId;
     },
   ): void => {
-    const id = ids.idOf(next);
+    const id = idOf(next);
     const start = BigInt(next);
     next += 1;
     if (child._tag !== "element" && !("attributes" in child)) {
@@ -393,7 +394,7 @@ const unreadTypeHrefsOf = (
   doc: XdmDocument<Composed>,
   rows: Pick<PackageRows, "ResourceHref">,
 ): ReadonlyMap<string, UnreadTypeHrefRow> => {
-  const flat = flatten(doc, ids.idOf);
+  const flat = flatten(doc, idOf);
   const resources = new Set<string>(
     flat.nodes.flatMap(({ id, kind }) => (kind === "cp:resource" ? [id] : [])),
   );
@@ -762,7 +763,7 @@ const unreadOf = (
     })),
     resourcesBase: undefined,
   });
-  const rows = rowsOf(doc, ids);
+  const rows = rowsOf(ownViewOf(doc, idOf), ids);
   const unread = [...unreadTypeHrefsOf(doc, rows).values()];
 
   return {
@@ -782,21 +783,24 @@ const unreadOf = (
 const dependencyRefsOf = (dependencies: readonly string[]) =>
   [
     ...rowsOf(
-      treeOf({
-        manifestBase: undefined,
-        manifestIdentifier: "m",
-        resources: [
-          {
-            base: undefined,
-            dependencies,
-            files: [],
-            href: undefined,
-            identifier: "r1",
-            type: "webcontent",
-          },
-        ],
-        resourcesBase: undefined,
-      }),
+      ownViewOf(
+        treeOf({
+          manifestBase: undefined,
+          manifestIdentifier: "m",
+          resources: [
+            {
+              base: undefined,
+              dependencies,
+              files: [],
+              href: undefined,
+              identifier: "r1",
+              type: "webcontent",
+            },
+          ],
+          resourcesBase: undefined,
+        }),
+        idOf,
+      ),
       ids,
     ).Dependency.values(),
   ].map(({ lexical }) => ({ lexical }));
@@ -852,7 +856,7 @@ describe("import/overlays/package.ts", () => {
             c.noteAll(situationsOf(input));
 
             const doc = treeOf(input);
-            const rows = rowsOf(doc, ids);
+            const rows = rowsOf(ownViewOf(doc, idOf), ids);
 
             assertRows(doc, rows, walk(doc), "generated");
             for (const [at, { type }] of namedDocuments(rows)
@@ -955,7 +959,7 @@ layer(TestLayer, { excludeTestServices: true })("import/overlays/package.ts, fix
           }
 
           shredded += 1;
-          const rows = rowsOf(tree.value, ids);
+          const rows = rowsOf(ownViewOf(tree.value, idOf), ids);
           assertRows(tree.value, rows, walk(tree.value), name);
           assert.isNotEmpty(rows.ManifestId, name);
         }
@@ -1147,16 +1151,16 @@ const referenceTreeOf = (input: ReferenceCase): XdmDocument<Composed> => ({
  * by its pattern over the lexical form, never the resolution's.
  *
  * @param input - The document.
- * @param documentIds - The ids its rows are written under.
+ * @param documentIds - Its package and path; its nodes' ids are `idOf` of their numbers.
  * @returns Its expected rows.
  */
 const expectedReferences = (input: ReferenceCase, documentIds: DocumentIds) => {
-  const document = documentIds.idOf(0);
+  const document = idOf(0);
   const references = new Map<string, object>();
   const paths = new Map<string, object>();
   for (const [at, { base, carrier, value }] of input.elements.entries()) {
     const [kind, name] = carrier;
-    const node = documentIds.idOf(3 + 2 * at);
+    const node = idOf(3 + 2 * at);
     for (const whiteSpace of Option.toArray(census("3.0.1", kind, name))) {
       const resolution = resolve({
         bases: [input.base, base].flatMap((written) => (written === undefined ? [] : [written])),
@@ -1401,7 +1405,11 @@ describe("import/overlays/package.ts, hrefs and references", () => {
           (input, c) =>
             Effect.sync(() => {
               const documentIds: DocumentIds = { ...ids, path: input.path };
-              const rows = referenceRowsOf(referenceTreeOf(input), documentIds, census);
+              const rows = referenceRowsOf(
+                ownViewOf(referenceTreeOf(input), idOf),
+                documentIds,
+                census,
+              );
               const expected = expectedReferences(input, documentIds);
 
               c.noteAll(referenceSituationsOf(input, rows));
@@ -1448,13 +1456,13 @@ describe("import/overlays/package.ts, hrefs and references", () => {
       ),
     };
     const documentIds: DocumentIds = { ...ids, path: "items/item.xml" };
-    const rows = referenceRowsOf(tree, documentIds, census);
+    const rows = referenceRowsOf(ownViewOf(tree, idOf), documentIds, census);
 
     const expectedTexts = new Map<string, object>();
     const expectedPaths = new Map<string, object>();
     let next = 2;
     for (const { base, kind, value } of cases) {
-      const node = documentIds.idOf(next + 1);
+      const node = idOf(next + 1);
       next += value === "" ? 2 : 3;
       if (kind === "qti-file-href") {
         continue;
@@ -1468,7 +1476,7 @@ describe("import/overlays/package.ts, hrefs and references", () => {
         whiteSpace: kind === "qti-resource-icon" ? "replace" : "collapse",
       });
       expectedTexts.set(JSON.stringify([node]), {
-        document: documentIds.idOf(0),
+        document: idOf(0),
         kind,
         lexical: value,
         node,
@@ -1477,7 +1485,7 @@ describe("import/overlays/package.ts, hrefs and references", () => {
       });
       if (resolution.scope === "entry") {
         expectedPaths.set(JSON.stringify([node]), {
-          document: documentIds.idOf(0),
+          document: idOf(0),
           kind,
           node,
           package: documentIds.package,

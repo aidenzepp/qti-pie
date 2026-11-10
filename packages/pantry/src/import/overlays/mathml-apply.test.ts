@@ -23,6 +23,7 @@ import type {
   XdmWhitespace,
 } from "#pantry/model/xdm.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 
 /**
  * The version every case is written in.
@@ -87,11 +88,6 @@ const documentOf = (root: XdmClosedElement<Composed>): XdmDocument<Composed> => 
 });
 
 /**
- * The ids every case's rows are written under, `idOf`, numbering nodes in document order.
- */
-const ids = { idOf };
-
-/**
  * The document node's id, node 0 of every case.
  */
 const documentNode = idOf(0);
@@ -151,7 +147,7 @@ describe("import/overlays/mathml-apply.ts, the apply rows (spec reading 2)", () 
     const doc = documentOf(
       elementOf("m:math", [elementOf("m:apply", [elementOf("m:sin"), elementOf("m:ci")])]),
     );
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.deepStrictEqual(keysOf(rows.MathApply), [idOf(2)]);
     assert.deepStrictEqual(rows.MathApply.get(idOf(2)), {
@@ -180,7 +176,7 @@ describe("import/overlays/mathml-apply.ts, the apply rows (spec reading 2)", () 
         ]),
       ]),
     );
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.deepStrictEqual(rows.MathApply.get(idOf(2)), {
       ...copied(doc, 2, 1),
@@ -209,7 +205,7 @@ describe("import/overlays/mathml-apply.ts, the apply rows (spec reading 2)", () 
         ]),
       ]),
     );
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.deepStrictEqual(keysOf(rows.MathQualifier), []);
     assert.deepStrictEqual(keysOf(rows.MathApply), [idOf(2), idOf(3)]);
@@ -244,7 +240,7 @@ describe("import/overlays/mathml-apply.ts, the apply rows (spec reading 2)", () 
         ]),
       ]),
     );
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.deepStrictEqual(rows.MathApply.get(idOf(2)), {
       ...copied(doc, 2, 1),
@@ -275,7 +271,7 @@ describe("import/overlays/mathml-apply.ts, the apply rows (spec reading 2)", () 
         ]),
       ]),
     );
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     // The row is written for any pair; the database refuses the one the syntax tables do not list.
     assert.deepStrictEqual(keysOf(rows.MathQualifier), [idOf(4), idOf(6), idOf(11)]);
@@ -296,7 +292,7 @@ describe("import/overlays/mathml-apply.ts, the apply rows (spec reading 2)", () 
         elementOf("m:apply", [spacing, comment, elementOf("m:sin"), spacing, elementOf("m:ci")]),
       ]),
     );
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
     const flat = flatten(doc, idOf);
     const [, second] = flat.nodes.filter((node) => node.kind === "m:apply");
     const sin = flat.nodes.find((node) => node.kind === "m:sin");
@@ -311,7 +307,7 @@ describe("import/overlays/mathml-apply.ts, the apply rows (spec reading 2)", () 
   });
 
   it("gives a document with no apply no rows", () => {
-    const rows = rowsOf(documentOf(elementOf("m:math", [elementOf("m:ci")])), ids);
+    const rows = rowsOf(ownViewOf(documentOf(elementOf("m:math", [elementOf("m:ci")])), idOf));
 
     assert.deepStrictEqual(keysOf(rows.MathApply), []);
     assert.deepStrictEqual(keysOf(rows.MathArgument), []);

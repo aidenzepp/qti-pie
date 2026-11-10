@@ -21,7 +21,7 @@ import { Duration, Effect, Option } from "effect";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { AnonymousType, GoverningOf } from "#pantry/grammar/install.ts";
 import { rowsOf } from "#pantry/import/overlays/identity.ts";
-import { governorOf, ownContext } from "#pantry/import/fold.ts";
+import { governorOf, ownViewOf } from "#pantry/import/fold.ts";
 import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
@@ -188,18 +188,16 @@ const documentOf = (
 });
 
 /**
- * The ids every content case's rows are written under: `idOf`, numbering nodes in document order,
- * in a package that holds no document at any path a resource names, the document an item.
+ * Where every content case's document stands, its nodes' ids `idOf`, numbering nodes in document
+ * order: in a package that holds no document at any path a resource names, the document an item.
  */
 const ids = {
   assembled: false,
-  context: ownContext(idOf(0)),
   documentType: "imsqti_item_xmlv3p0",
-  idOf,
 } as const satisfies IdentityIds;
 
 /**
- * The ids a case's stimulus is read under: {@link ids}, the document a stimulus.
+ * Where a case's stimulus stands: {@link ids}, the document a stimulus.
  */
 const stimulusIds = {
   ...ids,
@@ -207,7 +205,7 @@ const stimulusIds = {
 } as const satisfies IdentityIds;
 
 /**
- * The ids a LOM case's record file is read under: {@link ids}, the document an external record
+ * Where a LOM case's record file stands: {@link ids}, the document an external record
  * file, whose records a package reads.
  */
 const recordIds = { ...ids, documentType: "resourcemetadata/xml" } as const satisfies IdentityIds;
@@ -358,7 +356,7 @@ describe(
                   drawn.children.map((choice) => elementOf("div", attributesOf(choice), [])),
                 );
                 const rows = rowsOf(
-                  documentOf(root, drawn.version),
+                  ownViewOf(documentOf(root, drawn.version), idOf),
                   drawn.rootKind === "qti-assessment-item" ? ids : stimulusIds,
                 );
                 const placed = [
@@ -574,7 +572,10 @@ describe("import/overlays/identity.ts, a LOM record's rows", { timeout: searchTi
                 children.push(elementOf("lom:educational", [], [languageOf("de")]));
               }
 
-              const rows = rowsOf(documentOf(elementOf("lom:lom", [], children)), recordIds);
+              const rows = rowsOf(
+                ownViewOf(documentOf(elementOf("lom:lom", [], children)), idOf),
+                recordIds,
+              );
               const expected: {
                 readonly general: string;
                 readonly lang: string;
@@ -784,7 +785,7 @@ describe(
                     ),
                   ),
                 );
-                const rows = rowsOf(documentOf(root), ids);
+                const rows = rowsOf(ownViewOf(documentOf(root), idOf), ids);
                 const placed: {
                   readonly choice: TextChoice;
                   readonly node: string;
@@ -1080,17 +1081,13 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
                   ),
                 ],
               );
-              const manifestRows = rowsOf(documentOf(manifest), {
+              const manifestRows = rowsOf(ownViewOf(documentOf(manifest), idOf), {
                 assembled: false,
-                context: ownContext(idOf(0)),
                 documentType: "manifest",
-                idOf,
               });
-              const itemRows = rowsOf(documentOf(item), {
+              const itemRows = rowsOf(ownViewOf(documentOf(item), itemIdOf), {
                 assembled: false,
-                context: ownContext(itemIdOf(0)),
                 documentType: "imsqti_item_xmlv3p0",
-                idOf: itemIdOf,
               });
 
               const generals: { readonly langs: readonly string[]; readonly node: string }[] = [];
@@ -1303,7 +1300,7 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
                   ),
                 ],
               );
-              const rows = rowsOf(documentOf(root), ids);
+              const rows = rowsOf(ownViewOf(documentOf(root), idOf), ids);
 
               const expectedAttributes: string[] = [];
               const expectedScopes: string[] = [];
@@ -1428,31 +1425,34 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
  */
 const catalogued = () =>
   rowsOf(
-    documentOf(
-      elementOf(
-        "qti-assessment-item",
-        [],
-        [
-          elementOf(
-            "qti-catalog-info",
-            [],
-            [
-              elementOf(
-                "qti-catalog",
-                [attribute("id", "C")],
-                [
-                  elementOf(
-                    "qti-card",
-                    [],
-                    [elementOf("qti-card-entry", [attribute("xml:lang", "es")], [])],
-                  ),
-                ],
-              ),
-            ],
-          ),
-          elementOf("div", [attribute("xml:lang", "en")], []),
-        ],
+    ownViewOf(
+      documentOf(
+        elementOf(
+          "qti-assessment-item",
+          [],
+          [
+            elementOf(
+              "qti-catalog-info",
+              [],
+              [
+                elementOf(
+                  "qti-catalog",
+                  [attribute("id", "C")],
+                  [
+                    elementOf(
+                      "qti-card",
+                      [],
+                      [elementOf("qti-card-entry", [attribute("xml:lang", "es")], [])],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            elementOf("div", [attribute("xml:lang", "en")], []),
+          ],
+        ),
       ),
+      idOf,
     ),
     ids,
   );
@@ -1488,7 +1488,10 @@ describe("import/overlays/identity.ts, a catalog's scope rows (R9-c)", () => {
 
   it("gives an item with no catalog the document as every scope", () => {
     const rows = rowsOf(
-      documentOf(elementOf("qti-assessment-item", [attribute("xml:lang", "en")], [])),
+      ownViewOf(
+        documentOf(elementOf("qti-assessment-item", [attribute("xml:lang", "en")], [])),
+        idOf,
+      ),
       ids,
     );
 
@@ -1510,7 +1513,10 @@ const sharedRows = (srcs: readonly string[], assembled?: boolean) => {
   const shares = srcs.map((src) => elementOf("m:share", [attribute("src", src)], []));
   const root = elementOf("qti-assessment-item", [], shares);
 
-  return rowsOf(documentOf(root), assembled === undefined ? ids : { ...ids, assembled });
+  return rowsOf(
+    ownViewOf(documentOf(root), idOf),
+    assembled === undefined ? ids : { ...ids, assembled },
+  );
 };
 
 describe("import/overlays/identity.ts, a share's same-document fragment (P7)", () => {
@@ -1587,7 +1593,10 @@ describe("import/overlays/identity.ts, an unadmitted element's ID (R2)", () => {
         [],
         [elementOf("cp:resources", [], [resource, resource])],
       );
-      const rows = rowsOf(documentOf(manifest, written), { ...ids, documentType: "none" });
+      const rows = rowsOf(ownViewOf(documentOf(manifest, written), idOf), {
+        ...ids,
+        documentType: "none",
+      });
 
       assert.deepStrictEqual(
         [...rows.DocumentId.values()].map(({ admitted, id, node }) => [node, id, admitted]),

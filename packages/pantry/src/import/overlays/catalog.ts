@@ -1,10 +1,10 @@
 /**
- * The catalog overlays' rows (spec reading R9-a, `#pantry/qti/catalog.ts`): from one document's XDM
- * tree and the ids its nodes are written under, one `CardSupport` row per `qti-card`'s `support`,
- * one `DefaultEntry` row per `qti-card-entry` whose `default` designates it, one `CatalogRef` row
- * per `data-catalog-idref` that holds a token and one `CatalogId` row per `qti-catalog` whose
- * `id` is an NCName, each keyed by its node, and one `CatalogTarget` row per distinct token of the
- * document's references, keyed by its document and token.
+ * The catalog overlays' rows (spec reading R9-a, `#pantry/qti/catalog.ts`): from one document's
+ * view (`DocumentView` of `#pantry/import/fold.ts`), one `CardSupport` row per `qti-card`'s
+ * `support`, one `DefaultEntry` row per `qti-card-entry` whose `default` designates it, one
+ * `CatalogRef` row per `data-catalog-idref` that holds a token and one `CatalogId` row per
+ * `qti-catalog` whose `id` is an NCName, each keyed by its node, and one `CatalogTarget` row per
+ * distinct token of the document's references, keyed by its document and token.
  *
  * A document in an assembly resolves its references once per instance (spec reading 117), which
  * {@link placedCatalogRowsOf} writes over the whole package: a `PlacedCatalogRef` for each token of
@@ -18,11 +18,10 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import { booleanTrue, collapse, isNcName } from "#pantry/grammar/domains.ts";
 import { attributeRows, ValueIdentity } from "#pantry/grammar/install.ts";
-import type { DocumentContext } from "#pantry/import/context.ts";
-import { foldAt, foldOf, governorOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt, governorOf } from "#pantry/import/fold.ts";
+import type { DocumentView } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { NodeRow } from "#pantry/model/xdm.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import type {
   AssembledCatalog,
@@ -36,20 +35,15 @@ import type {
 import type { AssembledId } from "#pantry/qti/identity.ts";
 
 /**
- * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
- * `flatten` gives it, and the document's context (spec reading 117), its own where none is given.
- *
- * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
- * the tree's rows name each node by one id.
+ * Where a document stands in its package, as this builder reads it beside the document's view: the
+ * part of the importer's `NodeIds` (Q5.15) it needs.
  */
 export interface CatalogIds {
   /**
    * Whether the document is in an assembly (`Document.assembled`), so its references resolve per
-   * instance (spec reading 117); none read as no.
+   * instance (spec reading 117).
    */
-  readonly assembled?: boolean;
-  readonly context?: DocumentContext;
-  readonly idOf: (index: number) => NodeId;
+  readonly assembled: boolean;
 }
 
 /**
@@ -133,20 +127,20 @@ const designating: ReadonlySet<string> = new Set(booleanTrue);
  * or `1`, and a `CatalogRef` for each `data-catalog-idref` that holds an IDREF token (an empty or
  * blank one holds none). A document with no such element gives no row.
  *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under, and its context.
+ * @param view - The document's view: its rows, and their folds under its context (spec reading
+ *   117).
+ * @param ids - Where it stands in its package.
  * @returns Every catalog relation's rows, keyed by node.
  */
-export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows => {
-  const rows = flatten(doc, ids.idOf);
+export const rowsOf = (view: DocumentView, ids: CatalogIds): CatalogRows => {
+  const { folds, rows } = view;
   const document = rows.document.node;
-  const folds = foldOf(rows.nodes, ids.context ?? ownContext(document));
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const supports = new Map<string, Addition<typeof CardSupport>>();
   const defaults = new Map<string, Addition<typeof DefaultEntry>>();
   const references = new Map<string, Addition<typeof CatalogRef>>();
   const catalogIds = new Map<string, Addition<typeof CatalogId>>();
-  const assembled = ids.assembled ?? false;
+  const { assembled } = ids;
   const targets = new Map<string, Addition<typeof CatalogTarget>>();
 
   for (const { lexical, name, node: id } of rows.attributes) {

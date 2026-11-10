@@ -25,6 +25,7 @@ import type {
   XdmDocument,
 } from "#pantry/model/xdm.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 
 /**
  * The version every case is written in.
@@ -112,11 +113,6 @@ const cellOf = (
   children: readonly XdmChild<Composed>[],
   math: readonly XdmAttribute<Composed>[] = [],
 ): XdmDocument<Composed> => documentOf(elementOf("m:math", [elementOf("m:mtd", children)], math));
-
-/**
- * The ids every case's rows are written under, `idOf`, numbering nodes in document order.
- */
-const ids = { idOf };
 
 /**
  * The document node's id, node 0 of every case.
@@ -211,12 +207,14 @@ const comment: XdmComment = { _tag: "comment", value: "c" };
  */
 const readSelection = (lexical: string) =>
   rowsOf(
-    documentOf(
-      elementOf("m:math", [
-        elementOf("m:maction", [elementOf("m:mi")], [attributeOf("selection", lexical)]),
-      ]),
+    ownViewOf(
+      documentOf(
+        elementOf("m:math", [
+          elementOf("m:maction", [elementOf("m:mi")], [attributeOf("selection", lexical)]),
+        ]),
+      ),
+      idOf,
     ),
-    ids,
   ).MathAction.get(idOf(2));
 
 /**
@@ -229,8 +227,10 @@ const readSelection = (lexical: string) =>
  */
 const chosenUnder = (lexical: string) =>
   rowsOf(
-    cellOf([elementOf("m:maction", [elementOf("m:mi")], [attributeOf("selection", lexical)])]),
-    ids,
+    ownViewOf(
+      cellOf([elementOf("m:maction", [elementOf("m:mi")], [attributeOf("selection", lexical)])]),
+      idOf,
+    ),
   ).MathAlignScope.get(idOf(4))?.chosen;
 
 describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () => {
@@ -239,7 +239,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     const doc = cellOf([
       elementOf("m:mfrac", [elementOf("m:mrow", [elementOf("m:maligngroup"), elementOf("m:mi")])]),
     ]);
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.deepStrictEqual(rows.MathAlignScope.get(idOf(3)), {
       ...copied(doc, 3, 2),
@@ -290,7 +290,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
         [attributeOf("dir", "ltr")],
       ),
     ]);
-    const sameRows = rowsOf(same, ids);
+    const sameRows = rowsOf(ownViewOf(same, idOf));
 
     assert.deepStrictEqual(standing(sameRows, 3), {
       inherited: "ltr",
@@ -314,7 +314,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
         [attributeOf("dir", " rtl ")],
       ),
     ]);
-    const otherRows = rowsOf(other, ids);
+    const otherRows = rowsOf(ownViewOf(other, idOf));
 
     assert.deepStrictEqual(standing(otherRows, 3), {
       inherited: "ltr",
@@ -334,7 +334,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
       [elementOf("m:mrow", [elementOf("m:maligngroup")], [attributeOf("dir", "ltr")])],
       [attributeOf("dir", "rtl")],
     );
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.strictEqual(rows.MathAlignScope.get(idOf(2))?.inherited, "rtl");
     assert.deepStrictEqual(standing(rows, 3), {
@@ -352,7 +352,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     const doc = cellOf([
       elementOf("m:mrow", [elementOf("m:maligngroup")], [attributeOf("dir", "auto")]),
     ]);
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.strictEqual(rows.MathAlignScope.get(idOf(3))?.dirLexical, "");
     assert.deepStrictEqual(standing(rows, 3), {
@@ -381,7 +381,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
         ]),
       ]),
     );
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
     assert.deepStrictEqual(
       [...rows.MathDir.values()],
       [
@@ -403,7 +403,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
         elementOf("m:mrow", [elementOf("m:mi"), elementOf("m:maligngroup")]),
       ]),
     ]);
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.deepStrictEqual(standing(rows, 3), {
       inherited: "ltr",
@@ -435,7 +435,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
         [attributeOf("selection", "2")],
       ),
     ]);
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.strictEqual(rows.MathAlignScope.get(idOf(4))?.state, "unjudged");
     assert.strictEqual(rows.MathAlignScope.get(idOf(5))?.state, "open");
@@ -446,7 +446,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
   it("numbers a cell's leaves in document order: in mtd(mi, maligngroup, mi) slot 0 is the first mi", () => {
     // Nodes: 0 document, 1 math, 2 mtd, 3 mi, 4 maligngroup, 5 mi.
     const doc = cellOf([elementOf("m:mi"), elementOf("m:maligngroup"), elementOf("m:mi")]);
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.deepStrictEqual(leafKeysOf(rows), [idOf(3), idOf(4), idOf(5)]);
     assert.deepStrictEqual(leavesOf(rows, 2)[0], {
@@ -471,7 +471,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
       elementOf("m:mrow", [elementOf("m:mi"), elementOf("m:mrow", [elementOf("m:mi")])]),
       elementOf("m:mi"),
     ]);
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.deepStrictEqual(leafKeysOf(rows), [idOf(5), idOf(7), idOf(8)]);
     assert.strictEqual(leavesOf(rows, 2)[0]?.groups, 0n);
@@ -488,7 +488,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
         ),
       ]),
     );
-    const chosenRows = rowsOf(chosen, ids);
+    const chosenRows = rowsOf(ownViewOf(chosen, idOf));
 
     assert.deepStrictEqual(chosenRows.MathAction.get(idOf(2)), {
       elementChildren: 2n,
@@ -503,7 +503,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
       elementOf("m:math", [elementOf("m:maction", [elementOf("m:mi"), elementOf("m:mi")])]),
     );
 
-    assert.deepStrictEqual(rowsOf(plain, ids).MathAction.get(idOf(2)), {
+    assert.deepStrictEqual(rowsOf(ownViewOf(plain, idOf)).MathAction.get(idOf(2)), {
       elementChildren: 2n,
       elements: 1n,
       node: idOf(2),
@@ -539,7 +539,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     const doc = documentOf(
       elementOf("m:math", [elementOf("m:mrow", [elementOf("m:maligngroup"), elementOf("m:mi")])]),
     );
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.deepStrictEqual(keysOf(rows.MathAlignScope), []);
     assert.deepStrictEqual(keysOf(rows.MathAlignGroup), []);
@@ -556,7 +556,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
         elementOf("m:mtr", [elementOf("m:mtd"), elementOf("m:mtd", [elementOf("m:mi")])]),
       ]),
     ]);
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.deepStrictEqual(keysOf(rows.MathCell), [idOf(2), idOf(6), idOf(7)]);
     assert.strictEqual(rows.MathAlignScope.get(idOf(6))?.cell, idOf(6));
@@ -594,7 +594,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
         [attributeOf("dir", "rtl")],
       ),
     );
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.deepStrictEqual(rows.MathAlignScope.get(idOf(4)), {
       ...copied(doc, 4, 3),
@@ -636,7 +636,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
         [attributeOf("dir", "rtl")],
       ),
     );
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.strictEqual(rows.MathAlignScope.get(idOf(3))?.inherited, "ltr");
     assert.deepStrictEqual(standing(rows, 4), {
@@ -655,7 +655,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
       elementOf("m:mphantom", [elementOf("m:maligngroup")]),
       elementOf("m:mfrac", [elementOf("m:maligngroup")]),
     ]);
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.strictEqual(rows.MathAlignScope.get(idOf(4))?.state, "open");
     assert.strictEqual(rows.MathAlignScope.get(idOf(6))?.state, "closed");
@@ -675,7 +675,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     const count = 50_000;
     const doc = cellOf(Array.from({ length: count }, () => elementOf("m:mi")));
     const began = performance.now();
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
     const seconds = (performance.now() - began) / 1000;
 
     assert.strictEqual(leafKeysOf(rows).length, count);

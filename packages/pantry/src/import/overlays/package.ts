@@ -1,7 +1,7 @@
 /**
  * The manifest's overlay rows (plan §1.6, §C's `rowsOf`), each document's reference rows
  * (`referenceRowsOf`), and the one resolver of an href the importer has (`resolveIn`): from a
- * document's XDM tree and the ids its nodes are written under, the rows of every overlay
+ * document's view (`DocumentView` of `#pantry/import/fold.ts`), the rows of every overlay
  * `#pantry/qti/package.ts` declares, each relation's rows a keyed set.
  *
  * The rows restate what the tree says: each overlay copies its node's tuple as the tree's own rows
@@ -24,11 +24,11 @@ import { Option, Result } from "effect";
 import { collapse, isNcName } from "#pantry/grammar/domains.ts";
 import { documentTypes, grammar, ResourceType } from "#pantry/grammar/install.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
-import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt } from "#pantry/import/fold.ts";
+import type { DocumentView } from "#pantry/import/fold.ts";
 import { stringValuesOf } from "#pantry/import/overlays/string-values.ts";
-import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   Dependency,
   DependencyTarget,
@@ -49,14 +49,10 @@ import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
- * The ids a manifest's rows are written under: its package's, and each of its tree's nodes', drawn
- * by the number `flatten` gives the node, in document order from the document node's 0.
- *
- * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
- * the tree's rows name each node by one id.
+ * Where a manifest stands, as this builder reads it beside the manifest's view: its package's id,
+ * the part of the importer's `NodeIds` (Q5.15) it needs.
  */
 export interface ManifestIds {
-  readonly idOf: (index: number) => NodeId;
   readonly package: Uuid;
 }
 
@@ -760,15 +756,15 @@ const dependencyTargetsOf = (
  * Content Packaging 1.2, §6.11.1, the Base class: "Relative references appearing within the scope
  * of a Base object shall then be interpreted according to the rules defined in RFC3986").
  *
- * @param doc - The manifest's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
+ * @param view - The manifest's view, judged in its own context: no site names the manifest, which
+ *   is no resource's document (spec reading 146).
+ * @param ids - Its package.
  * @returns Every overlay's rows.
  */
-export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRows => {
-  const rows = flatten(doc, ids.idOf);
+export const rowsOf = (view: DocumentView, ids: ManifestIds): PackageRows => {
+  const { folds, rows } = view;
   const attributes = attributesOf(rows);
   const resolve = hrefResolverOf(rows, manifestPath);
-  const folds = foldOf(rows.nodes, ownContext(rows.document.node));
   const document = rows.document.node;
   const tupleOf = (node: NodeRow<Composed>) => ({
     document,
@@ -954,8 +950,8 @@ export const resourcePathsOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, s
 };
 
 /**
- * The ids a document's reference rows are written under: the manifest's, and the document's own
- * path in its package. It is the part of the importer's `NodeIds` (Q5.15) this builder reads.
+ * Where a document stands, as its reference rows read it: its package, and its own path in the
+ * package. It is the part of the importer's `NodeIds` (Q5.15) this builder reads.
  */
 export interface DocumentIds extends ManifestIds {
   readonly path: string;
@@ -1055,17 +1051,17 @@ const textWhiteSpaces: ReadonlyMap<string, WhiteSpace> = new Map(
  * its lexical form (`srcsetCandidatePattern`), whatever scope its resolution writes, so the builder
  * judges no candidate.
  *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under, and its path.
+ * @param view - The document's view: its rows under the ids they are written under.
+ * @param ids - Its package and its path.
  * @param census - The reference census.
  * @returns Its reference rows.
  */
 export const referenceRowsOf = (
-  doc: XdmDocument<Composed>,
+  view: DocumentView,
   ids: DocumentIds,
   census: ReferenceCensus,
 ): ReferenceRows => {
-  const rows = flatten(doc, ids.idOf);
+  const { rows } = view;
   const document = rows.document.node;
   const resolve = hrefResolverOf(rows, ids.path);
   const nodes = new Map(rows.nodes.map((node) => [node.id, node] as const));

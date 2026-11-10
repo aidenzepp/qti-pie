@@ -19,7 +19,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Effect, Formatter, Option } from "effect";
 import { governorOf } from "#pantry/grammar/attributes.ts";
 import { grammar, openElementClasses, TypeName } from "#pantry/grammar/install.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 import { documentRowsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type { NodeMember } from "#pantry/import/write.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -111,14 +111,15 @@ describe("the import's governing types", () => {
             Effect.sync(() => {
               const { document } = generated;
 
-              const context = ownContext(idOf(0));
+              const view = ownViewOf(document, idOf);
               const governors = governorsOf(
-                rootInsertOf(document, { context, documentType: "imsqti_item_xmlv3p0", idOf }),
+                rootInsertOf(view, { documentType: "imsqti_item_xmlv3p0" }),
               );
-              const layer = documentRowsOf(
-                { documentType: "imsqti_item_xmlv3p0", path: "item.xml", tree: document },
-                { assembled: false, context, idOf, package: idOf(0xff_ff_ff) },
-              );
+              const layer = documentRowsOf({
+                ids: { assembled: false, package: idOf(0xff_ff_ff) },
+                listed: { documentType: "imsqti_item_xmlv3p0", path: "item.xml" },
+                view,
+              });
               const { nodes } = flatten(document, idOf);
               for (const node of nodes) {
                 const foreign = foreignKinds.has(node.kind);

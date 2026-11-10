@@ -24,7 +24,7 @@ import { Duration, Effect, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { ownContext, ownViewOf, viewOf } from "#pantry/import/fold.ts";
 import { rowsOf, tolerancePiecesOf } from "#pantry/import/overlays/operators.ts";
 import type { OperatorRows, ToleranceRow } from "#pantry/import/overlays/operators.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
@@ -279,7 +279,7 @@ describe("import/overlays/operators.ts, rowsOf", () => {
           [ownContext(nodes.document.node), nodes.document.node],
           [context, idOf(9999)],
         ] as const) {
-          const rows = rowsOf(tree, { context: given, idOf });
+          const rows = rowsOf(viewOf(tree, nodes, given));
           const rounders = nodes.nodes.filter(
             ({ kind }) => kind === "qti-equal-rounded" || kind === "qti-round-to",
           );
@@ -302,10 +302,12 @@ describe("import/overlays/operators.ts, rowsOf", () => {
     // Oracle: the specification as a checker: readings 119 and 121 read the three operators alone.
     Effect.gen(function* none() {
       const rows = rowsOf(
-        yield* itemOf(
-          `<qti-set-outcome-value identifier="SCORE"><qti-variable identifier="SCORE"/></qti-set-outcome-value>`,
+        ownViewOf(
+          yield* itemOf(
+            `<qti-set-outcome-value identifier="SCORE"><qti-variable identifier="SCORE"/></qti-set-outcome-value>`,
+          ),
+          idOf,
         ),
-        { context: ownContext(idOf(0)), idOf },
       );
 
       assert.strictEqual(rows.Rounding.size + rows.Tolerance.size, 0);
@@ -657,10 +659,7 @@ describe(
               Effect.gen(function* checks() {
                 c.note(drawnCase.form);
 
-                const rows = rowsOf(yield* itemOf(ruleOfOperator(drawnCase)), {
-                  context: ownContext(idOf(0)),
-                  idOf,
-                });
+                const rows = rowsOf(ownViewOf(yield* itemOf(ruleOfOperator(drawnCase)), idOf));
 
                 if (drawnCase.kind === "qti-equal") {
                   assertEquality(drawnCase, rows);

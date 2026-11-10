@@ -1,6 +1,6 @@
 /**
  * The expression and processing overlays' rows (plan §1.7 O4, §C's `rowsOf`): from one document's
- * XDM tree and the ids its nodes are written under, the rows of every relation
+ * view (`DocumentView` of `#pantry/import/fold.ts`), the rows of every relation
  * `#pantry/qti/expressions.ts` declares, each relation's rows a keyed set.
  *
  * The rows restate what the tree says and nothing else: each element's `nodeRef` tuple, each
@@ -12,7 +12,6 @@
  * never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import type { DocumentContext } from "#pantry/import/context.ts";
 import { Array as Arr, Option } from "effect";
 import {
   integerMathOperators,
@@ -46,11 +45,10 @@ import type {
   TestIds,
   TestRows,
 } from "#pantry/import/overlays/tests.ts";
-import { foldAt, foldOf } from "#pantry/import/fold.ts";
-import type { Folds } from "#pantry/import/fold.ts";
+import { foldAt } from "#pantry/import/fold.ts";
+import type { DocumentView, Folds } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { AttributeRow, FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   AssembledReference,
   Expression,
@@ -105,23 +103,6 @@ import {
   sectionRefKind,
   testKind,
 } from "#pantry/vocab/terms/tests.ts";
-
-/**
- * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
- * `flatten` gives it, in document order from the document node's 0.
- *
- * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
- * the tree's rows name each node by one id.
- */
-export interface ExpressionIds {
-  /**
-   * The document's context (spec reading 117), `ownContext` of `#pantry/import/fold.ts` for a
-   * document no site names: an included fragment's nodes take the interaction their includes stand
-   * in as their nearest.
-   */
-  readonly context: DocumentContext;
-  readonly idOf: (index: number) => NodeId;
-}
 
 /**
  * A document's expression and processing rows, one keyed set per relation: each map from the text
@@ -868,12 +849,13 @@ const declarationsOf = (
 /**
  * Read a document for the builder.
  *
- * @param tree - The document's tree.
- * @param ids - The ids its rows are written under.
+ * @param view - The document's view: its rows, and their folds under its context (spec reading
+ *   117), its own for a document no site names, while an included fragment's nodes take the
+ *   interaction their includes stand in as their nearest.
  * @returns The document, indexed.
  */
-const documentOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Document => {
-  const rows = flatten(tree, ids.idOf);
+const documentOf = (view: DocumentView): Document => {
+  const { rows } = view;
   const attributes = attributesOf(rows);
   const indexed = treeOf(rows);
 
@@ -882,10 +864,10 @@ const documentOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Document =
     attributes,
     charsOf: charactersIn(rows),
     declarations: declarationsOf(rows, attributes, indexed.childrenOf),
-    folds: foldOf(rows.nodes, ids.context),
+    folds: view.folds,
     id: rows.document.node,
     languageOf: languagesOf(rows, indexed),
-    rootKind: tree.root.kind,
+    rootKind: view.tree.root.kind,
     rows,
   };
 };
@@ -1406,12 +1388,11 @@ const testReferencesOf = (
  * holder's type are filled once their expressions are typed, so each rule the laws state reads
  * values already derived.
  *
- * @param tree - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
+ * @param view - The document's view.
  * @returns Every overlay's rows.
  */
-export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): ExpressionRows => {
-  const doc = documentOf(tree, ids);
+export const rowsOf = (view: DocumentView): ExpressionRows => {
+  const doc = documentOf(view);
   const references = new Map<string, Addition<typeof VariableRef>>();
   for (const attribute of doc.rows.attributes) {
     const reference = referenceOf(doc, doc.nodeOf(attribute.node), attribute);
@@ -1466,8 +1447,8 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
 /**
  * One document as the package-level builder reads it: its declarations' cardinalities, each where
  * it has one (Q5.08's `DeclarationCardinality` rows), its named declarations (Q5.08's
- * `DeclarationIdentifier` rows, each by its node), its expression rows, its test rows, its tree and
- * the ids its rows are written under.
+ * `DeclarationIdentifier` rows, each by its node), its expression rows, its test rows, its view
+ * and where it stands in its package.
  */
 export interface AssembledExpressionInput {
   readonly cardinalities: ReadonlyMap<string, Addition<typeof DeclarationCardinality>>;
@@ -1475,7 +1456,7 @@ export interface AssembledExpressionInput {
   readonly expressions: ExpressionRows;
   readonly ids: TestIds;
   readonly tests: TestRows;
-  readonly tree: XdmDocument<Composed>;
+  readonly view: DocumentView;
 }
 
 /**
@@ -2108,7 +2089,7 @@ const templateDefaultsOf = (
   input: AssembledExpressionInput,
   lookups: Lookups,
 ): TemplateDefaultRows => {
-  const rows = flatten(input.tree, input.ids.idOf);
+  const { rows } = input.view;
   const held = new Map(
     [...input.expressions.Expression.values()]
       .filter(({ parentKind }) => parentKind === "qti-template-default")
@@ -2213,8 +2194,8 @@ const itemRefTargetsOf = (
   const itemRefHrefs = new Map<string, Addition<typeof ItemRefHref>>();
   const targetTypes = new Map<string, NamedResource["type"]>();
   const itemRefDocuments = new Map<string, Addition<typeof ItemRefDocument>>();
-  for (const { ids, tree } of documents) {
-    for (const href of itemRefPathsOf(tree, ids)) {
+  for (const { ids, view } of documents) {
+    for (const href of itemRefPathsOf(view, ids)) {
       itemRefHrefs.set(href.node, { node: href.node, package: href.package, path: href.path });
 
       const types = new Set(
@@ -2537,7 +2518,7 @@ export const assembledExpressionRowsOf = (
 
   const placed = placedRowsOf(documents, assembled, lookups);
   const templateDefaults = documents.flatMap((input) =>
-    tests.has(input.tree.root.kind) ? [templateDefaultsOf(input, lookups)] : [],
+    tests.has(input.view.tree.root.kind) ? [templateDefaultsOf(input, lookups)] : [],
   );
 
   return {

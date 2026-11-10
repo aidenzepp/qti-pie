@@ -1,7 +1,7 @@
 /**
- * The MathML apply overlay's rows (spec reading 2, §C's `rowsOf`): from one document's XDM tree and
- * the ids its nodes are written under, the rows of every relation `#pantry/qti/mathml-apply.ts`
- * declares.
+ * The MathML apply overlay's rows (spec reading 2, §C's `rowsOf`): from one document's view
+ * (`DocumentView` of `#pantry/import/fold.ts`), the rows of every relation
+ * `#pantry/qti/mathml-apply.ts` declares.
  *
  * - **`MathApply`**, one row for every `m:apply` with an element child: its copied `nodeRef` tuple,
  *   its element rank and its element count (the node's own `elements` and `elementChildren`), and
@@ -23,12 +23,11 @@ import {
   mathHeadQualifiers,
   mathQualifiers,
 } from "#pantry/grammar/expression.ts";
-import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt } from "#pantry/import/fold.ts";
+import type { DocumentView } from "#pantry/import/fold.ts";
 import { nonElements } from "#pantry/import/overlays/mathml-tree.ts";
-import type { NodeIds } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type { MathApply, MathArgument, MathQualifier } from "#pantry/qti/mathml-apply.ts";
 
 /**
@@ -50,16 +49,12 @@ const headQualifiers: ReadonlySet<string> = new Set(
 /**
  * The apply rows of one document.
  *
- * @param tree - The document's XDM tree.
- * @param ids - The ids its nodes are written under, and its context where it is judged in one.
+ * @param view - The document's view: its rows, and their folds under the context it is judged in.
  * @returns The rows of every relation the apply module declares.
  */
-export const rowsOf = (
-  tree: XdmDocument<Composed>,
-  ids: Pick<NodeIds, "idOf"> & Partial<Pick<NodeIds, "context">>,
-): MathmlApplyRows => {
-  const { document, nodes } = flatten(tree, ids.idOf);
-  const folds = foldOf(nodes, ids.context ?? ownContext(document.node));
+export const rowsOf = (view: DocumentView): MathmlApplyRows => {
+  const { folds } = view;
+  const { document, nodes } = view.rows;
   // Each parent's element children in order; their count and each one's rank are the fold's.
   const elementsOf = new Map<NodeId, NodeRow<Composed>[]>();
   for (const node of nodes) {

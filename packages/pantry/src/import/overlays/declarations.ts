@@ -1,7 +1,7 @@
 /**
- * The O2 overlay rows of a document (plan §1.7, §C's `rowsOf`): from a document's XDM tree and the
- * ids its nodes are written under, the rows of every overlay `#pantry/qti/declarations.ts`
- * declares, each relation's rows a keyed set by its node's id.
+ * The O2 overlay rows of a document (plan §1.7, §C's `rowsOf`): from a document's view (its rows
+ * under the ids its nodes are written under, and their folds), the rows of every overlay
+ * `#pantry/qti/declarations.ts` declares, each relation's rows a keyed set by its node's id.
  *
  * The rows restate what the tree says and nothing else: each overlay copies its node's tuple as the
  * tree's own rows give it (`flatten` of `#pantry/model/xdm.ts`), each attribute's lexical form as
@@ -11,16 +11,14 @@
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
-import type { DocumentContext } from "#pantry/import/context.ts";
-import { foldAt, foldOf } from "#pantry/import/fold.ts";
-import type { Folds } from "#pantry/import/fold.ts";
+import { foldAt } from "#pantry/import/fold.ts";
+import type { DocumentView, Folds } from "#pantry/import/fold.ts";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
 import { isNcName } from "#pantry/grammar/domains.ts";
 import { spelledCardinalities } from "#pantry/grammar/compose.ts";
 import { DeclarationKind } from "#pantry/grammar/install.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   Declaration,
   DeclarationBaseType,
@@ -42,22 +40,6 @@ import type {
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
 import { normalMinimumDefaults } from "#pantry/vocab/terms/declarations.ts";
-
-/**
- * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
- * `flatten` gives the node, in document order from the document node's 0.
- *
- * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
- * the tree's rows name each node by one id.
- */
-export interface DocumentIds {
-  /**
-   * The document's context (spec reading 117), its own (`ownContext`) or, for an included
-   * fragment, the interaction its includes stand in, which its nodes take as their nearest.
-   */
-  readonly context: DocumentContext;
-  readonly idOf: (index: number) => NodeId;
-}
 
 /**
  * A document's O2 overlay rows, one keyed set per relation: each map from its row's node id to the
@@ -380,15 +362,15 @@ interface Derived {
 const noCharacters = "";
 
 /**
- * Compute what the tree gives each node, as `Node`'s laws hold it: its fold, and the string value
- * of its children's characters, concatenated in order.
+ * Compute what the tree gives each node, as `Node`'s laws hold it: its fold, the view's, and the
+ * string value of its children's characters, concatenated in order.
  *
- * @param rows - A document's flat rows, its nodes in document order, so each parent precedes its
+ * @param view - A document's view, its nodes in document order, so each parent precedes its
  *   children.
- * @param context - The document's context (spec reading 117).
  * @returns The derived values, by node id.
  */
-const derivedOf = (rows: FlatRows<Composed>, context: DocumentContext): Derived => {
+const derivedOf = (view: DocumentView): Derived => {
+  const { folds, rows } = view;
   const chars = charsOf(rows);
   const pieces = rows.nodes.flatMap(({ id, parent }) =>
     parent === id
@@ -403,7 +385,7 @@ const derivedOf = (rows: FlatRows<Composed>, context: DocumentContext): Derived 
     ),
   );
 
-  return { folds: foldOf(rows.nodes, context), text };
+  return { folds, text };
 };
 
 /**
@@ -744,15 +726,16 @@ const addValueSetCardinalities = (reading: Reading): void => {
  * its declaration's cardinality, per value and its typed rows, per record field and per field
  * name, and per scale attribute of an outcome declaration and per pair of them it writes.
  *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
+ * @param view - The document's view: its rows under the ids they are written under, and their folds
+ *   under its context (spec reading 117), its own or, for an included fragment, the interaction its
+ *   includes stand in, which its nodes take as their nearest.
  * @returns Every overlay's rows.
  */
-export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): DeclarationRows => {
-  const flat = flatten(doc, ids.idOf);
+export const rowsOf = (view: DocumentView): DeclarationRows => {
+  const flat = view.rows;
   const reading: Reading = {
     attributes: attributesOf(flat),
-    derived: derivedOf(flat, ids.context),
+    derived: derivedOf(view),
     document: flat.document.node,
     kinds: new Map(flat.nodes.map(({ id, kind }) => [id, kind] as const)),
     rows: {

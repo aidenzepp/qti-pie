@@ -1,7 +1,7 @@
 /**
- * The MathML align overlay's rows (spec reading 2, §C's `rowsOf`): from one document's XDM tree and
- * the ids its nodes are written under, the rows of every relation `#pantry/qti/mathml-align.ts`
- * declares.
+ * The MathML align overlay's rows (spec reading 2, §C's `rowsOf`): from one document's view
+ * (`DocumentView` of `#pantry/import/fold.ts`), the rows of every relation
+ * `#pantry/qti/mathml-align.ts` declares.
  *
  * - **`MathAction`**, one row for every `m:maction`: its element rank and element count, the lexical
  *   form of its `selection` (empty where it writes none), that form collapsed, and the integer it
@@ -41,14 +41,12 @@
  * costs time linear in its nodes (decision 357).
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
-import type { Folds } from "#pantry/import/fold.ts";
+import { foldAt } from "#pantry/import/fold.ts";
+import type { DocumentView, Folds } from "#pantry/import/fold.ts";
 import { nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
 import { collapse } from "#pantry/grammar/domains.ts";
-import type { NodeIds } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   CellLeaf,
   MathAction,
@@ -403,19 +401,15 @@ const leavesByCell = (
 /**
  * The align rows of one document.
  *
- * @param tree - The document's XDM tree.
- * @param ids - The ids its nodes are written under, and its context where it is judged in one.
+ * @param view - The document's view: its rows, and their folds under the context it is judged in.
  * @returns The rows of every relation the align module declares.
  */
-export const rowsOf = (
-  tree: XdmDocument<Composed>,
-  ids: Pick<NodeIds, "idOf"> & Partial<Pick<NodeIds, "context">>,
-): MathmlAlignRows => {
-  const flat = flatten(tree, ids.idOf);
+export const rowsOf = (view: DocumentView): MathmlAlignRows => {
+  const flat = view.rows;
   const reading: Reading = {
     attributes: writtenOf(flat.attributes, readAttributes),
     document: flat.document.node,
-    folds: foldOf(flat.nodes, ids.context ?? ownContext(flat.document.node)),
+    folds: view.folds,
     kinds: new Map(flat.nodes.map((node) => [node.id, node.kind] as const)),
     owns: new Map<NodeId, Direction>([[flat.document.node, "ltr"]]),
     standing: new Map<NodeId, Scope>(),

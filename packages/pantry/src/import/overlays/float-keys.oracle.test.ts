@@ -42,15 +42,14 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { grammar } from "#pantry/grammar/install.ts";
-import { ownContext } from "#pantry/import/fold.ts";
 import { rowsOf } from "#pantry/import/overlays/mapping.ts";
-import type { MappingIds } from "#pantry/import/overlays/mapping.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 
 /**
  * A decimal numeral's exact value: its sign, its significant digits with no leading or trailing
@@ -307,12 +306,6 @@ const floatSelection = new RegExp(doublePattern.source, "u");
  * The law oracle's laws over the composed grammar, built once.
  */
 const oracleLaws = lawsOf(grammar);
-
-/**
- * The ids every case writes its rows under, each node's by its number, in the context of a
- * document no site names.
- */
-const ids: MappingIds = { context: ownContext(idOf(0)), idOf };
 
 /**
  * Write an item whose one multiple float response maps two keys.
@@ -684,7 +677,7 @@ const judged = ({ keys }: KeyPair, note: (situation: Situation) => void) =>
     const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(itemOf(keys))));
     const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
     const folded = yield* Effect.orDie(Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar))));
-    const rows = rowsOf(tree, ids);
+    const rows = rowsOf(ownViewOf(tree, idOf));
     const [first, second] = keys;
     const [firstName, secondName] = [referenceOf(first), referenceOf(second)];
     const expected = first === second || valued(firstName, secondName);

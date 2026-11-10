@@ -1,7 +1,7 @@
 /**
- * The mapping overlays' rows (plan §1.7 O5, §C's `rowsOf`): from one document's XDM tree and the
- * ids its nodes are written under, the rows of every relation `#pantry/qti/mapping.ts` declares,
- * each relation's rows a keyed set by its element's node.
+ * The mapping overlays' rows (plan §1.7 O5, §C's `rowsOf`): from one document's view
+ * (`DocumentView` of `#pantry/import/fold.ts`), the rows of every relation `#pantry/qti/mapping.ts`
+ * declares, each relation's rows a keyed set by its element's node.
  *
  * The rows restate what the tree says and nothing else: each overlay's node tuple, its parent, its
  * declaration's `declarationRef` tuple as `#pantry/qti/declarations.ts` derives it, each map
@@ -14,14 +14,13 @@
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
-import type { DocumentContext } from "#pantry/import/context.ts";
 import { declarationOf, typedCountOf } from "#pantry/import/overlays/declarations.ts";
 import type { TypedDeclaration } from "#pantry/import/overlays/declarations.ts";
-import { foldAt, foldOf } from "#pantry/import/fold.ts";
+import { foldAt } from "#pantry/import/fold.ts";
+import type { DocumentView } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { lowerAscii } from "#pantry/import/overlays/metadata.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import { booleanTrue, collapse } from "#pantry/grammar/domains.ts";
 import type {
   AreaMapping,
@@ -37,23 +36,6 @@ import type {
   MappingCardinality,
   LookupTable,
 } from "#pantry/qti/mapping.ts";
-
-/**
- * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
- * `flatten` gives it.
- *
- * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
- * the tree's rows name each node by one id.
- */
-export interface MappingIds {
-  /**
-   * The document's context (spec reading 117), `ownContext` of its document node for a document no
-   * site names: an included fragment's nodes take the interaction their includes stand in as their
-   * nearest.
-   */
-  readonly context: DocumentContext;
-  readonly idOf: (index: number) => NodeId;
-}
 
 /**
  * A document's mapping rows, one keyed set per relation: each map from the text of a row's key,
@@ -217,14 +199,13 @@ const matchingOf = (
  * row beside its declaration's cardinality, where the declaration has one, and only there (spec
  * reading 158).
  *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
+ * @param view - The document's view: its rows, and their folds under its context (spec reading
+ *   117), whose interaction an included fragment's nodes take as their nearest.
  * @returns Every overlay's rows.
  */
-export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows => {
-  const rows = flatten(doc, ids.idOf);
+export const rowsOf = (view: DocumentView): MappingRows => {
+  const { folds, rows } = view;
   const document = rows.document.node;
-  const folds = foldOf(rows.nodes, ids.context);
   const byId = new Map(rows.nodes.map((node) => [node.id, node]));
   const attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>> = new Map(
     [...Map.groupBy(rows.attributes, ({ node }) => node)].map(

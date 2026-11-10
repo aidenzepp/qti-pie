@@ -14,9 +14,7 @@ import { array, element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
-import { ownContext } from "#pantry/import/fold.ts";
 import { itemsOf, rowsOf } from "#pantry/import/overlays/mapping.ts";
-import type { MappingIds } from "#pantry/import/overlays/mapping.ts";
 import { twoItemPattern } from "#pantry/qti/mapping.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
@@ -28,6 +26,7 @@ import type {
   XdmDocument,
 } from "#pantry/model/xdm.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 
 /**
  * The deleted schema's `xs:integer` lexical space (`src/schema/patterns.ts` `xsInteger`): the
@@ -56,12 +55,6 @@ const typedOf = (baseType: string, key: string): string => {
 
   return baseType === "float" && xsDouble.test(key) ? String(Number(key)) : key;
 };
-
-/**
- * The ids every case writes its rows under, each node's by its number, in the context of a
- * document no site names.
- */
-const ids: MappingIds = { context: ownContext(idOf(0)), idOf };
 
 /**
  * One map entry of a generated mapping: its key and its mapped value, as written.
@@ -197,9 +190,7 @@ const treeOf = (input: MappingCase): XdmDocument<Composed> => {
 const walkedKeys = (
   input: MappingCase,
 ): ReadonlyMap<NodeId, { readonly key: string; readonly mapping: NodeId }> =>
-  new Map(
-    input.entries.map(({ key }, at) => [ids.idOf(5 + 2 * at), { key, mapping: ids.idOf(3) }]),
-  );
+  new Map(input.entries.map(({ key }, at) => [idOf(5 + 2 * at), { key, mapping: idOf(3) }]));
 
 /**
  * A situation the box must reach: two identical entries, two entries of one key and two values,
@@ -260,7 +251,7 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
             Effect.sync(() => {
               c.noteAll(situationsOf(input));
 
-              const rows = rowsOf(treeOf(input), ids);
+              const rows = rowsOf(ownViewOf(treeOf(input), idOf));
               const walked = walkedKeys(input);
 
               assert.strictEqual(rows.MapKey.size, input.entries.length);
@@ -284,13 +275,13 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
 
               assert.notProperty(rows, "MapKeyInteger");
               assert.notProperty(rows, "MapKeyFloat");
-              assert.deepStrictEqual([...rows.Mapping.keys()], [ids.idOf(3)]);
-              assert.strictEqual(rows.Mapping.get(ids.idOf(3))?.baseTypes, 1n);
-              assert.strictEqual(rows.Mapping.get(ids.idOf(3))?.declaration, ids.idOf(2));
-              assert.deepStrictEqual(rows.MappingBaseType.get(ids.idOf(3)), {
+              assert.deepStrictEqual([...rows.Mapping.keys()], [idOf(3)]);
+              assert.strictEqual(rows.Mapping.get(idOf(3))?.baseTypes, 1n);
+              assert.strictEqual(rows.Mapping.get(idOf(3))?.declaration, idOf(2));
+              assert.deepStrictEqual(rows.MappingBaseType.get(idOf(3)), {
                 baseType: input.baseType,
-                declaration: ids.idOf(2),
-                node: ids.idOf(3),
+                declaration: idOf(2),
+                node: idOf(3),
               });
             }),
         ),
@@ -306,17 +297,19 @@ describe("import/overlays/mapping.ts, how a map key is matched", () => {
     // case-sensitively beside one matched case-insensitively is two keys.
     // Bound: the one mapping each declared base type is written with, its entries named.
     const rows = rowsOf(
-      treeOf({
-        baseType: "string",
-        entries: [
-          { caseSensitive: "true", key: "York", value: "1" },
-          { key: "york", value: "0.5" },
-          { key: "YORK", value: "0.5" },
-          { caseSensitive: " 1 ", key: "York", value: "1" },
-          { caseSensitive: "false", key: "Leeds", value: "1" },
-        ],
-      }),
-      ids,
+      ownViewOf(
+        treeOf({
+          baseType: "string",
+          entries: [
+            { caseSensitive: "true", key: "York", value: "1" },
+            { key: "york", value: "0.5" },
+            { key: "YORK", value: "0.5" },
+            { caseSensitive: " 1 ", key: "York", value: "1" },
+            { caseSensitive: "false", key: "Leeds", value: "1" },
+          ],
+        }),
+        idOf,
+      ),
     );
     const matches = [...rows.MapKey.values()].map((row) => [
       row.key,
@@ -334,8 +327,7 @@ describe("import/overlays/mapping.ts, how a map key is matched", () => {
     ]);
 
     const identifiers = rowsOf(
-      treeOf({ baseType: "directedPair", entries: [{ key: "A B", value: "1" }] }),
-      ids,
+      ownViewOf(treeOf({ baseType: "directedPair", entries: [{ key: "A B", value: "1" }] }), idOf),
     );
     assert.deepStrictEqual(
       [...identifiers.MapKey.values()].map((row) => [row.folded, row.matched]),
@@ -353,11 +345,13 @@ describe("import/overlays/mapping.ts, how a map key is matched", () => {
 const identityOf = (entries: readonly { caseSensitive?: string; key: string }[]) =>
   [
     ...rowsOf(
-      treeOf({
-        baseType: "string",
-        entries: entries.map((entry) => ({ ...entry, value: "1" })),
-      }),
-      ids,
+      ownViewOf(
+        treeOf({
+          baseType: "string",
+          entries: entries.map((entry) => ({ ...entry, value: "1" })),
+        }),
+        idOf,
+      ),
     ).MapKey.values(),
   ].map((row) => JSON.stringify([row.mapping, row.key]));
 
@@ -535,7 +529,7 @@ describe("import/overlays/mapping.ts, two-item keys", { timeout: searchTimeout }
                 ...(split.some((items) => items === undefined) ? (["unsplit"] as const) : []),
               ]);
 
-              const rows = rowsOf(treeOf(input), ids);
+              const rows = rowsOf(ownViewOf(treeOf(input), idOf));
               const held = [...rows.MapKeyItems].map(([node, row]): SplitRow => [
                 node,
                 [row.first, row.gap, row.second],
@@ -660,12 +654,12 @@ describe("import/overlays/mapping.ts, lookup values", { timeout: searchTimeout }
             Effect.sync(() => {
               c.note(input.defaultValue === undefined ? "no default" : "default");
 
-              const rows = rowsOf(tableTreeOf(input), ids);
+              const rows = rowsOf(ownViewOf(tableTreeOf(input), idOf));
               const expected = [
                 ...(input.defaultValue === undefined
                   ? []
-                  : [[ids.idOf(3), ids.idOf(2), input.defaultValue]]),
-                ...input.targets.map((target, at) => [ids.idOf(5 + 2 * at), ids.idOf(3), target]),
+                  : [[idOf(3), idOf(2), input.defaultValue]]),
+                ...input.targets.map((target, at) => [idOf(5 + 2 * at), idOf(3), target]),
               ];
 
               assert.sameDeepMembers(
@@ -683,7 +677,7 @@ describe("import/overlays/mapping.ts, lookup values", { timeout: searchTimeout }
 
               assert.deepStrictEqual(
                 [...rows.LookupTable].map(([node, { kind }]) => [node, kind]),
-                [[ids.idOf(3), input.kind]],
+                [[idOf(3), input.kind]],
               );
             }),
         ),

@@ -26,6 +26,7 @@ import type {
 } from "#pantry/model/xdm.ts";
 import { keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 
 /**
  * The version every case is written in.
@@ -99,11 +100,6 @@ const documentOf = (root: XdmClosedElement<Composed>): XdmDocument<Composed> => 
 });
 
 /**
- * The ids every case's rows are written under, `idOf`, numbering nodes in document order.
- */
-const ids = { idOf };
-
-/**
  * The key of a part's row.
  *
  * @param at - The `cn`'s number in document order.
@@ -149,16 +145,18 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
   it("gives a base-40 rational of three parts a shape and three slots, and no MathCn or CnPartText", () => {
     // Nodes: 0 document, 1 math, 2 cn, 3 text, 4 sep, 5 text, 6 sep, 7 text.
     const rows = rowsOf(
-      documentOf(
-        elementOf("m:math", [
-          elementOf(
-            "m:cn",
-            [text("1"), elementOf("m:sep"), text("2"), elementOf("m:sep"), text("3")],
-            [attributeOf("type", "rational"), attributeOf("base", "40")],
-          ),
-        ]),
+      ownViewOf(
+        documentOf(
+          elementOf("m:math", [
+            elementOf(
+              "m:cn",
+              [text("1"), elementOf("m:sep"), text("2"), elementOf("m:sep"), text("3")],
+              [attributeOf("type", "rational"), attributeOf("base", "40")],
+            ),
+          ]),
+        ),
+        idOf,
       ),
-      ids,
     );
 
     assert.deepStrictEqual(keysOf(rows.CnCount), [idOf(2)]);
@@ -182,17 +180,19 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
   it("gives a cn with an mglyph part its slots, and a cn of a type no form lists none", () => {
     // Nodes: 0 document, 1 math, 2 cn, 3 mglyph, 4 sep, 5 text; 6 cn, 7 text.
     const rows = rowsOf(
-      documentOf(
-        elementOf("m:math", [
-          elementOf(
-            "m:cn",
-            [elementOf("m:mglyph"), elementOf("m:sep"), text("2")],
-            [attributeOf("type", "rational")],
-          ),
-          elementOf("m:cn", [text("x")], [attributeOf("type", "constant")]),
-        ]),
+      ownViewOf(
+        documentOf(
+          elementOf("m:math", [
+            elementOf(
+              "m:cn",
+              [elementOf("m:mglyph"), elementOf("m:sep"), text("2")],
+              [attributeOf("type", "rational")],
+            ),
+            elementOf("m:cn", [text("x")], [attributeOf("type", "constant")]),
+          ]),
+        ),
+        idOf,
       ),
-      ids,
     );
 
     assert.deepStrictEqual(keysOf(rows.CnCount), [idOf(2)]);
@@ -204,19 +204,21 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
     // Nodes: 0 document, 1 math, 2 cn (no base), 3 text; 4 cn (base 37), 5 text; 6 cn (empty
     // base), 7 text; 8 cn (rational surplus of three), 9 text, 10 sep, 11 text, 12 sep, 13 text.
     const rows = rowsOf(
-      documentOf(
-        elementOf("m:math", [
-          elementOf("m:cn", [text("1")]),
-          elementOf("m:cn", [text("1")], [attributeOf("base", "37")]),
-          elementOf("m:cn", [text("1")], [attributeOf("base", "")]),
-          elementOf(
-            "m:cn",
-            [text("1"), elementOf("m:sep"), text("2"), elementOf("m:sep"), text("3")],
-            [attributeOf("type", "rational")],
-          ),
-        ]),
+      ownViewOf(
+        documentOf(
+          elementOf("m:math", [
+            elementOf("m:cn", [text("1")]),
+            elementOf("m:cn", [text("1")], [attributeOf("base", "37")]),
+            elementOf("m:cn", [text("1")], [attributeOf("base", "")]),
+            elementOf(
+              "m:cn",
+              [text("1"), elementOf("m:sep"), text("2"), elementOf("m:sep"), text("3")],
+              [attributeOf("type", "rational")],
+            ),
+          ]),
+        ),
+        idOf,
       ),
-      ids,
     );
 
     assert.deepStrictEqual(keysOf(rows.CnCount), [idOf(2), idOf(4), idOf(6), idOf(8)]);
@@ -234,16 +236,18 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
   it("gives a rational cn one MathCn row and two integer parts, split at its sep", () => {
     // Nodes: 0 document, 1 math, 2 cn, 3 text, 4 sep, 5 text.
     const rows = rowsOf(
-      documentOf(
-        elementOf("m:math", [
-          elementOf(
-            "m:cn",
-            [text("1"), elementOf("m:sep"), text("2")],
-            [attributeOf("type", "rational")],
-          ),
-        ]),
+      ownViewOf(
+        documentOf(
+          elementOf("m:math", [
+            elementOf(
+              "m:cn",
+              [text("1"), elementOf("m:sep"), text("2")],
+              [attributeOf("type", "rational")],
+            ),
+          ]),
+        ),
+        idOf,
       ),
-      ids,
     );
 
     assert.deepStrictEqual(keysOf(rows.MathCn), [idOf(2)]);
@@ -276,8 +280,7 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
   it("gives a cn with no type its real default, one part, and its text collapsed", () => {
     // Nodes: 0 document, 1 math, 2 cn, 3 text.
     const rows = rowsOf(
-      documentOf(elementOf("m:math", [elementOf("m:cn", [text(" \t3.5\n ")])])),
-      ids,
+      ownViewOf(documentOf(elementOf("m:math", [elementOf("m:cn", [text(" \t3.5\n ")])])), idOf),
     );
 
     assert.deepStrictEqual(rows.MathCn.get(idOf(2)), {
@@ -301,16 +304,18 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
   it("reads the type and the base through the whitespace around them, and keeps their lexical forms", () => {
     // Nodes: 0 document, 1 math, 2 cn, 3 text.
     const rows = rowsOf(
-      documentOf(
-        elementOf("m:math", [
-          elementOf(
-            "m:cn",
-            [text("ff")],
-            [attributeOf("type", " integer\n"), attributeOf("base", " 016 ")],
-          ),
-        ]),
+      ownViewOf(
+        documentOf(
+          elementOf("m:math", [
+            elementOf(
+              "m:cn",
+              [text("ff")],
+              [attributeOf("type", " integer\n"), attributeOf("base", " 016 ")],
+            ),
+          ]),
+        ),
+        idOf,
       ),
-      ids,
     );
 
     assert.deepStrictEqual(rows.MathCn.get(idOf(2)), {
@@ -328,20 +333,22 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
     // Nodes: 0 document, 1 math, 2 cn (judged, both), 3 text, 4 cn (type no form lists), 5 text,
     // 6 cn (no attribute), 7 text, 8 mi (a type), 9 text, 10 cn (base outside the radixes), 11 text.
     const rows = rowsOf(
-      documentOf(
-        elementOf("m:math", [
-          elementOf(
-            "m:cn",
-            [text("ff")],
-            [attributeOf("type", " integer\n"), attributeOf("base", " 016 ")],
-          ),
-          elementOf("m:cn", [text("x")], [attributeOf("type", "constant")]),
-          elementOf("m:cn", [text("1")]),
-          elementOf("m:mi", [text("y")], [attributeOf("type", "integer")]),
-          elementOf("m:cn", [text("1")], [attributeOf("base", "37")]),
-        ]),
+      ownViewOf(
+        documentOf(
+          elementOf("m:math", [
+            elementOf(
+              "m:cn",
+              [text("ff")],
+              [attributeOf("type", " integer\n"), attributeOf("base", " 016 ")],
+            ),
+            elementOf("m:cn", [text("x")], [attributeOf("type", "constant")]),
+            elementOf("m:cn", [text("1")]),
+            elementOf("m:mi", [text("y")], [attributeOf("type", "integer")]),
+            elementOf("m:cn", [text("1")], [attributeOf("base", "37")]),
+          ]),
+        ),
+        idOf,
       ),
-      ids,
     );
 
     assert.deepStrictEqual(Object.fromEntries(rows.CnAttribute), {
@@ -358,10 +365,12 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
     // The builder restates the tree; the stated limit (reading 2, findings row 24) is the schema's.
     const long = "t".repeat(keyTextBytes + 1);
     const rows = rowsOf(
-      documentOf(
-        elementOf("m:math", [elementOf("m:cn", [text("x")], [attributeOf("type", long)])]),
+      ownViewOf(
+        documentOf(
+          elementOf("m:math", [elementOf("m:cn", [text("x")], [attributeOf("type", long)])]),
+        ),
+        idOf,
       ),
-      ids,
     );
 
     const copied = rows.CnAttribute.get(attributeKey(2, "type"));
@@ -373,14 +382,16 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
 
   it("gives a cn of a type no form lists no rows, its content being text", () => {
     const rows = rowsOf(
-      documentOf(
-        elementOf("m:math", [
-          elementOf("m:cn", [text("x")], [attributeOf("type", "constant")]),
-          elementOf("m:cn", [text("x")], [attributeOf("type", "Integer")]),
-          elementOf("m:cn", [text("x")], [attributeOf("type", "")]),
-        ]),
+      ownViewOf(
+        documentOf(
+          elementOf("m:math", [
+            elementOf("m:cn", [text("x")], [attributeOf("type", "constant")]),
+            elementOf("m:cn", [text("x")], [attributeOf("type", "Integer")]),
+            elementOf("m:cn", [text("x")], [attributeOf("type", "")]),
+          ]),
+        ),
+        idOf,
       ),
-      ids,
     );
 
     assert.deepStrictEqual(keysOf(rows.MathCn), []);
@@ -389,15 +400,17 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
 
   it("gives a cn whose base is no radix from 2 to 36 no rows, its digits being application specific", () => {
     const rows = rowsOf(
-      documentOf(
-        elementOf(
-          "m:math",
-          ["1", "37", "abc", "16.5", "", "0"].map((base) =>
-            elementOf("m:cn", [text("1")], [attributeOf("base", base)]),
+      ownViewOf(
+        documentOf(
+          elementOf(
+            "m:math",
+            ["1", "37", "abc", "16.5", "", "0"].map((base) =>
+              elementOf("m:cn", [text("1")], [attributeOf("base", base)]),
+            ),
           ),
         ),
+        idOf,
       ),
-      ids,
     );
 
     assert.deepStrictEqual(keysOf(rows.MathCn), []);
@@ -408,18 +421,20 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
     // Nodes: 0 document, 1 math, 2 cn (an element in a part), 3 mglyph; 4 cn (an entity reference
     // in a part), 5 text, 6 entityRef, 7 sep, 8 text; 9 cn, whole, 10 text.
     const rows = rowsOf(
-      documentOf(
-        elementOf("m:math", [
-          elementOf("m:cn", [elementOf("m:mglyph")]),
-          elementOf(
-            "m:cn",
-            [text("1"), reference, elementOf("m:sep"), text("2")],
-            [attributeOf("type", "rational")],
-          ),
-          elementOf("m:cn", [text("7")]),
-        ]),
+      ownViewOf(
+        documentOf(
+          elementOf("m:math", [
+            elementOf("m:cn", [elementOf("m:mglyph")]),
+            elementOf(
+              "m:cn",
+              [text("1"), reference, elementOf("m:sep"), text("2")],
+              [attributeOf("type", "rational")],
+            ),
+            elementOf("m:cn", [text("7")]),
+          ]),
+        ),
+        idOf,
       ),
-      ids,
     );
 
     assert.deepStrictEqual(keysOf(rows.MathCn), [idOf(9)]);
@@ -429,16 +444,18 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
   it("splits at every sep, keeps an empty part as empty text, and lets comments and whitespace add nothing", () => {
     // Nodes: 0 document, 1 math, 2 cn, 3 comment, 4 ws, 5 text, 6 sep, 7 ws, 8 comment.
     const rows = rowsOf(
-      documentOf(
-        elementOf("m:math", [
-          elementOf(
-            "m:cn",
-            [comment, spacing, text("1 2"), elementOf("m:sep"), spacing, comment],
-            [attributeOf("type", "e-notation")],
-          ),
-        ]),
+      ownViewOf(
+        documentOf(
+          elementOf("m:math", [
+            elementOf(
+              "m:cn",
+              [comment, spacing, text("1 2"), elementOf("m:sep"), spacing, comment],
+              [attributeOf("type", "e-notation")],
+            ),
+          ]),
+        ),
+        idOf,
       ),
-      ids,
     );
 
     assert.deepStrictEqual(keysOf(rows.CnPartText), [partKey(2, 0), partKey(2, 1)]);
@@ -453,30 +470,32 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
     // form `real`, which CnForm does not list at its place. A rational holds two parts, so a third
     // is written at the place no type lists (place 2), under `real`, and a fourth has no place.
     const rows = rowsOf(
-      documentOf(
-        elementOf("m:math", [
-          elementOf("m:cn", [text("1"), elementOf("m:sep"), text("2")]),
-          elementOf(
-            "m:cn",
-            [text("1"), elementOf("m:sep"), text("2"), elementOf("m:sep"), text("3")],
-            [attributeOf("type", "rational")],
-          ),
-          elementOf(
-            "m:cn",
-            [
-              text("1"),
-              elementOf("m:sep"),
-              text("2"),
-              elementOf("m:sep"),
-              text("3"),
-              elementOf("m:sep"),
-              text("4"),
-            ],
-            [attributeOf("type", "rational")],
-          ),
-        ]),
+      ownViewOf(
+        documentOf(
+          elementOf("m:math", [
+            elementOf("m:cn", [text("1"), elementOf("m:sep"), text("2")]),
+            elementOf(
+              "m:cn",
+              [text("1"), elementOf("m:sep"), text("2"), elementOf("m:sep"), text("3")],
+              [attributeOf("type", "rational")],
+            ),
+            elementOf(
+              "m:cn",
+              [
+                text("1"),
+                elementOf("m:sep"),
+                text("2"),
+                elementOf("m:sep"),
+                text("3"),
+                elementOf("m:sep"),
+                text("4"),
+              ],
+              [attributeOf("type", "rational")],
+            ),
+          ]),
+        ),
+        idOf,
       ),
-      ids,
     );
 
     // Nodes: 2 cn, 3 text, 4 sep, 5 text; 6 cn, 7 text, 8 sep, 9 text, 10 sep, 11 text;
@@ -510,11 +529,11 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
         ]),
       ]),
     );
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
 
     assert.deepStrictEqual(keysOf(rows.MathCn), [idOf(4)]);
     assert.deepStrictEqual(
-      keysOf(rowsOf(documentOf(elementOf("m:math", [elementOf("m:ci")])), ids).MathCn),
+      keysOf(rowsOf(ownViewOf(documentOf(elementOf("m:math", [elementOf("m:ci")])), idOf)).MathCn),
       [],
     );
   });
@@ -532,7 +551,7 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
       ]),
     );
     const start = performance.now();
-    const rows = rowsOf(doc, ids);
+    const rows = rowsOf(ownViewOf(doc, idOf));
     const elapsed = performance.now() - start;
 
     assert.deepStrictEqual(keysOf(rows.MathCn), [idOf(children + 3)]);

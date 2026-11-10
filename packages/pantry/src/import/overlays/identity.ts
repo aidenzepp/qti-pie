@@ -1,8 +1,8 @@
 /**
- * The identity overlays' rows (plan §1.7 O1, §C's `rowsOf`): from one document's XDM tree and the
- * ids its nodes are written under, the rows of every relation `#pantry/qti/identity.ts` declares,
- * each relation's rows a keyed set; and, from every document's rows, those placed under each
- * assembly ({@link placedIdRowsOf}, {@link placedLanguageRowsOf}).
+ * The identity overlays' rows (plan §1.7 O1, §C's `rowsOf`): from one document's view
+ * (`DocumentView` of `#pantry/import/fold.ts`), the rows of every relation
+ * `#pantry/qti/identity.ts` declares, each relation's rows a keyed set; and, from every document's
+ * rows, those placed under each assembly ({@link placedIdRowsOf}, {@link placedLanguageRowsOf}).
  *
  * The rows restate what the tree says and nothing else: each ID's lexical form as written and split
  * around its value, with the element its binding names; each element's text of an identity type and
@@ -15,7 +15,6 @@
  * builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import type { DocumentContext } from "#pantry/import/context.ts";
 import { Option } from "effect";
 import { collapse, isNcName } from "#pantry/grammar/domains.ts";
 import type { DocumentType } from "#pantry/grammar/install.ts";
@@ -27,11 +26,10 @@ import {
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
 import { lowerAscii, piecesOf, stringValuesOf } from "#pantry/import/overlays/metadata.ts";
-import { foldAt, foldOf, governorOf } from "#pantry/import/fold.ts";
-import type { Folds } from "#pantry/import/fold.ts";
+import { foldAt, governorOf } from "#pantry/import/fold.ts";
+import type { DocumentView, Folds } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { AttributeRow, FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   AssembledLang,
   BodyXmlLang,
@@ -61,11 +59,8 @@ import { recordDocumentTypes } from "#pantry/vocab/terms/metadata.ts";
 import { itemKind, testKind } from "#pantry/vocab/terms/tests.ts";
 
 /**
- * The ids a document's rows are written under: each of its tree's nodes' and attributes', drawn by
- * the number `flatten` gives it.
- *
- * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
- * the tree's rows name each node by one id.
+ * Where a document stands in its package, as this builder reads it: the part of the importer's
+ * `NodeIds` (Q5.15) it needs beside the document's view.
  */
 export interface IdentityIds {
   /**
@@ -74,18 +69,11 @@ export interface IdentityIds {
    */
   readonly assembled: boolean;
   /**
-   * The document's context (spec reading 117): an included fragment's nodes take the interaction
-   * their includes stand in as their nearest, and every other document's is its own
-   * (`ownContext`).
-   */
-  readonly context: DocumentContext;
-  /**
    * The document's type, `manifest` for the manifest, else the resource's that lists it: its LOM
    * records are read where it is of a type a package's records are read from
    * (`recordDocumentTypes`).
    */
   readonly documentType: (typeof DocumentType.handles)[number];
-  readonly idOf: (index: number) => NodeId;
 }
 
 /**
@@ -484,7 +472,7 @@ const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText
  * record's (170356bd's ruling).
  *
  * @param tree - The document's tree.
- * @param ids - The ids its rows are written under.
+ * @param ids - Where the document stands in its package.
  * @returns The rows, each by its key text.
  */
 const lomRowsOf = (
@@ -685,17 +673,18 @@ const langRowsOf = (
  * database under "Key text bound", the one rule a key text past its bound is refused by, as the law
  * oracle names it.
  *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
+ * @param view - The document's view: its rows, and their folds under its context (spec reading
+ *   117), whose interaction an included fragment's nodes take as their nearest.
+ * @param ids - Where it stands in its package.
  * @returns Every identity relation's rows.
  */
-export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRows => {
-  const rows = flatten(doc, ids.idOf);
+export const rowsOf = (view: DocumentView, ids: IdentityIds): IdentityRows => {
+  const { rows } = view;
   const lexicals = new Map(rows.attributes.map((row) => [`${row.node} ${row.name}`, row.lexical]));
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const tree: Tree = {
     document: rows.document.node,
-    folds: foldOf(rows.nodes, ids.context),
+    folds: view.folds,
     nodeAt: (id) => {
       const node = byId.get(id);
       if (node === undefined) {
@@ -706,7 +695,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
 
       return node;
     },
-    rootKind: doc.root.kind,
+    rootKind: view.tree.root.kind,
     rows,
     stringValueOf: stringValuesOf(rows),
     valueOf: (node, name) => lexicals.get(`${node} ${name}`),

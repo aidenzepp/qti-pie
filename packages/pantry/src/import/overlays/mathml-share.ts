@@ -2,8 +2,8 @@
  * The MathML share overlay's rows (spec reading 2, §C's `rowsOf`): the rows of every relation
  * `#pantry/qti/mathml-share.ts` declares, in the two scopes a share resolves in (spec reading 117).
  *
- * **A document in no assembly** ({@link rowsOf}), from its XDM tree and the ids its nodes are
- * written under:
+ * **A document in no assembly** ({@link rowsOf}), from its view (`DocumentView` of
+ * `#pantry/import/fold.ts`):
  *
  * - **`MathRank`**, one row for every element a share stands on or names, and for each of its
  *   ancestors up to the nearest `m:math` (the document node, where none holds it): its copied
@@ -35,10 +35,10 @@ import type { Addition } from "@bjornpagen/grizzle";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
 import type { InstanceRoot } from "#pantry/import/overlays/tests.ts";
-import { foldAt, foldOf } from "#pantry/import/fold.ts";
+import { foldAt } from "#pantry/import/fold.ts";
+import type { DocumentView } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type { DocumentId, ShareFragment } from "#pantry/qti/identity.ts";
 import type {
   MathRank,
@@ -199,11 +199,11 @@ const ranksOf = <Key extends string>(
 /**
  * The share rows of one document in no assembly.
  *
- * @param tree - The document's XDM tree.
- * @param ids - The ids its nodes are written under, as the identity builder reads them.
+ * @param view - The document's view.
+ * @param ids - Where it stands in its package, as the identity builder reads it.
  * @returns The {@link MathRank} and {@link ShareTarget} rows; none for a document in an assembly.
  */
-export const rowsOf = (tree: XdmDocument<Composed>, ids: IdentityIds): MathmlShareRows => {
+export const rowsOf = (view: DocumentView, ids: IdentityIds): MathmlShareRows => {
   const none: MathmlShareRows = { MathRank: new Map(), ShareTarget: new Map() };
   // A document in an assembly has its shares placed under each instance of it
   // ({@link placedShareRowsOf}), so it has none of its own.
@@ -211,14 +211,14 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: IdentityIds): MathmlSha
     return none;
   }
 
-  const flat = flatten(tree, ids.idOf);
+  const flat = view.rows;
   // Every share's fragment and every id's owner are the identity builder's rows; a document with
   // no `src` that could be one needs neither.
   if (!flat.attributes.some(({ lexical, name }) => name === "src" && lexical.startsWith("#"))) {
     return none;
   }
 
-  const { IdBinding, ShareFragment } = identityRowsOf(tree, ids);
+  const { IdBinding, ShareFragment } = identityRowsOf(view, ids);
   const owners = new Map<string, NodeId>();
   for (const { id, owner } of IdBinding.values()) {
     if (!owners.has(id)) {
@@ -261,7 +261,7 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: IdentityIds): MathmlSha
     targetOf,
   );
   const document = flat.document.node;
-  const folds = foldOf(flat.nodes, ids.context);
+  const { folds } = view;
   const rankOf = (node: NodeId): bigint => ranks.get(node) ?? 0n;
 
   return {

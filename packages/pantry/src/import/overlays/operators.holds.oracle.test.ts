@@ -25,7 +25,7 @@ import { Array as Arr, Duration, Effect, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { grammar } from "#pantry/grammar/install.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 import { rowsOf } from "#pantry/import/overlays/operators.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
@@ -194,10 +194,7 @@ const holdingOf = (figures: boolean, mode: boolean): string => {
 const assertRows = (input: Case) =>
   Effect.gen(function* rowsHeld() {
     const xml = yield* readXml(new TextEncoder().encode(itemOf(input)));
-    const rows = rowsOf(yield* shred(xml, "3.0.1", shredGrammar), {
-      context: ownContext(idOf(0)),
-      idOf,
-    });
+    const rows = rowsOf(ownViewOf(yield* shred(xml, "3.0.1", shredGrammar), idOf));
     const message = JSON.stringify(input);
     const mode = modeInForce(input);
     const figures = input.figures === "unwritten" ? [] : [input.figures];

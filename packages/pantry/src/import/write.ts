@@ -21,8 +21,10 @@
  * an attribute's `slot` (AL2's step) and its IDREF tokens with the whitespace around each, whose
  * generated pieces concatenate to its lexical form.
  *
- * Ids are drawn by the number `flatten` (`#pantry/model/xdm.ts`) gives each node and attribute, so
- * the tree and every overlay builder name each node by one id ({@link NodeIds}).
+ * Each document is flattened once, a fresh id drawn for each node and attribute, and folded once
+ * under the context it is judged in ({@link nodeIdsOf}, `DocumentView` of
+ * `#pantry/import/fold.ts`), so the tree and every overlay builder read one view and name each node
+ * by one id.
  */
 import { Bits, ChangeSet } from "@bjornpagen/grizzle";
 import type { Addition, InsertAllRowsOf, Uuid } from "@bjornpagen/grizzle";
@@ -38,9 +40,9 @@ import {
 } from "#pantry/grammar/install.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import { contextsOf } from "#pantry/import/context.ts";
-import { foldAt, foldOf, governorOf } from "#pantry/import/fold.ts";
-import type { Folded } from "#pantry/import/fold.ts";
-import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
+import { foldAt, governorOf, viewOf } from "#pantry/import/fold.ts";
+import type { DocumentView, Folded } from "#pantry/import/fold.ts";
+import type { ListedTarget } from "#pantry/import/context.ts";
 import type { documentLayer } from "#pantry/import/roster.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { endsOf } from "#pantry/model/folds.ts";
@@ -65,8 +67,8 @@ import type { AuthorRole } from "#pantry/qti/roles.ts";
 import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
- * The ids one document's rows are written under, and where it stands in its package: every overlay
- * builder's `ids` argument (§C), each reading the part it needs.
+ * Where one document stands in its package, beside its view: every overlay builder's `ids` argument
+ * (§C), each reading the part it needs.
  */
 export interface NodeIds {
   /**
@@ -74,11 +76,6 @@ export interface NodeIds {
    * document that holds a site or that a site names (`#pantry/import/context.ts`).
    */
   readonly assembled: boolean;
-  /**
-   * The context the document is judged in (spec reading 117, `#pantry/import/context.ts`): its own,
-   * or, for a document sites name, the union of their ancestries and the interaction they stand in.
-   */
-  readonly context: DocumentContext;
   /**
    * The documents of the package by their paths, which a site's href names (Q5.13's builder).
    *
@@ -101,15 +98,6 @@ export interface NodeIds {
    * document's.
    */
   readonly documentType: ListedDocument["documentType"];
-  /**
-   * The id of the node or attribute numbered `index` by `flatten`: the nodes in document order from
-   * the document node's 0, then the attributes, so every caller that flattens the document under
-   * it names each node by one id. The same index always gives the same id.
-   *
-   * @param index - The number `flatten` gives the node or attribute.
-   * @returns Its id, a fresh uuid the first time the index is asked for.
-   */
-  readonly idOf: (index: number) => NodeId;
   /**
    * The package's id.
    */
@@ -146,11 +134,15 @@ export interface ListedDocument {
 }
 
 /**
- * One listed document under the ids its rows are written under.
+ * One listed document as its rows are built: as listed, where it stands in its package, and its
+ * view, its rows under the ids they are written under and their folds under the context it is
+ * judged in (spec reading 117, `#pantry/import/context.ts`): its own, or, for a document sites
+ * name, the union of their ancestries and the interaction they stand in.
  */
 export interface PlacedDocument {
   readonly ids: NodeIds;
   readonly listed: ListedDocument;
+  readonly view: DocumentView;
 }
 
 /**
@@ -162,32 +154,11 @@ export interface PackageIds {
 }
 
 /**
- * The ids of one document, each drawn the first time its number is asked for.
- *
- * @param mint - Draws a fresh uuid.
- * @returns The document's `idOf`: the same id for the same number ever after.
- */
-const drawnBy = (mint: () => NodeId): ((index: number) => NodeId) => {
-  const drawn = new Map<number, NodeId>();
-
-  return (index) => {
-    const held = drawn.get(index);
-    if (held !== undefined) {
-      return held;
-    }
-
-    const id = mint();
-    drawn.set(index, id);
-
-    return id;
-  };
-};
-
-/**
- * Mint the ids of one package: one fresh uuid for the package, and one for each XDM node and each
- * attribute of every document, drawn the first time its number is asked for and the same ever
- * after, as an import mints them each time it runs. So the same package imported twice is two
- * packages, every id fresh.
+ * Mint the ids of one package and view each of its documents: one fresh uuid for the package, then
+ * each document flattened once, `flatten` drawing a fresh uuid for each XDM node and each attribute
+ * as it numbers them, judged in its context (`contextsOf` of `#pantry/import/context.ts`) and
+ * folded once under it. An import mints them each time it runs, so the same package imported twice
+ * is two packages, every id fresh.
  *
  * A document's `documentAt` reads every listed document's document node, one per path, since the
  * import reads each path once, the manifest's as the manifest (`#pantry/import/program.ts`). Its
@@ -198,7 +169,7 @@ const drawnBy = (mint: () => NodeId): ((index: number) => NodeId) => {
  * @param documents - The package's documents, in the listing's order.
  * @param entries - The paths of the package's entries.
  * @param mint - Draws a fresh uuid. Defaults to `crypto.randomUUID`.
- * @returns The package's id and each document under its ids, in the order given.
+ * @returns The package's id and each document placed and viewed, in the order given.
  */
 export const nodeIdsOf = (
   documents: readonly ListedDocument[],
@@ -208,29 +179,31 @@ export const nodeIdsOf = (
   const entryPaths: ReadonlySet<string> = new Set(entries);
   const entryAt = (path: string): boolean => entryPaths.has(path);
   const packageId = mint();
-  const listed = documents.map((document) => ({ document, idOf: drawnBy(mint) }));
+  const listed = documents.map((document) => ({
+    document,
+    named: document.documentType !== "manifest",
+    path: document.path,
+    rows: flatten(document.tree, mint),
+    tree: document.tree,
+  }));
   const placed = new Map<string, NodeId>();
-  for (const { document, idOf } of listed) {
-    if (!placed.has(document.path)) {
-      placed.set(document.path, idOf(0));
+  for (const { path, rows } of listed) {
+    if (!placed.has(path)) {
+      placed.set(path, rows.document.node);
     }
   }
 
   const documentAt = (path: string): Option.Option<NodeId> =>
     Option.fromUndefinedOr(placed.get(path));
-  const judged = contextsOf(
-    listed.map(({ document, idOf }) => ({
-      document,
-      idOf,
-      named: document.documentType !== "manifest",
-      path: document.path,
-      tree: document.tree,
-    })),
-  );
+  const judged = contextsOf(listed);
   const targets = new Map<string, ListedTarget>();
   for (const { context, listed: target } of judged) {
     if (target.named && !targets.has(target.path)) {
-      targets.set(target.path, { context, node: target.idOf(0), rootKind: target.tree.root.kind });
+      targets.set(target.path, {
+        context,
+        node: target.rows.document.node,
+        rootKind: target.tree.root.kind,
+      });
     }
   }
 
@@ -238,20 +211,19 @@ export const nodeIdsOf = (
     Option.fromUndefinedOr(targets.get(path));
 
   return {
-    documents: judged.map(({ assembled, context, listed: { document, idOf }, targeted }) => ({
+    documents: judged.map(({ assembled, context, listed: { document, rows }, targeted }) => ({
       ids: {
         assembled,
-        context,
         documentAt,
         documentType: document.documentType,
         entryAt,
-        idOf,
         package: packageId,
         path: document.path,
         targetAt,
         targeted,
       },
       listed: document,
+      view: viewOf(document.tree, rows, context),
     })),
     package: packageId,
   };
@@ -748,20 +720,16 @@ const memberOf = (
  * The walk reads the gathered nodes in document order, each nested in its parent's list, so a
  * tree of any depth is written without recursion.
  *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under, its type, and the context it is judged in
+ * @param view - The document's view: its rows, and their folds under the context it is judged in
  *   (`ownContext` of its document node for a document no site names).
+ * @param ids - Its type.
  * @returns The document node, with its tree nested.
  */
-export const rootInsertOf = (
-  doc: XdmDocument<Composed>,
-  ids: Pick<NodeIds, "context" | "documentType" | "idOf">,
-): NodeRoot => {
-  const { context, documentType } = ids;
-  const rows = flatten(doc, ids.idOf);
-  const { version } = doc;
+export const rootInsertOf = (view: DocumentView, ids: Pick<NodeIds, "documentType">): NodeRoot => {
+  const { documentType } = ids;
+  const { context, folds, rows } = view;
+  const { version } = view.tree;
   const self = rows.document.node;
-  const folds = foldOf(rows.nodes, context);
   const rootChildren: NodeMember[] = [];
   const root: NodeRoot = {
     ancestry: Bits.of(Flag, [...context.ancestry]),
@@ -811,25 +779,28 @@ export const rootInsertOf = (
  * (`governorOf`); and, for a document a resource lists, its `ResourceDocument`, the type of that
  * resource, which the manifest has none of (spec reading 176).
  *
- * @param document - The document as the importer lists it.
- * @param ids - The ids its rows are written under, whether it is in an assembly, and the context
- *   it is judged in (`ownContext` of its document node for a document no site names).
+ * @param document - The document, placed and viewed: its type and path as the importer lists it,
+ *   whether it is in an assembly and its package, and its view, folded under the context it is
+ *   judged in (`ownContext` of its document node for a document no site names).
+ * @param document.ids - Whether it is in an assembly, and its package.
+ * @param document.listed - Its type and path.
+ * @param document.view - Its view.
  * @returns Its rows, each keyed by its node's id.
  * @throws {Error} When `flatten` writes an `OpenElementName` row of a node, or a node of a parent,
  *   that it wrote no row of ({@link ownerIn}).
  */
-export const documentRowsOf = (
-  document: ListedDocument,
-  ids: Pick<NodeIds, "assembled" | "context" | "idOf" | "package">,
-): DocumentLayerRows => {
-  const rows = flatten(document.tree, ids.idOf);
+export const documentRowsOf = (document: {
+  readonly ids: Pick<NodeIds, "assembled" | "package">;
+  readonly listed: Pick<ListedDocument, "documentType" | "path">;
+  readonly view: DocumentView;
+}): DocumentLayerRows => {
+  const { ids, listed, view } = document;
+  const { context, folds, rows } = view;
   const self = rows.document.node;
-  const { context } = ids;
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const foreignNamespace = new Map(
     rows.openElementNames.map(({ namespace, node }) => [node, namespace] as const),
   );
-  const folds = foldOf(rows.nodes, context);
   const namespaceOf = (parent: NodeRow<Composed>): string =>
     parent.id === self
       ? noNamespace
@@ -863,14 +834,14 @@ export const documentRowsOf = (
           assembled: ids.assembled,
           contextNearest: context.nearest,
           contextNearestKind: context.nearestKind,
-          documentType: document.documentType,
+          documentType: listed.documentType,
           nodeChildren: BigInt(
             rows.nodes.filter((node) => node.parent === self && node.id !== self).length,
           ),
           package: ids.package,
-          path: document.path,
-          rootKind: document.tree.root.kind,
-          version: document.tree.version,
+          path: listed.path,
+          rootKind: view.tree.root.kind,
+          version: view.tree.version,
         },
       ],
     ]),
@@ -922,7 +893,7 @@ export const documentRowsOf = (
     ),
     Pi: new Map(rows.pis.map(({ data, node, target }) => [node, { data, node, target }] as const)),
     ResourceDocument: new Map(
-      document.documentType === "manifest"
+      listed.documentType === "manifest"
         ? []
         : [
             [
@@ -930,9 +901,9 @@ export const documentRowsOf = (
               {
                 node: self,
                 package: ids.package,
-                path: document.path,
-                rootKind: document.tree.root.kind,
-                type: document.documentType,
+                path: listed.path,
+                rootKind: view.tree.root.kind,
+                type: listed.documentType,
               },
             ],
           ],

@@ -2,10 +2,11 @@
  * Every overlay builder's rows of one package, merged into one keyed set per relation (plan W5,
  * Q5.15; §C's `overlayRowsOf`).
  *
- * Each builder (`#pantry/import/overlays/<family>.ts`) reads one document's tree under the ids its
- * rows are written under and returns each of its relations' rows as a `ReadonlyMap` from the text
- * of a row's key to the row. The merge keeps them a set (rule 0): a key met twice with one value is
- * one row, and a key met twice with two values is a defect of the builders, reported as an
+ * Each builder (`#pantry/import/overlays/<family>.ts`) reads one document's view, its rows under
+ * the ids they are written under and their folds (`DocumentView` of `#pantry/import/fold.ts`), and
+ * where it stands in its package, and returns each of its relations' rows as a `ReadonlyMap` from
+ * the text of a row's key to the row. The merge keeps them a set (rule 0): a key met twice with one
+ * value is one row, and a key met twice with two values is a defect of the builders, reported as an
  * {@link OverlayConflict} and never overwritten.
  *
  * Five builders also read the whole package: the tests' assemblies (Q5.13), what each test reads
@@ -79,7 +80,6 @@ import type { QuotationRows } from "#pantry/import/overlays/quotation.ts";
 import { assembledRowsOf, rowsOf as testRowsOf } from "#pantry/import/overlays/tests.ts";
 import type { AssembledRows, TestRows } from "#pantry/import/overlays/tests.ts";
 import type { PlacedDocument } from "#pantry/import/write.ts";
-import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { overlayRelations } from "#pantry/import/roster.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
@@ -142,27 +142,28 @@ interface DocumentRows {
  * so the metadata overlays read the package's records from the manifest and its record files alone
  * (`rowsOf` of `#pantry/import/overlays/metadata.ts`, by the document's type).
  *
- * @param document - The document, listed, under its ids.
- * @param document.ids - Its ids.
+ * @param document - The document, listed, placed and viewed.
+ * @param document.ids - Where it stands in its package.
  * @param document.listed - The document as listed.
+ * @param document.view - Its view.
  * @returns Every builder's rows.
  */
-const documentRowsOf = ({ ids, listed: { path, tree } }: PlacedDocument): DocumentRows => ({
-  catalog: catalogRowsOf(tree, ids),
-  dataSsml: dataSsmlRowsOf(tree, ids),
-  declarations: declarationRowsOf(tree, ids),
-  expressions: expressionRowsOf(tree, ids),
-  html: htmlRowsOf(tree, ids),
-  identity: identityRowsOf(tree, ids),
-  interactions: interactionRowsOf(tree, ids),
-  mapping: mappingRowsOf(tree, ids),
-  mathml: mathmlRowsOf(tree, ids),
-  metadata: metadataRowsOf(tree, ids),
-  operators: operatorRowsOf(tree, ids),
-  package: path === manifestPath ? packageRowsOf(tree, ids) : noPackageRows,
-  quotation: quotationRowsOf(tree, ids),
-  references: referenceRowsOf(tree, ids, referenceCensus),
-  tests: testRowsOf(tree, ids),
+const documentRowsOf = ({ ids, listed: { path }, view }: PlacedDocument): DocumentRows => ({
+  catalog: catalogRowsOf(view, ids),
+  dataSsml: dataSsmlRowsOf(view),
+  declarations: declarationRowsOf(view),
+  expressions: expressionRowsOf(view),
+  html: htmlRowsOf(view),
+  identity: identityRowsOf(view, ids),
+  interactions: interactionRowsOf(view),
+  mapping: mappingRowsOf(view),
+  mathml: mathmlRowsOf(view, ids),
+  metadata: metadataRowsOf(view, ids),
+  operators: operatorRowsOf(view),
+  package: path === manifestPath ? packageRowsOf(view, ids) : noPackageRows,
+  quotation: quotationRowsOf(view),
+  references: referenceRowsOf(view, ids, referenceCensus),
+  tests: testRowsOf(view, ids),
 });
 
 /**
@@ -293,7 +294,7 @@ export const overlayPartsOf = (
       expressions: rows.expressions,
       ids: document.ids,
       tests: rows.tests,
-      tree: document.listed.tree,
+      view: document.view,
     })),
     assembled,
     built.flatMap(({ rows }) => typedHrefsOf(rows.package)),
@@ -306,7 +307,7 @@ export const overlayPartsOf = (
   });
 
   const documentsById = new Map(
-    built.map(({ document }) => [document.ids.idOf(0), document] as const),
+    built.map(({ document }) => [document.view.rows.document.node, document] as const),
   );
   const placedShares = placedShareRowsOf({
     ids: built.flatMap(({ rows }) => [...rows.identity.DocumentId.values()]),
@@ -314,7 +315,7 @@ export const overlayPartsOf = (
     nodesOf: (document) => {
       const read = documentsById.get(document);
 
-      return read === undefined ? [] : flatten(read.listed.tree, read.ids.idOf).nodes;
+      return read === undefined ? [] : read.view.rows.nodes;
     },
     shares: built.flatMap(({ rows }) => [...rows.identity.ShareFragment.values()]),
     sites: built.flatMap(({ rows }) => [...rows.tests.Site.values()]),

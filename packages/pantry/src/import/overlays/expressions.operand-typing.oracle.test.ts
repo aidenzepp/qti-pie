@@ -55,7 +55,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Effect, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { grammar } from "#pantry/grammar/install.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 import { rowsOf } from "#pantry/import/overlays/expressions.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
@@ -313,7 +313,7 @@ describe("import/overlays/expressions.ts, the types a Delete, an Index and a Ran
               const tree = yield* Effect.orDie(shred(xml, "3.0.0", shredGrammarOf(grammar)));
               const folded = Result.getOrThrow(fold(tree, idOf, foldGrammarOf(grammar)));
               const typed = typedOf(viewOf("i.xml", folded, typedReadingOf(laws)), grammar);
-              const rows = rowsOf(tree, { context: ownContext(idOf(0)), idOf });
+              const rows = rowsOf(ownViewOf(tree, idOf));
 
               const expressions = [...rows.Expression.values()];
               assert.isNotEmpty(expressions, item);

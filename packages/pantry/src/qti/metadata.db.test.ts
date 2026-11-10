@@ -43,7 +43,7 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { grammar } from "#pantry/grammar/install.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 import { rowsOf } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataIds } from "#pantry/import/overlays/metadata.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
@@ -78,18 +78,16 @@ const shredGrammar = shredGrammarOf(grammar);
  *
  * @param document - The document's number.
  * @param documentType - The type it is listed under, `manifest` for the manifest.
- * @returns The ids.
+ * @returns Its type, and the ids its rows are written under.
  */
-const idsFor = (document: number, documentType: MetadataIds["documentType"]): MetadataIds => {
+const idsFor = (
+  document: number,
+  documentType: MetadataIds["documentType"],
+): MetadataIds & { readonly idOf: (index: number) => NodeId } => {
   const idOf = (index: number): NodeId =>
     `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`;
 
-  return {
-    context: ownContext(idOf(0)),
-    documentType,
-    idOf,
-    package: "00000000-0000-4000-8000-00000000c0de",
-  };
+  return { documentType, idOf };
 };
 
 /**
@@ -145,7 +143,7 @@ const builtOf = Effect.fn("test.metadata.db.builtOf")(function* builtOf(
     );
     if (Option.isSome(tree) && Option.isSome(listed)) {
       const ids = idsFor(at + 1, listed.value.type);
-      const rows = rowsOf(tree.value, ids);
+      const rows = rowsOf(ownViewOf(tree.value, ids.idOf), ids);
       dates.push(...rows.StatisticDate.values());
       values.push(...rows.UsageValueBaseType.values());
     }

@@ -1,7 +1,7 @@
 /**
- * The interaction overlays' rows (plan §1.7 O3, §C's `rowsOf`): from a document's XDM tree and the
- * ids its nodes are written under, the rows of every overlay `#pantry/qti/interactions.ts`
- * declares, each relation's rows a keyed set.
+ * The interaction overlays' rows (plan §1.7 O3, §C's `rowsOf`): from a document's view
+ * (`DocumentView` of `#pantry/import/fold.ts`), the rows of every overlay
+ * `#pantry/qti/interactions.ts` declares, each relation's rows a keyed set.
  *
  * The rows restate what the tree says and nothing else: each overlay copies its node's tuple as
  * the tree's own rows give it (`flatten` of `#pantry/model/xdm.ts`), each attribute's lexical form
@@ -19,13 +19,11 @@ import {
   interactionKinds,
 } from "#pantry/grammar/install.ts";
 import { booleanOf, collapse, isNcName } from "#pantry/grammar/domains.ts";
-import type { DocumentContext } from "#pantry/import/context.ts";
-import { foldAt, foldOf } from "#pantry/import/fold.ts";
-import type { Folds } from "#pantry/import/fold.ts";
+import { foldAt } from "#pantry/import/fold.ts";
+import type { DocumentView, Folds } from "#pantry/import/fold.ts";
 import { declarationOf, typedCountOf } from "#pantry/import/overlays/declarations.ts";
-import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   DeclarationBaseType,
   DeclarationCardinality,
@@ -106,23 +104,6 @@ import {
   referringRoots,
   sliderKind,
 } from "#pantry/vocab/terms/interactions.ts";
-
-/**
- * The ids a document's rows are written under: each node's, drawn by the number `flatten` gives
- * it, in document order from the document node's 0.
- *
- * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
- * the tree's rows name each node by one id.
- */
-export interface InteractionIds {
-  /**
-   * The document's context (spec reading 117), `ownContext` of its document node for a document no
-   * site names: an included fragment's nodes take the interaction their includes stand in as their
-   * nearest.
-   */
-  readonly context: DocumentContext;
-  readonly idOf: (index: number) => NodeId;
-}
 
 /**
  * The interaction overlays' rows, one keyed set per relation: each map from the text of a row's key
@@ -413,12 +394,11 @@ const adaptiveOf = (context: Pick<Context, "attributes">, item: NodeId): boolean
 /**
  * Read a document for the builders.
  *
- * @param doc - The document's tree.
- * @param ids - The ids its rows are written under.
+ * @param view - The document's view.
  * @returns The document as the builders read it.
  */
-const contextOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Context => {
-  const rows = flatten(doc, ids.idOf);
+const contextOf = (view: DocumentView): Context => {
+  const { rows } = view;
   const base = {
     attributes: new Map(
       [...Map.groupBy(rows.attributes, ({ node }) => node)].map(
@@ -427,9 +407,9 @@ const contextOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Context => 
       ),
     ),
     document: rows.document.node,
-    folds: foldOf(rows.nodes, ids.context),
+    folds: view.folds,
     kinds: new Map(rows.nodes.map((node) => [node.id, node.kind] as const)),
-    rootKind: doc.root.kind,
+    rootKind: view.tree.root.kind,
     rows,
   };
 
@@ -438,7 +418,7 @@ const contextOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Context => 
     itemMode: Option.map(
       Option.filter(
         Arr.findFirst(rows.nodes, ({ kind }) => kind === itemKind),
-        () => doc.root.kind === itemKind,
+        () => view.tree.root.kind === itemKind,
       ),
       (item) => adaptiveOf(base, item.id),
     ),
@@ -1256,12 +1236,12 @@ const sectionPrints = [references.printed, references.variable] as const;
  * holds has its declaration row and no cardinality row, so no law over the cardinality judges it
  * and that declaration's own law refuses it alone (spec readings 158 and 159).
  *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
+ * @param view - The document's view: its rows, and their folds under its context (spec reading
+ *   117), whose interaction an included fragment's nodes take as their nearest.
  * @returns Every overlay's rows.
  */
-export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): InteractionRows => {
-  const context = contextOf(doc, ids);
+export const rowsOf = (view: DocumentView): InteractionRows => {
+  const context = contextOf(view);
   const read = interactionAttributesOf(context);
   const choices = choicesOf(context);
   const owned = choiceInteractionsOf(context, choices);

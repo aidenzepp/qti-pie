@@ -11,7 +11,7 @@
  * its first term's string value (reading 122).
  */
 import { NodeServices } from "@effect/platform-node";
-import type { Addition, Uuid } from "@bjornpagen/grizzle";
+import type { Addition } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
@@ -26,7 +26,6 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { grammar } from "#pantry/grammar/install.ts";
-import { ownContext } from "#pantry/import/fold.ts";
 import { piecesOf, rowsOf } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataIds, MetadataRows } from "#pantry/import/overlays/metadata.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
@@ -58,6 +57,7 @@ import type {
 } from "#pantry/test/gen/lom-resource-type.ts";
 import { caseHang, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { noLanguage } from "#pantry/vocab/terms/metadata.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 
 /**
  * The fixtures the global setup materializes: `metaData` among them.
@@ -75,11 +75,6 @@ const shredGrammar = shredGrammarOf(grammar);
 const laws = lawsOf(grammar);
 
 /**
- * The package every generated case is written under.
- */
-const packageId: Uuid = "00000000-0000-4000-8000-00000000c0de";
-
-/**
  * The namespaces the generated packages write.
  */
 const namespaces = {
@@ -93,20 +88,17 @@ const namespaces = {
  * row's, so two documents' rows never share an id.
  *
  * @param document - The document's number in its package, the manifest 0.
- * @param documentType - The type it is listed under, `none` for the manifest.
- * @returns The ids, under the test package.
+ * @param documentType - The type it is listed under, `manifest` for the manifest.
+ * @returns Its type, and the ids its rows are written under.
  */
-const idsFor = (document: number, documentType: MetadataIds["documentType"]): MetadataIds => {
-  const idOf = (index: number): NodeId =>
-    `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`;
-
-  return {
-    context: ownContext(idOf(0)),
-    documentType,
-    idOf,
-    package: packageId,
-  };
-};
+const idsFor = (
+  document: number,
+  documentType: MetadataIds["documentType"],
+): MetadataIds & { readonly idOf: (index: number) => NodeId } => ({
+  documentType,
+  idOf: (index) =>
+    `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`,
+});
 
 /**
  * Read the schema version a manifest declares: its root's `metadata` child's `schemaversion` text.
@@ -214,7 +206,7 @@ const languageTagForm = new RegExp(languageTagPattern.source, patternFlags);
  */
 const namedOf = (
   manifest: XdmDocument<Composed>,
-  ids: MetadataIds,
+  ids: { readonly idOf: (index: number) => NodeId },
   records: MetadataRows["LomRecord"],
   documents: ReadonlyMap<string, NodeId>,
 ): ReadonlyMap<NodeId, NodeId> => {
@@ -259,7 +251,7 @@ const builtOf = (input: Shredded): Built => {
     }
 
     const ids = idsFor(number, listed.type);
-    const rows = rowsOf(tree, ids);
+    const rows = rowsOf(ownViewOf(tree, ids.idOf), ids);
     documents.set(path, ids.idOf(0));
     for (const identifier of rows.ObjectIdentifier.values()) {
       identifiers.set(identifier.document, identifier);
@@ -275,7 +267,7 @@ const builtOf = (input: Shredded): Built => {
   }
 
   const manifestIds = idsFor(0, "manifest");
-  const manifest = rowsOf(input.manifest, manifestIds);
+  const manifest = rowsOf(ownViewOf(input.manifest, manifestIds.idOf), manifestIds);
 
   return {
     identifiers,
@@ -1160,8 +1152,19 @@ describe("import/overlays/metadata.ts, the manifest's resources", () => {
         );
         const manifestIds = idsFor(0, "manifest");
 
-        assert.deepStrictEqual(countsOf(rowsOf(manifest, manifestIds)), {});
-        assert.deepStrictEqual(countsOf(rowsOf(recordFile, idsFor(1, "resourcemetadata/xml"))), {});
+        assert.deepStrictEqual(
+          countsOf(rowsOf(ownViewOf(manifest, manifestIds.idOf), manifestIds)),
+          {},
+        );
+        assert.deepStrictEqual(
+          countsOf(
+            rowsOf(
+              ownViewOf(recordFile, idsFor(1, "resourcemetadata/xml").idOf),
+              idsFor(1, "resourcemetadata/xml"),
+            ),
+          ),
+          {},
+        );
         assert.deepStrictEqual(
           [...resourcePathsOf(flatten(manifest, manifestIds.idOf)).values()],
           ["test.xml", "test.xml"],
@@ -1349,7 +1352,10 @@ describe("import/overlays/metadata.ts, usage values", () => {
               ].join("");
               const read = yield* Effect.orDie(readXml(new TextEncoder().encode(xml)));
               const tree = yield* Effect.orDie(shred(read, "3.0.1", shredGrammar));
-              const built = rowsOf(tree, idsFor(1, "qtiusagedata/xml"));
+              const built = rowsOf(
+                ownViewOf(tree, idsFor(1, "qtiusagedata/xml").idOf),
+                idsFor(1, "qtiusagedata/xml"),
+              );
               const rows = [...built.UsageValue.values()];
               const typed = [...built.UsageValueBaseType.values()];
               const copies = [...built.UsageBaseType.values()];
@@ -1465,7 +1471,7 @@ describe("import/overlays/metadata.ts, learning resource types", { timeout: sear
                   1,
                   path === "imsmanifest.xml" ? "manifest" : "resourcemetadata/xml",
                 );
-                const rows = rowsOf(tree, ids);
+                const rows = rowsOf(ownViewOf(tree, ids.idOf), ids);
                 const { nodes } = flatten(tree, ids.idOf);
                 const typeNodes = nodes.filter(({ kind }) => kind === "lom:learningResourceType");
                 const firstOf = (parent: string, kind: string) =>

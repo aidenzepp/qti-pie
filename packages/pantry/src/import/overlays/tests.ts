@@ -4,10 +4,10 @@
  *
  * Two builders, as `#pantry/qti/tests.ts` has two layers:
  *
- * - {@link rowsOf} reads one document's XDM tree into its document-level rows: the document, its
- *   tokens and flags, names, sections and their parts, selections and orderings, sites, branch
- *   rules and the item each item ref names, each href resolved as its `ReferencePath` is
- *   (`#pantry/import/overlays/package.ts`).
+ * - {@link rowsOf} reads one document's view (`DocumentView` of `#pantry/import/fold.ts`) into its
+ *   document-level rows: the document, its tokens and flags, names, sections and their parts,
+ *   selections and orderings, sites, branch rules and the item each item ref names, each href
+ *   resolved as its `ReferencePath` is (`#pantry/import/overlays/package.ts`).
  * - {@link assembledRowsOf} reads every document's rows of one package into the assemblies: one
  *   instance tree per document that heads one, every assembled document no include splices in place
  *   (`splicingParents` and `IncludeRoot`, spec reading 117), and, under a test, its instances'
@@ -28,13 +28,12 @@ import type { Kind } from "#pantry/grammar/compose.ts";
 import { booleanOf, isNcName } from "#pantry/grammar/domains.ts";
 import { Flag, grammar } from "#pantry/grammar/install.ts";
 import { isSiteKind } from "#pantry/import/context.ts";
-import { foldAt, foldOf, governorOf } from "#pantry/import/fold.ts";
-import type { Folds } from "#pantry/import/fold.ts";
-import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
+import { foldAt, governorOf } from "#pantry/import/fold.ts";
+import type { DocumentView, Folds } from "#pantry/import/fold.ts";
+import type { ListedTarget } from "#pantry/import/context.ts";
 import { comparedPathOf, entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   AssembledName,
   BranchResolution,
@@ -80,11 +79,9 @@ import {
 import type { FlagName } from "#pantry/vocab/terms/tests.ts";
 
 /**
- * What one document's rows are written under: its nodes' ids, its package's id, its entry's path,
- * and the document nodes of its package by their paths, which a site's href names.
- *
- * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
- * the tree's rows name each node by one id.
+ * Where one document stands in its package, as this builder reads it beside the document's view:
+ * its package's id, its entry's path, and the document nodes of its package by their paths, which a
+ * site's href names. It is the part of the importer's `NodeIds` (Q5.15) this builder reads.
  */
 export interface TestIds {
   /**
@@ -93,10 +90,6 @@ export interface TestIds {
    * or that a site names.
    */
   readonly assembled: boolean;
-  /**
-   * The document's context (spec reading 117).
-   */
-  readonly context: DocumentContext;
   readonly documentAt: (path: string) => Option.Option<NodeId>;
   /**
    * The document's type, the resource's that lists it, which each site copies from its include's
@@ -107,7 +100,6 @@ export interface TestIds {
    * Whether the package holds an entry at a path.
    */
   readonly entryAt: (path: string) => boolean;
-  readonly idOf: (index: number) => NodeId;
   readonly package: Uuid;
   readonly path: string;
   /**
@@ -307,7 +299,7 @@ interface Held {
 }
 
 /**
- * Read a node of the document: total, since {@link viewOf} holds every node, each parent before
+ * Read a node of the document: total, since {@link testViewOf} holds every node, each parent before
  * its children.
  *
  * @param byId - The document's nodes.
@@ -330,14 +322,14 @@ const heldAt = (byId: ReadonlyMap<NodeId, Held>, id: NodeId): Held => {
 /**
  * Read a document into its {@link View}.
  *
- * @param doc - The document's tree.
- * @param ids - The ids its rows are written under.
+ * @param document - The document's view.
+ * @param ids - Where it stands in its package.
  * @returns The view.
  * @throws {Error} When a node comes before its parent, which `flatten`'s document order rules out:
  *   a defect of the caller, never of the document.
  */
-const viewOf = (doc: XdmDocument<Composed>, ids: TestIds): View => {
-  const rows = flatten(doc, ids.idOf);
+const testViewOf = (document: DocumentView, ids: TestIds): View => {
+  const { rows } = document;
   const byId = new Map<NodeId, Held>();
   for (const node of rows.nodes) {
     byId.set(node.id, { children: [], kind: node.kind });
@@ -355,7 +347,7 @@ const viewOf = (doc: XdmDocument<Composed>, ids: TestIds): View => {
     ),
     byId,
     document: rows.document.node,
-    folds: foldOf(rows.nodes, ids.context),
+    folds: document.folds,
     ids,
     rows,
   };
@@ -860,13 +852,13 @@ const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> => {
  * Resolve the hrefs of a test's or a section's item refs, which `ItemRefHref` copies: each item
  * ref's path, as its `ReferencePath` resolves it; none for any other document.
  *
- * @param doc - The document's tree.
- * @param ids - The ids its rows are written under.
+ * @param document - The document's view.
+ * @param ids - Where it stands in its package.
  * @returns The item refs' hrefs, in document order.
  */
-export const itemRefPathsOf = (doc: XdmDocument<Composed>, ids: TestIds): readonly ResolvedHref[] =>
-  among(assembledRoots, doc.root.kind)
-    ? [...hrefsOf(viewOf(doc, ids)).values()].filter(({ kind }) => kind === itemRefKind)
+export const itemRefPathsOf = (document: DocumentView, ids: TestIds): readonly ResolvedHref[] =>
+  among(assembledRoots, document.tree.root.kind)
+    ? [...hrefsOf(testViewOf(document, ids)).values()].filter(({ kind }) => kind === itemRefKind)
     : [];
 
 /**
@@ -1129,19 +1121,19 @@ const keptIf = <A>(assembled: boolean, rows: ReadonlyMap<string, A>): ReadonlyMa
  * `href`, a selection's `select`, a name's or a stimulus ref's `identifier`, a section's
  * `visible`), and AL3 refuses the element.
  *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
+ * @param document - The document's view.
+ * @param ids - Where it stands in its package.
  * @returns Every overlay's rows.
  */
-export const rowsOf = (doc: XdmDocument<Composed>, ids: TestIds): TestRows => {
-  const view = viewOf(doc, ids);
+export const rowsOf = (document: DocumentView, ids: TestIds): TestRows => {
+  const view = testViewOf(document, ids);
   const tokens = tokensOf(view);
   const flags = flagsOf(view);
   const token: TokenOf = (node, name) =>
     Option.map(Option.fromNullishOr(tokens.get(keyOf([node.id, name]))), ({ value }) => value);
   const flag: FlagOf = (node, name) =>
     Option.map(Option.fromNullishOr(flags.get(keyOf([node.id, name]))), ({ value }) => value);
-  const root = doc.root.kind;
+  const root = document.tree.root.kind;
   const sections = sectionsOf(view, flag);
   const hrefs = hrefsOf(view);
   const sites = sitesOf(view, hrefs, sections.scopes);

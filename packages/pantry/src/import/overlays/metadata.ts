@@ -1,6 +1,6 @@
 /**
- * The metadata overlays' rows (plan §1.7 O6, §C's `rowsOf`): from one document's XDM tree and the
- * ids its nodes are written under, the rows of every per-document relation
+ * The metadata overlays' rows (plan §1.7 O6, §C's `rowsOf`): from one document's view
+ * (`DocumentView` of `#pantry/import/fold.ts`), the rows of every per-document relation
  * `#pantry/qti/metadata.ts` declares, each relation's rows a keyed set. Which document a record
  * names is no row's: the database reads it (`#pantry/qti/queries.ts` `namingRecords`).
  *
@@ -11,15 +11,14 @@
  * builder gets wrong is refused, never accepted. A copied text past `keyText`'s bound is written as
  * it is, and its field's pattern refuses it under the schema's limit law.
  */
-import type { Addition, Uuid } from "@bjornpagen/grizzle";
+import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
 import type { DocumentType } from "#pantry/grammar/install.ts";
-import type { DocumentContext } from "#pantry/import/context.ts";
-import { foldAt, foldOf } from "#pantry/import/fold.ts";
+import { foldAt } from "#pantry/import/fold.ts";
+import type { DocumentView } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   AssessmentObject,
   LomEntry,
@@ -48,25 +47,15 @@ import {
 } from "#pantry/vocab/terms/metadata.ts";
 
 /**
- * The ids a document's rows are written under: its package's, and each of its tree's nodes',
- * drawn by the number `flatten` gives the node, in document order from the document node's 0.
- *
- * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
- * the tree's rows name each node by one id.
+ * Where a document stands in its package, as this builder reads it: the part of the importer's
+ * `NodeIds` (Q5.15) it needs beside the document's view.
  */
 export interface MetadataIds {
-  /**
-   * The document's context (spec reading 117), which its nodes' nearest interactions are folded
-   * under, as every overlay's are (`#pantry/import/fold.ts`).
-   */
-  readonly context: DocumentContext;
   /**
    * The document's type, `manifest` for the manifest, else the resource's that lists it: a
    * package's records are read from a document of a type of `recordDocumentTypes` alone.
    */
   readonly documentType: (typeof DocumentType.handles)[number];
-  readonly idOf: (index: number) => NodeId;
-  readonly package: Uuid;
 }
 
 /**
@@ -269,18 +258,17 @@ interface Tree {
 }
 
 /**
- * Read a document's tree once, as every builder below reads it.
+ * Read a document's view once, as every builder below reads it.
  *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
+ * @param view - The document's view: its rows, and their folds under its context (spec reading
+ *   117), which its nodes' nearest interactions are folded under.
  * @returns The tree's rows and lookups.
  */
-const treeOf = (doc: XdmDocument<Composed>, ids: MetadataIds): Tree => {
-  const rows = flatten(doc, ids.idOf);
+const treeOf = (view: DocumentView): Tree => {
+  const { folds, rows } = view;
   const lexicals = new Map<string, string>(
     rows.attributes.map(({ lexical, name, node }) => [`${node} ${name}`, lexical]),
   );
-  const folds = foldOf(rows.nodes, ids.context);
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const document = rows.document.node;
 
@@ -698,12 +686,12 @@ const noRecordRows = {
  * {@link UsageValueBaseType} where that `baseType` spells a code; an optional
  * attribute's row exists where it is written.
  *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under, and its type.
+ * @param view - The document's view.
+ * @param ids - Where it stands in its package: its type.
  * @returns Every per-document overlay's rows.
  */
-export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRows => {
-  const tree = treeOf(doc, ids);
+export const rowsOf = (view: DocumentView, ids: MetadataIds): MetadataRows => {
+  const tree = treeOf(view);
   const usageValues = usageValueRowsOf(tree);
   const everyDocument = {
     ...objectRowsOf(tree, tree.document),

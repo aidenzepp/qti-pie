@@ -18,7 +18,6 @@ import { Duration, Effect, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { ownContext } from "#pantry/import/fold.ts";
 import { headerPiecesOf, rowsOf } from "#pantry/import/overlays/html.ts";
 import type { HtmlRows } from "#pantry/import/overlays/html.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
@@ -27,12 +26,7 @@ import { shred } from "#pantry/model/shred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
-
-/**
- * The ids a case writes its rows under: each node's by its number, in the context of a document no
- * site names.
- */
-const ids = { context: ownContext(idOf(0)), idOf };
+import { ownViewOf, viewOf } from "#pantry/import/fold.ts";
 
 /**
  * The QTI 3.0 assessment namespace.
@@ -267,7 +261,7 @@ describe("import/overlays/html.ts, rowsOf", () => {
       // interaction but `c3`, whose nearest is the custom interaction that holds it (N8).
       Effect.gen(function* nested() {
         const tree = yield* itemOf(nestedBody);
-        const rows = rowsOf(tree, ids);
+        const rows = rowsOf(ownViewOf(tree, idOf));
         const read = named(tree, rows);
 
         assert.deepStrictEqual(read.headers, [
@@ -321,8 +315,8 @@ describe("import/overlays/html.ts, rowsOf", () => {
           nearest: idOf(9999),
           nearestKind: "document",
         };
-        const own = named(tree, rowsOf(tree, ids));
-        const placed = named(tree, rowsOf(tree, { context, idOf }));
+        const own = named(tree, rowsOf(ownViewOf(tree, idOf)));
+        const placed = named(tree, rowsOf(viewOf(tree, flatten(tree, idOf), context)));
 
         assert.deepStrictEqual(own.scopes, interactionScopes("#doc"));
         assert.deepStrictEqual(placed.scopes, interactionScopes(idOf(9999)));
@@ -366,7 +360,7 @@ describe("import/overlays/html.ts, rowsOf", () => {
               const tree = yield* itemOf(
                 `<table><tbody><tr><th id="${attributeText(id)}">H</th><td headers="${attributeText(id)}">x</td></tr></tbody></table>`,
               );
-              const rows = rowsOf(tree, ids);
+              const rows = rowsOf(ownViewOf(tree, idOf));
 
               assert.deepStrictEqual(
                 [...rows.TableHeader.values()].map((row) => row.id),
@@ -428,7 +422,7 @@ describe("import/overlays/html.ts, rowsOf", () => {
               assert.isDefined(table, "the body writes a table");
 
               assert.deepStrictEqual(
-                [...rowsOf(tree, ids).TableHeader.values()].map((row) => ({
+                [...rowsOf(ownViewOf(tree, idOf)).TableHeader.values()].map((row) => ({
                   id: row.id,
                   node: row.node,
                   owner: row.owner,
@@ -445,7 +439,7 @@ describe("import/overlays/html.ts, rowsOf", () => {
   it.effect("gives a document with no table cell no row", () =>
     // Oracle: the specification as a checker: reading 126 reads table cells alone.
     Effect.gen(function* none() {
-      const rows = rowsOf(yield* itemOf(`<p id="p">No table.</p>`), ids);
+      const rows = rowsOf(ownViewOf(yield* itemOf(`<p id="p">No table.</p>`), idOf));
 
       assert.strictEqual(rows.CellHeaders.size + rows.TableHeader.size + rows.TableScope.size, 0);
     }),

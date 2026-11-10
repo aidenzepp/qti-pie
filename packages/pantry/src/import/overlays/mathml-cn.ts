@@ -1,7 +1,7 @@
 /**
- * The MathML cn overlay's rows (spec reading 2, §C's `rowsOf`): from one document's XDM tree and
- * the ids its nodes are written under, the rows of every relation `#pantry/qti/mathml-cn.ts`
- * declares.
+ * The MathML cn overlay's rows (spec reading 2, §C's `rowsOf`): from one document's view
+ * (`DocumentView` of `#pantry/import/fold.ts`), the rows of every relation
+ * `#pantry/qti/mathml-cn.ts` declares.
  *
  * - **`MathCn`**, one row for every `m:cn` whose `type` {@link cnForms} lists (`real` where it writes
  *   none) and whose `base` is a whole number from 2 to 36 (10 where it writes none), with the
@@ -38,10 +38,9 @@ import { cnDefaultType, cnForms } from "#pantry/grammar/expression.ts";
 import type { CnForm } from "#pantry/grammar/expression.ts";
 import { nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
 import { collapse } from "#pantry/grammar/domains.ts";
-import type { NodeIds } from "#pantry/import/write.ts";
+import type { DocumentView } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type { CnAttribute, CnPartText, CnCount, CnSlot, MathCn } from "#pantry/qti/mathml-cn.ts";
 
 /**
@@ -243,12 +242,11 @@ const writeCn = (
 /**
  * The cn rows of one document.
  *
- * @param tree - The document's XDM tree.
- * @param ids - The ids its nodes are written under.
+ * @param view - The document's view: its rows under the ids its nodes are written under.
  * @returns The rows of every relation the cn module declares.
  */
-export const rowsOf = (tree: XdmDocument<Composed>, ids: Pick<NodeIds, "idOf">): MathmlCnRows => {
-  const flat = flatten(tree, ids.idOf);
+export const rowsOf = (view: DocumentView): MathmlCnRows => {
+  const flat = view.rows;
   const cnIds = new Set<NodeId>();
   for (const node of flat.nodes) {
     if (node.kind === "m:cn") {

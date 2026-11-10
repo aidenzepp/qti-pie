@@ -10,7 +10,6 @@ import { previewPackage } from "#pantry/import/preview.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { NodeMember } from "#pantry/import/write.ts";
-import { flatten } from "#pantry/model/xdm.ts";
 import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
@@ -52,7 +51,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
         ];
         for (const dir of dirs) {
           const program = yield* readProgram(dir);
-          const flats = program.documents.map(({ ids, listed }) => flatten(listed.tree, ids.idOf));
+          const flats = program.documents.map(({ view }) => view.rows);
           const { Instance: instances, Node: roots, Package: records, ...flat } = program.inputs;
           const members = { Idref: 0 };
           const stack: NodeMember[] = [...roots.values()];

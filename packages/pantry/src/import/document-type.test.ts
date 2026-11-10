@@ -20,7 +20,7 @@ import {
   ResourceDocumentType,
   ResourceType,
 } from "#pantry/grammar/install.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 import { documentRowsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type { XdmDocument } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -92,12 +92,13 @@ describe("a document's type", () => {
               const manifest = documentType === "manifest";
               c.note(manifest ? "the manifest" : "a resource's document");
 
-              const context = ownContext(idOf(0));
-              const root = rootInsertOf(document, { context, documentType, idOf });
-              const layer = documentRowsOf(
-                { documentType, path: "doc.xml", tree: document },
-                { assembled: false, context, idOf, package: idOf(0xff_ff_ff) },
-              );
+              const view = ownViewOf(document, idOf);
+              const root = rootInsertOf(view, { documentType });
+              const layer = documentRowsOf({
+                ids: { assembled: false, package: idOf(0xff_ff_ff) },
+                listed: { documentType, path: "doc.xml" },
+                view,
+              });
 
               assert.strictEqual(root.documentType, documentType);
               assert.deepStrictEqual(

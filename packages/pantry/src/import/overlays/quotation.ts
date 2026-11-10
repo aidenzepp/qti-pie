@@ -1,6 +1,7 @@
 /**
  * The quotation overlay's rows (spec reading 127, `#pantry/qti/quotation.ts`): from one document's
- * XDM tree and the ids its nodes are written under, one `Quotation` row per `q`, keyed by its node.
+ * view (`DocumentView` of `#pantry/import/fold.ts`), one `Quotation` row per `q`, keyed by its
+ * node.
  *
  * The rows restate what the tree says and nothing else: each `q`'s node tuple (C18), its slot and
  * child count and its parent's, and the four characters beside and inside it, each the end of its
@@ -9,31 +10,13 @@
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Array as Arr, Option } from "effect";
-import type { DocumentContext } from "#pantry/import/context.ts";
-import { foldAt, foldOf } from "#pantry/import/fold.ts";
+import { foldAt } from "#pantry/import/fold.ts";
+import type { DocumentView } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { endsOf } from "#pantry/model/folds.ts";
 import type { Ends } from "#pantry/model/folds.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type { Quotation } from "#pantry/qti/quotation.ts";
-
-/**
- * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
- * `flatten` gives it.
- *
- * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
- * the tree's rows name each node by one id.
- */
-export interface QuotationIds {
-  /**
-   * The document's context (spec reading 117), `ownContext` of `#pantry/import/fold.ts` for a
-   * document no site names: an included fragment's nodes take the interaction their includes stand
-   * in as their nearest.
-   */
-  readonly context: DocumentContext;
-  readonly idOf: (index: number) => NodeId;
-}
 
 /**
  * A document's quotation rows: a keyed set from the text of a row's key, its `q`'s node id, to the
@@ -113,16 +96,15 @@ type Content = Pick<Addition<typeof Quotation>, "children" | "first" | "last">;
  * of its sibling before it, the first of its sibling after it, and the first and last of its first
  * and last child, each empty where that node does not exist or holds no characters.
  *
- * @param doc - The document's tree.
- * @param ids - The ids its rows are written under, and its context.
+ * @param view - The document's view: its rows, and their folds under its context (spec reading
+ *   117), whose interaction an included fragment's nodes take as their nearest.
  * @returns Its `Quotation` rows, keyed by node.
  * @throws {Error} When a `q`'s parent or its parent's children are not among the document's rows,
  *   which `flatten` writes in one pass: a defect of the rows, never of the document.
  */
-export const rowsOf = (doc: XdmDocument<Composed>, ids: QuotationIds): QuotationRows => {
-  const rows = flatten(doc, ids.idOf);
+export const rowsOf = (view: DocumentView): QuotationRows => {
+  const { folds, rows } = view;
   const document = rows.document.node;
-  const folds = foldOf(rows.nodes, ids.context);
   const charsOf = charactersIn(rows);
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const familyOf = Map.groupBy(

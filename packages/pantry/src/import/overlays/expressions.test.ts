@@ -41,7 +41,7 @@ import type {
   NamedResource,
 } from "#pantry/import/overlays/expressions.ts";
 import { contextsOf } from "#pantry/import/context.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { ownContext, ownViewOf } from "#pantry/import/fold.ts";
 import { rowsOf as declarationRowsOf } from "#pantry/import/overlays/declarations.ts";
 import { assembledRowsOf, keyOf, rowsOf as testRowsOf } from "#pantry/import/overlays/tests.ts";
 import type { AssembledRows, TestIds } from "#pantry/import/overlays/tests.ts";
@@ -909,7 +909,7 @@ const treeOfFixture = (file: string) =>
  * @returns Its rows.
  */
 const rowsOfFixture = (file: string) =>
-  Effect.map(treeOfFixture(file), (tree) => rowsOf(tree, { context: ownContext(idOf(0)), idOf }));
+  Effect.map(treeOfFixture(file), (tree) => rowsOf(ownViewOf(tree, idOf)));
 
 describe("import/overlays/expressions.ts, the fixtures' verdicts", () => {
   it.effect(
@@ -965,7 +965,7 @@ const rowsOfText = (text: string) =>
     const xml = yield* readXml(new TextEncoder().encode(text));
     const tree = yield* shred(xml, "3.0.0", shredGrammarOf(grammar));
 
-    return rowsOf(tree, { context: ownContext(idOf(0)), idOf });
+    return rowsOf(ownViewOf(tree, idOf));
   });
 
 /**
@@ -1062,10 +1062,7 @@ describe("import/overlays/expressions.ts, a base value's base-type", () => {
               `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="I" title="I" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-response-processing><qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="${form}">1</qti-base-value></qti-set-outcome-value></qti-response-processing></qti-assessment-item>`,
             ),
           );
-          const rows = rowsOf(yield* shred(xml, "3.0.0", shredGrammarOf(grammar)), {
-            context: ownContext(idOf(0)),
-            idOf,
-          });
+          const rows = rowsOf(ownViewOf(yield* shred(xml, "3.0.0", shredGrammarOf(grammar)), idOf));
           const value = [...rows.Expression.values()].find(({ kind }) => kind === "qti-base-value");
           const known = spelled.includes(form);
           const where = JSON.stringify(form);
@@ -1184,20 +1181,23 @@ const packageRowsOf = (
     documents.map(([at, tree], n) => [at, { node: idsIn(n)(0), tree }] as const),
   );
   const nodeAt = (to: string) => Option.fromNullishOr(nodes.get(to));
+  const viewed = documents.map(([at, tree], n) => {
+    const view = ownViewOf(tree, idsIn(n));
+
+    return { at, n, named: true, path: at, rows: view.rows, tree, view };
+  });
   const inAssembly = new Set(
-    contextsOf(documents.map(([at, tree], n) => ({ idOf: idsIn(n), named: true, path: at, tree })))
+    contextsOf(viewed)
       .filter(({ assembled }) => assembled)
-      .map(({ listed }) => listed.idOf(0)),
+      .map(({ listed }) => listed.rows.document.node),
   );
-  const inputs = documents.map(([at, tree], n): AssembledExpressionInput => {
+  const inputs = viewed.map(({ at, n, tree, view }): AssembledExpressionInput => {
     const ids: TestIds = {
       assembled: inAssembly.has(idsIn(n)(0)),
-      context: ownContext(idsIn(n)(0)),
       documentAt: (to: string) => Option.map(nodeAt(to), ({ node }) => node),
       documentType:
         grammar.package.rootOfType.rows.find(({ root }) => root === tree.root.kind)?.type ?? "none",
       entryAt: (to: string) => nodes.has(to),
-      idOf: idsIn(n),
       package: packageId,
       path: at,
       targetAt: (to: string) =>
@@ -1208,15 +1208,15 @@ const packageRowsOf = (
         })),
     };
 
-    const declared = declarationRowsOf(tree, ids);
+    const declared = declarationRowsOf(view);
 
     return {
       cardinalities: declared.DeclarationCardinality,
       declarations: declared.DeclarationIdentifier,
-      expressions: rowsOf(tree, ids),
+      expressions: rowsOf(view),
       ids,
-      tests: testRowsOf(tree, ids),
-      tree,
+      tests: testRowsOf(view, ids),
+      view,
     };
   });
   let minted = 0;
@@ -2342,7 +2342,7 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
           ],
         ),
       );
-      const rows = rowsOf(tree, { context: ownContext(idOf(0)), idOf });
+      const rows = rowsOf(ownViewOf(tree, idOf));
       const variables = [...rows.Expression.values()].find(
         ({ kind }) => kind === "qti-test-variables",
       );
@@ -2378,7 +2378,7 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
       Effect.gen(function* claimsProved() {
         for (const { file } of frozen) {
           const tree = yield* treeOfFixture(file);
-          const rows = rowsOf(tree, { context: ownContext(idOf(0)), idOf });
+          const rows = rowsOf(ownViewOf(tree, idOf));
           const declared = declarationsInTree(tree);
 
           for (const reference of rows.VariableRef.values()) {

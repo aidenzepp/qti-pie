@@ -13,8 +13,10 @@
  *   the document node's 0, and `elementChildren`, the elements among its own children, which an
  *   overlay copies where `nodeCounts` holds it to `Node`'s fold of them.
  *
- * The law oracle folds the same fields with its own fold (`#pantry/model/folds.ts`), so the two
- * implementations stay apart and a host-against-oracle differential compares them.
+ * An import flattens and folds each document once ({@link DocumentView}), and every row builder
+ * reads that one view. The law oracle folds the same fields with its own fold
+ * (`#pantry/model/folds.ts`), so the two implementations stay apart and a host-against-oracle
+ * differential compares them.
  */
 import { Match, Option } from "effect";
 import type { Kind } from "#pantry/grammar/compose.ts";
@@ -31,7 +33,8 @@ import {
 import type { Flag } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import { flatten } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 
 /**
  * An ancestry flag's handle.
@@ -340,4 +343,50 @@ export const foldOf = (nodes: readonly NodeRow<Composed>[], context: DocumentCon
       ]),
     ),
   };
+};
+
+/**
+ * One document as every row builder reads it: its tree, its rows as `flatten` writes them under the
+ * ids it is written under, and their folds under the context it is judged in. An import builds one
+ * view per document ({@link viewOf}) and hands that one value to the tree's writer and to every
+ * overlay builder, so each document is flattened and folded once and every row names each node by
+ * the same id.
+ */
+export interface DocumentView {
+  readonly context: DocumentContext;
+  readonly folds: Folds;
+  readonly rows: FlatRows<Composed>;
+  readonly tree: XdmDocument<Composed>;
+}
+
+/**
+ * Fold a flattened document under the context it is judged in.
+ *
+ * @param tree - The document's tree, as shred gives it.
+ * @param rows - Its rows, `flatten` of the tree under the ids they are written under.
+ * @param context - The context it is judged in (spec reading 117).
+ * @returns Its view.
+ */
+export const viewOf = (
+  tree: XdmDocument<Composed>,
+  rows: FlatRows<Composed>,
+  context: DocumentContext,
+): DocumentView => ({ context, folds: foldOf(rows.nodes, context), rows, tree });
+
+/**
+ * View a document no site names: flattened under `idOf` and judged in its own context
+ * ({@link ownContext}), as the read judges the manifest and every document it reads before the
+ * package's ids are minted.
+ *
+ * @param tree - The document's tree, as shred gives it.
+ * @param idOf - Draws the id of the node or attribute `flatten` numbers by its argument.
+ * @returns Its view.
+ */
+export const ownViewOf = (
+  tree: XdmDocument<Composed>,
+  idOf: (index: number) => NodeId,
+): DocumentView => {
+  const rows = flatten(tree, idOf);
+
+  return viewOf(tree, rows, ownContext(rows.document.node));
 };

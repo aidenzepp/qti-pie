@@ -25,7 +25,7 @@ import { inject } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { placementOf } from "#pantry/grammar/content.ts";
 import { grammar } from "#pantry/grammar/install.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
 import { unionOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { ImportProgram } from "#pantry/import/program.ts";
@@ -241,11 +241,12 @@ const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed>
 const roundTripOf = (tree: XdmDocument<Composed>, ids: (index: number) => NodeId) =>
   assemble(
     flatRowsOf(
-      rootInsertOf(tree, { context: ownContext(ids(0)), documentType: "manifest", idOf: ids }),
-      documentRowsOf(
-        { documentType: "manifest", path: "item.xml", tree },
-        { assembled: false, context: ownContext(ids(0)), idOf: ids, package: packageId },
-      ),
+      rootInsertOf(ownViewOf(tree, ids), { documentType: "manifest" }),
+      documentRowsOf({
+        ids: { assembled: false, package: packageId },
+        listed: { documentType: "manifest", path: "item.xml" },
+        view: ownViewOf(tree, ids),
+      }),
     ),
   );
 
@@ -471,10 +472,9 @@ describe("rootInsertOf", { timeout: searchTimeout }, () => {
         const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
         const insertOf = (root: XdmClosedElement<Composed>) =>
           nodesOf(
-            rootInsertOf(
-              { ...tree, root },
-              { context: ownContext(idOf(0)), documentType: "imsqti_item_xmlv3p0", idOf },
-            ),
+            rootInsertOf(ownViewOf({ ...tree, root }, idOf), {
+              documentType: "imsqti_item_xmlv3p0",
+            }),
           );
         const held = statesOf(insertOf(tree.root));
         const slots = unadmittedSlotsOf(tree);
@@ -600,10 +600,8 @@ describe("rootInsertOf", { timeout: searchTimeout }, () => {
               const byId = new Map(folded.nodes.map((node) => [node.id, node] as const));
               const attributes = new Map(folded.attributes.map((row) => [row.id, row] as const));
               for (const node of nodesOf(
-                rootInsertOf(generated.document, {
-                  context: ownContext(idOf(0)),
+                rootInsertOf(ownViewOf(generated.document, idOf), {
                   documentType: "imsqti_item_xmlv3p0",
-                  idOf,
                 }),
               )) {
                 const expected = byId.get(node.id);
@@ -814,14 +812,15 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         const packages = yield* acceptedPackages;
         for (const dir of Object.values(packages)) {
           const program = yield* readProgram(dir);
-          for (const { ids, listed } of program.documents) {
-            const root = program.inputs.Node.get(ids.idOf(0));
+          for (const placed of program.documents) {
+            const { listed, view } = placed;
+            const root = program.inputs.Node.get(view.rows.document.node);
             if (root === undefined) {
               assert.fail(`${dir}: no Node root for ${listed.path}`);
             }
 
             const assembled = yield* Effect.fromResult(
-              assemble(flatRowsOf(root, documentRowsOf(listed, ids))),
+              assemble(flatRowsOf(root, documentRowsOf(placed))),
             );
 
             assert.deepStrictEqual(assembled, listed.tree, `${dir} ${listed.path}`);
@@ -1170,37 +1169,35 @@ describe("idrefPiecesOf", () => {
 });
 
 layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) => {
-  suite.effect(
-    "mints one fresh id per package and per node and attribute, the same for one number",
-    () =>
-      // Oracle: the specification as a checker, the brief's "one fresh uuid per XDM node and per
-      // package": two mintings of one package share no id, and one number always names one id.
-      Effect.gen(function* freshIds() {
-        const program = yield* readProgram(fixtures.simple);
-        const listed = program.documents.map(({ listed: held }) => held);
-        const entries = [...program.inputs.Package.values()].flatMap((record) =>
-          record.entries.map(({ path }) => path),
-        );
-        const first = nodeIdsOf(listed, entries);
-        const second = nodeIdsOf(listed, entries);
-        const idsOf = (minted: typeof first) => [
-          minted.package,
-          ...minted.documents.flatMap(({ ids }) =>
-            Array.from({ length: 8 }, (_, at) => ids.idOf(at)),
-          ),
-        ];
+  suite.effect("mints one fresh id per package and per node and attribute", () =>
+    // Oracle: the specification as a checker, the brief's "one fresh uuid per XDM node and per
+    // package": no two nodes or attributes of one minting share an id, nor do two mintings.
+    Effect.gen(function* freshIds() {
+      const program = yield* readProgram(fixtures.simple);
+      const listed = program.documents.map(({ listed: held }) => held);
+      const entries = [...program.inputs.Package.values()].flatMap((record) =>
+        record.entries.map(({ path }) => path),
+      );
+      const first = nodeIdsOf(listed, entries);
+      const second = nodeIdsOf(listed, entries);
+      const idsOf = (minted: typeof first) => [
+        minted.package,
+        ...minted.documents.flatMap(({ view: { rows } }) => [
+          ...rows.nodes.map(({ id }) => id),
+          ...rows.attributes.map(({ id }) => id),
+        ]),
+      ];
 
-        assert.strictEqual(new Set(idsOf(first)).size, idsOf(first).length);
-        assert.strictEqual(
-          new Set([...idsOf(first), ...idsOf(second)]).size,
-          2 * idsOf(first).length,
-        );
-        assert.deepStrictEqual(idsOf(first), idsOf(first));
-        for (const { ids } of first.documents) {
-          assert.deepStrictEqual(ids.documentAt(ids.path), Option.some(ids.idOf(0)));
-          assert.strictEqual(ids.package, first.package);
-        }
-      }),
+      assert.strictEqual(new Set(idsOf(first)).size, idsOf(first).length);
+      assert.strictEqual(
+        new Set([...idsOf(first), ...idsOf(second)]).size,
+        2 * idsOf(first).length,
+      );
+      for (const { ids, view } of first.documents) {
+        assert.deepStrictEqual(ids.documentAt(ids.path), Option.some(view.rows.document.node));
+        assert.strictEqual(ids.package, first.package);
+      }
+    }),
   );
 
   suite.effect(
@@ -1226,9 +1223,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) =>
           );
           const firstAt = (path: string, named: boolean) =>
             Option.fromUndefinedOr(
-              minted.documents
-                .find(({ ids }) => ids.path === path && (!named || ids.documentType !== "manifest"))
-                ?.ids.idOf(0),
+              minted.documents.find(
+                ({ ids }) => ids.path === path && (!named || ids.documentType !== "manifest"),
+              )?.view.rows.document.node,
             );
 
           for (const { ids } of minted.documents) {

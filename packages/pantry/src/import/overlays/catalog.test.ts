@@ -23,6 +23,7 @@ import { shred } from "#pantry/model/shred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
+import { ownViewOf, viewOf } from "#pantry/import/fold.ts";
 
 /**
  * The QTI 3.0 assessment namespace.
@@ -110,7 +111,7 @@ describe("import/overlays/catalog.ts, rowsOf", () => {
         const tree = yield* itemOf(
           `<qti-catalog id="A"><qti-card support="spoken"><qti-card-entry default="true"><qti-html-content/></qti-card-entry><qti-card-entry default=" 1 "/><qti-card-entry default="false"/><qti-card-entry default="0"/><qti-card-entry/></qti-card></qti-catalog><qti-catalog id="B"><qti-card support=" braille "><qti-html-content/></qti-card></qti-catalog>`,
         );
-        const rows = rowsOf(tree, { idOf });
+        const rows = rowsOf(ownViewOf(tree, idOf), { assembled: false });
 
         assert.deepStrictEqual(named(tree, rows), {
           defaults: [
@@ -127,7 +128,7 @@ describe("import/overlays/catalog.ts, rowsOf", () => {
 
   it.effect("gives a document with no catalog no row", () =>
     Effect.gen(function* noCatalog() {
-      const rows = rowsOf(yield* itemOf(""), { idOf });
+      const rows = rowsOf(ownViewOf(yield* itemOf(""), idOf), { assembled: false });
 
       assert.strictEqual(rows.CardSupport.size, 0);
       assert.strictEqual(rows.DefaultEntry.size, 0);
@@ -149,8 +150,8 @@ describe("import/overlays/catalog.ts, rowsOf", () => {
           nearest: idOf(9999),
           nearestKind: "document",
         };
-        const own = rowsOf(tree, { idOf });
-        const placed = rowsOf(tree, { context, idOf });
+        const own = rowsOf(ownViewOf(tree, idOf), { assembled: false });
+        const placed = rowsOf(viewOf(tree, flat, context), { assembled: false });
 
         assert.deepStrictEqual(own.CardSupport.get(card?.id ?? ""), {
           catalog: card?.parent,
@@ -186,7 +187,7 @@ describe("import/overlays/catalog.ts, rowsOf, references", () => {
           `<qti-catalog id="A"><qti-card support="spoken"/></qti-catalog><qti-catalog id=" B "><qti-card support="spoken"/></qti-catalog>`,
           `<p data-catalog-idref="A">a</p><p data-catalog-idref=" B ">b</p><p id="p1">c</p>`,
         );
-        const rows = rowsOf(tree, { idOf });
+        const rows = rowsOf(ownViewOf(tree, idOf), { assembled: false });
         const names = namesOf(tree);
         const nameOf = (node: NodeId): string => names.get(node) ?? node;
 
@@ -213,11 +214,14 @@ describe("import/overlays/catalog.ts, rowsOf, references", () => {
     () =>
       Effect.gen(function* noReferences() {
         const rows = rowsOf(
-          yield* itemOf(
-            `<qti-catalog><qti-card support="spoken"/></qti-catalog>`,
-            `<p id="p1">c</p>`,
+          ownViewOf(
+            yield* itemOf(
+              `<qti-catalog><qti-card support="spoken"/></qti-catalog>`,
+              `<p id="p1">c</p>`,
+            ),
+            idOf,
           ),
-          { idOf },
+          { assembled: false },
         );
 
         assert.strictEqual(rows.CatalogRef.size, 0);
@@ -230,11 +234,14 @@ describe("import/overlays/catalog.ts, rowsOf, references", () => {
     () =>
       Effect.gen(function* noToken() {
         const rows = rowsOf(
-          yield* itemOf(
-            `<qti-catalog id="A"/>`,
-            `<p data-catalog-idref="">a</p><p data-catalog-idref=" \t ">b</p><p data-catalog-idref="A">c</p>`,
+          ownViewOf(
+            yield* itemOf(
+              `<qti-catalog id="A"/>`,
+              `<p data-catalog-idref="">a</p><p data-catalog-idref=" \t ">b</p><p data-catalog-idref="A">c</p>`,
+            ),
+            idOf,
           ),
-          { idOf },
+          { assembled: false },
         );
 
         assert.deepStrictEqual(
@@ -250,7 +257,7 @@ describe("import/overlays/catalog.ts, rowsOf, references", () => {
       const flat = flatten(tree, idOf);
       const paragraph = flat.nodes.find(({ kind }) => kind === "p");
       const catalog = flat.nodes.find(({ kind }) => kind === "qti-catalog");
-      const rows = rowsOf(tree, { idOf });
+      const rows = rowsOf(ownViewOf(tree, idOf), { assembled: false });
 
       assert.deepStrictEqual(rows.CatalogRef.get(paragraph?.id ?? ""), {
         document: flat.document.node,
@@ -278,15 +285,12 @@ describe("import/overlays/catalog.ts, rowsOf, targets", () => {
           `<p data-catalog-idref="A">a</p><p data-catalog-idref=" A ">b</p><p data-catalog-idref="B">c</p><p data-catalog-idref=" ">d</p>`,
         );
         const document = flatten(tree, idOf).document.node;
-        const targets = (assembled?: boolean) =>
-          [
-            ...rowsOf(
-              tree,
-              assembled === undefined ? { idOf } : { assembled, idOf },
-            ).CatalogTarget.values(),
-          ].toSorted((a, b) => a.id.localeCompare(b.id));
+        const targets = (assembled: boolean) =>
+          [...rowsOf(ownViewOf(tree, idOf), { assembled }).CatalogTarget.values()].toSorted(
+            (a, b) => a.id.localeCompare(b.id),
+          );
 
-        assert.deepStrictEqual(targets(), [
+        assert.deepStrictEqual(targets(false), [
           { assembled: false, document, id: "A" },
           { assembled: false, document, id: "B" },
         ]);
@@ -299,7 +303,10 @@ describe("import/overlays/catalog.ts, rowsOf, targets", () => {
 
   it.effect("gives a document with no reference no CatalogTarget", () =>
     Effect.gen(function* noTargets() {
-      const rows = rowsOf(yield* itemOf(`<qti-catalog id="A"/>`, `<p id="p1">c</p>`), { idOf });
+      const rows = rowsOf(
+        ownViewOf(yield* itemOf(`<qti-catalog id="A"/>`, `<p id="p1">c</p>`), idOf),
+        { assembled: false },
+      );
 
       assert.strictEqual(rows.CatalogTarget.size, 0);
     }),

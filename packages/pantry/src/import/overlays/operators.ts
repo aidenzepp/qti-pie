@@ -1,6 +1,6 @@
 /**
- * The operator overlays' rows (spec readings 119 and 121, §C's `rowsOf`): from one document's XDM
- * tree and the ids its nodes are written under, the rows of every relation
+ * The operator overlays' rows (spec readings 119 and 121, §C's `rowsOf`): from one document's view
+ * (`DocumentView` of `#pantry/import/fold.ts`), the rows of every relation
  * `#pantry/qti/operators.ts` declares, each a keyed set.
  *
  * The rows restate what the tree says and nothing else: each rounding operator's node tuple and
@@ -13,11 +13,10 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import { collapse } from "#pantry/grammar/domains.ts";
-import type { DocumentContext } from "#pantry/import/context.ts";
-import { foldAt, foldOf } from "#pantry/import/fold.ts";
+import { foldAt } from "#pantry/import/fold.ts";
+import type { DocumentView } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { NodeRow } from "#pantry/model/xdm.ts";
 import type {
   Rounding,
   RoundingFigures,
@@ -27,20 +26,6 @@ import type {
   ToleranceToken,
 } from "#pantry/qti/operators.ts";
 import { equalRoundedMode, roundingKinds } from "#pantry/vocab/terms/operators.ts";
-
-/**
- * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
- * `flatten` gives it, and the document's context (spec reading 117), whose interaction an included
- * fragment's nodes take as their nearest (`ownContext` of `#pantry/import/fold.ts` for a document
- * no site names).
- *
- * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
- * the tree's rows name each node by one id.
- */
-export interface OperatorIds {
-  readonly context: DocumentContext;
-  readonly idOf: (index: number) => NodeId;
-}
 
 /**
  * One value of a `tolerance` as its owner's family nests it: without the `node` the nesting
@@ -170,12 +155,12 @@ const holdingsOf = (
  * keeps its row, which `keyText` refuses under "Key text bound". A document with no such element
  * gives no row.
  *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under, and its context.
+ * @param view - The document's view: its rows, and their folds under its context (spec reading
+ *   117), whose interaction an included fragment's nodes take as their nearest.
  * @returns Every operator relation's rows.
  */
-export const rowsOf = (doc: XdmDocument<Composed>, ids: OperatorIds): OperatorRows => {
-  const rows = flatten(doc, ids.idOf);
+export const rowsOf = (view: DocumentView): OperatorRows => {
+  const { folds, rows } = view;
   const document = rows.document.node;
   const operators = rows.nodes.filter(({ kind }) => rounders.has(kind) || kind === "qti-equal");
   const built = {
@@ -192,7 +177,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: OperatorIds): OperatorRo
   const lexicals = new Map(rows.attributes.map((row) => [`${row.node} ${row.name}`, row.lexical]));
   const valueOf = (node: NodeRow<Composed>, name: string): string | undefined =>
     lexicals.get(`${node.id} ${name}`);
-  const folds = foldOf(rows.nodes, ids.context);
 
   for (const node of operators) {
     if (node.kind === "qti-equal") {

@@ -23,10 +23,9 @@ import {
   nonElementKinds,
 } from "#pantry/grammar/install.ts";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
-import { ownContext } from "#pantry/import/fold.ts";
 import { rowsOf, sectionRowsOf } from "#pantry/import/overlays/interactions.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
-import type { InteractionIds, InteractionRows } from "#pantry/import/overlays/interactions.ts";
+import type { InteractionRows } from "#pantry/import/overlays/interactions.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName as closedNamed } from "#pantry/model/xdm.ts";
 import type {
@@ -46,12 +45,7 @@ import { idOf } from "#pantry/test/gen/xdm.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { integerOf } from "#pantry/test/oracle-view.ts";
 import { choiceKinds, hottextKind } from "#pantry/vocab/terms/interactions.ts";
-
-/**
- * The ids every case writes its rows under: each node's by its number, in the context of a
- * document no site names.
- */
-const ids: InteractionIds = { context: ownContext(idOf(0)), idOf };
+import { ownViewOf } from "#pantry/import/fold.ts";
 
 /**
  * The kinds the choice generator places: three interactions whose choices sit at different depths
@@ -372,7 +366,7 @@ describe("import/overlays/interactions.ts, choices", () => {
               const walked = walk(doc);
               c.noteAll(situationsOf(walked, body));
 
-              const rows = rowsOf(doc, ids);
+              const rows = rowsOf(ownViewOf(doc, idOf));
               const choices = walked.filter(({ kind }) => isChoice(kind));
               assert.sameMembers(
                 [...rows.Choice.keys()],
@@ -655,7 +649,7 @@ describe("import/overlays/interactions.ts, counts", () => {
               const max = closedName(bound?.max ?? "");
               c.noteAll(countSituationsOf(input, max));
 
-              const rows = rowsOf(countTreeOf(input, { max, min }), ids);
+              const rows = rowsOf(ownViewOf(countTreeOf(input, { max, min }), idOf));
               const least = oracleCountOf(input.min, defaultOf(input.kind, min));
               const most = oracleCountOf(input.max, defaultOf(input.kind, max));
               const [counted] = rows.CountBound.values();
@@ -1051,7 +1045,7 @@ describe("import/overlays/interactions.ts, gaps", () => {
     // against the builder's read of the tree's flat rows (spec reading 169).
     for (const own of [0, 1, 2]) {
       for (const nested of [0, 1, 2]) {
-        const rows = rowsOf(gapTreeOf({ nested, own }), ids);
+        const rows = rowsOf(ownViewOf(gapTreeOf({ nested, own }), idOf));
         const interaction = [...rows.Interaction.values()].find(
           ({ kind }) => kind === "qti-gap-match-interaction",
         );
@@ -1094,7 +1088,7 @@ describe("import/overlays/interactions.ts, PCI module forms", () => {
       [{ attribute: false, modules: true }, [form(true)]],
       [{ attribute: true, modules: true }, [form(false), form(true)]],
     ] as const) {
-      const rows = rowsOf(pciTreeOf(forms), ids).PciModuleForm;
+      const rows = rowsOf(ownViewOf(pciTreeOf(forms), idOf)).PciModuleForm;
 
       assert.sameMembers([...rows.keys()], [...keys]);
       for (const [, row] of rows) {
@@ -1325,7 +1319,7 @@ describe("import/overlays/interactions.ts, content reference declarations", () =
                 }),
               );
 
-              const rows = rowsOf(doc, ids);
+              const rows = rowsOf(ownViewOf(doc, idOf));
               const key = JSON.stringify([named?.id, input.reference.attribute]);
               const relation = referenceRelationOf(rows, input.reference.kind);
               const reference = {

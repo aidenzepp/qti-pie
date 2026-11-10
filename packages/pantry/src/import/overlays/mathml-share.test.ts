@@ -18,7 +18,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import { AnonymousType, GoverningOf } from "#pantry/grammar/install.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { ownViewOf } from "#pantry/import/fold.ts";
+import type { DocumentView } from "#pantry/import/fold.ts";
 import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import { placedShareRowsOf, rowsOf } from "#pantry/import/overlays/mathml-share.ts";
@@ -29,7 +30,7 @@ import type {
   PlacementRoot,
 } from "#pantry/import/overlays/mathml-share.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { closedName, flatten } from "#pantry/model/xdm.ts";
+import { closedName } from "#pantry/model/xdm.ts";
 import type {
   XdmAttribute,
   XdmChild,
@@ -162,15 +163,13 @@ const documentOf = (root: XdmClosedElement<Composed>): XdmDocument<Composed> => 
 });
 
 /**
- * The ids every case's rows are written under, `idOf`, numbering nodes in document order, in a
- * package that holds no document at any path, the document listed as an item's, a type whose
- * records a package does not read.
+ * Where every case's document stands, its nodes' ids `idOf`, numbering nodes in document order: in
+ * a package that holds no document at any path, listed as an item's, a type whose records a package
+ * does not read.
  */
 const ids = {
   assembled: false,
-  context: ownContext(idOf(0)),
   documentType: "imsqti_item_xmlv3p0",
-  idOf,
 } as const satisfies IdentityIds;
 
 /**
@@ -237,12 +236,15 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
   it("gives apply(plus, ci id=a, share src=#a) a share rank above the ci's", () => {
     // Nodes: 0 document, 1 math, 2 apply, 3 plus, 4 ci, 5 share.
     const rows = rowsOf(
-      documentOf(
-        elementOf(
-          "m:math",
-          [],
-          [plusOf(undefined, [elementOf("m:ci", [attribute("id", "a")]), shareOf("#a")])],
+      ownViewOf(
+        documentOf(
+          elementOf(
+            "m:math",
+            [],
+            [plusOf(undefined, [elementOf("m:ci", [attribute("id", "a")]), shareOf("#a")])],
+          ),
         ),
+        idOf,
       ),
       ids,
     );
@@ -264,12 +266,15 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
   it("gives every row the tuple its node's row carries", () => {
     // Nodes: 0 document, 1 math, 2 apply, 3 plus, 4 ci, 5 share.
     const rows = rowsOf(
-      documentOf(
-        elementOf(
-          "m:math",
-          [],
-          [plusOf(undefined, [elementOf("m:ci", [attribute("id", "a")]), shareOf("#a")])],
+      ownViewOf(
+        documentOf(
+          elementOf(
+            "m:math",
+            [],
+            [plusOf(undefined, [elementOf("m:ci", [attribute("id", "a")]), shareOf("#a")])],
+          ),
         ),
+        idOf,
       ),
       ids,
     );
@@ -285,15 +290,18 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
   it("gives two shares of one element two ShareTarget rows above its one rank", () => {
     // Nodes: 0 document, 1 math, 2 apply, 3 plus, 4 ci, 5 apply, 6 plus, 7 share, 8 share.
     const rows = rowsOf(
-      documentOf(
-        elementOf(
-          "m:math",
-          [],
-          [
-            plusOf(undefined, [elementOf("m:ci", [attribute("id", "a")])]),
-            plusOf(undefined, [shareOf("#a"), shareOf("#a")]),
-          ],
+      ownViewOf(
+        documentOf(
+          elementOf(
+            "m:math",
+            [],
+            [
+              plusOf(undefined, [elementOf("m:ci", [attribute("id", "a")])]),
+              plusOf(undefined, [shareOf("#a"), shareOf("#a")]),
+            ],
+          ),
         ),
+        idOf,
       ),
       ids,
     );
@@ -307,7 +315,10 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
   it("gives apply id=a(plus, share src=#a, cn) a share rank not above its target's", () => {
     // Nodes: 0 document, 1 math, 2 apply, 3 plus, 4 share, 5 cn.
     const rows = rowsOf(
-      documentOf(elementOf("m:math", [], [plusOf("a", [shareOf("#a"), elementOf("m:cn")])])),
+      ownViewOf(
+        documentOf(elementOf("m:math", [], [plusOf("a", [shareOf("#a"), elementOf("m:cn")])])),
+        idOf,
+      ),
       ids,
     );
     const row = shareRowOf(rows, idOf(4));
@@ -320,8 +331,11 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
   it("refuses two applies each holding a share of the other, at the share that closes the cycle", () => {
     // Nodes: 0 document, 1 math, 2 apply a, 3 plus, 4 share, 5 apply b, 6 plus, 7 share.
     const rows = rowsOf(
-      documentOf(
-        elementOf("m:math", [], [plusOf("a", [shareOf("#b")]), plusOf("b", [shareOf("#a")])]),
+      ownViewOf(
+        documentOf(
+          elementOf("m:math", [], [plusOf("a", [shareOf("#b")]), plusOf("b", [shareOf("#a")])]),
+        ),
+        idOf,
       ),
       ids,
     );
@@ -333,12 +347,15 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
   it("refuses a share three levels below the element it names", () => {
     // Nodes: 0 document, 1 math, 2 apply a, 3 plus, 4 apply, 5 plus, 6 apply, 7 plus, 8 share.
     const rows = rowsOf(
-      documentOf(
-        elementOf(
-          "m:math",
-          [],
-          [plusOf("a", [plusOf(undefined, [plusOf(undefined, [shareOf("#a")])])])],
+      ownViewOf(
+        documentOf(
+          elementOf(
+            "m:math",
+            [],
+            [plusOf("a", [plusOf(undefined, [plusOf(undefined, [shareOf("#a")])])])],
+          ),
         ),
+        idOf,
       ),
       ids,
     );
@@ -350,17 +367,20 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
     // Nodes: 0 document, 1 math, 2 apply, 3 plus, 4 apply, 5 plus, 6 apply, 7 plus, 8 ci,
     // 9 apply, 10 plus, 11 apply, 12 plus, 13 share.
     const rows = rowsOf(
-      documentOf(
-        elementOf(
-          "m:math",
-          [],
-          [
-            plusOf(undefined, [
-              plusOf(undefined, [plusOf(undefined, [elementOf("m:ci", [attribute("id", "t")])])]),
-            ]),
-            plusOf(undefined, [plusOf(undefined, [shareOf("#t")])]),
-          ],
+      ownViewOf(
+        documentOf(
+          elementOf(
+            "m:math",
+            [],
+            [
+              plusOf(undefined, [
+                plusOf(undefined, [plusOf(undefined, [elementOf("m:ci", [attribute("id", "t")])])]),
+              ]),
+              plusOf(undefined, [plusOf(undefined, [shareOf("#t")])]),
+            ],
+          ),
         ),
+        idOf,
       ),
       ids,
     );
@@ -374,21 +394,24 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
     // The target is an HTML element inside an annotation, which a MathML share may name.
     // Nodes: 0 document, 1 math, 2 semantics, 3 apply, 4 plus, 5 share, 6 annotation-xml, 7 div.
     const rows = rowsOf(
-      documentOf(
-        elementOf(
-          "m:math",
-          [],
-          [
-            elementOf(
-              "m:semantics",
-              [],
-              [
-                plusOf(undefined, [shareOf("#t")]),
-                elementOf("m:annotation-xml", [], [elementOf("div", [attribute("id", "t")])]),
-              ],
-            ),
-          ],
+      ownViewOf(
+        documentOf(
+          elementOf(
+            "m:math",
+            [],
+            [
+              elementOf(
+                "m:semantics",
+                [],
+                [
+                  plusOf(undefined, [shareOf("#t")]),
+                  elementOf("m:annotation-xml", [], [elementOf("div", [attribute("id", "t")])]),
+                ],
+              ),
+            ],
+          ),
         ),
+        idOf,
       ),
       ids,
     );
@@ -402,30 +425,33 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
   it("refuses a share inside an HTML element it names, through the annotation that holds the math", () => {
     // Nodes: 0 document, 1 math, 2 semantics, 3 annotation-xml, 4 div, 5 math, 6 share.
     const rows = rowsOf(
-      documentOf(
-        elementOf(
-          "m:math",
-          [],
-          [
-            elementOf(
-              "m:semantics",
-              [],
-              [
-                elementOf(
-                  "m:annotation-xml",
-                  [],
-                  [
-                    elementOf(
-                      "div",
-                      [attribute("id", "t")],
-                      [elementOf("m:math", [], [shareOf("#t")])],
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
+      ownViewOf(
+        documentOf(
+          elementOf(
+            "m:math",
+            [],
+            [
+              elementOf(
+                "m:semantics",
+                [],
+                [
+                  elementOf(
+                    "m:annotation-xml",
+                    [],
+                    [
+                      elementOf(
+                        "div",
+                        [attribute("id", "t")],
+                        [elementOf("m:math", [], [shareOf("#t")])],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
+        idOf,
       ),
       ids,
     );
@@ -439,7 +465,10 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
 
   it("writes no ShareTarget row for a share whose fragment names no id, or that names a file", () => {
     for (const src of ["#nowhere", "other.xml#a", "#", ""]) {
-      const rows = rowsOf(documentOf(elementOf("m:math", [], [plusOf("a", [shareOf(src)])])), ids);
+      const rows = rowsOf(
+        ownViewOf(documentOf(elementOf("m:math", [], [plusOf("a", [shareOf(src)])])), idOf),
+        ids,
+      );
 
       assert.strictEqual(rows.ShareTarget.size, 0, src);
       assert.strictEqual(rows.MathRank.size, 0, src);
@@ -448,7 +477,7 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
 
   it("writes no rows for a document that holds no share", () => {
     const rows = rowsOf(
-      documentOf(elementOf("m:math", [], [plusOf("a", [elementOf("m:cn")])])),
+      ownViewOf(documentOf(elementOf("m:math", [], [plusOf("a", [elementOf("m:cn")])])), idOf),
       ids,
     );
 
@@ -460,12 +489,15 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
     // Nodes: 0 document, 1 item, 2 div, 3 math, 4 share. The law has no row for the document node
     // that it accepts, so the database refuses this document; the oracle accepts it (a follow-up).
     const rows = rowsOf(
-      documentOf(
-        elementOf(
-          "qti-assessment-item",
-          [],
-          [elementOf("div", [attribute("id", "t")]), elementOf("m:math", [], [shareOf("#t")])],
+      ownViewOf(
+        documentOf(
+          elementOf(
+            "qti-assessment-item",
+            [],
+            [elementOf("div", [attribute("id", "t")]), elementOf("m:math", [], [shareOf("#t")])],
+          ),
         ),
+        idOf,
       ),
       ids,
     );
@@ -485,7 +517,7 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
       const doc = documentOf(
         elementOf("m:math", [], [plusOf(undefined, [...siblings, shareOf("#a")])]),
       );
-      const rows = rowsOf(doc, ids);
+      const rows = rowsOf(ownViewOf(doc, idOf), ids);
 
       assert.deepStrictEqual(keysOf(rows.MathRank), nodesOf(1, 2, 4, count + 4));
       assert.deepStrictEqual(breachesOf(rows), []);
@@ -504,18 +536,22 @@ interface Written {
 }
 
 /**
- * The ids of a written document.
+ * Where a written document stands: in an assembly, listed as an item's as {@link ids} is.
+ */
+const assembledIds = {
+  assembled: true,
+  documentType: ids.documentType,
+} as const satisfies IdentityIds;
+
+/**
+ * View a written document, its nodes numbered from its `base` in document order, judged in its own
+ * context.
  *
  * @param written - The document.
- * @returns Its ids, `base` and the node's number in document order, in an assembly, listed as
- *   an item's as {@link ids} is.
+ * @returns Its view.
  */
-const assembledIds = ({ base }: Written): IdentityIds => ({
-  assembled: true,
-  context: ownContext(idOf(base)),
-  documentType: ids.documentType,
-  idOf: (index: number) => idOf(base + index),
-});
+const writtenViewOf = ({ base, tree }: Written): DocumentView =>
+  ownViewOf(tree, (index) => idOf(base + index));
 
 /**
  * Place the shares of some written documents, as the package's pass reads them.
@@ -530,7 +566,7 @@ const placedOf = (
   instances: readonly PlacementRoot[],
   sites: readonly IncludeSite[] = [],
 ): PlacedShareRows => {
-  const rows = documents.map((written) => identityRowsOf(written.tree, assembledIds(written)));
+  const rows = documents.map((written) => identityRowsOf(writtenViewOf(written), assembledIds));
 
   return placedShareRowsOf({
     ids: rows.flatMap(({ DocumentId }) => [...DocumentId.values()]),
@@ -538,7 +574,7 @@ const placedOf = (
     nodesOf: (document) => {
       const written = documents.find(({ base }) => idOf(base) === document);
 
-      return written === undefined ? [] : flatten(written.tree, assembledIds(written).idOf).nodes;
+      return written === undefined ? [] : writtenViewOf(written).rows.nodes;
     },
     shares: rows.flatMap(({ ShareFragment }) => [...ShareFragment.values()]),
     sites,
@@ -641,12 +677,15 @@ describe("import/overlays/mathml-share.ts, the shares of an assembled document (
   // Nodes of the fragment: 100 document, 101 math, 102 share.
   it("writes no MathRank or ShareTarget row for a document in an assembly", () => {
     const rows = rowsOf(
-      documentOf(
-        elementOf(
-          "m:math",
-          [],
-          [plusOf(undefined, [elementOf("m:ci", [attribute("id", "a")]), shareOf("#a")])],
+      ownViewOf(
+        documentOf(
+          elementOf(
+            "m:math",
+            [],
+            [plusOf(undefined, [elementOf("m:ci", [attribute("id", "a")]), shareOf("#a")])],
+          ),
         ),
+        idOf,
       ),
       { ...ids, assembled: true },
     );

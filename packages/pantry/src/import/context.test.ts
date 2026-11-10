@@ -189,9 +189,9 @@ describe("contextsOf", () => {
               );
               const nested = yield* treeOf(`<span xmlns="${asi}">b</span>`);
               const judged = contextsOf([
-                { idOf: idsOf(1), named: true, path: "i.xml", tree: item },
-                { idOf: idsOf(2), named: true, path: "f.xml", tree: fragment },
-                { idOf: idsOf(3), named: true, path: "g.xml", tree: nested },
+                { named: true, path: "i.xml", rows: flatten(item, idsOf(1)), tree: item },
+                { named: true, path: "f.xml", rows: flatten(fragment, idsOf(2)), tree: fragment },
+                { named: true, path: "g.xml", rows: flatten(nested, idsOf(3)), tree: nested },
               ]);
               const itemNodes = flatten(item, idsOf(1)).nodes;
               const interactionOf = (kind: string | undefined) =>
@@ -205,7 +205,7 @@ describe("contextsOf", () => {
               const nearestKind = inside?.interaction ?? "document";
               const placed = sited.length > 0 ? [idsOf(2)(0)] : [];
               const selvesWhere = (holds: (judgment: (typeof judged)[number]) => boolean) =>
-                new Set(judged.filter(holds).map(({ listed }) => listed.idOf(0)));
+                new Set(judged.filter(holds).map(({ listed }) => listed.rows.document.node));
               c.note(noteOf(inside !== undefined, sited));
 
               assert.deepStrictEqual(

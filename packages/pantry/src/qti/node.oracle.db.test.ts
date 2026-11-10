@@ -47,7 +47,7 @@ import {
   TextDomain,
 } from "#pantry/grammar/install.ts";
 import { symbolRowsOf } from "#pantry/test/indexes.ts";
-import { governorOf, ownContext } from "#pantry/import/fold.ts";
+import { governorOf, ownViewOf } from "#pantry/import/fold.ts";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -1518,11 +1518,9 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                         assert.strictEqual(breached, version === "3.0.1", `the oracle: ${label}`);
                       }
 
-                      const uses = identityRowsOf(tree, {
+                      const uses = identityRowsOf(ownViewOf(tree, idOf), {
                         assembled: false,
-                        context: ownContext(idOf(0)),
                         documentType: "imsqti_item_xmlv3p0",
-                        idOf,
                       }).LabelUse.values();
                       const verdict = yield* judged(
                         client,
