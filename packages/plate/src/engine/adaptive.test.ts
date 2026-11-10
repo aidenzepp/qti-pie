@@ -116,39 +116,37 @@ const attempted = (record: ItemRecord, numAttempts: number, status: string): Ite
   },
 });
 
-describe("adaptivePolicy, the stub", () => {
-  it("[W0-BD] is a stub: implemented is false", () => {
-    assert.isFalse(adaptivePolicy.implemented);
+describe("adaptivePolicy, filled", () => {
+  it("[W0-BD] is filled: implemented is true", () => {
+    assert.isTrue(adaptivePolicy.implemented);
   });
 
-  it.effect("[W0-BD] the stub's answers equal today's: closed and limit", () =>
-    Effect.gen(function* closedAndLimit() {
-      const item = yield* Effect.fromResult(buildItem(policyItem));
-      const start = fresh(item, "q1");
-      const records = [
-        attempted(start, 0, "not_attempted"),
-        attempted(start, 1, "unknown"),
-        attempted(start, 2, "completed"),
-        attempted(start, 3, "incomplete"),
-      ];
+  it.effect(
+    "[W0-BD] closed and limit: a non-adaptive item keeps today's answers, an adaptive item closes only at completed and has no limit",
+    () =>
+      Effect.gen(function* closedAndLimit() {
+        const item = yield* Effect.fromResult(buildItem(policyItem));
+        const start = fresh(item, "q1");
+        const statuses = ["not_attempted", "unknown", "completed", "incomplete"];
 
-      for (const record of records) {
-        for (const limit of [0, 1, 2, 3]) {
-          for (const adaptive of [false, true]) {
-            assert.strictEqual(
-              adaptivePolicy.closed(adaptive, record, limit),
-              limit > 0 && record.numAttempts >= limit,
-              `closed(${String(adaptive)}, ${String(record.numAttempts)} attempts, ${String(limit)})`,
-            );
-            assert.strictEqual(
-              adaptivePolicy.limit(adaptive, limit),
-              limit,
-              `limit(${String(adaptive)}, ${String(limit)})`,
-            );
+        for (const [numAttempts, status] of statuses.entries()) {
+          const record = attempted(start, numAttempts, status);
+          for (const limit of [0, 1, 2, 3]) {
+            for (const adaptive of [false, true]) {
+              assert.strictEqual(
+                adaptivePolicy.closed(adaptive, record, limit),
+                adaptive ? status === "completed" : limit > 0 && numAttempts >= limit,
+                `closed(${String(adaptive)}, ${String(record.numAttempts)} attempts, ${String(limit)})`,
+              );
+              assert.strictEqual(
+                adaptivePolicy.limit(adaptive, limit),
+                adaptive ? 0 : limit,
+                `limit(${String(adaptive)}, ${String(limit)})`,
+              );
+            }
           }
         }
-      }
-    }),
+      }),
   );
 
   it.effect(
