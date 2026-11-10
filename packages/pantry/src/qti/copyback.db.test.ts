@@ -40,7 +40,7 @@ import {
   writtenColumnsOf,
 } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
 
 /**
  * A node no stored row holds: an orphan copy's.
@@ -234,7 +234,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("an attribute's copy, held by its forward and its keyed reverse containment", (it) => {
       it.effect(
         "refuses a copy of another lexical form by the forward containment alone, and a copy of no attribute by the reverse alone",
