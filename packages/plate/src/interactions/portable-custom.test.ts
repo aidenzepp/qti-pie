@@ -1,8 +1,8 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Exit, Option, Result, Schema } from "effect";
-import { encodeRedacted } from "#plate/codec/redacted.ts";
+import { Effect, Exit, Option, Predicate, Result, Schema } from "effect";
+import { decodeRedacted, encodeRedacted } from "#plate/codec/redacted.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -628,5 +628,122 @@ describe("the Portable Custom Interaction module", () => {
         values: [{ baseType: "integer", value: 2n }],
       });
     }),
+  );
+
+  it.effect(
+    "[Q-16] the redacted JSON of a PCI names no key like a hidden field: templates is absent at every depth, the inert templates travel as inertTemplates",
+    () =>
+      Effect.gen(function* namesNoHiddenKey() {
+        const configuration = yield* configure({});
+        // The redaction sweep refuses a key named like any of these at any depth of a redacted
+        // item's JSON, whatever the field sits under, a module's node included.
+        const hidden = [
+          "areaMapping",
+          "correct",
+          "defaultValue",
+          "defaults",
+          "mapping",
+          "outcomes",
+          "path",
+          "processing",
+          "seed",
+          "showHide",
+          "templateIdentifier",
+          "templateProcessing",
+          "templateVisibility",
+          "templates",
+        ];
+
+        for (const [label, accepted, inert] of [
+          ["the fixture", yield* fixture, 1],
+          [
+            "the empty-markup variant",
+            yield* variant((text) =>
+              text.replace(
+                /<qti-interaction-markup>[\s\S]*<\/qti-interaction-markup>/u,
+                "<qti-interaction-markup/>",
+              ),
+            ),
+            0,
+          ],
+        ] as const) {
+          const json = yield* Effect.fromResult(
+            encodeRedacted(redact(accepted, undefined, configuration)),
+          );
+          const written = JSON.stringify(json);
+          const keys: string[] = [];
+          const pcis: unknown[] = [];
+          const pending: unknown[] = [JSON.parse(written)];
+
+          while (pending.length > 0) {
+            const next = pending.pop();
+
+            if (Array.isArray(next)) {
+              for (const element of next) {
+                pending.push(element);
+              }
+            } else if (Predicate.isObject(next)) {
+              if (next["kind"] === "portable-custom") {
+                pcis.push(next);
+              }
+
+              for (const [key, value] of Object.entries(next)) {
+                keys.push(key);
+                pending.push(value);
+              }
+            }
+          }
+
+          for (const key of hidden) {
+            assert.notInclude(keys, key, `${label}: the JSON holds the key ${key}`);
+          }
+
+          assert.lengthOf(pcis, 1, label);
+
+          const [pci] = pcis;
+          const templates = Predicate.isObject(pci) ? pci["inertTemplates"] : undefined;
+
+          assert.isTrue(Array.isArray(templates), `${label}: the PCI node holds inertTemplates`);
+          assert.lengthOf(Array.isArray(templates) ? templates : [], inert, label);
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-16] the inert templates round-trip through the codec under their new name and render the same HTML",
+    () =>
+      Effect.gen(function* roundTripsUnderTheName() {
+        const configuration = yield* configure({});
+        const files = yield* filesOf(path.join(packageDirectory, fixturePackage));
+        const verdict = yield* openPackage(fixturePackage, files);
+
+        if (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") {
+          assert.fail(`the package is ${verdict.verdict}: ${JSON.stringify(verdict)}`);
+        }
+
+        const [packaged] = [...verdict.accepted.items.values()];
+
+        if (packaged === undefined) {
+          assert.fail("the fixture package holds no item");
+        }
+
+        for (const [label, accepted] of [
+          ["the fixture", yield* fixture],
+          ["the fixture package's item", packaged],
+        ] as const) {
+          const redacted = redact(accepted, undefined, configuration);
+          const decoded = yield* Effect.fromResult(
+            Result.flatMap(encodeRedacted(redacted), decodeRedacted),
+          );
+          const options = { instance, mode: "answering" } as const;
+          const fromRedact = yield* Effect.fromResult(render(redacted, configuration, options));
+          const fromDecode = yield* Effect.fromResult(render(decoded, configuration, options));
+          const { root } = rendered(accepted, configuration);
+
+          assert.strictEqual(fromDecode.html, fromRedact.html, label);
+          assert.include(fromDecode.html, `data-slot="${slots.template}"`, label);
+          assert.lengthOf(slotted(root, slots.template), 1, label);
+        }
+      }),
   );
 });
