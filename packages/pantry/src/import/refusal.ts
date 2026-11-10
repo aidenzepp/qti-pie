@@ -9,11 +9,16 @@
  *
  * - **Laws by name.** Every law the schema states has a name, the law oracle's (`src/test/oracle.ts`
  *   `LawName`) where the oracle states the law, with its rule and its spec source
- *   ({@link lawTable}). An outcome's law is named by its own fields ({@link lawNameOf}): a check by
- *   its name ({@link checkNameOf}), a primary key by its relation, a generated field by its
- *   relation and field, a contract by its name, a pattern by its field's type, and a statement's
- *   law by the group its module files the statement under, matched by grizzle's `sameLaw`. The
- *   tables are dictionaries keyed by the database's law, never a judge.
+ *   ({@link lawTable}). An outcome's law is named by its own fields where they name it
+ *   ({@link lawNameOf}): a check by its name ({@link lawOfCheck}), a contract by its name and a
+ *   generated field by its relation and field ({@link contractNames}, {@link generatedNames}), and
+ *   a pattern by its relation and field, the committed dictionary's `patterns`. Every other law (a
+ *   primary key, a key, a containment, a coverage, a family, a fold, a tree, a law of a level
+ *   above) is named by the dictionary's entry of its LawId, which the outcome carries
+ *   ({@link namerFrom}). The dictionary, `#pantry/vocab/law-names.json`, is the schema's own naming
+ *   (`src/test/law-namer.ts`) written out and held to it by `law-names.committed.test.ts`, so
+ *   naming a refusal builds no schema. The tables are dictionaries keyed by the database's law,
+ *   never a judge.
  * - **A refusal is what the database said.** A family's axis foreign key discharges the family and
  *   every containment and fold merged into it, and its violation names them all. The refusal
  *   carries how grizzle decided them, every law it named and the set of their rules
@@ -43,8 +48,8 @@ import lawNamesFile from "#pantry/vocab/law-names.json" with { type: "json" };
 
 /**
  * The rules no law of the schema keeps yet, each with the W5 slice that states its law, so the
- * census shows them. Each slice names its law, and its row joins {@link lawTable} or
- * {@link statedLaws} when it lands.
+ * census shows them. Each slice names its law, and its row joins {@link lawTable}, with its law
+ * named by `statedLaws` of `src/test/law-namer.ts`, when it lands.
  *
  * - `typed-copy`: a typed value proved against its lexical form through G-parse (the tier 1
  *   addendum), as a relation of its own per typed form.
@@ -86,52 +91,6 @@ export const lawOfCheck = (name: string): Option.Option<LawName> => {
 };
 
 /**
- * The relation each side of a law reads, in the order the law names its sides: the part of a law
- * {@link bucketOf} files it under beside its kind. A contract reads no relation, and a law of a
- * level above the schema reads its own law's relations: `Qti` is one level, which no level extends,
- * so no outcome names one (grizzle `999facc6`'s `above`), and none is in the table.
- *
- * @param law - A law as grizzle names it.
- * @returns Its sides' relations.
- */
-export const relationsOf = (law: Law): readonly string[] =>
-  Match.value(law).pipe(
-    Match.discriminatorsExhaustive("kind")({
-      above: ({ law: stated }) => relationsOf(stated),
-      check: ({ relation }) => [relation],
-      contained: ({ from, to }) => [from.relation, to.relation],
-      contract: () => [],
-      coverage: ({ from, to }) => [from.relation, to.relation],
-      family: ({ member, slots }) => [member.relation, slots.owner],
-      fold: ({ end, family, step }) => [family.owner, step.relation, end.relation],
-      generated: ({ relation }) => [relation],
-      key: ({ side }) => [side.relation],
-      pattern: ({ relation }) => [relation],
-      primaryKey: ({ relation }) => [relation],
-      tree: ({ member, slots }) => [member.relation, slots.owner],
-    }),
-  );
-
-/**
- * File a law by its kind and its sides' relations, so {@link lawNameOf} holds an outcome's law to
- * the few stated laws of that kind over those relations, never every law of Qti.
- *
- * This is no identity of the law: grizzle's `sameLaw` decides whether two laws are one, comparing
- * them whole, and two laws one bucket holds may still differ in their terms or selections. The
- * bucket only needs one law's two descriptions to fall in it together, which they do, since
- * `sameLaw` holds only of laws of one kind whose sides read the same relations.
- *
- * @param law - A law as grizzle names it.
- * @returns Its bucket.
- */
-export const bucketOf = (law: Law): string => [law.kind, ...relationsOf(law)].join(" ");
-
-/**
- * The law of a given kind.
- */
-export type LawOf<Kind extends Law["kind"]> = Extract<Law, { readonly kind: Kind }>;
-
-/**
  * Name each key by one law: one row per key, so a table lists its laws as their names group them.
  *
  * @param name - The law.
@@ -154,18 +113,19 @@ export const namedBy = (
  * - An IDREF token's piece, a header's and a tolerance value's, and a reference segment's token, is
  *   its own whitespace or separator and its token concatenated, its concat fold's step: written
  *   texts, none NULL, so the term is never NULL. A piece or a token past its keyText bound is
- *   refused by its own pattern law, named by keyText's row of {@link textLaws}, "Key text bound".
+ *   refused by its own pattern law, named by keyText's row of `textLaws` (`src/test/law-namer.ts`),
+ *   "Key text bound".
  * - An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of a
  *   set keyed by the row's own NOT NULL `baseType` and `cardinality`: ∅ where the diagonal holds no
  *   row (`any`, `unknown`), never NULL, which only a NULL key, an absent `C.at`, reads
  *   (docs/grizzle-findings.md, lane DBT's). A field a closed relation determines is E1 derived.
  * - A selection's `select` casts `selectForm`, which its pattern law, named by SelectForm's row of
- *   {@link textLaws}, holds to the language the cast reads total: a form outside it is refused by
- *   that law as the statement casts it into its column, before PostgreSQL computes `select`.
- * - A statistic's `date` casts `day`, which its pattern law, named by DayForm's row of
- *   {@link textLaws}, holds to the days 0001-01-01 to 9999-12-31 the cast reads total, refused the
- *   same way. Its value is the calendar day `lastUpdated` names, which the value domain states
- *   exists, so it is the value domain's.
+ *   `textLaws`, holds to the language the cast reads total: a form outside it is refused by that
+ *   law as the statement casts it into its column, before PostgreSQL computes `select`.
+ * - A statistic's `date` casts `day`, which its pattern law, named by DayForm's row of `textLaws`,
+ *   holds to the days 0001-01-01 to 9999-12-31 the cast reads total, refused the same way. Its
+ *   value is the calendar day `lastUpdated` names, which the value domain states exists, so it is
+ *   the value domain's.
  * - A document's and an item's assembly's `xml:lang` form's compared `value` is the form collapsed
  *   and case-folded, cast into the form's own key text, a cast the schema proves total: a written
  *   text, never NULL.
