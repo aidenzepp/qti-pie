@@ -1501,6 +1501,147 @@
 /* end position-object-interaction */
 
 /* begin select-point-interaction (issue ei-14) */
+
+/*
+ * The Root lays the image and the point groups side by side, and wraps them when the width is
+ * short; the Prompt takes the whole first line.
+ */
+:where([data-slot="select-point-interaction"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+/* The Prompt: its own line, in the weight a Choice's Prompt has. */
+:where([data-slot="select-point-interaction-prompt"]) {
+  display: block;
+  flex-basis: 100%;
+  font-weight: 500;
+}
+
+/*
+ * The image part, the box the markers are positioned in: a grid, so the author's image is a block
+ * in it and leaves no line gap under it, and the box is exactly the image's. It takes the image's
+ * own size; an image wider than its line scrolls with the item, with the markers over it.
+ */
+:where([data-slot="select-point-interaction-image"]) {
+  position: relative;
+  display: inline-grid;
+}
+
+/*
+ * The markers overlay fills the image's box, so a marker's `cx` and `cy`, in the overlay's viewBox
+ * of the image's size, land on the image's pixel. It takes no pointer: without script it is not a
+ * control, and the inputs are.
+ */
+:where([data-slot="select-point-interaction-markers"]) {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/*
+ * A marker: the theme's dark fill under a halo in the card colour, so the dot keeps 3:1 against
+ * any image (1.4.11); forced colours recolour the fill and the stroke and keep the dot. It scales
+ * with the image, as the overlay's viewBox does.
+ */
+:where([data-slot="select-point-interaction-marker"]) {
+  fill: var(--primary, oklch(0.205 0 0));
+  stroke: var(--card, oklch(1 0 0));
+  stroke-width: 2px;
+}
+
+/* The point groups: a column beside the image. */
+:where([data-slot="select-point-interaction-points"]) {
+  display: grid;
+  flex: 1 1 12rem;
+  gap: 0.5rem;
+}
+
+/*
+ * A point group: a bordered row holding its legend and its two inputs, each behind its label, in
+ * one line that wraps when the row is short.
+ */
+:where([data-slot="select-point-interaction-point"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, oklch(0.922 0 0));
+  border-radius: var(--radius, 0.625rem);
+}
+
+/* A point group's legend: the muted weight of a caption. */
+:where([data-slot="select-point-interaction-point"]) :where(legend) {
+  padding: 0;
+  font-weight: 500;
+}
+
+/*
+ * The coordinate inputs: the host's font, and the card's surface and text, so a dark host theme
+ * reads, as a text Control does; wide enough for the digits of any image's size.
+ */
+:where([data-slot="select-point-interaction-x"], [data-slot="select-point-interaction-y"]) {
+  inline-size: 6ch;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--input, oklch(0.922 0 0));
+  border-radius: calc(var(--radius, 0.625rem) * 0.8);
+  font: inherit;
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/* A coordinate input holding a refused answer. */
+:where(
+  [data-slot="select-point-interaction-x"][aria-invalid="true"],
+  [data-slot="select-point-interaction-y"][aria-invalid="true"]
+) {
+  border-color: var(--destructive, oklch(0.577 0.245 27.325));
+}
+
+/* A disabled coordinate input. */
+:where(
+  [data-slot="select-point-interaction-x"]:disabled,
+  [data-slot="select-point-interaction-y"]:disabled
+) {
+  opacity: 0.5;
+}
+
+/*
+ * The coordinate inputs in review or solution: at full strength, after the rule above. A number
+ * input is disabled there only because the answer it shows cannot change; a Root the author
+ * disabled, which carries data-disabled, stays dimmed in every mode.
+ */
+:where(
+  [data-slot="select-point-interaction"][data-mode="review"]:not([data-disabled])
+    [data-slot="select-point-interaction-x"],
+  [data-slot="select-point-interaction"][data-mode="review"]:not([data-disabled])
+    [data-slot="select-point-interaction-y"],
+  [data-slot="select-point-interaction"][data-mode="solution"]:not([data-disabled])
+    [data-slot="select-point-interaction-x"],
+  [data-slot="select-point-interaction"][data-mode="solution"]:not([data-disabled])
+    [data-slot="select-point-interaction-y"]
+) {
+  opacity: 1;
+}
+
+/* Focus on a coordinate input: the same ring as a text Control's. */
+:where(
+  [data-slot="select-point-interaction-x"]:focus-visible,
+  [data-slot="select-point-interaction-y"]:focus-visible
+) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
+
 /* end select-point-interaction */
 
 /* begin drawing-interaction (issue ei-17) */

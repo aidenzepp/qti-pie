@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="ei-select-point-single" title="Garden pond" adaptive="false" time-dependent="false"
+  xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="point">
+    <qti-correct-response>
+      <qti-value>120 80</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-select-point-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-prompt>Mark the centre of the pond on the plan of the garden.</qti-prompt>
+      <img src="images/select-point-map.svg" width="400" height="300"
+        alt="A plan of a walled garden with a round pond, a fenced bed and a path"/>
+    </qti-select-point-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+</qti-assessment-item>
