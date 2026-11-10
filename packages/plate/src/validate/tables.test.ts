@@ -339,6 +339,33 @@ describe("validate/tables.ts", () => {
     });
   });
 
+  it("align-54 extension lists E10: the tables mark the 127 elements the 3.0.1 XSD's extension patterns cover, each one an ##any lax attribute wildcard narrows", () => {
+    const covered = Object.entries(tables.elements).filter(
+      ([, table]) => table.extensionCovered === true,
+    );
+
+    assert.strictEqual(covered.length, 127);
+    for (const name of [
+      "img",
+      "object",
+      "qti-assessment-item",
+      "qti-extended-text-interaction",
+      "qti-stimulus-body",
+    ]) {
+      assert.isTrue(elementNamed(name).extensionCovered, name);
+    }
+    for (const name of ["qti-custom-operator", "qti-ordering", "qti-selection", "qti-value"]) {
+      assert.notProperty(elementNamed(name), "extensionCovered", name);
+    }
+    assert.deepStrictEqual(
+      covered.filter(
+        ([, table]) =>
+          table.anyAttribute?.namespace !== "##any" || table.anyAttribute.process !== "lax",
+      ),
+      [],
+    );
+  });
+
   it("qti-calculator-type has an inline type, for which types holds no name", () => {
     const table = elementNamed("qti-calculator-type");
 

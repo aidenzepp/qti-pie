@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Effect, Option } from "effect";
+import { readCorpusFile } from "#plate/document/corpus.ts";
+import { readSource } from "#plate/document/read.ts";
 import { attr, doc, el, entity, text, xincludeNamespace } from "#plate/document/source.ts";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { tables } from "#plate/validate/tables.ts";
@@ -211,22 +213,34 @@ const rubricBlock = (...content: readonly SourceElement[]): SourceElement =>
   el("qti-rubric-block", [attr("view", "candidate")], [el("qti-content-body", [], content)]);
 
 /**
- * Construct a test feedback shown at the end, whose content body holds the given content.
+ * Construct a test feedback shown at the end when an outcome holds `DONE`, whose content body
+ * holds the given content.
  *
+ * @param outcome Its `outcome-identifier`.
  * @param content The content body's children.
  * @returns The `qti-test-feedback`.
  */
-const testFeedback = (...content: readonly SourceElement[]): SourceElement =>
+const feedbackNaming = (outcome: string, ...content: readonly SourceElement[]): SourceElement =>
   el(
     "qti-test-feedback",
     [
       attr("access", "atEnd"),
       attr("identifier", "DONE"),
-      attr("outcome-identifier", "FEEDBACK"),
+      attr("outcome-identifier", outcome),
       attr("show-hide", "show"),
     ],
     [el("qti-content-body", [], content)],
   );
+
+/**
+ * Construct a test feedback naming `FEEDBACK` ({@link feedbackOutcome}), whose content body holds
+ * the given content.
+ *
+ * @param content The content body's children.
+ * @returns The `qti-test-feedback`.
+ */
+const testFeedback = (...content: readonly SourceElement[]): SourceElement =>
+  feedbackNaming("FEEDBACK", ...content);
 
 /**
  * A Choice bound to `RESPONSE` with one choice.
@@ -306,6 +320,11 @@ const declaration = (
     attr("cardinality", cardinality),
     attr("identifier", identifier),
   ]);
+
+/**
+ * The test's single identifier outcome `FEEDBACK`, which {@link testFeedback} names.
+ */
+const feedbackOutcome = declaration("qti-outcome-declaration", "FEEDBACK", "single", "identifier");
 
 /**
  * Construct a test whose record outcome `R` holds a `qti-default-value` of the fields given, before
@@ -518,6 +537,132 @@ const collectingMaximum = (baseType: string): SourceDocument =>
   ]);
 
 /**
+ * Construct an XInclude `include` of `more.xml` whose fallback holds the given content.
+ *
+ * @param fallback The `xi:fallback`'s children, none for an include with no fallback.
+ * @returns The `xi:include`.
+ */
+const include = (...fallback: readonly SourceElement[]): SourceElement =>
+  el(
+    "include",
+    [attr("href", "more.xml")],
+    fallback.length === 0 ? [] : [el("fallback", [], fallback, xincludeNamespace)],
+    xincludeNamespace,
+  );
+
+/**
+ * An outcome rule setting the undeclared `NOPE`, which the processing rules refuse wherever they
+ * judge it.
+ */
+const setUndeclared = el("qti-set-outcome-value", [attr("identifier", "NOPE")], [integer("1")]);
+
+/**
+ * Construct `oneSection`'s test, its section holding one item ref, with outcome processing of the
+ * given children.
+ *
+ * @param rules The `qti-outcome-processing`'s children.
+ * @returns The test.
+ */
+const withOutcomeRules = (...rules: readonly SourceElement[]): SourceDocument =>
+  oneSection([itemRef("I1")], [], [el("qti-outcome-processing", [], rules)]);
+
+/**
+ * Construct a `qti-branch-rule` to a target whose condition is always true.
+ *
+ * @param target Its `target`, as written.
+ * @returns The branch rule.
+ */
+const jumpTo = (target: string): SourceElement => branchRule(target, baseValue("boolean", "true"));
+
+/**
+ * Construct an item ref holding one branch rule to a target ({@link jumpTo}).
+ *
+ * @param identifier The item ref's `identifier`.
+ * @param target The rule's `target`.
+ * @returns The `qti-assessment-item-ref`.
+ */
+const branching = (identifier: string, target: string): SourceElement =>
+  itemRef(identifier, [jumpTo(target)]);
+
+/**
+ * Construct an item ref that a shuffle leaves in place, `fixed="true"`, with its children.
+ *
+ * @param identifier Its `identifier`.
+ * @param children Its children, such as a branch rule.
+ * @returns The `qti-assessment-item-ref`.
+ */
+const fixedItemRef = (identifier: string, children: readonly SourceElement[] = []): SourceElement =>
+  el(
+    "qti-assessment-item-ref",
+    [
+      attr("fixed", "true"),
+      attr("href", `items/${identifier}.xml`),
+      attr("identifier", identifier),
+    ],
+    children,
+  );
+
+/**
+ * A section's `qti-ordering` that shuffles its children.
+ *
+ * @returns The `qti-ordering`.
+ */
+const shuffle = (): SourceElement => el("qti-ordering", [attr("shuffle", "true")]);
+
+/**
+ * Construct an invisible section that does not keep together, so a shuffle above it mixes its
+ * children into its parent's (reading 87), unless it is given `keep-together="true"`.
+ *
+ * @param identifier Its `identifier`, also its `title`.
+ * @param children Its children, in document order.
+ * @param keepTogether Its `keep-together`.
+ * @returns The `qti-assessment-section`.
+ */
+const looseSection = (
+  identifier: string,
+  children: readonly SourceChild[],
+  keepTogether = "false",
+): SourceElement =>
+  el(
+    "qti-assessment-section",
+    [
+      attr("identifier", identifier),
+      attr("keep-together", keepTogether),
+      attr("title", identifier),
+      attr("visible", "false"),
+    ],
+    children,
+  );
+
+/**
+ * Construct a section's `qti-selection`.
+ *
+ * @param select Its `select`, as written.
+ * @param withReplacement Its `with-replacement`, as written, none when absent.
+ * @returns The `qti-selection`.
+ */
+const selection = (select: string, withReplacement?: string): SourceElement =>
+  el("qti-selection", [
+    attr("select", select),
+    ...(withReplacement === undefined ? [] : [attr("with-replacement", withReplacement)]),
+  ]);
+
+/**
+ * Construct the reduced `branch-target` refusal of the branch rule an element holds (reading 87),
+ * with the detail the assembled test's judgement gives it too.
+ *
+ * @param owner The path of the element that holds the rule.
+ * @param reason Why the target is refused.
+ * @param target The rule's `target`.
+ * @returns The refusal at the rule's `target`, as {@link judged} reduces it.
+ */
+const refusedTarget = (owner: string, reason: string, target: string) => ({
+  detail: { reading: "87", reason, target },
+  path: `${owner}/qti-branch-rule/@target`,
+  rule: "branch-target" as const,
+});
+
+/**
  * Reduce refusals to what a test asserts: the rule, the path and the detail.
  *
  * @param source The document to check.
@@ -537,14 +682,43 @@ const judged = (source: SourceDocument) =>
   });
 
 /**
- * The child-count detail of an empty section (reading 26).
+ * Construct a test whose float outcome `SCORE` carries the attributes given, before a part holding
+ * one item ref.
+ *
+ * @param attributes The declaration's further attributes, such as `mastery-value`.
+ * @returns The test.
  */
-const sectionChildren = {
-  child: "qti-assessment-item-ref or qti-assessment-section or qti-assessment-section-ref",
-  element: "qti-assessment-section",
-  required: "at least one",
-  source: "reading 26",
-};
+const mastered = (attributes: Readonly<Record<string, string>>): SourceDocument =>
+  assessmentTest([
+    el("qti-outcome-declaration", [
+      attr("identifier", "SCORE"),
+      attr("cardinality", "single"),
+      attr("base-type", "float"),
+      ...Object.entries(attributes).map(([local, value]) => attr(local, value)),
+    ]),
+    part("P", [section("S", [itemRef("I1")])]),
+  ]);
+
+/**
+ * Construct the reduced refusal of a test outcome's `mastery-value` outside a written bound.
+ *
+ * @param value The `mastery-value`, as written.
+ * @param bound `least` for a `normal-minimum`, `greatest` for a `normal-maximum`.
+ * @param written The bound, as written.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const outOfRange = (value: string, bound: "greatest" | "least", written: string) => ({
+  detail: {
+    attribute: "mastery-value",
+    [bound]: written,
+    check: "mastery-range",
+    element: "qti-outcome-declaration",
+    reading: "9",
+    value,
+  },
+  path: "qti-assessment-test/qti-outcome-declaration/@mastery-value",
+  rule: "attribute-type",
+});
 
 describe("checkTestRules", () => {
   describe("duplicate-identifier", () => {
@@ -631,30 +805,43 @@ describe("checkTestRules", () => {
     });
   });
 
-  describe("child-count (reading 26)", () => {
-    it("refuses a section holding no item ref, section or section ref", () => {
-      assert.deepStrictEqual(judged(oneSection([rubricBlock(paragraph)])), [
-        { detail: sectionChildren, path: sectionPath, rule: "child-count" },
-      ]);
+  describe("a section's parts (reading 26: an assessment section may hold no part)", () => {
+    it("align-54 empty section D1: accepts a section holding a rubric block alone", () => {
+      assert.deepStrictEqual(judged(oneSection([rubricBlock(paragraph)])), []);
     });
 
-    it("refuses a section document whose root section is empty", () => {
-      assert.deepStrictEqual(judged(sectionDocument("S", [])), [
-        { detail: sectionChildren, path: "qti-assessment-section", rule: "child-count" },
-      ]);
+    it("align-54 empty section D1: accepts a section document whose root section holds nothing", () => {
+      assert.deepStrictEqual(judged(sectionDocument("S", [])), []);
     });
 
-    it("accepts a section holding only an item ref, only a section, or only a section ref", () => {
+    it("accepts a section holding only an item ref, a section or a section ref", () => {
       assert.deepStrictEqual(judged(oneSection([itemRef("I1")])), []);
       assert.deepStrictEqual(judged(oneSection([section("S2", [itemRef("I1")])])), []);
       assert.deepStrictEqual(judged(oneSection([sectionRef("R1")])), []);
     });
+  });
 
-    it("does not count a section whose children an XInclude include may supply", () => {
+  describe("an XInclude include (E23: the verdict leaves a document holding one unchecked)", () => {
+    it("align-54 includes E23: gives no refusal for a section holding an include alone", () => {
+      assert.deepStrictEqual(judged(oneSection([include()])), []);
+    });
+
+    it("align-54 includes E23: judges nothing inside an include: a repeated item ref and an interaction in a rubric block in its fallback give no refusal", () => {
       assert.deepStrictEqual(
-        judged(oneSection([el("include", [attr("href", "more.xml")], [], xincludeNamespace)])),
+        judged(oneSection([itemRef("I1"), rubricBlock(choice), itemRef("I1")])).map(
+          (refused) => refused.rule,
+        ),
+        ["misplaced-element", "duplicate-identifier"],
+      );
+      assert.deepStrictEqual(
+        judged(oneSection([itemRef("I1"), include(rubricBlock(choice), itemRef("I1"))])),
         [],
       );
+    });
+
+    it("align-54 includes E23: judges nothing inside an include in outcome processing: an undeclared outcome its fallback sets gives no refusal", () => {
+      assert.isNotEmpty(judged(withOutcomeRules(setUndeclared)));
+      assert.deepStrictEqual(judged(withOutcomeRules(include(setUndeclared))), []);
     });
   });
 
@@ -676,18 +863,16 @@ describe("checkTestRules", () => {
     it("refuses template elements and a nested interaction in test feedback", () => {
       assert.deepStrictEqual(
         judged(
-          oneSection(
-            [itemRef("I1")],
-            [],
-            [
-              testFeedback(
-                el("p", [], [template("qti-template-inline", [])]),
-                template("qti-template-block", [
-                  el("qti-content-body", [], [el("div", [], [choice])]),
-                ]),
-              ),
-            ],
-          ),
+          assessmentTest([
+            feedbackOutcome,
+            part("P", [section("S", [itemRef("I1")])]),
+            testFeedback(
+              el("p", [], [template("qti-template-inline", [])]),
+              template("qti-template-block", [
+                el("qti-content-body", [], [el("div", [], [choice])]),
+              ]),
+            ),
+          ]),
         ),
         [
           {
@@ -726,6 +911,7 @@ describe("checkTestRules", () => {
         judged(
           assessmentTest([
             score,
+            feedbackOutcome,
             part("P", [
               testFeedback(
                 feedback("qti-feedback-block", [
@@ -874,6 +1060,7 @@ describe("checkTestRules", () => {
         judged(
           assessmentTest([
             score,
+            feedbackOutcome,
             part("P", [
               testFeedback(el("p", [], [printed("FEEDBACK_NOPE")])),
               section("S", [rubricBlock(el("p", [], [printed("SECTION_NOPE")])), itemRef("I1")]),
@@ -993,7 +1180,7 @@ describe("checkTestRules", () => {
     });
   });
 
-  describe("dotted references (readings 4, 5, 37 and 48)", () => {
+  describe('dotted references (readings 4, 5 and 37, and reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))', () => {
     it("accepts prefixed references in pre-conditions, branch rules and outcome processing", () => {
       assert.deepStrictEqual(
         judged(
@@ -1404,7 +1591,7 @@ describe("checkTestRules", () => {
     const named = ["field-identifier", "n"] as const;
     const integerBase = ["base-type", "integer"] as const;
 
-    it("[I-1] refuses a record field in a test declaration with no field-identifier, as missing-attribute at its @field-identifier (pantry's RecordFieldIdentifier)", () => {
+    it("[I-1] refuses a record field in a test declaration with no field-identifier, as missing-attribute at its @field-identifier (pantry's value-cardinality)", () => {
       assert.deepStrictEqual(judged(recordOutcome([field([integerBase], "1")])), [
         missingField("field-identifier"),
       ]);
@@ -1438,6 +1625,347 @@ describe("checkTestRules", () => {
 
     it("[I-1] accepts a record field in a test declaration with both attributes and an integer, trimmed (reading 7)", () => {
       assert.deepStrictEqual(judged(recordOutcome([field([named, integerBase], " 1 ")])), []);
+    });
+
+    it("align-54 built-ins by kind B7: refuses a test's record value writing a field twice, as duplicate-identifier field at the second, as an item's (reading 158)", () => {
+      assert.deepStrictEqual(
+        judged(recordOutcome([field([named, integerBase], "5"), field([named, integerBase], "6")])),
+        [
+          {
+            detail: { check: "field", field: "n", reading: "158" },
+            path: "qti-assessment-test/qti-outcome-declaration/qti-default-value/qti-value[2]",
+            rule: "duplicate-identifier",
+          },
+        ],
+      );
+    });
+
+    it("align-54 built-ins by kind E42a: refuses a test outcome's mastery-value below its written normal-minimum and one above its written normal-maximum, as attribute-type mastery-range, as an item's (reading 9)", () => {
+      assert.deepStrictEqual(
+        [
+          judged(mastered({ "mastery-value": "-1", "normal-minimum": "0" })),
+          judged(mastered({ "mastery-value": "11", "normal-maximum": "1E1" })),
+          judged(
+            mastered({ "mastery-value": "0.5", "normal-maximum": "1", "normal-minimum": "0" }),
+          ),
+        ],
+        [[outOfRange("-1", "least", "0")], [outOfRange("11", "greatest", "1E1")], []],
+      );
+    });
+  });
+
+  describe("a test's declarations, test feedback, selections and branch targets (readings 74, 77, 79 and 87)", () => {
+    /**
+     * The path of `oneSection`'s first item ref.
+     */
+    const firstRef = `${sectionPath}/qti-assessment-item-ref[1]`;
+
+    /**
+     * The path of `oneSection`'s second item ref.
+     */
+    const secondRef = `${sectionPath}/qti-assessment-item-ref[2]`;
+
+    it("align-54 test rules E1a: refuses the second of two test outcomes named SCORE (a74_test_dup_outcome)", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            declaration("qti-outcome-declaration", "SCORE", "single", "float"),
+            declaration("qti-outcome-declaration", "SCORE", "single", "float"),
+            part("P", [section("S", [itemRef("I1")])]),
+          ]),
+        ),
+        [
+          {
+            detail: { identifier: "SCORE", reading: "74" },
+            path: "qti-assessment-test/qti-outcome-declaration[2]/@identifier",
+            rule: "duplicate-identifier",
+          },
+        ],
+      );
+    });
+
+    it("align-54 test rules E1a: refuses an outcome sharing a context variable's identifier, since a test's declarations are one namespace (a74_test_ctx_outcome)", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            declaration("qti-context-declaration", "SCORE", "single", "float"),
+            declaration("qti-outcome-declaration", "SCORE", "single", "float"),
+            part("P", [section("S", [itemRef("I1")])]),
+          ]),
+        ),
+        [
+          {
+            detail: { identifier: "SCORE", reading: "74" },
+            path: "qti-assessment-test/qti-outcome-declaration/@identifier",
+            rule: "duplicate-identifier",
+          },
+        ],
+      );
+    });
+
+    it("align-54 test rules E3b: refuses test feedback naming a float outcome, where an identifier outcome is needed", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            score,
+            part("P", [section("S", [itemRef("I1")])]),
+            feedbackNaming("SCORE", paragraph),
+          ]),
+        ),
+        [
+          {
+            detail: {
+              baseType: "float",
+              cardinality: "single",
+              check: "feedback-outcome",
+              element: "qti-test-feedback",
+              identifier: "SCORE",
+              reading: "77",
+            },
+            path: "qti-assessment-test/qti-test-feedback/@outcome-identifier",
+            rule: "expression-type",
+          },
+        ],
+      );
+    });
+
+    it("align-54 test rules E3b: refuses test feedback naming no outcome the test declares: an undeclared name, a context variable and the built-in duration", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            declaration("qti-context-declaration", "CONTEXT", "single", "identifier"),
+            part("P", [section("S", [itemRef("I1")])]),
+            testFeedback(paragraph),
+            feedbackNaming("CONTEXT", paragraph),
+            feedbackNaming("duration", paragraph),
+          ]),
+        ),
+        (
+          [
+            ["1", "FEEDBACK"],
+            ["2", "CONTEXT"],
+            ["3", "duration"],
+          ] as const
+        ).map(([position, identifier]) => ({
+          detail: {
+            attribute: "outcome-identifier",
+            declarer: "test",
+            element: "qti-test-feedback",
+            expected: "outcome",
+            identifier,
+            reading: "77",
+          },
+          path: `qti-assessment-test/qti-test-feedback[${position}]/@outcome-identifier`,
+          rule: "undeclared-variable",
+        })),
+      );
+    });
+
+    it("align-54 test rules E3b: accepts test feedback naming a single or a multiple identifier outcome, in the test and in a part", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            feedbackOutcome,
+            declaration("qti-outcome-declaration", "SEEN", "multiple", "identifier"),
+            part("P", [feedbackNaming(" SEEN ", paragraph), section("S", [itemRef("I1")])]),
+            testFeedback(paragraph),
+          ]),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 test rules E3b: leaves an undeclared outcome unjudged where an include at the test's root may declare it (E23)", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([include(), part("P", [section("S", [itemRef("I1")])]), testFeedback()]),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 test rules E4: refuses a selection of 3 without replacement from a section of two parts (a79_select_over)", () => {
+      assert.deepStrictEqual(judged(oneSection([selection("3"), itemRef("I1"), itemRef("I2")])), [
+        {
+          detail: { check: "selection", parts: "2", reading: "79", select: "3" },
+          path: `${sectionPath}/qti-selection/@select`,
+          rule: "count-range",
+        },
+      ]);
+    });
+
+    it("align-54 test rules E4: accepts a selection of 3 from two parts with replacement, written 1 or true (a79_select_over_wr1)", () => {
+      for (const written of ["1", "true"]) {
+        assert.deepStrictEqual(
+          judged(oneSection([selection("3", written), itemRef("I1"), itemRef("I2")])),
+          [],
+          written,
+        );
+      }
+    });
+
+    it("align-54 test rules E4: counts a sub-section as one part, whatever it holds", () => {
+      const nested = section("S2", [itemRef("I2"), itemRef("I3")]);
+
+      assert.deepStrictEqual(judged(oneSection([selection("2"), itemRef("I1"), nested])), []);
+      assert.deepStrictEqual(
+        judged(oneSection([selection("3"), itemRef("I1"), nested])).map(({ detail }) => detail),
+        [{ check: "selection", parts: "2", reading: "79", select: "3" }],
+      );
+    });
+
+    it("align-54 test rules E4: leaves a selection uncounted where an include among its section's children may stand for parts (E23)", () => {
+      assert.deepStrictEqual(judged(oneSection([selection("3"), itemRef("I1"), include()])), []);
+    });
+
+    it("align-54 test rules E8a: refuses a branch rule targeting an earlier item ref as backward (a87_branch_backward)", () => {
+      assert.deepStrictEqual(judged(oneSection([itemRef("I1"), branching("I2", "I1")])), [
+        refusedTarget(secondRef, "backward", "I1"),
+      ]);
+    });
+
+    it("align-54 test rules E8a: refuses a branch rule targeting its own item ref as self (a87_branch_self)", () => {
+      assert.deepStrictEqual(judged(oneSection([branching("I1", "I1"), itemRef("I2")])), [
+        refusedTarget(firstRef, "self", "I1"),
+      ]);
+    });
+
+    it("align-54 test rules E8a: refuses a branch rule targeting another part's item ref, or a test part, as outside-part (a87_branch_part)", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            part("P1", [section("S1", [branching("I1", "I2")])]),
+            part("P2", [section("S2", [itemRef("I2")])]),
+          ]),
+        ),
+        [
+          refusedTarget(
+            "qti-assessment-test/qti-test-part[1]/qti-assessment-section/qti-assessment-item-ref",
+            "outside-part",
+            "I2",
+          ),
+        ],
+      );
+      assert.deepStrictEqual(judged(oneSection([branching("I1", "P"), itemRef("I2")])), [
+        refusedTarget(firstRef, "outside-part", "P"),
+      ]);
+    });
+
+    it("align-54 test rules E8a: refuses a branch rule targeting a name the test does not hold as unknown (a87_branch_nothing)", () => {
+      assert.deepStrictEqual(judged(oneSection([branching("I1", "NOPE"), itemRef("I2")])), [
+        refusedTarget(firstRef, "unknown", "NOPE"),
+      ]);
+    });
+
+    it("align-54 test rules E8a: refuses a branch rule targeting an item ref a selection with replacement can repeat as repeatable (a87_branch_replacement)", () => {
+      assert.deepStrictEqual(
+        judged(
+          oneSection([
+            branching("I1", "I2"),
+            section("S2", [selection("2", "true"), itemRef("I2")]),
+          ]),
+        ),
+        [refusedTarget(`${sectionPath}/qti-assessment-item-ref`, "repeatable", "I2")],
+      );
+    });
+
+    it("align-54 test rules E8a: accepts a later item ref, a later section, a later test part from a part, and the reserved exits (a87_branch_ok)", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            part("P1", [
+              jumpTo(" P2 "),
+              section("S1", [
+                branching("I1", "I2"),
+                branching("I2", "S2"),
+                section("S2", [branching("I3", "EXIT_SECTION")]),
+              ]),
+            ]),
+            part("P2", [jumpTo("EXIT_TEST"), section("S3", [branching("I4", "EXIT_TESTPART")])]),
+          ]),
+        ),
+        [],
+      );
+    });
+
+    it.effect(
+      "align-54 test rules E8a: accepts rtest13.xml's two branch rules, one to a later item ref and one to EXIT_SECTION",
+      () =>
+        Effect.gen(function* rtest13BranchRules() {
+          const member = "qtiv3-examples/tests/rtest13.xml";
+          const source = yield* readSource(member, yield* readCorpusFile(member));
+
+          assert.deepStrictEqual(checkTestRules(source, tables), []);
+        }),
+      { tags: ["corpus"] },
+    );
+
+    it("align-54 test rules E8a: accepts a backward target under a shuffling nearest common section, whose order is drawn at delivery", () => {
+      assert.deepStrictEqual(
+        judged(oneSection([shuffle(), itemRef("I1"), branching("I2", "I1")])),
+        [],
+      );
+    });
+
+    it("align-54 test rules E8a: accepts a backward target under an invisible section with keep-together false mixed into a shuffling section", () => {
+      assert.deepStrictEqual(
+        judged(oneSection([shuffle(), looseSection("L", [itemRef("I1"), branching("I2", "I1")])])),
+        [],
+      );
+    });
+
+    it("align-54 test rules E8a: refuses a backward target under an invisible section that keeps together, or whose section does not shuffle", () => {
+      const loosePath = `${sectionPath}/qti-assessment-section/qti-assessment-item-ref[2]`;
+
+      assert.deepStrictEqual(
+        judged(
+          oneSection([
+            shuffle(),
+            looseSection("L", [itemRef("I1"), branching("I2", "I1")], "true"),
+          ]),
+        ),
+        [refusedTarget(loosePath, "backward", "I1")],
+      );
+      assert.deepStrictEqual(
+        judged(oneSection([looseSection("L", [itemRef("I1"), branching("I2", "I1")])])),
+        [refusedTarget(loosePath, "backward", "I1")],
+      );
+    });
+
+    it("align-54 test rules E8a: accepts a backward target a fixed choice would hold in order under a shuffle, since fixed is not read", () => {
+      assert.deepStrictEqual(
+        judged(oneSection([shuffle(), fixedItemRef("I1"), fixedItemRef("I2", [jumpTo("I1")])])),
+        [],
+      );
+    });
+
+    it("align-54 test rules E8a: judges a section document's targets inside it, and leaves one outside it, or under a loose root, to the assembled test", () => {
+      assert.deepStrictEqual(judged(sectionDocument("S", [itemRef("I1"), branching("I2", "I1")])), [
+        refusedTarget("qti-assessment-section/qti-assessment-item-ref[2]", "backward", "I1"),
+      ]);
+      assert.deepStrictEqual(judged(sectionDocument("S", [branching("I1", "ELSEWHERE")])), []);
+      assert.deepStrictEqual(
+        judged(doc(location, looseSection("S", [itemRef("I1"), branching("I2", "I1")]))),
+        [],
+      );
+    });
+
+    it("align-54 test rules E8a: leaves a test's target that no name of it gives to the assembled test where a section ref may supply it, placed once or twice", () => {
+      assert.deepStrictEqual(judged(oneSection([branching("I1", "I9"), sectionRef("R1")])), []);
+      assert.deepStrictEqual(
+        judged(
+          oneSection([
+            branching("I1", "I9"),
+            sectionRef("R1"),
+            sectionRef("R2", "sections/R1.xml"),
+          ]),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 test rules E8a: leaves an unknown target unjudged where an include may supply it (E23)", () => {
+      assert.deepStrictEqual(judged(oneSection([branching("I1", "I9"), include()])), []);
     });
   });
 
@@ -1506,7 +2034,6 @@ describe("checkTestRules", () => {
         ).map(({ path, rule }) => [rule, path]),
         [
           ["expression-placement", `${partPath}/qti-pre-condition/qti-gte/qti-number-selected`],
-          ["child-count", `${partPath}/qti-assessment-section[1]`],
           [
             "misplaced-element",
             `${partPath}/qti-assessment-section[1]/qti-rubric-block/qti-content-body/qti-choice-interaction`,
@@ -1515,5 +2042,332 @@ describe("checkTestRules", () => {
         ],
       );
     });
+  });
+});
+
+/**
+ * Construct a paragraph whose `span` carries the given `data-ssml`.
+ *
+ * @param value The `span`'s `data-ssml`, as the XML reader gives it.
+ * @returns The `p`.
+ */
+const spokenParagraph = (value: string): SourceElement =>
+  el(
+    "p",
+    [],
+    [text("Our word is "), el("span", [attr("data-ssml", value)], [text("mRNA")]), text(".")],
+  );
+
+/**
+ * The documents whose `data-ssml` these rules judge, each with the paths of its `data-ssml`
+ * attributes: a test whose section's rubric block holds {@link spokenParagraph}'s paragraph, a test
+ * whose test feedback does, and a section document whose rubric block carries the value itself and
+ * holds the paragraph.
+ *
+ * @param value Every `data-ssml`'s value.
+ * @returns The documents.
+ */
+const spokenDocuments = (value: string) =>
+  [
+    {
+      paths: [`${sectionPath}/qti-rubric-block/qti-content-body/p/span/@data-ssml`],
+      source: oneSection([rubricBlock(spokenParagraph(value)), itemRef("I1")]),
+    },
+    {
+      paths: ["qti-assessment-test/qti-test-feedback/qti-content-body/p/span/@data-ssml"],
+      source: assessmentTest([
+        feedbackOutcome,
+        part("P", [section("S", [itemRef("I1")])]),
+        testFeedback(spokenParagraph(value)),
+      ]),
+    },
+    {
+      paths: [
+        "qti-assessment-section/qti-rubric-block/@data-ssml",
+        "qti-assessment-section/qti-rubric-block/qti-content-body/p/span/@data-ssml",
+      ],
+      source: sectionDocument("S", [
+        el(
+          "qti-rubric-block",
+          [attr("data-ssml", value), attr("view", "candidate")],
+          [el("qti-content-body", [], [spokenParagraph(value)])],
+        ),
+        itemRef("I1"),
+      ]),
+    },
+  ] as const;
+
+describe("checkTestRules, align-54 Data-SSML everywhere: a data-ssml value is Data-SSML JSON in a test and a section (the operator's P3)", () => {
+  it("align-54 Data-SSML everywhere P3: refuses data-ssml=\"hello\" in a test's rubric block, its test feedback and a section's rubric block, as attribute-type data-ssml with problem json at each attribute", () => {
+    assert.deepStrictEqual(
+      spokenDocuments("hello").map(({ source }) => judged(source)),
+      spokenDocuments("hello").map(({ paths }) =>
+        paths.map((path) => ({
+          detail: {
+            attribute: "data-ssml",
+            check: "data-ssml",
+            element: path.includes("/span/") ? "span" : "qti-rubric-block",
+            problem: "json",
+          },
+          path,
+          rule: "attribute-type",
+        })),
+      ),
+    );
+  });
+
+  it("align-54 Data-SSML everywhere P3: names an unknown property, a value of the wrong type and a value outside its list as the problem", () => {
+    assert.deepStrictEqual(
+      [
+        '{"speak":{"alias":"messenger RNA"}}',
+        '{"sub":{"alias":3}}',
+        '{"say-as":{"interpret-as":"spell-out"}}',
+      ].map((value) =>
+        spokenDocuments(value).flatMap(({ source }) =>
+          judged(source).map(({ detail }) => detail["problem"]),
+        ),
+      ),
+      [
+        ["name", "name", "name", "name"],
+        ["type", "type", "type", "type"],
+        ["value", "value", "value", "value"],
+      ],
+    );
+  });
+
+  it("align-54 Data-SSML everywhere P3: accepts a data-ssml that is Data-SSML JSON in each document", () => {
+    assert.deepStrictEqual(
+      spokenDocuments('{"sub":{"alias":"messenger RNA"}}').map(({ source }) => judged(source)),
+      [[], [], []],
+    );
+  });
+
+  it("align-54 Data-SSML everywhere P3: does not judge a data-ssml an attribute wildcard admits on a kind that does not declare it (rule 5b8ee08b)", () => {
+    assert.deepStrictEqual(
+      judged(
+        oneSection([
+          rubricBlock(el("ul", [], [el("li", [attr("data-ssml", "hello")], [text("mRNA")])])),
+          itemRef("I1"),
+        ]),
+      ),
+      [],
+    );
+  });
+});
+
+/**
+ * The places a test's and a section's rubric prose rule cases put their content, each with the
+ * path of the content body that holds it: a test's own rubric block, the rubric block of a section
+ * the test holds, a section document's rubric block, and a test feedback.
+ */
+const rubricPlaces = [
+  {
+    path: "qti-assessment-test/qti-rubric-block/qti-content-body",
+    place: "a test's rubric block",
+    source: (content: SourceElement) =>
+      assessmentTest([rubricBlock(content), part("P", [section("S", [itemRef("I1")])])]),
+  },
+  {
+    path: `${sectionPath}/qti-rubric-block/qti-content-body`,
+    place: "a section's rubric block in a test",
+    source: (content: SourceElement) => oneSection([rubricBlock(content), itemRef("I1")]),
+  },
+  {
+    path: "qti-assessment-section/qti-rubric-block/qti-content-body",
+    place: "a section document's rubric block",
+    source: (content: SourceElement) => sectionDocument("S", [rubricBlock(content), itemRef("I1")]),
+  },
+  {
+    path: "qti-assessment-test/qti-test-feedback/qti-content-body",
+    place: "a test feedback",
+    source: (content: SourceElement) =>
+      assessmentTest([
+        feedbackOutcome,
+        part("P", [section("S", [itemRef("I1")])]),
+        testFeedback(content),
+      ]),
+  },
+] as const;
+
+/**
+ * The content the rubric prose rule cases put in each of {@link rubricPlaces}, each with the one
+ * refusal it earns there, its path under the content body: a `td` whose `headers` names no header
+ * of its table (reading 126, E29) and a `q` a quotation mark stands against (reading 127, E30).
+ */
+const rubricProse = [
+  {
+    content: el("table", [], [el("tr", [], [el("td", [attr("headers", "zz")], [text("x")])])]),
+    name: "E29",
+    refusal: {
+      detail: {
+        attribute: "headers",
+        check: "headers",
+        element: "td",
+        reading: "126",
+        token: "zz",
+        value: "zz",
+      },
+      path: "table/tr/td/@headers",
+      rule: "attribute-type",
+    },
+  },
+  {
+    content: el("p", [], [text("“"), el("q", [], [text("hi")]), text("”")]),
+    name: "E30",
+    refusal: {
+      detail: { check: "quotation", element: "q", mark: "“", reading: "127", side: "before" },
+      path: "p/q",
+      rule: "text-not-allowed",
+    },
+  },
+] as const;
+
+describe("checkTestRules, align-54 r11 rubric prose rules: a test's and a section's rubric blocks and test feedback judge table headers and quotations as an item's body does (readings 126 and 127)", () => {
+  it.each(
+    rubricPlaces.flatMap(({ path, place, source }) =>
+      rubricProse.map(({ content, name, refusal }) => ({
+        expected: { ...refusal, path: `${path}/${refusal.path}` },
+        name,
+        place,
+        source: source(content),
+      })),
+    ),
+  )(
+    "align-54 r11 rubric prose rules $name: refuses the fault in $place, with the refusal an item's body earns",
+    ({ expected, source }) => {
+      assert.deepStrictEqual(judged(source), [expected]);
+    },
+  );
+
+  it("align-54 r11 rubric prose rules E29: accepts a cell naming a header of its own table and a q clear of quotation marks in each place (control)", () => {
+    const content = el(
+      "div",
+      [],
+      [
+        el(
+          "table",
+          [],
+          [
+            el("tr", [], [el("th", [attr("id", "h")], [text("Head")])]),
+            el("tr", [], [el("td", [attr("headers", "h")], [text("x")])]),
+          ],
+        ),
+        el("p", [], [text("She said "), el("q", [], [text("hi")]), text(".")]),
+      ],
+    );
+
+    assert.deepStrictEqual(
+      rubricPlaces.map(({ source }) => judged(source(content))),
+      rubricPlaces.map(() => []),
+    );
+  });
+
+  it("align-54 r11 rubric prose rules E30: a rubric block's choice interaction with two choices both A stays misplaced-element alone (reading 25; control)", () => {
+    assert.deepStrictEqual(
+      judged(
+        oneSection([
+          rubricBlock(
+            el(
+              "qti-choice-interaction",
+              [attr("response-identifier", "RESPONSE")],
+              [
+                el("qti-simple-choice", [attr("identifier", "A")], [text("Yes")]),
+                el("qti-simple-choice", [attr("identifier", "A")], [text("No")]),
+              ],
+            ),
+          ),
+          itemRef("I1"),
+        ]),
+      ),
+      [
+        {
+          detail: {
+            element: "qti-choice-interaction",
+            reading: "25",
+            requires: "outside a test's qti-rubric-block",
+          },
+          path: `${sectionPath}/qti-rubric-block/qti-content-body/qti-choice-interaction`,
+          rule: "misplaced-element",
+        },
+      ],
+    );
+  });
+});
+
+/**
+ * The forms of a structure identifier that are no `xs:NCName`, each with the name a case's title
+ * gives it: one that starts with a digit, one with an inner space, the empty string, whitespace
+ * alone, which collapses to the empty string, and one that starts with a character only XML 1.0's
+ * fifth edition admits (reading 94 reads the second edition's).
+ */
+const namelessForms = [
+  { form: "1a", name: "1a" },
+  { form: "a b", name: "a b" },
+  { form: "", name: "the empty string" },
+  { form: "   ", name: "whitespace alone" },
+  { form: "٠a", name: "U+0660 a" },
+] as const;
+
+describe("checkTestRules, align-54 r11 reading 152 names nothing: a structure identifier or a declaration's identifier that is no NCName names nothing, so no law but its value domain judges it (reading 152 as amended)", () => {
+  it.each(namelessForms)(
+    "align-54 r11 reading 152 names nothing decision 457 (2): two parts, a section and an item ref of one name, two section refs and two item refs that each write $name are not refused duplicate-identifier",
+    ({ form }) => {
+      assert.deepStrictEqual(
+        [
+          judged(
+            assessmentTest([
+              part(form, [section("S1", [itemRef("I1")])]),
+              part(form, [section("S2", [itemRef("I2")])]),
+            ]),
+          ),
+          judged(assessmentTest([part("P", [section(form, [itemRef(form, [], "items/a.xml")])])])),
+          judged(
+            oneSection([
+              sectionRef(form, "sections/a.xml"),
+              sectionRef(form, "sections/b.xml"),
+              itemRef("I1"),
+            ]),
+          ),
+          judged(oneSection([itemRef(form, [], "items/a.xml"), itemRef(form, [], "items/b.xml")])),
+        ],
+        [[], [], [], []],
+      );
+    },
+  );
+
+  it.each(namelessForms)(
+    "align-54 r11 reading 152 names nothing decision 457 (2): two test outcomes that each write $name are not refused duplicate-identifier (readings 74 and 157)",
+    ({ form }) => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            declaration("qti-outcome-declaration", form, "single", "float"),
+            declaration("qti-outcome-declaration", form, "single", "float"),
+            part("P", [section("S", [itemRef("I1")])]),
+          ]),
+        ),
+        [],
+      );
+    },
+  );
+
+  it("align-54 r11 reading 152 names nothing decision 457 (2): a branch rule whose target 1a an earlier part writes is unknown, not backward, since no target resolves to a name that is no NCName, and a rule of a part 1a is left to the assembled test (reading 147)", () => {
+    assert.deepStrictEqual(
+      [
+        judged(
+          assessmentTest([
+            part("1a", [section("S1", [itemRef("I1")])]),
+            part("P", [jumpTo("1a"), section("S2", [itemRef("I2")])]),
+          ]),
+        ),
+        judged(
+          assessmentTest([
+            part("1a", [jumpTo("Q"), section("S1", [itemRef("I1")])]),
+            part("Q", [section("S2", [itemRef("I2")])]),
+          ]),
+        ),
+      ],
+      [[refusedTarget("qti-assessment-test/qti-test-part[2]", "unknown", "1a")], []],
+    );
   });
 });

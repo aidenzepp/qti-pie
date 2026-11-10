@@ -13,7 +13,7 @@
  * @module
  */
 import { Array as Arr, Effect, Option, pipe } from "effect";
-import { attributePath, walk, xincludeNamespace } from "#plate/document/source.ts";
+import { attributePath, walk } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import {
   attributeOf,
@@ -122,7 +122,7 @@ export interface ItemRef {
 
 /**
  * A `qti-assessment-section`. `children` holds its sections and item references in document order;
- * a `qti-assessment-section-ref` and an `xi:include` are marked and not among them.
+ * a `qti-assessment-section-ref` is marked and not among them.
  */
 export interface Section {
   readonly children: readonly SectionChild[];
@@ -179,7 +179,8 @@ export type OutcomeProcessing =
  * states. `unsupported` lists every feature not delivered, in document order, each once per feature
  * and path: the keys of `testMarks`, the marks the item model gives an outcome declaration it does
  * not hold, and the marks of outcome processing the engine cannot run. A package's test may follow
- * them with the marks only its items show ({@link withUnheldReads}).
+ * them with the marks only its items show ({@link withUnheldReads}) and those of its item refs that
+ * name an LTI link ({@link withLtiLinks}).
  */
 export interface Test {
   /**
@@ -197,6 +198,15 @@ export interface Test {
   readonly outcomeProcessing: OutcomeProcessing;
   readonly outcomes: ReadonlyMap<string, OutcomeDeclaration>;
   readonly parts: readonly TestPart[];
+  /**
+   * The identifiers of the test's own item refs that a selection with replacement can repeat: those
+   * under a `qti-assessment-section` whose `qti-selection` has `with-replacement` true, anywhere
+   * above them in the test document. Only through one of them does a numbered reading such as
+   * `a.2.SCORE` count (reading 88, "a numbered reference such as `Q01.2.SCORE` names an instance of
+   * an item ref that a selection with replacement can repeat, and nothing else"). `buildTest`
+   * always gives it; a test built by hand may leave it out, and then no item ref is repeatable.
+   */
+  readonly repeatable?: ReadonlySet<string>;
   readonly title: string;
   readonly unsupported: readonly MarkedFeature[];
 }
@@ -221,11 +231,6 @@ export const absentControl: ControlAttributes = {
 const elementMarks: ReadonlySet<string> = new Set(
   testMarks.filter((mark) => mark.startsWith("qti-")),
 );
-
-/**
- * The mark of an XInclude `include`, which is never fetched.
- */
-const includeMark: TestMark = "xi:include";
 
 /**
  * The mark of a `qti-item-session-control` whose `allow-comment` is true.
@@ -405,8 +410,10 @@ const controlOf = (
   });
 
 /**
- * Read a `qti-weight`: its `identifier`, and its `value` as an `xs:double`, outer whitespace gone
- * (readings 7 and 56), as `doubleAttribute` in `#plate/model/attributes.ts` reads one.
+ * Read a `qti-weight`: its `identifier`, and its `value` as an `xs:double`, outer whitespace gone,
+ * by reading 7 and reading 56 ("an `xs:double` literal beyond the largest finite double names the
+ * largest finite double of its sign"), as `doubleAttribute` in `#plate/model/attributes.ts` reads
+ * one.
  *
  * @param build The build.
  * @param element The weight.
@@ -621,21 +628,13 @@ const holdsOn = (condition: Condition, declaration: SourceElement): boolean => {
 };
 
 /**
- * Name the element feature an element is, if it is one: a `qti-*` element `testMarks` names, or an
- * XInclude `include`.
+ * Name the element feature an element is, if it is one: a `qti-*` element `testMarks` names.
  *
  * @param element The element.
  * @returns The feature's key, or none when the element is not one.
  */
-const elementMark = (element: SourceElement): Option.Option<string> => {
-  if (element.namespace === xincludeNamespace) {
-    return element.local === "include" ? Option.some(includeMark) : Option.none();
-  }
-
-  return isQti(element) && elementMarks.has(element.local)
-    ? Option.some(element.local)
-    : Option.none();
-};
+const elementMark = (element: SourceElement): Option.Option<string> =>
+  isQti(element) && elementMarks.has(element.local) ? Option.some(element.local) : Option.none();
 
 /**
  * Give the marks a `qti-item-session-control` carries, in the order its attributes are written:
@@ -667,14 +666,14 @@ const controlMarks = (control: SourceElement, path: string): readonly MarkedFeat
 /**
  * Give every feature a test holds and M2 does not deliver, in document order.
  *
- * An element `testMarks` names, an XInclude `include` among them, is marked at its path, and its
- * own subtree is not searched, so a rubric block's stylesheet is not marked apart from the block. A
- * `qti-item-session-control` gives its own marks. A test-level outcome declaration is marked as the
+ * An element `testMarks` names is marked at its path, and its own subtree is not searched, so a
+ * rubric block's stylesheet is not marked apart from the block. A `qti-item-session-control` gives
+ * its own marks. A test-level outcome declaration is marked as the
  * item model marks an item's: the `renders` marks that sit on it, at its path, and each `qti-*`
  * element below it that the model does not read, keyed by its name, its subtree not searched. An
  * element a reader has marked already, the outcome processing and each template default, gives its
  * own mark when it is an element feature, then the reader's marks, where it stands, its subtree not
- * searched, so an `xi:include` in it is marked once.
+ * searched, so an element the reader marked in it is not marked again.
  *
  * @param source The test.
  * @param placed The marks a reader gave, keyed by the element they stand at.
@@ -736,10 +735,17 @@ const marksOf = (
 };
 
 /**
- * The built-in variables a test's processing may name, as the qti package gives them for a test
- * (`builtInsOf("test")` in `packages/pantry/src/processing/env.ts`), whatever the engine holds of
- * them. Of these the engine holds only the test's own `duration` (G-R3, pending: a test's
- * processing reads only the test's declared outcomes and its own `duration`).
+ * The built-in variables a test's processing may name, as plate reads them: `completionStatus`,
+ * `duration`, `numAttempts` and `QTI_CONTEXT`, whatever the engine holds of them. The qti package
+ * now gives a test only `duration` and `QTI_CONTEXT` (`builtIns` in
+ * `packages/pantry/src/grammar/references.ts`, typed by `builtInTypes` in
+ * `packages/pantry/src/grammar/expression.ts`); plate keeps a test's own `numAttempts` and
+ * `completionStatus` where the test declares neither, accepted and marked, as ruled (B4), an
+ * agreement difference (G-R3 184, pending). A test may declare either (reading 168, "A test may
+ * declare a variable named `numAttempts` or `completionStatus`; in a test only `duration` is
+ * reserved"), and its processing then reads the declared variable, not this built-in. Of these the
+ * engine holds only the test's own `duration` (G-R3, pending: a test's processing reads only the
+ * test's declared outcomes and its own `duration`).
  */
 const processingBuiltIns: readonly string[] = [
   "completionStatus",
@@ -767,9 +773,15 @@ interface ProcessingNames {
    */
   readonly outcomes: ReadonlyMap<string, OutcomeDeclaration>;
   /**
+   * The identifiers of the test's own item references that a selection with replacement can
+   * repeat (`Test.repeatable`), through which alone a numbered reading counts
+   * ({@link isPrefixedHeld}).
+   */
+  readonly repeatable: ReadonlySet<string>;
+  /**
    * Whether the test holds a `qti-assessment-section-ref` under one of its parts or sections. A
    * section document it references holds parts of the test the engine does not deliver, so a dotted
-   * name that resolves only through it is not held ({@link isPrefixedHeld}), and an outcome-only
+   * name that may resolve through it is not held ({@link isPrefixedHeld}), and an outcome-only
    * expression, which would count only the test document's own items, marks the outcome processing
    * ({@link outcomeOnlyMarks}).
    */
@@ -787,48 +799,76 @@ interface ProcessingNames {
 interface Structure {
   readonly identifiers: ReadonlySet<string>;
   readonly referencesSection: boolean;
+  readonly repeatable: ReadonlySet<string>;
 }
+
+/**
+ * Report whether a section's `qti-selection` has `with-replacement` true, as `xs:boolean` reads it,
+ * which lets each item reference beneath the section, at any depth, be instantiated more than once
+ * (reading 88), as the package judges it (`replacesItems` in `#plate/package/open.ts`).
+ *
+ * @param element The section.
+ * @returns Whether it does.
+ */
+const replacesItems = (element: SourceElement): boolean =>
+  childrenNamed(element, "qti-selection").some((selection) =>
+    Option.exists(Option.flatMap(valueOf(selection, "with-replacement"), xsBooleanOf), Boolean),
+  );
+
+/**
+ * Add the identifier an element writes to a set, when it writes one.
+ *
+ * @param element The element.
+ * @param into The set.
+ */
+const addIdentifier = (element: SourceElement, into: Set<string>): void => {
+  for (const identifier of Option.toArray(
+    Option.map(valueOf(element, "identifier"), identifierOf),
+  )) {
+    into.add(identifier);
+  }
+};
 
 /**
  * Give the identifiers of a test's parts, sections and item references, nested sections included,
  * read from the elements the tree holds as {@link testPart} and {@link section} walk them, so the
- * names are known before the item references, whose template defaults read them, are built; and
- * whether the walk meets a `qti-assessment-section-ref`, which the tree leaves out.
+ * names are known before the item references, whose template defaults read them, are built;
+ * whether the walk meets a `qti-assessment-section-ref`, which the tree leaves out; and the item
+ * references a selection with replacement can repeat, those under a section whose `qti-selection`
+ * has `with-replacement` true ({@link replacesItems}), anywhere above them.
  *
  * @param root The test's root.
- * @returns Their identifiers, and whether the test references a section document.
+ * @returns Their identifiers, whether the test references a section document, and its repeatable
+ *   item references.
  */
 const structureOf = (root: SourceElement): Structure => {
   const identifiers = new Set<string>();
+  const repeatable = new Set<string>();
   let referencesSection = false;
-  const add = (element: SourceElement): void => {
-    for (const identifier of Option.toArray(
-      Option.map(valueOf(element, "identifier"), identifierOf),
-    )) {
-      identifiers.add(identifier);
-    }
-  };
-  const addChildren = (element: SourceElement): void => {
+  const addChildren = (element: SourceElement, replacing: boolean): void => {
     for (const child of elementsOf(element)) {
       if (isQti(child, "qti-assessment-section-ref")) {
         referencesSection = true;
       } else if (isQti(child, "qti-assessment-section")) {
-        add(child);
-        addChildren(child);
+        addIdentifier(child, identifiers);
+        addChildren(child, replacing || replacesItems(child));
       } else if (
         isQti(child, "qti-assessment-item-ref") &&
         isQti(element, "qti-assessment-section")
       ) {
-        add(child);
+        addIdentifier(child, identifiers);
+        if (replacing) {
+          addIdentifier(child, repeatable);
+        }
       }
     }
   };
   for (const part of childrenNamed(root, "qti-test-part")) {
-    add(part);
-    addChildren(part);
+    addIdentifier(part, identifiers);
+    addChildren(part, false);
   }
 
-  return { identifiers, referencesSection };
+  return { identifiers, referencesSection, repeatable };
 };
 
 /**
@@ -851,13 +891,14 @@ const processingNamesOf = (
     ),
   );
 
-  const { identifiers, referencesSection } = structureOf(root);
+  const { identifiers, referencesSection, repeatable } = structureOf(root);
 
   return {
     declared,
     named: new Set([...declared, ...processingBuiltIns]),
     outcomes,
     referencesSection,
+    repeatable,
     structure: identifiers,
   };
 };
@@ -877,17 +918,63 @@ const readsStructureDuration = (names: ProcessingNames, prefix: string, rest: st
   names.structure.has(prefix) && occurrenceOf(rest).variable === "duration";
 
 /**
+ * Report whether a reading of a dotted name, split at one of its dots, counts as a read of the
+ * test's own structure: its prefix is an identifier of that structure, and the variable its rest
+ * names holds no dot. Through an item reference a selection with replacement can repeat, a rest in
+ * the numbered form `N.VAR` ({@link occurrenceOf}) names `VAR`; through any other prefix the rest
+ * is the variable whole, so a numbered rest holds a dot and does not count. A numbered reading
+ * counts only through such an item reference (reading 88, "a numbered reference such as
+ * `Q01.2.SCORE` names an instance of an item ref that a selection with replacement can repeat, and
+ * nothing else"), as the package counts it (`isCounted` in `#plate/package/open.ts`) and the test
+ * scope resolves it (`prefixedVariable` in `#plate/engine/scope.ts`).
+ *
+ * A variable whose name holds a dot does not count, though reading 37 lets an identifier hold one.
+ * The test model reads no item, so it cannot tell `a.b.SCORE` read through the test's own `a`,
+ * whose item declares `b.SCORE`, from the same name whose one resolving reading is a section
+ * document's item ref `a.b`, which the engine does not deliver. A reading whose rest holds no dot
+ * is the name's longest split, and its prefix, given once across the test's reach, is no section
+ * document's. A numbered reading through a repeatable item reference has a longer split, as `a.2`
+ * is of `a.2.SCORE`; where a section document gives that prefix and both items declare the
+ * variable, both readings count, and the package refuses the name `ambiguous-reference`.
+ *
+ * @param names What the processing resolves a name against.
+ * @param prefix The part before the dot.
+ * @param rest The part after it.
+ * @returns Whether it counts as a read of the test's own structure.
+ */
+const readsOwnStructure = (names: ProcessingNames, prefix: string, rest: string): boolean =>
+  names.structure.has(prefix) &&
+  !(names.repeatable.has(prefix) ? occurrenceOf(rest).variable : rest).includes(".");
+
+/**
  * Report whether the engine holds what a dotted name the test does not declare whole reads, judged
  * on each of its readings, one for each dot it may split at, from the first.
  *
- * It is not held when a reading reads a `duration` of the test's structure
- * ({@link readsStructureDuration}; G-R3, pending: the engine holds no part's, section's or item
- * reference's `duration`, the occurrence form included). In a test that references a section
- * document, it is not held when no reading's prefix is an identifier of the test's own structure:
- * it can resolve only through the section document, whose items the engine does not deliver. A
- * read whose prefix names the test's own structure stays held there; an outcome-only expression in
- * such a test is marked on its own ({@link outcomeOnlyMarks}). Otherwise it is held, the test
- * scope's to resolve.
+ * It is not held when a reading reads a `duration` of the test's structure ({@link
+ * readsStructureDuration}; G-R3, pending: the engine holds no part's, section's or item reference's
+ * `duration`, the occurrence form included). In a test that references a section document, it is
+ * not held when no reading counts as a read of the test's own structure ({@link
+ * readsOwnStructure}): it may resolve only through the section document, whose items the engine
+ * does not deliver. A reading through the test's own prefix whose variable holds a dot does not
+ * count. One is a numbered rest after an own item reference no selection with replacement can
+ * repeat: its numbered reading names nothing, and read whole it names a variable whose identifier
+ * starts with a digit, which nothing declares. Another is a rest that is itself dotted, which the
+ * test model cannot tell from a section document's longer prefix. So `a.2.SCORE`, with an own `a`
+ * that is not repeatable, reads only a section document's `a.2` and is not held, as `b.SCORE`
+ * through one is not; nor is `a.b.SCORE` with an own `a` and no own `a.b`, `a.SCORE.SCORE` with an
+ * own `a` and no own `a.SCORE`, or `S.x.SCORE` with an own section or part `S` and no own `S.x`.
+ * With an own `a.2` or `a.b`, each stays held. A read that counts as one of the test's own
+ * structure stays held there; an outcome-only expression in such a test is marked on its own
+ * ({@link outcomeOnlyMarks}). Otherwise it is held, the test scope's to resolve.
+ *
+ * The test model reads no item, so it holds a name whose own reading counts whether or not that
+ * item declares the variable. Where it does not, and a section document's item reference resolves
+ * the name, as a section document's `a.2` resolves `a.2.SCORE` beside an own repeatable `a` whose
+ * item declares no `SCORE`, or a section document's `x` resolves `x.y.SCORE` beside an own `x.y`
+ * whose item declares no `SCORE`, the package counts that reading alone and accepts the name. The
+ * package reads the items, so it marks the processing that reads such a name (`judgeTest` in
+ * `#plate/package/open.ts`, through {@link withUnheldReads}), and no session runs it. A test built
+ * apart from its items holds it, and there the engine finds no reading of it.
  *
  * @param names What the processing resolves a name against.
  * @param name The dotted name.
@@ -897,11 +984,12 @@ const isPrefixedHeld = (names: ProcessingNames, name: string): boolean => {
   let ownPrefix = false;
   for (let dot = name.indexOf("."); dot !== -1; dot = name.indexOf(".", dot + 1)) {
     const prefix = name.slice(0, dot);
-    if (readsStructureDuration(names, prefix, name.slice(dot + 1))) {
+    const rest = name.slice(dot + 1);
+    if (readsStructureDuration(names, prefix, rest)) {
       return false;
     }
 
-    ownPrefix ||= names.structure.has(prefix);
+    ownPrefix ||= readsOwnStructure(names, prefix, rest);
   }
 
   return ownPrefix || !names.referencesSection;
@@ -913,9 +1001,10 @@ const isPrefixedHeld = (names: ProcessingNames, name: string): boolean => {
  * outcome the model does not hold are not. A dotted name the test does not declare whole is a
  * prefixed read, which the test scope resolves, held as {@link isPrefixedHeld} judges it: not when
  * it reads a part's, a section's or an item reference's `duration`, directly or in the occurrence
- * form, nor, in a test that references a section document, when it names none of the test's own
- * structure. Any other name is held only when it is the test's own `duration`: `numAttempts`,
- * `completionStatus` and `QTI_CONTEXT` are not.
+ * form, nor, in a test that references a section document, when no reading of it counts as a read
+ * of the test's own structure, one whose variable holds no dot, a numbered one counting only
+ * through a repeatable item reference. Any other name is held only when it is the test's own
+ * `duration`: `numAttempts`, `completionStatus` and `QTI_CONTEXT` are not.
  *
  * @param names What the processing resolves a name against.
  * @param name The name.
@@ -1088,6 +1177,8 @@ const outcomeOnlyKinds: ReadonlySet<string> = new Set(
  * ruling: mark, do not narrow. The engine delivers no section document's item, so such an
  * expression would count the test document's own items alone, and its result would be a wrong
  * score reported without saying so. Every one is marked, whatever its `section-identifier` names.
+ * A package's test whose item refs name an LTI link takes them too ({@link withLtiLinks}), since
+ * the delivered test leaves those item refs out.
  *
  * @param build The build.
  * @param element The `qti-outcome-processing` element.
@@ -1287,8 +1378,7 @@ const outcomeSetting = (
  * Read one outcome rule element into the rules it runs: a `qti-outcome-condition`, a
  * `qti-set-outcome-value`, a `qti-lookup-outcome-value` and a `qti-exit-test` are one rule each,
  * and a `qti-outcome-processing-fragment` is its own rules, read in place, nested fragments
- * included. An XInclude `include` is never fetched (S-6): it is marked `xi:include` at its path.
- * Any other element is marked by its name.
+ * included. Any other element is marked by its name.
  *
  * @param reading The processing's reading context.
  * @param element The rule element.
@@ -1298,10 +1388,6 @@ const outcomeRule = (
   reading: ExpressionReading,
   element: SourceElement,
 ): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> => {
-  if (element.namespace === xincludeNamespace && element.local === "include") {
-    return reading.unread(element, includeMark);
-  }
-
   if (isQti(element, "qti-outcome-processing-fragment")) {
     return outcomeRules(reading, elementsOf(element));
   }
@@ -1365,7 +1451,7 @@ interface ReadProcessing {
  *
  * Its rules are read into the item model's {@link Rule} union, each expression through the
  * registry's generic reader. It is `marked`, and nothing is refused, when the engine cannot run it:
- * an element the reader marks at its path (an `xi:include`, a rule of a malformed shape), a name
+ * an element the reader marks at its path (a rule of a malformed shape), a name
  * the engine does not hold in a test ({@link unheldNames}, and a `qti-test-variables` that names
  * `duration`, {@link collectsDurations}), each the mark `variable:<name>` at the processing
  * element's path, as the item model marks an item's, or, in a test that references a section
@@ -1429,8 +1515,8 @@ interface ReadDefault {
  * processing resolves (G-R3, pending: of those, the engine holds in a template default only the
  * test's declared outcomes, the test's own `duration`, which reads NULL there, and an item's
  * variables read by a prefixed name, as in outcome processing). It is left out, and nothing is
- * refused, when the engine cannot apply it: an element the reader marks at its path (an
- * `xi:include`, a default that does not hold exactly one expression), or a name the engine does not
+ * refused, when the engine cannot apply it: an element the reader marks at its path (a default
+ * that does not hold exactly one expression), or a name the engine does not
  * hold in a test ({@link addUnheldReads}, and a `qti-test-variables` that names `duration`,
  * {@link collectsDurations}), each the mark `variable:<name>` at the default's path.
  *
@@ -1480,7 +1566,7 @@ const templateDefaultOf = (
  * Build the test model of a valid `qti-assessment-test`.
  *
  * The parts, their sections and item references are read in document order; a
- * `qti-assessment-section-ref` and an `xi:include` are marked and left out, and every other
+ * `qti-assessment-section-ref` is marked and left out, and every other
  * `testMarks` feature is marked and left out of the tree or, as `allow-comment` and a negative
  * `max-attempts`, held as written. Each `qti-item-session-control` attribute is held as written or
  * absent, and each item reference's weights, variable mappings and template defaults are read, a
@@ -1491,7 +1577,11 @@ const templateDefaultOf = (
  * references a section document (the engine delivers no section document's item, so the
  * expression would count the test document's own items alone), and `runs` with its rules
  * otherwise; nothing in it or in a template default is refused but an attribute outside its type.
- * `declared` holds every identifier the test's outcome and context declarations declare.
+ * `declared` holds every identifier the test's outcome and context declarations declare, and
+ * `repeatable` the item references a selection with replacement can repeat.
+ *
+ * A test holding an XInclude `include` is never built: `check` leaves it unchecked (E23) before it
+ * reaches here, so no include is read or marked.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The test, or the refusal `value-type` at the first typed value outside its lexical
@@ -1541,6 +1631,7 @@ export const buildTest = (source: SourceDocument): Effect.Effect<Test, Refusal> 
       outcomeProcessing: read.outcomeProcessing,
       outcomes,
       parts,
+      repeatable: names.repeatable,
       title,
       unsupported: marksOf(source, placed),
     };
@@ -1549,8 +1640,11 @@ export const buildTest = (source: SourceDocument): Effect.Effect<Test, Refusal> 
 /**
  * A read by a test's processing of a variable the engine holds no value of, which the test model
  * cannot see from the test document alone: an item's context variable read through its item ref
- * (`ITEMREF.VAR` naming the item's `qti-context-declaration`), which the item marks. A package,
- * which reads the test's items, finds each one.
+ * (`ITEMREF.VAR` naming the item's `qti-context-declaration`), which the item marks; any variable
+ * read through an item ref that names an LTI link; or a name whose one counting reading reads
+ * through an item ref, part or section a section document writes, though a reading through the
+ * test's own structure counts in the test document alone ({@link isPrefixedHeld}). A package,
+ * which reads the test's items and the section documents it reaches, finds each one.
  *
  * It lies in the test's outcome processing, or in a template default of one of the test's own item
  * refs, named by the item ref's identifier. `name` is the name read, as written, and `path` the
@@ -1566,15 +1660,29 @@ export type UnheldRead =
     };
 
 /**
- * Report whether an expression or one of its operands reads a variable, its value or its default
- * (`qti-variable` or `qti-default`), by one of some names.
+ * The kinds of expression that read a variable by an `identifier` a test may prefix with an item
+ * ref: its value, its default, a response's correct response, and a response mapped through its
+ * mapping or its area mapping.
+ */
+const prefixedReads: ReadonlySet<Expression["kind"]> = new Set([
+  "correct",
+  "default",
+  "map-response",
+  "map-response-point",
+  "variable",
+]);
+
+/**
+ * Report whether an expression or one of its operands reads a variable by one of some names, by
+ * any of the expressions whose `identifier` a test may prefix ({@link prefixedReads}).
  *
  * @param expression The expression.
  * @param names The names.
  * @returns Whether it reads one of them.
  */
 const readsAny = (expression: Expression, names: ReadonlySet<string>): boolean =>
-  ((expression.kind === "variable" || expression.kind === "default") &&
+  ("identifier" in expression &&
+    prefixedReads.has(expression.kind) &&
     names.has(expression.identifier)) ||
   expression.operands.some((operand) => readsAny(operand, names));
 
@@ -1583,8 +1691,9 @@ const readsAny = (expression: Expression, names: ReadonlySet<string>): boolean =
  * marks the test model would give, had it seen what the package sees.
  *
  * When the outcome processing reads one, it is `marked`, as {@link outcomeProcessingOf} marks an
- * unheld read. Each template default of an item ref whose expression reads one, by a `qti-variable`
- * or a `qti-default`, is left out of the item ref's `templateDefaults`, as
+ * unheld read. Each template default of an item ref whose expression reads one, by a
+ * `qti-variable`, a `qti-default`, a `qti-correct`, a `qti-map-response` or a
+ * `qti-map-response-point` ({@link readsAny}), is left out of the item ref's `templateDefaults`, as
  * {@link templateDefaultOf} leaves out one the engine cannot apply, so its template variable starts
  * at its item's declared default. Each read is the mark `variable:<name>` at its path, and the
  * marks follow the test's own in `unsupported`, each once per feature and path. A test with no
@@ -1662,6 +1771,104 @@ export const withUnheldReads = (test: Test, reads: readonly UnheldRead[]): Test 
         ? { kind: "marked" }
         : test.outcomeProcessing,
     parts: test.parts.map((part) => ({ ...part, children: part.children.map(sectionWith) })),
+    unsupported: [...test.unsupported, ...added],
+  };
+};
+
+/**
+ * An item ref of a test document that names an LTI link in place of an item (reading 110, "under
+ * an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded limit,
+ * and a template default is refused"), which the test model cannot see from the test document
+ * alone: its identifier, and its path in the test document. A package, which reads the resource an
+ * item ref names, finds each one (`#plate/package/open.ts`). It leaves a variable mapping's source
+ * under the ref unchecked, judges the mapping's target by reading 97, refuses a template default
+ * `undeclared-variable`, and delivers the test without the ref ({@link withLtiLinks}).
+ */
+export interface LtiLink {
+  readonly identifier: string;
+  readonly path: string;
+}
+
+/**
+ * The mark of an item ref that names an LTI link, at the item ref's path.
+ */
+const ltiLinkMark: TestMark = "lti-link";
+
+/**
+ * Give a test whose item refs that name an LTI link are marked and left out of the tree, as every
+ * other `testMarks` feature is, so a session walked from it never meets them: plate launches no LTI
+ * link, and an LTI link holds no item a session could deliver.
+ *
+ * Each item ref of an identifier a link names is left out of its section, a nested section's
+ * included, and each link is the mark `lti-link` at its path. The item ref's identifier stays a
+ * name of the test's structure, so the test's own reads through it stay as the test model read
+ * them; a package marks each read through it that the engine holds no value of ({@link
+ * withUnheldReads}). Each outcome-only expression of the test's outcome processing, which counts or
+ * collects over the test's items, is then marked by its name at its own path, and the processing is
+ * `marked`, as a test that references a section document marks it ({@link outcomeOnlyMarks}): the
+ * delivered test holds no item a link names, so the expression would count the delivered items
+ * alone, and its result would be a wrong score reported without saying so. The marks follow the
+ * test's own in `unsupported`, the links' first, each once per feature and path. A test with no
+ * links is returned unchanged.
+ *
+ * @param test The test model, as {@link buildTest} gives it.
+ * @param links The test document's item refs that name an LTI link, in document order.
+ * @param source The test document the model was built from, where each outcome-only expression is
+ *   found.
+ * @returns The test without them, each marked, and its processing marked where it counts over
+ *   the test's items.
+ */
+export const withLtiLinks = (
+  test: Test,
+  links: readonly LtiLink[],
+  source: SourceDocument,
+): Test => {
+  if (links.length === 0) {
+    return test;
+  }
+
+  const linked = new Set(links.map(({ identifier }) => identifier));
+
+  /**
+   * Give a section without the item refs, its nested sections' included, that name an LTI link.
+   *
+   * @param held The section.
+   * @returns The section.
+   */
+  const unlinked = (held: Section): Section => ({
+    ...held,
+    children: held.children.flatMap((child): readonly SectionChild[] => {
+      if (child.kind === "section") {
+        return [unlinked(child)];
+      }
+
+      return linked.has(child.identifier) ? [] : [child];
+    }),
+  });
+
+  const build: ModelWalk = { builder: "buildTest", document: source, paths: pathsOf(source) };
+  const counting = childrenNamed(source.root, "qti-outcome-processing").flatMap((element) =>
+    outcomeOnlyMarks(build, element),
+  );
+  const marked = new Set(test.unsupported.map(markKey));
+  const added: MarkedFeature[] = [];
+  for (const mark of [
+    ...links.map(({ path }): MarkedFeature => ({ feature: ltiLinkMark, path, shown: "mark" })),
+    ...counting,
+  ]) {
+    if (!marked.has(markKey(mark))) {
+      marked.add(markKey(mark));
+      added.push(mark);
+    }
+  }
+
+  return {
+    ...test,
+    outcomeProcessing:
+      test.outcomeProcessing.kind === "runs" && counting.length > 0
+        ? { kind: "marked" }
+        : test.outcomeProcessing,
+    parts: test.parts.map((part) => ({ ...part, children: part.children.map(unlinked) })),
     unsupported: [...test.unsupported, ...added],
   };
 };

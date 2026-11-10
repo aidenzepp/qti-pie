@@ -10,6 +10,7 @@ import type { StoredTestSession } from "#plate/codec/session.ts";
 import { configure } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
+import { qtiNamespace } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
@@ -19,6 +20,8 @@ import type { InlineChoiceInteraction } from "#plate/model/item.ts";
 import { fresh, startingValue } from "#plate/model/record.ts";
 import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
+import { openPackage } from "#plate/package/open.ts";
+import { fileLocation, manifestFile } from "#plate/package/store.ts";
 import { redact, render } from "#plate/render.ts";
 import { results } from "#plate/results/results.ts";
 import type { ResultContext, ResultsInput } from "#plate/results/results.ts";
@@ -37,6 +40,8 @@ import { validateAgainst } from "#plate/test/xsd.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem, acceptForTest } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
+import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
+import type { CpVersion } from "#plate/vocabulary.ts";
 
 /**
  * The cached Results Reporting XSD, named relative to the XSD cache.
@@ -467,8 +472,9 @@ const typedRecord = (text: string): RecordValue => ({
 /**
  * An item written for this test whose template processing sets `HIDDEN` to `B` and `BLOCK` to `Y`.
  * Its shuffled Choice bound to `RESPONSE` holds `A` to `D`, `B` hidden while `HIDDEN` holds `B`;
- * its template block `X`, shown only while `BLOCK` holds `X`, holds a shuffled Choice bound to
- * `INNER`. So the page shows three of `RESPONSE`'s choices and no `INNER` at all.
+ * its template inline `X`, shown only while `BLOCK` holds `X`, holds a shuffled Inline Choice bound
+ * to `INNER` in its `span`, since a template block may hold no interaction (reading 143). So the
+ * page shows three of `RESPONSE`'s choices and no `INNER` at all.
  */
 const hidingXml = [
   '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="hiding"',
@@ -493,14 +499,13 @@ const hidingXml = [
   '<qti-simple-choice identifier="C">Charlie</qti-simple-choice>',
   '<qti-simple-choice identifier="D">Delta</qti-simple-choice>',
   "</qti-choice-interaction>",
-  '<qti-template-block identifier="X" template-identifier="BLOCK" show-hide="show">',
-  "<qti-content-body><div>",
-  '<qti-choice-interaction response-identifier="INNER" max-choices="1" shuffle="true">',
-  '<qti-simple-choice identifier="P">Papa</qti-simple-choice>',
-  '<qti-simple-choice identifier="Q">Quebec</qti-simple-choice>',
-  '<qti-simple-choice identifier="R">Romeo</qti-simple-choice>',
-  "</qti-choice-interaction>",
-  "</div></qti-content-body></qti-template-block>",
+  '<p><qti-template-inline identifier="X" template-identifier="BLOCK" show-hide="show"><span>',
+  '<qti-inline-choice-interaction response-identifier="INNER" shuffle="true">',
+  '<qti-inline-choice identifier="P">Papa</qti-inline-choice>',
+  '<qti-inline-choice identifier="Q">Quebec</qti-inline-choice>',
+  '<qti-inline-choice identifier="R">Romeo</qti-inline-choice>',
+  "</qti-inline-choice-interaction>",
+  "</span></qti-template-inline></p>",
   "</qti-item-body></qti-assessment-item>",
 ].join("");
 
@@ -1289,7 +1294,7 @@ describe("results", () => {
   );
 
   it.effect(
-    "[I-5] writes a shuffled Choice's choiceSequence in the order the page renders under the record, without the choice its template hides, none for a Choice a hidden template block holds, and the template variables between the responses and the outcomes",
+    "[I-5] writes a shuffled Choice's choiceSequence in the order the page renders under the record, without the choice its template hides, none for an Inline Choice a hidden template inline holds, and the template variables between the responses and the outcomes",
     () =>
       Effect.gen(function* hiddenChoice() {
         const hiding = yield* acceptItem("items/hiding.xml", new TextEncoder().encode(hidingXml));
@@ -1473,7 +1478,7 @@ describe("results", () => {
   );
 
   it.effect(
-    "[I-5] reports the record's value, not the saved one, for a response only a template block the record hides binds, as score keeps it, and a shown response's saved value",
+    "[I-5] reports the record's value, not the saved one, for a response only a template inline the record hides binds, as score keeps it, and a shown response's saved value",
     () =>
       Effect.gen(function* savedHidden() {
         const hiding = yield* acceptItem("items/hiding.xml", new TextEncoder().encode(hidingXml));
@@ -2427,5 +2432,116 @@ describe("results", () => {
           Option.some("InvalidSession"),
         );
       }),
+  );
+});
+
+/**
+ * Where the minimum packages are opened.
+ */
+const minimumLocation = "minimum";
+
+/**
+ * Write the files of a package that holds one item and one test with no outcome processing, under
+ * a manifest that names a version. The item `items/scored.xml` declares the float outcome `SCORE`
+ * and the identifier outcome `FEEDBACK`, neither writing a `normal-minimum`, and the float `LOW`
+ * whose `normal-minimum` is -2; the test `test.xml` declares the float `TOTAL` and the identifier
+ * `BAND`, neither writing one, and the float `FLOOR` whose `normal-minimum` is -1, and holds one
+ * item ref to the item, `scored`.
+ *
+ * @param version The version the manifest's `schemaversion` names.
+ * @returns The package's files, keyed by path.
+ */
+const minimumPackage = (version: CpVersion): ReadonlyMap<string, Uint8Array> =>
+  new Map(
+    (
+      [
+        [
+          manifestFile,
+          `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>${version}</schemaversion></metadata><organizations/><resources><resource identifier="T" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource><resource identifier="I" type="imsqti_item_xmlv3p0" href="items/scored.xml"><file href="items/scored.xml"/></resource></resources></manifest>`,
+        ],
+        [
+          "items/scored.xml",
+          `<qti-assessment-item xmlns="${qtiNamespace}" identifier="scored" title="Scored" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/><qti-outcome-declaration identifier="LOW" cardinality="single" base-type="float" normal-minimum="-2"/><qti-item-body><p>Scored</p></qti-item-body></qti-assessment-item>`,
+        ],
+        [
+          "test.xml",
+          `<qti-assessment-test xmlns="${qtiNamespace}" identifier="T" title="T"><qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="BAND" cardinality="single" base-type="identifier"/><qti-outcome-declaration identifier="FLOOR" cardinality="single" base-type="float" normal-minimum="-1"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="S" visible="true"><qti-assessment-item-ref identifier="scored" href="items/scored.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+        ],
+      ] as const
+    ).map(([file, written]) => [file, new TextEncoder().encode(written)] as const),
+  );
+
+/**
+ * Give the `normalMinimum` each outcome variable of a result writes, by identifier.
+ *
+ * @param written The item or test result.
+ * @returns Each outcome variable's `normalMinimum`, absent when it writes none.
+ */
+const minimaOf = (written: Written): Readonly<Record<string, string | undefined>> =>
+  Object.fromEntries(
+    Object.entries(written.outcomes).map(([identifier, variable]) => [
+      identifier,
+      variable.attributes["normalMinimum"],
+    ]),
+  );
+
+describe("results, the default normal-minimum of a QTI 3.0.1 outcome (reading 149)", () => {
+  it.effect(
+    "align-54 default minimum B3a: the results of a 3.0.1 package's session write normalMinimum 0 on each item and test outcome variable that writes none, an identifier outcome among them, keep a written one, and a 3.0.0 package's write none",
+    () =>
+      Effect.gen(function* defaultMinimum() {
+        const configuration = yield* configure({});
+        const minima = yield* Effect.all(
+          cpVersions.map((version) =>
+            Effect.gen(function* minimaUnder() {
+              const verdict = yield* openPackage(minimumLocation, minimumPackage(version));
+              assert.strictEqual(verdict.verdict, "accepted", version);
+
+              const held =
+                verdict.verdict === "accepted"
+                  ? verdict.accepted.tests.get(fileLocation(minimumLocation, "test.xml"))
+                  : undefined;
+              if (held === undefined) {
+                return assert.fail(`The ${version} package holds no accepted test.`);
+              }
+
+              const session = yield* Effect.fromResult(
+                startTest(held.test, held.items, configuration, {
+                  instance,
+                  now: new Date(started),
+                  seed: processingSeed,
+                }),
+              );
+              const { report, xml } = yield* reported({
+                context,
+                items: held.items,
+                kind: "test",
+                session: yield* Effect.fromResult(encodeSession(session)),
+                test: held.test,
+              });
+
+              yield* assertValid(xml);
+
+              return {
+                item: minimaOf(itemOf(report, "scored")),
+                test: minimaOf(Option.getOrElse(report.test, () => assert.fail("No testResult."))),
+              };
+            }),
+          ),
+        );
+
+        // The built-in completionStatus is no declaration, so it writes none under either.
+        assert.deepStrictEqual(minima, [
+          {
+            item: { FEEDBACK: undefined, LOW: "-2", SCORE: undefined, completionStatus: undefined },
+            test: { BAND: undefined, FLOOR: "-1", TOTAL: undefined },
+          },
+          {
+            item: { FEEDBACK: "0", LOW: "-2", SCORE: "0", completionStatus: undefined },
+            test: { BAND: "0", FLOOR: "-1", TOTAL: "0" },
+          },
+        ]);
+      }),
+    { tags: ["results-xsd"] },
   );
 });

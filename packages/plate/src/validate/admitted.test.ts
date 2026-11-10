@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { Effect, Exit, Option } from "effect";
 import { readSource } from "#plate/document/read.ts";
 import { openCorpus } from "#plate/test/sweep.ts";
 import { openAdmitted } from "#plate/validate/admitted.ts";
@@ -30,18 +30,35 @@ const itemOf = (body: string, root = "", itemBody = ""): Uint8Array =>
   );
 
 /**
+ * The namespace of the `onclick` {@link e3Item} carries, one the QTI XSD declares nothing in.
+ */
+const foreign = "urn:example:other";
+
+/**
+ * An item whose response processing sets `SCORE` through a `qti-custom-operator` carrying an
+ * `onclick` in {@link foreign}, which only the operator's `##other` attribute wildcard admits. The
+ * Schematron's extension lists do not cover the operator, so `open` accepts the attribute there and
+ * E3 removes and marks it, where on a body element the lists cover, such as `p`, `open` refuses any
+ * undeclared attribute but a `data-` one (reading 90, E10).
+ */
+const e3Item: Uint8Array = new TextEncoder().encode(
+  `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="I" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p class="lead">Hi</p></qti-item-body><qti-response-processing><qti-set-outcome-value identifier="SCORE"><qti-custom-operator xmlns:x="${foreign}" class="org.example.Half" x:onclick="alert(1)"><qti-base-value base-type="float">1</qti-base-value></qti-custom-operator></qti-set-outcome-value></qti-response-processing></qti-assessment-item>`,
+);
+
+/**
  * Documents that exercise what securing does, each by name: a plain item; E3 removing and marking
- * an `onclick` that only a wildcard admits; the URL pass dropping a `javascript:` href; and valid
- * `xsi:type`s, under which the type's table governs E3 (AD-9).
+ * an `onclick` that only a wildcard the extension lists do not cover admits; the URL pass dropping
+ * a `javascript:` href; and valid `xsi:type`s, under which the type's table governs the walk and
+ * E3 (AD-9).
  */
 const securedDocuments: ReadonlyMap<string, Uint8Array> = new Map([
   ["plain.xml", itemOf("<p>Hi</p>")],
-  ["e3.xml", itemOf('<p class="lead" onclick="alert(1)">Hi</p>')],
+  ["e3.xml", e3Item],
   ["url.xml", itemOf('<p><a href="javascript:x">Go</a>.</p>')],
   [
     "xsi-type.xml",
     itemOf(
-      '<p xsi:type="q:HTMLTextDType" onclick="alert(1)">Hi</p>',
+      '<p xsi:type="q:HTMLTextDType" class="lead">Hi</p>',
       ' xmlns:q="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="q:AssessmentItemDType"',
       ' xsi:type="q:ItemBodyDType"',
     ),
@@ -116,27 +133,41 @@ describe("validate/admitted.ts", () => {
   );
 
   it("removes and marks the onclick E3 removes, by the securing tables' declared names", () => {
-    const e3 = securedDocuments.get("e3.xml");
-    assert.isDefined(e3, "the e3 document is defined");
+    const source = Effect.runSync(readSource("e3.xml", e3Item));
+    const checked = check(source, tables, Option.none());
 
-    const source = Effect.runSync(readSource("e3.xml", e3));
+    assert.deepStrictEqual(
+      checked.verdict === "accepted-with-unsupported"
+        ? checked.accepted.unsupported.filter((mark) => mark.feature.startsWith("attribute:"))
+        : [],
+      [
+        {
+          feature: `attribute:{${foreign}}onclick`,
+          path: "qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-custom-operator",
+          shown: "mark",
+        },
+      ],
+    );
+    assert.deepStrictEqual(checkAdmitted(source, securingTables, Option.none()), checked);
 
-    assert.deepStrictEqual(checkAdmitted(source, securingTables), check(source, tables));
-
-    // The plant: securing tables in which p declares onclick keep it, where open removes it.
-    const { p } = securingTables.elements;
-    assert.isDefined(p, "the securing tables hold p");
+    // The plant: securing tables in which qti-custom-operator declares onclick keep it, where open
+    // removes it.
+    const operator = securingTables.elements["qti-custom-operator"];
+    assert.isDefined(operator, "the securing tables hold qti-custom-operator");
 
     const planted: SecuringTables = {
       ...securingTables,
       elements: {
         ...securingTables.elements,
-        p: {
-          ...p,
-          attributes: [...p.attributes, { local: "onclick", namespace: "", use: "optional" }],
+        "qti-custom-operator": {
+          ...operator,
+          attributes: [
+            ...operator.attributes,
+            { local: "onclick", namespace: foreign, use: "optional" },
+          ],
         },
       },
     };
-    assert.notDeepEqual(checkAdmitted(source, planted), check(source, tables));
+    assert.notDeepEqual(checkAdmitted(source, planted, Option.none()), checked);
   });
 });

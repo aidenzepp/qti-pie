@@ -3031,11 +3031,20 @@ const builtInTypes: ReadonlyMap<string, ValueType> = new Map<string, ValueType>(
 ]);
 
 /**
- * The built-in variables a rule may set as it sets an outcome: `completionStatus`, as the prose
- * rules let `qti-set-outcome-value` and `qti-lookup-outcome-value` name it (`builtInsNamed` in
- * `#plate/validate/rules.ts`).
+ * The kind each built-in variable the engine holds stands as (reading 111, "a processing element's
+ * `identifier` names a variable of the kind the element reads or sets"): the built-in response
+ * `numAttempts` and the built-in outcome `completionStatus`, as the prose rules name them
+ * (`builtInsNamed` in `#plate/validate/rules.ts`). A rule that sets or reads a variable of a kind
+ * names the built-ins of that kind too: `qti-set-outcome-value` and `qti-lookup-outcome-value` set
+ * `completionStatus`, `qti-set-default-value` sets either one's default,
+ * `qti-set-correct-response` sets the correct response of `numAttempts`, and `qti-correct` reads
+ * it (`targetOf` in `#plate/engine/template.ts`, `evaluateCorrect` in
+ * `#plate/engine/expressions/references.ts`).
  */
-const settableBuiltIns: ReadonlySet<string> = new Set(["completionStatus"]);
+const builtInKinds: ReadonlyMap<string, "outcome" | "response"> = new Map([
+  ["completionStatus", "outcome"],
+  ["numAttempts", "response"],
+]);
 
 /**
  * Give the built-in variables the engine holds a value of for an item: each of
@@ -3170,8 +3179,11 @@ const namesHeldRecord = (operand: Expression, heldRecords: ReadonlySet<string>):
  *
  * - The declaration facet: the `identifier` of a kind that expects a response, such as `qti-correct`,
  *   `qti-map-response` and `qti-map-response-point`, names one the engine holds only among the
- *   responses; that of a kind that expects any variable, such as `qti-variable`, among the
- *   responses, the outcomes, the template variables and the built-in variables.
+ *   responses, and, for `qti-correct`, the built-in response `numAttempts` the engine holds, whose
+ *   correct response the engine reads (`evaluateCorrect` in
+ *   `#plate/engine/expressions/references.ts`), though it holds no mapping of it; that of a kind
+ *   that expects any variable, such as `qti-variable`, among the responses, the outcomes, the
+ *   template variables and the built-in variables.
  * - The reference facet: each variable an attribute names (`referencesOf`), before the operands, in
  *   the facet's order. A checked reference names one the engine holds as `qti-variable` does. An
  *   unchecked one, a `qti-equal`'s `tolerance` token, is judged only when a declaration or a
@@ -3184,22 +3196,23 @@ const namesHeldRecord = (operand: Expression, heldRecords: ReadonlySet<string>):
  *
  * Each setting rule's target is judged as the engine finds it: `qti-set-outcome-value` and
  * `qti-lookup-outcome-value` set an outcome, or the built-in `completionStatus` where the engine
- * holds it ({@link settableBuiltIns}), never a template variable, which only template processing
- * sets; `qti-set-template-value` sets a template variable, `qti-set-correct-response` a response,
- * and `qti-set-default-value` a response or an outcome (`targetOf` in
- * `#plate/engine/template.ts`). The names it finds are valid content, never refused (reading 1,
- * rule `5b8ee08b`): a response, an outcome or a template variable the engine does not hold (base
- * type `file`, cardinality `record`, a record response the model holds in `records` read other
- * than as such an operand among them, or no base type), a template variable beside template
- * processing that does not run, the built-in variable `duration`, read or set, which the engine
- * holds no value for, and the built-in `completionStatus` where a declaration names it.
- * Reading 29 makes an item's `duration` a single float, so it is a valid name in an item's rules.
- * In template processing it also finds `QTI_CONTEXT` and each variable a `qti-context-declaration`
- * declares: template processing may read them (`info.txt:22601`, and a reference to `QTI_CONTEXT`
- * "must succeed", `info.txt:8454-8456`), and the engine holds no context variable. An identifier
- * nothing declares is refused before the model is built when inline rules name it; the walk finds
- * it too. One a built-in template names, such as `MAXSCORE` or `FEEDBACK` in a `CC2_*` template, is
- * not in the document, so nothing refuses it: the walk finds it, and the processing is marked.
+ * holds it ({@link builtInKinds}), never a template variable, which only template processing sets;
+ * `qti-set-template-value` sets a template variable, `qti-set-correct-response` a response, the
+ * built-in `numAttempts` where the engine holds it among them, and `qti-set-default-value` a
+ * response or an outcome, either built-in among them (`targetOf` in `#plate/engine/template.ts`).
+ * The names it finds are valid content, never refused (reading 1, rule `5b8ee08b`): a response, an
+ * outcome or a template variable the engine does not hold (base type `file`, cardinality `record`,
+ * a record response the model holds in `records` read other than as such an operand among them, or
+ * no base type), a template variable beside template processing that does not run, the built-in
+ * variable `duration`, read or set, which the engine holds no value for, and the built-in
+ * `completionStatus` where a declaration names it. Reading 29 makes an item's `duration` a single
+ * float, so it is a valid name in an item's rules. In template processing it also finds
+ * `QTI_CONTEXT` and each variable a `qti-context-declaration` declares: template processing may
+ * read them (`info.txt:22601`, and a reference to `QTI_CONTEXT` "must succeed",
+ * `info.txt:8454-8456`), and the engine holds no context variable. An identifier nothing declares
+ * is refused before the model is built when inline rules name it; the walk finds it too. One a
+ * built-in template names, such as `MAXSCORE` or `FEEDBACK` in a `CC2_*` template, is not in the
+ * document, so nothing refuses it: the walk finds it, and the processing is marked.
  *
  * @param tree The rule tree.
  * @param responses The responses the model holds.
@@ -3238,6 +3251,16 @@ const unheldIdentifiers = (
     builtIns.has(identifier);
 
   /**
+   * Report whether the engine holds a built-in of a kind by a name ({@link builtInKinds}).
+   *
+   * @param kind The kind the built-in stands as.
+   * @param identifier The name.
+   * @returns Whether the engine holds a built-in of that kind by that name.
+   */
+  const isBuiltIn = (kind: "outcome" | "response", identifier: string): boolean =>
+    builtIns.has(identifier) && builtInKinds.get(identifier) === kind;
+
+  /**
    * Add each identifier an expression and its operands read that the engine does not hold: the
    * declaration its kind's declaration facet names, then each variable its attributes name, then
    * those of its operands, but for an operand that names a held record response under a kind that
@@ -3250,7 +3273,8 @@ const unheldIdentifiers = (
     if (kindRule.declaration !== undefined && "identifier" in operand) {
       const held =
         kindRule.declaration.expected === "response"
-          ? responses.has(operand.identifier)
+          ? responses.has(operand.identifier) ||
+            (operand.kind === "correct" && isBuiltIn("response", operand.identifier))
           : isHeld(operand.identifier);
       if (!held) {
         unheld.add(operand.identifier);
@@ -3272,22 +3296,33 @@ const unheldIdentifiers = (
   };
 
   /**
-   * Report whether the engine holds an outcome a rule may set by a name: a modelled outcome, or a
-   * built-in it holds that a rule may set ({@link settableBuiltIns}).
+   * Report whether the engine holds an outcome a rule may set by a name: a modelled outcome, or the
+   * built-in outcome it holds ({@link builtInKinds}).
    *
    * @param identifier The name.
    * @returns Whether a set or a lookup of it runs.
    */
   const isSettable = (identifier: string): boolean =>
-    outcomes.has(identifier) || (builtIns.has(identifier) && settableBuiltIns.has(identifier));
+    outcomes.has(identifier) || isBuiltIn("outcome", identifier);
+
+  /**
+   * Report whether the engine holds a response whose correct response or default a template rule
+   * may set by a name: a modelled response, or the built-in response it holds ({@link
+   * builtInKinds}).
+   *
+   * @param identifier The name.
+   * @returns Whether a set of its correct response or default runs.
+   */
+  const isResponse = (identifier: string): boolean =>
+    responses.has(identifier) || isBuiltIn("response", identifier);
 
   /**
    * Whether the engine holds the variable each kind of setting rule sets by a name.
    */
   const targets: Readonly<Record<SettingKind, (identifier: string) => boolean>> = {
     "lookup-outcome": isSettable,
-    "set-correct-response": (identifier) => responses.has(identifier),
-    "set-default-value": (identifier) => responses.has(identifier) || outcomes.has(identifier),
+    "set-correct-response": isResponse,
+    "set-default-value": (identifier) => isResponse(identifier) || isSettable(identifier),
     "set-outcome": isSettable,
     "set-template-value": (identifier) => heldTemplates.has(identifier),
   };
@@ -4019,8 +4054,8 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     // The names template processing reads or sets that the engine does not hold while it runs. The
     // engine gives it no response or outcome value (`#plate/engine/template.ts`), but P26 refuses
     // every read of one, and of every built-in but `QTI_CONTEXT`, so on a checked item these are
-    // `QTI_CONTEXT`, a context variable, and a template variable, response or outcome the model
-    // does not hold.
+    // `QTI_CONTEXT`, a context variable, a template variable, response or outcome the model does
+    // not hold, and the built-in `duration` a rule sets the default or correct response of.
     const templateMarks = Option.match(templateRead, {
       onNone: () => [],
       onSome: (read) =>

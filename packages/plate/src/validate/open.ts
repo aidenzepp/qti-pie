@@ -10,7 +10,7 @@
  *
  * @module
  */
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import { readSource } from "#plate/document/read.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { check } from "#plate/validate/verdict.ts";
@@ -23,6 +23,10 @@ import type { Verdict } from "#plate/validate/verdict.ts";
  * It never fails, because a refusal is a verdict. A document the reader cannot build a tree from
  * is `refused`, of kind `none`, with the reader's one refusal (`not-well-formed` or
  * `reader-refused`); any other is `check`'s verdict. Nothing but its two inputs decides the result.
+ *
+ * A document opened alone states no QTI version, which only a package's manifest gives, so `check`
+ * judges it with none (OD-A54-3): no refusal that turns on the version applies, and a
+ * `qti-custom-interaction` that a 3.0.0 package refuses stays accepted here.
  *
  * @param location The document's location as the host named it, which the verdict and every
  *   refusal carry as `document`.
@@ -38,7 +42,7 @@ export const open = Effect.fn("open")(function* open(
   const read = yield* Effect.result(readSource(location, bytes));
   const verdict: Verdict = Result.isFailure(read)
     ? { document: location, kind: "none", refusals: [read.failure], verdict: "refused" }
-    : check(read.success, tables);
+    : check(read.success, tables, Option.none());
 
   yield* Effect.annotateCurrentSpan("document.verdict", verdict.verdict);
   yield* Effect.annotateCurrentSpan("document.kind", verdict.kind);

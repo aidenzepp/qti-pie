@@ -12,7 +12,7 @@
  *
  * @module
  */
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import { readSource } from "#plate/document/read.ts";
 import { securingTables } from "#plate/validate/securing-tables.ts";
 import { checkAdmitted } from "#plate/validate/verdict.ts";
@@ -28,6 +28,9 @@ import type { Verdict } from "#plate/validate/verdict.ts";
  * document the reader cannot build a tree from is `refused`, of kind `none`, with the reader's one
  * refusal (`not-well-formed` or `reader-refused`). Nothing but its two inputs decides the result.
  *
+ * Like `open`, it judges the document alone, with no QTI version, which only a package's manifest
+ * gives (OD-A54-3), so it gives `open`'s verdict and not `openPackage`'s on a 3.0.1 document.
+ *
  * @param location The document's location as the host named it, which the verdict and every
  *   refusal carry as `document`.
  * @param bytes The document as read from the store.
@@ -42,7 +45,7 @@ export const openAdmitted = Effect.fn("openAdmitted")(function* openAdmitted(
   const read = yield* Effect.result(readSource(location, bytes));
   const verdict: Verdict = Result.isFailure(read)
     ? { document: location, kind: "none", refusals: [read.failure], verdict: "refused" }
-    : checkAdmitted(read.success, securingTables);
+    : checkAdmitted(read.success, securingTables, Option.none());
 
   yield* Effect.annotateCurrentSpan("document.verdict", verdict.verdict);
   yield* Effect.annotateCurrentSpan("document.kind", verdict.kind);

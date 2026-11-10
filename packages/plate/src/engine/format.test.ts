@@ -172,6 +172,41 @@ describe("formatPrinted: the format's text around the conversion (G-R2, pending)
   });
 });
 
+describe("formatPrinted: %d, every conversion after the first, and %% (the operator's ruling on P1)", () => {
+  it("[I-5] align-54 printing P1b: %d prints as %i would, in the base given", () => {
+    for (const [format, input] of integerRows) {
+      if (format.endsWith("i")) {
+        const decimal = `${format.slice(0, -1)}d`;
+
+        assert.strictEqual(
+          printed(integer(input), { format: decimal }),
+          printed(integer(input), { format }),
+          decimal,
+        );
+      }
+    }
+    assert.strictEqual(printed(integer(987n), { base: 16n, format: "%d" }), "3db");
+    assert.strictEqual(printed(float(-2.7), { format: "%d" }), "-2");
+  });
+
+  it('[I-5] align-54 printing P1b: "%i of %i" prints the value in the first conversion and the second as written', () => {
+    assert.strictEqual(printed(integer(3n), { format: "%i of %i" }), "3 of %i");
+    assert.strictEqual(printed(integer(3n), { format: "%d of %d" }), "3 of %d");
+    assert.strictEqual(printed(float(2.5), { format: "%.1f, %i and %#x" }), "2.5, %i and %#x");
+  });
+
+  it('[I-5] align-54 printing B2b.2: "100%%" prints 100%, and %% prints a percent sign around a conversion', () => {
+    assert.strictEqual(printed(integer(3n), { format: "100%%" }), "100%");
+    assert.strictEqual(printed(integer(3n), { format: "Score: %i%%" }), "Score: 3%");
+    assert.strictEqual(printed(float(1.5), { format: "%%%e%%%G" }), "%1.500000e+00%%G");
+  });
+
+  it('[I-5] align-54 printing B2b.2: "%%i" prints %i and no number', () => {
+    assert.strictEqual(printed(integer(3n), { format: "%%i" }), "%i");
+    assert.strictEqual(printed(integer(3n), { format: "%%%%i" }), "%%i");
+  });
+});
+
 describe("formatPrinted: the default form, with no format (G-R2, pending)", () => {
   it("[I-5] prints an integer as its decimal digits, exactly past 2^53", () => {
     assert.strictEqual(printed(integer(-987n)), "-987");

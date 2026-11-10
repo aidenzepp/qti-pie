@@ -42,6 +42,7 @@ import {
 } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest, RootSummary, Verdict } from "#plate/validate/verdict.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
+import type { CpVersion } from "#plate/vocabulary.ts";
 
 /**
  * A `javascript:` URL, which every URL attribute drops.
@@ -203,7 +204,7 @@ const matchCorrect = el(
  * @param source The document.
  * @returns Its verdict.
  */
-const verdictOf = (source: SourceDocument): Verdict => check(source, tables);
+const verdictOf = (source: SourceDocument): Verdict => check(source, tables, Option.none());
 
 /**
  * Read the accepted item of a verdict that must accept an item.
@@ -625,18 +626,55 @@ describe("check", () => {
 });
 
 describe("check, E3: attributes only a wildcard admits", () => {
-  it("removes an onclick on a body p and marks it", () => {
+  it("align-54 extension lists E10: refuses an onclick on a body p as unknown-attribute, since the extension lists cover p (reading 90)", () => {
+    const verdict = verdictOf(
+      item([body([el("p", [attr("class", "lead"), attr("onclick", "alert(1)")], [text("Hi")])])]),
+    );
+
+    assert.deepStrictEqual(refusalsOf(verdict), [
+      { location: { kind: "path", path: `${bodyPath}/p/@onclick` }, rule: "unknown-attribute" },
+    ]);
+    assert.deepStrictEqual(
+      verdict.verdict === "refused" ? verdict.refusals.map((refusal) => refusal.detail) : [],
+      [{ attribute: "onclick", element: "p", reading: "90" }],
+    );
+  });
+
+  it("align-54 extension lists E10: removes and marks an attribute in another namespace on qti-custom-operator, whose wildcard the extension lists do not cover", () => {
+    const foreign = "urn:example:other";
+    const operatorPath = `${root}/qti-response-processing/qti-set-outcome-value/qti-custom-operator`;
     const accepted = acceptedOf(
       verdictOf(
-        item([body([el("p", [attr("class", "lead"), attr("onclick", "alert(1)")], [text("Hi")])])]),
+        item([
+          score(),
+          body([el("p", [], [text("Hi")])]),
+          el(
+            "qti-response-processing",
+            [],
+            [
+              el(
+                "qti-set-outcome-value",
+                [attr("identifier", "SCORE")],
+                [
+                  el(
+                    "qti-custom-operator",
+                    [attr("class", "org.example.Half"), attr("x", "1", foreign)],
+                    [el("qti-base-value", [attr("base-type", "float")], [text("1")])],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ]),
       ),
       "accepted-with-unsupported",
     );
 
-    assert.deepStrictEqual(accepted.unsupported, [
-      { feature: "attribute:onclick", path: `${bodyPath}/p`, shown: "mark" },
-    ]);
-    assert.deepStrictEqual(namesOf(bodyElement(accepted, `${bodyPath}/p`)), ["class"]);
+    // The case is about attribute marks only; the custom operator earns its own mark.
+    assert.deepStrictEqual(
+      accepted.unsupported.filter((mark) => mark.feature.startsWith("attribute:")),
+      [{ feature: `attribute:{${foreign}}x`, path: operatorPath, shown: "mark" }],
+    );
   });
 
   it("neither marks nor removes xsi:schemaLocation, xsi:noNamespaceSchemaLocation, xml:lang or a namespace declaration on the root", () => {
@@ -659,57 +697,49 @@ describe("check, E3: attributes only a wildcard admits", () => {
     assert.deepStrictEqual(accepted.item.lang, Option.some("en"));
   });
 
-  it("keeps aria-keyshortcuts where the table declares aria-keyshorts, and removes aria-keyshorts where it does not", () => {
-    const accepted = acceptedOf(
-      verdictOf(
-        item([
-          body([
-            el(
-              "p",
-              [attr("aria-keyshorts", "Alt+P")],
-              [
-                el("img", [
-                  attr("alt", "A cat"),
-                  attr("aria-keyshortcuts", "Alt+I"),
-                  attr("src", "cat.png"),
-                ]),
-              ],
-            ),
-          ]),
-        ]),
-      ),
-      "accepted-with-unsupported",
-    );
-
-    assert.deepStrictEqual(accepted.unsupported, [
-      { feature: "attribute:aria-keyshorts", path: `${bodyPath}/p`, shown: "mark" },
+  it("align-54 extension lists E10: keeps aria-keyshortcuts where the table declares aria-keyshorts (reading 10), and refuses aria-keyshorts where it does not as unknown-attribute (reading 90)", () => {
+    const image = el("img", [
+      attr("alt", "A cat"),
+      attr("aria-keyshortcuts", "Alt+I"),
+      attr("src", "cat.png"),
     ]);
-    assert.deepStrictEqual(namesOf(bodyElement(accepted, `${bodyPath}/p`)), []);
+    const accepted = acceptedOf(verdictOf(item([body([el("p", [], [image])])])), "accepted");
+    const refused = verdictOf(item([body([el("p", [attr("aria-keyshorts", "Alt+P")], [image])])]));
+
+    assert.deepStrictEqual(accepted.unsupported, []);
     assert.deepStrictEqual(namesOf(bodyElement(accepted, `${bodyPath}/p/img`)), [
       "alt",
       "aria-keyshortcuts",
       "src",
     ]);
+    assert.deepStrictEqual(refusalsOf(refused), [
+      {
+        location: { kind: "path", path: `${bodyPath}/p/@aria-keyshorts` },
+        rule: "unknown-attribute",
+      },
+    ]);
+    assert.deepStrictEqual(
+      refused.verdict === "refused" ? refused.refusals.map((refusal) => refusal.detail) : [],
+      [{ attribute: "aria-keyshorts", element: "p", reading: "90" }],
+    );
   });
 
-  it("compares names exactly: an HREF is wildcard-only, and an element A is refused", () => {
-    const accepted = acceptedOf(
-      verdictOf(
-        item([
-          body([
-            el("p", [], [el("a", [attr("HREF", scriptUrl), attr("href", "#note")], [text("Go")])]),
-          ]),
+  it("align-54 extension lists E10: compares names exactly: an HREF is no attribute a declares, refused as unknown-attribute (reading 90), and an element A is refused", () => {
+    const undeclared = verdictOf(
+      item([
+        body([
+          el("p", [], [el("a", [attr("HREF", scriptUrl), attr("href", "#note")], [text("Go")])]),
         ]),
-      ),
-      "accepted-with-unsupported",
+      ]),
     );
 
-    assert.deepStrictEqual(accepted.unsupported, [
-      { feature: "attribute:HREF", path: `${bodyPath}/p/a`, shown: "mark" },
+    assert.deepStrictEqual(refusalsOf(undeclared), [
+      { location: { kind: "path", path: `${bodyPath}/p/a/@HREF` }, rule: "unknown-attribute" },
     ]);
-    assert.deepStrictEqual(bodyElement(accepted, `${bodyPath}/p/a`).attributes, [
-      { name: "href", value: "#note" },
-    ]);
+    assert.deepStrictEqual(
+      undeclared.verdict === "refused" ? undeclared.refusals.map((refusal) => refusal.detail) : [],
+      [{ attribute: "HREF", element: "a", reading: "90" }],
+    );
 
     const refused = verdictOf(
       item([body([el("p", [], [el("A", [attr("href", scriptUrl)], [text("Go")])])])]),
@@ -1090,7 +1120,7 @@ const tolerating = (tolerance: string): SourceDocument =>
     ),
   ]);
 
-describe("check, the built-in variables' identifiers and qti-equal's tolerance tokens (pantry DeclarationNotReserved and P6)", () => {
+describe("check, the built-in variables' identifiers (pantry DeclarationNotReserved) and qti-equal's tolerance values (reading 121, \"every tolerance is one or two values, each number among them above 0\")", () => {
   it("[I-9a] refuses an item that declares a variable named completionStatus, numAttempts or duration as attribute-type at its identifier (pantry DeclarationNotReserved)", () => {
     for (const [kind, identifier, baseType] of [
       ["qti-outcome-declaration", "completionStatus", "identifier"],
@@ -1118,8 +1148,8 @@ describe("check, the built-in variables' identifiers and qti-equal's tolerance t
     }
   });
 
-  it("[I-9a] refuses an item whose qti-equal tolerance holds a token that is neither an xs:double nor an NCName, 1,5, as attribute-type (pantry P6)", () => {
-    assert.deepStrictEqual(refusalsOf(verdictOf(tolerating("1,5"))), [
+  it('[I-9a] refuses an item whose qti-equal tolerance holds a number not above 0, -1, as attribute-type (reading 121, "each number among them above 0")', () => {
+    assert.deepStrictEqual(refusalsOf(verdictOf(tolerating("-1"))), [
       {
         location: {
           kind: "path",
@@ -1130,8 +1160,8 @@ describe("check, the built-in variables' identifiers and qti-equal's tolerance t
     ]);
   });
 
-  it("[I-9a] accepts an item whose qti-equal tolerance is 0.5, 1 2, TOL (an NCName) or INF", () => {
-    for (const tolerance of ["0.5", "1 2", "TOL", "INF"]) {
+  it("[I-9a] accepts an item whose qti-equal tolerance is 0.5, 1 2, TOL or INF, or 1,5 or +INF, which name variables read at run time (reading 121)", () => {
+    for (const tolerance of ["0.5", "1 2", "TOL", "INF", "1,5", "+INF"]) {
       assert.notStrictEqual(verdictOf(tolerating(tolerance)).verdict, "refused", tolerance);
     }
   });
@@ -1339,6 +1369,96 @@ describe("check, the base types of a test's SCORE, MAXSCORE and PASSED", () => {
 });
 
 /**
+ * Construct a single float outcome declaration that writes a `normal-minimum`.
+ *
+ * @param identifier Its `identifier`.
+ * @param minimum Its `normal-minimum`, as written.
+ * @returns The declaration.
+ */
+const bounded = (identifier: string, minimum: string): SourceElement =>
+  el("qti-outcome-declaration", [
+    attr("base-type", "float"),
+    attr("cardinality", "single"),
+    attr("identifier", identifier),
+    attr("normal-minimum", minimum),
+  ]);
+
+/**
+ * Give the `normal-minimum` the built model holds of each outcome, in declaration order.
+ *
+ * @param outcomes The model's outcome declarations.
+ * @returns Each outcome's identifier and its minimum, none when it has none.
+ */
+const minimaOf = (
+  outcomes: Item["outcomes"],
+): readonly (readonly [string, Option.Option<number>])[] =>
+  Array.from(outcomes.values(), (declaration) => [
+    declaration.identifier,
+    declaration.normalMinimum,
+  ]);
+
+describe("check, the default normal-minimum of a QTI 3.0.1 outcome (reading 149)", () => {
+  /**
+   * The versions a document is checked under: a 3.0.1 package's, a 3.0.0 package's, and none, as
+   * a document opened alone states.
+   */
+  const versions: readonly Option.Option<CpVersion>[] = [
+    Option.some("3.0.1"),
+    Option.some("3.0.0"),
+    Option.none(),
+  ];
+
+  /**
+   * What a 3.0.1 package's document holds of each outcome: 0.0 where it writes none, and what it
+   * writes where it writes one.
+   *
+   * @param unwritten The outcomes that write no `normal-minimum`.
+   * @param written The outcome that writes one, and its value.
+   * @returns The minima, and the minima under a 3.0.0 package and a lone document.
+   */
+  const expected = (
+    unwritten: readonly string[],
+    written: readonly [string, number],
+  ): readonly (readonly (readonly [string, Option.Option<number>])[])[] =>
+    versions.map((version) => [
+      ...unwritten.map(
+        (identifier) =>
+          [
+            identifier,
+            Option.exists(version, (stated) => stated === "3.0.1") ? Option.some(0) : Option.none(),
+          ] as const,
+      ),
+      [written[0], Option.some(written[1])] as const,
+    ]);
+
+  it("align-54 default minimum B3a: gives every outcome of a 3.0.1 package's item that writes no normal-minimum 0.0, an identifier outcome among them, keeps a written one, and gives none under 3.0.0 or alone", () => {
+    const source = item([
+      score(),
+      outcome("FEEDBACK", "identifier"),
+      bounded("LOW", "-2"),
+      body([el("p", [], [text("Hello")])]),
+    ]);
+    const minima = versions.map((version) =>
+      minimaOf(acceptedOf(check(source, tables, version), "accepted").item.outcomes),
+    );
+
+    assert.deepStrictEqual(minima, expected(["SCORE", "FEEDBACK"], ["LOW", -2]));
+  });
+
+  it("align-54 default minimum B3a: gives every outcome of a 3.0.1 package's test that writes no normal-minimum 0.0, an identifier outcome among them, keeps a written one, and gives none under 3.0.0 or alone", () => {
+    const source = assessmentTest(
+      [itemRef("q1")],
+      [outcome("TOTAL", "float"), outcome("BAND", "identifier"), bounded("FLOOR", "-1")],
+    );
+    const minima = versions.map((version) =>
+      minimaOf(acceptedTestOf(check(source, tables, version), "accepted").test.outcomes),
+    );
+
+    assert.deepStrictEqual(minima, expected(["TOTAL", "BAND"], ["FLOOR", -1]));
+  });
+});
+
+/**
  * Construct a test whose outcome processing looks `I1.SCORE`, which it reads through its item ref
  * `I1`, up with an operand.
  *
@@ -1519,13 +1639,17 @@ describe("check, every QTI 3 root", () => {
     { tags: ["corpus"] },
   );
 
-  it("refuses a hand-built empty section document with child-count, of kind section", () => {
+  it("align-54 empty section D1: accepts a hand-built section document whose root section holds nothing, marked as a section root (reading 26)", () => {
     const verdict = verdictOf(doc("section.xml", assessmentSection("S", [])));
 
-    assert.deepStrictEqual(refusalsOf(verdict), [
-      { location: { kind: "path", path: "qti-assessment-section" }, rule: "child-count" },
-    ]);
-    assert.strictEqual(verdict.kind, "section");
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+    assert.isTrue(verdict.kind === "section");
+    if (verdict.verdict === "accepted-with-unsupported" && verdict.kind === "section") {
+      assert.strictEqual(verdict.accepted.identifier, "S");
+      assert.deepStrictEqual(featuresOf(verdict.accepted.unsupported), [
+        "root:qti-assessment-section@qti-assessment-section",
+      ]);
+    }
   });
 
   it("accepts a section document with unsupported features, marked as a section root", () => {
@@ -1573,17 +1697,65 @@ describe("check, every QTI 3 root", () => {
     }
   });
 
-  it("marks a test's xi:include rather than leaving the test unchecked", () => {
+  it("align-54 includes E23: leaves a test holding an XInclude include unchecked, with no accepted test", () => {
     const include = el("include", [attr("href", "shared/items.xml")], [], xincludeNamespace);
-    const accepted = acceptedTestOf(
-      verdictOf(assessmentTest([itemRef("q1"), include])),
-      "accepted-with-unsupported",
-    );
+    const verdict = verdictOf(assessmentTest([itemRef("q1"), include]));
 
-    assert.deepStrictEqual(featuresOf(accepted.unsupported), [
-      `xi:include@qti-assessment-test/qti-test-part/qti-assessment-section/{${xincludeNamespace}}include`,
-    ]);
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.kind, "test");
+    assert.isFalse("accepted" in verdict);
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        {
+          path: `qti-assessment-test/qti-test-part/qti-assessment-section/{${xincludeNamespace}}include`,
+          reason: "xinclude",
+        },
+      ]);
+    }
   });
+
+  it("align-54 includes E23: leaves a section document holding an XInclude include unchecked, with no accepted section", () => {
+    const include = el("include", [attr("href", "shared/items.xml")], [], xincludeNamespace);
+    const verdict = verdictOf(doc("section.xml", assessmentSection("S", [itemRef("q1"), include])));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.kind, "section");
+    assert.isFalse("accepted" in verdict);
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        { path: `qti-assessment-section/{${xincludeNamespace}}include`, reason: "xinclude" },
+      ]);
+    }
+  });
+
+  /**
+   * Includes whose form XInclude or the readings would refuse, each of which plate leaves only
+   * unchecked (P4): none is refused for its form.
+   */
+  const includeForms = [
+    {
+      attributes: [attr("href", "shared/items.xml"), attr("xpointer", "element(/1)")],
+      form: "an xpointer",
+    },
+    { attributes: [attr("href", "shared/items.xml"), attr("parse", "text")], form: 'parse="text"' },
+    { attributes: [attr("href", "https://example.com/items.xml")], form: "an external href" },
+  ];
+  for (const { attributes, form } of includeForms) {
+    it(`align-54 includes E23: leaves a test's include with ${form} only unchecked, never refused (P4)`, () => {
+      const include = el("include", attributes, [], xincludeNamespace);
+      const verdict = verdictOf(assessmentTest([itemRef("q1"), include]));
+
+      assert.strictEqual(verdict.verdict, "unchecked");
+      if (verdict.verdict === "unchecked") {
+        assert.deepStrictEqual(verdict.reasons, [
+          {
+            path: `qti-assessment-test/qti-test-part/qti-assessment-section/{${xincludeNamespace}}include`,
+            reason: "xinclude",
+          },
+        ]);
+      }
+    });
+  }
 
   it("refuses a test's outcome-only expression outside outcome processing once, as expression-placement", () => {
     const branch = el(
@@ -1684,6 +1856,335 @@ describe("check, every QTI 3 root", () => {
     assert.strictEqual(refused.kind, "item");
     assert.strictEqual(accepted.verdict, "accepted");
     assert.strictEqual(accepted.kind, "item");
+  });
+});
+
+/**
+ * Construct a paragraph whose `span` carries the given `data-ssml`.
+ *
+ * @param value The `span`'s `data-ssml`, as the XML reader gives it.
+ * @returns The `p`.
+ */
+const spokenParagraph = (value: string): SourceElement =>
+  el(
+    "p",
+    [],
+    [text("Our word is "), el("span", [attr("data-ssml", value)], [text("mRNA")]), text(".")],
+  );
+
+/**
+ * Construct a candidate rubric block holding {@link spokenParagraph}'s paragraph.
+ *
+ * @param value The `span`'s `data-ssml`.
+ * @returns The `qti-rubric-block`.
+ */
+const spokenRubric = (value: string): SourceElement =>
+  el(
+    "qti-rubric-block",
+    [attr("view", "candidate")],
+    [el("qti-content-body", [], [spokenParagraph(value)])],
+  );
+
+/**
+ * The three documents `checkRules` does not judge whose `span` carries a `data-ssml`: a stimulus,
+ * a test whose section's rubric block holds it, and a section document whose rubric block does,
+ * each with its kind and the `span`'s path.
+ *
+ * @param value The `span`'s `data-ssml`.
+ * @returns The documents.
+ */
+const spokenDocuments = (value: string) =>
+  [
+    {
+      kind: "stimulus",
+      path: "qti-assessment-stimulus/qti-stimulus-body/p/span",
+      source: stimulus([spokenParagraph(value)]),
+    },
+    {
+      kind: "test",
+      path: "qti-assessment-test/qti-test-part/qti-assessment-section/qti-rubric-block/qti-content-body/p/span",
+      source: assessmentTest([spokenRubric(value), itemRef("q1")]),
+    },
+    {
+      kind: "section",
+      path: "qti-assessment-section/qti-rubric-block/qti-content-body/p/span",
+      source: doc("section.xml", assessmentSection("S", [spokenRubric(value), itemRef("q1")])),
+    },
+  ] as const;
+
+/**
+ * Reduce a verdict that must refuse to its refusals' rules, paths and details.
+ *
+ * @param verdict The verdict.
+ * @returns One entry per refusal, in order.
+ */
+const refusedFacts = (verdict: Verdict) =>
+  verdict.verdict === "refused"
+    ? verdict.refusals.map((refusal) => ({
+        detail: refusal.detail,
+        path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
+        rule: refusal.rule,
+      }))
+    : assert.fail(`The verdict is ${verdict.verdict}, not refused.`);
+
+describe("check, align-54 Data-SSML everywhere: a data-ssml value is Data-SSML JSON in every document (the operator's P3)", () => {
+  it("align-54 Data-SSML everywhere P3: refuses data-ssml=\"hello\" in a stimulus, a test's rubric block and a section's rubric block, as attribute-type data-ssml with problem json at the attribute", () => {
+    for (const { kind, path, source } of spokenDocuments("hello")) {
+      const verdict = verdictOf(source);
+
+      assert.strictEqual(verdict.kind, kind);
+      assert.deepStrictEqual(refusedFacts(verdict), [
+        {
+          detail: { attribute: "data-ssml", check: "data-ssml", element: "span", problem: "json" },
+          path: `${path}/@data-ssml`,
+          rule: "attribute-type",
+        },
+      ]);
+    }
+  });
+
+  it("align-54 Data-SSML everywhere P3: names an unknown property, a value of the wrong type and a value outside its list as the problem in each document", () => {
+    const values = [
+      ["name", '{"speak":{"alias":"messenger RNA"}}'],
+      ["type", '{"sub":{"alias":3}}'],
+      ["value", '{"say-as":{"interpret-as":"spell-out"}}'],
+    ] as const;
+
+    for (const [problem, value] of values) {
+      assert.deepStrictEqual(
+        spokenDocuments(value).map(({ source }) =>
+          refusedFacts(verdictOf(source)).map((refusal) => refusal.detail["problem"]),
+        ),
+        [[problem], [problem], [problem]],
+      );
+    }
+  });
+
+  it("align-54 Data-SSML everywhere P3: accepts a data-ssml that is Data-SSML JSON in each document, with its notice", () => {
+    assert.deepStrictEqual(
+      spokenDocuments('{"sub":{"alias":"messenger RNA"}}').map(({ source }) => {
+        const verdict = verdictOf(source);
+
+        return [
+          verdict.verdict,
+          verdict.kind,
+          verdict.verdict === "accepted-with-unsupported"
+            ? featuresOf(verdict.accepted.unsupported)
+            : [],
+        ];
+      }),
+      [
+        [
+          "accepted-with-unsupported",
+          "stimulus",
+          ["root:qti-assessment-stimulus@qti-assessment-stimulus"],
+        ],
+        [
+          "accepted-with-unsupported",
+          "test",
+          [
+            "qti-rubric-block@qti-assessment-test/qti-test-part/qti-assessment-section/qti-rubric-block",
+          ],
+        ],
+        [
+          "accepted-with-unsupported",
+          "section",
+          ["root:qti-assessment-section@qti-assessment-section"],
+        ],
+      ],
+    );
+  });
+
+  it("align-54 Data-SSML everywhere P3: does not judge a stimulus's data-ssml an attribute wildcard admits on a kind that does not declare it (rule 5b8ee08b)", () => {
+    const verdict = verdictOf(
+      stimulus([el("ul", [], [el("li", [attr("data-ssml", "hello")], [text("mRNA")])])]),
+    );
+
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+    assert.strictEqual(verdict.kind, "stimulus");
+  });
+
+  it("align-54 Data-SSML everywhere P3: leaves a stimulus holding an unexpanded entity reference unchecked, judging none of its data-ssml, as an item's rules do", () => {
+    const verdict = verdictOf(stimulus([spokenParagraph("hello"), el("p", [], [entity("more")])]));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.kind, "stimulus");
+  });
+});
+
+/**
+ * Construct a Portable Custom Interaction bound to `RESPONSE` that names its module by a `module`
+ * attribute or by neither form.
+ *
+ * @param module Whether it carries a `module`.
+ * @returns The interaction.
+ */
+const portableInteraction = (module: boolean): SourceElement =>
+  el(
+    "qti-portable-custom-interaction",
+    [
+      attr("custom-interaction-type-identifier", "urn:example:pci"),
+      ...(module ? [attr("module", "pci")] : []),
+      attr("response-identifier", "RESPONSE"),
+    ],
+    [el("qti-interaction-markup", [], [el("div")])],
+  );
+
+/**
+ * Construct a Choice bound to `RESPONSE` holding one simple choice.
+ *
+ * @param identifier The choice's `identifier`.
+ * @returns The interaction.
+ */
+const oneChoice = (identifier: string): SourceElement =>
+  el(
+    "qti-choice-interaction",
+    [attr("response-identifier", "RESPONSE")],
+    [el("qti-simple-choice", [attr("identifier", identifier)], [text("Yes")])],
+  );
+
+/**
+ * The content a stimulus and an item share in the stimulus prose rule cases, each with the
+ * declaration the item binds it to, if any, and the one refusal it earns: a `td` whose `headers`
+ * names no header of its table (reading 126, E29), a `q` a quotation mark stands against (reading
+ * 127, E30), a Choice whose two choices are both `A` (reading 104, E19), and a PCI that names its
+ * module by neither form (R10-a, F6). Each `path` is under the body.
+ */
+const stimulusProse = [
+  {
+    content: el("table", [], [el("tr", [], [el("td", [attr("headers", "zz")], [text("x")])])]),
+    declarations: [],
+    name: "E29",
+    refusal: {
+      detail: {
+        attribute: "headers",
+        check: "headers",
+        element: "td",
+        reading: "126",
+        token: "zz",
+        value: "zz",
+      },
+      path: "table/tr/td/@headers",
+      rule: "attribute-type",
+    },
+  },
+  {
+    content: el("p", [], [text("“"), el("q", [], [text("hi")]), text("”")]),
+    declarations: [],
+    name: "E30",
+    refusal: {
+      detail: { check: "quotation", element: "q", mark: "“", reading: "127", side: "before" },
+      path: "p/q",
+      rule: "text-not-allowed",
+    },
+  },
+  {
+    content: el(
+      "div",
+      [],
+      [
+        el(
+          "qti-choice-interaction",
+          [attr("response-identifier", "RESPONSE")],
+          [
+            el("qti-simple-choice", [attr("identifier", "A")], [text("Yes")]),
+            el("qti-simple-choice", [attr("identifier", "A")], [text("No")]),
+          ],
+        ),
+      ],
+    ),
+    declarations: [response("identifier", "single")],
+    name: "E19",
+    refusal: {
+      detail: { class: "qti-simple-choice", identifier: "A", reading: "104" },
+      path: "div/qti-choice-interaction/qti-simple-choice[2]/@identifier",
+      rule: "duplicate-identifier",
+    },
+  },
+  {
+    content: el("div", [], [portableInteraction(false)]),
+    declarations: [response("string", "single")],
+    name: "F6",
+    refusal: {
+      detail: {
+        attribute: "module",
+        check: "pci-module-source",
+        element: "qti-portable-custom-interaction",
+        source: "info.txt:37583",
+      },
+      path: "div/qti-portable-custom-interaction",
+      rule: "missing-attribute",
+    },
+  },
+] as const;
+
+describe("check, align-54 r11 stimulus prose rules: a stimulus's choices, table headers, quotations and PCIs are judged as an item's are (readings 104, 126 and 127; R10-a)", () => {
+  it.each(stimulusProse)(
+    "align-54 r11 stimulus prose rules $name: refuses the stimulus holding it, with the refusal the item holding it earns",
+    ({ content, refusal }) => {
+      const verdict = verdictOf(stimulus([content]));
+
+      assert.strictEqual(verdict.kind, "stimulus");
+      assert.deepStrictEqual(refusedFacts(verdict), [
+        { ...refusal, path: `qti-assessment-stimulus/qti-stimulus-body/${refusal.path}` },
+      ]);
+    },
+  );
+
+  it.each(stimulusProse)(
+    "align-54 r11 stimulus prose rules $name: the item holding it keeps exactly its refusal (control)",
+    ({ content, declarations, refusal }) => {
+      const verdict = verdictOf(item([...declarations, body([content])]));
+
+      assert.strictEqual(verdict.kind, "item");
+      assert.deepStrictEqual(refusedFacts(verdict), [
+        { ...refusal, path: `${bodyPath}/${refusal.path}` },
+      ]);
+    },
+  );
+
+  it("align-54 r11 stimulus prose rules E19: refuses each of a stimulus's faults in document order, the choices pooled across its interactions", () => {
+    const verdict = verdictOf(
+      stimulus([
+        el("div", [], [oneChoice("A")]),
+        el("p", [], [el("q", [], [text("“hi”")])]),
+        el("div", [], [oneChoice("A")]),
+      ]),
+    );
+
+    assert.deepStrictEqual(refusedFacts(verdict), [
+      {
+        detail: { check: "quotation", element: "q", mark: "“", reading: "127", side: "start" },
+        path: "qti-assessment-stimulus/qti-stimulus-body/p/q",
+        rule: "text-not-allowed",
+      },
+      {
+        detail: { class: "qti-simple-choice", identifier: "A", reading: "104" },
+        path: "qti-assessment-stimulus/qti-stimulus-body/div[2]/qti-choice-interaction/qti-simple-choice/@identifier",
+        rule: "duplicate-identifier",
+      },
+    ]);
+  });
+
+  it("align-54 r11 stimulus prose rules E29: accepts a stimulus whose cells name their table's headers, whose q stands clear of marks, whose choices differ and whose PCI names its module, marked as a stimulus root (control)", () => {
+    const verdict = verdictOf(
+      stimulus([
+        el(
+          "table",
+          [],
+          [
+            el("tr", [], [el("th", [attr("id", "h")], [text("Head")])]),
+            el("tr", [], [el("td", [attr("headers", "h")], [text("x")])]),
+          ],
+        ),
+        el("p", [], [text("She said "), el("q", [], [text("hi")]), text(".")]),
+        el("div", [], [choiceInteraction()]),
+        el("div", [], [portableInteraction(true)]),
+      ]),
+    );
+
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+    assert.strictEqual(verdict.kind, "stimulus");
   });
 });
 
@@ -2274,11 +2775,1019 @@ const m2Wordings: readonly {
   },
 ];
 
+/**
+ * A hand-built refusal for each `check`, rule and rewording align-54 adds (its refusal contract),
+ * with the item that adds it and the fragments its sentence must hold: the facts its detail
+ * carries, what settles it and the repair. Each fragment names a fact the rule's default sentence
+ * never names, so each case fails until its branch words it.
+ */
+const align54Wordings: readonly {
+  readonly detail: Readonly<Record<string, string>>;
+  readonly item: string;
+  readonly name: string;
+  readonly rule: RefusalRule;
+  readonly says: readonly string[];
+}[] = [
+  {
+    detail: {
+      baseType: "integer",
+      cardinality: "multiple",
+      check: "string-binding",
+      interaction: "qti-text-entry-interaction",
+      reading: "14",
+      response: "NOTES",
+    },
+    item: "D3a",
+    name: "a string-identifier binds a string response that is not a record",
+    rule: "binding",
+    says: [
+      "`qti-text-entry-interaction`'s attribute `string-identifier` names `NOTES`, a multiple response of base type `integer`, and a `string-identifier` binds a `string` response that is not a `record` (reading 14).",
+      "To make it valid: name such a response in `string-identifier`, or change the declaration of `NOTES`.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "response-identifier",
+      check: "bound-once",
+      interaction: "qti-choice-interaction",
+      reading: "92",
+      response: "RESPONSE",
+    },
+    item: "E11a",
+    name: "one response, one binding",
+    rule: "binding",
+    says: [
+      "`qti-choice-interaction`'s attribute `response-identifier` binds `RESPONSE`, which an earlier binding already binds, and a response is bound at most once, to one interaction (reading 92).",
+      "To make it valid: declare a response of its own and name it in `response-identifier`, so that `RESPONSE` is bound once.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "max-choices",
+      check: "count-cardinality",
+      count: "0",
+      interaction: "qti-choice-interaction",
+      reading: "92",
+      response: "RESPONSE",
+    },
+    item: "E11a",
+    name: "a count of 0, no limit, needs a multiple response",
+    rule: "binding",
+    says: [
+      "`qti-choice-interaction`'s `max-choices` is `0`, which sets no limit, so the interaction must be bound to a `multiple` response, and `RESPONSE` is not one (reading 92).",
+      'To make it valid: declare `RESPONSE` with `cardinality="multiple"`, or set `max-choices` to `1`.',
+    ],
+  },
+  {
+    detail: {
+      attribute: "max-associations",
+      check: "count-cardinality",
+      count: "2",
+      interaction: "qti-match-interaction",
+      reading: "92",
+      response: "RESPONSE",
+    },
+    item: "E11a",
+    name: "a count above 1 needs a multiple response",
+    rule: "binding",
+    says: [
+      "`qti-match-interaction`'s `max-associations` is `2`, so the interaction must be bound to a `multiple` response, and `RESPONSE` is not one (reading 92).",
+    ],
+  },
+  {
+    detail: {
+      cardinality: "single",
+      check: "gap-match-single",
+      gaps: "3",
+      interaction: "qti-gap-match-interaction",
+      response: "RESPONSE",
+    },
+    item: "P7",
+    name: "several gaps need a multiple response",
+    rule: "binding",
+    says: [
+      "`qti-gap-match-interaction` holds 3 gaps and is bound to `RESPONSE`, a single response, and an interaction of several gaps needs a `multiple` response.",
+      'To make it valid: declare `RESPONSE` with `cardinality="multiple"`.',
+    ],
+  },
+  {
+    detail: {
+      check: "context-variable",
+      element: "qti-context-variable",
+      identifier: "LOCALE",
+      reading: "92",
+    },
+    item: "E11a",
+    name: "a PCI's context variable names a context variable",
+    rule: "undeclared-variable",
+    says: [
+      "`qti-context-variable` names `LOCALE`, which is neither a context variable the item declares nor the built-in `QTI_CONTEXT` (reading 92).",
+      "To make it valid: name a context variable the item declares, or the built-in `QTI_CONTEXT`.",
+    ],
+  },
+  {
+    detail: {
+      check: "count-pair",
+      element: "qti-choice-interaction",
+      least: "min-choices",
+      leastValue: "3",
+      most: "max-choices",
+      mostValue: "2",
+      reading: "76",
+    },
+    item: "E2",
+    name: "a least count is at most its most",
+    rule: "count-range",
+    says: [
+      "`qti-choice-interaction`'s `min-choices` is `3`, above its `max-choices`, `2`, and a least count is at most its most (reading 76).",
+      "To make it valid: lower `min-choices` to at most `2`, or raise `max-choices` to at least `3`.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "max-choices",
+      check: "choice-count",
+      choices: "4",
+      reading: "18",
+      value: "5",
+    },
+    item: "D4a",
+    name: "a count is at most the number of choices",
+    rule: "count-range",
+    says: [
+      "`max-choices` is `5`, more than the interaction's 4 choices, and it may be at most the number of choices (reading 18).",
+      "To make it valid: write a `max-choices` of at most 4, or give the interaction more choices.",
+    ],
+  },
+  {
+    detail: { check: "selection", parts: "3", reading: "79", select: "5" },
+    item: "E4",
+    name: "a selection without replacement selects at most its section's parts",
+    rule: "count-range",
+    says: [
+      "`qti-selection` selects `5` without replacement from its section's 3 parts, and a selection without replacement selects at most its section's parts (reading 79).",
+      'To make it valid: set `select` to at most 3, or set `with-replacement="true"`.',
+    ],
+  },
+  {
+    detail: {
+      attribute: "identifier",
+      check: "numbered",
+      element: "qti-variable",
+      itemRef: "Q1",
+      reading: "88",
+      reference: "Q1.2.SCORE",
+    },
+    item: "D6",
+    name: "a numbered reading only under a selection with replacement",
+    rule: "undeclared-variable",
+    says: [
+      "`qti-variable`'s attribute `identifier` names `Q1.2.SCORE`, a numbered instance of the item ref `Q1`, and an instance number counts only where a selection with replacement can repeat `Q1`, which none does (reading 88).",
+      'To make it valid: name the variable without its instance number, or give a section that holds `Q1` a selection with `with-replacement="true"`.',
+    ],
+  },
+  {
+    detail: {
+      attribute: "identifier",
+      check: "setter",
+      element: "qti-set-outcome-value",
+      reading: "112",
+      reference: "a.SCORE",
+    },
+    item: "D6",
+    name: "a setter names the test's own declaration",
+    rule: "undeclared-variable",
+    says: [
+      "`qti-set-outcome-value`'s attribute `identifier` names `a.SCORE`, which the test does not declare, and a setter sets a variable its own document declares, never an item's (reading 112).",
+      "To make it valid: declare `a.SCORE` in the test, or set a variable the test declares.",
+    ],
+  },
+  {
+    detail: {
+      baseType: "float",
+      cardinality: "single",
+      check: "feedback-outcome",
+      element: "qti-feedback-block",
+      identifier: "SCORE",
+      reading: "77",
+    },
+    item: "E3a",
+    name: "a feedback element names an identifier outcome, single or multiple",
+    rule: "expression-type",
+    says: [
+      "`qti-feedback-block`'s attribute `outcome-identifier` names `SCORE`, a single outcome of base type `float`, and a feedback element names an outcome of base type `identifier`, single or multiple (reading 77).",
+      "To make it valid: name an outcome of base type `identifier`, single or multiple, in `outcome-identifier`, or change the declaration of `SCORE`.",
+    ],
+  },
+  {
+    detail: {
+      check: "default-hotspot",
+      context: "qti-hotspot-interaction",
+      element: "qti-hotspot-choice",
+      reading: "80",
+    },
+    item: "E5",
+    name: "a default hotspot comes last",
+    rule: "misplaced-element",
+    says: [
+      '`qti-hotspot-choice` is a default hotspot, with `shape="default"`, and is not the last hotspot of `qti-hotspot-interaction`, where a default hotspot comes last (reading 80).',
+      "To make it valid: move `qti-hotspot-choice` after the other hotspots of `qti-hotspot-interaction`.",
+    ],
+  },
+  {
+    detail: {
+      check: "default-hotspot",
+      context: "qti-graphic-gap-match-interaction",
+      element: "qti-associable-hotspot",
+      reading: "80",
+    },
+    item: "E5",
+    name: "a graphic gap match interaction has no default hotspot",
+    rule: "misplaced-element",
+    says: [
+      '`qti-associable-hotspot` is a default hotspot, with `shape="default"`, and `qti-graphic-gap-match-interaction` may hold none (reading 80).',
+      "To make it valid: give `qti-associable-hotspot` another shape, or remove it.",
+    ],
+  },
+  {
+    detail: {
+      check: "order",
+      context: "qti-companion-materials-info",
+      element: "qti-physical-material",
+      reading: "96",
+    },
+    item: "E13",
+    name: "order after a repeated wildcard",
+    rule: "misplaced-element",
+    says: [
+      "`qti-physical-material` comes after a child of `qti-companion-materials-info` that its repeated wildcard holds, and no element of an earlier part of the sequence may follow such a child (reading 96).",
+      "To make it valid: move `qti-physical-material` before the children the wildcard holds.",
+    ],
+  },
+  {
+    detail: {
+      check: "lookup-cardinality",
+      element: "qti-match-table",
+      identifier: "GRADE",
+      reading: "100",
+    },
+    item: "E15",
+    name: "a lookup sets a single outcome",
+    rule: "misplaced-element",
+    says: [
+      "`qti-match-table` belongs to the outcome `GRADE`, which is not single, and a lookup table sets a single outcome (reading 100).",
+      'To make it valid: declare `GRADE` with `cardinality="single"`, or remove `qti-match-table`.',
+    ],
+  },
+  {
+    detail: { check: "quotation", mark: '"', reading: "127", side: "before" },
+    item: "E30",
+    name: "no quotation mark before a q",
+    rule: "text-not-allowed",
+    says: [
+      'The quotation mark `"` stands immediately before this `q`, and a browser adds the quotation marks of a `q` itself (reading 127).',
+      'To make it valid: remove the quotation mark `"`.',
+    ],
+  },
+  {
+    detail: { check: "quotation", mark: "”", reading: "127", side: "end" },
+    item: "E30",
+    name: "no quotation mark at the end of a q",
+    rule: "text-not-allowed",
+    says: ["The quotation mark `”` stands at the end of this `q`"],
+  },
+  {
+    detail: {
+      chain: "tests/test.xml sections/a.xml sections/b.xml sections/a.xml",
+      href: "../sections/a.xml",
+      identifier: "toA",
+      reading: "85",
+    },
+    item: "E7",
+    name: "the new rule inclusion-cycle",
+    rule: "inclusion-cycle",
+    says: [
+      "The section ref `toA` points at `../sections/a.xml`, which leads back to a document already on its chain, `tests/test.xml sections/a.xml sections/b.xml sections/a.xml`, and an inclusion never reaches itself (reading 85).",
+      "Rule `inclusion-cycle`.",
+      "To make it valid: point the section ref at a document that does not lead back to one on its chain, or remove it.",
+    ],
+  },
+  {
+    detail: { reading: "87", reason: "backward", target: "Q1" },
+    item: "E8a",
+    name: "the new rule branch-target, a backward jump",
+    rule: "branch-target",
+    says: [
+      "`qti-branch-rule`'s target `Q1` comes before the end of the element that holds the rule, and a branch rule jumps only forward (reading 87).",
+      "Rule `branch-target`.",
+      "To make it valid: name a later item ref, section or test part the rule may reach, or one of `EXIT_SECTION`, `EXIT_TESTPART` and `EXIT_TEST`.",
+    ],
+  },
+  {
+    detail: { reading: "87", reason: "self", target: "Q2" },
+    item: "E8a",
+    name: "the new rule branch-target, a jump to itself",
+    rule: "branch-target",
+    says: [
+      "`qti-branch-rule`'s target `Q2` names the element that holds the rule, and a branch rule jumps only forward, never to its own element (reading 87).",
+    ],
+  },
+  {
+    detail: { reading: "87", reason: "outside-part", target: "S9" },
+    item: "E8a",
+    name: "the new rule branch-target, a jump outside its test part",
+    rule: "branch-target",
+    says: [
+      "`qti-branch-rule`'s target `S9` lies outside what the rule may name: a test part's rule names a later test part, and any other rule an item ref, section or section ref of its own test part (reading 87).",
+    ],
+  },
+  {
+    detail: { reading: "87", reason: "unknown", target: "NOWHERE" },
+    item: "E8b",
+    name: "the new rule branch-target, an unknown target",
+    rule: "branch-target",
+    says: [
+      "`qti-branch-rule`'s target `NOWHERE` names no test part, section, section ref or item ref the rule can reach, and no exit (reading 87).",
+    ],
+  },
+  {
+    detail: { reading: "87", reason: "repeatable", target: "Q3" },
+    item: "E8b",
+    name: "the new rule branch-target, a repeatable item ref",
+    rule: "branch-target",
+    says: [
+      "`qti-branch-rule`'s target `Q3` names an item ref that a selection with replacement can repeat, which no branch rule may target (reading 87).",
+      "To make it valid: name an item ref no selection with replacement repeats, or one of `EXIT_SECTION`, `EXIT_TESTPART` and `EXIT_TEST`.",
+    ],
+  },
+  {
+    detail: { reading: "87", reason: "ambiguous", target: "Q4" },
+    item: "E8b",
+    name: "the new rule branch-target, a target two placements supply",
+    rule: "branch-target",
+    says: [
+      "`qti-branch-rule`'s target `Q4` names an element that two placements of one section document both supply, so it names two (reading 87).",
+      "To make it valid: name an element placed once, or place that section document once.",
+    ],
+  },
+  {
+    detail: { document: "items/q1.xml", language: "fr", listed: "en de", reading: "134" },
+    item: "E34",
+    name: "the new rule document-lang",
+    rule: "document-lang",
+    says: [
+      "The document `items/q1.xml` uses the language `fr`, and its resource's LOM general category lists only `en` and `de`; each language an item or test uses is listed there (reading 134).",
+      "Rule `document-lang`.",
+      "To make it valid: add a `language` of `fr` to the resource's LOM general category, or correct the document's language.",
+    ],
+  },
+  {
+    detail: { document: "items/q1.xml", language: "fr", listed: "", reading: "134" },
+    item: "E34",
+    name: "the new rule document-lang, with no language listed",
+    rule: "document-lang",
+    says: ["its resource's LOM general category lists no language;"],
+  },
+  {
+    detail: { reading: "122", value: "self assessment" },
+    item: "E25",
+    name: "the new rule lom-learning-resource-type",
+    rule: "lom-learning-resource-type",
+    says: [
+      "The LOM `learningResourceType` is `self assessment`, a LOM value that QTI forbids, since a QTI object may be reused in any kind of assessment (reading 122).",
+      "Rule `lom-learning-resource-type`.",
+      "To make it valid: use `exercise` or `questionnaire`, or a term of another vocabulary.",
+    ],
+  },
+  {
+    detail: {
+      check: "choice-variable",
+      class: "qti-simple-choice",
+      identifier: "SCORE",
+      reading: "104",
+    },
+    item: "E19",
+    name: "a choice's identifier names no item variable",
+    rule: "duplicate-identifier",
+    says: [
+      "`qti-simple-choice`'s identifier `SCORE` is also the name of an item variable or a built-in, and a choice's identifier names no item variable (reading 104).",
+      "To make it valid: give the `qti-simple-choice` an identifier that no variable, built-in or other choice of the item uses.",
+    ],
+  },
+  {
+    detail: { baseType: "integer", check: "map-key", key: "01", reading: "98" },
+    item: "B5b",
+    name: "a mapping's keys are distinct",
+    rule: "duplicate-identifier",
+    says: [
+      "The mapping's key `01` repeats an earlier key, compared as a value of base type `integer`, and a mapping's keys are distinct (reading 98).",
+      "To make it valid: remove the repeated `qti-map-entry`, or give it a key no other entry has.",
+    ],
+  },
+  {
+    detail: { check: "field", field: "x", reading: "158" },
+    item: "B7",
+    name: "a record writes each field once",
+    rule: "duplicate-identifier",
+    says: [
+      "The record value writes the field `x` more than once, and a record holds each field once (reading 158).",
+      "To make it valid: write the field `x` once.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "for",
+      check: "idref-target",
+      element: "label",
+      reading: "156",
+      value: "name",
+    },
+    item: "E16",
+    name: "an IDREF names an ID of the document",
+    rule: "attribute-type",
+    says: [
+      "`label`'s attribute `for` is `name`, the `id` of no element of the document (reading 156).",
+      "To make it valid: name in `for` the `id` of an element of the document.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "headers",
+      check: "headers",
+      element: "td",
+      reading: "126",
+      token: "h3",
+      value: "h1 h3",
+    },
+    item: "E29",
+    name: "headers names header cells of the same table, each once",
+    rule: "attribute-type",
+    says: [
+      "`td`'s attribute `headers` is `h1 h3`, and its token `h3` is not the `id` of a `th` of the cell's own table, or repeats an earlier token (reading 126).",
+      "To make it valid: make each token of `headers` the `id` of a `th` of the same table, each written once.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "mastery-value",
+      check: "mastery-range",
+      element: "qti-outcome-declaration",
+      least: "0.0",
+      reading: "149",
+      value: "-1",
+    },
+    item: "E42b",
+    name: "a mastery value at least the outcome's minimum",
+    rule: "attribute-type",
+    says: [
+      "`qti-outcome-declaration`'s attribute `mastery-value` is `-1`, below the outcome's minimum, `0.0`, and a mastery value lies from the outcome's minimum to its maximum (reading 149).",
+      "To make it valid: write a `mastery-value` of at least `0.0`, or lower the outcome's `normal-minimum`.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "mastery-value",
+      check: "mastery-range",
+      element: "qti-outcome-declaration",
+      greatest: "10",
+      reading: "149",
+      value: "12",
+    },
+    item: "E42a",
+    name: "a mastery value at most the outcome's maximum",
+    rule: "attribute-type",
+    says: [
+      "`qti-outcome-declaration`'s attribute `mastery-value` is `12`, above the outcome's maximum, `10`, and a mastery value lies from the outcome's minimum to its maximum (reading 149).",
+      "To make it valid: write a `mastery-value` of at most `10`, or raise the outcome's `normal-maximum`.",
+    ],
+  },
+  {
+    detail: { attribute: "data-ssml", check: "data-ssml", element: "span", problem: "json" },
+    item: "P3",
+    name: "a data-ssml value that is not JSON",
+    rule: "attribute-type",
+    says: [
+      "`span`'s attribute `data-ssml` is not JSON, and a `data-ssml` value is Data-SSML JSON.",
+      "To make it valid: write `data-ssml` as Data-SSML JSON, or remove it.",
+    ],
+  },
+  {
+    detail: { attribute: "data-ssml", check: "data-ssml", element: "span", problem: "name" },
+    item: "P3",
+    name: "a data-ssml value naming an unknown property",
+    rule: "attribute-type",
+    says: ["`span`'s attribute `data-ssml` names a property Data-SSML does not define,"],
+  },
+  {
+    detail: { attribute: "data-ssml", check: "data-ssml", element: "span", problem: "type" },
+    item: "P3",
+    name: "a data-ssml value of an unknown type",
+    rule: "attribute-type",
+    says: [
+      "`span`'s attribute `data-ssml` gives a property a value of a type Data-SSML does not allow it,",
+    ],
+  },
+  {
+    detail: { attribute: "data-ssml", check: "data-ssml", element: "span", problem: "value" },
+    item: "P3",
+    name: "a data-ssml value outside its property's values",
+    rule: "attribute-type",
+    says: ["`span`'s attribute `data-ssml` gives a property a value Data-SSML does not allow,"],
+  },
+  {
+    detail: {
+      attribute: "cardinality",
+      baseType: "float",
+      check: "reserved-outcome-type",
+      element: "qti-outcome-declaration",
+      identifier: "SCORE",
+      reading: "153",
+      value: "record",
+    },
+    item: "B1b",
+    name: "a reserved outcome declared record",
+    rule: "attribute-type",
+    says: [
+      "`qti-outcome-declaration`'s attribute `cardinality` is `record`, but an outcome named `SCORE` is a single value of the base type `float`, and a record has no base type (reading 153).",
+      'To make it valid: declare `SCORE` with `cardinality="single"` and the base type `float`, or give `qti-outcome-declaration` another identifier.',
+    ],
+  },
+  {
+    detail: {
+      attribute: "tool-name tool-version",
+      check: "label-tool",
+      element: "qti-assessment-item",
+      labelled: "qti-assessment-item/qti-item-body/qti-text-entry-interaction",
+      reading: "128",
+    },
+    item: "E31a",
+    name: "a label names its tool",
+    rule: "missing-attribute",
+    says: [
+      "`qti-assessment-item` must carry `tool-name` and `tool-version`, because `qti-assessment-item/qti-item-body/qti-text-entry-interaction` carries a `label`, and an item that uses labels names the tool that set them (reading 128).",
+      "To make it valid: add `tool-name` and `tool-version` to `qti-assessment-item`, or remove the `label`.",
+    ],
+  },
+  {
+    detail: { check: "entry-key", path: "C:/items/q1.xml", reading: "138" },
+    item: "E36",
+    name: "an entry key with a backslash or a drive letter",
+    rule: "package-path-outside",
+    says: [
+      "The package's entry `C:/items/q1.xml` holds a backslash or begins with a drive letter, so it names no path inside the package (reading 138).",
+      "To make it valid: rename the entry with forward slashes and no drive letter.",
+    ],
+  },
+  {
+    detail: { check: "document-entry", path: "https://example.org/q1.xml", reading: "102" },
+    item: "E17",
+    name: "a document resource's href outside the package",
+    rule: "package-path-outside",
+    says: [
+      "The resource's `href` is `https://example.org/q1.xml`, which leads outside the package, and a document resource's `href` names a document the package holds (reading 102).",
+      "To make it valid: point the `href` at the document's path inside the package, relative to its root.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "src",
+      check: "reference",
+      document: "items/q1.xml",
+      path: "images/a.png",
+      reading: "103",
+    },
+    item: "E18",
+    name: "a file reference names a held file",
+    rule: "package-file-missing",
+    says: [
+      "The document `items/q1.xml` names the file `images/a.png` in its `src`, and the package's manifest lists no such file (reading 103).",
+      "To make it valid: add `images/a.png` to the package and list it in a `file` entry, or correct the `src`.",
+    ],
+  },
+  {
+    detail: {
+      check: "path-type",
+      path: "items/q1.xml",
+      reading: "162",
+      type: "imsqti_test_xmlv3p0",
+    },
+    item: "E38",
+    name: "one path, one document type",
+    rule: "resource-type-mismatch",
+    says: [
+      "The manifest names `items/q1.xml` a document of type `imsqti_test_xmlv3p0`, and another resource names it a document of another type; a path is one document, of one type (reading 162).",
+      "To make it valid: name `items/q1.xml` under one document type only.",
+    ],
+  },
+  {
+    detail: {
+      check: "manifest-document",
+      path: "imsmanifest.xml",
+      reading: "146",
+      type: "imsqti_item_xmlv3p0",
+    },
+    item: "E38",
+    name: "no resource names the manifest",
+    rule: "resource-type-mismatch",
+    says: [
+      "A resource of type `imsqti_item_xmlv3p0` names `imsmanifest.xml`, the package's manifest, which is no resource's document (reading 146).",
+      "To make it valid: point the resource's `href` at its own document, not at the manifest.",
+    ],
+  },
+  {
+    detail: { attribute: "identifier", check: "unwritten", path: "q1.xml", reading: "148" },
+    item: "E41a",
+    name: "a root with no identifier beside a LOM identifier",
+    rule: "lom-identifier",
+    says: [
+      "The document `q1.xml` writes no `identifier` on its root, so nothing matches the `identifier` its resource's LOM metadata gives (reading 148).",
+      "To make it valid: write on the document's root the `identifier` its resource's LOM metadata gives.",
+    ],
+  },
+  {
+    detail: { attribute: "title", check: "unwritten", path: "q1.xml", reading: "148" },
+    item: "E41a",
+    name: "a root with no title beside a LOM title",
+    rule: "lom-title",
+    says: [
+      "The document `q1.xml` writes no `title` on its root, so nothing matches the `title` its resource's LOM metadata gives (reading 148).",
+      "To make it valid: write on the document's root the `title` its resource's LOM metadata gives.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "identifier",
+      check: "unwritten",
+      href: "q9.xml",
+      path: "items/q9.xml",
+      reading: "155",
+    },
+    item: "E41b",
+    name: "an item ref with no identifier, judged like any other",
+    rule: "item-ref-unresolved",
+    says: [
+      "The item ref that writes no `identifier` points at `q9.xml`, which resolves to `items/q9.xml`, and the manifest lists no item resource there (reading 155).",
+      "To make it valid: point the item ref's `href` at an item resource the manifest lists, or list the item as a resource of the package.",
+    ],
+  },
+  {
+    detail: {
+      check: "custom-interaction",
+      element: "qti-custom-interaction",
+      parent: "qti-item-body",
+      version: "3.0.0",
+    },
+    item: "P2",
+    name: "qti-custom-interaction in a 3.0.0 package",
+    rule: "unknown-element",
+    says: [
+      "`qti-custom-interaction` is deprecated in QTI 3.0.0, which requires a Portable Custom Interaction, `qti-portable-custom-interaction`, in its place.",
+      "To make it valid: replace `qti-custom-interaction` with a `qti-portable-custom-interaction`.",
+    ],
+  },
+];
+
+/**
+ * A hand-built refusal for each `check` and rewording Revision 3 of align-54 adds, with the row of
+ * its contract that adds it and the fragments its sentence must hold: the facts its detail carries,
+ * what settles it and the repair. Each fragment names a fact the rule's default sentence never
+ * names, so each case fails until its branch words it.
+ */
+const align54R3Wordings: readonly {
+  readonly detail: Readonly<Record<string, string>>;
+  readonly name: string;
+  readonly row: string;
+  readonly rule: RefusalRule;
+  readonly says: readonly string[];
+}[] = [
+  {
+    detail: {
+      catalog: "glossary",
+      check: "card-support",
+      source: "info.txt:21097",
+      support: "sign-language",
+    },
+    name: "a catalog holds one card per support",
+    row: "F3a",
+    rule: "duplicate-identifier",
+    says: [
+      "A `qti-card` names the support `sign-language`, as an earlier card of the catalog `glossary` does, and a catalog holds one card per support (info.txt:21097).",
+      "To make it valid: remove the repeated `qti-card`, or merge its entries into the catalog's first card for `sign-language`.",
+    ],
+  },
+  {
+    detail: {
+      check: "card-default",
+      count: "2",
+      element: "qti-card",
+      source: "info.txt:21284",
+      support: "sign-language",
+    },
+    name: "a card holds at most one default entry",
+    row: "F3a",
+    rule: "child-count",
+    says: [
+      "The `qti-card` for the support `sign-language` holds 2 entries that designate themselves default, and a card holds at most one default entry (info.txt:21284).",
+      'To make it valid: keep `default="true"` on one `qti-card-entry` of the card, and remove it from the others.',
+    ],
+  },
+  {
+    detail: {
+      attribute: "data-catalog-idref",
+      check: "catalog-reference",
+      element: "span",
+      source: "info.txt:21437",
+      target: "p",
+      value: "note-1",
+    },
+    name: "a data-catalog-idref names a qti-catalog",
+    row: "F3b",
+    rule: "attribute-type",
+    says: [
+      "`span`'s attribute `data-catalog-idref` is `note-1`, the `id` of the element `p`, not of a `qti-catalog`, and a `data-catalog-idref` names a `qti-catalog` of its own document (info.txt:21437).",
+      "To make it valid: name in `data-catalog-idref` the `id` of a `qti-catalog` of the document.",
+    ],
+  },
+  {
+    detail: {
+      check: "reference",
+      document: "items/q1.xml",
+      element: "qti-file-href",
+      path: "cards/sign.mp4",
+      source: "info.txt:21151",
+    },
+    name: "a file reference an element's text makes names a held file",
+    row: "F4",
+    rule: "package-file-missing",
+    says: [
+      "The document `items/q1.xml` names the file `cards/sign.mp4` in its `qti-file-href`, and the package's manifest lists no such file (info.txt:21151).",
+      "To make it valid: add `cards/sign.mp4` to the package and list it in a `file` entry, or correct the `qti-file-href`.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "module",
+      check: "pci-module-source",
+      element: "qti-portable-custom-interaction",
+      source: "info.txt:37583",
+    },
+    name: "a PCI names its module",
+    row: "F6",
+    rule: "missing-attribute",
+    says: [
+      "`qti-portable-custom-interaction` carries no `module` and holds no `qti-interaction-modules`, and a PCI names its module by `module`, by `qti-interaction-modules`, or by both (info.txt:37583).",
+      "To make it valid: add a `module` to `qti-portable-custom-interaction`, or a `qti-interaction-modules` inside it.",
+    ],
+  },
+  {
+    detail: {
+      check: "remote-section",
+      href: "https://example.org/sections/s1.xml",
+      reading: "170",
+    },
+    name: "a remote section ref is refused under a stated limit",
+    row: "C",
+    rule: "package-path-outside",
+    says: [
+      "The section ref's `href` is `https://example.org/sections/s1.xml`, which leads outside the package; plate assembles a test from its package's documents and never fetches a section, so a remote section ref is refused, a stated limit and not a rule of QTI (reading 170).",
+      "To make it valid: put the section document in the package and point the `href` at its path inside the package.",
+    ],
+  },
+];
+
+/**
+ * The facts of a `string-binding` refusal of an interaction's `string-identifier` naming `NOTES`,
+ * a response of base type `integer`.
+ *
+ * @param interaction The interaction's name.
+ * @param cardinality The cardinality `NOTES` is declared with.
+ * @returns The refusal's detail.
+ */
+const stringBound = (interaction: string, cardinality: string) => ({
+  baseType: "integer",
+  cardinality,
+  check: "string-binding",
+  interaction,
+  reading: "14",
+  response: "NOTES",
+});
+
+/**
+ * Construct the `assembly-limit` refusal of the package `package.zip`, which points at the whole
+ * package.
+ *
+ * @param detail The bound passed, its limit and the count reached.
+ * @returns The refusal.
+ */
+const limitRefusal = (detail: Readonly<Record<string, string>>): Refusal =>
+  refusalAt("assembly-limit", "package.zip", { kind: "document" }, detail);
+
 describe("describeRefusal", () => {
   it("words every rule in refusalRules", () => {
     for (const rule of refusalRules) {
       assert.isAbove(describeRefusal(refusalOf(rule, {})).length, 0, rule);
     }
+  });
+
+  it.each(align54Wordings)("align-54 wording $item: $name", ({ detail, rule, says }) => {
+    const sentence = describeRefusal(refusalOf(rule, detail));
+
+    assert.notMatch(sentence, /[\n\r]/u);
+
+    for (const fragment of says) {
+      assert.include(sentence, fragment);
+    }
+  });
+
+  it.each(align54R3Wordings)("align-54 R3 wording $row: $name", ({ detail, rule, says }) => {
+    const sentence = describeRefusal(refusalOf(rule, detail));
+
+    assert.notMatch(sentence, /[\n\r]/u);
+
+    for (const fragment of says) {
+      assert.include(sentence, fragment);
+    }
+  });
+
+  it("align-54 r12 assembly limit: words a package whose tests assemble past the placements bound or the bytes bound with the limit and its number, the count reached, the cause and the remedy, as plate's own limit", () => {
+    assert.strictEqual(
+      describeRefusal(limitRefusal({ bound: "placements", limit: "2048", reached: "2049" })),
+      "**`package.zip`: refused.** The package's tests assemble past plate's assembly limit of 2048 placements of section documents: they place section documents at least 2049 times, each document counted once for every test and context that places it; the limit is plate's own, not a rule of QTI. Rule `assembly-limit`. To make it valid: place fewer section documents in the package's tests, or split the package.",
+    );
+    assert.strictEqual(
+      describeRefusal(limitRefusal({ bound: "bytes", limit: "4194304", reached: "4194560" })),
+      "**`package.zip`: refused.** The package's tests assemble past plate's assembly limit of 4194304 bytes of section documents placed: they place at least 4194560 bytes of section documents, each document counted once for every test and context that places it; the limit is plate's own, not a rule of QTI. Rule `assembly-limit`. To make it valid: place fewer section documents in the package's tests, or split the package.",
+    );
+  });
+
+  it("align-54 R3 wording F4: a file reference an attribute makes keeps its sentence, naming the attribute", () => {
+    assert.strictEqual(
+      describeRefusal(
+        refusalOf("package-file-missing", {
+          attribute: "src",
+          check: "reference",
+          document: "items/q1.xml",
+          path: "images/a.png",
+          reading: "103",
+        }),
+      ),
+      "**`item.xml`, at `qti-assessment-item`: refused.** The document `items/q1.xml` names the file `images/a.png` in its `src`, and the package's manifest lists no such file (reading 103). Rule `package-file-missing`. To make it valid: add `images/a.png` to the package and list it in a `file` entry, or correct the `src`.",
+    );
+  });
+
+  it("align-54 wording D2: compares a LOM title in the document's language, as xs:normalizedString, naming the language when the document has one", () => {
+    const facts = {
+      metadata: "Metadata Example Item #1",
+      path: "choice.xml",
+      reading: "62",
+      resource: "choice",
+      title: "Unattended Luggage",
+    };
+    const unstated = describeRefusal(refusalOf("lom-title", facts));
+    const stated = describeRefusal(refusalOf("lom-title", { ...facts, language: "en" }));
+
+    assert.include(
+      unstated,
+      "The document `choice.xml` has the title `Unattended Luggage`, and the LOM metadata of its resource `choice` gives `Metadata Example Item #1` instead; an item's or test's title must be one its LOM metadata gives in the document's language, compared as an `xs:normalizedString`, in which a tab or line break reads as a space (reading 62).",
+    );
+    assert.include(
+      unstated,
+      "To make it valid: make the resource's LOM title string in the document's language `Unattended Luggage`, or change the document's `title` to `Metadata Example Item #1`.",
+    );
+    assert.include(
+      stated,
+      "must be one its LOM metadata gives in the document's language, `en`, compared as an `xs:normalizedString`",
+    );
+  });
+
+  it("align-54 wording D6: names the test's own variable as one reading of an ambiguous reference when its prefix is empty", () => {
+    const sentence = describeRefusal(
+      refusalOf("ambiguous-reference", {
+        firstPrefix: "",
+        firstVariable: "a.b",
+        reading: "48",
+        reference: "a.b",
+        secondPrefix: "a",
+        secondVariable: "b",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "The reference `a.b` reads two ways, the test's own variable `a.b` and `a` with the variable `b`, and both name a variable that exists (reading 48).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: rename the test's own variable `a.b`, or the item ref, test part or section `a`, so that only one reading names a variable.",
+    );
+  });
+
+  it("align-54 wording P1, B2b: words a printed variable's format as any text, %% and conversions over the codes and d", () => {
+    const sentence = describeRefusal(
+      refusalOf("attribute-type", {
+        attribute: "format",
+        check: "printf-format",
+        element: "qti-printed-variable",
+        reading: "132",
+        value: "%q",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-printed-variable`'s attribute `format` is `%q`, which is not a printf format: any text, `%%` for a percent sign, and conversions, each a `%`, then any of the flags `#`, `0`, a space, `+` and `-`, an optional width, an optional precision and one of the codes `E`, `e`, `f`, `G`, `g`, `r`, `R`, `i`, `o`, `X`, `x` or `d` (reading 132).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: end each conversion in one of those codes, and write a percent sign as `%%`.",
+    );
+  });
+
+  // Rewritten under the Mind's ruling 5 (rule bb28660b): a `string-identifier` names "a second
+  // response variable (of base-type string)" (info.txt:48078), of any cardinality but `record`, so
+  // a Text Entry and an Extended Text are worded by one sentence, which demands no cardinality.
+  it("align-54 r11 string response fit D3a: words a Text Entry's string-identifier as naming a string response that is not a record, demanding no cardinality (reading 14)", () => {
+    const sentence = describeRefusal(
+      refusalOf("binding", stringBound("qti-text-entry-interaction", "multiple")),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-text-entry-interaction`'s attribute `string-identifier` names `NOTES`, a multiple response of base type `integer`, and a `string-identifier` binds a `string` response that is not a `record` (reading 14).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: name such a response in `string-identifier`, or change the declaration of `NOTES`.",
+    );
+    assert.notInclude(sentence, "a single `string` response");
+  });
+
+  it("align-54 r11 string response fit D3a: words an Extended Text's string-identifier naming a record as naming a string response that is not a record, demanding no cardinality (reading 14)", () => {
+    const sentence = describeRefusal(
+      refusalOf("binding", {
+        baseType: "",
+        cardinality: "record",
+        check: "string-binding",
+        interaction: "qti-extended-text-interaction",
+        reading: "14",
+        response: "NOTES",
+      }),
+    );
+
+    assert.strictEqual(
+      sentence,
+      "**`item.xml`, at `qti-assessment-item`: refused.** `qti-extended-text-interaction`'s attribute `string-identifier` names `NOTES`, a record response, and a `string-identifier` binds a `string` response that is not a `record` (reading 14). Rule `binding`. To make it valid: name such a response in `string-identifier`, or change the declaration of `NOTES`.",
+    );
+  });
+
+  it("words a Gap Match of several gaps bound record with a remedy that writes the base type a multiple declaration needs (reading 169, E39a)", () => {
+    // A record declaration writes no base type, and a multiple one with none is refused under
+    // E39a, so a remedy for a response that is not single names `base-type="directedPair"` too.
+    assert.strictEqual(
+      describeRefusal(
+        refusalOf("binding", {
+          cardinality: "record",
+          check: "gap-match-single",
+          gaps: "2",
+          interaction: "qti-gap-match-interaction",
+          response: "RESPONSE",
+        }),
+      ),
+      '**`item.xml`, at `qti-assessment-item`: refused.** `qti-gap-match-interaction` holds 2 gaps and is bound to `RESPONSE`, a record response, and an interaction of several gaps needs a `multiple` response. Rule `binding`. To make it valid: declare `RESPONSE` with `cardinality="multiple"` and `base-type="directedPair"`.',
+    );
+  });
+
+  it("align-54 r11 gaps bind multiple P7: words a Gap Match of several gaps bound ordered as naming an ordered response (reading 169)", () => {
+    const sentence = describeRefusal(
+      refusalOf("binding", {
+        cardinality: "ordered",
+        check: "gap-match-single",
+        gaps: "2",
+        interaction: "qti-gap-match-interaction",
+        response: "RESPONSE",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-gap-match-interaction` holds 2 gaps and is bound to `RESPONSE`, an ordered response, and an interaction of several gaps needs a `multiple` response.",
+    );
+    assert.notInclude(sentence, "a single response");
+  });
+
+  it("align-54 r11 gaps bind multiple P7: keeps a Gap Match of several gaps bound single worded as before (reading 169)", () => {
+    assert.strictEqual(
+      describeRefusal(
+        refusalOf("binding", {
+          cardinality: "single",
+          check: "gap-match-single",
+          gaps: "3",
+          interaction: "qti-gap-match-interaction",
+          response: "RESPONSE",
+        }),
+      ),
+      '**`item.xml`, at `qti-assessment-item`: refused.** `qti-gap-match-interaction` holds 3 gaps and is bound to `RESPONSE`, a single response, and an interaction of several gaps needs a `multiple` response. Rule `binding`. To make it valid: declare `RESPONSE` with `cardinality="multiple"`.',
+    );
   });
 
   it("keeps a value holding backticks inside one code span, whole", () => {
@@ -2371,6 +3880,8 @@ describe("describeRefusal", () => {
   });
 
   it("cites the reading that refuses a child, and names QTI 3.0's schema only when none does", () => {
+    // Reading 60 ("a simple type it names governs its text and is checked"): an element whose
+    // `xsi:type` names a simple type holds no element child.
     const cited = describeRefusal(
       refusalOf("unknown-element", { element: "b", parent: "data", reading: "60" }),
     );
@@ -2471,26 +3982,24 @@ describe("describeRefusal", () => {
     );
   });
 
-  it("[I-9a] words a qti-equal tolerance whose token is neither a number nor a variable's name, citing the information model's line (pantry P6)", () => {
+  it("align-54 wording E24: words a qti-equal tolerance of 0, which is not one or two values, each a number above 0 or a variable's name (reading 121)", () => {
     const sentence = describeRefusal(
       refusalOf("attribute-type", {
         attribute: "tolerance",
         check: "tolerance-token",
         element: "qti-equal",
-        expected: "a list of numbers (xs:double) and variable names (NCName), one space apart",
-        pantry: "P6",
-        source: "info.txt:24946",
-        value: "1,5",
+        reading: "121",
+        value: "0",
       }),
     );
 
     assert.include(
       sentence,
-      "`qti-equal`'s attribute `tolerance` is `1,5`, which holds a token that is neither a number (`xs:double`) nor a variable's name (an NCName) (info.txt:24946).",
+      "`qti-equal`'s attribute `tolerance` is `0`, which is not one or two values, each a number above 0 or a variable's name (reading 121).",
     );
     assert.include(
       sentence,
-      "To make it valid: write each token of `tolerance` as a number or a variable's name, one space apart.",
+      "To make it valid: write one or two values, one space apart, each a number above 0 or a variable's name.",
     );
   });
 
@@ -3082,53 +4591,6 @@ describe("describeRefusal", () => {
     assert.notInclude(sentence, "outcome, to a");
   });
 
-  it("names the built-in duration an item that is not time dependent reads, and the attribute that names it", () => {
-    const read = describeRefusal(
-      refusalOf("undeclared-variable", {
-        check: "untimed-duration",
-        element: "qti-variable",
-        identifier: "duration",
-      }),
-    );
-    const named = describeRefusal(
-      refusalOf("undeclared-variable", {
-        attribute: "min",
-        check: "untimed-duration",
-        element: "qti-any-n",
-        identifier: "duration",
-      }),
-    );
-
-    assert.include(
-      read,
-      "`qti-variable` reads the built-in `duration`, which an item that is not time dependent does not have",
-    );
-    assert.include(read, '`time-dependent="true"`');
-    assert.notInclude(read, "declares no");
-    assert.include(named, "`qti-any-n`'s attribute `min` names the built-in `duration`");
-    assert.notInclude(named, "declares no");
-  });
-
-  it("[I-9a] names the built-in a qti-lookup-outcome-value sets, which only a qti-set-outcome-value may set, and cites the information model's line", () => {
-    const sentence = describeRefusal(
-      refusalOf("undeclared-variable", {
-        check: "built-in-target",
-        element: "qti-lookup-outcome-value",
-        identifier: "completionStatus",
-        source: "info.txt:8488",
-      }),
-    );
-
-    assert.include(
-      sentence,
-      "`qti-lookup-outcome-value` sets the built-in `completionStatus`, which only a `qti-set-outcome-value` may set (info.txt:8488).",
-    );
-    assert.include(
-      sentence,
-      "To make it valid: set `completionStatus` with a `qti-set-outcome-value`, or name a declared outcome.",
-    );
-  });
-
   it("[T-9] words the lookup operand of a dotted target by what every lookup reads, and names no table (reading 28)", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {
@@ -3152,7 +4614,7 @@ describe("describeRefusal", () => {
     assert.notInclude(sentence, "sets");
   });
 
-  it("names a dotted name that resolves to no item ref, test part or section variable (reading 48)", () => {
+  it('names a dotted name that resolves to no item ref, test part or section variable, by reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable")', () => {
     const sentence = describeRefusal(
       refusalOf("undeclared-variable", {
         check: "reading",
@@ -3291,6 +4753,96 @@ describe("describeRefusal", () => {
     assert.notInclude(sentence, "item ref");
   });
 
+  it("align-54 built-ins by kind E22a: words a map-response or map-response-point of a built-in as naming it, which has no declaration, and never asks to declare it (reading 111)", () => {
+    const cases = [
+      ["qti-map-response", "numAttempts", { child: "qti-mapping" }, "with a `qti-mapping`"],
+      [
+        "qti-map-response-point",
+        "duration",
+        { baseType: "point", child: "qti-area-mapping" },
+        "of base type `point` with a `qti-area-mapping`",
+      ],
+    ] as const;
+
+    for (const [element, identifier, needs, lacks] of cases) {
+      const sentence = describeRefusal(
+        refusalOf("template-requirements", {
+          ...needs,
+          declaration: "qti-response-declaration",
+          element,
+          identifier,
+        }),
+      );
+
+      assert.include(
+        sentence,
+        `\`${element}\` needs a \`qti-response-declaration\` ${lacks}, and names the built-in \`${identifier}\`, which has no declaration.`,
+        element,
+      );
+      assert.include(
+        sentence,
+        `To make it valid: name a response the item declares in a \`qti-response-declaration\` ${lacks}.`,
+        element,
+      );
+      assert.notInclude(sentence, `declare \`${identifier}\``, element);
+    }
+  });
+
+  it("words a test's or a section's map-response or map-response-point of a built-in with the fix of a response an item declares, read through its item ref, never one the item declares (reading 166)", () => {
+    const places = [
+      [testLocation, "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value"],
+      ["section.xml", "qti-assessment-section/qti-pre-condition/qti-gte"],
+    ] as const;
+    const cases = [
+      ["qti-map-response", "duration", { child: "qti-mapping" }, "with a `qti-mapping`"],
+      [
+        "qti-map-response-point",
+        "numAttempts",
+        { baseType: "point", child: "qti-area-mapping" },
+        "of base type `point` with a `qti-area-mapping`",
+      ],
+    ] as const;
+
+    for (const [document, parent] of places) {
+      for (const [element, identifier, needs, lacks] of cases) {
+        const sentence = describeRefusal(
+          refusalAt(
+            "template-requirements",
+            document,
+            { kind: "path", path: `${parent}/${element}` },
+            { ...needs, declaration: "qti-response-declaration", element, identifier },
+          ),
+        );
+
+        assert.include(
+          sentence,
+          `\`${element}\` needs a \`qti-response-declaration\` ${lacks}, and names the built-in \`${identifier}\`, which has no declaration.`,
+          `${document} ${element}`,
+        );
+        assert.include(
+          sentence,
+          `To make it valid: name a response an item declares in a \`qti-response-declaration\` ${lacks}, through its item ref, written \`ITEMREF.RESPONSE\`.`,
+          `${document} ${element}`,
+        );
+        assert.notInclude(sentence, "a response the item declares", `${document} ${element}`);
+      }
+    }
+  });
+
+  it("keeps an item's sentence for a map-response of a built-in byte for byte (reading 166, control)", () => {
+    assert.strictEqual(
+      describeRefusal(
+        refusalOf("template-requirements", {
+          child: "qti-mapping",
+          declaration: "qti-response-declaration",
+          element: "qti-map-response",
+          identifier: "numAttempts",
+        }),
+      ),
+      "**`item.xml`, at `qti-assessment-item`: refused.** `qti-map-response` needs a `qti-response-declaration` with a `qti-mapping`, and names the built-in `numAttempts`, which has no declaration. Rule `template-requirements`. To make it valid: name a response the item declares in a `qti-response-declaration` with a `qti-mapping`.",
+    );
+  });
+
   it.each(m2Wordings)("writes the author facts of $name in code spans", ({ args, spans }) => {
     const [rule] = args;
     const sentence = describeRefusal(refusalAt(...args));
@@ -3357,5 +4909,139 @@ describe("describeRefusal", () => {
       assert.notInclude(outside, "](", rule);
       assert.include(spans, escapingValue, rule);
     }
+  });
+});
+
+/**
+ * Construct a test that declares `TOTAL` and the given declarations before its one part, and whose
+ * outcome processing sets `TOTAL` to an expression naming a variable through its `identifier`.
+ *
+ * @param declarations The test's declarations besides `TOTAL`.
+ * @param local The expression's local name, such as `qti-correct`.
+ * @param identifier The name the expression gives.
+ * @returns The test, at {@link testLocation}.
+ */
+const readingByName = (
+  declarations: readonly SourceElement[],
+  local: string,
+  identifier: string,
+): SourceDocument =>
+  doc(
+    testLocation,
+    el(
+      "qti-assessment-test",
+      [attr("identifier", "T"), attr("title", "Test")],
+      [
+        ...declarations,
+        outcome("TOTAL", "integer"),
+        el(
+          "qti-test-part",
+          [
+            attr("identifier", "P"),
+            attr("navigation-mode", "linear"),
+            attr("submission-mode", "individual"),
+          ],
+          [assessmentSection("S", [itemRef("I1")])],
+        ),
+        el(
+          "qti-outcome-processing",
+          [],
+          [
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "TOTAL")],
+              [el(local, [attr("identifier", identifier)])],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+/**
+ * The `undeclared-variable` refusals of a verdict, each with its detail and its sentence.
+ *
+ * @param verdict The verdict.
+ * @returns Each such refusal's detail and sentence, in order; none when the verdict is not refused.
+ */
+const undeclaredOf = (verdict: Verdict) =>
+  verdict.verdict === "refused"
+    ? verdict.refusals
+        .filter((refusal) => refusal.rule === "undeclared-variable")
+        .map((refusal) => ({ detail: refusal.detail, sentence: describeRefusal(refusal) }))
+    : [];
+
+describe("check, a built-in's name a test declares, read as a response (reading 168)", () => {
+  it("align-54 R3 declared built-in: refuses a qti-correct or qti-map-response of the outcome numAttempts or completionStatus a test declares, or of its context variable numAttempts, with declared naming the kind, and says the test declares it, not that it has no declaration", () => {
+    for (const [identifier, declaration, declared, kind] of [
+      ["numAttempts", outcome("numAttempts", "integer"), "outcome", "an outcome"],
+      ["completionStatus", outcome("completionStatus", "identifier"), "outcome", "an outcome"],
+      [
+        "numAttempts",
+        el("qti-context-declaration", [
+          attr("base-type", "integer"),
+          attr("cardinality", "single"),
+          attr("identifier", "numAttempts"),
+        ]),
+        "context",
+        "a context variable",
+      ],
+    ] as const) {
+      for (const local of ["qti-correct", "qti-map-response"]) {
+        const label = `${local} ${declared} ${identifier}`;
+        const refusals = undeclaredOf(verdictOf(readingByName([declaration], local, identifier)));
+
+        assert.deepStrictEqual(
+          refusals.map((refusal) => refusal.detail),
+          [{ declared, declarer: "test", element: local, expected: "response", identifier }],
+          label,
+        );
+        assert.strictEqual(
+          refusals.map((refusal) => refusal.sentence).join("\n"),
+          `**\`${testLocation}\`, at \`qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/${local}\`: refused.** \`${local}\` names \`${identifier}\`, ${kind} the test declares in place of the built-in, and no response, so it has no mapping or correct response. Rule \`undeclared-variable\`. To make it valid: name a response an item declares, through its item ref, written \`ITEMREF.RESPONSE\`.`,
+          label,
+        );
+      }
+    }
+  });
+
+  it("align-54 R3 declared built-in: keeps today's sentence, byte for byte, for an item's qti-correct of the undeclared built-in completionStatus, and for a test's that declares no completionStatus, neither carrying declared", () => {
+    const itemVerdict = verdictOf(
+      item([
+        score(),
+        el("qti-item-body", [], [el("p", [], [text("x")])]),
+        el(
+          "qti-response-processing",
+          [],
+          [
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "SCORE")],
+              [el("qti-correct", [attr("identifier", "completionStatus")])],
+            ),
+          ],
+        ),
+      ]),
+    );
+    const testVerdict = verdictOf(readingByName([], "qti-correct", "completionStatus"));
+
+    assert.deepStrictEqual(undeclaredOf(itemVerdict), [
+      {
+        detail: { element: "qti-correct", expected: "response", identifier: "completionStatus" },
+        sentence:
+          "**`item.xml`, at `qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-correct`: refused.** `qti-correct` names the built-in `completionStatus`, which has no declaration, so no mapping or correct response. Rule `undeclared-variable`. To make it valid: name a declared response.",
+      },
+    ]);
+    assert.deepStrictEqual(undeclaredOf(testVerdict), [
+      {
+        detail: {
+          declarer: "test",
+          element: "qti-correct",
+          expected: "response",
+          identifier: "completionStatus",
+        },
+        sentence: `**\`${testLocation}\`, at \`qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-correct\`: refused.** \`qti-correct\` names the built-in \`completionStatus\`, which has no declaration, so no mapping or correct response. Rule \`undeclared-variable\`. To make it valid: name a response an item declares, through its item ref, written \`ITEMREF.RESPONSE\`.`,
+      },
+    ]);
   });
 });

@@ -578,8 +578,9 @@ export const encodeRedacted = (item: Redacted): Result.Result<RedactedJson, Inva
  * The most levels of arrays and objects the JSON form may nest, the outermost value counted as
  * the first.
  *
- * `encodeRedacted` never writes more than 511 levels for an item `redact` produced. The reader
- * opens at most 256 elements at once (`ELEMENT_DEPTH` in `@qti-pie/crust/read.ts`), so at most 254
+ * `encodeRedacted` never writes more than 511 levels for an item `redact` produced. crust's reader
+ * refuses a document that opens more than 256 elements at once (`defaultElementDepth` in
+ * `@qti-pie/crust/read.ts`, a limit the operator ruled to keep, ruling `97a93093`), so at most 254
  * nest below `qti-item-body`; each adds at most two levels to the outermost object's one, the array
  * that holds it and its own object, and a run of text or an attribute inside the deepest adds two
  * more. Schema's decode recurses through every level and overflows Node's default stack from about

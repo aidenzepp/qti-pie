@@ -15,6 +15,7 @@ import { Array as Arr, Option, Result } from "effect";
 import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
+  SourceChild,
   SourceDocument,
   SourceElement,
   Visit,
@@ -35,22 +36,26 @@ import type {
   ReferenceEntry,
   ResultAttributes,
 } from "#plate/model/expression.ts";
-import { xsBooleanOf } from "#plate/model/attributes.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import {
+  format,
+  integerLexical,
   isModelled,
   isNcName,
   parseElementText,
   parseLexical,
+  readIeeeDouble,
   trimXmlSpace,
 } from "#plate/model/values.ts";
-import type { InvalidValue, ModelledBaseType } from "#plate/model/values.ts";
+import type { InvalidValue, ModelledBaseType, Single } from "#plate/model/values.ts";
+import { decodeDataSsml } from "#plate/validate/data-ssml.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { governingTables } from "#plate/validate/structure.ts";
-import type { Tables } from "#plate/validate/xsd.ts";
-import { baseTypes, cardinalities, interactionNames, templateName } from "#plate/vocabulary.ts";
-import type { BaseType, Cardinality, InteractionName, TemplateName } from "#plate/vocabulary.ts";
+import { missingToolAttributes } from "#plate/validate/versions.ts";
+import type { ChildName, Tables } from "#plate/validate/xsd.ts";
+import { baseTypes, cardinalities, templateName } from "#plate/vocabulary.ts";
+import type { BaseType, Cardinality, TemplateName } from "#plate/vocabulary.ts";
 
 /**
  * The base types and cardinalities a response declaration may have when an interaction is bound to
@@ -66,42 +71,199 @@ interface Requirement {
 }
 
 /**
- * The binding each interaction plate renders requires, by its information-model class, quoted from
- * QTI 3.0's information model.
+ * The binding an interaction requires, by local name, quoted from the normative class descriptions
+ * of QTI 3.0's information model (its section 5).
  *
  * This is what QTI allows, not what plate renders: a binding QTI allows and plate does not render,
  * such as a Text Entry bound to a record response with a `file` field, is valid and becomes a
- * notice (`renders` in the vocabulary), so it is not refused here. Other interactions' bindings are
- * not checked.
+ * notice (`renders` in the vocabulary), so it is not refused here. An interaction whose binding
+ * sentence is only in the non-normative section 2 has no entry, by rule `5b8ee08b` (refuse only
+ * what the standard refuses) and the operator's ruling `e3bc2c3d`: the Order's "must be bound to a
+ * response variable with a base-type of identifier and ordered cardinality only" is §2.4.1.2's
+ * alone (info.txt:8766), and its class description, §5.97, does not repeat it. The other
+ * interactions' bindings are not checked here; reading 92's counts reach some of them
+ * ({@link cardinalityCounts}).
  */
-const requirements = {
-  // "The qti-choice-interaction must be bound to a response variable with a base-type of identifier
-  // and single or multiple cardinality." (info.txt:8760)
-  "qti-choice-interaction": {
-    baseTypes: ["identifier"],
-    cardinalities: ["single", "multiple"],
-  },
-  // "The extendedTextInteraction must be bound to a response variable of single, multipe, ordered or
-  // record cardinality. [...] Otherwise it must have a base-type of string, integer or float."
-  // (info.txt:8850)
-  "qti-extended-text-interaction": {
-    baseTypes: ["string", "integer", "float"],
-    cardinalities: ["single", "multiple", "ordered", "record"],
-  },
-  // "The qti-inline-choice-interaction must be bound to a response variable with a base-type of
-  // identifier and single cardinality only." (info.txt:8818)
-  "qti-inline-choice-interaction": {
-    baseTypes: ["identifier"],
-    cardinalities: ["single"],
-  },
-  // "The qti-text-entry-interaction must be bound to a response variable with either single or
-  // record cardinality only. For single cardinality the base-type must be one of string, integer or
-  // float." (info.txt:8826)
-  "qti-text-entry-interaction": {
-    baseTypes: ["string", "integer", "float"],
-    cardinalities: ["single", "record"],
-  },
-} as const satisfies Record<InteractionName, Requirement>;
+const requirements: ReadonlyMap<string, Requirement> = new Map<string, Requirement>([
+  // "The ChoiceInteraction must be bound to a response variable with a base-type of identifier and
+  // single or multiple cardinality." (§5.30, info.txt:21733)
+  ["qti-choice-interaction", { baseTypes: ["identifier"], cardinalities: ["single", "multiple"] }],
+  // "The qti-extended-text-interaction must be bound to a response variable of single, multiple,
+  // ordered or record cardinality. [...] Otherwise it ust have a base-type of string, integer or
+  // float." (§5.48, info.txt:25345)
+  [
+    "qti-extended-text-interaction",
+    {
+      baseTypes: ["string", "integer", "float"],
+      cardinalities: ["single", "multiple", "ordered", "record"],
+    },
+  ],
+  // "The order hotspot interaction must be bound to a response variable with a base-type of
+  // identifier and ordered cardinality." (§5.61, info.txt:29186)
+  ["qti-graphic-order-interaction", { baseTypes: ["identifier"], cardinalities: ["ordered"] }],
+  // "The inlineChoiceInteraction must be bound to a response variable with a base-type of identifier
+  // and single cardinality only." (§5.74, info.txt:32207)
+  ["qti-inline-choice-interaction", { baseTypes: ["identifier"], cardinalities: ["single"] }],
+  // "The textEntryInteraction must be bound to a response variable with single or record
+  // cardinality only. If the response variable has single cardinality the base-type must be one of
+  // string, integer or float" (§5.162, info.txt:47996)
+  [
+    "qti-text-entry-interaction",
+    { baseTypes: ["string", "integer", "float"], cardinalities: ["single", "record"] },
+  ],
+]);
+
+/**
+ * The count that decides the cardinality of the response an interaction binds: its attribute, and
+ * the XSD's default for it, which an unwritten count is read as.
+ */
+interface CardinalityCount {
+  readonly attribute: "max-associations" | "max-choices";
+  readonly unwritten: bigint;
+}
+
+/**
+ * The interactions whose most count decides the cardinality of the response they bind, by local
+ * name, under reading 92 ("the information model's binding and count sentences that no other
+ * reading restates hold as written"): "If max-choices is greater than 1 (or 0) then the interaction
+ * must be bound to a response with multiple cardinality", of the `max-choices` of the choice,
+ * hottext, hotspot, position object and select point interactions and the `max-associations` of the
+ * associate, gap match, graphic associate, graphic gap match and match interactions, each unwritten
+ * count read as its XSD default. Both XSDs give every one of them the default `1` but the select
+ * point's `max-choices`, whose default is `0`.
+ */
+const cardinalityCounts: ReadonlyMap<string, CardinalityCount> = new Map([
+  ["qti-associate-interaction", { attribute: "max-associations", unwritten: 1n }],
+  ["qti-choice-interaction", { attribute: "max-choices", unwritten: 1n }],
+  ["qti-gap-match-interaction", { attribute: "max-associations", unwritten: 1n }],
+  ["qti-graphic-associate-interaction", { attribute: "max-associations", unwritten: 1n }],
+  ["qti-graphic-gap-match-interaction", { attribute: "max-associations", unwritten: 1n }],
+  ["qti-hotspot-interaction", { attribute: "max-choices", unwritten: 1n }],
+  ["qti-hottext-interaction", { attribute: "max-choices", unwritten: 1n }],
+  ["qti-match-interaction", { attribute: "max-associations", unwritten: 1n }],
+  ["qti-position-object-interaction", { attribute: "max-choices", unwritten: 1n }],
+  ["qti-select-point-interaction", { attribute: "max-choices", unwritten: 0n }],
+]);
+
+/**
+ * The interactions that bind a second response through a `string-identifier`, the only ones whose
+ * XSD declares it: "If the string interaction is bound to a numeric response variable then the
+ * actual string entered by the candidate can also be captured by binding the interaction to a
+ * second response variable (of base-type string)" (info.txt:25400 and info.txt:48078, the
+ * Extended Text's and the Text Entry's `string-identifier`).
+ */
+const stringBindings: ReadonlySet<string> = new Set([
+  "qti-extended-text-interaction",
+  "qti-text-entry-interaction",
+]);
+
+/**
+ * A least count and the most it may reach, both written on one element.
+ *
+ * Only the most's XSD default is kept: an unwritten least is at most any most, since its XSD
+ * default, where it has one, is `0`.
+ */
+interface CountPair {
+  /**
+   * The least count's attribute.
+   */
+  readonly least: string;
+  /**
+   * The most count's attribute.
+   */
+  readonly most: string;
+  /**
+   * The reading that settles the pair.
+   */
+  readonly reading: string;
+  /**
+   * The most's XSD default, which an unwritten most is read as, none where the XSD gives none.
+   */
+  readonly unwritten: Option.Option<bigint>;
+  /**
+   * Whether a most of `0` sets no limit, so that any least meets it.
+   */
+  readonly zeroUnlimited: boolean;
+}
+
+/**
+ * Construct one of reading 76's count pairs, in which a most of `0` sets no limit.
+ *
+ * @param least The least count's attribute.
+ * @param most The most count's attribute.
+ * @param unwritten The most's XSD default, none where the XSD gives none.
+ * @returns The pair.
+ */
+const limitPair = (least: string, most: string, unwritten: Option.Option<bigint>): CountPair => ({
+  least,
+  most,
+  reading: "76",
+  unwritten,
+  zeroUnlimited: true,
+});
+
+/**
+ * The `min-associations` and `max-associations` pair, whose most every interaction that writes it
+ * defaults to `1`.
+ */
+const associations = limitPair("min-associations", "max-associations", Option.some(1n));
+
+/**
+ * The `match-min` and `match-max` pair, whose most the XSD requires and so gives no default.
+ */
+const matches = limitPair("match-min", "match-max", Option.none());
+
+/**
+ * The count pairs reading 76 ("a least count is at most its most, unless the most is 0") holds, by
+ * the local name of the element that writes them: the `min-choices` and `max-choices` of the
+ * choice, hottext, hotspot, position object and select point interactions, the `min-associations`
+ * and `max-associations` of the associate, gap match, graphic associate, graphic gap match and
+ * match interactions, the `match-min` and `match-max` of the associable hotspot, gap image, gap
+ * text and simple associable choice, an extended text interaction's `min-strings` and
+ * `max-strings`, and a media interaction's `min-plays` and `max-plays`. Each most's default is the
+ * XSD's: `1` but the select point's `max-choices` and the media interaction's `max-plays`, `0`,
+ * and none for `match-max` and `max-strings`.
+ */
+const countPairs: ReadonlyMap<string, CountPair> = new Map([
+  ["qti-associable-hotspot", matches],
+  ["qti-associate-interaction", associations],
+  ["qti-choice-interaction", limitPair("min-choices", "max-choices", Option.some(1n))],
+  ["qti-extended-text-interaction", limitPair("min-strings", "max-strings", Option.none())],
+  ["qti-gap-img", matches],
+  ["qti-gap-match-interaction", associations],
+  ["qti-gap-text", matches],
+  ["qti-graphic-associate-interaction", associations],
+  ["qti-graphic-gap-match-interaction", associations],
+  ["qti-hotspot-interaction", limitPair("min-choices", "max-choices", Option.some(1n))],
+  ["qti-hottext-interaction", limitPair("min-choices", "max-choices", Option.some(1n))],
+  ["qti-match-interaction", associations],
+  ["qti-media-interaction", limitPair("min-plays", "max-plays", Option.some(0n))],
+  ["qti-position-object-interaction", limitPair("min-choices", "max-choices", Option.some(1n))],
+  ["qti-select-point-interaction", limitPair("min-choices", "max-choices", Option.some(0n))],
+  ["qti-simple-associable-choice", matches],
+]);
+
+/**
+ * The `min-choices` and `max-choices` pair of an order or graphic order interaction, under reading
+ * 18: neither interaction gives `0` the meaning "no limit", and the XSD gives neither count a
+ * default.
+ */
+const orderPair: CountPair = {
+  least: "min-choices",
+  most: "max-choices",
+  reading: "18",
+  unwritten: Option.none(),
+  zeroUnlimited: false,
+};
+
+/**
+ * The interactions reading 18 bounds by their number of choices, by local name, each with the
+ * local name of the children that are its choices.
+ */
+const orderedChoices: ReadonlyMap<string, string> = new Map([
+  ["qti-graphic-order-interaction", "qti-hotspot-choice"],
+  ["qti-order-interaction", "qti-simple-choice"],
+]);
 
 /**
  * Read an identifier attribute's value as its XSD type reads it.
@@ -116,6 +278,24 @@ const requirements = {
  * @returns The identifier it names.
  */
 const identifierOf = (attribute: SourceAttribute): string => trimXmlSpace(attribute.value);
+
+/**
+ * Read the name an identifier attribute gives, where it gives one: its value collapsed
+ * ({@link identifierOf}), when that is an NCName.
+ *
+ * Reading 152 ("a value names something only where it is an NCName"): a declaration's
+ * `identifier`, an interaction's binding and a variable reference name something only as an
+ * `xs:NCName`, and a value outside that lexical space names nothing. It shares no name with
+ * another, no reference resolves to it, and the law a reference, a binding or a name is held to
+ * does not judge it: the attribute's value domain, the structural validator's `attribute-type`,
+ * refuses it alone (readings 157 and 159, E40a). So every law here that resolves or compares a name
+ * reads it through this.
+ *
+ * @param attribute The identifier attribute.
+ * @returns The name it gives, none when its collapsed value is no NCName.
+ */
+const nameOf = (attribute: SourceAttribute): Option.Option<string> =>
+  Option.filter(Option.some(identifierOf(attribute)), isNcName);
 
 /**
  * Find an element's attribute in no namespace by its local name.
@@ -179,23 +359,11 @@ const isInteraction = (element: SourceElement): boolean =>
   isQti(element, (local) => local.startsWith("qti-") && local.endsWith("-interaction"));
 
 /**
- * Find which of the interactions plate renders an element is, the ones whose binding these rules
- * check (`interactionNames` in the vocabulary).
- *
- * @param element The element.
- * @returns Its QTI name, or none for any other element.
- */
-const renderedInteraction = (element: SourceElement): Option.Option<InteractionName> =>
-  element.namespace === qtiNamespace
-    ? Arr.findFirst(interactionNames, (name) => name === element.local)
-    : Option.none();
-
-/**
  * Report whether a declaration's base type and cardinality meet an interaction's requirement.
  *
  * @param requirement The interaction's requirement.
  * @param cardinality The declaration's cardinality.
- * @param baseType The declaration's base type, none when it carries no `base-type`.
+ * @param baseType The declaration's base type, none when its `base-type` is absent or spells none.
  * @returns Whether the cardinality is one the requirement allows and, unless it is `record`, the
  *   base type is one it allows.
  */
@@ -261,65 +429,149 @@ const refusal = (
   });
 
 /**
- * The choice elements whose `identifier` is unique within their interaction: each choice's local
- * name, with the local name of the interaction that scopes it.
- *
- * A `qti-simple-choice` is scoped only inside a Choice. In any other interaction that holds one,
- * such as an Order, these rules do not judge its identifier.
+ * The choice classes whose identifiers share one pool across an item: the nine classes reading 104
+ * as amended names ("A choice's identifier is used by no other choice of any class in its
+ * document, and names no item variable"), `qti-gap` among them. Each says of its identifier that it
+ * "must not be used by any other choice or item variable" (SimpleChoice 5.132.1, `info.txt:42411`;
+ * InlineChoice 5.73.1, `info.txt:31918`) or names its own noun ("any other gap", "any other image",
+ * "any other text", "any other hotspot", "any other hottext choice"); the amended reading pools the
+ * nine, so no two choices of these classes in one item share an identifier, whichever interactions
+ * hold them, and a gap and a gap text of one Gap Match may not share one either.
  */
-const choiceScopes: ReadonlyMap<string, string> = new Map([
-  ["qti-inline-choice", "qti-inline-choice-interaction"],
-  ["qti-simple-choice", "qti-choice-interaction"],
+const pooledChoices: ReadonlySet<string> = new Set([
+  "qti-associable-hotspot",
+  "qti-gap",
+  "qti-gap-img",
+  "qti-gap-text",
+  "qti-hotspot-choice",
+  "qti-hottext",
+  "qti-inline-choice",
+  "qti-simple-associable-choice",
+  "qti-simple-choice",
 ]);
 
 /**
- * Find the scope in which an element's `identifier` must be unique, if it has one.
- *
- * The item's declarations share one scope, the root: "All item variables declared in an item share
- * the same namespace" (info.txt:12006). A Choice's simple choices share another, the interaction:
- * the identifier of a simple choice "must not be used by any other choice" (info.txt:42411). An
- * Inline Choice's inline choices share theirs the same way: "This identifier must not be used by
- * any other choice or item variable." (info.txt:31918, InlineChoice 5.73.1). Both sentences also
- * forbid a choice identifier equal to an item variable's, which these rules do not refuse.
- *
- * @param source The document.
- * @param visit The element's visit.
- * @returns The element whose children share the scope, or none when no rule here scopes it.
+ * The identifiers an item's choices have given so far, each with the class of the first element
+ * that gave it: one pool for every class of {@link pooledChoices}, gaps included.
  */
-const uniquenessScope = (source: SourceDocument, visit: Visit): Option.Option<SourceElement> =>
-  visit.parent.pipe(
-    Option.filter(
-      (parent) =>
-        (parent === source.root && isDeclaration(visit.element)) ||
-        (isQti(visit.element, (local) => choiceScopes.has(local)) &&
-          isQti(parent, (local) => local === choiceScopes.get(visit.element.local))),
-    ),
-  );
+export interface ChoicePools {
+  readonly choices: Map<string, string>;
+}
 
 /**
- * Apply `duplicate-identifier` to one element: its `identifier` is not one an earlier element of
- * its scope already declared.
+ * Find the pool an element's `identifier` is unique within, if it is a choice.
+ *
+ * Reading 104 as amended gives every choice class one space of identifiers, so a gap shares the
+ * pool with the other eight classes: it repeats no gap's identifier, "any other gap" (Gap 5.55.1),
+ * and no other choice's, a gap text's of its own Gap Match included.
+ *
+ * @param element The element.
+ * @param pools The item's pools.
+ * @returns The pool, or none for an element that is no choice.
+ */
+const choicePool = (
+  element: SourceElement,
+  pools: ChoicePools,
+): Option.Option<Map<string, string>> =>
+  isQti(element, (local) => pooledChoices.has(local)) ? Option.some(pools.choices) : Option.none();
+
+/**
+ * Apply `duplicate-identifier` to one choice, a gap included (reading 104 as amended, "A choice's
+ * identifier is used by no other choice of any class in its document, and names no item variable",
+ * E19): its `identifier` names no item variable, and no earlier choice of the pool
+ * ({@link choicePool}) gave it.
+ *
+ * The item variables are its declarations of all four kinds and its built-ins, `completionStatus`,
+ * `numAttempts`, `duration` and `QTI_CONTEXT`, which "are declared implicitly". A choice that names
+ * one is refused under `check: "choice-variable"` alone, whether or not it also repeats an earlier
+ * choice's identifier, and still counts toward its pool.
  *
  * @param source The document.
  * @param visit The element's visit.
- * @param seen The identifiers each scope has declared so far, which this adds the element's to.
- * @returns The refusal at the repeated `identifier` attribute's path, or none for the first
- *   occurrence and for an element no scope holds.
+ * @param variables The identifiers of the item's variables, declared and built in.
+ * @param pools The identifiers the pool has given so far, which this adds the element's to.
+ * @returns The refusal at the `identifier` attribute's path, with the element's `class` and, for a
+ *   repeat of a choice of another class, its `otherClass`; none for an element that is no choice,
+ *   for a first occurrence that names no variable, and for an identifier that names nothing
+ *   ({@link nameOf}).
  */
-const duplicateIdentifier = (
+export const choiceIdentifier = (
   source: SourceDocument,
   visit: Visit,
-  seen: Map<SourceElement, Set<string>>,
+  variables: ReadonlySet<string>,
+  pools: ChoicePools,
 ): readonly Refusal[] => {
-  const scope = uniquenessScope(source, visit);
+  const pool = choicePool(visit.element, pools);
   const attribute = attributeOf(visit.element, "identifier");
-  if (Option.isNone(scope) || Option.isNone(attribute)) {
+  const name = attribute.pipe(Option.flatMap(nameOf));
+  if (Option.isNone(pool) || Option.isNone(attribute) || Option.isNone(name)) {
     return [];
   }
 
-  const identifier = identifierOf(attribute.value);
-  const declared = seen.get(scope.value) ?? new Set<string>();
-  seen.set(scope.value, declared);
+  const identifier = name.value;
+  const path = attributePath(visit.path, attribute.value);
+  const choiceClass = visit.element.local;
+  const earlier = Option.fromUndefinedOr(pool.value.get(identifier));
+  if (Option.isNone(earlier)) {
+    pool.value.set(identifier, choiceClass);
+  }
+
+  if (variables.has(identifier)) {
+    return [
+      refusal(source, "duplicate-identifier", path, {
+        check: "choice-variable",
+        class: choiceClass,
+        identifier,
+        reading: "104",
+      }),
+    ];
+  }
+
+  return Option.match(earlier, {
+    onNone: () => [],
+    onSome: (otherClass) => [
+      refusal(
+        source,
+        "duplicate-identifier",
+        path,
+        otherClass === choiceClass
+          ? { class: choiceClass, identifier, reading: "104" }
+          : { class: choiceClass, identifier, otherClass, reading: "104" },
+      ),
+    ],
+  });
+};
+
+/**
+ * Apply `duplicate-identifier` to one of the item's declarations: its `identifier` is not one an
+ * earlier declaration gave.
+ *
+ * The item's declarations share one scope, the root: "All item variables declared in an item share
+ * the same namespace" (info.txt:12006). A choice's identifier is judged against them, and against
+ * the other choices, by {@link choiceIdentifier}.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param declared The identifiers the item's declarations have given so far, which this adds the
+ *   element's to.
+ * @returns The refusal at the repeated `identifier` attribute's path, or none for the first
+ *   occurrence, for an element that is no declaration of the root, and for an identifier that names
+ *   nothing ({@link nameOf}).
+ */
+const duplicateDeclaration = (
+  source: SourceDocument,
+  visit: Visit,
+  declared: Set<string>,
+): readonly Refusal[] => {
+  const attribute = attributeOf(visit.element, "identifier");
+  const name = attribute.pipe(Option.flatMap(nameOf));
+  const declaration =
+    Option.exists(visit.parent, (parent) => parent === source.root) && isDeclaration(visit.element);
+  if (!declaration || Option.isNone(attribute) || Option.isNone(name)) {
+    return [];
+  }
+
+  const identifier = name.value;
   if (!declared.has(identifier)) {
     declared.add(identifier);
 
@@ -334,13 +586,305 @@ const duplicateIdentifier = (
 };
 
 /**
- * Apply `binding` and reading 19 to an interaction plate renders and the declaration it names.
+ * Read a declaration's cardinality, where its `cardinality` spells one.
+ *
+ * Reading 158 ("a declaration whose cardinality or base type spells nothing is still a declaration:
+ * each law over it judges what it does spell"): a `cardinality` that is absent or outside the
+ * vocabulary is the structural validator's refusal, and a law that reads it judges nothing here.
+ *
+ * @param declaration The declaration.
+ * @returns Its cardinality, none when it spells none.
+ */
+const cardinalityOf = (declaration: SourceElement): Option.Option<Cardinality> =>
+  Option.flatMap(attributeOf(declaration, "cardinality"), (attribute) =>
+    Arr.findFirst(cardinalities, (value) => value === attribute.value),
+  );
+
+/**
+ * A declaration's `base-type` as written, and the base type it spells.
+ */
+interface DeclaredBaseType {
+  readonly baseType: Option.Option<BaseType>;
+  readonly written: Option.Option<string>;
+}
+
+/**
+ * Read a declaration's `base-type` as written, and the base type it spells.
+ *
+ * Under reading 158 a `base-type` that spells nothing types nothing, as an unwritten one does, so
+ * a law that reads the base type judges neither.
+ *
+ * @param declaration The declaration.
+ * @returns The `base-type` as written, none when absent, and the base type it spells, none when
+ *   absent or outside the vocabulary.
+ */
+const baseTypeOf = (declaration: SourceElement): DeclaredBaseType => {
+  const written = Option.map(attributeOf(declaration, "base-type"), (attribute) => attribute.value);
+
+  return {
+    baseType: written.pipe(
+      Option.flatMap((value) => Arr.findFirst(baseTypes, (candidate) => candidate === value)),
+    ),
+    written,
+  };
+};
+
+/**
+ * Read a count attribute's value as an `xs:nonNegativeInteger`, exactly and unbounded (reading 45).
+ *
+ * @param attribute The count attribute.
+ * @returns The count, none when its value is not a non-negative integer, which the structural
+ *   validator refuses as `attribute-type`.
+ */
+const nonNegativeOf = (attribute: SourceAttribute): Option.Option<bigint> => {
+  const lexical = trimXmlSpace(attribute.value);
+
+  return integerLexical.test(lexical)
+    ? Option.filter(Option.some(BigInt(lexical)), (value) => value >= 0n)
+    : Option.none();
+};
+
+/**
+ * Read an interaction's count as an `xs:nonNegativeInteger`, or as the XSD's default where the
+ * interaction does not write it, exactly and unbounded (reading 45).
+ *
+ * @param element The interaction.
+ * @param count The count and its default.
+ * @returns The count, none when its value is not a non-negative integer, which the structural
+ *   validator refuses as `attribute-type`.
+ */
+const countOf = (element: SourceElement, count: CardinalityCount): Option.Option<bigint> =>
+  Option.match(attributeOf(element, count.attribute), {
+    onNone: () => Option.some(count.unwritten),
+    onSome: nonNegativeOf,
+  });
+
+/**
+ * List the `qti-gap`s an element holds, at any depth.
+ *
+ * @param element The element.
+ * @returns Its QTI `qti-gap` descendants, in document order.
+ */
+const gapsIn = (element: SourceElement): readonly SourceElement[] =>
+  element.children.flatMap((child) =>
+    child.kind === "element"
+      ? [...(isQti(child, (local) => local === "qti-gap") ? [child] : []), ...gapsIn(child)]
+      : [],
+  );
+
+/**
+ * Apply a count pair to an element: its least count is at most its most, unless the most is `0`
+ * and the pair reads `0` as no limit.
+ *
+ * Each count is read as written, exactly and unbounded (reading 45); an unwritten most is read as
+ * its XSD default, and an unwritten least is at most any most. A pair whose most is unwritten with
+ * no default is not compared, nor one whose count's value is not a non-negative integer, which is
+ * the structural validator's `attribute-type`. A least above its most is `count-range` with
+ * `check: "count-pair"`, at the most where it is written and otherwise at the element that would
+ * write it.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param pair The pair it writes.
+ * @returns The refusal, or none when the least is at most the most.
+ */
+const pairRefusals = (
+  source: SourceDocument,
+  visit: Visit,
+  pair: CountPair,
+): readonly Refusal[] => {
+  const written = attributeOf(visit.element, pair.most);
+  const least = Option.flatMap(attributeOf(visit.element, pair.least), nonNegativeOf);
+  const most = Option.match(written, { onNone: () => pair.unwritten, onSome: nonNegativeOf });
+  if (
+    Option.isNone(least) ||
+    Option.isNone(most) ||
+    least.value <= most.value ||
+    (pair.zeroUnlimited && most.value === 0n)
+  ) {
+    return [];
+  }
+
+  const at = Option.match(written, {
+    onNone: () => visit.path,
+    onSome: (attribute) => attributePath(visit.path, attribute),
+  });
+
+  return [
+    refusal(source, "count-range", at, {
+      check: "count-pair",
+      element: visit.element.local,
+      least: pair.least,
+      leastValue: least.value.toString(),
+      most: pair.most,
+      mostValue: most.value.toString(),
+      reading: pair.reading,
+    }),
+  ];
+};
+
+/**
+ * Apply reading 18 to an order or graphic order interaction that writes `min-choices`: that count,
+ * and a `max-choices` beside it, is at most the interaction's number of choices, its
+ * `qti-simple-choice` or `qti-hotspot-choice` children, and its `max-choices` is at least its
+ * `min-choices`, `0` included ({@link orderPair}).
+ *
+ * The information model's sentences for both interactions: "If specified, min-choices must be 1 or
+ * greater but must not exceed the number of choices available. If unspecified, all of the choices
+ * must be ordered and max-choices is ignored", and "max-choices must be greater than or equal to
+ * min-choices and must not exceed the number of choices available". So without a `min-choices` no
+ * count is read. A count above the number of choices is `count-range` with `check:
+ * "choice-count"`, at the count; a `min-choices` below 1 is the structural validator's refusal.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @returns The refusals, none for an element that is no order or graphic order interaction, or
+ *   that writes no `min-choices`.
+ */
+const orderCounts = (source: SourceDocument, visit: Visit): readonly Refusal[] => {
+  const choice = qtiEntry(orderedChoices, visit.element);
+  if (Option.isNone(choice) || Option.isNone(attributeOf(visit.element, "min-choices"))) {
+    return [];
+  }
+
+  const choices = BigInt(
+    visit.element.children.filter(
+      (child) => child.kind === "element" && isQti(child, (local) => local === choice.value),
+    ).length,
+  );
+  const overChoices = [orderPair.least, orderPair.most].flatMap((local) =>
+    Option.toArray(
+      Option.flatMap(attributeOf(visit.element, local), (attribute) =>
+        Option.map(
+          Option.filter(nonNegativeOf(attribute), (value) => value > choices),
+          (value) =>
+            refusal(source, "count-range", attributePath(visit.path, attribute), {
+              attribute: local,
+              check: "choice-count",
+              choices: choices.toString(),
+              reading: orderPair.reading,
+              value: value.toString(),
+            }),
+        ),
+      ),
+    ),
+  );
+
+  return [...overChoices, ...pairRefusals(source, visit, orderPair)];
+};
+
+/**
+ * Apply the count rules to an element: reading 76's pairs ({@link countPairs}) and reading 18's
+ * counts of an order or graphic order interaction ({@link orderCounts}).
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @returns The `count-range` refusals, none when every count it writes holds.
+ */
+const countRules = (source: SourceDocument, visit: Visit): readonly Refusal[] => [
+  ...Option.match(qtiEntry(countPairs, visit.element), {
+    onNone: () => [],
+    onSome: (pair) => pairRefusals(source, visit, pair),
+  }),
+  ...orderCounts(source, visit),
+];
+
+/**
+ * Apply reading 92's count sentence, then the operator's ruling on a gap match, to an interaction
+ * and the cardinality of the response it binds.
+ *
+ * Reading 92 ("the information model's binding and count sentences that no other reading restates
+ * hold as written"): "If max-choices is greater than 1 (or 0) then the interaction must be bound to
+ * a response with multiple cardinality", of each count {@link cardinalityCounts} lists, read as
+ * written or as its XSD default. A count above 1, or 0, which sets no limit, bound to a response
+ * that is not `multiple` is `binding` with `check: "count-cardinality"`. A count whose value is not
+ * a non-negative integer is the structural validator's refusal and is not compared.
+ *
+ * The operator's ruling P7, which main now shares as reading 169 ("A gap match interaction with two
+ * or more gaps binds a response of multiple cardinality"), beside reading 92's sentence on
+ * `max-associations`: the gap match "must be bound to a response variable with base-type
+ * 'directedPair' and either single or multiple cardinality, depending on the number of gaps"
+ * (info.txt:8792), and "with one gap either cardinality may bind, and with two or more only
+ * `multiple` may". So a gap match of two or more `qti-gap`s bound to a response that is not
+ * `multiple` (`single`, `ordered` or `record`) is `binding` with `check: "gap-match-single"`, whose
+ * `cardinality` is the response's. Main and pantry refuse each of them too: pantry's `Binding
+ * cardinality` law refuses a `single` one (`packages/pantry/src/qti/interactions.ts`), and its fit
+ * laws an `ordered` one (`BindingFit`, which admits a gap match bound `single` or `multiple`) and a
+ * `record` one (`RecordBindingFit`, which admits no gap match), both in
+ * `packages/pantry/src/grammar/facets.ts`. A gap match of one gap is not judged here: binding it
+ * `ordered` or `record` is outside E11's reach. The gaps are judged only where the count gives no
+ * refusal, so a gap match bound otherwise than `multiple` gets one refusal, whose remedy, a
+ * `multiple` response, is the same.
+ *
+ * @param source The document.
+ * @param visit The interaction's visit.
+ * @param response The response identifier it binds.
+ * @param cardinality That response's cardinality.
+ * @returns The refusal, or none when the interaction binds as its count and its gaps need.
+ */
+const cardinalityRules = (
+  source: SourceDocument,
+  visit: Visit,
+  response: string,
+  cardinality: Cardinality,
+): readonly Refusal[] => {
+  const count = qtiEntry(cardinalityCounts, visit.element);
+  if (Option.isNone(count) || cardinality === "multiple") {
+    return [];
+  }
+
+  const counted = Option.match(countOf(visit.element, count.value), {
+    onNone: () => [],
+    onSome: (value) =>
+      value === 1n
+        ? []
+        : [
+            refusal(source, "binding", visit.path, {
+              attribute: count.value.attribute,
+              check: "count-cardinality",
+              count: value.toString(),
+              interaction: visit.element.local,
+              reading: "92",
+              response,
+            }),
+          ],
+  });
+  const gaps =
+    counted.length === 0 && visit.element.local === "qti-gap-match-interaction"
+      ? gapsIn(visit.element).length
+      : 0;
+
+  return gaps > 1
+    ? [
+        refusal(source, "binding", visit.path, {
+          cardinality,
+          check: "gap-match-single",
+          gaps: gaps.toString(),
+          interaction: visit.element.local,
+          response,
+        }),
+      ]
+    : counted;
+};
+
+/**
+ * Apply `binding`, reading 92's counts and reading 19 to an interaction and the declaration its
+ * `response-identifier` names.
  *
  * `binding` reads the declaration the interaction's `response-identifier` names, never any other
  * declaration in the document: QTI's Schematron runs some base-type tests against every
- * declaration, and reading 9 applies each rule by its intent, over the bound declaration. A
- * declaration whose `cardinality` is absent or outside the vocabulary, or whose `base-type` is
- * outside it, is the structural validator's refusal and is not judged here.
+ * declaration, and by reading 9 ("the Schematron's rules are read by their intent, not their text")
+ * each rule applies over the bound declaration. Every interaction {@link requirements} lists is held
+ * to its requirement; every interaction {@link cardinalityCounts} lists is held to its count, and a
+ * gap match to its gaps ({@link cardinalityRules}), only where the requirement gives no refusal,
+ * since that refusal already names the response's cardinality.
+ *
+ * Reading 158 ("a declaration whose cardinality or base type spells nothing is still a declaration:
+ * each law over it judges what it does spell"): a declaration whose `cardinality` spells nothing is
+ * not judged. The requirement reads both attributes but for a `record`, which it judges by its
+ * cardinality alone, so a declaration of another cardinality whose `base-type` is absent (E39a's
+ * `missing-attribute`) or spells nothing (its value domain's `attribute-type`) is not held to it;
+ * the counts read the cardinality alone.
  *
  * Reading 19: an Extended Text bound to a `multiple` or `ordered` declaration carries `max-strings`
  * (the information model requires it of a container binding; the XSD makes it optional because it
@@ -349,7 +893,6 @@ const duplicateIdentifier = (
  *
  * @param source The document.
  * @param visit The interaction's visit.
- * @param name Which of the interactions plate renders it is.
  * @param response The response identifier it names.
  * @param declaration The declaration of that identifier.
  * @returns The refusals `binding` and reading 19 give, empty when the binding holds.
@@ -357,92 +900,338 @@ const duplicateIdentifier = (
 const bindingRules = (
   source: SourceDocument,
   visit: Visit,
-  name: InteractionName,
   response: string,
   declaration: SourceElement,
 ): readonly Refusal[] => {
-  const cardinality = Option.flatMap(attributeOf(declaration, "cardinality"), (attribute) =>
-    Arr.findFirst(cardinalities, (value) => value === attribute.value),
-  );
+  const cardinality = cardinalityOf(declaration);
   if (Option.isNone(cardinality)) {
     return [];
   }
 
-  const written = Option.map(attributeOf(declaration, "base-type"), (attribute) => attribute.value);
-  const baseType = written.pipe(
-    Option.flatMap((value) => Arr.findFirst(baseTypes, (candidate) => candidate === value)),
-  );
-  const judged = Option.isNone(written) || Option.isSome(baseType);
-  const binding =
-    judged && !meets(requirements[name], cardinality.value, baseType)
-      ? [
-          refusal(source, "binding", visit.path, {
-            baseType: Option.getOrElse(written, () => ""),
-            cardinality: cardinality.value,
-            interaction: name,
-            response,
-          }),
-        ]
-      : [];
+  const { baseType, written } = baseTypeOf(declaration);
+  const judged = cardinality.value === "record" || Option.isSome(baseType);
+  const binding = Option.match(qtiEntry(requirements, visit.element), {
+    onNone: () => [],
+    onSome: (requirement) =>
+      judged && !meets(requirement, cardinality.value, baseType)
+        ? [
+            refusal(source, "binding", visit.path, {
+              baseType: Option.getOrElse(written, () => ""),
+              cardinality: cardinality.value,
+              interaction: visit.element.local,
+              response,
+            }),
+          ]
+        : [],
+  });
+  const counted =
+    binding.length === 0 ? cardinalityRules(source, visit, response, cardinality.value) : [];
 
+  const extendedText = isQti(visit.element, (local) => local === "qti-extended-text-interaction");
   const container = cardinality.value === "multiple" || cardinality.value === "ordered";
   const maxStrings =
-    name === "qti-extended-text-interaction" &&
-    container &&
-    Option.isNone(attributeOf(visit.element, "max-strings"))
+    extendedText && container && Option.isNone(attributeOf(visit.element, "max-strings"))
       ? [
           refusal(source, "missing-attribute", visit.path, {
             attribute: "max-strings",
-            element: name,
+            element: visit.element.local,
           }),
         ]
       : [];
 
-  return [...binding, ...maxStrings];
+  return [...binding, ...counted, ...maxStrings];
 };
 
 /**
- * Apply `undeclared-response` to an interaction, then `binding` and reading 19 to the declaration
- * it names.
- *
- * Reading I-8.6 (the goal's decision `01e90255`): an interaction's `response-identifier` names a
- * declared `qti-response-declaration`. Reading 14 makes a Text Entry's `response-identifier` a
- * plain identifier like every other interaction's, not an `xs:IDREF`, so this rule is the only
- * check on it. A text interaction's `string-identifier` is not resolved: reading 14 types it as a
- * plain identifier, and the qti package stores it unresolved. An interaction with no
- * `response-identifier` is the structural validator's `missing-attribute`.
+ * Apply reading 92's "Each response variable declared may be bound to one and only one
+ * interaction" to one binding: a response that an earlier binding of the item already binds is
+ * `binding` with `check: "bound-once"`, at the attribute that binds it the second time.
  *
  * @param source The document.
- * @param visit The element's visit.
- * @param declarations The item's response declarations by identifier.
- * @returns The refusal at the `response-identifier` attribute's path when it names no
- *   declaration, otherwise the binding rules' refusals; none for an element that is not an
- *   interaction.
+ * @param visit The interaction's visit.
+ * @param attribute The attribute that binds the response, a `response-identifier` or a
+ *   `string-identifier`.
+ * @param response The declared response it names.
+ * @param bound The responses earlier bindings bind, which this adds `response` to.
+ * @param reading The reading that settles a second binding here: `92` for another interaction's,
+ *   `14` for a `string-identifier` that names its own interaction's response.
+ * @returns The refusal, or none for the response's first binding.
  */
-const responseRules = (
+const boundOnce = (
   source: SourceDocument,
   visit: Visit,
-  declarations: ReadonlyMap<string, SourceElement>,
+  attribute: SourceAttribute,
+  response: string,
+  bound: Set<string>,
+  reading: string,
 ): readonly Refusal[] => {
-  const attribute = attributeOf(visit.element, "response-identifier");
-  if (!isInteraction(visit.element) || Option.isNone(attribute)) {
+  if (!bound.has(response)) {
+    bound.add(response);
+
     return [];
   }
 
-  const response = identifierOf(attribute.value);
+  return [
+    refusal(source, "binding", attributePath(visit.path, attribute), {
+      attribute: attribute.local,
+      check: "bound-once",
+      interaction: visit.element.local,
+      reading,
+      response,
+    }),
+  ];
+};
+
+/**
+ * Apply `undeclared-response` to an interaction's `response-identifier`, then reading 92's single
+ * binding and {@link bindingRules} to the declaration it names.
+ *
+ * Reading I-8.6 (the goal's decision `01e90255`): an interaction's `response-identifier` names a
+ * declared `qti-response-declaration`; reading 14 ("a text-entry interaction's
+ * `response-identifier` and `string-identifier` are `xs:IDREF`s, as the XSD types them") resolves a
+ * Text Entry's to the declaration it names, as every interaction's is resolved here.
+ *
+ * @param source The document.
+ * @param visit The interaction's visit.
+ * @param declarations The item's response declarations by identifier.
+ * @param bound The responses earlier bindings bind.
+ * @param attribute The interaction's `response-identifier`.
+ * @returns The refusal at the attribute's path when it names no declaration, otherwise the
+ *   refusals of its binding; none when its value names nothing ({@link nameOf}).
+ */
+const responseBinding = (
+  source: SourceDocument,
+  visit: Visit,
+  declarations: ReadonlyMap<string, SourceElement>,
+  bound: Set<string>,
+  attribute: SourceAttribute,
+): readonly Refusal[] => {
+  const name = nameOf(attribute);
+  if (Option.isNone(name)) {
+    return [];
+  }
+
+  const response = name.value;
   const declaration = declarations.get(response);
   if (declaration === undefined) {
     return [
-      refusal(source, "undeclared-response", attributePath(visit.path, attribute.value), {
+      refusal(source, "undeclared-response", attributePath(visit.path, attribute), { response }),
+    ];
+  }
+
+  return [
+    ...boundOnce(source, visit, attribute, response, bound, "92"),
+    ...bindingRules(source, visit, response, declaration),
+  ];
+};
+
+/**
+ * Apply `undeclared-response`, reading 92's single binding and `binding` to a Text Entry's or an
+ * Extended Text's `string-identifier`.
+ *
+ * Reading 14 ("a text-entry interaction's `response-identifier` and `string-identifier` are
+ * `xs:IDREF`s, as the XSD types them") resolves a `string-identifier` to the declaration it names,
+ * as a `response-identifier` is resolved: naming no declared response is `undeclared-response`,
+ * its `attribute` naming the `string-identifier`. The response it names is "a second response
+ * variable (of base-type string)" (info.txt:48078), and the information model asks nothing more of
+ * it (rule `5b8ee08b`), so it is held to that sentence alone, for a Text Entry and an Extended Text
+ * alike: a `record`, which has no base type, and a declaration that spells a base type other than
+ * `string` are each `binding` with `check: "string-binding"`, and any other cardinality fits,
+ * whatever the interaction's own response is. Reading 158 holds the base type to it only where it
+ * spells one; a declaration whose `cardinality` spells nothing is not judged. A response bound
+ * already, the interaction's own among them, is bound a second time ({@link boundOnce}).
+ *
+ * @param source The document.
+ * @param visit The interaction's visit.
+ * @param declarations The item's response declarations by identifier.
+ * @param bound The responses earlier bindings bind.
+ * @param attribute The interaction's `string-identifier`.
+ * @param own The response its `response-identifier` names, which sets the reading a second
+ *   binding of it cites; none when it writes none or names nothing.
+ * @returns The refusals of its binding, empty when it binds a `string` response that is not a
+ *   `record` and that no other binding binds, and when its value names nothing ({@link nameOf}).
+ */
+const stringBinding = (
+  source: SourceDocument,
+  visit: Visit,
+  declarations: ReadonlyMap<string, SourceElement>,
+  bound: Set<string>,
+  attribute: SourceAttribute,
+  own: Option.Option<string>,
+): readonly Refusal[] => {
+  const name = nameOf(attribute);
+  if (Option.isNone(name)) {
+    return [];
+  }
+
+  const response = name.value;
+  const declaration = declarations.get(response);
+  if (declaration === undefined) {
+    return [
+      refusal(source, "undeclared-response", attributePath(visit.path, attribute), {
+        attribute: attribute.local,
+        element: visit.element.local,
+        identifier: response,
+        reading: "14",
         response,
       }),
     ];
   }
 
-  return Option.match(renderedInteraction(visit.element), {
-    onNone: () => [],
-    onSome: (name) => bindingRules(source, visit, name, response, declaration),
+  const reading = Option.exists(own, (identifier) => identifier === response) ? "14" : "92";
+  const cardinality = cardinalityOf(declaration);
+  const { baseType, written } = baseTypeOf(declaration);
+  const fits = Option.match(cardinality, {
+    onNone: () => true,
+    onSome: (value) => value !== "record" && !Option.exists(baseType, (type) => type !== "string"),
   });
+
+  return [
+    ...boundOnce(source, visit, attribute, response, bound, reading),
+    ...(fits
+      ? []
+      : [
+          refusal(source, "binding", visit.path, {
+            baseType: Option.getOrElse(written, () => ""),
+            cardinality: Option.getOrElse(cardinality, () => ""),
+            check: "string-binding",
+            interaction: visit.element.local,
+            reading: "14",
+            response,
+          }),
+        ]),
+  ];
+};
+
+/**
+ * Resolve the bindings of an interaction: its `response-identifier`, then, on a Text Entry or an
+ * Extended Text, its `string-identifier`, in that order, so a `string-identifier` that names the
+ * interaction's own response is its second binding.
+ *
+ * Only an interaction's bindings are read: the XSD declares `response-identifier` on the
+ * `qti-*-interaction` elements and `string-identifier` on the two {@link stringBindings}, and on
+ * any other element only an attribute wildcard admits either, which binds nothing. An interaction
+ * with no `response-identifier` is the structural validator's `missing-attribute`.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param declarations The item's response declarations by identifier.
+ * @param bound The responses earlier bindings bind, which this adds the interaction's to.
+ * @returns The refusals of its bindings; none for an element that is not an interaction.
+ */
+const responseRules = (
+  source: SourceDocument,
+  visit: Visit,
+  declarations: ReadonlyMap<string, SourceElement>,
+  bound: Set<string>,
+): readonly Refusal[] => {
+  if (!isInteraction(visit.element)) {
+    return [];
+  }
+
+  const own = attributeOf(visit.element, "response-identifier");
+  const second = isQti(visit.element, (local) => stringBindings.has(local))
+    ? attributeOf(visit.element, "string-identifier")
+    : Option.none();
+  const first = Option.match(own, {
+    onNone: () => [],
+    onSome: (attribute) => responseBinding(source, visit, declarations, bound, attribute),
+  });
+
+  return [
+    ...first,
+    ...Option.match(second, {
+      onNone: () => [],
+      onSome: (attribute) =>
+        stringBinding(
+          source,
+          visit,
+          declarations,
+          bound,
+          attribute,
+          own.pipe(Option.flatMap(nameOf)),
+        ),
+    }),
+  ];
+};
+
+/**
+ * Apply reading 92 to a Portable Custom Interaction's `qti-context-variable`: it names a context
+ * variable, one the item declares in a `qti-context-declaration` or the built-in `QTI_CONTEXT`.
+ * The reading's bullet: the element "allows an item author to bind a context variable to the PCI
+ * instance", the context variables are the declared ones and `QTI_CONTEXT`, and "All variables must
+ * be declared except for the built-in session variables"; the Schematron's rule 20Ba states the
+ * same. Another name is `undeclared-variable` with `check: "context-variable"`. The XSD declares
+ * the element only inside a `qti-portable-custom-interaction`, and requires its `identifier`, whose
+ * absence is the structural validator's `missing-attribute`.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param contexts The item's context declarations by identifier.
+ * @returns The refusal at the element, or none when it names a context variable, when its
+ *   `identifier` names nothing ({@link nameOf}), or when it is no `qti-context-variable`.
+ */
+const contextVariableReference = (
+  source: SourceDocument,
+  visit: Visit,
+  contexts: ReadonlyMap<string, SourceElement>,
+): readonly Refusal[] => {
+  const name = Option.flatMap(attributeOf(visit.element, "identifier"), nameOf);
+  if (!isQti(visit.element, (local) => local === "qti-context-variable") || Option.isNone(name)) {
+    return [];
+  }
+
+  const identifier = name.value;
+
+  return identifier === "QTI_CONTEXT" || contexts.has(identifier)
+    ? []
+    : [
+        refusal(source, "undeclared-variable", visit.path, {
+          check: "context-variable",
+          element: visit.element.local,
+          identifier,
+          reading: "92",
+        }),
+      ];
+};
+
+/**
+ * Apply R10-a ("A PCI names its module by `module`, by `qti-interaction-modules`, or by both") to a
+ * Portable Custom Interaction: it carries a `module` attribute, holds a `qti-interaction-modules`
+ * child, or both. The information model's `module` (§5.106.2, in 3.0.0 and 3.0.1): "If this
+ * characteristic is provided the qti-interaction-modules child attribute is not required, if
+ * omitted then the modules child element is mandatory" (`info.txt:37583`). The XSD makes both
+ * optional, so the structural walk refuses neither, and a PCI with neither is `missing-attribute`
+ * with `check: "pci-module-source"` here. Any written `module` counts, whatever its value: the
+ * structural walk judges its value. Every version is judged alike, with no version seam.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @returns The refusal at the PCI, or none when it names its module by either form, or when it is
+ *   no `qti-portable-custom-interaction`.
+ */
+export const pciModuleSource = (source: SourceDocument, visit: Visit): readonly Refusal[] => {
+  if (!isQti(visit.element, (local) => local === "qti-portable-custom-interaction")) {
+    return [];
+  }
+
+  const named =
+    Option.isSome(attributeOf(visit.element, "module")) ||
+    visit.element.children.some(
+      (child) =>
+        child.kind === "element" && isQti(child, (local) => local === "qti-interaction-modules"),
+    );
+
+  return named
+    ? []
+    : [
+        refusal(source, "missing-attribute", visit.path, {
+          attribute: "module",
+          check: "pci-module-source",
+          element: visit.element.local,
+          source: "info.txt:37583",
+        }),
+      ];
 };
 
 /**
@@ -709,9 +1498,10 @@ const enclosing = (
 
 /**
  * The processing an element of the rules belongs to, as the qti package names its languages
- * (`Language` in `packages/pantry/src/processing/ast.ts`): an item's response processing or
- * template processing, a test's outcome processing, or the expression a test or a section holds in
- * a `qti-pre-condition`, a `qti-branch-rule` or a `qti-template-default`. A template default is an
+ * (`languages` in `packages/pantry/src/grammar/expression.ts`, held by the relation `Processing` in
+ * `packages/pantry/src/qti/expressions.ts`): an item's response processing or template processing,
+ * a test's outcome processing, or the expression a test or a section holds in a
+ * `qti-pre-condition`, a `qti-branch-rule` or a `qti-template-default`. A template default is an
  * expression, never template processing: it may read an outcome, a built-in and an item's variable
  * (9.24), so the template read rule ({@link templateReads}, P26) never judges it.
  */
@@ -719,7 +1509,8 @@ type Processing = "expression" | "outcome" | "response" | "template";
 
 /**
  * The element that holds each processing, by its local name: the qti package judges all four test
- * contexts (`packages/pantry/src/processing/ast.ts`, `import/processing.ts`).
+ * contexts (`languages` and `processingRoots` in `packages/pantry/src/grammar/expression.ts`;
+ * `processingRowsOf` in `packages/pantry/src/import/overlays/expressions.ts`).
  */
 const processings: ReadonlyMap<string, Processing> = new Map<string, Processing>([
   ["qti-branch-rule", "expression"],
@@ -756,7 +1547,7 @@ const processingOf = (context: Context, element: SourceElement): Option.Option<P
 /**
  * Report whether an element lies anywhere under an element that holds a processing
  * ({@link processings}), the processing the type and reference rules judge. The qti package judges
- * them alike (`checkProcessing` in `packages/pantry/src/processing/check.ts`).
+ * them alike (the expression laws of `packages/pantry/src/qti/expressions.ts`).
  *
  * @param context The parents the walk has met.
  * @param element The element.
@@ -797,6 +1588,18 @@ const mappingNeeds = {
 type MappingExpression = keyof typeof mappingNeeds;
 
 /**
+ * Read an element's local name as an inline mapping expression's.
+ *
+ * @param element The element's local name.
+ * @returns The mapping expression, none for any other element.
+ */
+const mappingExpressionOf = (element: string): Option.Option<MappingExpression> =>
+  Arr.findFirst(
+    Object.keys(mappingNeeds),
+    (local): local is MappingExpression => local === element,
+  );
+
+/**
  * Judge the response declaration a `qti-map-response` or a `qti-map-response-point` names against
  * what {@link mappingNeeds} lists for that expression: the detail of the `template-requirements`
  * refusal it earns when the declaration lacks it. An item's inline expression is judged so
@@ -814,73 +1617,111 @@ export const mappingRequirement = (
   identifier: string,
   declaration: SourceElement,
 ): Option.Option<Readonly<Record<string, string>>> =>
-  Option.flatMap(
-    Arr.findFirst(
-      Object.keys(mappingNeeds),
-      (local): local is MappingExpression => local === element,
-    ),
-    (expression) => {
-      const needed: Needed = { ...mappingNeeds[expression], identifier };
+  Option.flatMap(mappingExpressionOf(element), (expression) => {
+    const needed: Needed = { ...mappingNeeds[expression], identifier };
 
-      return provides(declaration, needed)
-        ? Option.none()
-        : Option.some(neededDetail(expression, needed));
-    },
+    return provides(declaration, needed)
+      ? Option.none()
+      : Option.some(neededDetail(expression, needed));
+  });
+
+/**
+ * Give the detail of the `template-requirements` refusal a `qti-map-response` or a
+ * `qti-map-response-point` earns when it names a response with none of what {@link mappingNeeds}
+ * lists for it, a built-in response among them ({@link mapResponseRequirements}).
+ *
+ * @param element The expression's local name.
+ * @param identifier The name the expression gives the response, which the detail repeats.
+ * @returns The refusal's detail; none when the element is neither expression.
+ */
+const mappingNeedOf = (
+  element: string,
+  identifier: string,
+): Option.Option<Readonly<Record<string, string>>> =>
+  Option.map(mappingExpressionOf(element), (expression) =>
+    neededDetail(expression, { ...mappingNeeds[expression], identifier }),
   );
 
 /**
  * Apply `template-requirements` to an inline `qti-map-response` or `qti-map-response-point`: the
  * response it names is declared with what {@link mappingNeeds} lists for it
- * ({@link mappingRequirement}). The qti package refuses both as P27 (`checkMapping` in
- * `packages/pantry/src/processing/check.ts`).
+ * ({@link mappingRequirement}). The qti package refuses both as P27 (the `Mapped response` law
+ * in `packages/pantry/src/qti/expressions.ts`).
  *
  * An expression that names no response declaration is not judged here: an undeclared variable is
- * its own refusal, and this rule refuses only a declared response that lacks what it needs.
- * Template processing is not judged here either: every response this rule could judge there is a
- * read template processing may not make, {@link templateReads}' refusal (P26), which the qti
- * package reports in place of P27 because it keeps its first refusal and `checkMapping` reads the
- * name before it judges the mapping.
+ * its own refusal, and this rule refuses a declared response that lacks what it needs. A built-in
+ * response is one such an expression may name (reading 111, "a processing element's `identifier`
+ * names a variable of the kind the element reads or sets"): an item's `numAttempts` or `duration`,
+ * and a test's `duration`, with the `numAttempts` plate keeps for a test that declares none
+ * ({@link testProcessingBuiltIns}, as ruled, B4). No declaration may take its name, so it has no
+ * mapping or area mapping: it is refused here, with the detail a declared response that lacks both
+ * would get. Reading 166 says so: "An unprefixed `qti-map-response` or `qti-map-response-point`
+ * that names a built-in response variable, an item's `numAttempts` or `duration` or a test's
+ * `duration`, is refused under 'Mapped response' too: a built-in has no declaration, so no mapping
+ * or area mapping has been declared". The qti package refuses the same by its `Mapped response`
+ * law, which a built-in breaks for want of the table. A name a test declares is no built-in there
+ * (reading 168, "A test may declare a variable named `numAttempts` or `completionStatus`";
+ * {@link testProcessingScope}), so a mapping expression of a declared outcome `numAttempts` keeps
+ * {@link undeclaredVariable}'s refusal, never this one.
+ *
+ * In an item only response processing is judged. Template processing is not: every response this
+ * rule could judge there is a read template processing may not make, {@link templateReads}'
+ * refusal (P26) alone, so it is refused once. The qti package states the two as separate laws,
+ * `Template reads` (P26) and `Mapped response` (P27), and names a refusal by its most specific law
+ * in one fixed order (`precedence` in `packages/pantry/src/vocab/laws.ts`). In a test, and in a
+ * section document under a test that reaches it ({@link processingRefusals}), every processing is
+ * judged: outcome processing, a pre-condition, a branch rule and a template default, the four
+ * contexts the qti package judges. A section document on its own holds no built-in, so nothing is
+ * refused there.
  *
  * @param source The document.
  * @param visit The element's visit.
- * @param context The item's declarations and the parents the walk has met.
+ * @param context The document's declarations, its built-ins and the parents the walk has met.
  * @returns The refusal at the expression's path when its response lacks what it needs; none for any
- *   other element and for one outside response processing.
+ *   other element, and for one outside the processing judged: an item's response processing, or
+ *   any processing of a test or a section.
  */
 const mapResponseRequirements = (
   source: SourceDocument,
   visit: Visit,
   context: Context,
 ): readonly Refusal[] => {
-  const attribute = attributeOf(visit.element, "identifier");
-  if (
-    visit.element.namespace !== qtiNamespace ||
-    Option.isNone(attribute) ||
-    !liesIn(context, visit.element, "response")
-  ) {
+  const name = Option.flatMap(attributeOf(visit.element, "identifier"), nameOf);
+  const judged =
+    context.declarer === "test"
+      ? inProcessing(context, visit.element)
+      : liesIn(context, visit.element, "response");
+  if (visit.element.namespace !== qtiNamespace || Option.isNone(name) || !judged) {
     return [];
   }
 
-  const identifier = identifierOf(attribute.value);
+  const identifier = name.value;
   const declaration = context.responses.get(identifier);
+  const detail =
+    declaration === undefined
+      ? Option.filter(mappingNeedOf(visit.element.local, identifier), () =>
+          Option.exists(
+            Option.fromUndefinedOr(context.builtIns.get(identifier)),
+            (builtIn) => builtIn.kind === "response",
+          ),
+        )
+      : mappingRequirement(visit.element.local, identifier, declaration);
 
-  return declaration === undefined
-    ? []
-    : Option.toArray(
-        Option.map(mappingRequirement(visit.element.local, identifier, declaration), (detail) =>
-          refusal(source, "template-requirements", visit.path, detail),
-        ),
-      );
+  return Option.toArray(
+    detail.pipe(Option.map((facts) => refusal(source, "template-requirements", visit.path, facts))),
+  );
 };
 
 /**
  * Give an element's `base-type` when the value model holds values of it.
  *
- * A base type the value model does not hold (`file`) has no lexical check here (the
- * slice list's 0.11 item 3), so its values are not judged. A `point` is held, so a value that is
- * not two integers is refused, as the qti package refuses it (`value-lexical`, the `point` pattern
- * in `packages/pantry/src/import/refusal.ts`). A missing or out-of-vocabulary `base-type` is the
- * structural validator's.
+ * A base type the value model does not hold (`file`) has no lexical check here (the slice list's
+ * 0.11 item 3), so its values are not judged. A `point` is held, so a value that is not two
+ * integers is refused, as the qti package refuses it (`pointValuePattern` in
+ * `packages/pantry/src/qti/expression-types.ts`, read by the `Typed value` law in
+ * `packages/pantry/src/qti/declarations.ts`, rule `typed-copy`, and by the `Literal lexical` law in
+ * `packages/pantry/src/qti/expressions.ts`, rule `attribute-lexical`). A missing or
+ * out-of-vocabulary `base-type` is the structural validator's.
  *
  * @param element An element with a `base-type`, such as a declaration or a `qti-base-value`.
  * @returns Its base type, none when it is absent or not modelled.
@@ -1064,6 +1905,11 @@ const isRecordField = (visit: Visit, parents: ReadonlyMap<SourceElement, SourceE
  * `qti-correct-response` or `qti-default-value`, the declaration's, or, when the declaration is a
  * record, the field's own `base-type` ({@link isRecordField}).
  *
+ * A declaration's values are typed only where its `cardinality` spells one (reading 158, "each law
+ * over it judges what it does spell", E40a): the law over a typed value reads the cardinality and
+ * the base type both, so a value of a declaration whose `cardinality` is unwritten or spells
+ * nothing is not judged, and the structural validator refuses the cardinality alone.
+ *
  * @param visit The element's visit.
  * @param context The parents the walk has met.
  * @returns The base type, none for any other element and for a value this rule does not judge.
@@ -1078,7 +1924,9 @@ const textBaseType = (visit: Visit, context: Context): Option.Option<ModelledBas
   }
 
   return Option.flatMap(
-    enclosing(context.parents, visit.element, valueToDeclaration),
+    Option.filter(enclosing(context.parents, visit.element, valueToDeclaration), (declaration) =>
+      Option.isSome(cardinalityOf(declaration)),
+    ),
     (declaration) =>
       modelledBaseType(isRecordDeclaration(declaration) ? visit.element : declaration),
   );
@@ -1111,13 +1959,13 @@ const textUnder = (
  * Reading 1 and the value model's lexical spaces (research `ea422814` §3): a `qti-value` in a
  * declaration's `qti-correct-response` or `qti-default-value` parses under the declaration's base
  * type, a field of a record declaration's value under its own `base-type` (as pantry's import reads
- * it, `valueRows` in `packages/pantry/src/import/item.ts`), and a `qti-base-value` under its own
- * `base-type`, after reading 7's trim of element text, which the value model's `parseElementText`
- * applies. A boolean is `true` or `false`, never `1` or `0` (reading 34). The XSD does not decide,
- * typing `qti-value` as `xs:normalizedString` and `qti-base-value` as `xs:string`; the information
- * model's boolean base type is the boolean primitive's set (`info.txt:72950`), "with permitted
- * values of "true" and "false"" (`info.txt:74908`). XML Schema's `1` and `0` belong only to the
- * attributes the XSD types `xs:boolean`.
+ * it, the `Typed value` law in `packages/pantry/src/qti/declarations.ts`), and a `qti-base-value`
+ * under its own `base-type`, after reading 7's trim of element text, which the value model's
+ * `parseElementText` applies. A boolean is `true` or `false`, never `1` or `0` (reading 34). The
+ * XSD does not decide, typing `qti-value` as `xs:normalizedString` and `qti-base-value` as
+ * `xs:string`; the information model's boolean base type is the boolean primitive's set
+ * (`info.txt:72950`), "with permitted values of "true" and "false"" (`info.txt:74908`). XML
+ * Schema's `1` and `0` belong only to the attributes the XSD types `xs:boolean`.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1165,11 +2013,10 @@ const missingFieldAttributes = (source: SourceDocument, visit: Visit): readonly 
  *
  * The XSD makes both optional on every `qti-value`; the information model requires them of a
  * record's: a record "contains a set of independent values each identified by its own identifier
- * and having its own base-type" (`info.txt:73046`). The qti package refuses the same document:
- * a field with no `base-type` has no arm, which its commit refuses (`valueRows` in
- * `packages/pantry/src/import/item.ts`), and one with no `field-identifier` fails the NCName
- * contract `RecordFieldIdentifier` (`packages/pantry/src/schema/contracts.ts`). A field whose text
- * is outside its own `base-type` is `value-type`'s ({@link textValueType}).
+ * and having its own base-type" (`info.txt:73046`). The qti package refuses the same document: its
+ * `Value cardinality` law (`packages/pantry/src/qti/declarations.ts`, rule `value-cardinality`)
+ * holds a record's field to both a `field-identifier` and a `base-type`. A field whose text is
+ * outside its own `base-type` is `value-type`'s ({@link textValueType}).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1192,12 +2039,11 @@ const recordFieldAttributes = (
  * gets. `checkTestRules` calls it once per judged visit.
  *
  * A test's record declarations take their fields as an item's do. The information model requires
- * both attributes of every record's field (`info.txt:73046`), and the qti package's test import
- * runs the item builder's declaration pass (`packages/pantry/src/import/test.ts` calling
- * `semanticRows` of `packages/pantry/src/import/item.ts`), which refuses a field with no
- * `base-type` (it has no arm) and one with no `field-identifier` (the NCName contract
- * `RecordFieldIdentifier`). The rest of a test's record declaration is the test model's, which
- * marks it `cardinality="record"`.
+ * both attributes of every record's field (`info.txt:73046`), and the qti package builds a test's
+ * declarations as an item's (`rowsOf` in `packages/pantry/src/import/overlays/declarations.ts`, run
+ * for every document), so its `Value cardinality` law (`packages/pantry/src/qti/declarations.ts`)
+ * refuses a test's field with no `base-type` or no `field-identifier` too. The rest of a test's
+ * record declaration is the test model's, which marks it `cardinality="record"`.
  *
  * @param source The test or section document.
  * @param visit The element's visit.
@@ -1218,11 +2064,291 @@ export const recordFieldRefusals = (
     : [];
 
 /**
+ * What one item has written so far in each holder whose values may not repeat, a mapping or a
+ * record value, by holder: each record value's field identifiers, each mapping's keys as written,
+ * and each mapping's keys as values of its declaration's base type ({@link mapKeyValue}).
+ */
+interface Written {
+  readonly fields: Map<SourceElement, Set<string>>;
+  readonly keyValues: Map<SourceElement, Set<string>>;
+  readonly keys: Map<SourceElement, Set<string>>;
+}
+
+/**
+ * Record a value a holder writes, and report whether the holder wrote it before.
+ *
+ * @param written What each holder has written so far, which this adds the value to.
+ * @param holder The mapping or record value that writes it.
+ * @param value The value, as the comparison reads it.
+ * @returns Whether an earlier entry of the same holder wrote the same value.
+ */
+const writtenBefore = (
+  written: Map<SourceElement, Set<string>>,
+  holder: SourceElement,
+  value: string,
+): boolean => {
+  const values = written.get(holder);
+  if (values === undefined) {
+    written.set(holder, new Set([value]));
+
+    return false;
+  }
+
+  if (values.has(value)) {
+    return true;
+  }
+
+  values.add(value);
+
+  return false;
+};
+
+/**
+ * Give a single value as one text that two singles share exactly when they are one value, as a
+ * mapping's keys compare (reading 98): a pair's identifiers in an order of their own, since a pair
+ * is undirected, and every other value in its base type's lexical form ({@link format}), which
+ * writes an integer and a point's coordinates without signs or leading zeros a value does not
+ * need.
+ *
+ * @param single The value.
+ * @returns The text.
+ */
+const singleKey = (single: Single): string => {
+  if (single.baseType !== "pair") {
+    return format(single);
+  }
+
+  const [source, destination] = single.value;
+
+  return source <= destination ? `${source} ${destination}` : `${destination} ${source}`;
+};
+
+/**
+ * Read a map key as the value it names under its declaration's base type, as one text two keys
+ * share exactly when they repeat (reading 98): an integer by its value at any length (`1`, `01`
+ * and `+1`), a point as its integer tuple, a pair unordered and a directed pair in order, and a
+ * boolean, a string, an identifier and a URI as written. A float, and a duration, which the value
+ * model reads as a float, is the double reading 144 reads it as (reading 154): `1e400`, `2e400`
+ * and `INF` repeat, as do `0` and `-0`, and two `NaN`s.
+ *
+ * @param baseType The declaration's base type.
+ * @param lexical The key, without its outer whitespace unless the base type is `string`.
+ * @returns The text, none when the key is outside the base type's lexical space, which
+ *   {@link attributeValueType} refuses.
+ */
+const mapKeyValue = (baseType: ModelledBaseType, lexical: string): Option.Option<string> =>
+  baseType === "float" || baseType === "duration"
+    ? Option.map(readIeeeDouble(lexical), (double) =>
+        Number.isNaN(double) ? "NaN" : String(double),
+      )
+    : Option.map(Result.getSuccess(parseLexical(baseType, lexical)), singleKey);
+
+/**
+ * The steps from a `qti-map-entry` up to the response declaration whose mapping holds it.
+ */
+const mapEntryToDeclaration = [named("qti-mapping"), named("qti-response-declaration")];
+
+/**
+ * Apply `duplicate-identifier` with `check: "map-key"` to a map entry whose `map-key` an earlier
+ * entry of its mapping wrote (reading 98, B5b): "The map is defined by a set of mapEntries, each
+ * of which maps a single value from the source set onto a single float" (section 5.88.4), so two
+ * entries of one key map one value twice.
+ *
+ * The keys compare twice (reading 160). As values of the declaration's base type
+ * ({@link mapKeyValue}), where its `base-type` spells one the value model holds and it is no record
+ * ({@link declaredBaseType}): `1` and `01` repeat in an integer mapping, and that refusal names the
+ * base type and cites reading 154 for a float, reading 98 otherwise. And as written, in every
+ * mapping, whatever its declaration's `cardinality` or `base-type` spells (reading 158): a key that
+ * repeats only so, such as `a` twice under `base-type=" string "`, is refused with an empty
+ * `baseType`, citing reading 160, while `1` and `01` under `" integer "` are two keys. A string
+ * compares by its code points, whatever an entry's `case-sensitive` says, so `York` and `york` are
+ * two keys (reading 165, "Two string map keys that differ only by case are two keys, and a
+ * response that matches several entries takes the first one listed", which narrows reading 98's
+ * string clause). A key outside its base type's lexical space has no value to compare, and is
+ * {@link attributeValueType}'s refusal.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The parents the walk has met.
+ * @param written The keys each mapping has written so far, which this adds the entry's to.
+ * @returns The refusal at the repeating entry's path; none for its mapping's first entry of that
+ *   key and for any other element.
+ */
+const repeatedMapKey = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+  written: Written,
+): readonly Refusal[] => {
+  const key = attributeOf(visit.element, "map-key");
+  const mapping = context.parents.get(visit.element);
+  if (
+    !isQti(visit.element, (local) => local === "qti-map-entry") ||
+    Option.isNone(key) ||
+    mapping === undefined ||
+    !named("qti-mapping")(mapping)
+  ) {
+    return [];
+  }
+
+  const lexical = key.value.value;
+  const baseType = Option.flatMap(
+    enclosing(context.parents, visit.element, mapEntryToDeclaration),
+    declaredBaseType,
+  );
+  const value = baseType.pipe(
+    Option.flatMap((type) =>
+      mapKeyValue(type, type === "string" ? lexical : trimXmlSpace(lexical)),
+    ),
+  );
+  const repeatsValue = Option.exists(value, (text) =>
+    writtenBefore(written.keyValues, mapping, text),
+  );
+  const repeatsText = writtenBefore(written.keys, mapping, lexical);
+  if (repeatsValue && Option.isSome(baseType)) {
+    return [
+      refusal(source, "duplicate-identifier", visit.path, {
+        baseType: baseType.value,
+        check: "map-key",
+        key: lexical,
+        reading: baseType.value === "float" ? "154" : "98",
+      }),
+    ];
+  }
+
+  return repeatsText
+    ? [
+        refusal(source, "duplicate-identifier", visit.path, {
+          baseType: "",
+          check: "map-key",
+          key: lexical,
+          reading: "160",
+        }),
+      ]
+    : [];
+};
+
+/**
+ * Apply `duplicate-identifier` with `check: "field"` to a field of a record declaration's value
+ * ({@link isRecordField}) whose `field-identifier` an earlier field of the same value wrote (B7): a
+ * record "contains a set of independent values each identified by its own identifier"
+ * (`info.txt:73046`), and reading 158 counts the law over a record's field keys among those that
+ * read neither the declaration's `cardinality` nor its `base-type`. A `qti-correct-response` and a
+ * `qti-default-value` are two values, each with its own fields. A `field-identifier` that is no
+ * NCName names nothing ({@link nameOf}) and is not compared. A test's record declarations take
+ * their fields as an item's do, so `checkTestRules` in `#plate/validate/test-rules.ts` applies it
+ * to a test's too.
+ *
+ * @param source The item, test or section document.
+ * @param visit The element's visit.
+ * @param parents Each element's parent, as the walk has met them.
+ * @param fields The field identifiers each record value has written so far, which this adds the
+ *   field's to.
+ * @returns The refusal at the repeating field's path; none for its value's first field of that
+ *   identifier and for any other element.
+ */
+export const repeatedField = (
+  source: SourceDocument,
+  visit: Visit,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+  fields: Map<SourceElement, Set<string>>,
+): readonly Refusal[] => {
+  const value = parents.get(visit.element);
+  const name = Option.flatMap(attributeOf(visit.element, "field-identifier"), nameOf);
+  if (!isRecordField(visit, parents) || value === undefined || Option.isNone(name)) {
+    return [];
+  }
+
+  return writtenBefore(fields, value, name.value)
+    ? [
+        refusal(source, "duplicate-identifier", visit.path, {
+          check: "field",
+          field: name.value,
+          reading: "158",
+        }),
+      ]
+    : [];
+};
+
+/**
+ * The bounds an outcome declaration may write about its `mastery-value`, each with the detail fact
+ * that names it and the test of a mastery value that breaks it.
+ */
+const masteryBounds = [
+  {
+    attribute: "normal-minimum",
+    breaks: (mastery: number, bound: number) => mastery < bound,
+    fact: "least",
+  },
+  {
+    attribute: "normal-maximum",
+    breaks: (mastery: number, bound: number) => mastery > bound,
+    fact: "greatest",
+  },
+] as const;
+
+/**
+ * Apply `attribute-type` with `check: "mastery-range"` to an outcome declaration whose
+ * `mastery-value` lies outside the bounds it writes (E42a): the Schematron's RULE SPECIFIC CLASS
+ * OUTCOMEDEC 1 and 2, read by their intent (reading 9), hold a mastery value at least the
+ * `normal-minimum` and at most the `normal-maximum`. One refusal for each bound broken, which a
+ * declaration whose bounds cross can break both; the detail names it as written, `least` or
+ * `greatest`.
+ *
+ * Each value is compared by its IEEE double (reading 144); one outside xs:double's lexical space
+ * is the structural validator's to refuse, and is not compared. A bound the declaration does not
+ * write is not judged here: a QTI 3.0.1 `normal-minimum` that is not written is 0.0 (reading 149),
+ * which only the document's version decides, so `checkVersion` in `#plate/validate/versions.ts`
+ * judges that floor. A test's outcome declarations carry the same attributes, so `checkTestRules`
+ * in `#plate/validate/test-rules.ts` applies it to a test's too.
+ *
+ * @param source The item, test or section document.
+ * @param visit The element's visit.
+ * @returns The refusals at the `mastery-value` attribute's path, the minimum's first; none for any
+ *   other element.
+ */
+export const masteryRange = (source: SourceDocument, visit: Visit): readonly Refusal[] => {
+  const mastery = attributeOf(visit.element, "mastery-value");
+  const value = mastery.pipe(
+    Option.flatMap((attribute) => readIeeeDouble(trimXmlSpace(attribute.value))),
+  );
+  if (
+    !isQti(visit.element, (local) => local === "qti-outcome-declaration") ||
+    Option.isNone(mastery) ||
+    Option.isNone(value)
+  ) {
+    return [];
+  }
+
+  return masteryBounds.flatMap(({ attribute, breaks, fact }) =>
+    Option.toArray(
+      Option.flatMap(attributeOf(visit.element, attribute), (bound) =>
+        Option.map(
+          Option.filter(readIeeeDouble(trimXmlSpace(bound.value)), (limit) =>
+            breaks(value.value, limit),
+          ),
+          () =>
+            refusal(source, "attribute-type", attributePath(visit.path, mastery.value), {
+              attribute: mastery.value.local,
+              check: "mastery-range",
+              element: visit.element.local,
+              [fact]: bound.value,
+              reading: "9",
+              value: mastery.value.value,
+            }),
+        ),
+      ),
+    ),
+  );
+};
+
+/**
  * Apply `value-type` to a `qti-base-value` that lies in a processing ({@link processings}), as
  * {@link textValueType} judges it: its text parses under its own `base-type`. The qti package
- * refuses the same as P7 in every processing a document holds, a test's and a section's included
- * (the `Literal` value context in `packages/pantry/src/schema/value-contexts.ts`). A declaration's
- * values are left to the test model's builder, which refuses them first.
+ * refuses the same in every processing a document holds, a test's and a section's included (the
+ * `Literal lexical` law in `packages/pantry/src/qti/expressions.ts`, rule `attribute-lexical`,
+ * formerly P7). A declaration's values are left to the test model's builder, which refuses them
+ * first.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1248,9 +2374,9 @@ const literalValueType = (
  * which has no base type of its own: "any references within an item or an assessment to the
  * QTI_CONTEXT variable [...] must succeed" (`info-compact.txt:8456`).
  *
- * `duration` is typed here in every item, so a read of it types the same whether the item is time
- * dependent or not; an item that is not may not read it at all, which {@link untimedDuration}
- * decides.
+ * `duration` is typed here in every item, and read whether the item is time dependent or not:
+ * reading 150 ("an item's built-in `duration` may be read whether or not the item is time
+ * dependent") finds no normative law that reads `time-dependent`.
  */
 const builtIns: ReadonlyMap<string, ExpressionType> = new Map<string, ExpressionType>([
   ["completionStatus", singleOf("identifier")],
@@ -1318,32 +2444,6 @@ const declaredBy = (
 ): Readonly<Record<string, string>> => (declarer === "item" ? facts : { ...facts, declarer });
 
 /**
- * Report whether a name, which no declaration answers, reads the built-in `duration` of an item
- * that is not time dependent: "The value of duration for items that are not time dependent must
- * not be used in any item or test-level expression" (`info-compact.txt:8472`). The qti package
- * refuses the same as `item-duration` (S-R49, `untimedDuration` in
- * `packages/pantry/src/processing/check.ts`).
- *
- * The root's `time-dependent` is read as `xs:boolean`. One that is absent or outside
- * `xs:boolean` is the structural validator's refusal, so the item is not judged untimed here. A
- * root other than a `qti-assessment-item` has no item `duration` of its own: a test reaches an
- * item's through an item ref, which is not judged here.
- *
- * @param source The document whose root the name is read in.
- * @param identifier The name, which the caller has found no declaration of.
- * @returns Whether the name is `duration` and the root is an item whose `time-dependent` is false.
- */
-const untimedDuration = (source: SourceDocument, identifier: string): boolean =>
-  identifier === "duration" &&
-  isQti(source.root, (local) => local === "qti-assessment-item") &&
-  Option.exists(
-    Option.flatMap(attributeOf(source.root, "time-dependent"), (attribute) =>
-      xsBooleanOf(attribute.value),
-    ),
-    (timeDependent) => !timeDependent,
-  );
-
-/**
  * The kind of a variable template processing may not read: a declared response or outcome
  * variable, or a built-in.
  */
@@ -1359,7 +2459,8 @@ type ForbiddenRead = "built-in" | "outcome" | "response";
  * built-in context variable `QTI_CONTEXT`. So a declared response or outcome is forbidden, and so
  * is every other built-in that no declaration answers (`numAttempts`, `duration`,
  * `completionStatus`); a template or context declaration is not. The qti package decides the same
- * (`read` in `packages/pantry/src/processing/check.ts`), the declaration first, as here.
+ * (the `Template reads` law in `packages/pantry/src/qti/expressions.ts`, over `resolve` in
+ * `packages/pantry/src/import/overlays/expressions.ts`), the declaration first, as here.
  *
  * @param identifier The name read, as {@link identifierOf} reads it.
  * @param declarations Every declaration of the item, by identifier.
@@ -1437,24 +2538,23 @@ const referencing: ReadonlyMap<string, Expected> = new Map<string, Expected>([
 ]);
 
 /**
- * The built-in variables each kind of reference may name.
- *
- * Response processing sets `completionStatus` like an outcome, and reads every built-in.
+ * The built-in variables each kind of reference may name: each built-in stands as a declaration of
+ * its kind ({@link builtInKinds}), so a reference that names a variable of a kind names the
+ * built-ins of that kind too (reading 111, "a processing element's `identifier` names a variable
+ * of the kind the element reads or sets"). `qti-set-outcome-value` and `qti-lookup-outcome-value`
+ * set the built-in outcome `completionStatus`; `qti-correct`, `qti-map-response` and
+ * `qti-map-response-point` read the built-in responses `numAttempts` and `duration`, and a
+ * mapping expression of one is refused for the mapping a built-in lacks
+ * ({@link mapResponseRequirements}); `qti-variable` and `qti-default` read every built-in. The qti
+ * package decides the same: its `Variable kind` law (`packages/pantry/src/qti/expressions.ts`)
+ * judges a reference to a built-in as one to a declaration of the kind its `BuiltInVariable`
+ * relation (`packages/pantry/src/grammar/install.ts`) stands it as.
  */
 const builtInsNamed = {
   outcome: ["completionStatus"],
-  response: [],
+  response: ["numAttempts", "duration"],
   variable: [...builtIns.keys()],
 } as const satisfies Record<Expected, readonly string[]>;
-
-/**
- * The rules that may set a built-in variable: only `qti-set-outcome-value`, which sets
- * `completionStatus`. That variable changes only "by a setOutcomeValue rule in responseProcessing"
- * (`info.txt:8488`), and the qti package's `BuiltInRefKind` admits a built-in as a rule's target
- * only there (`packages/pantry/src/schema/processing.ts:622-627`, P9), so a
- * `qti-lookup-outcome-value` that targets it is refused.
- */
-const builtInSetters: ReadonlySet<string> = new Set(["qti-set-outcome-value"]);
 
 /**
  * An element's `identifier`, read as a reference to a variable of the kind the element names.
@@ -1508,14 +2608,15 @@ const namingOf = (
  * Read the variable reference of an element that names one.
  *
  * @param element The element.
- * @returns Its reference, none for an element that names no variable and for one with no
- *   `identifier`, which is the structural validator's `missing-attribute`.
+ * @returns Its reference, none for an element that names no variable, for one with no
+ *   `identifier`, which is the structural validator's `missing-attribute`, and for one whose
+ *   `identifier` names nothing ({@link nameOf}), which no law here judges and nothing types.
  */
 const referenceOf = (element: SourceElement): Option.Option<Reference> =>
   Option.flatMap(namingOf(element), ({ attribute, expected }) =>
-    Option.map(attributeOf(element, attribute), (written) => ({
+    Option.map(Option.flatMap(attributeOf(element, attribute), nameOf), (identifier) => ({
       expected,
-      identifier: identifierOf(written),
+      identifier,
     })),
   );
 
@@ -1608,44 +2709,89 @@ const variableType = (
 };
 
 /**
+ * The kind each declaration that a `qti-variable` may read declares, by its local name.
+ */
+const declarationKinds: ReadonlyMap<string, NamedKind> = new Map<string, NamedKind>([
+  ["qti-context-declaration", "context"],
+  ["qti-outcome-declaration", "outcome"],
+  ["qti-response-declaration", "response"],
+  ["qti-template-declaration", "template"],
+]);
+
+/**
+ * The `declared` fact of an `undeclared-variable` refusal in a test whose name is a built-in's
+ * ({@link builtInKinds}) that the test declares as an outcome or a context variable.
+ *
+ * A test may declare `numAttempts` or `completionStatus` (reading 168, "A test may declare a
+ * variable named `numAttempts` or `completionStatus`; in a test only `duration` is reserved"), and
+ * the declaration takes the built-in's place in its processing ({@link testProcessingScope}). An
+ * expression that reads another kind, such as a `qti-correct` of a declared outcome `numAttempts`,
+ * which reads a response, is then refused although the name is declared, and the fact lets the
+ * wording say that the test declares it, rather than that the built-in has no declaration. Any
+ * other name, and every name in an item, carries no such fact.
+ *
+ * @param identifier The name the expression gives.
+ * @param context The document's declarations.
+ * @returns The fact `declared`, `outcome` or `context`, for such a name in a test; no fact
+ *   otherwise.
+ */
+const declaredBuiltIn = (
+  identifier: string,
+  context: Context,
+): Readonly<Record<string, string>> => {
+  const declaration = context.variables.get(identifier);
+  const declared = declaration === undefined ? undefined : declarationKinds.get(declaration.local);
+
+  return context.declarer === "test" &&
+    builtInKinds.has(identifier) &&
+    (declared === "outcome" || declared === "context")
+    ? { declared }
+    : {};
+};
+
+/**
  * Apply `undeclared-variable` to an element that lies in a processing ({@link processings}) and
  * names a variable ({@link namingOf}).
  *
  * An expression whose kind's rule declares a declaration facet names a variable of the kind the
  * facet expects: `qti-variable` a response, outcome, template or context declaration of the
  * document, or a built-in variable (`info-compact.txt:9286`), and `qti-default` likewise;
- * `qti-correct`, `qti-map-response` and `qti-map-response-point` a response declaration.
- * `qti-set-outcome-value` and `qti-lookup-outcome-value` name an outcome declaration or
- * `completionStatus`. The qti package refuses each as P8 (`reference` and `target` in
- * `packages/pantry/src/processing/check.ts`). A reference attribute that names no variable is
- * {@link attributeReferences}' refusal, and a template rule's target {@link templateTarget}'s. In
- * template processing a name that template processing may not read ({@link forbiddenRead}) is
- * {@link templateReads}' refusal (P26) alone, as the qti package, which keeps its first refusal,
- * reports it: `read` refuses it before anything else judges the name.
+ * `qti-correct`, `qti-map-response` and `qti-map-response-point` a response declaration or a
+ * built-in response, `numAttempts` or `duration`. `qti-set-outcome-value` and
+ * `qti-lookup-outcome-value` name an outcome declaration or `completionStatus`. The qti package
+ * refuses each by its `Variable declared` law (P8) and its `Variable kind` law (rule
+ * `variable-kind`), both in `packages/pantry/src/qti/expressions.ts`. A reference attribute that
+ * names no variable is {@link attributeReferences}' refusal, and a template rule's target
+ * {@link templateTarget}'s. In template processing a name that template processing may not read
+ * ({@link forbiddenRead}) is {@link templateReads}' refusal (P26) alone, never this one as well.
+ * The qti package states that read as its own law, `Template reads` (P26), beside `Variable
+ * declared` and `Variable kind`, and names a refusal by its most specific law in one fixed order
+ * (`precedence` in `packages/pantry/src/vocab/laws.ts`).
  *
- * One that reads the built-in `duration`, which no declaration of the expected kind answers, in an
- * item that is not time dependent is refused too, with `check: "untimed-duration"`
- * ({@link untimedDuration}, pantry's `item-duration`). A declaration named `duration` is read
- * instead, timed or not, as the qti package's `reference` reads the declaration first; the
- * structural walk refuses such a declaration (pantry's `DeclarationNotReserved`), so a checked item
- * holds none. A rule other than {@link builtInSetters} that targets a built-in no declaration
- * answers, a `qti-lookup-outcome-value` of `completionStatus`, is refused with
- * `check: "built-in-target"` and the information model's line as `source` (pantry's P9).
+ * A read of the built-in `duration` is never refused for the item's `time-dependent`: reading 150
+ * ("an item's built-in `duration` may be read whether or not the item is time dependent"). A
+ * built-in is named by the kind it stands as ({@link builtInsNamed}, reading 111): a
+ * `qti-lookup-outcome-value` sets `completionStatus` as a `qti-set-outcome-value` does, and a
+ * `qti-correct` reads `numAttempts` or `duration`.
  *
  * In a test a name its context's typer answers (`typeUnanswered`), a prefixed read, is never
  * refused here, nor is any name in a section on its own ({@link processingRefusals}): the qti
- * package types the first through the test's reach (`reference` and `target` in
- * `packages/pantry/src/processing/check.ts`), which a package judges. A name nothing answers in a
- * test's processing, or in a section document a test reaches, is refused with `declarer: "test"`
- * ({@link declaredBy}), so its wording names the test, which declares outcomes and context
- * variables and no response, rather than an item.
+ * package types a prefixed read through the assembled test (the relation `Reading` in
+ * `packages/pantry/src/qti/expressions.ts`, judged by its `Variable declared`, `Variable kind` and
+ * `Prefixed reference` laws), which a package judges, and, by reading 112 ("a test's setter sets a
+ * variable of its own document, so a prefixed reading never resolves it"), resolves a setter's name
+ * by its unsplit reading alone. A name nothing answers in a test's processing, or in a section
+ * document a test reaches, is refused with `declarer: "test"` ({@link declaredBy}), so its wording
+ * names the test, which declares outcomes and context variables and no response, rather than an
+ * item. A built-in's name the test declares as an outcome or a context variable also carries the
+ * kind that declares it ({@link declaredBuiltIn}).
  *
  * @param source The document.
  * @param visit The element's visit.
  * @param context The document's declarations and the parents the walk has met.
- * @returns The refusal at the element's path when it names no variable of the kind it must, or the
- *   `duration` an item that is not time dependent does not have; none for any other element, for
- *   one outside processing, and for a read template processing may not make.
+ * @returns The refusal at the element's path when it names no variable of the kind it must; none
+ *   for any other element, for one outside processing, and for a read template processing may not
+ *   make.
  */
 const undeclaredVariable = (
   source: SourceDocument,
@@ -1665,37 +2811,22 @@ const undeclaredVariable = (
     return [];
   }
 
-  if (Option.isNone(variableType(reference.value, context))) {
-    return [
-      refusal(
-        source,
-        "undeclared-variable",
-        visit.path,
-        declaredBy({ element: visit.element.local, expected, identifier }, context.declarer),
-      ),
-    ];
-  }
-
-  const builtIn =
-    !declarationsNamable(expected, context).has(identifier) && context.builtIns.has(identifier);
-  if (builtIn && referencing.has(visit.element.local) && !builtInSetters.has(visit.element.local)) {
-    return [
-      refusal(source, "undeclared-variable", visit.path, {
-        check: "built-in-target",
-        element: visit.element.local,
-        identifier,
-        source: "info.txt:8488",
-      }),
-    ];
-  }
-
-  return builtIn && untimedDuration(source, identifier)
+  return Option.isNone(variableType(reference.value, context))
     ? [
-        refusal(source, "undeclared-variable", visit.path, {
-          check: "untimed-duration",
-          element: visit.element.local,
-          identifier,
-        }),
+        refusal(
+          source,
+          "undeclared-variable",
+          visit.path,
+          declaredBy(
+            {
+              element: visit.element.local,
+              expected,
+              identifier,
+              ...declaredBuiltIn(identifier, context),
+            },
+            context.declarer,
+          ),
+        ),
       ]
     : [];
 };
@@ -1705,10 +2836,10 @@ const undeclaredVariable = (
  * that reads a variable through its `identifier` ({@link namingOf}): `qti-variable`, `qti-default`,
  * `qti-correct`, `qti-map-response` and `qti-map-response-point`. One that names a declared
  * response or outcome, or a built-in other than `QTI_CONTEXT`, reads what template processing may
- * not ({@link forbiddenRead}). The qti package refuses the same as P26 (`read`, through `reference`
- * for the three reading kinds and `checkMapping` for the two mapping kinds, in
- * `packages/pantry/src/processing/check.ts`); a mapping kind's P27 and a `qti-correct`'s wrong kind
- * are not reported beside it ({@link mapResponseRequirements}, {@link undeclaredVariable}).
+ * not ({@link forbiddenRead}). The qti package refuses the same as P26 (the `Template reads` law in
+ * `packages/pantry/src/qti/expressions.ts`, the `Mapped response` law there judging the two mapping
+ * kinds); a mapping kind's P27 and a `qti-correct`'s wrong kind are not reported beside it
+ * ({@link mapResponseRequirements}, {@link undeclaredVariable}).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1785,8 +2916,9 @@ const isPrefixedRead = (reference: Reference, context: Context): boolean => {
  * variable is of any other type the weight is ignored" (G-R3 186). A name the test declares,
  * unprefixed or whole, or a built-in, keeps its declared type; in a test checked alone a prefixed
  * read is unknown and stays so. The engine weights a read alike (`evaluateVariable` in
- * `#plate/engine/expressions/references.ts`). The qti package promotes no weighted read
- * (`packages/pantry/src/processing/types.ts`): an agreement difference G-R3 198 settles.
+ * `#plate/engine/expressions/references.ts`). The qti package promotes no weighted read (the
+ * relation `ExpressionAttribute` in `packages/pantry/src/qti/expressions.ts` reads
+ * `weight-identifier` on `qti-test-variables` alone): an agreement difference G-R3 198 settles.
  *
  * @param reference The weighted reference.
  * @param declared The type of the variable it names ({@link variableType}).
@@ -1889,8 +3021,8 @@ const resultAttributes = (
 /**
  * Give the type of an expression through its kind's rule in the registry (`kindRules` in
  * `#plate/model/expressions/read.ts`): the rule's `resultType` over its operands' types, typed the
- * same way, and its {@link resultAttributes}. The qti package types expressions alike
- * (`resultType` in `packages/pantry/src/processing/types.ts`).
+ * same way, and its {@link resultAttributes}. The qti package types expressions alike (the
+ * typings of `expressionTypings` in `packages/pantry/src/grammar/expression.ts`).
  *
  * An expression is untyped (none) when its element is no expression kind, when any of its operands
  * is untyped, or when its declaration facet names no variable (ruling R3). Untyped is not judged,
@@ -1945,9 +3077,9 @@ const baseTypeText = (type: ExpressionType): string =>
   type.baseType === "any" || type.baseType === "unknown" ? "" : type.baseType;
 
 /**
- * Report whether two types agree, as the qti package's `compatible` compares them
- * (`packages/pantry/src/processing/check.ts`): the same base type unless either has none of its
- * own (`any` or `unknown`), and the same cardinality unless either is `unknown`.
+ * Report whether two types agree, as the qti package's `Set type` law compares them, with
+ * `silentBases` (`packages/pantry/src/qti/expressions.ts`): the same base type unless either has
+ * none of its own (`any` or `unknown`), and the same cardinality unless either is `unknown`.
  *
  * @param one A type.
  * @param other Another.
@@ -1983,7 +3115,8 @@ const targetDeclarations = {
  * variable" (`info.txt:65138`), `qti-set-correct-response` names "The response variable to have its
  * correct value set" (`:65246`), and `qti-set-default-value` "The response variable or outcome
  * variable to have its default value set" (`:65219`). The qti package admits the same kinds
- * (`DeclaredRefKind` in `packages/pantry/src/schema/processing.ts`, P8).
+ * (`referenceDeclarations` in `packages/pantry/src/qti/expression-types.ts`, judged by its
+ * `Variable kind` law, rule `variable-kind`).
  */
 const templateSetters: ReadonlyMap<string, readonly TargetKind[]> = new Map<
   string,
@@ -1996,33 +3129,44 @@ const templateSetters: ReadonlyMap<string, readonly TargetKind[]> = new Map<
 
 /**
  * A template rule's target: the name its `identifier` gives, the kinds of variable the rule may
- * set, and the declaration that answers the name when it declares a variable of one of those kinds.
+ * set, and, when the name answers a variable of one of those kinds, that kind and the variable's
+ * type, itself none when its declaration's type is not judged ({@link declarationType}).
  */
 interface TemplateTarget {
   readonly identifier: string;
   readonly kinds: readonly TargetKind[];
-  readonly set: Option.Option<{ readonly declaration: SourceElement; readonly kind: TargetKind }>;
+  readonly set: Option.Option<{
+    readonly kind: TargetKind;
+    readonly type: Option.Option<ExpressionType>;
+  }>;
 }
 
 /**
  * Read the target of a template rule that sets a variable ({@link templateSetters}).
  *
- * A name that a declaration of another kind answers, or only a built-in, sets nothing the rule may
- * set: a built-in is set only by a `qti-set-outcome-value` ({@link builtInSetters}).
+ * The name answers a declaration of the item, else a built-in, which stands as a declaration of its
+ * kind (reading 111, "a processing element's `identifier` names a variable of the kind the element
+ * reads or sets"): `numAttempts` and `duration` a response, `completionStatus` an outcome ({@link
+ * builtInKinds}), each typed as the built-in. A declaration wins over a built-in of the same name,
+ * as {@link variableType} finds one. A name that a declaration or a built-in of another kind answers
+ * sets nothing the rule may set.
  *
  * @param element The element.
- * @param context The item's declarations.
- * @returns The target; none for an element that is not such a rule and for one with no
- *   `identifier`, which is the structural validator's `missing-attribute`.
+ * @param context The item's declarations and built-ins.
+ * @returns The target; none for an element that is not such a rule, for one with no
+ *   `identifier`, which is the structural validator's `missing-attribute`, and for one whose
+ *   `identifier` names nothing ({@link nameOf}).
  */
 const templateTargetOf = (
   element: SourceElement,
   context: Context,
 ): Option.Option<TemplateTarget> =>
   Option.map(
-    Option.all([qtiEntry(templateSetters, element), attributeOf(element, "identifier")]),
-    ([kinds, written]) => {
-      const identifier = identifierOf(written);
+    Option.all([
+      qtiEntry(templateSetters, element),
+      Option.flatMap(attributeOf(element, "identifier"), nameOf),
+    ]),
+    ([kinds, identifier]) => {
       const declaration = context.variables.get(identifier);
 
       return {
@@ -2030,12 +3174,17 @@ const templateTargetOf = (
         kinds,
         set:
           declaration === undefined
-            ? Option.none()
+            ? Option.flatMap(Option.fromUndefinedOr(context.builtIns.get(identifier)), (builtIn) =>
+                Option.map(
+                  Arr.findFirst(kinds, (kind) => kind === builtIn.kind),
+                  (kind) => ({ kind, type: builtIn.type }),
+                ),
+              )
             : Option.map(
                 Arr.findFirst(kinds, (kind) =>
                   isQti(declaration, (local) => local === targetDeclarations[kind]),
                 ),
-                (kind) => ({ declaration, kind }),
+                (kind) => ({ kind, type: declarationType(declaration) }),
               ),
       };
     },
@@ -2044,14 +3193,17 @@ const templateTargetOf = (
 /**
  * Apply `undeclared-variable` to a template rule whose `identifier` names no variable of a kind the
  * rule may set ({@link templateTargetOf}): a `qti-set-template-value` names a template variable, a
- * `qti-set-correct-response` a response, and a `qti-set-default-value` a response or an outcome.
+ * `qti-set-correct-response` a response, and a `qti-set-default-value` a response or an outcome,
+ * a built-in of that kind among them (reading 111).
  *
- * A name the item declares no variable for, one a declaration of another kind answers, and a
- * built-in are refused alike, as a `qti-set-outcome-value` that names no outcome is
- * ({@link undeclaredVariable}), with the kinds the rule may set as `expected`, space-separated. The
- * qti package refuses the first as P8 (`target` in `packages/pantry/src/processing/check.ts`), the
- * second as P8 (`DeclaredRefKind`) and the third as P9 (`BuiltInRefKind`, both in
- * `packages/pantry/src/schema/processing.ts`).
+ * A name the item declares no variable for, and one a declaration or a built-in of another kind
+ * answers, such as a `qti-set-correct-response` of the built-in outcome `completionStatus`, are
+ * refused alike, as a `qti-set-outcome-value` that names no outcome is ({@link
+ * undeclaredVariable}), with the kinds the rule may set as `expected`, space-separated. The qti
+ * package refuses the first by its `Variable declared` law and the second by its `Variable kind`
+ * law, which judges a built-in as a declaration of the kind its `BuiltInVariable` relation stands
+ * it as (the laws in `packages/pantry/src/qti/expressions.ts`, the relation in
+ * `packages/pantry/src/grammar/install.ts`).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -2084,10 +3236,11 @@ const templateTarget = (
 
 /**
  * Give the variable a setting rule sets and its type: a `qti-set-outcome-value`'s outcome, as
- * {@link variableType} finds it, a template rule's variable among the kinds
- * {@link templateSetters} lets it set, with that kind, or the template variable of its item a
- * test's `qti-template-default` sets, named by its `template-identifier` and typed by the context
- * (`templateOf` in `packages/pantry/src/processing/check.ts`).
+ * {@link variableType} finds it, a template rule's variable among the kinds {@link templateSetters}
+ * lets it set, a built-in of that kind among them, with that kind ({@link templateTargetOf}), or
+ * the template variable of its item a test's `qti-template-default` sets, named by its
+ * `template-identifier` and typed by the context (`TemplateDefaultTarget` in
+ * `packages/pantry/src/qti/expressions.ts`, typed by its `Template default type` law).
  *
  * @param element The rule.
  * @param context The document's declarations.
@@ -2126,12 +3279,14 @@ const setTarget = (
 
   return Option.flatMap(templateTargetOf(element, context), ({ identifier, set }) =>
     set.pipe(
-      Option.flatMap(({ declaration, kind }) =>
-        Option.map(declarationType(declaration), (type) => ({
-          identifier,
-          kind: Option.some(kind),
-          type,
-        })),
+      Option.flatMap(({ kind, type }) =>
+        type.pipe(
+          Option.map((declared) => ({
+            identifier,
+            kind: Option.some(kind),
+            type: declared,
+          })),
+        ),
       ),
     ),
   );
@@ -2149,13 +3304,13 @@ const setTarget = (
  * agree}), the outcome's, the template variable's, or the response's or outcome's whose correct or
  * default value the rule sets ({@link setTarget}). A type with no base type (a `record`) compares
  * by cardinality alone. A variable or an expression that is not typed is not judged, nor is a
- * template rule's variable that is undeclared or of a kind the rule may not set
- * ({@link templateTarget} refuses that). The qti package refuses the same as P20 (`setKinds` and
- * `typeRule` in `packages/pantry/src/processing/check.ts`). The detail names the variable's type
- * `outcomeBaseType` and `outcomeCardinality` whatever its kind, and `element` names the rule; a
- * template rule's or a template default's detail names the variable's kind too, `targetKind`
- * (`template`, `response` or `outcome`), so its sentence does not word a template variable or a
- * response as an outcome.
+ * template rule's variable that is undeclared or of a kind the rule may not set ({@link
+ * templateTarget} refuses that). The qti package refuses the same as P20 (`setKinds` in
+ * `packages/pantry/src/grammar/expression.ts`, judged by the `Set type` law in
+ * `packages/pantry/src/qti/expressions.ts`). The detail names the variable's type `outcomeBaseType`
+ * and `outcomeCardinality` whatever its kind, and `element` names the rule; a template rule's or a
+ * template default's detail names the variable's kind too, `targetKind` (`template`, `response` or
+ * `outcome`), so its sentence does not word a template variable or a response as an outcome.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -2200,7 +3355,7 @@ const setType = (source: SourceDocument, visit: Visit, context: Context): readon
 /**
  * The local names of the rules whose first child is a condition: the branches of a response
  * condition, of an outcome condition and of a template condition, and a template constraint, as
- * the qti package's `conditionKinds` lists them (`packages/pantry/src/processing/check.ts`). A
+ * the qti package's `conditionKinds` lists them (`packages/pantry/src/grammar/expression.ts`). A
  * `qti-pre-condition` and a `qti-branch-rule` are not among them: the information model words
  * each as "If the expression evaluates to 'true'" (`info.txt` 5.23) and types neither.
  */
@@ -2227,8 +3382,9 @@ const conditionBranches: ReadonlySet<string> = new Set([
  * effective base-type of boolean and single cardinality" (`:11918`): the rule's first child
  * element, its condition, is a single `boolean` ({@link agree}). A condition that is untyped
  * ({@link expressionType}) is not judged, and one of base type `any` or `unknown` passes, as a
- * `qti-null` does. The qti package refuses the same as P21 (`typeRule` and `conditionKinds` in
- * `packages/pantry/src/processing/check.ts`).
+ * `qti-null` does. The qti package refuses the same as P21 (the `Condition type` law in
+ * `packages/pantry/src/qti/expressions.ts`, over `conditionKinds` in
+ * `packages/pantry/src/grammar/expression.ts`).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -2315,16 +3471,16 @@ const lookupTableRequirements = (
   visit: Visit,
   context: Context,
 ): readonly Refusal[] => {
-  const attribute = attributeOf(visit.element, "identifier");
+  const name = Option.flatMap(attributeOf(visit.element, "identifier"), nameOf);
   if (
     !isQti(visit.element, (local) => local === "qti-lookup-outcome-value") ||
-    Option.isNone(attribute) ||
+    Option.isNone(name) ||
     !inProcessing(context, visit.element)
   ) {
     return [];
   }
 
-  const identifier = identifierOf(attribute.value);
+  const identifier = name.value;
   const declaration = context.outcomes.get(identifier);
 
   return declaration === undefined || Option.isSome(lookupTableOf(declaration))
@@ -2352,8 +3508,8 @@ const anyLookupOperand: readonly BaseType[] = lookupOperands["qti-interpolation-
  * `qti-match-table` (operator ruling `96840ced`, Q15 B). An operand that is untyped
  * ({@link expressionType}) is accepted. An outcome that is undeclared or holds no lookup table is
  * not judged against a table here: they are `undeclared-variable`'s refusal and
- * {@link lookupTableRequirements}'s. The qti package refuses the same as P22 (`checkLookup` in
- * `packages/pantry/src/processing/check.ts`).
+ * {@link lookupTableRequirements}'s. The qti package refuses the same as P22 (the `Lookup type`
+ * law in `packages/pantry/src/qti/expressions.ts`).
  *
  * A target no declaration answers but the context's typer does (`typeUnanswered`: a test's
  * prefixed target, `I1.SCORE`, or any name in a section) still needs a single integer, float or
@@ -2372,16 +3528,16 @@ const lookupOperandType = (
   visit: Visit,
   context: Context,
 ): readonly Refusal[] => {
-  const attribute = attributeOf(visit.element, "identifier");
+  const name = Option.flatMap(attributeOf(visit.element, "identifier"), nameOf);
   if (
     !isQti(visit.element, (local) => local === "qti-lookup-outcome-value") ||
-    Option.isNone(attribute) ||
+    Option.isNone(name) ||
     !inProcessing(context, visit.element)
   ) {
     return [];
   }
 
-  const identifier = identifierOf(attribute.value);
+  const identifier = name.value;
   const declaration = context.outcomes.get(identifier);
   const table =
     declaration === undefined
@@ -2419,9 +3575,9 @@ const lookupOperandType = (
 /**
  * Apply `expression-type` with `check: "weight"` to a `qti-test-variables` of a test's outcome
  * processing that has a `weight-identifier` and a `base-type` other than `float`: the qti package
- * refuses it as P29 (`checkWeight` in `packages/pantry/src/processing/check.ts`), since a weight's
- * behaviour "is only defined if the base-type attribute is float or omitted", and the same line
- * rules out `base-type` integer (`info.txt:71457`; G-R3 199). One with no `base-type` is not
+ * refuses it as P29 (the `Weighted base` law in `packages/pantry/src/qti/expressions.ts`), since a
+ * weight's behaviour "is only defined if the base-type attribute is float or omitted", and the same
+ * line rules out `base-type` integer (`info.txt:71457`; G-R3 199). One with no `base-type` is not
  * refused, and is a float (`testRules` in `#plate/model/expressions/test.ts`). A `base-type`
  * outside the vocabulary is the structural validator's refusal, so it is not judged here. It reads
  * the two attributes alone.
@@ -2461,10 +3617,11 @@ const weightType = (source: SourceDocument, visit: Visit, context: Context): rea
  * `weight-identifier`. Weights are "defined only in the test context (and hence only in outcomes
  * processing)", so a weighted variable follows the outcome-only expressions (T-O10, pick A), and an
  * item, which holds no outcome processing, holds none: in its response processing, its template
- * processing or anywhere else. The qti package refuses the same as P12 (`VariableWeightInTest` in
- * `packages/pantry/src/schema/expression-attributes.ts`, whose check holds the attribute to a test
- * root). A test's and a section's are judged by `expressionPlacement` in
- * `#plate/validate/test-rules.ts`, with the same facts.
+ * processing or anywhere else. The qti package once refused the same as P12; no law in
+ * `packages/pantry/src/qti/expressions.ts` names a `qti-variable`'s `weight-identifier` now, and no
+ * reading states the refusal, so plate keeps it on the information model's sentence alone, a
+ * question for the next readings batch. A test's and a section's are judged by
+ * `expressionPlacement` in `#plate/validate/test-rules.ts`, with the same facts.
  *
  * @param source The item.
  * @param visit The element's visit.
@@ -2490,11 +3647,12 @@ const weightPlacement = (source: SourceDocument, visit: Visit): readonly Refusal
 };
 
 /**
- * Apply `expression-type` to the operands of an expression that lies in a processing
- * ({@link processings}): each operand its kind's rule does not accept (`operandsAccept` in the
- * registry, `kindRules` in `#plate/model/expressions/read.ts`), so the engine never meets an
- * operand its evaluator does not take. The qti package refuses the same as P23 (`operandRules` in
- * `packages/pantry/src/processing/check.ts`).
+ * Apply `expression-type` to the operands of an expression that lies in a processing ({@link
+ * processings}): each operand its kind's rule does not accept (`operandsAccept` in the registry,
+ * `kindRules` in `#plate/model/expressions/read.ts`), so the engine never meets an operand its
+ * evaluator does not take. The qti package refuses the same as P23 (the `Operand fit` and `One
+ * base` laws in `packages/pantry/src/qti/expressions.ts`, over `expressionTypings` in
+ * `packages/pantry/src/grammar/expression.ts`).
  *
  * An untyped operand is judged as unknown ({@link untyped}), which every rule accepts, so a typed
  * sibling is still judged (ruling R3). Each refusal is at the expression's path, one per operand
@@ -2568,10 +3726,10 @@ const valuesOf = (written: string, entry: ReferenceEntry): readonly string[] =>
  * document's declared names and built-ins, and the name a value braces when no declaration and no
  * built-in answers it but the context's typer types it (`typeUnanswered`) other than `unknown`.
  *
- * That last is a test's prefixed read a package resolves (`{I1.N}`), which the qti package reads
- * as a reference (`patternOrRef` in `packages/pantry/src/processing/parse.ts`) and judges through
- * the variable it resolves to (`checkAttributeReference` in
- * `packages/pantry/src/processing/check.ts`, P24). A test checked alone types every prefixed read
+ * That last is a test's prefixed read a package resolves (`{I1.N}`), which the qti package reads as
+ * a reference (`referenceMembers` in `packages/pantry/src/grammar/references.ts`) and judges
+ * through the variable it resolves to (the `Reference type` law in
+ * `packages/pantry/src/qti/expressions.ts`, P24). A test checked alone types every prefixed read
  * `unknown`, and a section every name, so a braced name there stays literal text (ruling R1), as a
  * braced name no reading resolves (`{I9.X}`) does through a package; an item's typer answers
  * nothing.
@@ -2601,8 +3759,8 @@ const namableBy = (
 /**
  * Apply `undeclared-variable` and `expression-type` to the variables an expression's reference
  * attributes name, as its kind's reference facet lists them (`references` of its rule in the
- * registry). The qti package refuses the same as P8 and P24 (`checkAttributeReference` in
- * `packages/pantry/src/processing/check.ts`).
+ * registry). The qti package refuses the same as P8 and P24 (the `Variable declared` and
+ * `Reference type` laws in `packages/pantry/src/qti/expressions.ts`).
  *
  * Each value of a checked entry's attribute goes through its classifier ({@link classifiers}); a
  * literal names no variable. A reference that no declaration of the item names and no built-in
@@ -2614,24 +3772,23 @@ const namableBy = (
  * reference whose text is no NCName lies outside both members of the attribute's union, which is
  * the structural validator's refusal, so it is passed over here.
  *
- * A reference to the built-in `duration`, which no declaration answers, in an item that is not time
- * dependent is also `undeclared-variable`, with `check: "untimed-duration"` and the `attribute`
- * ({@link untimedDuration}, pantry's `item-duration`), before its P24: the qti package refuses
- * both, `item-duration` first. In a time-dependent item it is P24 alone.
+ * A reference to the built-in `duration`, which no declaration answers, is P24 alone, whether the
+ * item is time dependent or not: reading 150 ("an item's built-in `duration` may be read whether or
+ * not the item is time dependent").
  *
  * In template processing a reference that names a variable template processing may not read, a
  * declared response or outcome or a built-in other than `QTI_CONTEXT` ({@link forbiddenRead}), is
- * `expression-type` with `check: "template-read"` and the `attribute` (P26), and nothing else: the
- * qti package's `checkAttributeReference` reads the name, which refuses P26, before it judges P24,
- * and the qti package keeps its first refusal. Its checked entries are the qti package's list of
- * reference attributes (`referenceAttributes`): `tolerance`, which is not checked, is not in it, so
- * a `tolerance` that names such a variable is not refused (OD-P8-20). A reference that names
- * nothing, or a template variable of another type, is refused as in response processing.
+ * `expression-type` with `check: "template-read"` and the `attribute` (P26), and nothing else,
+ * never P24 as well. The qti package states the two as its `Template reads` and `Reference type`
+ * laws, and names a refusal by its most specific law in one fixed order (`precedence` in
+ * `packages/pantry/src/vocab/laws.ts`). `tolerance` is not a checked entry, so a `tolerance` that
+ * names such a variable is not refused (OD-P8-20). A reference that names nothing, or a template
+ * variable of another type, is refused as in response processing.
  *
  * In a test's processing a name its typer answers (`typeUnanswered`), which no declaration and no
  * built-in does, is a prefixed read: it is never `undeclared-variable`, and it is P24's when its
- * type does not agree with the entry's single base type, as the qti package's
- * `checkAttributeReference` judges the variable it resolves to. A string attribute's braced name
+ * type does not agree with the entry's single base type, as the qti package's `Reference type` law
+ * judges the variable it resolves to. A string attribute's braced name
  * is such a read only when the typer types it other than `unknown` ({@link namableBy}). In a
  * section on its own every name is typed `unknown`, so none is refused. A name nothing answers in a
  * test's processing, or in a section document a test reaches, carries `declarer: "test"`
@@ -2647,8 +3804,7 @@ const namableBy = (
  * @param names The document's built-ins, the typer of a name nothing else answers and the kind of
  *   document that declares the variables, an item's unless given.
  * @returns The refusals at the expression's path, one per value that names no variable, one of
- *   another kind or type, or one template processing may not read, and one more for each that
- *   names the `duration` an item that is not time dependent does not have.
+ *   another kind or type, or one template processing may not read.
  */
 export const referenceRefusals = (
   source: SourceDocument,
@@ -2728,29 +3884,17 @@ export const referenceRefusals = (
         onSome: (type) => agree(type, singleOf(entry.baseType)),
       });
 
-      return [
-        ...(declaration === undefined && untimedDuration(source, identifier)
-          ? [
-              refusal(source, "undeclared-variable", visit.path, {
-                attribute: entry.attribute,
-                check: "untimed-duration",
-                element: visit.element.local,
-                identifier,
-              }),
-            ]
-          : []),
-        ...(fits
-          ? []
-          : [
-              refusal(source, "expression-type", visit.path, {
-                attribute: entry.attribute,
-                check: "reference",
-                element: visit.element.local,
-                expectedBaseType: entry.baseType,
-                identifier,
-              }),
-            ]),
-      ];
+      return fits
+        ? []
+        : [
+            refusal(source, "expression-type", visit.path, {
+              attribute: entry.attribute,
+              check: "reference",
+              element: visit.element.local,
+              expectedBaseType: entry.baseType,
+              identifier,
+            }),
+          ];
     });
   });
 
@@ -2805,16 +3949,6 @@ const printedKinds: Readonly<Record<VariableScope["declarer"], string>> = {
  * naming.
  */
 export type NamedKind = "context" | "outcome" | "response" | "template";
-
-/**
- * The kind each declaration that a `qti-variable` may read declares, by its local name.
- */
-const declarationKinds: ReadonlyMap<string, NamedKind> = new Map<string, NamedKind>([
-  ["qti-context-declaration", "context"],
-  ["qti-outcome-declaration", "outcome"],
-  ["qti-response-declaration", "response"],
-  ["qti-template-declaration", "template"],
-]);
 
 /**
  * The variable a printed variable's attribute or a `template-identifier` names: its kind, and its
@@ -3004,11 +4138,10 @@ const printedInteger = (
 };
 
 /**
- * Apply `undeclared-variable` and `expression-type` to the variables a `qti-printed-variable` of
- * an item or a test names, as the qti package refuses them as `printed-variable-ref` (`printedRows`
- * in `packages/pantry/src/import/content.ts`, which binds the printed variables of an item and of
- * a test, `bindsVariables`; R37's `PrintedVariableRefKind` and R39's `PrintedVariableVarRefType` in
- * `packages/pantry/src/schema/template.ts`).
+ * Apply `undeclared-variable` and `expression-type` to the variables a `qti-printed-variable` of an
+ * item or a test names, as the qti package refuses them as `printed-variable-ref` (its `Printed
+ * variable reference` law in `packages/pantry/src/qti/interactions.ts`, over `PrintedVariableRef`,
+ * which binds the printed variables of an item and of a test).
  *
  * Its `identifier` names an outcome or a template variable of any type: "The outcome variable or
  * template variable must have been defined. The values of response variables cannot be printed
@@ -3016,10 +4149,10 @@ const printedInteger = (
  * single integer outcome or template variable when written as a name. A built-in of the document
  * counts as declared, since it is declared implicitly (`info.txt:8440`), and has its kind: in an
  * item ({@link builtInKinds}) `completionStatus` may be printed, and `numAttempts`, `duration` and
- * `QTI_CONTEXT` are refused by kind (Mind amendment 1). The qti package's `printedRows` reads only
- * the document's declarations and refuses `completionStatus` as undeclared, so that one case is an
- * agreement difference (G-R2, pending: plate accepts a printed `completionStatus` in an item, the
- * qti package refuses it). A name that nothing declares or builds in is `undeclared-variable` with
+ * `QTI_CONTEXT` are refused by kind (Mind amendment 1). A printed `completionStatus` is reading
+ * 77's ("a feedback element names an outcome variable, and a printed variable an outcome or a
+ * template variable, the built-in `completionStatus` among them"), which the qti package now
+ * accepts too. A name that nothing declares or builds in is `undeclared-variable` with
  * the `attribute` and, as `expected`, the kinds the document declares that a printed variable
  * prints. A name of another kind or type is `expression-type` with `check: "reference"`: for
  * `identifier`, a response or a context variable, with its `variableKind` and the information
@@ -3074,6 +4207,89 @@ export const printedVariableReferences = (
 };
 
 /**
+ * An item's feedback elements, each of which names in its `outcome-identifier` the outcome whose
+ * value shows or hides it.
+ */
+const itemFeedback: ReadonlySet<string> = new Set([
+  "qti-feedback-block",
+  "qti-feedback-inline",
+  "qti-modal-feedback",
+]);
+
+/**
+ * Apply reading 77 to an item's feedback element ({@link itemFeedback}, E3a): its
+ * `outcome-identifier` is "The identifier of an outcome variable that must have a base-type of
+ * identifier and be of either single or multiple cardinality", as a test's `qti-test-feedback`'s
+ * is (`feedbackOutcome` in `#plate/validate/test-rules.ts`).
+ *
+ * A name no outcome of the item answers is `undeclared-variable`, expecting an outcome: one the
+ * item declares nothing for, and one a response, a template or a context variable answers, the
+ * built-ins `numAttempts`, `duration` and `QTI_CONTEXT` among them. The built-in outcome
+ * `completionStatus`, a single identifier, is named as an item's outcome is ({@link variableType}).
+ * An outcome of another cardinality, or whose base type is not `identifier`, is `expression-type`
+ * with `check: "feedback-outcome"`, its `baseType` (empty where it has none, as a record has none)
+ * and `cardinality`; one whose `base-type` spells nothing is judged by its cardinality alone
+ * (reading 159). An outcome whose type is not judged ({@link declarationType}), and an
+ * `outcome-identifier` that names nothing ({@link nameOf}), are the structural validator's.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The item's declarations and built-ins.
+ * @returns The refusal at the `outcome-identifier` attribute's path; none for any other element.
+ */
+const feedbackOutcome = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] => {
+  const written = attributeOf(visit.element, "outcome-identifier");
+  const name = written.pipe(Option.flatMap(nameOf));
+  if (
+    !isQti(visit.element, (local) => itemFeedback.has(local)) ||
+    Option.isNone(written) ||
+    Option.isNone(name)
+  ) {
+    return [];
+  }
+
+  const identifier = name.value;
+  const element = visit.element.local;
+  const path = attributePath(visit.path, written.value);
+
+  return Option.match(variableType({ expected: "outcome", identifier }, context), {
+    onNone: () => [
+      refusal(source, "undeclared-variable", path, {
+        attribute: "outcome-identifier",
+        element,
+        expected: "outcome",
+        identifier,
+        reading: "77",
+      }),
+    ],
+    onSome: (type) =>
+      Option.toArray(
+        type.pipe(
+          Option.filter(
+            ({ baseType, cardinality }) =>
+              (cardinality !== "single" && cardinality !== "multiple") ||
+              (baseType !== "identifier" && baseType !== "unknown"),
+          ),
+          Option.map(({ baseType, cardinality }) =>
+            refusal(source, "expression-type", path, {
+              baseType: baseType === "unknown" ? "" : baseType,
+              cardinality,
+              check: "feedback-outcome",
+              element,
+              identifier,
+              reading: "77",
+            }),
+          ),
+        ),
+      ),
+  });
+};
+
+/**
  * The elements of an item that carry a `template-identifier`, each with the line of QTI's
  * information model that types it: "The identifier of a template variable that must have a
  * base-type of identifier and be of either single or multiple cardinality" (`qti-simple-choice`'s
@@ -3116,19 +4332,16 @@ const controlsVisibility = ({ kind, type }: NamedVariable): boolean =>
  * Apply `undeclared-variable` and `expression-type` to the variable an item's element names in its
  * `template-identifier`, as the qti package refuses it as `template-ref`: R36's
  * `TemplateContentRefType` for a template block or inline, in a rubric block too, and
- * `ChoiceTemplateRefType` for a choice (`packages/pantry/src/schema/template.ts`,
- * `packages/pantry/src/schema/choices.ts`).
+ * `ChoiceTemplateRefType` for a choice, now its `Template reference` law in
+ * `packages/pantry/src/qti/interactions.ts`, over every choice's `template-identifier`.
  *
  * The variable must be a template variable "that must have a base-type of identifier and be of
  * either single or multiple cardinality" (`info.txt:45053`, and each element's line in
- * {@link templateIdentifierSources}). Every element that carries one is judged, whether or not
- * plate renders it, in the body, a feedback or a rubric block alike (audit B A5). A
- * `qti-simple-choice`'s is judged too, which the qti package stores without a check
- * (`packages/pantry/src/import/interactions/order.ts`, `import/item.ts`) while the information
- * model types it as it types the rest (`info.txt:42466`): plate refuses it because the standard
- * does (OD-P8-19, rule `5b8ee08b`), an agreement difference (G-R2, pending: plate refuses a simple
- * choice's `template-identifier` naming anything but an identifier template variable, single or
- * multiple, and the qti package accepts it).
+ * {@link templateIdentifierSources}). Every element that carries one is judged, whether or not plate
+ * renders it, in the body, a feedback or a rubric block alike (audit B A5). A `qti-simple-choice`'s
+ * is judged too, as the information model types it as it types the rest (`info.txt:42466`): plate
+ * refuses it because the standard does (OD-P8-19, rule `5b8ee08b`), and the qti package now refuses
+ * it too (its `Template reference` law in `packages/pantry/src/qti/interactions.ts`).
  *
  * A name that nothing declares or builds in is `undeclared-variable` with `expected: "template"`
  * (OD-P8-11; the qti package's `binding-declared`). A built-in counts as declared, as for a printed
@@ -3185,97 +4398,6 @@ const templateIdentifierReference = (
 };
 
 /**
- * The elements of an item that carry an `outcome-identifier` naming the outcome that shows or hides
- * them, each with the line of QTI's information model that types it: "The identifier of an outcome
- * variable that must have a base-type of identifier and be of either single or multiple
- * cardinality" (FeedbackBlock, section 5.49.1; FeedbackInline, 5.52.1; ModalFeedback, 5.93.1). A
- * feedback block inside a template block is a TemplateBlockFeedbackBlock, whose line (5.148.1,
- * `info.txt:45190`) says the same.
- */
-const feedbackSources: ReadonlyMap<string, string> = new Map([
-  ["qti-feedback-block", "info.txt:25704"],
-  ["qti-feedback-inline", "info.txt:26184"],
-  ["qti-modal-feedback", "info.txt:35049"],
-]);
-
-/**
- * Report whether a variable is one a feedback element's `outcome-identifier` may name: an outcome
- * variable of base type identifier and of single or multiple cardinality, the built-in
- * `completionStatus` among them (reading 77). A declaration whose own type is not judged
- * ({@link declarationType}) is not refused; one with no base type of its own, such as a record, is.
- *
- * @param variable The variable the name names.
- * @returns Whether it is an outcome variable that is not of another type.
- */
-const controlsFeedback = ({ kind, type }: NamedVariable): boolean =>
-  kind === "outcome" &&
-  Option.match(type, {
-    onNone: () => true,
-    onSome: ({ baseType, cardinality }) =>
-      baseType === "identifier" && (cardinality === "single" || cardinality === "multiple"),
-  });
-
-/**
- * Apply `undeclared-variable` and `expression-type` to the outcome a feedback element names in its
- * `outcome-identifier`, as pantry refuses it under its laws `Feedback reference` and `Feedback
- * outcome type` (reading 77). plate shows or hides the element by that outcome's value, so it
- * judges every `qti-feedback-block`, `qti-feedback-inline` and `qti-modal-feedback` of an item, in
- * the body, a template block or a rubric block alike.
- *
- * A name that nothing declares or builds in is `undeclared-variable` with `expected: "outcome"`. A
- * name of another kind, or an outcome of another type, is `expression-type` with `check:
- * "reference"`, the `expectedKind` `outcome`, the `expectedBaseType` `identifier`, the
- * `expectedCardinalities` `single multiple`, which select the verdict's sentence for this check,
- * and the element's line as `source` ({@link feedbackSources}). Each refusal is at the attribute's
- * path. A missing `outcome-identifier`, or one whose text is no NCName, is the structural
- * validator's refusal and is passed over.
- *
- * @param source The document.
- * @param visit The element's visit.
- * @param context The item's declarations.
- * @returns The refusal of its `outcome-identifier`; none for an element that carries none, and for
- *   one naming an identifier outcome, single or multiple.
- */
-const feedbackReference = (
-  source: SourceDocument,
-  visit: Visit,
-  context: Context,
-): readonly Refusal[] => {
-  const line = qtiEntry(feedbackSources, visit.element);
-  const written = Option.filter(attributeOf(visit.element, "outcome-identifier"), (attribute) =>
-    isNcName(identifierOf(attribute)),
-  );
-
-  return Option.match(Option.all([line, written]), {
-    onNone: () => [],
-    onSome: ([cited, attribute]) => {
-      const identifier = identifierOf(attribute);
-      const path = attributePath(visit.path, attribute);
-      const facts = { attribute: "outcome-identifier", element: visit.element.local, identifier };
-
-      return Option.match(namedVariable(identifier, context), {
-        onNone: () => [
-          refusal(source, "undeclared-variable", path, { ...facts, expected: "outcome" }),
-        ],
-        onSome: (variable) =>
-          controlsFeedback(variable)
-            ? []
-            : [
-                refusal(source, "expression-type", path, {
-                  ...facts,
-                  check: "reference",
-                  expectedBaseType: "identifier",
-                  expectedCardinalities: "single multiple",
-                  expectedKind: "outcome",
-                  source: cited,
-                }),
-              ],
-      });
-    },
-  });
-};
-
-/**
  * The declarations whose variables a `qti-variable` may read. Where two share an identifier, the
  * later kind here wins; the duplicate is `duplicate-identifier`'s refusal.
  */
@@ -3302,7 +4424,7 @@ const variableDeclarations = [
  * @param tables The tables generated from the QTI XSD, the ones the structural walk checks it by.
  * @returns Each element the rules judge, with the path and the parent `walk` gives it.
  */
-const judgedVisits = (source: SourceDocument, tables: Tables): readonly Visit[] => {
+export const judgedVisits = (source: SourceDocument, tables: Tables): readonly Visit[] => {
   const governing = governingTables(source, tables);
 
   return [...walk(source)].filter((visit) => governing.has(visit.element));
@@ -3310,12 +4432,16 @@ const judgedVisits = (source: SourceDocument, tables: Tables): readonly Visit[] 
 
 /**
  * Report whether a judged element holds an unexpanded entity reference where a rule may read it:
- * in an attribute's value or among its children, wildcard content included.
+ * in an attribute's value or among its children, wildcard content included. Every prose rule of a
+ * document judges nothing when one of its judged elements does: the item rules here, the test
+ * rules (`#plate/validate/test-rules.ts`), the catalog rules (`#plate/validate/catalog.ts`) and the
+ * stimulus rules of the verdict, which leaves such a document unchecked unless the structural walk
+ * refuses it.
  *
  * @param element The element.
  * @returns Whether its attributes or its children hold a reference whose value is unknown.
  */
-const holdsUnexpanded = (element: SourceElement): boolean =>
+export const holdsUnexpanded = (element: SourceElement): boolean =>
   element.attributes.some((attribute) => attribute.references.length > 0) ||
   element.children.some((child) => child.kind === "entity");
 
@@ -3362,28 +4488,468 @@ const setCorrectResponses = (
 };
 
 /**
+ * The ASI types whose `label` characteristic states the sentence "If an item uses labels then
+ * values for the associated toolName and toolVersion characteristics must also be provided", in
+ * both information models (reading 128): BasePromptInteraction's (section 5.15.5), the six of the
+ * BaseSequence family's (sections 5.16.5 to 5.21.5) and ItemBody's (section 5.79.4). The other
+ * types that declare a `label` describe it as text for a reader and ask for nothing: the item's
+ * and the stimulus's own, ItemFileInfo's (a `qti-digital-material`'s or a `qti-calculator-info`'s)
+ * and PrintedVariable's. A QTI 3.0.1 item root's own `label` is `checkVersion`'s (E31b).
+ */
+const toolLabelTypes: ReadonlySet<string> = new Set([
+  "BasePromptInteractionDType",
+  "BaseSequenceDType",
+  "BaseSequenceEmptyDType",
+  "BaseSequenceFullDType",
+  "BaseSequenceRIdentDType",
+  "BaseSequenceXBaseDType",
+  "BaseSequenceXBaseEmptyDType",
+  "ItemBodyDType",
+]);
+
+/**
+ * Report whether a named type is one of {@link toolLabelTypes} or derives from one, by extension or
+ * restriction, through the tables' named types.
+ *
+ * @param tables The tables generated from the QTI XSD.
+ * @param type The type, as an element's table names it.
+ * @returns Whether its derivation chain reaches a type whose `label` asks for its tool.
+ */
+const derivesToolLabel = (tables: Tables, type: ChildName): boolean => {
+  const climbed = new Set<string>();
+  let current = Option.some(type);
+  while (
+    Option.isSome(current) &&
+    current.value.namespace === qtiNamespace &&
+    !climbed.has(current.value.local)
+  ) {
+    const { local } = current.value;
+    if (toolLabelTypes.has(local)) {
+      return true;
+    }
+
+    climbed.add(local);
+    current = Option.flatMap(Option.fromUndefinedOr(tables.types[local]), (entry) =>
+      entry.derivation === "union" ? Option.none() : Option.some(entry.base),
+    );
+  }
+
+  return false;
+};
+
+/**
+ * Report whether an element's `label` asks for the tool that labelled it (reading 128): its kind's
+ * declared type is one of {@link toolLabelTypes} or derives from one. A type an `xsi:type` names is
+ * validly derived from the declared type, so it asks for the same. The kinds this gives are exactly
+ * those whose `label` the XSD declares inside one of those types: the body's HTML elements, the
+ * interactions, their choices and prompts, the feedback, template and rubric blocks and the item
+ * body itself.
+ *
+ * @param tables The tables generated from the QTI XSD.
+ * @param element The element.
+ * @returns Whether it is a QTI element of such a kind.
+ */
+const asksForTool = (tables: Tables, element: SourceElement): boolean =>
+  element.namespace === qtiNamespace &&
+  Option.exists(Option.fromUndefinedOr(tables.elements[element.local]), (table) =>
+    table.types.some((type) => derivesToolLabel(tables, type)),
+  );
+
+/**
+ * Apply `missing-attribute` with `check: "label-tool"` to an item that labels a body element
+ * (reading 128, E31a): an item one of whose elements carries a `label` its kind's characteristic
+ * asks a tool for ({@link asksForTool}) carries both `tool-name` and `tool-version` on its root, in
+ * either version. One refusal per item, at its root, naming the first such element in document
+ * order; `checkVersion`'s E31b adds none beside it for a QTI 3.0.1 root's own `label`.
+ *
+ * @param source The document, an item.
+ * @param visits The elements the rules judge, in document order.
+ * @param tables The tables generated from the QTI XSD.
+ * @returns The one refusal at the root, listing the missing tool attributes space-separated and the
+ *   labelled element's path as `labelled`; none when the root carries both or nothing is labelled.
+ */
+const labelTool = (
+  source: SourceDocument,
+  visits: readonly Visit[],
+  tables: Tables,
+): readonly Refusal[] => {
+  const { root } = source;
+  const missing = missingToolAttributes(root);
+  if (missing.length === 0) {
+    return [];
+  }
+
+  return Option.toArray(
+    Option.map(
+      Arr.findFirst(
+        visits,
+        ({ element }) =>
+          Option.isSome(attributeOf(element, "label")) && asksForTool(tables, element),
+      ),
+      ({ path }) =>
+        refusal(source, "missing-attribute", root.local, {
+          attribute: missing.join(" "),
+          check: "label-tool",
+          element: root.local,
+          labelled: path,
+          reading: "128",
+        }),
+    ),
+  );
+};
+
+/**
+ * Where each element of a document sits, as the body content rules read it: whether a template
+ * block holds it, the table it takes part in, and its place among its parent's children.
+ */
+export interface Placing {
+  /**
+   * The ids of the `th`s that take part in each table, each collapsed.
+   */
+  readonly headerIds: ReadonlyMap<SourceElement, ReadonlySet<string>>;
+  /**
+   * Each element's index among its parent's children, every child node counted: a text, an entity
+   * reference or an element, as {@link edgeCharacter} reads a neighbour. Every element but the root
+   * has one.
+   */
+  readonly positions: ReadonlyMap<SourceElement, number>;
+  /**
+   * The nearest `table` each element lies in, for those a table holds.
+   */
+  readonly tableOf: ReadonlyMap<SourceElement, SourceElement>;
+  /**
+   * The elements a `qti-template-block` holds at any depth.
+   */
+  readonly templated: ReadonlySet<SourceElement>;
+}
+
+/**
+ * Find where each element of a document sits ({@link Placing}), over every element the document
+ * holds, so an ancestor the rules do not judge still places what it holds. Each element's children
+ * are read once, as the walk reaches it, so a rule that reads an element's neighbour takes it by
+ * position: a search of the parent's children per element grows as the square of its siblings.
+ *
+ * @param source The document.
+ * @returns Its placing.
+ */
+export const placingOf = (source: SourceDocument): Placing => {
+  const headerIds = new Map<SourceElement, Set<string>>();
+  const positions = new Map<SourceElement, number>();
+  const tableOf = new Map<SourceElement, SourceElement>();
+  const templated = new Set<SourceElement>();
+  for (const { element, parent } of walk(source)) {
+    for (const [index, child] of element.children.entries()) {
+      if (child.kind === "element") {
+        positions.set(child, index);
+      }
+    }
+
+    if (Option.isSome(parent)) {
+      const holder = parent.value;
+      if (templated.has(holder) || isQti(holder, (local) => local === "qti-template-block")) {
+        templated.add(element);
+      }
+
+      const table = isQti(holder, (local) => local === "table") ? holder : tableOf.get(holder);
+      if (table !== undefined) {
+        tableOf.set(element, table);
+
+        const id = attributeOf(element, "id");
+        if (isQti(element, (local) => local === "th") && Option.isSome(id)) {
+          const ids = headerIds.get(table) ?? new Set<string>();
+          ids.add(identifierOf(id.value));
+          headerIds.set(table, ids);
+        }
+      }
+    }
+  }
+
+  return { headerIds, positions, tableOf, templated };
+};
+
+/**
+ * Apply `misplaced-element` to an interaction a `qti-template-block` holds at any depth (reading
+ * 143, E37): "A qti-template-block must not contain any interactions, either directly or
+ * indirectly" (section 5.145), which is stricter than the XSD, whose content body reaches the
+ * interactions. A template inline's HTML may hold the four inline interactions, which this does not
+ * judge.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param placing Where the document's elements sit.
+ * @returns The refusal at the interaction's path; none for any other element.
+ */
+const templateBlockInteraction = (
+  source: SourceDocument,
+  visit: Visit,
+  placing: Placing,
+): readonly Refusal[] =>
+  isInteraction(visit.element) && placing.templated.has(visit.element)
+    ? [
+        refusal(source, "misplaced-element", visit.path, {
+          element: visit.element.local,
+          reading: "143",
+          requires: "outside a qti-template-block",
+        }),
+      ]
+    : [];
+
+/**
+ * Apply `attribute-type` with `check: "headers"` to a `td`'s or a `th`'s `headers` (reading 126,
+ * E29): each token is the `id` of a `th` of the cell's own table, its nearest, compared
+ * case-sensitively with the `id` collapsed, and no token is written twice. A cell no table holds
+ * takes part in none, so every token it writes is refused. A token outside the NCName's lexical
+ * space names nothing and is its value domain's alone (reading 152).
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param placing Where the document's elements sit.
+ * @returns One refusal at the `headers` attribute's path, naming the first token at fault; none
+ *   when every token names a header of the cell's table once, and for any other element.
+ */
+export const tableHeaders = (
+  source: SourceDocument,
+  visit: Visit,
+  placing: Placing,
+): readonly Refusal[] => {
+  const attribute = attributeOf(visit.element, "headers");
+  if (
+    !isQti(visit.element, (local) => local === "td" || local === "th") ||
+    Option.isNone(attribute)
+  ) {
+    return [];
+  }
+
+  const table = placing.tableOf.get(visit.element);
+  const held = table === undefined ? undefined : placing.headerIds.get(table);
+  const written = new Set<string>();
+  for (const token of attribute.value.value.split(/[\t\n\r ]+/u).filter(isNcName)) {
+    if (written.has(token) || held?.has(token) !== true) {
+      return [
+        refusal(source, "attribute-type", attributePath(visit.path, attribute.value), {
+          attribute: attribute.value.local,
+          check: "headers",
+          element: visit.element.local,
+          reading: "126",
+          token,
+          value: attribute.value.value,
+        }),
+      ];
+    }
+
+    written.add(token);
+  }
+
+  return [];
+};
+
+/**
+ * The quotation punctuation of reading 127: the double quote, the curly and low quotes but the
+ * right single quotation mark `’`, and the guillemets. The ASCII apostrophe and `’` are left out,
+ * each an apostrophe as often as a quote, so a `’` that does close a quote around a `q` is not
+ * refused, the reading's known under-refusal.
+ */
+const quotationMarks: ReadonlySet<string> = new Set([
+  '"',
+  "«",
+  "»",
+  "‘",
+  "‚",
+  "‛",
+  "“",
+  "”",
+  "„",
+  "‟",
+  "‹",
+  "›",
+]);
+
+/**
+ * Read the character at one edge of a neighbour of a `q`, where the neighbour holds characters: a
+ * text. An element or an absent neighbour holds none.
+ *
+ * @param child The neighbour, or none at the edge of its parent.
+ * @param edge Which edge: the first character, or the last.
+ * @returns The character, none for a neighbour that is no text or holds none.
+ */
+const edgeCharacter = (
+  child: SourceChild | undefined,
+  edge: "first" | "last",
+): Option.Option<string> =>
+  child?.kind === "text"
+    ? Option.fromUndefinedOr(edge === "first" ? child.text.at(0) : child.text.at(-1))
+    : Option.none();
+
+/**
+ * Apply `text-not-allowed` with `check: "quotation"` to a `q` (reading 127, E30): "Quotation
+ * punctuation (such as quotation marks) that is quoting the contents of the tag must not appear
+ * immediately before, after, or inside q tags" (section 5.111). Four characters are read, each
+ * alone: the last of the text before the `q`, the first of the text after it, and the first and
+ * the last of its own content; a mark inside its content but at neither end quotes nothing. A
+ * neighbour that is no text, an element or the parent's edge, holds no character, and a space keeps
+ * a mark from standing immediately beside the `q`. The reader substitutes a predefined entity, so
+ * `&quot;` is read as `"`.
+ *
+ * Plate's limit (rule `db2ef322`): the reader drops comments and processing instructions from the
+ * source view (`#plate/document/read.ts`), so one between a mark and a `q`, which the reading says
+ * keeps the mark from standing beside it, is not seen, and that mark is refused.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param placing Where the document's elements sit, the `q`'s position among its siblings read
+ *   from it.
+ * @returns One refusal at the `q`, naming the first mark found and the `side` it stands on, in the
+ *   order before, after, start and end; none for any other element.
+ */
+export const quotation = (
+  source: SourceDocument,
+  visit: Visit,
+  placing: Placing,
+): readonly Refusal[] => {
+  const at = placing.positions.get(visit.element);
+  if (
+    !isQti(visit.element, (local) => local === "q") ||
+    Option.isNone(visit.parent) ||
+    at === undefined
+  ) {
+    return [];
+  }
+
+  const siblings = visit.parent.value.children;
+  const own = visit.element.children;
+  const sides = [
+    ["before", at > 0 ? edgeCharacter(siblings[at - 1], "last") : Option.none()],
+    ["after", edgeCharacter(siblings[at + 1], "first")],
+    ["start", edgeCharacter(own.at(0), "first")],
+    ["end", edgeCharacter(own.at(-1), "last")],
+  ] as const;
+
+  return sides
+    .flatMap(([side, character]) =>
+      Option.toArray(character.pipe(Option.filter((mark) => quotationMarks.has(mark)))).map(
+        (mark) =>
+          refusal(source, "text-not-allowed", visit.path, {
+            check: "quotation",
+            element: visit.element.local,
+            mark,
+            reading: "127",
+            side,
+          }),
+      ),
+    )
+    .slice(0, 1);
+};
+
+/**
+ * Report whether an element's kind declares `data-ssml`: a QTI element whose name's table holds the
+ * attribute in no namespace. The XSD declares it on exactly the 45 elements the Data-SSML binding
+ * lists (§5), a rubric block among them; on any other, only an attribute wildcard admits a
+ * `data-ssml`, laxly and unchecked, so nothing the standard states makes its value Data-SSML and it
+ * is not refused (rule `5b8ee08b`).
+ *
+ * @param tables The tables generated from the QTI XSD.
+ * @param element The element.
+ * @returns Whether its kind declares `data-ssml`.
+ */
+const declaresDataSsml = (tables: Tables, element: SourceElement): boolean =>
+  element.namespace === qtiNamespace &&
+  Option.exists(Option.fromUndefinedOr(tables.elements[element.local]), (table) =>
+    table.attributes.some(
+      (attribute) => attribute.namespace === "" && attribute.local === "data-ssml",
+    ),
+  );
+
+/**
+ * Apply `attribute-type` with `check: "data-ssml"` to a `data-ssml` value that is not Data-SSML
+ * JSON (the operator's P3), where the element's kind declares the attribute
+ * ({@link declaresDataSsml}): the value, with its entities replaced, decodes as the Data-SSML
+ * binding's JSON ({@link decodeDataSsml}). The XSD types it `xs:string`, so the binding alone
+ * judges it. A value that decodes keeps the `data-ssml` feature mark every body element carrying
+ * the attribute gets (`#plate/vocabulary.ts`).
+ *
+ * It judges every document by the same decoder, with the same refusal: an item's elements here, a
+ * test's and a section's rubric blocks and test feedback through `checkTestRules` in
+ * `#plate/validate/test-rules.ts`, and a stimulus's body through the verdict's own stimulus rules.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param tables The tables generated from the QTI XSD.
+ * @returns One refusal at the attribute's path, naming the first `problem` the decoding found;
+ *   none when the value is Data-SSML JSON, and for an element that carries no `data-ssml` or whose
+ *   kind does not declare it.
+ */
+export const dataSsml = (
+  source: SourceDocument,
+  visit: Visit,
+  tables: Tables,
+): readonly Refusal[] => {
+  const attribute = attributeOf(visit.element, "data-ssml");
+  if (Option.isNone(attribute) || !declaresDataSsml(tables, visit.element)) {
+    return [];
+  }
+
+  return Result.match(decodeDataSsml(attribute.value.value), {
+    onFailure: ({ problem }) => [
+      refusal(source, "attribute-type", attributePath(visit.path, attribute.value), {
+        attribute: attribute.value.local,
+        check: "data-ssml",
+        element: visit.element.local,
+        problem,
+      }),
+    ],
+    onSuccess: () => [],
+  });
+};
+
+/**
  * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier`,
- * `binding`, `template-requirements`, `value-type`, `undeclared-variable` and `expression-type`,
- * reading 19's `max-strings` on an Extended Text bound to a container, and reading 23's
- * `expression-placement` on a `qti-variable` that carries `weight-identifier`, which only a test's
- * outcome processing may hold ({@link weightPlacement}, pantry's P12). `template-requirements`
- * judges the declarations a standard template, an inline `qti-map-response` or
- * `qti-map-response-point` and a `qti-lookup-outcome-value` need. `undeclared-variable` judges the
+ * `binding`, `count-range`, `template-requirements`, `value-type`, `undeclared-variable`,
+ * `expression-type`, and the body content's `missing-attribute`, `misplaced-element`,
+ * `attribute-type` and `text-not-allowed`, reading 19's `max-strings` on an Extended Text bound to
+ * a container, and reading 23's `expression-placement` on a `qti-variable` that carries
+ * `weight-identifier`, which only a test's outcome processing may hold ({@link weightPlacement},
+ * which pantry once refused as P12). `undeclared-response` and `binding` judge each binding an
+ * interaction makes, its `response-identifier` and a Text Entry's or an Extended Text's
+ * `string-identifier` ({@link responseRules}): the declaration each names, its fit, reading 92's
+ * counts and single binding, and a gap match's gaps. `count-range` judges a least count against its
+ * most (reading 76) and an order interaction's counts against its choices (reading 18,
+ * {@link countRules}). `duplicate-identifier` judges the item's declarations among themselves
+ * ({@link duplicateDeclaration}), and each choice of the nine pooled classes, gaps among them,
+ * against the one pool and the item's variables (reading 104 as amended, E19,
+ * {@link choiceIdentifier}), a mapping's keys, as written and as values of its base type (readings
+ * 98 and 160, B5b, {@link repeatedMapKey}), and a record value's fields (B7,
+ * {@link repeatedField}). `attribute-type` judges a `mastery-value` outside the bounds its outcome
+ * declaration writes (reading 9, E42a, {@link masteryRange}). Every law over a name reads it only
+ * where it is an NCName ({@link nameOf}, reading 152, E40a), and a declaration's values are typed
+ * only where its cardinality spells one (reading 158). The body content rules judge an item that
+ * labels a body element without naming its tool, `missing-attribute` once at the root
+ * ({@link labelTool}, reading 128, E31a); an interaction a `qti-template-block` holds,
+ * `misplaced-element` ({@link templateBlockInteraction}, reading 143, E37); a cell's `headers` that
+ * names no header of its table, or one twice, `attribute-type` ({@link tableHeaders}, reading 126,
+ * E29); and a quotation mark against a `q`, `text-not-allowed` ({@link quotation}, reading 127,
+ * E30); and a `data-ssml` value that is not Data-SSML JSON, `attribute-type` ({@link dataSsml}, the
+ * operator's P3). `template-requirements` judges the declarations a standard template, an inline
+ * `qti-map-response` or `qti-map-response-point` and a `qti-lookup-outcome-value` need, and a
+ * mapping expression of a built-in response, which has none. `undeclared-variable` judges the
  * variable a rule or an expression names, through its kind's declaration facet in the registry, and
- * the variables its reference attributes name, through its kind's reference facet, and refuses a
- * read of the built-in `duration` in an item whose `time-dependent` is false, a rule other than
- * `qti-set-outcome-value` that sets a built-in, a template rule that sets a variable of a kind it
- * may not set, and a name a `qti-printed-variable` or a `template-identifier` gives that the item
- * declares no variable of. `expression-type` judges what a `qti-set-outcome-value`,
- * `qti-set-template-value`, `qti-set-correct-response` or `qti-set-default-value` sets, a branch's
- * or a template constraint's condition, a lookup's operand, every expression's operands by its
- * kind's rule, the variables its reference attributes name, a read template processing may not
- * make, and the kind and type of the variables a `qti-printed-variable` or a `template-identifier`
- * names. Each expression is typed through its kind's rule in the registry (`kindRules` in
- * `#plate/model/expressions/read.ts`). The variable, type and reference rules judge inline response
- * processing and template processing alike, as the qti package does. A field of a record
- * declaration's value that lacks its `field-identifier` or its `base-type` is `missing-attribute`
- * ({@link recordFieldAttributes}).
+ * the variables its reference attributes name, through its kind's reference facet, a built-in by
+ * the kind it stands as (reading 111), and refuses a template rule that sets a variable of a kind
+ * it may not set, and a name a `qti-printed-variable` or a `template-identifier` gives that the
+ * item declares no variable of, or a Portable Custom Interaction's `qti-context-variable` names
+ * that is no context variable ({@link contextVariableReference}), or a feedback element's
+ * `outcome-identifier` names that is no outcome of the item ({@link feedbackOutcome}, reading 77,
+ * E3a). `expression-type` judges what a `qti-set-outcome-value`, `qti-set-template-value`,
+ * `qti-set-correct-response` or `qti-set-default-value` sets, a branch's or a template constraint's
+ * condition, a lookup's operand, every expression's operands by its kind's rule, the variables its
+ * reference attributes name, a read template processing may not make, and the kind and type of the
+ * variables a `qti-printed-variable` or a `template-identifier` names, and the type of the outcome
+ * a feedback element names. Each expression is typed through its kind's rule in the registry
+ * (`kindRules` in `#plate/model/expressions/read.ts`). The variable, type and reference rules judge
+ * inline response processing and template processing alike, as the qti package does. A field of a
+ * record declaration's value that lacks its `field-identifier` or its `base-type` is
+ * `missing-attribute` ({@link recordFieldAttributes}), and so is a Portable Custom Interaction that
+ * names its module by neither a `module` nor a `qti-interaction-modules` ({@link pciModuleSource},
+ * R10-a).
  *
  * The rules judge exactly what the structural walk checks, and only an item they can read whole:
  *
@@ -3434,19 +5000,32 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
     types: new Map(),
     variables: new Map(variableDeclarations.flatMap((kind) => [...declarationsOf(source, kind)])),
   };
-  const seen = new Map<SourceElement, Set<string>>();
-  const refusals: Refusal[] = [];
+  const declared = new Set<string>();
+  const written: Written = { fields: new Map(), keyValues: new Map(), keys: new Map() };
+  const pools: ChoicePools = { choices: new Map() };
+  const variables = new Set([...context.variables.keys(), ...itemBuiltIns.keys()]);
+  const bound = new Set<string>();
+  const contexts = declarationsOf(source, "qti-context-declaration");
+  const placing = placingOf(source);
+  const refusals: Refusal[] = [...labelTool(source, visits, tables)];
   for (const visit of visits) {
     if (Option.isSome(visit.parent)) {
       context.parents.set(visit.element, visit.parent.value);
     }
 
     refusals.push(
-      ...duplicateIdentifier(source, visit, seen),
-      ...responseRules(source, visit, context.responses),
+      ...duplicateDeclaration(source, visit, declared),
+      ...choiceIdentifier(source, visit, variables, pools),
+      ...repeatedMapKey(source, visit, context, written),
+      ...repeatedField(source, visit, context.parents, written.fields),
+      ...responseRules(source, visit, context.responses, bound),
+      ...countRules(source, visit),
+      ...contextVariableReference(source, visit, contexts),
+      ...pciModuleSource(source, visit),
       ...templateRequirements(source, visit, context),
       ...mapResponseRequirements(source, visit, context),
       ...attributeValueType(source, visit, context),
+      ...masteryRange(source, visit),
       ...textValueType(source, visit, context),
       ...recordFieldAttributes(source, visit, context),
       ...undeclaredVariable(source, visit, context),
@@ -3455,13 +5034,17 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
       ...attributeReferences(source, visit, context),
       ...weightPlacement(source, visit),
       ...printedVariableReferences(source, visit, context),
+      ...feedbackOutcome(source, visit, context),
       ...templateIdentifierReference(source, visit, context),
-      ...feedbackReference(source, visit, context),
       ...setType(source, visit, context),
       ...conditionType(source, visit, context),
       ...lookupTableRequirements(source, visit, context),
       ...lookupOperandType(source, visit, context),
       ...operandTypes(source, visit, context),
+      ...templateBlockInteraction(source, visit, placing),
+      ...tableHeaders(source, visit, placing),
+      ...quotation(source, visit, placing),
+      ...dataSsml(source, visit, tables),
     );
   }
 
@@ -3469,12 +5052,18 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
 };
 
 /**
- * The built-in variables a test's processing reads, with the types the qti package gives them in a
- * test (`builtInsOf("test")` in `packages/pantry/src/processing/env.ts`): `duration` a single
- * duration, "the time spent on the test [...] of base-type duration and single cardinality"
- * (`info.txt:9226`, reading 29), and `numAttempts`, `completionStatus` and `QTI_CONTEXT` typed as
- * an item's. A test's printed variables name fewer: only `duration` and `QTI_CONTEXT`
- * (`testBuiltIns` in `#plate/validate/test-rules.ts`).
+ * The built-in variables a test's processing reads, with the types plate gives them in a test:
+ * `duration` a single duration, "the time spent on the test [...] of base-type duration and single
+ * cardinality" (`info.txt:9226`, reading 29), and `numAttempts`, `completionStatus` and
+ * `QTI_CONTEXT` typed as an item's. The qti package now gives a test only `duration`, a duration,
+ * and `QTI_CONTEXT` (`builtIns` in `packages/pantry/src/grammar/references.ts`, typed by
+ * `builtInTypes` in `packages/pantry/src/grammar/expression.ts`); plate keeps a test's own
+ * `numAttempts` and `completionStatus` where the test declares neither, as ruled (B4), an agreement
+ * difference (G-R3 184, pending). A test may declare either (reading 168, "A test may declare a
+ * variable named `numAttempts` or `completionStatus`; in a test only `duration` is reserved"), and
+ * its processing then reads the declared variable: {@link testProcessingScope} drops from this map
+ * each built-in the test declares, under any kind. A test's printed variables name fewer: only
+ * `duration` and `QTI_CONTEXT` (`testBuiltIns` in `#plate/validate/test-rules.ts`).
  */
 const testProcessingBuiltIns: ReadonlyMap<string, NamedVariable> = new Map(
   [...builtInKinds].map(([identifier, kind]) => [
@@ -3502,12 +5091,19 @@ type ProcessingScope = Pick<
  * processing reads ({@link testProcessingBuiltIns}), the typer of a prefixed read, a name with a
  * `.` that no declaration answers whole, and the typer of what a `qti-test-variables` collects.
  *
+ * A built-in the test declares, under any kind, is not among them: its declaration takes the
+ * built-in's place (reading 168, "A test may declare a variable named `numAttempts` or
+ * `completionStatus`; in a test only `duration` is reserved"), so a `qti-correct` or a map
+ * response of a declared outcome `numAttempts`, which reads a response, names none and is refused
+ * `undeclared-variable`, its refusal carrying the kind that declares the name
+ * ({@link declaredBuiltIn}).
+ *
  * A dotted name the test declares whole is that declaration and never a prefixed read (reading 37),
  * whatever kind of variable the reference expects: where it expects another kind
  * ({@link variableType}), a `qti-map-response` or a `qti-correct` of a test outcome `A.B`, or a
  * `qti-set-outcome-value` of a context variable `C.X`, nothing answers it, and it is refused
- * `undeclared-variable` as its undotted form is (pantry P8 and P27, whose `DeclaredRefKind` admits
- * only a declaration of the kind).
+ * `undeclared-variable` as its undotted form is (pantry's P8 and P27, its `Variable declared` and
+ * `Mapped response` laws).
  *
  * @param test The test document.
  * @param typePrefixed The typer of its prefixed reads.
@@ -3524,7 +5120,9 @@ const testProcessingScope = (
   );
 
   return {
-    builtIns: testProcessingBuiltIns,
+    builtIns: new Map(
+      [...testProcessingBuiltIns].filter(([identifier]) => !variables.has(identifier)),
+    ),
     declarer: "test",
     outcomes: declarationsOf(test, "qti-outcome-declaration"),
     typeCollected,
@@ -3589,16 +5187,24 @@ const processingScope = (
 };
 
 /**
- * Check a test's or a section's expressions against the item's processing rules, each where the
- * qti package applies it (`checkProcessing` in `packages/pantry/src/processing/check.ts`, over the
- * four test contexts of `packages/pantry/src/processing/ast.ts`):
+ * Check a test's or a section's expressions against the item's processing rules, each where the qti
+ * package applies it (the expression laws of `packages/pantry/src/qti/expressions.ts`, over the
+ * four contexts of `languages` in `packages/pantry/src/grammar/expression.ts`):
  *
  * - `undeclared-variable` (P8, {@link undeclaredVariable}), and the operand and reference-attribute
  *   types of `expression-type` (P23, {@link operandTypes}; P24, {@link attributeReferences}), in a
  *   `qti-outcome-processing`, a `qti-pre-condition`, a `qti-branch-rule` and a
  *   `qti-template-default`. A test declares no response, so an unprefixed `qti-map-response` or
- *   `qti-map-response-point` names none and is refused `undeclared-variable`, where the qti package
- *   reports P27 (`checkMapping`); a prefixed one is a package's to judge.
+ *   `qti-map-response-point` of a name that is no built-in response names none and is refused
+ *   `undeclared-variable`, where the qti package reports P27 (its `Mapped response` law); a
+ *   prefixed one is a package's to judge.
+ * - `template-requirements` (P27, {@link mapResponseRequirements}) in the same four: an unprefixed
+ *   `qti-map-response` or `qti-map-response-point` of a built-in response the scope holds, a test's
+ *   `duration`, and `numAttempts` where the test declares none, has no mapping or area mapping
+ *   (reading 166, "An unprefixed `qti-map-response` or `qti-map-response-point` that names a
+ *   built-in response variable, an item's `numAttempts` or `duration` or a test's `duration`, is
+ *   refused under 'Mapped response' too"). A test that declares `numAttempts` (reading 168) holds
+ *   no such built-in, so its mapping expression of the name keeps the refusal above.
  * - What a `qti-set-outcome-value` sets (P20, {@link setType}) and a `qti-lookup-outcome-value`'s
  *   table and operand (P22, {@link lookupTableRequirements}, {@link lookupOperandType}) in outcome
  *   processing, and what a `qti-template-default` sets (P20) where `templateDefaultType` types its
@@ -3612,23 +5218,25 @@ const processingScope = (
  * An unweighted `qti-test-variables` with no `base-type` is a multiple of the base type
  * `typeCollected` gives it from the test's items, where it is given (G-R3 199,
  * {@link collectedAttribute}), and unknown otherwise. The qti package types one with no `base-type`
- * unknown (`attributeContainer`, `packages/pantry/src/processing/types.ts`), so a package whose
- * test sets a float from an integer collection is refused here and accepted there: an agreement
- * difference G-R3 199 settles, since the engine's run fails it (`OutcomeMismatchError`).
+ * unknown (its `qti-test-variables` typing in `packages/pantry/src/grammar/expression.ts`), so a
+ * package whose test sets a float from an integer collection is refused here and accepted there: an
+ * agreement difference G-R3 199 settles, since the engine's run fails it (`OutcomeMismatchError`).
  *
  * The rules are the item's own, so the two runs cannot drift. Names resolve against the processing
  * scope ({@link processingScope}): a test's declarations and built-ins, where a name with a `.`
  * that the test does not declare whole is a prefixed read, typed by `typePrefixed` and never
- * refused `undeclared-variable` here (reading 48 is a package's). A section document's names are
- * all typed `unknown` on its own, as its own verdict judges it; under a test that reaches it
- * (`reaching`), as a package judges it once for each such test, they resolve against that test's
- * scope, so a name the test neither declares nor holds as a built-in is `undeclared-variable`, with
- * the test as its `declarer` as in a test ({@link declaredBy}), and each prefixed read is typed by
- * the reaching test's `typePrefixed` (pantry's
- * `testProcessingRows`, `packages/pantry/src/import/reference.ts`). A template default is an
- * expression, so the template read rule (P26) and the template rules' targets do not judge it; its
- * own target is an item's template variable, which only a package can find, so its expression is
- * judged against that variable (P20, {@link setType}) only where `templateDefaultType` types it.
+ * refused `undeclared-variable` here (reading 48, "a dotted reference is accepted when exactly one
+ * reading names a real item ref, test part or section and its variable", is a package's). A section
+ * document's names are all typed `unknown` on its own, as its own verdict judges it; under a test
+ * that reaches it (`reaching`), as a package judges it once for each such test, they resolve
+ * against that test's scope, so a name the test neither declares nor holds as a built-in is
+ * `undeclared-variable`, with the test as its `declarer` as in a test ({@link declaredBy}), and
+ * each prefixed read is typed by the reaching test's `typePrefixed` (pantry's relations
+ * `AssembledReference` and `Reading` in `packages/pantry/src/qti/expressions.ts`). A template
+ * default is an expression, so the template read rule (P26) and the template rules' targets do not
+ * judge it; its own target is an item's template variable, which only a package can find, so its
+ * expression is judged against that variable (P20, {@link setType}) only where
+ * `templateDefaultType` types it.
  *
  * As {@link checkRules} does, it judges exactly what the structural walk checks, and gives no
  * refusal for a document whose judged elements hold an unexpanded entity reference. Every refusal
@@ -3640,9 +5248,9 @@ const processingScope = (
  * @param typePrefixed The type of each prefixed read: `unknown` for a test checked alone, which
  *   satisfies every rule; the items' types for a test a package holds.
  * @param templateDefaultType The type of the template variable a `qti-template-default` sets, its
- *   item ref's item's (`templateOf` in `packages/pantry/src/processing/check.ts`): none unless
- *   given, as for a test checked alone, which judges no default against its target; a package's
- *   for a test it holds, or a section document a test reaches.
+ *   item ref's item's (`TemplateDefaultTarget` in `packages/pantry/src/qti/expressions.ts`): none
+ *   unless given, as for a test checked alone, which judges no default against its target; a
+ *   package's for a test it holds, or a section document a test reaches.
  * @param reaching For a section document, the test document it is judged under, a test that
  *   reaches it: none unless given, which judges the section on its own, every name `unknown`.
  *   Passed over for a test.
@@ -3692,6 +5300,7 @@ export const processingRefusals = (
 
     refusals.push(
       ...literalValueType(source, visit, context),
+      ...mapResponseRequirements(source, visit, context),
       ...undeclaredVariable(source, visit, context),
       ...attributeReferences(source, visit, context),
       ...setType(source, visit, context),

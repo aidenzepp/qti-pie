@@ -307,8 +307,8 @@ const outcomeXml = (identifier: string, baseType: string, initial?: string): str
 
 /**
  * Write a `record` outcome declaration, which has no base type: the information model fixes the
- * base type of `SCORE` and `MAXSCORE` as float, and the checker refuses one of another base type,
- * but reads no `record` one, so a record is how an item names one that is not a float.
+ * base type of an item's `SCORE` and `MAXSCORE` as float, so the checker refuses one declared
+ * `record` at its `cardinality` (reading 153) before any template reads it.
  *
  * @param identifier Its `identifier`.
  * @returns The declaration's XML.
@@ -392,54 +392,128 @@ const markedNotRun = Effect.fnUntraced(function* markedNotRun(bytes: Uint8Array,
   assert.deepStrictEqual(wrong, none);
 });
 
+/**
+ * Open a hand-built item that declares the `SCORE` or `MAXSCORE` its template reads as a `record`,
+ * and require it refused before the template is read: an item's typed outcome is a value of its
+ * base type, and a record has none (reading 153), so the item is refused, with one
+ * `reserved-outcome-type` refusal, `attribute-type` at that declaration's `cardinality`.
+ *
+ * @param bytes The item's bytes.
+ * @param identifier The outcome declared a record.
+ * @param declaration The path of its declaration.
+ * @returns Nothing; it fails the test on the first broken requirement.
+ */
+const refusedBeforeTemplate = Effect.fnUntraced(function* refusedBeforeTemplate(
+  bytes: Uint8Array,
+  identifier: string,
+  declaration: string,
+) {
+  const verdict = yield* open("items/cc2.xml", bytes);
+  const refusals = verdict.verdict === "refused" ? verdict.refusals : [];
+
+  assert.strictEqual(verdict.verdict, "refused");
+  assert.deepStrictEqual(
+    refusals
+      .filter((refusal) => refusal.detail["check"] === "reserved-outcome-type")
+      .map(({ detail, location, rule }) => ({
+        identifier: detail["identifier"],
+        location,
+        reading: detail["reading"],
+        rule,
+        value: detail["value"],
+      })),
+    [
+      {
+        identifier,
+        location: { kind: "path", path: `${declaration}/@cardinality` },
+        reading: "153",
+        rule: "attribute-type",
+        value: "record",
+      },
+    ],
+  );
+});
+
 describe("a CC2_* template whose needs the item does not meet (Q6: marked, never refused)", () => {
   it.effect(
-    "CC2_map_response is marked mapping:RESPONSE when RESPONSE has no qti-mapping, variable:SCORE when SCORE is a record, which the engine does not hold, and score runs neither",
+    "CC2_map_response is marked mapping:RESPONSE when RESPONSE has no qti-mapping, and score does not run it",
     () =>
       Effect.gen(function* cc2MapResponseUnmet() {
-        const feedback = outcomeXml("FEEDBACK", "identifier");
-
         yield* markedNotRun(
           templatedBytes("CC2_map_response", false, [
             outcomeXml("SCORE", "float"),
             outcomeXml("MAXSCORE", "float", "1"),
-            feedback,
+            outcomeXml("FEEDBACK", "identifier"),
           ]),
           "mapping:RESPONSE",
         );
+      }),
+  );
+
+  it.effect(
+    "CC2_match is marked variable:SCORE when the item declares no SCORE, which the engine then does not hold, and score does not run it",
+    () =>
+      Effect.gen(function* cc2MatchUndeclared() {
+        yield* markedNotRun(templatedBytes("CC2_match", false, []), "variable:SCORE");
+      }),
+  );
+
+  it.effect(
+    "CC2_match_basic is marked variable:MAXSCORE when the item declares SCORE and no MAXSCORE, which the engine then does not hold, and score does not run it",
+    () =>
+      Effect.gen(function* cc2MatchBasicUndeclared() {
         yield* markedNotRun(
+          templatedBytes("CC2_match_basic", false, [
+            outcomeXml("SCORE", "float"),
+            outcomeXml("FEEDBACKBASIC", "identifier"),
+          ]),
+          "variable:MAXSCORE",
+        );
+      }),
+  );
+});
+
+describe("a CC2_* template whose SCORE or MAXSCORE is declared record (reading 153)", () => {
+  it.effect(
+    "align-54 record SCORE refused before the template B1b: a CC2_map_response item whose SCORE is a record is refused attribute-type at SCORE's cardinality, and the template is not read",
+    () =>
+      Effect.gen(function* cc2MapResponseRecord() {
+        yield* refusedBeforeTemplate(
           templatedBytes("CC2_map_response", true, [
             recordXml("SCORE"),
             outcomeXml("MAXSCORE", "float", "1"),
-            feedback,
+            outcomeXml("FEEDBACK", "identifier"),
           ]),
-          "variable:SCORE",
+          "SCORE",
+          "qti-assessment-item/qti-outcome-declaration[1]",
         );
       }),
   );
 
   it.effect(
-    "CC2_match is marked variable:SCORE when SCORE is a record, which the engine does not hold, and score does not run it",
+    "align-54 record SCORE refused before the template B1b: a CC2_match item whose SCORE is a record is refused attribute-type at SCORE's cardinality, and the template is not read",
     () =>
-      Effect.gen(function* cc2MatchUnmet() {
-        yield* markedNotRun(
+      Effect.gen(function* cc2MatchRecord() {
+        yield* refusedBeforeTemplate(
           templatedBytes("CC2_match", false, [recordXml("SCORE")]),
-          "variable:SCORE",
+          "SCORE",
+          "qti-assessment-item/qti-outcome-declaration",
         );
       }),
   );
 
   it.effect(
-    "CC2_match_basic is marked variable:MAXSCORE when MAXSCORE is a record, which the engine does not hold, and SCORE a float, and score does not run it",
+    "align-54 record SCORE refused before the template B1b: a CC2_match_basic item whose MAXSCORE is a record and SCORE a float is refused attribute-type at MAXSCORE's cardinality, and the template is not read",
     () =>
-      Effect.gen(function* cc2MatchBasicUnmet() {
-        yield* markedNotRun(
+      Effect.gen(function* cc2MatchBasicRecord() {
+        yield* refusedBeforeTemplate(
           templatedBytes("CC2_match_basic", false, [
             outcomeXml("SCORE", "float"),
             recordXml("MAXSCORE"),
             outcomeXml("FEEDBACKBASIC", "identifier"),
           ]),
-          "variable:MAXSCORE",
+          "MAXSCORE",
+          "qti-assessment-item/qti-outcome-declaration[2]",
         );
       }),
   );

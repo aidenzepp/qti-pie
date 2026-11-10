@@ -6,8 +6,9 @@ changes. [`docs/spec-readings.md`](../../docs/spec-readings.md) numbers the read
 
 ## Unreleased
 
-The first entry lists the surface of M1 and M2, and what M3 adds to it. plate is not published,
-and each of its entry points is unstable until M3.
+These entries list the surface of M1 and M2, what M3 adds to it, and each change to how plate
+reads the specification. plate is not published, and each of its entry points is unstable until
+M3.
 
 ### Serving admitted content without the XSD tables (2026-11-09)
 
@@ -91,10 +92,10 @@ and each of its entry points is unstable until M3.
   feedback determined by the default values of the outcome variables" (7.19.3). Modal feedback
   "is shown to the candidate directly following response processing" (5.93).
 - `open` refuses a feedback element whose `outcome-identifier` names no outcome of base type
-  `identifier`, single or multiple, the built-in `completionStatus` included, with
-  `undeclared-variable` for a name nothing declares and `expression-type` otherwise, as pantry does
-  (reading 77, the laws `Feedback reference` and `Feedback outcome type`). No corpus document is
-  newly refused.
+  `identifier`, single or multiple, the built-in `completionStatus` included, as pantry does
+  (reading 77, the laws `Feedback reference` and `Feedback outcome type`), by align-54's E3a rule
+  below: `undeclared-variable` for a name no outcome answers, and `expression-type`, check
+  `feedback-outcome`, for an outcome of another type. No corpus document is newly refused.
 - The verdict no longer marks `qti-modal-feedback` nor shows `qti-feedback-block` or
   `qti-feedback-inline` as a notice. These 36 corpus items are now `accepted`, each also as its
   copy inside its folder's zip (`BPIG_22April.zip`, `basicFeedbackTest.zip`, `BBQsTest.zip`,
@@ -121,7 +122,447 @@ and each of its entry points is unstable until M3.
   `Example05-feedbackBlock-adaptive.xml`, `adaptiveTemplate.xml`, `adaptive.xml` and `hint.xml`.
   Every copy of `Example03-feedbackBlock-solution.xml` and `Example04-feedbackBlock-templateBlock.xml`
   stays `unchecked` for its MathML. No package's verdict moves: `feedbackTest.zip` stays refused with
-  `item-ref-unresolved`, for refs its test names that its zip lacks.
+  `item-ref-unresolved` and `package-file-missing`, for refs its test names that its zip lacks.
+
+### How plate reads the shared readings after pantry's cutover, 2026-11-09 (align-54)
+
+- plate now reads QTI 3.0 as [`docs/spec-readings.md`](../../docs/spec-readings.md) reads it after
+  pantry's cutover. Each line below names its reading by number and wording, the rule and `check` a
+  host receives, and the corpus documents whose verdict moves. Every corpus document and package
+  that no line names keeps its verdict, its refusals and their sentences.
+- Five refusal rules are new. Four take pantry's names: `inclusion-cycle`, `branch-target`,
+  `document-lang` and `lom-learning-resource-type`. The fifth, `assembly-limit`, is plate's own
+  stated limit. Every other new refusal is an existing rule with a new `check` in its detail.
+- Tests and sections:
+  - A section that holds only a rubric block, or nothing, is accepted and delivered. `open` refused
+    it with `child-count` (reading 26, "an assessment section may hold no part"). Corpus:
+    `englishHighLevelV2`'s test `Test_976288596.xml`, in its folder and in `englishHighLevelV2.zip`,
+    moves from refused to `accepted-with-unsupported`. The package stays refused for its LOM title.
+  - A test that declares one outcome twice, or an outcome and a context variable of one name, is
+    refused `duplicate-identifier`, and so is an element whose `id` is a context variable's name
+    (reading 74, "an identifier names one variable among the declarations of its document"). Corpus:
+    none.
+  - A `qti-selection` without replacement whose `select` is above its section's number of parts is
+    refused `count-range`, check `selection` (reading 79, "a selection without replacement selects
+    at most its section's parts"). Corpus: none.
+  - `branch-target`: a branch rule that jumps backward, to itself, into another part, to a name the
+    test does not hold, or to an item ref a selection with replacement can repeat is refused, in a
+    test document and across a package's assembled test. Its `reason` says which: `backward`,
+    `self`, `outside-part`, `unknown`, `repeatable` or `ambiguous` (reading 87, "a branch rule names
+    a reserved exit, or a later part of its own kind in its own test part, never inside a section a
+    ref places from outside it, and never an item a replacement can repeat"). A backward jump is not
+    judged where delivery draws the order: where the nearest section that holds both shuffles, or a
+    `keep-together="false"` section mixes them into one that does. A `fixed` choice inside a shuffle
+    is not read, a recorded limit. Corpus: none.
+  - A test or a section that holds an `xi:include` is `unchecked`, with the reason `xinclude`, so it
+    is never delivered. Before, plate left the include out and delivered the rest. No include is
+    refused for its form (reading 114, "an `xi:include` is the information model's Include only
+    where its parent's model holds one"; reading 115, "an include names a document of its package or
+    a resource outside it"; reading 117, "an included fragment is judged in place, as its merged
+    document holds it"; reading 118, "an include holds at most one fallback"). Corpus: none.
+  - A feedback element whose `outcome-identifier` names nothing, a response, a template variable or
+    an outcome that is not a single or multiple `identifier` is refused, in items and in tests:
+    `undeclared-variable`, or `expression-type` with check `feedback-outcome` (reading 77, "a
+    feedback element names an outcome variable"). Corpus: none.
+- Packages and their tests:
+  - Dotted names. A read of a dotted name such as `a.b` that the test also declares whole is
+    `ambiguous-reference` when item ref `a`'s item declares `b`, since the test's own variable
+    counts as one reading (reading 48, "a dotted reference is accepted when exactly one reading
+    names a real item ref, test part or section and its variable"). A test that sets `a.SCORE`
+    without declaring it is refused `undeclared-variable`, check `setter` (reading 112, "a test's
+    setter sets a variable of its own document, so a prefixed reading never resolves it"). A
+    numbered name such as `Q1.2.SCORE` is accepted only where a selection with replacement can
+    repeat `Q1`, and is refused `undeclared-variable`, check `numbered`, elsewhere (reading 88, "a
+    numbered reference such as `Q01.2.SCORE` names an instance of an item ref that a selection with
+    replacement can repeat, and nothing else"). Corpus: none.
+  - A reference from outside a section document that a test places twice into that document is
+    `ambiguous-reference` (reading 86, "a section document a test places twice is written once";
+    reading 145, "a fragment a test or a section document splices is judged in the test that places
+    it, once per placement"). Corpus: none.
+  - `inclusion-cycle`: a section ref that leads back to a section document already on its chain is
+    refused, and places nothing (reading 85, "an inclusion never reaches itself"). Corpus: none.
+  - A `qti-variable-mapping` whose `target-identifier` names another variable of its item, or a
+    built-in, is refused `duplicate-identifier` (reading 97, "a variable mapping's target names no
+    other variable its item ref's item holds"). Corpus: none.
+  - A test may read an item's `QTI_CONTEXT` through its item ref, which `openPackage` refused
+    (reading 106, "a prefixed reference reaches every built-in variable its item ref's item holds,
+    `QTI_CONTEXT` among them"). The package marks that processing, as it marks other reads of an
+    item's context, and a session does not run it. Corpus: none.
+  - A read of an item's built-in `duration` is no longer refused when the item is not time
+    dependent, in the item or through a test's item ref, so `undeclared-variable` with
+    `item-duration` is gone (reading 150, "an item's built-in `duration` may be read whether or not
+    the item is time dependent"). plate holds no item duration for processing, so the verdict marks
+    the processing that reads one, timed or not: an item's with `variable:duration`, and a test's
+    outcome processing that reads `ITEM1.duration`. Neither runs. Corpus: none.
+  - In a package whose manifest says QTI 3.0.1, every outcome declaration that writes no
+    `normal-minimum`, an item's or the test's, numeric or not, has the minimum 0.0 (reading 149, "an
+    outcome declaration's `normal-minimum` is 0.0 where a QTI 3.0.1 document writes none, and has no
+    value where a QTI 3.0 document writes none"). A test's `qti-outcome-minimum` counts such an
+    outcome, where it left it out, and `results` writes `normalMinimum="0"` for it. A 3.0.0 package,
+    or a document you `open` alone, is unchanged. Corpus: no verdict moves. The results of a session
+    of `BegGuide_March2025.zip` gain `normalMinimum="0"` on its six outcomes.
+  - A `mastery-value` below its outcome's minimum or above its maximum is refused `attribute-type`,
+    check `mastery-range`. In a 3.0.1 package the minimum is 0.0 where none is written (reading 149;
+    reading 9, "the Schematron's rules are read by their intent, not their text"). Corpus: none.
+  - An item that labels a body element, such as a track, a text entry, media or an object, carries
+    `tool-name` and `tool-version` on its root, and in a 3.0.1 package so does an item whose root
+    carries a `label`. One that does not is refused `missing-attribute`, check `label-tool`, once
+    per item (reading 128, "a `label` asks for the tool that labelled it where its own
+    characteristic's description says so"). Corpus: six items move to refused: `audio-video.xml`
+    (accepted before) and `media_coords.xml` (`accepted-with-unsupported` before), each in
+    `qtiv3-examples/packaging/items/` and in `items.zip`, and the BPIG
+    `feedbackBlock-solution-random.xml` (unchecked before), in `QTI3_BPIG_Examples/items/` and in
+    `BPIG_22April.zip`. `items.zip` and `BPIG_22April.zip` stay refused, each with
+    `missing-attribute` added.
+  - A package that holds a QTI 2 usage-data document is refused `not-qti-root` (reading 89, "a
+    document whose root element is in a namespace of QTI 2 is not a QTI 3 document"). Corpus:
+    `usageData.zip` moves from accepted to refused.
+  - Each file reference that reading 103 lists, an image, a stylesheet, an item ref and a module
+    configuration among them, resolves through the `xml:base` in scope and names a file the package
+    holds or its manifest lists, or it is refused `package-file-missing`, check `reference`
+    (reading 103, "a document's file references are the attributes its vocabularies define as the
+    location of a file, and each one that resolves within the package names a file the manifest
+    describes; an `xml:base` is a base, resolved and never a file reference"). An item ref that
+    names no file is refused both `item-ref-unresolved` and `package-file-missing`. Corpus:
+    `sharedStimulus.zip` (two missing images) and `BBQsTest.zip` (a missing stylesheet) move from
+    unchecked to refused. `feedbackTest.zip` (a missing item) and `pci_item_examples.zip` (a missing
+    module configuration) stay refused, with one more refusal each.
+  - A path that resources name as two types of document is read as one, and each resource of the
+    other type is refused `resource-type-mismatch`, check `path-type`. A document resource whose
+    `href` names `imsmanifest.xml` is refused the same, check `manifest-document` (reading 146, "the
+    manifest is the package's one document at `imsmanifest.xml`, and no resource's"; reading 162, "a
+    path two document types name is the document its root bears out"). Corpus: none.
+  - An item's or a test's title matches its LOM title only in the document's language, as an
+    `xs:normalizedString`: tabs and line breaks read as spaces, and runs of spaces are kept. Before,
+    a title in any language matched, its spaces collapsed. The `lom-title` refusal's sentence says
+    so (reading 62, "an item's or test's identifier and title are those its package's LOM metadata
+    gives it"; reading 151, "an item's `xml:lang` outside its value domain states no language"). An
+    item or a test that writes no `title` or no `identifier` beside a LOM one is refused `lom-title`
+    or `lom-identifier`, check `unwritten` (reading 148, "an assessment item or test that writes no
+    `identifier` or no `title` has none for its LOM record to match"). Corpus: no verdict moves. The
+    `lom-title` sentences of `englishHighLevelV2.zip`, `CASEWithOutcome.zip`, `metaData.zip` and
+    `test_package_minfiles.zip` change.
+  - `document-lang`: each language an item's or a test's `xml:lang` states is listed by each general
+    category of its LOM record, compared as language tags (reading 134, "an item's or a test's
+    languages are listed by its records' general categories"). Corpus: `BBQsTest.zip`, refused for
+    this as well as for its stylesheet.
+  - `lom-learning-resource-type`: a LOM `learningResourceType` of `exam` or `self assessment` from
+    the LOM vocabulary is refused (reading 122, "a LOM `learningResourceType` of the LOM vocabulary
+    is neither `exam` nor `self assessment`"). A LOM element repeated past the loose binding's cap
+    is refused `child-count` (reading 130, "a LOM element repeats no more than the loose binding's
+    Schematron allows"). Corpus: none.
+  - An `href` and an `xml:base` lose their padding before they resolve. The `href` of a `cp:file` or
+    of a non-document resource, or an `xml:base`, that leads outside the package is an external
+    link, not refused. A document resource whose `href` is absolute, rooted or leads outside is
+    refused `package-path-outside`, check `document-entry` (reading 102, "an href is read as its
+    path and its params"). Corpus: none.
+  - A file key that holds a backslash or begins with a drive prefix, such as `C:/x.xml`, is refused
+    `package-path-outside`, check `entry-key`, where plate read it as a path (reading 138, "an entry
+    path that holds a backslash or begins with a drive prefix is refused"). Reading 139 ("a package
+    zip's central directory ends where its end record begins") judges a zip's own bytes, which plate
+    never reads, since you unzip the package. Corpus: none.
+  - An item ref that writes no `identifier` is judged like any other. One whose `href` names no item
+    is refused `item-ref-unresolved`, check `unwritten` (reading 155, "an item ref that writes no
+    `href` names nothing, so AL3 alone refuses it"). Corpus: none.
+  - An item ref that names an LTI link, a resource of an LTI type, is accepted (reading 110, "under
+    an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded limit,
+    and a template default is refused"). The package delivers its test with the ref marked
+    `lti-link` and left out, so the link's item is never presented, and marks the outcome processing
+    when it counts over the test's items. A built-in read through the ref, such as
+    `lti.numAttempts`, is accepted and its processing marked. Corpus: none (`lti.zip` and
+    `testWithLti.zip` stay refused at their manifests).
+- Item content and interactions:
+  - A choice's identifier is used by no other choice in its item, of any class, and names no item
+    variable or built-in. The choices are the nine classes the information model's prose calls
+    choices, pooled: simple, simple associable, inline, hotspot, associable hotspot, gap image, gap
+    text and hottext choices, and `qti-gap` (reading 104, "a choice's identifier is used by no other
+    choice of any class in its document, and names no item variable"). A repeat is refused
+    `duplicate-identifier`, and a choice that names a variable is refused with check
+    `choice-variable`. Corpus: 32 items of the `shared-vocabulary` set move to refused, 16 in
+    `qtiv3-examples/items/shared-vocabulary/Items/` and the same 16 in
+    `shared-vocabulary-imsmanifest.zip`: `Item_QTI3_CompWater_02` to `_04`, `Item_QTI3_Gap_Match_02`
+    and `_03`, `Item_QTI3_Graphic_Gap_Match_02` and `_03`, `Item_QTI3_Hotspot_01` and `_02`,
+    `Item_QTI3_Luggage_02` to `_05`, `Item_QTI3_Match_02` and `_03`, and
+    `Item_QTI3_RichardTake2_01`. Of the 32, 14 were accepted, 16 `accepted-with-unsupported` and 2
+    unchecked. The package stays refused, with `duplicate-identifier` added.
+  - On an element the Schematron's extension-attribute lists cover, an attribute the XSD does not
+    declare is refused `unknown-attribute` unless it is a `data-` attribute. Before, plate dropped
+    it (reading 90, "on an element the Schematron's extension-attribute lists cover, an attribute
+    its XSD does not declare is a `data-` attribute, or the document is refused"). Corpus: 7
+    `shared-vocabulary` items move to refused, for an `object` with `alt` and for `patternMask`:
+    `Item_QTI3_Graphic_Gap_Match_01` to `_03` in both copies, and `Item_QTI3_WritingPostcard_03` in
+    the zip. Four of them are also under the line above. The package stays refused, with
+    `unknown-attribute` added.
+  - A Text Entry's or Extended Text's `string-identifier` names a declared `string` response other
+    than its `response-identifier`, and an element's `id` may not equal a response's identifier
+    (reading 14, "a text-entry interaction's `response-identifier` and `string-identifier` are
+    `xs:IDREF`s"). A `string-identifier` that names a `record` response, or a response whose base
+    type is spelled as anything but `string`, is refused, and no cardinality is asked of the
+    response, for Text Entry and Extended Text alike. The information model asks only for "a second
+    response variable (of base-type string)". The refusals are `undeclared-response`, `binding` with
+    check `string-binding` or `bound-once`, and `duplicate-identifier`. Corpus: none.
+  - An interaction whose count allows more than one choice, or any number, binds a `multiple`
+    response (`binding`, check `count-cardinality`). Before, plate rendered it as a multi-select
+    over a single response. One response binds one interaction (`binding`, check `bound-once`). A
+    position object's `min-choices` is at least 1 (`attribute-type`). A PCI's `qti-context-variable`
+    names a declared context variable (`undeclared-variable`, check `context-variable`). Each
+    follows reading 92, "the information model's binding and count sentences that no other reading
+    restates hold as written". Corpus: none.
+  - A least count is at most its most, over five count pairs: `count-range`, check `count-pair`. An
+    order or graphic-order interaction's counts are at most its choices (check `choice-count`), and
+    its `max-choices="0"` beside a written `min-choices` is refused (reading 76, "a least count is
+    at most its most, unless the most is 0"; reading 18, "an order or graphic-order interaction's
+    `min-choices`, where written, is from 1 to its number of choices"). Corpus: none.
+  - A default hotspot is the last hotspot choice of its interaction, and a graphic gap match has
+    none: `misplaced-element`, check `default-hotspot` (reading 80, "a default hotspot is the last
+    hotspot choice of its interaction"). Corpus: none.
+  - A lookup table sets a single outcome: `misplaced-element`, check `lookup-cardinality`
+    (reading 100, "a lookup table sets a single outcome"). Corpus: none.
+  - A `source` takes no `role` (`unknown-attribute`), and a heading's `role` is `heading`, `tab` or
+    `presentation` (`attribute-type`), as reading 9 reads the Schematron ("the Schematron's rules
+    are read by their intent, not their text"). Corpus: none.
+  - A `bdo` carries `dir`, `ltr` or `rtl` (reading 123, "a `bdo` carries `dir`"). A `source` in a
+    `picture` carries `srcset`, one in `audio` or `video` carries `src`, and a media URL is not
+    blank (reading 124, "a `source` in a `picture` carries `srcset`, and one in an `audio` or a
+    `video` carries `src`"). A `track` with no `kind`, or `kind="subtitles"`, carries `srclang`
+    (reading 125, "a `track` in the subtitles state carries `srclang`"). A MIME type is two tokens
+    joined by a slash (reading 135, "a MIME type is RFC 2045's type and subtype"). Each is
+    `missing-attribute` or `attribute-type`. Corpus: none.
+  - Each token of a cell's `headers` names a `th` of the cell's own table, once: `attribute-type`,
+    check `headers` (reading 126, "each token of a `td`'s or a `th`'s `headers` is the `id` of a
+    `th` of the cell's own table"). Corpus: none.
+  - No quotation mark stands immediately before, after or inside a `q`, which the browser quotes
+    itself: `text-not-allowed`, check `quotation` (reading 127, "no quotation punctuation stands
+    immediately before, after or inside a `q`"). Corpus: none.
+  - `xml:lang`, `lang` and `srclang` hold well-formed BCP 47 language tags, or the document is
+    refused `attribute-type` (reading 129, "`xml:lang`, `lang` and a track's `srclang` hold BCP 47
+    language tags"). Corpus: none.
+  - No interaction stands at any depth of a `qti-template-block`: `misplaced-element` (reading 143,
+    "an interaction is banned at any depth of a template block"). Corpus: none.
+  - A `tolerance` is one or two values, each a number above 0 or a variable's name. `0`, `-1`, an
+    empty value and three values are refused `attribute-type`, check `tolerance-token`, and `+INF`
+    and `1,5`, a name read at run time, are accepted: the reverse of before (reading 121, "every
+    `tolerance` is one or two values, each number among them above 0"). Corpus: none.
+  - A printed variable's `format` may hold text and `%%` around its conversion, or text alone, and
+    `%%` prints a percent sign. All three were refused (reading 132, "a printed variable's `format`
+    is a printf format string"; reading 161, "a printed variable's `format` may hold any number of
+    conversion specifiers"). Corpus: none.
+  - A mapping repeats no key, compared as values: `1` and `01`, `A B` and `B A` in a `pair`, and
+    floats by their double. A repeat is refused `duplicate-identifier`, check `map-key` (reading 98,
+    "a mapping's map keys are distinct, compared as values of its base type"; reading 154, "a float
+    mapping's map keys are compared by the doubles reading 144 maps them to"; reading 160, "a
+    mapping's keys repeat as written whatever its declaration's base type spells"). Corpus: none.
+  - A record value writes no field twice (`duplicate-identifier`, check `field`). A record
+    declaration that carries `base-type` is refused `unknown-attribute`, and every other declaration
+    does, or it is refused `missing-attribute` (reading 153, "a record has no base type, so no value
+    stands for one"; reading 158, "a declaration whose cardinality or base type spells nothing is
+    still a declaration"). Corpus: none.
+  - A QTI element in `qti-ordering`'s extension slot is checked, laxly, where plate passed over it
+    (reading 61, "an element in QTI's own namespace inside `qti-ordering`'s extension slot is
+    valid"). Corpus: none.
+  - Under a `strict` wildcard, an element the tables declare is checked, and any other is refused
+    `unknown-element` unless its `xsi:type` names a type. An `xsi:type` whose prefix nothing binds
+    is refused `attribute-type` (reading 81, "a `strict` wildcard refuses any other element unless
+    its `xsi:type` names a type of that set or a built-in"; reading 83, "a prefix nothing binds
+    makes the document invalid"; reading 113, "a root that reading 6 keeps foreign stands under a
+    `strict` wildcard that finds its declaration"). Corpus: none.
+  - After a child a repeated wildcard holds, no element of an earlier particle follows:
+    `misplaced-element`, check `order` (reading 96, "a repeated wildcard keeps its sequence's
+    order"). Corpus: none.
+  - The ID table, over the elements QTI's tables govern: a second element with one `id` is refused
+    `duplicate-identifier`, an IDREF that names no ID `attribute-type` with check `idref-target`,
+    and a wildcard `xml:id` on an element whose type declares an ID `unknown-attribute`
+    (reading 101, "an ID that an element's text carries is bound to that element's parent";
+    reading 109, "an element whose type has an ID attribute use holds no wildcard `xml:id`";
+    reading 156, "an ID-typed attribute or text is one of its document's IDs only where its value is
+    an NCName"; reading 84, "an element is judged under its governing type for everything XML Schema
+    decides"). A manifest's identifiers are judged by the package's rules, not by this table.
+    Corpus: none.
+  - An identifier's characters follow XML 1.0 Second Edition, so a few rare non-ASCII letters are
+    refused that were accepted (reading 94, "an `xs:NCName` takes its name characters from XML 1.0
+    Second Edition"; reading 152, "a value names something only where it is an NCName"). Corpus:
+    none.
+  - A name that is not a valid identifier gets only its own refusal, not one from each rule that
+    reads it (readings 157 to 159: "a declaration whose identifier names nothing is still a
+    declaration", "a declaration whose cardinality or base type spells nothing is still a
+    declaration", "a binding or a reference resolves by name to every declaration whose identifier
+    names something"). Only refusal lists change. Corpus: none.
+  - An item's `SCORE` or `MAXSCORE`, or a `PASSED` anywhere, declared `record` is refused
+    `attribute-type`, check `reserved-outcome-type` (reading 153, and the information model's §4.5,
+    "SCORE needs to be a float"). A test's `record` `SCORE` or `MAXSCORE` stays accepted, as the
+    operator ruled. Corpus: none.
+  - Built-ins named by kind (reading 111, "a processing element's `identifier` names a variable of
+    the kind the element reads or sets"): a `qti-correct` of `numAttempts` or `duration`, a
+    `qti-lookup-outcome-value` that sets `completionStatus`, a template `qti-set-default-value` of
+    `completionStatus` or `numAttempts`, a template `qti-set-correct-response` of `numAttempts`, and
+    a test's `qti-correct` of an item's `numAttempts` are accepted and run. A `qti-correct` or
+    `qti-default` of a built-in reads what template processing set, else NULL, and never the
+    built-in's own value. A mapping of a built-in stays refused. Corpus: none.
+  - A `qti-graphic-order-interaction` binds an `ordered` `identifier` response (§5.61), and one
+    bound otherwise is refused `binding`. A `qti-order-interaction`'s binding is not refused, since
+    only the non-normative §2.4.1.2 states it. The operator ruled both, and reading 172 now says the
+    same ("an order interaction may be bound to a response variable of any base type and
+    cardinality"). Corpus: none.
+- The operator's disputed rulings, which plate keeps:
+  - `%d`: a printed variable's `format` with `%d`, or with two or more conversions, is accepted.
+    `%d` prints as `%i`, the value fills the first conversion, and each later one prints as written.
+    A conversion that ends in no listed code, such as `%q`, `%u` or a trailing `%`, stays refused.
+  - `qti-custom-interaction`: in a package whose manifest says 3.0.0, an item that holds one is
+    refused `unknown-element`, check `custom-interaction`. In a 3.0.1 package, or an item you `open`
+    alone, whose version plate cannot know, it stays accepted with its notice.
+  - `data-ssml`: a value that is not Data-SSML JSON, or that names an unknown property, type or
+    value, is refused `attribute-type`, check `data-ssml`, its `problem` naming which. It is judged
+    in every document: an item, a stimulus, and a test's or a section's rubric block. A valid value
+    keeps its notice.
+  - `qti-card`: an empty `qti-card` or `qti-card-entry` is accepted. It was refused `child-count`
+    (reading 31, "a card holds an HTML content node, file hrefs, both, or nothing").
+  - `qti-gap-match-interaction`: one with two or more gaps bound to a `single`, an `ordered` or a
+    `record` response is refused `binding`, check `gap-match-single`, its `cardinality` fact naming
+    which (reading 169, "a gap match interaction with two or more gaps binds a response of multiple
+    cardinality"). A gap match of one gap is held to no cardinality.
+  - The shared readings now agree with seven of the operator's eight disputed rulings: `%d` (P1),
+    `qti-custom-interaction` (P2), `data-ssml` (P3), `qti-card` (P5), usage-data values (P6),
+    `qti-gap-match-interaction` (P7) and a test's `SCORE` and `MAXSCORE` of any base type (P8). They
+    agree with P4, on includes, in part: reading 115 admits an external include, and reading 85
+    still refuses `xpointer` and `parse="text"`. plate keeps all eight. Nothing changes for P4, P6
+    or P8.
+- Later readings, each moving no corpus document:
+  - A `qti-gap`'s identifier joins the choices' one pool (reading 104 as amended), so a gap that
+    shares an identifier with a gap text or an inline choice is refused `duplicate-identifier`, and
+    a gap named as a variable with check `choice-variable`. Corpus: none.
+  - A test may declare `numAttempts` or `completionStatus`, and in a test only `duration` is
+    reserved (reading 168, "a test may declare a variable named `numAttempts` or `completionStatus`;
+    in a test only `duration` is reserved"). The declaration takes the place of plate's test-level
+    built-in of that name, so the test's processing reads the declared variable, and a refusal that
+    names it says the test declares it. A test's `duration`, and an item's three, stay refused
+    `attribute-type`, check `reserved-identifier`. Corpus: none.
+  - A catalog holds one card per support, `duplicate-identifier` with check `card-support`, and a
+    card at most one default entry, `child-count` with check `card-default`. A `data-catalog-idref`
+    names a `qti-catalog`, `attribute-type` with check `catalog-reference` (R9-a, "the catalog
+    sentences of the information model hold as written"). Corpus: none.
+  - A card's or card entry's `qti-file-href`, and a `qti-resource-icon`, name files the package
+    holds, or they are refused `package-file-missing`, check `reference`, the refusal naming the
+    `element` (R9-b, "card files and resource icons are file references"). Corpus: none.
+  - An `xml:lang` inside a catalog asks for no LOM listing, so `document-lang` refuses less (R9-c,
+    "R26 counts the metadata binding's elements, and catalog content is not among them"). Corpus:
+    none.
+  - A PCI names its module by `module`, by `qti-interaction-modules` or by both, or it is refused
+    `missing-attribute`, check `pci-module-source` (R10-a, "a PCI names its module by `module`, by
+    `qti-interaction-modules`, or by both"). Corpus: none.
+  - Under an item ref that names an LTI link, a variable mapping's source is accepted unchecked, a
+    recorded limit, and so is a name read through the ref, whose processing is marked. A template
+    default under it stays refused `undeclared-variable` (reading 110 as amended; reading 106, "a
+    prefixed reference reaches every built-in variable its item ref's item holds"). The mapping's
+    target is judged by reading 97 ("a variable mapping's target names no other variable its item
+    ref's item holds"): a second mapping of the ref with the same target, and a target that names
+    `completionStatus`, `numAttempts` or `duration` other than the mapping's own source, are refused
+    `duplicate-identifier`. A target of `QTI_CONTEXT` stays accepted there, since a link holds no
+    item variables. Corpus: none.
+  - A section ref whose `href` leads outside the package is refused `package-path-outside`, check
+    `remote-section`, in the test and in each section document it places. It is a stated limit, not
+    a rule of QTI: plate never fetches a section (reading 170, "a section ref whose href is external
+    is refused under the stated limit 'Remote section ref'"). Corpus: none.
+  - A tab, line feed or carriage return in a `data-ssml` value's `break.time` or `prosody.rate` is
+    refused `attribute-type`, check `data-ssml` (R7-a, a `data-ssml` value is Data-SSML JSON).
+    Corpus: none.
+  - A test part's, section's, section ref's or item ref's `identifier`, and a `cp:dependency`'s
+    `identifierref`, that is no NCName names nothing, so its `attribute-type` is its only refusal
+    (reading 152 as amended, decision 457 (2)). Two such identifiers, in one document or across a
+    test's reach, and two test declarations of one such identifier, are no longer refused
+    `duplicate-identifier`, and such a dependency is no longer refused `dependency-unresolved`. No
+    branch rule's target resolves to such an identifier, so its rule is refused `branch-target`
+    `unknown`, and so is a rule whose owner writes one, as a rule whose owner writes no identifier
+    is (reading 147). A `dependency`'s `identifierref` names a resource as `xs:IDREF` and `xs:ID`
+    read them, collapsed, so `identifierref=" a "` names the resource `a` (decision 457 (3)).
+    Corpus: none.
+- Repairs after the phase's review, each moving no corpus document:
+  - A session counts a numbered name such as `a.2.SCORE` as `openPackage` does, only through an
+    item ref that a selection with replacement can repeat (reading 88). With item refs `a` and `a.2`
+    and no such selection, outcome processing and a template default read item ref `a.2`'s `SCORE`.
+    Through a section document's `a.2`, the processing is marked. `Test` and `TestScope` gain an
+    optional `repeatable`, the identifiers of those item refs, which `buildTest` always gives.
+    Corpus: none.
+  - In a test that holds a section ref, a dotted name counts as a read of the test's own structure
+    only where, after the test's own part, section or item ref, its variable name holds no dot; an
+    occurrence number may come first after an item ref that a selection with replacement can
+    repeat. So `a.b.SCORE` and `a.SCORE.SCORE` through the test's own item ref `a`, and
+    `S.x.SCORE` through its own section or part `S`, mark the outcome processing, or leave out the
+    template default, that reads them, as `I1.SCORE` through a section document's `I1` does. Before,
+    such processing ran, and `advance` or `startTest` failed with `UnknownIdentifierError` when the
+    name's one resolving reading was a section document's item ref, such as `a.b`. The test
+    document cannot tell that case from `a`'s item declaring `b.SCORE`, so such a read is marked in
+    both. `openPackage`, which reads the items, also marks a name whose one counting reading reads
+    through a section document's item ref though a reading through the test's own one counts in
+    the test document alone: `a.2.SCORE` beside an own `a` that a selection with replacement can
+    repeat, whose item declares no `SCORE`, and a section document's `a.2`; and `x.y.SCORE` beside
+    an own `x.y` whose item declares no `SCORE`, and a section document's `x` whose item declares
+    `y.SCORE`. Before, such processing ran, and `advance` or `startTest` failed with
+    `UnknownIdentifierError`. A test with no section ref is unchanged. Corpus: none.
+  - In a test's processing, and in a section document's under a test that reaches it, a
+    `qti-map-response` or `qti-map-response-point` of the test's `duration`, or of the `numAttempts`
+    plate keeps for a test that declares none, is refused `template-requirements`, as an item's of
+    its own built-in is (reading 166, "an unprefixed `qti-map-response` or `qti-map-response-point`
+    that names a built-in response variable, an item's `numAttempts` or `duration` or a test's
+    `duration`, is refused under 'Mapped response' too"). A test that declares `numAttempts` keeps
+    the `undeclared-variable` refusal (reading 168). The sentence for a built-in in a test's or a
+    section's processing asks for a response an item declares, read through its item ref. Corpus:
+    none.
+  - A stimulus is judged as an item's body is for its choices, its PCIs, its table headers and its
+    quotation marks. Two choices that share an identifier are refused `duplicate-identifier`
+    (reading 104, "a choice's identifier is used by no other choice of any class in its document"),
+    a PCI that names no module `missing-attribute` with check `pci-module-source` (R10-a), a
+    `headers` token that names no `th` of its table `attribute-type` with check `headers`
+    (reading 126), and a quotation mark beside or inside a `q` `text-not-allowed` with check
+    `quotation` (reading 127). A stimulus declares no variables, so no choice of one is refused for
+    naming a variable. Corpus: none.
+  - A `qti-rubric-block` of a test or a section, and a `qti-test-feedback`, are judged for `headers`
+    (reading 126) and `q` (reading 127) as an item's body is, in a test and in a section document.
+    Corpus: none.
+  - What the manifest's version decides is judged only on the elements the structural walk checks
+    (reading 57, "in lax wildcard content, every prose rule judges the QTI elements the structural
+    walk checks there"). In a 3.0.0 package, a `qti-custom-interaction` inside lax wildcard content,
+    which the XSD declares only within its parents, is not refused. In a 3.0.1 package, a
+    `mastery-value` inside a QTI root nested in lax content, which reading 6 keeps foreign, is not
+    refused `mastery-range`. Corpus: none.
+  - An element the walk passes over laxly has its `xml:id` and `xml:lang` judged, as XML Schema
+    assesses it against the ur-type. Its `xml:lang` is held to reading 129's language tags. Its
+    `xml:id` is held to `xs:ID`, and below an element QTI's tables govern it is one of the
+    document's IDs: a repeat is refused `duplicate-identifier` (reading 101), an IDREF that names it
+    resolves, and a `data-catalog-idref` that names it is refused `attribute-type` with check
+    `catalog-reference`, since it names no `qti-catalog`, and not with check `idref-target`. An
+    `xml:id` that a wildcard admits and that is no NCName is refused `attribute-type`, as a declared
+    ID of that value is (reading 156). What the walk never visits stays unjudged, a README limit.
+    Corpus: none.
+  - A section document the manifest lists is judged whether or not a test reaches it: its item
+    refs, its section refs (reading 170), its variable mappings and its template defaults
+    (readings 97 and 110) are refused as a reached one's are, after the reached ones' refusals, in
+    the manifest's order. Its expressions are judged only under a test that reaches it. Corpus:
+    none.
+  - The `path` of a file reference's `package-file-missing` and of an `item-ref-unresolved`, and the
+    `chain` of an `inclusion-cycle`, are at most 1,024 characters: a longer one keeps its first 512
+    and its last 511 characters around one `…` (U+2026). This is plate's own bound, not a rule of
+    QTI, so that a hostile package cannot make its refusals too long to serialise. No corpus
+    refusal carries a fact that long, so no wording moves.
+  - `assembly-limit`: a package whose tests together place section documents more than 2,048
+    times, or place more than 4 MiB (4,194,304 bytes) of them, is refused with one refusal, and none
+    of its tests is judged. A section document placed in two test parts, or in two tests, counts
+    twice, and its bytes count each time. The refusal's detail names the `bound` passed,
+    `placements` or `bytes`, its `limit` and the count `reached`. Whether a package is refused never
+    depends on the order of its manifest's resources, but which bound the refusal names, and its
+    `reached`, may. This is plate's own stated limit, not a rule of QTI, as the element-depth limit
+    of 256 is. A section document is judged once for each placement (readings 5 and 145), so a
+    package's tests can make that work far larger than the package. Issue #64 tracks the redesign
+    that would lift the limit. Within it, every verdict is as before. Corpus: none, since no corpus
+    package holds a section ref.
+  - Within the assembly limit, these hostile shapes no longer take time that grows faster than their
+    size: many sibling `q` elements, many default hotspots before trailing text, many resources that
+    name one large document, many references under a deep `xml:base`, a section document that many
+    parts place, many refusals across a test's placements, a long inclusion chain, branch rules
+    whose target many section documents write, many names read through the section documents that
+    one section document places when many parts place it (reading 86), and many branch rules at the
+    end of a long chain of section documents, each to a target that a document placed twice writes.
+    On each, the time now grows about as the input does, and the last two no longer hold memory that
+    grows faster than their size. No verdict, refusal or sentence moves.
 
 ### Record answers and `qti-field-value` (M3)
 
@@ -410,14 +851,17 @@ and each of its entry points is unstable until M3.
   as pantry does (P12, reading 23).
 - `openPackage` refuses each of the following, as pantry does.
   - With `undeclared-variable`: a dotted name that no reading resolves, the target of a
-    `qti-set-outcome-value` or `qti-lookup-outcome-value` among them (reading 48, `prefixed-ref`),
+    `qti-set-outcome-value` or `qti-lookup-outcome-value` among them (reading 48, "a dotted
+    reference is accepted when exactly one reading names a real item ref, test part or section and
+    its variable", `prefixed-ref`),
     a dotted name that reads the built-in `duration` of an item that is not time dependent
     (`item-duration`), a `qti-variable-mapping` whose `source-identifier` names no outcome its item
     declares (`variable-mapping-source`), and a `qti-template-default` that names no template
     variable of its item (`template-default-target`).
   - With `ambiguous-reference`: the dotted target of a `qti-set-outcome-value` or
     `qti-lookup-outcome-value` that two readings resolve, as a dotted read already was (reading 48,
-    `prefixed-ref`).
+    "a dotted reference is accepted when exactly one reading names a real item ref, test part or
+    section and its variable", `prefixed-ref`).
   - With `duplicate-identifier`: a second `qti-variable-mapping` on one item ref with the same
     `target-identifier` (`variable-mapping-target`).
   - With `expression-type`: a dotted read whose item variable's type breaks P20 to P24 where it
@@ -473,9 +917,9 @@ and each of its entry points is unstable until M3.
   or `0` there with `value-type` (reading 34). The QTI XSD types both elements as strings, so it
   does not decide, and the information model permits `true` and `false`. No verdict changes.
 - A value that two or more entries of a `qti-mapping` match maps by the first entry listed, as a
-  point that two areas of a `qti-area-mapping` hold maps by the first area listed. pantry reads it
-  the same way, as its reading 150, which `docs/spec-readings.md` does not number yet.
-  plate already mapped so, and no verdict changes.
+  point that two areas of a `qti-area-mapping` hold maps by the first area listed. The shared
+  readings now say the same, as reading 165 ("a response that matches several entries takes the
+  first one listed"). plate already mapped so, and no verdict changes.
 - The refusal of a `qti-map-response`, `qti-map-response-point` or `qti-correct` that names a
   built-in, such as `numAttempts`, or a dotted name that reads anything but a response, says why
   and what to write instead: a built-in has no declaration, so no mapping or correct response, and

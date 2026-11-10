@@ -1024,6 +1024,7 @@ describe("redactItem on printed variables", () => {
         ),
       ),
       tables,
+      Option.none(),
     );
     const accepted = Option.getOrThrow(acceptedItem(verdict));
     const withheld = redact(accepted, {
@@ -1687,6 +1688,7 @@ describe("redactItem on template blocks, inlines and choices", () => {
                 ),
               ),
               tables,
+              Option.none(),
             ),
           ),
         );
@@ -1870,7 +1872,9 @@ describe("redactItem on template blocks, inlines and choices", () => {
 
   for (const promptLast of [true, false]) {
     it(`[I-5] names no notice from inside a template block the page does not see, whatever the order check lists it in, and the rest in document order, with the Choice's prompt ${promptLast ? "after" : "before"} its choices`, () => {
-      const accepted = Option.getOrThrow(acceptedItem(check(linkedItem(promptLast), tables)));
+      const accepted = Option.getOrThrow(
+        acceptedItem(check(linkedItem(promptLast), tables, Option.none())),
+      );
       const choiceLink = `${bodyPath}/qti-choice-interaction/qti-simple-choice[1]/a`;
       const promptLink = `${bodyPath}/qti-choice-interaction/qti-prompt/a`;
       const mailto = "url-scheme:mailto";
@@ -1930,31 +1934,42 @@ describe("redactItem on template blocks, inlines and choices", () => {
 });
 
 /**
- * Build a template block of `T`, shown when `T` holds its identifier, whose content holds a Text
- * Entry bound to the response given.
+ * Build a paragraph holding a template inline of `T`, shown when `T` holds its identifier, whose
+ * `span` holds a Text Entry bound to the response given. A template block may hold no interaction
+ * (reading 143), so the interaction a template shows or hides sits in a template inline.
  *
- * @param identifier The block's identifier.
+ * @param identifier The inline's identifier.
  * @param response The response its Text Entry binds.
- * @returns The block's source element.
+ * @returns The paragraph's source element.
  */
-const answeringBlock = (identifier: string, response: string): SourceElement =>
+const answeringInline = (identifier: string, response: string): SourceElement =>
   el(
-    "qti-template-block",
-    [attr("identifier", identifier), attr("show-hide", "show"), attr("template-identifier", "T")],
+    "p",
+    [],
     [
       el(
-        "qti-content-body",
-        [],
-        [el("p", [], [el("qti-text-entry-interaction", [attr("response-identifier", response)])])],
+        "qti-template-inline",
+        [
+          attr("identifier", identifier),
+          attr("show-hide", "show"),
+          attr("template-identifier", "T"),
+        ],
+        [
+          el(
+            "span",
+            [],
+            [el("qti-text-entry-interaction", [attr("response-identifier", response)])],
+          ),
+        ],
       ),
     ],
   );
 
 /**
- * An item whose body holds two template blocks of `T`: `A`, whose Text Entry binds the string
+ * An item whose body holds two template inlines of `T`: `A`, whose Text Entry binds the string
  * response `SHOWN_ANSWER`, and `B`, whose Text Entry binds the float response `HIDDEN_ANSWER`.
  */
-const blockAnswers: SourceDocument = doc(
+const inlineAnswers: SourceDocument = doc(
   "item.xml",
   el(
     "qti-assessment-item",
@@ -1978,7 +1993,7 @@ const blockAnswers: SourceDocument = doc(
       el(
         "qti-item-body",
         [],
-        [answeringBlock("A", "SHOWN_ANSWER"), answeringBlock("B", "HIDDEN_ANSWER")],
+        [answeringInline("A", "SHOWN_ANSWER"), answeringInline("B", "HIDDEN_ANSWER")],
       ),
     ],
   ),
@@ -2036,8 +2051,8 @@ const respondedTo = (redaction: Redacted): readonly string[] =>
   redaction.responses.map((binding) => binding.identifier);
 
 describe("redactItem on responses only hidden content binds", () => {
-  it("[I-5] lists no response only a template block the record hides binds, in the redacted item or its JSON, and names that response as hidden-only", () => {
-    const accepted = Option.getOrThrow(acceptedItem(check(blockAnswers, tables)));
+  it("[I-5] lists no response only a template inline the record hides binds, in the redacted item or its JSON, and names that response as hidden-only", () => {
+    const accepted = Option.getOrThrow(acceptedItem(check(inlineAnswers, tables, Option.none())));
     const showingA = holding({ T: identifierValue("A") });
     const shown = redact(accepted, showingA);
 
@@ -3341,7 +3356,9 @@ describe("redactItem on param-variable parameters", () => {
     "[I-5] gives a param whose value names a param-variable template variable that variable's value from the record, which render writes: an integer by %i, a float by %G, a point x then y, a pair and a directed pair as their identifiers, a boolean as true or false (R§4.4)",
     () =>
       Effect.gen(function* rendersParameterValues() {
-        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(parameterDocument, tables, Option.none())),
+        );
         const expanded = redact(accepted, parameterValues);
         const configuration = yield* configure({});
         const rendered = yield* Effect.fromResult(render(expanded, configuration, { instance }));
@@ -3362,7 +3379,7 @@ describe("redactItem on param-variable parameters", () => {
     () =>
       Effect.gen(function* passesContainersAndNull() {
         const accepted = yield* Effect.fromOption(
-          acceptedItem(check(containerParameterDocument, tables)),
+          acceptedItem(check(containerParameterDocument, tables, Option.none())),
         );
         const expanded = redact(accepted, containerParameterValues);
         const configuration = yield* configure({});
@@ -3388,7 +3405,9 @@ describe("redactItem on param-variable parameters", () => {
     "[I-5] keeps the written value of a param that names a template variable not declared param-variable, or names none",
     () =>
       Effect.gen(function* keepsWrittenValues() {
-        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(parameterDocument, tables, Option.none())),
+        );
         const kept = parametersOf(objectChildren(redact(accepted, parameterValues).body));
 
         assert.deepStrictEqual(kept.slice(-2), [
@@ -3402,7 +3421,9 @@ describe("redactItem on param-variable parameters", () => {
     "[I-5] with no record, withholds each param-variable param of an item whose template processing runs behind its notice, param at its path, named among the notices in document order (H3)",
     () =>
       Effect.gen(function* withholdsParameters() {
-        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(parameterDocument, tables, Option.none())),
+        );
         const withheld = redact(accepted);
         const [count, ratio, spot, link, arrow, flag, ...rest] = objectChildren(accepted.item.body);
 
@@ -3421,7 +3442,9 @@ describe("redactItem on param-variable parameters", () => {
     "[I-5] withholds a param-variable param whose template variable the record holds no value of, as with no record (0.13 decision 15)",
     () =>
       Effect.gen(function* withholdsUnheldParameter() {
-        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(parameterDocument, tables, Option.none())),
+        );
         const { N: _held, ...unheld } = parameterValues.templates;
         const gap = redact(accepted, holding(unheld));
         const [count] = objectChildren(accepted.item.body);
@@ -3439,7 +3462,9 @@ describe("redactItem on param-variable parameters", () => {
     "[I-5] with no record, gives an item without template processing's param-variable params their declared defaults, the values its first record holds (H3)",
     () =>
       Effect.gen(function* givesDeclaredDefaults() {
-        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(parameterDocument, tables, Option.none())),
+        );
         const started = redactItem({ ...accepted.item, templateProcessing: Option.none() });
 
         assert.deepStrictEqual(parametersOf(objectChildren(started.body)), [
@@ -3560,7 +3585,9 @@ describe("redactItem on a printed variable whose text passes 1,000,000 character
     () =>
       Effect.gen(function* recordsOversizedText() {
         for (const [document, value] of oversizedPrinting) {
-          const accepted = yield* Effect.fromOption(acceptedItem(check(document, tables)));
+          const accepted = yield* Effect.fromOption(
+            acceptedItem(check(document, tables, Option.none())),
+          );
           const emptied = redactItem(accepted.item, holding({ S: value }));
 
           assert.deepStrictEqual(paragraphOf(emptied), [text("Value: ")]);
@@ -3578,7 +3605,9 @@ describe("redactItem on a printed variable whose text passes 1,000,000 character
     () =>
       Effect.gen(function* recordsWidenedConversion() {
         const document = repeatedDocument("integer", "5", 1, [attr("format", "%1000001i")]);
-        const accepted = yield* Effect.fromOption(acceptedItem(check(document, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(document, tables, Option.none())),
+        );
         const emptied = redactItem(accepted.item, holding({ S: orderedIntegers([5n]) }));
 
         assert.deepStrictEqual(paragraphOf(emptied), [text("Value: ")]);
@@ -3594,7 +3623,9 @@ describe("redactItem on a printed variable whose text passes 1,000,000 character
     () =>
       Effect.gen(function* printsWithinBound() {
         const document = repeatedDocument("integer", "1", 3, [attr("format", "%2i")]);
-        const accepted = yield* Effect.fromOption(acceptedItem(check(document, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(document, tables, Option.none())),
+        );
         const shown = redactItem(accepted.item, holding({ S: orderedIntegers([1n, 1n, 1n]) }));
 
         assert.deepStrictEqual(paragraphOf(shown), texts("Value: ", " 1; 1; 1"));
@@ -3628,7 +3659,7 @@ const shownParts = (
  * @returns The item.
  */
 const acceptedFrom = (document: SourceDocument): Item =>
-  Option.getOrElse(acceptedItem(check(document, tables)), () =>
+  Option.getOrElse(acceptedItem(check(document, tables, Option.none())), () =>
     assert.fail(`${document.location} is not accepted.`),
   ).item;
 
@@ -3670,7 +3701,7 @@ const counted = (value: Value): CountedValue => {
 
 describe("redactStructure", () => {
   it("[I-5] decides what redactItem decides over the templated fixtures: the same interactions and choices, responses, notices and hidden-only responses", () => {
-    const answers = acceptedFrom(blockAnswers);
+    const answers = acceptedFrom(inlineAnswers);
     const parameters = acceptedFrom(parameterDocument);
     const containers = acceptedFrom(containerParameterDocument);
     const cases: readonly (readonly [string, Item, RedactRecord | undefined])[] = [
@@ -3687,9 +3718,9 @@ describe("redactStructure", () => {
       ),
       ["template visibility with no record", visibility, undefined],
       ["template visibility with no value of VISIBLE", visibility, holding({})],
-      ["answering blocks, T holding A", answers, holding({ T: identifierValue("A") })],
-      ["answering blocks, T holding B", answers, holding({ T: identifierValue("B") })],
-      ["answering blocks with no record", answers, undefined],
+      ["answering inlines, T holding A", answers, holding({ T: identifierValue("A") })],
+      ["answering inlines, T holding B", answers, holding({ T: identifierValue("B") })],
+      ["answering inlines with no record", answers, undefined],
       ["parameters the record expands", parameters, parameterValues],
       ["parameters the record withholds", parameters, holding({})],
       ["container parameters", containers, containerParameterValues],

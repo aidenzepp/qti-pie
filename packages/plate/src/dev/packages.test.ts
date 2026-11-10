@@ -309,8 +309,8 @@ const outsideRoot = path.join(scratch, "outside");
 const outsideBytes = "OUTSIDE-SECRET-BYTES";
 
 /**
- * The bytes `evil` holds in its file named `foo\secret.png`, the file `openPackage` judged as
- * `foo/secret.png`.
+ * The bytes `evil` holds in its file named `foo\secret.png`, a key `openPackage` refuses (reading
+ * 138), so no route answers with them either.
  */
 const heldBytes = "HELD-BYTES";
 
@@ -595,7 +595,7 @@ describe("dev/packages.ts", () => {
     );
 
     it.effect(
-      "a listed file is read under the key openPackage judged: foo\\secret.png beside a link foo to a folder outside answers the held bytes, never the outside file",
+      "align-54 hrefs and keys E36: a package holding the key foo\\secret.png beside a link foo to a folder outside is refused package-path-outside, check entry-key, and its files route answers neither the held bytes nor the outside file",
       () =>
         Effect.gen(function* escape() {
           const entry = Option.getOrThrow(yield* inCrafted(crafted.packageOf("evil")));
@@ -604,13 +604,21 @@ describe("dev/packages.ts", () => {
             readFile(path.join(craftedRoot, "evil.zip.d", "foo", "secret.png"), "utf-8"),
           );
 
-          assert.include(accepting, entry.verdict.verdict);
-          assert.isTrue(
-            "accepted" in entry.verdict && entry.verdict.accepted.files.has("foo/secret.png"),
+          assert.deepStrictEqual(
+            entry.verdict.verdict === "refused"
+              ? entry.verdict.refusals.map((refusal) => [refusal.rule, refusal.detail])
+              : [],
+            [
+              [
+                "package-path-outside",
+                { check: "entry-key", path: String.raw`foo\secret.png`, reading: "138" },
+              ],
+            ],
           );
           assert.strictEqual(outside, outsideBytes);
-          assert.strictEqual(answer.response.status, 200);
-          assert.strictEqual(answer.html, heldBytes);
+          assert.strictEqual(answer.response.status, 404);
+          assert.notInclude(answer.html, heldBytes);
+          assert.notInclude(answer.html, outsideBytes);
         }),
     );
 

@@ -1007,7 +1007,7 @@ const packageFiles = Effect.fnUntraced(function* packageFiles(directory: string)
 
 describe("feedbackTest.zip", { tags: ["corpus"] }, () => {
   it.effect(
-    "[I-10] [I-7] opens every item of the package, its MathML replaced, with no feedback element marked or noticed, and refuses the package only for the item refs its test names and its zip lacks",
+    "[I-10] [I-7] opens every item of the package, its MathML replaced, with no feedback element marked or noticed, and refuses the package only for the item refs its test names and its zip lacks, each item-ref-unresolved and package-file-missing",
     () =>
       Effect.gen(function* feedbackTest() {
         const files = yield* packageFiles(feedbackPackage);
@@ -1034,7 +1034,8 @@ describe("feedbackTest.zip", { tags: ["corpus"] }, () => {
           verdict.verdict === "refused"
             ? [...new Set(verdict.refusals.map((refusal) => refusal.rule))]
             : [],
-          ["item-ref-unresolved"],
+          // An item ref that names no file is both (reading 103).
+          ["item-ref-unresolved", "package-file-missing"],
         );
       }),
   );

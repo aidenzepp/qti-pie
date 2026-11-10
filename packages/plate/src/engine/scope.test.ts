@@ -191,14 +191,16 @@ const item3: ScopeItem = {
 
 /**
  * A test with one part `P1` holding the section `S1`, which holds `ITEM1` and a nested section
- * `S2` holding `ITEM2`; a section `S3` holds `ITEM3`. The test declares `ITEM1.SCORE` whole and ran
- * for 90.5 seconds.
+ * `S2` holding `ITEM2`; a section `S3` holds `ITEM3`. A selection with replacement can repeat
+ * `ITEM2` and `ITEM3`, so a numbered name reads through them. The test declares `ITEM1.SCORE`
+ * whole and ran for 90.5 seconds.
  */
 const scope: TestScope = {
   declared: new Set(["ITEM1.SCORE", "TOTAL"]),
   duration: Option.some(90.5),
   items: [item1, item2, item3],
   parts: new Map([["P1", ["ITEM1", "ITEM2", "ITEM3"]]]),
+  repeatable: new Set(["ITEM2", "ITEM3"]),
   sections: new Map([
     ["S1", ["ITEM1", "ITEM2"]],
     ["S2", ["ITEM2"]],
@@ -435,6 +437,16 @@ describe("itemVariable", () => {
   });
 });
 
+/**
+ * Give the item ref a prefixed name reads through and its reading, or the failure.
+ *
+ * @param within The test scope.
+ * @param name The name.
+ * @returns The item ref and the reading.
+ */
+const readThrough = (within: TestScope, name: string) =>
+  Result.map(prefixedVariable(within, name), (each) => [each.item.ref, each.reading] as const);
+
 describe("prefixedVariable", () => {
   it("[T-9] test scope lookup: ITEMREF.VAR and ITEMREF.1.VAR read the item's variable through its item ref", () => {
     assert.deepStrictEqual(prefixed("ITEM2.NOTA"), {
@@ -525,6 +537,47 @@ describe("prefixedVariable", () => {
       ["record", "record", "record", "record", "record"],
     );
   });
+
+  it("align-54 r11 numbered reading counted once P1-1: a.2.SCORE reads item ref a.2's SCORE when no selection with replacement can repeat a, and nothing when one can (two readings) or for a.1.SCORE (no reading)", () => {
+    const scored = (ref: string, value: number): ScopeItem => ({
+      ...item1,
+      record: { ...item1.record, outcomes: { ...item1.record.outcomes, SCORE: floatValue(value) } },
+      ref,
+    });
+    const once: TestScope = {
+      declared: new Set(["TOTAL"]),
+      duration: Option.none(),
+      items: [scored("a", 1), scored("a.2", 7)],
+      parts: new Map([["P1", ["a", "a.2"]]]),
+      sections: new Map(),
+    };
+    const repeating: TestScope = { ...once, repeatable: new Set(["a"]) };
+
+    assert.deepStrictEqual(
+      readThrough(once, "a.2.SCORE"),
+      Result.succeed(["a.2", { kind: "held", value: floatValue(7) }] as const),
+    );
+    assert.deepStrictEqual(
+      readThrough(once, "a.SCORE"),
+      Result.succeed(["a", { kind: "held", value: floatValue(1) }] as const),
+    );
+    // Through a repeatable a, a.2.SCORE has a numbered and a split reading, which a checked
+    // package refuses as ambiguous-reference, and a.1.SCORE reads a's first occurrence.
+    assert.deepStrictEqual(
+      [
+        failureOf(readThrough(repeating, "a.2.SCORE")),
+        failureOf(readThrough(once, "a.1.SCORE")),
+      ].map((failure) => [failure.holder, failure.identifier]),
+      [
+        ["record", "a.2.SCORE"],
+        ["record", "a.1.SCORE"],
+      ],
+    );
+    assert.deepStrictEqual(
+      readThrough(repeating, "a.1.SCORE"),
+      Result.succeed(["a", { kind: "held", value: floatValue(1) }] as const),
+    );
+  });
 });
 
 describe("weightOf", () => {
@@ -585,13 +638,15 @@ const unansweredItem: ScopeItem = {
 };
 
 /**
- * A test of one part `P1` holding `ITEM4` and `ITEM5`, which declares `TOTAL`.
+ * A test of one part `P1` holding `ITEM4` and `ITEM5`, which declares `TOTAL`. A selection with
+ * replacement can repeat `ITEM4`.
  */
 const recordScope: TestScope = {
   declared: new Set(["TOTAL"]),
   duration: Option.none(),
   items: [recordItem, unansweredItem],
   parts: new Map([["P1", ["ITEM4", "ITEM5"]]]),
+  repeatable: new Set(["ITEM4"]),
   sections: new Map(),
 };
 

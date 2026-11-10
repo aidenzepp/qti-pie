@@ -48,12 +48,12 @@ const refusalsOf = (outcome: string, declared: string) =>
 
 /**
  * The three feedback elements, in document order: the attribute's path and the element's local
- * name, with the line of the information model that types its `outcome-identifier`.
+ * name.
  */
 const elements = [
-  ["qti-item-body/p/qti-feedback-inline", "qti-feedback-inline", "info.txt:26184"],
-  ["qti-item-body/qti-feedback-block", "qti-feedback-block", "info.txt:25704"],
-  ["qti-modal-feedback", "qti-modal-feedback", "info.txt:35049"],
+  ["qti-item-body/p/qti-feedback-inline", "qti-feedback-inline"],
+  ["qti-item-body/qti-feedback-block", "qti-feedback-block"],
+  ["qti-modal-feedback", "qti-modal-feedback"],
 ] as const;
 
 /**
@@ -98,6 +98,7 @@ describe("a feedback element's outcome-identifier (reading 77; pantry's Feedback
               element,
               expected: "outcome",
               identifier: "NOPE",
+              reading: "77",
             },
             path: `qti-assessment-item/${path}/@outcome-identifier`,
             rule: "undeclared-variable" as const,
@@ -108,7 +109,7 @@ describe("a feedback element's outcome-identifier (reading 77; pantry's Feedback
   );
 
   it.effect(
-    "[I-10] refuses exactly the variables that are not identifier outcomes of single or multiple cardinality, over every kind, base type and cardinality (a property over the whole grid)",
+    "[I-10] refuses exactly the variables that are not identifier outcomes of single or multiple cardinality, over every kind, base type and cardinality, a non-outcome as undeclared-variable and an outcome of another type as expression-type (a property over the whole grid)",
     () =>
       Effect.gen(function* grid() {
         const kinds = [
@@ -133,26 +134,36 @@ describe("a feedback element's outcome-identifier (reading 77; pantry's Feedback
                 refused.map(({ detail, path, rule }) => ({ detail, path, rule })),
                 allowed
                   ? []
-                  : elements.map(([path, element, line]) => ({
-                      detail: {
-                        attribute: "outcome-identifier",
-                        check: "reference",
-                        element,
-                        expectedBaseType: "identifier",
-                        expectedCardinalities: "single multiple",
-                        expectedKind: "outcome",
-                        identifier: "V",
-                        source: line,
-                      },
+                  : elements.map(([path, element]) => ({
+                      detail: isOutcome
+                        ? {
+                            baseType,
+                            cardinality,
+                            check: "feedback-outcome",
+                            element,
+                            identifier: "V",
+                            reading: "77",
+                          }
+                        : {
+                            attribute: "outcome-identifier",
+                            element,
+                            expected: "outcome",
+                            identifier: "V",
+                            reading: "77",
+                          },
                       path: `qti-assessment-item/${path}/@outcome-identifier`,
-                      rule: "expression-type" as const,
+                      rule: isOutcome
+                        ? ("expression-type" as const)
+                        : ("undeclared-variable" as const),
                     })),
                 case_,
               );
               if (!allowed) {
                 assert.include(
                   refused[0]?.message ?? "",
-                  "names `V`, which is not an outcome of base type `identifier`, single or multiple",
+                  isOutcome
+                    ? "and a feedback element names an outcome of base type `identifier`, single or multiple (reading 77)"
+                    : "and the item declares no outcome `V`",
                   case_,
                 );
               }
