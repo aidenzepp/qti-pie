@@ -21,6 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          # The whole history: the ledger's agreement test reads pantry's verdict file at an older commit.
+          fetch-depth: 0
           lfs: true
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
@@ -29,6 +31,13 @@ jobs:
         with:
           node-version: 26.13.0
           cache: pnpm
+      # xmllint, which PLATE_XMLLINT names for the XSD tests; the runner image has none.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-utils
+      # The public caches, kept between runs; the fetch below keeps what is present and fetches the rest.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/gr8des
+          key: gr8des-${{ runner.os }}-${{ hashFiles('packages/plate/scripts/cloud/fetch-caches.sh', 'packages/plate/src/test/xsd-layout.ts') }}
       - run: pnpm install --frozen-lockfile
       - run: bash packages/plate/scripts/cloud/fetch-caches.sh
       - run: pnpm check
