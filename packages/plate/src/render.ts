@@ -18,10 +18,15 @@ import { Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import { defaultView } from "#plate/content/contract.ts";
 import type { ContentRenderKit } from "#plate/content/contract.ts";
-import { contentNodes, renderContent, renderItemContent } from "#plate/content/modules.ts";
+import {
+  attachedBy,
+  contentNodes,
+  renderContent,
+  renderItemContent,
+} from "#plate/content/modules.ts";
 import type { ContentPayload } from "#plate/content/modules.ts";
 import { emitBody, emitNodes, writesMalformedHeading } from "#plate/emit/body.ts";
-import type { AttachCatalog, RenderInteraction } from "#plate/emit/body.ts";
+import type { ReferencingElement, RenderInteraction } from "#plate/emit/body.ts";
 import type { Node } from "#plate/emit/node.ts";
 import { emitItem, emitStatus, itemPart } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
@@ -50,6 +55,7 @@ import type {
   ValidationMessage,
   View,
 } from "#plate/payload.ts";
+import type { HostFacts } from "#plate/pci/host.ts";
 import { drawInstance } from "#plate/seed.ts";
 import { commentModule } from "#plate/session/comment.ts";
 import { noSupports } from "#plate/supports.ts";
@@ -79,12 +85,17 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * redaction took. `comment` is the comment the session holds for the item, which a session item's
  * view (`ItemView.comment`) gives: the comment module (`#plate/session/comment.ts`) writes the
  * comment part from it, after the body and before the live region, when the configuration's
- * `allowComment` is set.
+ * `allowComment` is set. `host` is what the host knows and plate does not (`HostFacts` in
+ * `#plate/pci/host.ts`), the empty record when absent: each interaction module reads its own
+ * member through its `redact` kit and writes what its controller needs onto its own Root, and the
+ * shipped kinds read none, so for an item of those alone the HTML is the same with or without it.
+ * It is a render input, never item data: nothing of it reaches the redacted item or its JSON.
  */
 export interface Options {
   readonly assetBase?: string;
   readonly comment?: string;
   readonly disabled?: boolean;
+  readonly host?: HostFacts;
   readonly instance?: string;
   readonly messages?: readonly ValidationMessage[];
   readonly mode?: RenderMode;
@@ -364,11 +375,13 @@ const mapOf = <A>(record: Readonly<Record<string, A>> = {}): ReadonlyMap<string,
  * @param configuration The configuration, which gives the locale and the seed.
  * @param options The author's options.
  * @returns The view `payload` reads, its mode `answering` when the author names none, holding the
- *   configuration's `seed` when it has one.
+ *   configuration's `seed` when it has one and the author's host facts, the empty record when the
+ *   author passed none.
  */
 const viewOf = (instance: string, configuration: Configuration, options: Options): View => {
   const view: View = {
     finished: options.disabled ?? false,
+    host: options.host ?? {},
     instance,
     locale: configuration.locale,
     messages: options.messages ?? [],
@@ -466,16 +479,6 @@ const contentKitOf = (
 });
 
 /**
- * The default answer to `RenderInteraction.attach`: no catalog presenter attaches anything, so an
- * element that references a catalog renders as any other, with no minted id and no following
- * nodes. The catalog module's answer, which presents the active cards of the catalog for the
- * supports the host enabled, replaces it.
- *
- * @returns No nodes.
- */
-const attachNothing: AttachCatalog = () => Result.succeed([]);
-
-/**
  * Construct the render function each interaction of a body is handed to, dispatching on its kind,
  * with its `modules`, which hands an interaction a module parses to its module's render, its
  * `moduleContent`, which gives that interaction's content through its module, its `content`,
@@ -483,7 +486,8 @@ const attachNothing: AttachCatalog = () => Result.succeed([]);
  * its `contentNodes`, which gives that node's content, its `containers`, which hands a module's
  * container and its children's output to the module's container render, so the emitter reads all
  * five without importing a module, and its `attach`, which answers an element's catalog reference
- * with nothing ({@link attachNothing}).
+ * with what the item-placed modules the payload holds nodes of attach, folded (`attachedBy`), with
+ * the content kit: the empty answer, which leaves the HTML unchanged, while none attaches.
  *
  * @param built The render's payload.
  * @param state The render's emit state.
@@ -491,7 +495,8 @@ const attachNothing: AttachCatalog = () => Result.succeed([]);
  */
 const interactionRenderer = (built: Payload, state: EmitState): RenderInteraction => {
   const renderer: RenderInteraction = Object.assign(shippedRenderer(built, state), {
-    attach: attachNothing,
+    attach: (reference: ReferencingElement) =>
+      attachedBy(built.content, reference, state, contentKitOf(built, state, renderer)),
     containers: (node: ContainerPayload, children: readonly Node[]) =>
       renderContainer(node, children, built, state),
     content: (node: ContentPayload) =>

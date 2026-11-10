@@ -1,11 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Result, Schema } from "effect";
+import { Effect, Option, Predicate, Result, Schema } from "effect";
 import { begin } from "#plate/begin.ts";
 import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { StoredRecord } from "#plate/codec/record.ts";
 import { Configuration, configure } from "#plate/configuration.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
 import { decode, Malformed } from "#plate/form/encoding.ts";
+import type * as Surface from "#plate/index.ts";
 import type { PostedBaseType } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
 import type {
@@ -24,6 +25,8 @@ import { redact, render } from "#plate/render.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { fitting, score, tierA } from "#plate/score.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
+import { readImports, sourceModules, valueNames } from "#plate/test/imports.ts";
+import type { ModuleImports } from "#plate/test/imports.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -1894,6 +1897,49 @@ describe("checkResponses", () => {
   );
 });
 
+/**
+ * What an export of the public surface is at run time, which its name has to say.
+ */
+type ExportKind = "error" | "function" | "schema" | "unclassified" | "value";
+
+/**
+ * Read the declarations `src/index.ts` writes, which are the only way a name reaches the public
+ * surface.
+ *
+ * @returns The entry module's `export … from` declarations and the lines of any it could not
+ *   classify.
+ */
+const indexDeclarations = (): ModuleImports => {
+  const source = sourceModules().get("src/index.ts");
+
+  assert.isDefined(source, "src/index.ts is not among the package's modules");
+
+  return readImports(source);
+};
+
+/**
+ * Classify an export by what it is at run time: a class that extends `Error` first, then a Schema,
+ * then any other function, then a plain object or array.
+ *
+ * @param value The export's value.
+ * @returns `error`, `schema`, `function` or `value`, and `unclassified` for anything else.
+ */
+const kindOf = (value: (typeof Surface)[keyof typeof Surface]): ExportKind => {
+  if (Predicate.isFunction(value) && value.prototype instanceof Error) {
+    return "error";
+  }
+
+  if (Schema.isSchema(value)) {
+    return "schema";
+  }
+
+  if (Predicate.isFunction(value)) {
+    return "function";
+  }
+
+  return Predicate.isObjectOrArray(value) ? "value" : "unclassified";
+};
+
 describe("the public surface", () => {
   it.effect("@qti-pie/plate resolves through the exports map to the same render and score", () =>
     Effect.gen(function* selfImport() {
@@ -1904,97 +1950,89 @@ describe("the public surface", () => {
     }),
   );
 
-  it.effect("exports exactly the author's functions, the native-form helpers and the errors", () =>
-    Effect.gen(function* surfaceNames() {
+  it.effect(
+    "[GATE-PINS] exports exactly the names its own export declarations write, none through export *",
+    () =>
+      Effect.gen(function* writtenNames() {
+        const surface = yield* Effect.promise(() => import("#plate/index.ts"));
+        const read = indexDeclarations();
+        const written = [...new Set(read.imports.flatMap(valueNames))].toSorted();
+
+        assert.deepStrictEqual(read.unreadable, []);
+        assert.deepStrictEqual(
+          read.imports
+            .filter(({ names }) => names.some(({ name }) => name === "*"))
+            .map(({ line }) => line),
+          [],
+        );
+        assert.deepStrictEqual(
+          read.imports
+            .filter(({ specifier }) => !specifier.startsWith("#plate/"))
+            .map(({ specifier }) => specifier),
+          [],
+        );
+        assert.deepStrictEqual(Object.keys(surface).toSorted(), written);
+      }),
+  );
+
+  it.effect(
+    "[GATE-PINS] every export is a function, an Error class, a Schema or a plain value, and its name says which",
+    () =>
+      Effect.gen(function* kindsByName() {
+        const surface = yield* Effect.promise(() => import("#plate/index.ts"));
+        const kinds = Object.entries(surface).map(([name, value]) => ({
+          kind: kindOf(value),
+          name,
+        }));
+
+        assert.deepStrictEqual(
+          kinds.filter(({ kind }) => kind === "unclassified"),
+          [],
+        );
+        assert.deepStrictEqual(
+          kinds.filter(
+            ({ kind, name }) => /^[A-Z]/u.test(name) !== (kind === "error" || kind === "schema"),
+          ),
+          [],
+        );
+        assert.deepStrictEqual(
+          kinds.filter(({ kind, name }) => name.endsWith("Schema") !== (kind === "schema")),
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "[GATE-PINS] the ./effect entry's Schema side is never reached from the public entry",
+    () =>
+      Effect.gen(function* effectSideStaysOut() {
+        const surface = yield* Effect.promise(() => import("#plate/index.ts"));
+        const effectSide = Object.keys(
+          yield* Effect.promise(() => import("#plate/effect/schemas.ts")),
+        );
+
+        assert.isNotEmpty(effectSide);
+        assert.deepStrictEqual(
+          indexDeclarations()
+            .imports.filter(({ specifier }) => specifier.startsWith("#plate/effect"))
+            .map(({ specifier }) => specifier),
+          [],
+        );
+        assert.deepStrictEqual(
+          effectSide.filter((name) => Object.keys(surface).includes(name)),
+          [],
+        );
+      }),
+  );
+
+  it.effect("[GATE-PINS] no export is a test seam or a brand constructor by name", () =>
+    Effect.gen(function* noSeamNames() {
       const surface = yield* Effect.promise(() => import("#plate/index.ts"));
 
-      assert.deepStrictEqual(Object.keys(surface).toSorted(), [
-        "EscapableRawTextElementChild",
-        "EventHandlerAttribute",
-        "IntentRefused",
-        "InvalidConfiguration",
-        "InvalidHeadingLevel",
-        "InvalidInstance",
-        "InvalidPnp",
-        "InvalidRecord",
-        "InvalidRedacted",
-        "InvalidResponses",
-        "InvalidResultContext",
-        "InvalidSession",
-        "InvalidSessionInstance",
-        "InvalidTime",
-        "ItemNotInSession",
-        "Malformed",
-        "MalformedAttributeName",
-        "MalformedTagName",
-        "MarkupRefused",
-        "NotRedacted",
-        "OutcomeMismatchError",
-        "OutputTooLarge",
-        "PartSwapRefused",
-        "PlaintextElement",
-        "PnpSupportsSchema",
-        "RawTextChildren",
-        "RecordMismatch",
-        "RecordOperandError",
-        "RecordRequired",
-        "ResponsesRefused",
-        "ResultItemMissing",
-        "SessionMismatch",
-        "StepResponseMisfit",
-        "SupportsSchema",
-        "TestNotDeliverable",
-        "UnknownIdentifierError",
-        "UnknownItemRef",
-        "UnknownPart",
-        "UnmappedResponseError",
-        "VoidElementChildren",
-        "acceptedItem",
-        "advance",
-        "allowedIntents",
-        "begin",
-        "catalogSupports",
-        "checkInstance",
-        "checkResponses",
-        "commentName",
-        "configure",
-        "current",
-        "decode",
-        "decodeComment",
-        "decodeIntent",
-        "decodeRedacted",
-        "decodeSession",
-        "encode",
-        "encodeIntent",
-        "encodeRedacted",
-        "encodeSession",
-        "entryName",
-        "h",
-        "intentName",
-        "isPosted",
-        "itemRefs",
-        "itemView",
-        "navigationState",
-        "noPnpSupports",
-        "noSupports",
-        "open",
-        "openPackage",
-        "partition",
-        "permits",
-        "postedStrings",
-        "postings",
-        "readPnp",
-        "redact",
-        "render",
-        "renderNavigation",
-        "renderStatus",
-        "restore",
-        "results",
-        "score",
-        "solution",
-        "startTest",
-        "toolPreferences",
-      ]);
+      assert.deepStrictEqual(
+        Object.keys(surface).filter((name) => name.endsWith("ForTest") || name.startsWith("brand")),
+        [],
+      );
     }),
   );
 

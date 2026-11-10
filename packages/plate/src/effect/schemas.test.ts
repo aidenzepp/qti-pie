@@ -18,6 +18,7 @@ import { fresh } from "#plate/model/record.ts";
 import type { Redacted } from "#plate/payload.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import { bg007Item } from "#plate/test/fixtures.ts";
+import { sessionItem } from "#plate/test/session-item.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
 
 /**
@@ -39,22 +40,7 @@ const session: TestSession = {
   document: "tests/m2.xml",
   expired: [],
   instance: "s1",
-  items: [
-    {
-      adaptive: false,
-      comment: Option.none(),
-      datestamp: "2026-11-05T10:00:00.000Z",
-      duration: 0,
-      firstOutcomes: Option.none(),
-      locked: false,
-      presented: false,
-      record: fresh(bg007Item, "s1.1"),
-      ref: "item-1",
-      saved: Option.none(),
-      sequenceIndex: 1,
-      templateDefaults: Option.none(),
-    },
-  ],
+  items: [sessionItem({ record: fresh(bg007Item, "s1.1"), ref: "item-1" })],
   kind: "test",
   outcomeRuns: 0,
   outcomes: {},

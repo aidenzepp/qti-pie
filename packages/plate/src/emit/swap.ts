@@ -130,6 +130,9 @@ const mayBecome = {
   prompt: "a <p>, or a flow or phrasing container such as <div> or <span>",
   select:
     'a <select> with no "multiple" and no "size" other than 1, a drop-down that posts one entry',
+  svg: "an <svg>, the root of the picture",
+  "svg-content":
+    "an SVG element such as <text>, <tspan> or <g>, in its own case, and never an HTML element, a custom element, <a>, <script> or <style>",
   "text-input": 'an <input> of type "text"',
   textarea: "a <textarea>",
 } satisfies { readonly [C in TagClass]: string };
