@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m3g-composite" title="Kettle and tea" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="CHOICE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>A</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-response-declaration identifier="TEXT" cardinality="single" base-type="string">
+    <qti-correct-response>
+      <qti-value>hot</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>A</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-choice-interaction response-identifier="CHOICE" max-choices="1">
+      <qti-prompt>What do you fill a kettle with before it boils?</qti-prompt>
+      <qti-simple-choice identifier="A">Water</qti-simple-choice>
+      <qti-simple-choice identifier="B">Sand</qti-simple-choice>
+    </qti-choice-interaction>
+    <p>Freshly brewed tea is served <qti-text-entry-interaction response-identifier="TEXT" expected-length="6"/> in most cafes.</p>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+</qti-assessment-item>

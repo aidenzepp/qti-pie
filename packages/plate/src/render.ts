@@ -12,6 +12,9 @@
  * none of the page, never a part of it. This is a browser module: it value-imports from `effect`
  * only `Option`, `Array`, `pipe`, `Data` and `Result`.
  *
+ * {@link renderTree} and {@link statusTree} give the neutral tree `render` and `renderStatus`
+ * serialise, so the React layer projects the tree the core builds; `src/index.ts` exports neither.
+ *
  * @module
  */
 import { Data, Option, Result } from "effect";
@@ -20,6 +23,7 @@ import { defaultView } from "#plate/content/contract.ts";
 import type { ContentRenderKit } from "#plate/content/contract.ts";
 import { contentNodes, renderContent, renderItemContent } from "#plate/content/modules.ts";
 import type { ContentPayload } from "#plate/content/modules.ts";
+import type { Element } from "#plate/emit/node.ts";
 import { emitBody, emitNodes, writesMalformedHeading } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { emitItem, emitStatus, itemPart } from "#plate/emit/item.ts";
@@ -483,9 +487,96 @@ const interactionRenderer = (built: Payload, state: EmitState): RenderInteractio
 };
 
 /**
+ * The tree one render builds: the part's root element in the neutral tree (`#plate/emit/node.ts`)
+ * and the instance token that scopes it, before any HTML is written.
+ */
+interface Tree {
+  readonly instance: string;
+  readonly root: Element;
+}
+
+/**
+ * Build an item's tree: the item Root around its body, as the neutral tree {@link render}
+ * serialises, before any HTML is written.
+ *
+ * It takes every step `render` takes before it writes, in the same order and with the same
+ * refusals: the redaction mark ({@link NotRedacted}), the redacted item's `unprinted`
+ * ({@link OutputTooLarge}, only with `printed`), the overrides ({@link UnknownPart}), the instance
+ * ({@link InvalidInstance}), the part swaps ({@link PartSwapRefused}) and the heading level
+ * ({@link InvalidHeadingLevel}). So the tree it gives serialises to `render`'s HTML, and a React
+ * piece projects the tree `render` builds rather than a copy of its steps (issue m3g-01). It
+ * checks no output budget and refuses no markup: those belong to the serialisation, which
+ * `render` runs after it.
+ *
+ * @example
+ *   const tree = renderTree(redact(accepted), configuration, { instance: "q1" });
+ *   // Result.succeed({ instance: "q1", root: { kind: "element", tag: "qti-assessment-item", … } })
+ *
+ * @param item The item `redact` gave, or `decodeRedacted`: that object itself, never a copy.
+ * @param configuration The configuration, which gives the locale, the heading level, the asset
+ *   base and the seed.
+ * @param options The author's inputs, none by default.
+ * @returns The Root's element and the instance token it used, or the first refusal `render` would
+ *   give before it writes.
+ */
+export const renderTree = (
+  item: Redacted,
+  configuration: Configuration,
+  options: Options = {},
+): Result.Result<
+  Tree,
+  | InvalidHeadingLevel
+  | InvalidInstance
+  | NotRedacted
+  | OutputTooLarge
+  | PartSwapRefused
+  | UnknownPart
+> =>
+  Result.gen(function* renderItemTree() {
+    if (!isRedacted(item)) {
+      return yield* Result.fail(new NotRedacted());
+    }
+
+    if (Option.isSome(item.unprinted)) {
+      const { bound, identifier, limit } = item.unprinted.value;
+
+      return yield* Result.fail(
+        new OutputTooLarge({
+          budget: configuration.outputBudget,
+          item: item.identifier,
+          printed: Option.some({ bound, identifier, limit }),
+        }),
+      );
+    }
+
+    const parts = yield* resolveOverrides(options.parts);
+    const instance = yield* options.instance === undefined
+      ? Result.succeed(drawInstance())
+      : checkedInstance(options.instance, "options.instance");
+    const state = stateOf(configuration, parts, options.assetBase, options.supports, options.view);
+    const built = payload(item, viewOf(instance, configuration, options));
+    const renderer = interactionRenderer(built, state);
+    const body = yield* emitBody(built, state, renderer);
+    const content = yield* renderItemContent(
+      built.content,
+      state,
+      contentKitOf(built, state, renderer),
+    );
+    const live = yield* itemPart(state.parts, "live", liveRegion, []);
+    const root = yield* emitItem(built, state, [...body, ...content, live]);
+
+    if (writesMalformedHeading(built.body, configuration.headingLevel, renderer)) {
+      return yield* Result.fail(new InvalidHeadingLevel({ level: configuration.headingLevel }));
+    }
+
+    return { instance, root };
+  });
+
+/**
  * Render an item: the item Root around its body, as HTML.
  *
- * It resolves the overrides once, takes the instance from `options.instance` as given or draws a
+ * It builds the tree through {@link renderTree}, then writes it within the output budget. It
+ * resolves the overrides once, takes the instance from `options.instance` as given or draws a
  * lowercase UUID v4 (`drawInstance`, from `crypto.getRandomValues`, never derived from the seed;
  * not `crypto.randomUUID`, which a browser gives only in a secure context, so a page served over
  * plain HTTP lacks it), builds the payload from the redacted item and the options, and emits the
@@ -550,42 +641,7 @@ export const render = (
   | UnknownPart
 > =>
   Result.gen(function* renderItem() {
-    if (!isRedacted(item)) {
-      return yield* Result.fail(new NotRedacted());
-    }
-
-    if (Option.isSome(item.unprinted)) {
-      const { bound, identifier, limit } = item.unprinted.value;
-
-      return yield* Result.fail(
-        new OutputTooLarge({
-          budget: configuration.outputBudget,
-          item: item.identifier,
-          printed: Option.some({ bound, identifier, limit }),
-        }),
-      );
-    }
-
-    const parts = yield* resolveOverrides(options.parts);
-    const instance = yield* options.instance === undefined
-      ? Result.succeed(drawInstance())
-      : checkedInstance(options.instance, "options.instance");
-    const state = stateOf(configuration, parts, options.assetBase, options.supports, options.view);
-    const built = payload(item, viewOf(instance, configuration, options));
-    const renderer = interactionRenderer(built, state);
-    const body = yield* emitBody(built, state, renderer);
-    const content = yield* renderItemContent(
-      built.content,
-      state,
-      contentKitOf(built, state, renderer),
-    );
-    const live = yield* itemPart(state.parts, "live", liveRegion, []);
-    const root = yield* emitItem(built, state, [...body, ...content, live]);
-
-    if (writesMalformedHeading(built.body, configuration.headingLevel, renderer)) {
-      return yield* Result.fail(new InvalidHeadingLevel({ level: configuration.headingLevel }));
-    }
-
+    const { instance, root } = yield* renderTree(item, configuration, options);
     const html = yield* Result.fromOption(
       yield* toHtmlWithin(root, configuration.outputBudget),
       () =>
@@ -600,9 +656,53 @@ export const render = (
   });
 
 /**
+ * Build the Status part's tree: the status region, its heading and what it shows, as the neutral
+ * tree {@link renderStatus} serialises.
+ *
+ * It takes every step `renderStatus` takes before it writes, in the same order and with the same
+ * refusals: the instance ({@link InvalidInstance}), the overrides ({@link UnknownPart}), the
+ * heading level ({@link InvalidHeadingLevel}) and the part swaps ({@link PartSwapRefused}). So
+ * the tree it gives serialises to `renderStatus`'s HTML, and a React piece projects it (issue
+ * m3g-01). It refuses no markup: that belongs to the serialisation.
+ *
+ * @example
+ *   statusTree({ heading: "scored", instance: "q1", score: "1" }, configuration);
+ *   // Result.succeed({ instance: "q1", root: { kind: "element", tag: "section", … } })
+ *
+ * @param input The author's Status input.
+ * @param configuration The configuration, which gives the locale and the heading level.
+ * @param options The part overrides, none by default.
+ * @returns The region's element and `input.instance`, or the first refusal `renderStatus` would
+ *   give before it writes.
+ */
+export const statusTree = (
+  input: StatusInput,
+  configuration: Configuration,
+  options: Pick<Options, "parts"> = {},
+): Result.Result<Tree, InvalidHeadingLevel | InvalidInstance | PartSwapRefused | UnknownPart> =>
+  Result.gen(function* statusRegionTree() {
+    yield* checkedInstance(input.instance, "input.instance");
+
+    const parts = yield* resolveOverrides(options.parts);
+    // Plain JavaScript can hand over a configuration with no headingLevel, which the Status
+    // heading reads as 1, as rowFor does.
+    const configured: number | undefined = configuration.headingLevel;
+    const headingLevel = configured ?? 1;
+
+    if (!Number.isInteger(headingLevel) || headingLevel < 1 || headingLevel > 6) {
+      return yield* Result.fail(new InvalidHeadingLevel({ level: headingLevel }));
+    }
+
+    const root = yield* emitStatus(input, stateOf(configuration, parts));
+
+    return { instance: input.instance, root };
+  });
+
+/**
  * Render the Status part: the status region, its heading and what it shows, as HTML.
  *
- * It checks `input.instance`, which must be the token the item was rendered with, then the part
+ * It builds the tree through {@link statusTree}, then writes it. It checks `input.instance`, which
+ * must be the token the item was rendered with, then the part
  * overrides, then the configuration's heading level, at which it writes the region's heading: an
  * integer from 1 to 6, or {@link InvalidHeadingLevel}, which only a `Configuration` built by hand
  * gives. It then emits the region through the same part overrides `render` takes. It places the
@@ -630,19 +730,7 @@ export const renderStatus = (
   InvalidHeadingLevel | InvalidInstance | MarkupRefused | PartSwapRefused | UnknownPart
 > =>
   Result.gen(function* renderStatusRegion() {
-    yield* checkedInstance(input.instance, "input.instance");
+    const { instance, root } = yield* statusTree(input, configuration, options);
 
-    const parts = yield* resolveOverrides(options.parts);
-    // Plain JavaScript can hand over a configuration with no headingLevel, which the Status
-    // heading reads as 1, as rowFor does.
-    const configured: number | undefined = configuration.headingLevel;
-    const headingLevel = configured ?? 1;
-
-    if (!Number.isInteger(headingLevel) || headingLevel < 1 || headingLevel > 6) {
-      return yield* Result.fail(new InvalidHeadingLevel({ level: headingLevel }));
-    }
-
-    const region = yield* emitStatus(input, stateOf(configuration, parts));
-
-    return { html: yield* toHtml(region), instance: input.instance };
+    return { html: yield* toHtml(root), instance };
   });
