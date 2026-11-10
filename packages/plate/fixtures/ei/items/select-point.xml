@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="ei-select-point" title="Garden plan" adaptive="false" time-dependent="false"
+  xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="point">
+    <qti-correct-response>
+      <qti-value>120 80</qti-value>
+      <qti-value>250 150</qti-value>
+    </qti-correct-response>
+    <qti-area-mapping default-value="-1">
+      <qti-area-map-entry shape="circle" coords="120,80,40" mapped-value="1"/>
+      <qti-area-map-entry shape="rect" coords="100,60,300,200" mapped-value="2"/>
+    </qti-area-mapping>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-select-point-interaction response-identifier="RESPONSE" max-choices="2">
+      <qti-prompt>Mark the pond and the oak on the plan of the garden.</qti-prompt>
+      <img src="images/select-point-map.svg" width="400" height="300"
+        alt="A plan of a walled garden with a round pond, a fenced bed and a path"/>
+    </qti-select-point-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/map_response_point.xml"/>
+</qti-assessment-item>

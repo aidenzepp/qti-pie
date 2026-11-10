@@ -1718,7 +1718,7 @@ describe("a module that lands", () => {
           const built = yield* Effect.fromResult(model.buildItem(landedDocument));
 
           // The table of modules holds the fake's member, where the hub reads it.
-          assert.strictEqual(interactions.modules[landedKind].entry, landedGapMatch.entry);
+          assert.strictEqual<unknown>(interactions.modules[landedKind].entry, landedGapMatch.entry);
 
           const [posting, ...others] = payload.postings(payload.redactItem(built), "q1");
 
