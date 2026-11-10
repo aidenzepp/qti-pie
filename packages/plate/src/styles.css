@@ -1045,8 +1045,14 @@
   list-style: none;
 }
 
-/* A Choice: a chip on the card's surface, so a dark host theme reads. */
+/*
+ * A Choice: a chip on the card's surface, so a dark host theme reads. It is at least 24 by 24 CSS
+ * pixels whatever the font size, since the runtime makes it a button (WCAG 2.5.8).
+ */
 :where([data-slot="gap-match-interaction-choice"]) {
+  box-sizing: border-box;
+  min-inline-size: 24px;
+  min-block-size: 24px;
   padding: 0.25rem 0.75rem;
   border: 1px solid var(--input, oklch(0.922 0 0));
   border-radius: calc(var(--radius, 0.625rem) * 0.8);
@@ -1054,12 +1060,16 @@
   color: var(--card-foreground, oklch(0.145 0 0));
 }
 
-/* A Gap: a blank in the author's sentence, wide enough to show it is there while it is empty. */
+/*
+ * A Gap: a blank in the author's sentence, wide enough to show it is there while it is empty, and
+ * never under 24 by 24 CSS pixels, since the runtime makes it a target (WCAG 2.5.8): 5em is 24px
+ * from a 4.8px font up, and the block size is a px floor.
+ */
 :where([data-slot="gap-match-interaction-gap"]) {
   display: inline-block;
   box-sizing: border-box;
   min-inline-size: 5em;
-  min-block-size: 1.75em;
+  min-block-size: 24px;
   margin-inline: 0.25em;
   padding: 0 0.5rem;
   border: 1px dashed var(--muted-foreground, oklch(0.556 0 0));
