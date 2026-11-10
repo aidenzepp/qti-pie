@@ -10,9 +10,7 @@ import { rowFor } from "#plate/emit/parts.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { fresh } from "#plate/model/record.ts";
 import { encodeRecord } from "#plate/codec/record.ts";
-import { readSource } from "#plate/document/read.ts";
-import { buildItem } from "#plate/model/item.ts";
-import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 import { openPackage } from "#plate/package/open.ts";
 import { postings } from "#plate/payload.ts";
 import type { RenderMode } from "#plate/payload.ts";
@@ -21,7 +19,7 @@ import { restore } from "#plate/restore.ts";
 import { solution } from "#plate/solution.ts";
 import { open } from "#plate/validate/open.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
-import { checkTree, textOf } from "#plate/test/accessibility.ts";
+import { authorFindings, checkTree, textOf } from "#plate/test/accessibility.ts";
 import { parseHtml, roundTrips } from "#plate/test/round-trip.ts";
 import { acceptedOf, openCorpus } from "#plate/test/sweep.ts";
 
@@ -281,22 +279,8 @@ describe("the Portable Custom Interaction module", () => {
         Option.getOrElse(() => []),
       );
 
-      // No part of the PCI is a notice. The marks that stay are E3's: `open` secures the document
-      // before the model is built and drops each attribute only a wildcard admits, the PCI's
-      // `data-*` among them, so the properties reach the module only from an unsecured source.
-      assert.deepStrictEqual(
-        unsupported.filter((entry) => entry.shown === "notice"),
-        [],
-        JSON.stringify(unsupported),
-      );
-      assert.deepStrictEqual(
-        unsupported.filter((entry) => entry.feature === "qti-portable-custom-interaction"),
-        [],
-      );
-      assert.deepStrictEqual(
-        unsupported.map((entry) => entry.feature),
-        ["attribute:data-max-count", "attribute:data-start_value-2"],
-      );
+      // No part of the PCI is a notice or a mark: E3 keeps the PCI's `data-*` properties.
+      assert.deepStrictEqual(unsupported, []);
     }),
   );
 
@@ -329,12 +313,7 @@ describe("the Portable Custom Interaction module", () => {
     () =>
       Effect.gen(function* configured() {
         const configuration = yield* configure({});
-        // The model is built from the source as written: `open` secures a document first, and its
-        // E3 drops every attribute only a wildcard admits, the PCI's `data-*` among them, so the
-        // properties reach the module only through `buildItem` today.
-        const source = yield* readSource(fixtureItem, yield* bytesOf(fixtureItem));
-        const built = acceptForTest(yield* Effect.fromResult(buildItem(source)));
-        const { root } = rendered(built, configuration);
+        const { root } = rendered(yield* fixture, configuration);
         const written = configurationOf(only(root, slots.root));
 
         assert.deepStrictEqual(written, {
@@ -344,13 +323,6 @@ describe("the Portable Custom Interaction module", () => {
           responseIdentifier: response,
           templateVariables: ["START"],
         });
-
-        const opened = configurationOf(
-          only(rendered(yield* fixture, configuration).root, slots.root),
-        );
-
-        assert.deepStrictEqual(opened.templateVariables, ["START"]);
-        assert.strictEqual(opened.module, "counter");
       }),
   );
 
@@ -514,6 +486,7 @@ describe("the Portable Custom Interaction module", () => {
         primaryConfiguration: "../modules/module_resolution.js",
       });
       assert.strictEqual(written.responseIdentifier, response);
+      assert.deepStrictEqual(written.properties, { maxCount: "5", "start_value-2": "0" });
     }),
   );
 
@@ -585,8 +558,30 @@ describe("the Portable Custom Interaction module", () => {
         const { root } = rendered(accepted, configuration, mode);
 
         assert.deepStrictEqual(checkTree(root, { baseLevel: 2 }), [], mode);
+        assert.deepStrictEqual(authorFindings(root, { baseLevel: 2 }), [], mode);
         assert.isTrue(roundTrips(root), mode);
       }
+
+      // A heading gap the author wrote inside the markup is reproduced as authored: an author
+      // finding, not a failure of plate's own heading order.
+      const gapped = rendered(
+        yield* variant((text) =>
+          text.replace(
+            "<p>Each press adds one",
+            "<h2>Counting</h2><h4>Presses</h4><p>Each press adds one",
+          ),
+        ),
+        configuration,
+      );
+
+      assert.deepStrictEqual(checkTree(gapped.root, { baseLevel: 2 }), []);
+      assert.deepStrictEqual(
+        authorFindings(gapped.root, { baseLevel: 2 }).map((finding) => [
+          finding.finding,
+          finding.path.at(-1),
+        ]),
+        [["heading-gap", "h4"]],
+      );
     }),
   );
 

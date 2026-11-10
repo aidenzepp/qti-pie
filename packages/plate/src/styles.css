@@ -1140,12 +1140,6 @@
   color: var(--muted-foreground, oklch(0.556 0 0));
   font-style: italic;
 }
-
-/* The runtime (issue pci-04) hides the notice once the page's script runs the interaction. */
-:where([data-slot="portable-custom-interaction"][data-runtime])
-  :where([data-slot="portable-custom-interaction-notice"]) {
-  display: none;
-}
 /* end portable-custom-interaction */
 
 /* begin rubric-block (issue m3e-01) */
