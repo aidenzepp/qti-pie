@@ -15,9 +15,9 @@
  * draws, the stored forms' Schemas and their JSON Schema documents, {@link Refused} and
  * {@link PlateError}.
  *
- * One name of `.` means something else here: `Configuration` is the service, not the plain
- * settings type. That type is the service's shape, and `typeof ConfigurationSchema.Type`, or it is
- * imported from `.`.
+ * One name of `.` means something else here: `Configuration` is the service, not the plain settings
+ * type. A host names that type as the service's shape, `(typeof Configuration)["Service"]`, equally
+ * as `typeof ConfigurationSchema.Type`, or imports it from `.`.
  *
  * Nothing under `src/` imports this module, and no browser module reaches it: a host that does not
  * import `./effect` loads none of it.

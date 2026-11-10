@@ -323,6 +323,17 @@ export const identifierOf = (written: string): string => trimXmlSpace(written);
 export const xmlWhitespaceRun = /[\t\n\r ]+/gu;
 
 /**
+ * Collapse a value's XML whitespace, as XSD's `whiteSpace="collapse"` facet reads it: the XML
+ * whitespace at either end removed and each inner run of it one space. An `xs:anyURI`, an `xs:ID`,
+ * an `xs:IDREF` and an `xs:token` are read this way.
+ *
+ * @param value The value as written.
+ * @returns The value, collapsed.
+ */
+export const collapseXmlSpace = (value: string): string =>
+  trimXmlSpace(value).replaceAll(xmlWhitespaceRun, " ");
+
+/**
  * Read an identifier attribute the element must carry, as `identifierOf` reads it.
  *
  * @param build The build.

@@ -34,8 +34,7 @@ import type {
   SourceElement,
   Visit,
 } from "#plate/document/source.ts";
-import { xmlWhitespaceRun, xsBooleanOf } from "#plate/model/attributes.ts";
-import { trimXmlSpace } from "#plate/model/values.ts";
+import { collapseXmlSpace, xsBooleanOf } from "#plate/model/attributes.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { holdsUnexpanded } from "#plate/validate/rules.ts";
@@ -90,15 +89,6 @@ const refuse = (
   });
 
 /**
- * Collapse a value's XML whitespace, as XSD's `whiteSpace="collapse"` does: each run becomes one
- * space, and a space at either end is removed.
- *
- * @param value The value as written.
- * @returns The collapsed value.
- */
-const collapse = (value: string): string => trimXmlSpace(value).replaceAll(xmlWhitespaceRun, " ");
-
-/**
  * Report whether an element is QTI's element of a local name.
  *
  * @param element The element.
@@ -131,7 +121,7 @@ const attributeOf = (element: SourceElement, local: string): Option.Option<Sourc
 const collapsedAttribute = (element: SourceElement, local: string): string =>
   Option.match(attributeOf(element, local), {
     onNone: () => "",
-    onSome: (attribute) => collapse(attribute.value),
+    onSome: (attribute) => collapseXmlSpace(attribute.value),
   });
 
 /**
@@ -340,7 +330,7 @@ export const checkCatalogs = (source: SourceDocument, tables: Tables): readonly 
       catalogReferenceOf(element, table),
     );
     if (Option.isSome(attribute)) {
-      const token = collapse(attribute.value.value);
+      const token = collapseXmlSpace(attribute.value.value);
       if (token !== "" && !catalogIds.has(token)) {
         unresolved.set(element, { attribute: attribute.value, token });
       }
