@@ -254,6 +254,12 @@ export interface HotspotJson {
  * over the image, holding the control, the outline and the label text), the Control (the native
  * `input`), the Label (the `hotspot-label` text or the positional name) and the Outline (the
  * drawn area, an inline `svg`, `aria-hidden`).
+ *
+ * The Outline's row takes the `svg` tag class, so only an `svg` may replace it (Q-10, handbook
+ * rule 18, issue m3d-07c, GitHub issue #426): the HTML parser opens the picture's SVG namespace at
+ * the `svg` start tag, and under any other element the shape below it is an unknown HTML element
+ * that draws nothing. The Choice row stays `any`, a `label` laid over the image. No row takes
+ * `svg-content`, since the Outline holds only its shape, which is no part.
  */
 export type HotspotPart =
   | "choice"
@@ -309,7 +315,7 @@ const parts = {
     element: "svg",
     listOwner: false,
     merged: ["aria-hidden", "viewBox"],
-    tagClass: "any",
+    tagClass: "svg",
   },
   prompt: {
     defaults: {},
