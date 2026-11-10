@@ -69,12 +69,7 @@ describe("checkResponses on an item whose printed variable's whole text passes 1
         };
 
         assert.deepStrictEqual(
-          checkResponses(accepted, { RESPONSE: stray }, configuration, {
-            attempt: "none",
-            defaults: {},
-            outcomes: {},
-            templates: { S: value },
-          }),
+          checkResponses(accepted, { RESPONSE: stray }, configuration, { templates: { S: value } }),
           [{ response: "RESPONSE", text: message("en", "unknownChoice") }],
         );
       }),
@@ -132,12 +127,7 @@ describe("checkResponses and the printed variables of the item it judges", () =>
         const printed = counted(repeated({ baseType: "string", value: "y" }, 3));
 
         assert.deepStrictEqual(
-          checkResponses(accepted, {}, configuration, {
-            attempt: "none",
-            defaults: {},
-            outcomes: {},
-            templates: { S: printed.value },
-          }),
+          checkResponses(accepted, {}, configuration, { templates: { S: printed.value } }),
           [],
         );
         assert.strictEqual(printed.reads(), 0);

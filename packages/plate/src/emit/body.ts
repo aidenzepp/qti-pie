@@ -60,15 +60,13 @@ export type RenderInteraction = (
 
 /**
  * Where a nested interaction was met: inside a Choice's Prompt or choice content, an Extended
- * Text's Prompt, an Inline Choice's Label, or a modal feedback's content. An Inline Choice's choice
- * content is written as option text, never as nodes, so its Label is the only content of one the
- * emitter walks.
+ * Text's Prompt, or an Inline Choice's Label. An Inline Choice's choice content is written as
+ * option text, never as nodes, so its Label is the only content of one the emitter walks.
  */
 export type NestedWithin =
   | "choice-interaction"
   | "extended-text-interaction"
-  | "inline-choice-interaction"
-  | "modal-feedback";
+  | "inline-choice-interaction";
 
 /**
  * The content each {@link NestedWithin} names, as the message says it.
@@ -77,18 +75,15 @@ const nestedPlaces: Readonly<Record<NestedWithin, string>> = {
   "choice-interaction": "a Choice's Prompt or choice content",
   "extended-text-interaction": "an Extended Text's Prompt",
   "inline-choice-interaction": "an Inline Choice's Label",
-  "modal-feedback": "a modal feedback's content",
 };
 
 /**
- * An interaction met inside a Prompt, a choice's content, an Inline Choice's Label or a modal
- * feedback's content, a defect that no checked item can cause.
+ * An interaction met inside a Prompt, a choice's content or an Inline Choice's Label, a defect
+ * that no checked item can cause.
  *
  * It cannot occur through the library: QTI's schema admits no interaction inside a Prompt, a
- * choice's content, an Inline Choice's Label or a modal feedback's content (the information
- * model's ModalFeedback, section 5.93: "The content of the modalFeedback must not contain any
- * interactions"), `check` refuses one, `redact` copies only what `check` accepted, and
- * `decodeRedacted` refuses JSON that holds one. Only a payload built by hand
+ * choice's content or an Inline Choice's Label, `check` refuses one, `redact` copies only what
+ * `check` accepted, and `decodeRedacted` refuses JSON that holds one. Only a payload built by hand
  * can hold one. It is thrown, never returned.
  */
 export class NestedInteractionDefect extends Data.TaggedError("NestedInteractionDefect")<{
@@ -763,17 +758,6 @@ const headingLevelsIn = (nodes: readonly PayloadNode[]): readonly number[] =>
   });
 
 /**
- * Give the nodes an item's written headings stand in: its body, then each modal feedback's content.
- *
- * @param payload The payload.
- * @returns The body's nodes followed by each modal feedback's.
- */
-const headedOf = (payload: Payload): readonly PayloadNode[] => [
-  ...payload.body,
-  ...payload.modalFeedback.flatMap((feedback) => feedback.content),
-];
-
-/**
  * The level of each payload body's shallowest written heading, kept from the first walk over the
  * body for every later one.
  *
@@ -789,24 +773,20 @@ const headedOf = (payload: Payload): readonly PayloadNode[] => [
 const shallowestLevels = new WeakMap<readonly PayloadNode[], number>();
 
 /**
- * Give the level of an item's shallowest written heading, in its body or its modal feedback, 1
- * when it writes none: read from the payload on the first call for its body, and from
- * {@link shallowestLevels} after.
+ * Give the level of a body's shallowest written heading, 1 when it writes none: read from the
+ * body on the first call for it, and from {@link shallowestLevels} after.
  *
- * @param payload The payload, whose body and modal feedback hold every heading the emitter writes
- *   for the item.
- * @returns The least level {@link headingLevelsIn} gives for them ({@link headedOf}), or 1 when
- *   it gives none.
+ * @param body The payload's body, which holds every heading the emitter writes for the item.
+ * @returns The least level {@link headingLevelsIn} gives for the body, or 1 when it gives none.
  */
-const shallowestLevelOf = (payload: Payload): number => {
-  const { body } = payload;
+const shallowestLevelOf = (body: readonly PayloadNode[]): number => {
   const known = shallowestLevels.get(body);
 
   if (known !== undefined) {
     return known;
   }
 
-  const levels = headingLevelsIn(headedOf(payload));
+  const levels = headingLevelsIn(body);
   let shallowest = levels[0] ?? 1;
 
   for (const level of levels) {
@@ -823,44 +803,44 @@ const shallowestLevelOf = (payload: Payload): number => {
  * heading lands at the configured heading level, and every other heading keeps its distance from
  * it, so an item that starts at `h2` or `h3` (a delivery page owns `h1`) still starts at the
  * heading level. An item that starts at `h1` shifts as it always did, by the heading level less
- * one; an item with no heading has none to shift. Its modal feedback counts as the item's, so a
- * heading there shifts with the body's. The payload is read once, however many walks of one render
- * ask ({@link shallowestLevelOf}).
+ * one; an item with no heading has none to shift. The body is read once, however many walks of
+ * one render ask ({@link shallowestLevelOf}).
  *
- * @param payload The payload, whose body and modal feedback hold every heading the emitter writes.
+ * @param body The payload's body, which holds every heading the emitter writes for the item.
  * @param headingLevel The configured heading level, 1 to 6.
  * @returns The offset {@link tagFor} adds to an authored level.
  */
-const headingOffsetOf = (payload: Payload, headingLevel: number): number =>
-  headingLevel - shallowestLevelOf(payload);
+const headingOffsetOf = (body: readonly PayloadNode[], headingLevel: number): number =>
+  headingLevel - shallowestLevelOf(body);
 
 /**
- * Tell whether an item writes a heading whose tag names no heading level, because its level,
- * shifted to the configured heading level and capped at 6 as {@link tagFor} computes it, is not an
+ * Tell whether a body writes a heading whose tag names no heading level, because its level, shifted
+ * to the configured heading level and capped at 6 as {@link tagFor} computes it, is not an
  * integer.
  *
  * `render` asks it before it writes an item (`InvalidHeadingLevel` in `#plate/render.ts`), so a
  * hand-built configuration's heading level of `NaN`, `-Infinity` or a fraction below 6 is refused
- * where the emitter would write a tag such as `h5.5`. It reads the headings {@link headingLevelsIn}
- * gives for the body and each modal feedback's content ({@link headedOf}: the body's, a Prompt's, a
- * choice's content and an Inline Choice's Label, never one below an element the second line drops),
- * the headings {@link headingOffsetOf} shifts, and applies {@link shiftedLevel}, the function
- * `tagFor` writes with, rather than a second expression for the rule, so the two cannot disagree.
- * So a level above 6 and `Infinity` are not refused, since they cap at `h6`, and an item with no
- * heading is never refused. At its corners it follows `tagFor`, not a test of the capped heading
- * level alone: where floating-point rounding makes the shifted level an integer (a heading level of
- * `1e-17` writes `h0`, as 0 does) it is false, and so it is for an integer level at or below
- * -10^21, whose tag `h-1e+21` the serialiser then refuses as a `MalformedTagName`.
+ * where the emitter would write a tag such as `h5.5`. It reads the headings
+ * {@link headingLevelsIn} gives (the body's, a Prompt's, a choice's content and an Inline Choice's
+ * Label, never one below an element the second line drops) and applies {@link shiftedLevel}, the
+ * function `tagFor` writes with, rather than a second expression for the rule, so the two cannot
+ * disagree. So a level above 6 and `Infinity` are not refused, since they cap at `h6`, and a body
+ * with no heading is never refused. At its corners it follows `tagFor`, not a test of the capped
+ * heading level alone: where floating-point rounding makes the shifted level an integer (a heading
+ * level of `1e-17` writes `h0`, as 0 does) it is false, and so it is for an integer level at or
+ * below -10^21, whose tag `h-1e+21` the serialiser then refuses as a `MalformedTagName`.
  *
- * @param payload The payload, whose body and modal feedback hold every heading the emitter writes
- *   for the item.
+ * @param body The payload's body, which holds every heading the emitter writes for the item.
  * @param headingLevel The configured heading level, as the emit state holds it.
- * @returns Whether a heading the item writes would get a level that is not an integer.
+ * @returns Whether a heading the body writes would get a level that is not an integer.
  */
-export const writesMalformedHeading = (payload: Payload, headingLevel: number): boolean => {
-  const headingOffset = headingOffsetOf(payload, headingLevel);
+export const writesMalformedHeading = (
+  body: readonly PayloadNode[],
+  headingLevel: number,
+): boolean => {
+  const headingOffset = headingOffsetOf(body, headingLevel);
 
-  return headingLevelsIn(headedOf(payload)).some(
+  return headingLevelsIn(body).some(
     (level) => !Number.isInteger(shiftedLevel(level, headingOffset)),
   );
 };
@@ -884,7 +864,7 @@ const walkOf = (
   position: Position,
 ): Walk => ({
   assetBase: state.assetBase,
-  headingOffset: headingOffsetOf(payload, state.headingLevel),
+  headingOffset: headingOffsetOf(payload.body, state.headingLevel),
   instance: payload.instance,
   locale: state.locale,
   parts: state.parts,
@@ -934,56 +914,3 @@ export const emitBody = (
     payload.body,
     walkOf(payload, state, renderInteraction, positionUnder(rowFor("item", "root").element, false)),
   );
-
-/**
- * Emit the modal feedback the payload shows: one ModalFeedback part per modal feedback, in document
- * order, each a `section` holding its content, named by its `title` through `aria-label` when it
- * has one (the information model's ModalFeedback, section 5.93.4: an engine may present the title
- * "for example as the title of a modal pop-up window"), and carrying the payload's credit as
- * `data-credit` when it has one, `full`, `partial` or `none`, which the default theme draws as a
- * mark and a coloured edge and which adds no words. The Root holds them after the body: how
- * modal feedback is displayed "is left to the delivery platform, and an implementation may simply
- * display modal feedback in-line in the item" (the best practice guide, section 3.7.3), and a host
- * that wants a dialog swaps the part.
- *
- * Its content is written as the body's is, at the flow position a `section` gives, with the same id
- * scoping, heading shift, URLs and Notice part. It holds no interaction: QTI's schema admits none
- * there (section 5.93), so one is a {@link NestedInteractionDefect}.
- *
- * @param payload The payload, whose modal feedback the walk reads.
- * @param state The emit state.
- * @returns The ModalFeedback parts, or the first refusal of a part swap.
- */
-export const emitModalFeedback = (
-  payload: Payload,
-  state: EmitState,
-): Result.Result<readonly Element[], PartSwapRefused> => {
-  const walk = walkOf(
-    payload,
-    state,
-    nestedInteraction("modal-feedback"),
-    positionUnder(rowFor("item", "modalFeedback").element, false),
-  );
-
-  return Result.all(
-    payload.modalFeedback.map((feedback) =>
-      Result.flatMap(nodesOf(feedback.content, walk), (content) =>
-        itemPart(
-          state.parts,
-          "modalFeedback",
-          {
-            ...Option.match(feedback.title, {
-              onNone: () => ({}),
-              onSome: (title) => ({ "aria-label": title }),
-            }),
-            ...Option.match(payload.credit, {
-              onNone: () => ({}),
-              onSome: (credit) => ({ "data-credit": credit }),
-            }),
-          },
-          content,
-        ),
-      ),
-    ),
-  );
-};

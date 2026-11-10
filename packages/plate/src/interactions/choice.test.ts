@@ -19,7 +19,7 @@ import type {
   TemplateDeclaration,
   TemplateVisibility,
 } from "#plate/model/item.ts";
-import type { RedactRecord } from "#plate/model/record.ts";
+import type { ResponsesRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, postings, redactItem } from "#plate/payload.ts";
 import type {
@@ -1538,10 +1538,7 @@ const visibleDeclaration: TemplateDeclaration = {
  * @param identifier What `VISIBLE` holds.
  * @returns The record part.
  */
-const visibleAs = (identifier: string): RedactRecord => ({
-  attempt: "none",
-  defaults: {},
-  outcomes: {},
+const visibleAs = (identifier: string): ResponsesRecord => ({
   templates: { VISIBLE: identifiersOf("single", identifier) },
 });
 
@@ -1624,7 +1621,7 @@ describe("checkResponses", () => {
         const unknown = { response, text: message("en", "unknownChoice") };
         const hiding = visibleAs("C");
         const revealing = visibleAs("B");
-        const redacted = redactItem(accepted.item, hiding);
+        const redacted = redactItem(accepted.item, { outcomes: {}, ...hiding });
 
         assert.deepStrictEqual(
           choiceIn(payload(redacted, answering)).choices.map(({ identifier }) => identifier),
@@ -1725,12 +1722,7 @@ describe("checkResponses", () => {
         );
         assert.deepStrictEqual(checkResponses(accepted, { [response]: over }, configuration), []);
         assert.deepStrictEqual(
-          checkResponses(accepted, { [response]: over }, configuration, {
-            attempt: "none",
-            defaults: {},
-            outcomes: {},
-            templates: {},
-          }),
+          checkResponses(accepted, { [response]: over }, configuration, { templates: {} }),
           [],
         );
         assert.deepStrictEqual(

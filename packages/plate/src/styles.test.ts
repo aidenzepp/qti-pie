@@ -67,13 +67,11 @@ const themeLine = "/* == theme: plate's default theme, on the part markers == */
  * The only attribute names a selector may test: `data-slot`, the part marker; `data-mode` and
  * `data-disabled`, the Root's state; `aria-invalid` and `type` on a Control; `data-orientation`,
  * the authored orientation on the Choice Root; `aria-current`, which the current item's button
- * carries; `readonly`, which a text Control carries in review and solution; and `data-credit`, the
- * credit a modal feedback carries.
+ * carries; and `readonly`, which a text Control carries in review and solution.
  */
 const attributeNames: ReadonlySet<string> = new Set([
   "aria-current",
   "aria-invalid",
-  "data-credit",
   "data-disabled",
   "data-mode",
   "data-orientation",
@@ -89,9 +87,8 @@ const attributeNames: ReadonlySet<string> = new Set([
 const typeNames: ReadonlySet<string> = new Set(["fieldset", "input", "legend", "textarea"]);
 
 /**
- * The only pseudo-classes: the four that hold selectors, the four states the sheet reads (never
- * `:invalid`, `:valid`, `:user-invalid` or `:user-valid`), and the two that count a Choice's
- * choices, `:nth-child` and `:last-child`, so its tracks follow how many it holds.
+ * The only pseudo-classes: the four that hold selectors, and the four states the sheet reads
+ * (never `:invalid`, `:valid`, `:user-invalid` or `:user-valid`).
  */
 const pseudoClassNames: ReadonlySet<string> = new Set([
   "checked",
@@ -100,9 +97,7 @@ const pseudoClassNames: ReadonlySet<string> = new Set([
   "has",
   "hover",
   "is",
-  "last-child",
   "not",
-  "nth-child",
   "where",
 ]);
 
@@ -832,78 +827,6 @@ const dimmedModes = (
 };
 
 /**
- * Find the modes in which a Choice row has no locked look: no rule reaches the row under a Choice
- * Root in that mode, whatever its `data-disabled`, and gives it the muted surface a readonly text
- * Control takes, `--muted`, and the default cursor, without dimming it.
- *
- * @param sheet The scanned sheet.
- * @returns Each such mode of {@link readingModes}.
- */
-const unlockedModes = (sheet: Sheet): readonly string[] =>
-  readingModes.filter(
-    (mode) =>
-      !sheet.rules.some(
-        (rule) =>
-          reaches(rule, marker.choice) &&
-          Option.contains(tokenName(rule, "background-color"), "--muted") &&
-          declares(rule, "cursor", "default") &&
-          Option.isNone(declared(rule, "opacity")) &&
-          holdsAnywhere(
-            rule,
-            (compound) =>
-              holdsSlot(compound, marker.choiceRoot) && holdsEquals(compound, "data-mode", mode),
-          ),
-      ),
-  );
-
-/**
- * The Choice classes that lay the choices out in grid tracks, each with its count of tracks: the
- * horizontal orientation's five and each stacking's own.
- */
-const trackClasses: readonly (readonly [string, number])[] = [
-  ["qti-orientation-horizontal", 5],
-  ["qti-choices-stacking-2", 2],
-  ["qti-choices-stacking-3", 3],
-  ["qti-choices-stacking-4", 4],
-  ["qti-choices-stacking-5", 5],
-];
-
-/**
- * Find the counts of choices a track class leaves an empty track for: each count k below the
- * class's tracks that no rule, after the class's own, gives exactly k `auto` tracks under the class
- * when the Choices hold a choice that is both their k-th and their last.
- *
- * @param sheet The scanned sheet.
- * @returns Each class and count left without its rule, as `<class> <k>`.
- */
-const untrackedCounts = (sheet: Sheet): readonly string[] =>
-  trackClasses.flatMap(([name, count]) => {
-    const own = sheet.rules.findIndex((rule) =>
-      rule.selectors.some(
-        (selector) => selector.includes(`.${name}`) && !selector.includes(":nth-child("),
-      ),
-    );
-
-    return Array.from({ length: count - 1 }, (_, index) => index + 1).flatMap((k) =>
-      sheet.rules.some(
-        (rule, at) =>
-          at > own &&
-          declares(
-            rule,
-            "grid-template-columns",
-            Array.from({ length: k }, () => "auto").join(" "),
-          ) &&
-          rule.selectors.some(
-            (selector) =>
-              selector.includes(`.${name}`) && selector.includes(`:nth-child(${k}):last-child`),
-          ),
-      )
-        ? []
-        : [`${name} ${k}`],
-    );
-  });
-
-/**
  * Find the Controls no rule gives the refused look: no rule whose subject compound holds the
  * Control's marker and `[aria-invalid="true"]` takes its `border-color` from `--destructive`.
  *
@@ -1442,7 +1365,7 @@ layer(Stylesheet.layer)("styles.css", (test) => {
       }),
   );
 
-  test.effect("uses only the ten pseudo-classes", () =>
+  test.effect("uses only the eight pseudo-classes", () =>
     Effect.gen(function* pseudoClasses() {
       const { sheet } = yield* Stylesheet;
 
@@ -1641,71 +1564,6 @@ layer(Stylesheet.layer)("styles.css", (test) => {
         assert.deepStrictEqual(
           dimmedModes(sheet, { part: marker.choice, root: marker.choiceRoot }),
           [],
-        );
-      }),
-  );
-
-  test.effect(
-    "[Q-2] gives a Choice row in review and solution the locked look a readonly text Control has: the muted surface, a default cursor, undimmed",
-    () =>
-      Effect.gen(function* lockedChoice() {
-        const { sheet } = yield* Stylesheet;
-
-        assert.deepStrictEqual(unlockedModes(sheet), []);
-      }),
-  );
-
-  test.effect(
-    "[Q-2] draws the Indicator's ring in --muted-foreground, which an unselected choice's boundary needs at 3:1, and a selected one in --primary",
-    () =>
-      Effect.gen(function* ring() {
-        const { sheet } = yield* Stylesheet;
-        const rings = sheet.rules.filter(
-          (rule) => reaches(rule, marker.indicator) && Option.isSome(declared(rule, "border")),
-        );
-
-        assert.isNotEmpty(rings);
-        assert.isTrue(
-          rings.every((rule) => Option.contains(tokenName(rule, "border"), "--muted-foreground")),
-        );
-        assert.isTrue(
-          sheet.rules.some(
-            (rule) =>
-              reaches(rule, marker.indicator) &&
-              Option.contains(tokenName(rule, "border-color"), "--primary"),
-          ),
-        );
-      }),
-  );
-
-  test.effect(
-    "[I-19] [Q-2] gives a horizontal or stacked Choice as many tracks as it has choices, up to the class's own",
-    () =>
-      Effect.gen(function* tracks() {
-        const { sheet } = yield* Stylesheet;
-
-        assert.deepStrictEqual(untrackedCounts(sheet), []);
-      }),
-  );
-
-  test.effect(
-    "sets the item Root's blocks in one column, 1rem apart, and puts its padding back on the host's column",
-    () =>
-      Effect.gen(function* rhythm() {
-        const { sheet } = yield* Stylesheet;
-        const root = sheet.rules.filter((rule) => reaches(rule, marker.item));
-
-        assert.isTrue(root.some((rule) => declares(rule, "display", "flex")));
-        assert.isTrue(root.some((rule) => declares(rule, "flex-direction", "column")));
-        assert.isTrue(root.some((rule) => declares(rule, "gap", "1rem")));
-        assert.isTrue(root.some((rule) => declares(rule, "margin", "-3px")));
-        assert.isFalse(
-          sheet.rules.some(
-            (rule) =>
-              reaches(rule, rowFor("item", "modalFeedback").slot) &&
-              Option.isSome(declared(rule, "margin-block-start")),
-          ),
-          "a modal feedback sets no margin of its own",
         );
       }),
   );

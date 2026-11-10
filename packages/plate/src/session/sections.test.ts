@@ -8,6 +8,7 @@ import {
   current,
   encodeIntent,
   IntentRefused,
+  open,
   startTest,
 } from "#plate/index.ts";
 import type {
@@ -19,7 +20,6 @@ import type {
   Responses,
   TestSession,
 } from "#plate/index.ts";
-import { open } from "#plate/validate/open.ts";
 
 /**
  * The session instance every walk starts with.

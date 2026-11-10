@@ -39,7 +39,6 @@ import type {
   Verdict,
 } from "#plate/index.ts";
 import { brandRedacted } from "#plate/payload.ts";
-import { open } from "#plate/validate/open.ts";
 
 /**
  * The time the plain `startTest` starts the fixture's session at.
@@ -130,7 +129,7 @@ const mathXml = [
  * @returns Its verdict.
  */
 const verdictOf = (location: string, text: string) =>
-  open(location, new TextEncoder().encode(text));
+  plain.open(location, new TextEncoder().encode(text));
 
 /**
  * Open a hand-built item and require it accepted.

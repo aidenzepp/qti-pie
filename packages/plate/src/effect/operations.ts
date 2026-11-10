@@ -60,7 +60,7 @@ import type {
   RecordBinding,
   ValueBinding,
 } from "#plate/form/encoding.ts";
-import type { RedactRecord } from "#plate/model/record.ts";
+import type { RedactRecord, ResponsesRecord } from "#plate/model/record.ts";
 import type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 import {
   navigationState as plainNavigationState,
@@ -588,16 +588,15 @@ export const redact = Effect.fn("plate.redact")(function* redact(
  * @param document The document `check` accepted.
  * @param responses The responses by identifier, each a value, a record or the `Malformed` `decode`
  *   gave.
- * @param record The record of the attempt the page showed, the one `redact` took: its template
- *   values and the outcomes its feedback follows; none to judge the item as it reads with no
- *   record.
+ * @param record The template values of the attempt the page showed, the record `redact` took; none
+ *   to judge the item as it reads with no record.
  * @returns Every message of the interactions shown, in their document order; none when all are
  *   accepted.
  */
 export const checkResponses = Effect.fn("plate.checkResponses")(function* checkResponses(
   document: Accepted,
   responses: Readonly<Record<string, Malformed | ResponseValue>>,
-  record?: RedactRecord,
+  record?: ResponsesRecord,
 ): Effect.fn.Return<readonly ValidationMessage[], never, Configuration> {
   yield* Effect.annotateCurrentSpan("item.identifier", document.item.identifier);
 

@@ -92,8 +92,6 @@ import type {
   ElementTable,
   Tables,
   TypeEntry,
-  WalkElement,
-  WalkType,
   Wildcard,
 } from "#plate/validate/xsd.ts";
 import { baseTypes, manifestNamespace } from "#plate/vocabulary.ts";
@@ -1863,41 +1861,22 @@ export const isInstanceAttribute = (attribute: SourceAttribute): boolean =>
   attribute.namespace === xsiNamespace && (attribute.local === "type" || attribute.local === "nil");
 
 /**
- * Walk tables whose element tables are `E` and whose type entries are `Y`: the full
- * {@link Tables}, with {@link ElementTable} and {@link TypeEntry}, or any walk tables, such
- * as the securing tables. The walk keeps each table's own type, so the checks read every field of
- * the full tables' and securing reads its declared attributes.
- */
-interface TablesOf<E extends WalkElement, Y extends WalkType> {
-  readonly elements: { readonly [local: string]: E };
-  readonly types: { readonly [local: string]: Y };
-}
-
-/**
  * Look up an element's table, only among the tables' own keys.
  *
- * @param tables The tables: the full tables, or any walk tables.
- * @param tables.elements Their element tables, by local name.
+ * @param tables The tables.
  * @param local The element's local name in the tables' namespace.
  * @returns Its table, or none when the tables declare no element of that name.
  */
-export const tableOf = <E extends WalkElement>(
-  tables: { readonly elements: { readonly [local: string]: E } },
-  local: string,
-): Option.Option<E> =>
+export const tableOf = (tables: Tables, local: string): Option.Option<ElementTable> =>
   Object.hasOwn(tables.elements, local)
     ? Option.fromUndefinedOr(tables.elements[local])
     : Option.none();
 
 /**
  * The tables the walk checks by, keyed by namespace URI: QTI's tables under QTI's namespace, and
- * each other namespace's tables under its own. The checks read the full {@link Tables}; the walk
- * alone reads any walk tables (`WalkTables` in `src/validate/xsd.ts`).
+ * each other namespace's tables under its own.
  */
-type Schemas<E extends WalkElement = ElementTable, Y extends WalkType = TypeEntry> = ReadonlyMap<
-  string,
-  TablesOf<E, Y>
->;
+type Schemas = ReadonlyMap<string, Tables>;
 
 /**
  * Gather the tables the walk checks by.
@@ -1907,10 +1886,8 @@ type Schemas<E extends WalkElement = ElementTable, Y extends WalkType = TypeEntr
  *   namespace is set aside: `tables` are QTI's.
  * @returns The tables by namespace.
  */
-const schemasOf = <E extends WalkElement, Y extends WalkType>(
-  tables: TablesOf<E, Y>,
-  others: ReadonlyMap<string, TablesOf<E, Y>> = new Map(),
-): Schemas<E, Y> => new Map<string, TablesOf<E, Y>>([...others, [qtiNamespace, tables]]);
+const schemasOf = (tables: Tables, others: ReadonlyMap<string, Tables> = new Map()): Schemas =>
+  new Map<string, Tables>([...others, [qtiNamespace, tables]]);
 
 /**
  * Look up an element's table among the tables of its namespace.
@@ -1920,10 +1897,7 @@ const schemasOf = <E extends WalkElement, Y extends WalkType>(
  * @returns Its table, or none when the walk holds no tables for its namespace or they declare no
  *   element of its local name.
  */
-const elementTableOf = <E extends WalkElement, Y extends WalkType>(
-  schemas: Schemas<E, Y>,
-  element: SourceElement,
-): Option.Option<E> =>
+const elementTableOf = (schemas: Schemas, element: SourceElement): Option.Option<ElementTable> =>
   Option.flatMap(Option.fromUndefinedOr(schemas.get(element.namespace)), (owner) =>
     tableOf(owner, element.local),
   );
@@ -1936,10 +1910,7 @@ const elementTableOf = <E extends WalkElement, Y extends WalkType>(
  * @returns Its entry, or none when the walk holds no tables for its namespace or they define no
  *   type of its local name.
  */
-const typeEntryOf = <E extends WalkElement, Y extends WalkType>(
-  schemas: Schemas<E, Y>,
-  type: ChildName,
-): Option.Option<Y> => {
+const typeEntryOf = (schemas: Schemas, type: ChildName): Option.Option<TypeEntry> => {
   const owner = schemas.get(type.namespace);
 
   return owner !== undefined && Object.hasOwn(owner.types, type.local)
@@ -1949,12 +1920,11 @@ const typeEntryOf = <E extends WalkElement, Y extends WalkType>(
 
 /**
  * The table that governs an element the walk checks, with the namespace of the tables it comes
- * from, against which its `##other` wildcards are read: an element's table or a named type's
- * entry of the tables the walk reads.
+ * from, against which its `##other` wildcards are read.
  */
-interface Governed<E extends WalkElement = ElementTable, Y extends WalkType = TypeEntry> {
+interface Governed {
   readonly namespace: string;
-  readonly table: E | Y;
+  readonly table: ContentTable;
 }
 
 /**
@@ -2022,10 +1992,7 @@ const builtinBases: ReadonlyMap<string, string> = new Map([
  * @param schemas The tables by namespace.
  * @returns Its base, or none for `anyType` and for a name that resolves to no type.
  */
-const baseOf = (
-  type: ChildName,
-  schemas: Schemas<WalkElement, WalkType>,
-): Option.Option<ChildName> => {
+const baseOf = (type: ChildName, schemas: Schemas): Option.Option<ChildName> => {
   if (type.namespace === xsdNamespace) {
     const base = builtinBases.get(type.local);
 
@@ -2052,7 +2019,7 @@ const baseOf = (
 const derivesFrom = (
   type: ChildName,
   declared: readonly ChildName[],
-  schemas: Schemas<WalkElement, WalkType>,
+  schemas: Schemas,
 ): boolean => {
   const seen = new Set<string>();
   for (
@@ -2254,7 +2221,7 @@ const manifestUntabled: ReadonlySet<string> = new Set([xlinkNamespace]);
  * @param schemas The tables by namespace.
  * @returns The namespaces.
  */
-const untabledOf = (schemas: Schemas<WalkElement, WalkType>): ReadonlySet<string> =>
+const untabledOf = (schemas: Schemas): ReadonlySet<string> =>
   schemas.has(manifestNamespace) ? manifestUntabled : assessmentUntabled;
 
 /**
@@ -3260,12 +3227,12 @@ const checkInstance = (
  * @param schemas The tables by namespace.
  * @returns The named type's entry with its namespace, or none when the name's table governs.
  */
-const namedType = <E extends WalkElement, Y extends WalkType>(
+const namedType = (
   element: SourceElement,
-  table: E,
+  table: ElementTable,
   parents: ReadonlyMap<SourceElement, SourceElement>,
-  schemas: Schemas<E, Y>,
-): Option.Option<Governed<E, Y>> => {
+  schemas: Schemas,
+): Option.Option<Governed> => {
   const written = element.attributes.find(
     (attribute) => attribute.namespace === xsiNamespace && attribute.local === "type",
   );
@@ -3275,7 +3242,7 @@ const namedType = <E extends WalkElement, Y extends WalkType>(
 
   return Option.flatMap(resolveQName(written.value, element, parents), (type) =>
     derivesFrom(type, table.types, schemas)
-      ? Option.map(typeEntryOf(schemas, type), (entry): Governed<E, Y> => ({
+      ? Option.map(typeEntryOf(schemas, type), (entry) => ({
           namespace: type.namespace,
           table: entry,
         }))
@@ -3466,8 +3433,8 @@ const checkSimplyTyped = (
  * simple type governs, by reading 60 ("a simple type it names governs its text and is checked"),
  * or pass over it and its subtree.
  */
-type Admission<E extends WalkElement = ElementTable> =
-  | { readonly kind: "check"; readonly table: E }
+type Admission =
+  | { readonly kind: "check"; readonly table: ElementTable }
   | { readonly kind: "unknown"; readonly reading: Option.Option<string> }
   | { readonly kind: "lax"; readonly mistyped: Option.Option<SourceAttribute> }
   | { readonly kind: "simple" }
@@ -3484,7 +3451,7 @@ type Admission<E extends WalkElement = ElementTable> =
  * @param schemas The tables by namespace.
  * @returns Whether `type` names a simple type.
  */
-const isSimpleType = (type: ChildName, schemas: Schemas<WalkElement, WalkType>): boolean => {
+const isSimpleType = (type: ChildName, schemas: Schemas): boolean => {
   const seen = new Set<string>();
   let current = type;
   while (current.namespace !== xsdNamespace) {
@@ -3533,7 +3500,7 @@ type InstanceType =
 const instanceTypeOf = (
   element: SourceElement,
   parents: ReadonlyMap<SourceElement, SourceElement>,
-  schemas: Schemas<WalkElement, WalkType>,
+  schemas: Schemas,
 ): InstanceType => {
   const written = element.attributes.find(
     (attribute) => attribute.namespace === xsiNamespace && attribute.local === "type",
@@ -3587,11 +3554,11 @@ const instanceTypeOf = (
  * @returns `simple` under a simple type, `pass` under a complex or unknown one, and `lax`
  *   otherwise, holding the `xsi:type` to refuse where it does not resolve.
  */
-const admitByInstanceType = <E extends WalkElement, Y extends WalkType>(
+const admitByInstanceType = (
   element: SourceElement,
   parents: ReadonlyMap<SourceElement, SourceElement>,
-  schemas: Schemas<E, Y>,
-): Admission<E> => {
+  schemas: Schemas,
+): Admission => {
   const type = instanceTypeOf(element, parents, schemas);
   switch (type.kind) {
     case "complex":
@@ -3637,11 +3604,11 @@ const admitByInstanceType = <E extends WalkElement, Y extends WalkType>(
  * @param schemas The tables by namespace.
  * @returns How to treat the element.
  */
-const admitLaxly = <E extends WalkElement, Y extends WalkType>(
+const admitLaxly = (
   element: SourceElement,
   parents: ReadonlyMap<SourceElement, SourceElement>,
-  schemas: Schemas<E, Y>,
-): Admission<E> => {
+  schemas: Schemas,
+): Admission => {
   if (isForeignRoot(element)) {
     return { kind: "pass" };
   }
@@ -3650,7 +3617,7 @@ const admitLaxly = <E extends WalkElement, Y extends WalkType>(
     Option.filter(elementTableOf(schemas, element), (table) => table.global),
     {
       onNone: () => admitByInstanceType(element, parents, schemas),
-      onSome: (table): Admission<E> => ({ kind: "check", table }),
+      onSome: (table): Admission => ({ kind: "check", table }),
     },
   );
 };
@@ -3677,11 +3644,11 @@ const admitLaxly = <E extends WalkElement, Y extends WalkType>(
  * @param schemas The tables by namespace.
  * @returns How to treat the element.
  */
-const admitStrictly = <E extends WalkElement, Y extends WalkType>(
+const admitStrictly = (
   element: SourceElement,
   parents: ReadonlyMap<SourceElement, SourceElement>,
-  schemas: Schemas<E, Y>,
-): Admission<E> => {
+  schemas: Schemas,
+): Admission => {
   const table = Option.filter(elementTableOf(schemas, element), (declared) => declared.global);
   if (Option.isSome(table)) {
     return isForeignRoot(element) ? { kind: "pass" } : { kind: "check", table: table.value };
@@ -3743,22 +3710,22 @@ const admitStrictly = <E extends WalkElement, Y extends WalkType>(
  * @param schemas The tables by namespace.
  * @returns How to treat the element.
  */
-const admit = <E extends WalkElement, Y extends WalkType>(
+const admit = (
   element: SourceElement,
   parent: Option.Option<SourceElement>,
-  checked: ReadonlyMap<SourceElement, Governed<E, Y>>,
+  checked: ReadonlyMap<SourceElement, Governed>,
   laxed: ReadonlySet<SourceElement>,
   simple: ReadonlySet<SourceElement>,
   parents: ReadonlyMap<SourceElement, SourceElement>,
-  schemas: Schemas<E, Y>,
-): Admission<E> => {
+  schemas: Schemas,
+): Admission => {
   /**
    * Admit the element by its own table: passed over when it is not tabled, checked when its
    * namespace's tables declare its local name, and unknown when they do not.
    *
    * @returns The element's admission.
    */
-  const byTable = (): Admission<E> => {
+  const byTable = (): Admission => {
     if (!schemas.has(element.namespace)) {
       return { kind: "pass" };
     }
@@ -3826,11 +3793,11 @@ const admit = <E extends WalkElement, Y extends WalkType>(
  * below an element QTI's tables govern, so that its `xml:id` is one of the document's IDs
  * ({@link idEntriesOf}).
  */
-type Step<E extends WalkElement = ElementTable, Y extends WalkType = TypeEntry> =
+type Step =
   | {
-      readonly governed: Governed<E, Y>;
+      readonly governed: Governed;
       readonly kind: "check";
-      readonly name: E;
+      readonly name: ElementTable;
       readonly visit: Visit;
     }
   | {
@@ -3846,10 +3813,10 @@ type Step<E extends WalkElement = ElementTable, Y extends WalkType = TypeEntry> 
  * The walk of a document: each element it checks, refuses or passes over laxly, the table that
  * governs each element it checks with its tables' namespace, and each element's parent.
  */
-interface Walked<E extends WalkElement = ElementTable, Y extends WalkType = TypeEntry> {
-  readonly governing: ReadonlyMap<SourceElement, Governed<E, Y>>;
+interface Walked {
+  readonly governing: ReadonlyMap<SourceElement, Governed>;
   readonly parents: ReadonlyMap<SourceElement, SourceElement>;
-  readonly steps: readonly Step<E, Y>[];
+  readonly steps: readonly Step[];
 }
 
 /**
@@ -3865,17 +3832,14 @@ interface Walked<E extends WalkElement = ElementTable, Y extends WalkType = Type
  * @param schemas The tables by namespace.
  * @returns The walk.
  */
-const walkTables = <E extends WalkElement, Y extends WalkType>(
-  source: SourceDocument,
-  schemas: Schemas<E, Y>,
-): Walked<E, Y> => {
+const walkTables = (source: SourceDocument, schemas: Schemas): Walked => {
   const parents = new Map<SourceElement, SourceElement>();
-  const governing = new Map<SourceElement, Governed<E, Y>>();
+  const governing = new Map<SourceElement, Governed>();
   const laxed = new Set<SourceElement>();
   const simple = new Set<SourceElement>();
   // Each element QTI's tables govern, and each element passed over laxly below one.
   const underQti = new Set<SourceElement>();
-  const steps: Step<E, Y>[] = [];
+  const steps: Step[] = [];
 
   for (const visit of walk(source)) {
     const { element, parent } = visit;
@@ -3902,7 +3866,7 @@ const walkTables = <E extends WalkElement, Y extends WalkType>(
       const name = admission.table;
       const governed = Option.getOrElse(
         namedType(element, name, parents, schemas),
-        (): Governed<E, Y> => ({ namespace: element.namespace, table: name }),
+        (): Governed => ({ namespace: element.namespace, table: name }),
       );
       governing.set(element, governed);
       if (governed.namespace === qtiNamespace) {
@@ -4440,23 +4404,19 @@ export const idHoldersOf = (
  * namespaces `others` holds, are among them. An element the walk passes over or refuses has no
  * entry. {@link checkStructure} walks by the same tables, so the two cannot drift.
  *
- * The walk reads only the fields of {@link WalkElement} and {@link WalkType}, so tables that hold the
- * same values there, the full tables or the securing tables' projection of them, give the same
- * elements the same governing tables, the projection's entries in place of the full ones.
- *
  * @param source The document, as the reader adapter built it.
- * @param tables The tables generated from the QTI XSD, or any walk tables of the same values.
+ * @param tables The tables generated from the QTI XSD.
  * @param others The tables of other namespaces, keyed by namespace URI, by which the walk checks
  *   those namespaces' elements as it checks QTI's; none by default. An entry for QTI's namespace is
  *   set aside.
  * @returns The table that governs each checked element, keyed by the element; each value is the
  *   element's table or the type's entry itself, never a copy.
  */
-export const governingTables = <E extends WalkElement, Y extends WalkType>(
+export const governingTables = (
   source: SourceDocument,
-  tables: TablesOf<E, Y>,
-  others?: ReadonlyMap<string, TablesOf<E, Y>>,
-): ReadonlyMap<SourceElement, E | Y> =>
+  tables: Tables,
+  others?: ReadonlyMap<string, Tables>,
+): ReadonlyMap<SourceElement, ContentTable> =>
   new Map(
     Array.from(walkTables(source, schemasOf(tables, others)).governing, ([element, governed]) => [
       element,

@@ -614,8 +614,6 @@ const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
           prompt: node.prompt.pipe(Option.map((prompt) => withoutPaths(prompt))),
         };
       }
-      case "feedback-block":
-      case "feedback-inline":
       case "template-block":
       case "template-inline": {
         return { ...node, content: withoutPaths(node.content), path: "" };
@@ -635,20 +633,15 @@ const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
   });
 
 /**
- * Give a redacted item as its JSON form decodes: every body node's path `""`, each modal
- * feedback's content's too, and `unprinted`'s.
+ * Give a redacted item as its JSON form decodes: every body node's path `""`, and `unprinted`'s.
  *
  * @param redacted The item `redact` gave.
- * @returns The same item, each path in its body, its modal feedback and `unprinted`, `""`.
+ * @returns The same item, each path in its body, and `unprinted`'s, `""`.
  */
 const pathless = (redacted: Redacted): Redacted =>
   brandRedacted({
     ...redacted,
     body: withoutPaths(redacted.body),
-    modalFeedback: redacted.modalFeedback.map((feedback) => ({
-      ...feedback,
-      content: withoutPaths(feedback.content),
-    })),
     unprinted: redacted.unprinted.pipe(Option.map((unprinted) => ({ ...unprinted, path: "" }))),
   });
 
@@ -683,8 +676,6 @@ const pathsOf = (nodes: readonly BodyNode[]): readonly string[] =>
       case "extended-text": {
         return [node.path, ...Option.toArray(node.prompt).flatMap((prompt) => pathsOf(prompt))];
       }
-      case "feedback-block":
-      case "feedback-inline":
       case "template-block":
       case "template-inline": {
         return [node.path, ...pathsOf(node.content)];
@@ -1224,8 +1215,6 @@ const pathsBytes = new TextEncoder().encode(
  * the Choice's second choice, `B`.
  */
 const pathsRecord: RedactRecord = {
-  attempt: "none",
-  defaults: {},
   outcomes: {},
   templates: {
     VISIBLE: {
@@ -1759,11 +1748,9 @@ describe("render", () => {
     const decoded: Redacted = Result.getOrThrow(decodeRedacted(json));
     const handBuilt: RedactedFields = {
       body: redacted.body,
-      credit: redacted.credit,
       document: redacted.document,
       identifier: redacted.identifier,
       lang: redacted.lang,
-      modalFeedback: redacted.modalFeedback,
       notices: redacted.notices,
       responses: redacted.responses,
       title: redacted.title,
