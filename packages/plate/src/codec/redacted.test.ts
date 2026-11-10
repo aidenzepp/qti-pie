@@ -1856,6 +1856,63 @@ describe("the codec and catalog references", () => {
   );
 });
 
+/**
+ * An item whose `div` names the stimulus `S1` through `data-stimulus-idref`, beside a paragraph
+ * that names none.
+ */
+const hostingItem = itemOf(
+  "hosting",
+  Option.none(),
+  [
+    {
+      attributes: [{ name: "data-stimulus-idref", value: "S1" }],
+      children: [words("Loading the passage.")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/div",
+      stimulus: "S1",
+      tag: "div",
+    },
+    {
+      attributes: [],
+      children: [words("No stimulus.")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p",
+      tag: "p",
+    },
+  ],
+  [],
+);
+
+describe("the codec and stimulus references", () => {
+  it.effect(
+    '[W0-AR] the JSON holds an element\'s stimulus idref under "stimulus", no "stimulus" key for an element without one and no "path", and round-trips to the redacted item with every path ""',
+    () =>
+      Effect.gen(function* roundTripsStimulus() {
+        const redacted = redact(acceptForTest(hostingItem));
+        const json = Result.getOrThrow(encodeRedacted(redacted));
+        const wire = JSON.stringify(json);
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+        const handedOver: unknown = JSON.parse(wire);
+        const decoded = Result.getOrThrow(decodeRedacted(handedOver));
+        const configuration = yield* defaults;
+
+        assert.include(wire, '"stimulus":"S1"');
+        assert.strictEqual(wire.split('"stimulus"').length, 2);
+        assert.notInclude(wire, '"path"');
+        assert.deepStrictEqual(decoded, pathless(redacted));
+        assert.strictEqual(
+          decoded.body[0]?.kind === "element" ? decoded.body[0].stimulus : decoded.body[0],
+          "S1",
+        );
+        assert.isFalse(Object.hasOwn(decoded.body[1] ?? {}, "stimulus"));
+        assert.strictEqual(
+          Result.getOrThrow(render(decoded, configuration, { instance })).html,
+          Result.getOrThrow(render(redacted, configuration, { instance })).html,
+        );
+      }),
+  );
+});
+
 describe("the codec on a module's container", () => {
   it.effect(
     "decodeRedacted refuses a container naming a kind whose module declares no container: InvalidRedacted at stage decode, naming the kind",
@@ -1889,6 +1946,58 @@ describe("the codec on a module's container", () => {
 
         assert.strictEqual(error._tag, "InvalidRedacted");
         assert.strictEqual(error.stage, "encode");
+      }),
+  );
+});
+
+/**
+ * A single identifier value.
+ *
+ * @param value The identifier.
+ * @returns The value.
+ */
+const identifierValue = (value: string): Value => ({
+  baseType: "identifier",
+  cardinality: "single",
+  values: [{ baseType: "identifier", value }],
+});
+
+describe("the codec on held template values", () => {
+  it.effect(
+    "[W0-PCIVARS] the JSON form writes held values under held.<response>.<identifier> as ValueSchema writes a value, leaves the key out when nothing is held, and reads both back",
+    () =>
+      Effect.gen(function* heldRoundTrip() {
+        const unheld = redact(acceptForTest(choiceItem));
+        const held: RedactedFields["held"] = { RESPONSE: { HELD: identifierValue("beacon") } };
+        const holding = brandRedacted({ ...unheld, held });
+        const json = yield* Effect.fromResult(encodeRedacted(holding));
+
+        assert.deepStrictEqual(json.held, {
+          RESPONSE: {
+            HELD: {
+              baseType: "identifier",
+              cardinality: "single",
+              values: [{ baseType: "identifier", value: "beacon" }],
+            },
+          },
+        });
+
+        const decoded = yield* Effect.fromResult(
+          // oxlint-disable-next-line unicorn/prefer-structured-clone -- the round trip is the JSON a host sends to a page, which a structured clone does not take.
+          decodeRedacted(JSON.parse(JSON.stringify(json))),
+        );
+
+        assert.deepStrictEqual(decoded.held, held);
+
+        const unheldJson = yield* Effect.fromResult(encodeRedacted(unheld));
+
+        assert.isFalse(Object.hasOwn(unheldJson, "held"));
+        assert.isUndefined(unheld.held);
+
+        const unheldAgain = yield* Effect.fromResult(decodeRedacted(unheldJson));
+
+        assert.isFalse(Object.hasOwn(unheldAgain, "held"));
+        assert.isTrue(fieldsPinned);
       }),
   );
 });

@@ -15,7 +15,10 @@
  * once emitted, to the render function's attachment hook (`RenderInteraction.attach`), whose
  * answer ({@link AttachAnswer}) adds attributes to the element and places nodes right after it or
  * after the nearest enclosing element at a flow position; the hook answers nothing while no
- * catalog support is active, and the element then renders as any other.
+ * catalog support is active, and the element then renders as any other. An element that names a
+ * stimulus (`ElementPayload.stimulus`) is handed, once emitted, to the dock hook
+ * (`RenderInteraction.dock`), whose nodes replace its content; the hook answers none while no
+ * module declares `dock`, and the element then renders as any other.
  *
  * Two supports of the candidate change one element each, and only for a candidate who asks (issue
  * m5-11): captions (A-13a) write `default` on one captions `track` of each `video`
@@ -147,26 +150,42 @@ export type OwnedElements = (
 ) => Option.Option<Result.Result<readonly Node[], PartSwapRefused>>;
 
 /**
- * A body element that references a catalog, as the emitter hands it to {@link AttachCatalog}: the
- * catalog it names and the id a presenter's nodes can point at.
+ * A body element that references a catalog or names a stimulus, as the emitter hands it to
+ * {@link AttachCatalog} or {@link DockStimulus}: what it names and the id a hook's nodes can point
+ * at.
  */
 export interface ReferencingElement {
   /**
    * The element's id as emitted: its authored `id` scoped by the item instance
    * ({@link authoredId}), or, for an element without one, the id the emitter mints
-   * (`<instance>-catalog-<idref>-<n>` through {@link scopedId}, `n` counting from 0 the id-less
-   * elements of the walk that reference the same catalog). A minted id is written on the element
-   * only when the hook answers at least one node or attribute, so a presenter's nodes can point at
-   * the element and an empty answer changes no HTML.
+   * (`<instance>-catalog-<idref>-<n>` for a catalog reference and `<instance>-stimulus-<idref>-<n>`
+   * for a stimulus, through {@link scopedId}, `n` counting from 0 the id-less elements of the walk
+   * that name the same one). A minted id is written on the element only when the hook answers at
+   * least one node or attribute, so a hook's nodes can point at the element and an empty answer
+   * changes no HTML.
    */
   readonly id: string;
   /**
-   * The catalog the element references: its `data-catalog-idref` as the author wrote it
-   * (`ElementPayload.catalog`), the `id` of a `qti-catalog` of the item's document, never a source
-   * path.
+   * What the element names, as the author wrote it, never a source path: for a catalog reference
+   * its `data-catalog-idref` (`ElementPayload.catalog`), the `id` of a `qti-catalog` of the item's
+   * document; for a stimulus its `data-stimulus-idref` (`ElementPayload.stimulus`), the identifier
+   * of the stimulus reference whose node docks into the element.
    */
   readonly idref: string;
 }
+
+/**
+ * Dock a module's node into a body element that names a stimulus: the answer of the module that
+ * reads a stimulus reference (`m3e-02`'s), which renders the stimulus's body inside the element
+ * (`ItemContentModule.dock` in `#plate/content/contract.ts`).
+ *
+ * @param reference The naming element: the stimulus's idref and the element's id.
+ * @returns The nodes that replace the element's content, none to leave the element as it is, or
+ *   the refusal of a part swap.
+ */
+export type DockStimulus = (
+  reference: ReferencingElement,
+) => Result.Result<Option.Option<readonly Node[]>, PartSwapRefused>;
 
 /**
  * What {@link AttachCatalog} answers for a referencing element: attributes for the element, nodes
@@ -260,6 +279,16 @@ export interface RenderInteraction {
    * only a payload built by hand reaches it so.
    */
   readonly containers?: RenderContainer;
+  /**
+   * Dock a module's node into an element that names a stimulus ({@link DockStimulus}). The walk
+   * calls it once for each body element it emits whose payload carries a `stimulus` idref, after
+   * the element and its subtree are emitted, with the idref and the element's id
+   * ({@link ReferencingElement}), and writes the nodes it answers in place of the element's
+   * content. An answer of none docks nothing and leaves the element as emitted, with its own
+   * children and no minted id: what `render` answers while no module declares `dock`, so the HTML
+   * is unchanged. A render function without it docks nothing either.
+   */
+  readonly dock?: DockStimulus;
   readonly moduleContent?: ModuleContent;
   /**
    * Render the elements a module owns among the content it emits ({@link OwnedElements}): set by
@@ -703,10 +732,10 @@ interface Walk {
   readonly lang: string;
   readonly locale: Locale;
   /**
-   * How many id-less elements referencing each catalog the walk has handed `attach` so far, by
-   * idref, which numbers the ids {@link mintedId} writes. One map per walk, shared with every
-   * element below; a nested walk ({@link emitNodes} for a Prompt or a choice's content) counts on
-   * its own.
+   * How many id-less elements referencing each catalog the walk has handed `attach`, and naming
+   * each stimulus it has handed `dock`, so far, by `<kind>:<idref>`, which numbers the ids
+   * {@link mintedId} writes. One map per walk, shared with every element below; a nested walk
+   * ({@link emitNodes} for a Prompt or a choice's content) counts on its own.
    */
   readonly minted: Map<string, number>;
   readonly parts: Resolved;
@@ -996,20 +1025,51 @@ const elementOf = (
   );
 
 /**
- * Mint the id of an element that references a catalog and carries no `id` of its own, so a
- * presenter's nodes can point at it: `<instance>-catalog-<idref>-<n>`, where `n` counts from 0
- * the id-less elements of the walk that reference the same catalog, so two of them never share an
+ * What a body element names through a hook: a catalog it references (`attach`) or a stimulus
+ * (`dock`), which the minted ids are keyed and named by.
+ */
+type Named = "catalog" | "stimulus";
+
+/**
+ * Mint the id of an element that references a catalog or names a stimulus and carries no `id` of
+ * its own, so a hook's nodes can point at it: `<instance>-<kind>-<idref>-<n>`, where `n` counts
+ * from 0 the id-less elements of the walk that name the same one, so two of them never share an
  * id.
  *
  * @param walk What the walk carries: the instance and the count so far.
- * @param idref The catalog the element references.
+ * @param kind What the element names.
+ * @param idref The catalog or stimulus the element names.
  * @returns The minted id.
  */
-const mintedId = (walk: Walk, idref: string): string => {
-  const count = walk.minted.get(idref) ?? 0;
-  walk.minted.set(idref, count + 1);
+const mintedId = (walk: Walk, kind: Named, idref: string): string => {
+  const key = `${kind}:${idref}`;
+  const count = walk.minted.get(key) ?? 0;
+  walk.minted.set(key, count + 1);
 
-  return scopedId(walk.instance, "catalog", idref, count);
+  return scopedId(walk.instance, kind, idref, count);
+};
+
+/**
+ * An emitted element's id as a hook is handed it: its authored `id`, scoped, when it has one;
+ * otherwise an id minted for what it names ({@link mintedId}), and whether it was minted, so the
+ * caller writes a minted id on the element only when the hook answers.
+ *
+ * @param element The element as emitted.
+ * @param kind What the element names.
+ * @param idref The catalog or stimulus it names.
+ * @param walk What the walk carries.
+ * @returns The id, and whether it is the element's own.
+ */
+const handedId = (element: Element, kind: Named, idref: string, walk: Walk) => {
+  const authored = Option.filter(
+    Option.fromUndefinedOr(element.attrs["id"]),
+    (value): value is string => value !== true,
+  );
+
+  return {
+    authored: Option.isSome(authored),
+    id: Option.getOrElse(authored, () => mintedId(walk, kind, idref)),
+  };
 };
 
 /**
@@ -1064,11 +1124,7 @@ const attached = (
   Option.match(Option.fromUndefinedOr(walk.renderInteraction.attach), {
     onNone: () => Result.succeed([element]),
     onSome: (attach) => {
-      const authored = Option.filter(
-        Option.fromUndefinedOr(element.attrs["id"]),
-        (value): value is string => value !== true,
-      );
-      const id = Option.getOrElse(authored, () => mintedId(walk, idref));
+      const { id } = handedId(element, "catalog", idref, walk);
 
       return Result.map(attach({ id, idref }), (answer): readonly Node[] => {
         if (attachesNothing(answer)) {
@@ -1250,9 +1306,43 @@ const altTextAfter = (
 };
 
 /**
- * Emit an authored HTML element the second line admits, with what a catalog presenter attaches
- * after it when the element references a catalog, and then the nodes its subtree deferred to it
- * when it stands at a flow position.
+ * Dock a module's nodes into an emitted element that names a stimulus, through the render
+ * function's `dock`: the nodes it answers replace the element's content.
+ *
+ * The element's own emitted id is handed when it has one; otherwise an id is minted
+ * ({@link mintedId}) and written on the element only when the hook answers nodes, so an answer of
+ * none leaves the element exactly as emitted.
+ *
+ * @param element The element as emitted.
+ * @param idref The stimulus it names.
+ * @param walk What the walk carries.
+ * @returns The element, its content replaced when the hook answers, or the refusal of a part swap.
+ */
+const docked = (
+  element: Element,
+  idref: string,
+  walk: Walk,
+): Result.Result<Element, PartSwapRefused> =>
+  Option.match(Option.fromUndefinedOr(walk.renderInteraction.dock), {
+    onNone: () => Result.succeed(element),
+    onSome: (dock) => {
+      const { authored, id } = handedId(element, "stimulus", idref, walk);
+
+      return Result.map(dock({ id, idref }), (answer) =>
+        Option.match(answer, {
+          onNone: () => element,
+          onSome: (nodes) =>
+            h(element.tag, authored ? element.attrs : { ...element.attrs, id }, nodes),
+        }),
+      );
+    },
+  });
+
+/**
+ * Emit an authored HTML element the second line admits: with a module's nodes docked in place of
+ * its content when it names a stimulus, with what a catalog presenter attaches after it when it
+ * references a catalog, and then the nodes its subtree deferred to it when it stands at a flow
+ * position.
  *
  * For a candidate who asks, a `video` is written with its captions track defaulted
  * ({@link captioned}, A-13a) and an `img` with an `alt` is followed by that text shown
@@ -1262,9 +1352,9 @@ const altTextAfter = (
  * @param element The element's payload.
  * @param declared The attributes the XSD declares on the element, from {@link htmlSubset}.
  * @param walk What the walk carries.
- * @returns The element, followed by the attached nodes when it references a catalog
- *   ({@link attached}) and by the nodes deferred to it ({@link Walk.deferred}), or the first
- *   refusal of a part swap.
+ * @returns The element, its content docked when it names a stimulus ({@link docked}), followed by
+ *   the attached nodes when it references a catalog ({@link attached}) and by the nodes deferred
+ *   to it ({@link Walk.deferred}), or the first refusal of a part swap.
  */
 const admittedElement = (
   element: ElementPayload,
@@ -1275,14 +1365,22 @@ const admittedElement = (
 
   return Result.map(
     Result.flatMap(
-      Result.flatMap(elementOf(element, declared, inner), (emitted) => {
-        const shown = captioned(emitted, walk);
+      Result.flatMap(elementOf(element, declared, inner), (emitted) =>
+        Result.flatMap(
+          Option.match(Option.fromUndefinedOr(element.stimulus), {
+            onNone: () => Result.succeed(emitted),
+            onSome: (idref) => docked(emitted, idref, walk),
+          }),
+          (hosting) => {
+            const shown = captioned(hosting, walk);
 
-        return Option.match(Option.fromUndefinedOr(element.catalog), {
-          onNone: () => Result.succeed([shown]),
-          onSome: (idref) => attached(shown, idref, walk),
-        });
-      }),
+            return Option.match(Option.fromUndefinedOr(element.catalog), {
+              onNone: () => Result.succeed([shown]),
+              onSome: (idref) => attached(shown, idref, walk),
+            });
+          },
+        ),
+      ),
       (nodes) => altTextAfter(nodes, walk),
     ),
     (nodes) => (inner.deferred === walk.deferred ? nodes : [...nodes, ...inner.deferred]),

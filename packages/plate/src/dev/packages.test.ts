@@ -100,7 +100,7 @@ const answerOf = (outcome: Page | Response, target: string): Response =>
     ? outcome
     : new Response(
         pageHtml(outcome, { appearance: { dark: false, theme: emptyTheme }, back: target }),
-        { headers: { ...pageHeaders, ...outcome.headers }, status: outcome.status },
+        { headers: { ...pageHeaders(), ...outcome.headers }, status: outcome.status },
       );
 
 /**
@@ -311,6 +311,17 @@ const outsideRoot = path.join(scratch, "outside");
 const boundedRoot = path.join(scratch, "bounded");
 
 /**
+ * A fourth folder in the scratch folder, a corpus root of one package, `styled`, that holds a
+ * stylesheet, an image and the item document, all listed by its manifest.
+ */
+const styledRoot = path.join(scratch, "styled");
+
+/**
+ * The text of `css/item.css` in {@link styledRoot}'s package, as the package holds it.
+ */
+const styledSheet = ".item p {\n  color: rebeccapurple;\n}\n";
+
+/**
  * The ids of the packages in {@link boundedRoot}, in the order of their locations: eleven, numbered
  * so the sorted order is their numbering. The fixture package follows them in the cache.
  */
@@ -382,6 +393,24 @@ const inBounded = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
   );
 
 /**
+ * The package cache over {@link styledRoot}, which only {@link inStyled} reads.
+ */
+const styled = Effect.runSync(packageCache());
+
+/**
+ * Run an effect with {@link styledRoot} as `PLATE_CORPUS_DIR`.
+ *
+ * @param effect The effect.
+ * @returns The effect under that setting.
+ */
+const inStyled = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  effect.pipe(
+    Effect.provide(
+      ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: styledRoot })),
+    ),
+  );
+
+/**
  * Send a GET for a target to the route over the crafted packages.
  *
  * @param target The path.
@@ -414,6 +443,17 @@ beforeAll(() => {
   for (const id of boundedIds) {
     mkdirSync(path.join(boundedRoot, `${id}.zip.d`), { recursive: true });
   }
+  const styledPackage = path.join(styledRoot, "styled.zip.d");
+  mkdirSync(path.join(styledPackage, "css"), { recursive: true });
+  mkdirSync(path.join(styledPackage, "img"), { recursive: true });
+  mkdirSync(path.join(styledPackage, "items"), { recursive: true });
+  writeFileSync(
+    path.join(styledPackage, "imsmanifest.xml"),
+    craftedManifest("items/q.xml", "css/item.css", "img/logo.png"),
+  );
+  writeFileSync(path.join(styledPackage, "items", "q.xml"), craftedItem);
+  writeFileSync(path.join(styledPackage, "css", "item.css"), styledSheet);
+  writeFileSync(path.join(styledPackage, "img", "logo.png"), "PNG");
 });
 
 afterAll(() => {
@@ -816,6 +856,41 @@ describe("dev/packages.ts", () => {
           );
         }),
       { tags: ["corpus"] },
+    );
+  });
+
+  describe("an opened package's files", () => {
+    it.effect(
+      "[W0-DEVHOST.2] an opened package answers files for a path it holds and none for one it does not",
+      () =>
+        Effect.gen(function* reading() {
+          const entry = Option.getOrThrow(yield* inStyled(styled.packageOf("styled")));
+
+          assert.strictEqual(entry.verdict.verdict, "accepted");
+          assert.deepStrictEqual(entry.files("css/item.css"), Option.some(styledSheet));
+          assert.deepStrictEqual(entry.files("missing.css"), Option.none());
+          assert.deepStrictEqual(entry.files("../outside"), Option.none());
+          assert.deepStrictEqual(entry.files("../outside/secret.png"), Option.none());
+          assert.deepStrictEqual(entry.files("img/logo.png"), Option.none());
+          assert.deepStrictEqual(entry.files("items/q.xml"), Option.none());
+          assert.deepStrictEqual(entry.files("imsmanifest.xml"), Option.none());
+        }),
+    );
+
+    it.effect(
+      "[W0-DEVHOST.2] a package that is not accepted answers none for a path its directory holds",
+      () =>
+        Effect.gen(function* withheld() {
+          const evil = Option.getOrThrow(yield* inCrafted(crafted.packageOf("evil")));
+          const unchecked = yield* packageCache((source) => Effect.succeed(uncheckedOf(source)));
+          const [first] = yield* inStyled(unchecked.packages);
+
+          assert.isDefined(first);
+          assert.deepStrictEqual(first.files("css/item.css"), Option.none());
+          assert.strictEqual(evil.verdict.verdict, "refused");
+          assert.deepStrictEqual(evil.files("item.xml"), Option.none());
+          assert.deepStrictEqual(evil.files("foo\\secret.png"), Option.none());
+        }),
     );
   });
 });

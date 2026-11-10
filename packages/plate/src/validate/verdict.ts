@@ -33,8 +33,9 @@ import type {
   SourceElement,
   Visit,
 } from "#plate/document/source.ts";
+import { valueOf } from "#plate/model/attributes.ts";
 import { isInteraction, mapRegions } from "#plate/model/interactions.ts";
-import { buildItem } from "#plate/model/item.ts";
+import { buildItem, stimulusBody } from "#plate/model/item.ts";
 import type {
   BodyNode,
   Item,
@@ -188,9 +189,28 @@ export interface RootSummary {
   readonly title: string;
   /**
    * Every feature not delivered: the root's own mark, `root:qti-assessment-section` or
-   * `root:qti-assessment-stimulus`, at the root's path.
+   * `root:qti-assessment-stimulus`, at the root's path, first; then, for a stimulus, the marks and
+   * notices the body walk recorded in its body ({@link StimulusSummary}). A section's holds its
+   * mark alone.
    */
-  readonly unsupported: readonly MarkedFeature[];
+  readonly unsupported: readonly UnsupportedFeature[];
+}
+
+/**
+ * What M2 holds of a stimulus document it accepts: its summary, its body read through the body
+ * walk (`stimulusBody` in `#plate/model/item.ts`) and its language.
+ */
+export interface StimulusSummary extends RootSummary {
+  /**
+   * The children of the document's `qti-stimulus-body`, read as an item body is read, each
+   * interaction among them a notice: what the module that reads a stimulus reference (`m3e-02`'s)
+   * renders inside the element that names the stimulus.
+   */
+  readonly body: readonly BodyNode[];
+  /**
+   * The root's `xml:lang`, as written; none when the root carries none.
+   */
+  readonly lang: Option.Option<string>;
 }
 
 /**
@@ -205,10 +225,14 @@ export type AcceptedSection = Brand.Branded<RootSummary, "AcceptedSection">;
 const acceptSection = Brand.nominal<AcceptedSection>();
 
 /**
- * A stimulus document {@link check} accepted. {@link check} is its constructor, and
- * {@link acceptStimulusForTest} the one named seam for tests.
+ * A stimulus document {@link check} accepted: its summary with its body and its language
+ * ({@link StimulusSummary}). {@link check} is its constructor, and {@link acceptStimulusForTest}
+ * the one named seam for tests.
  */
-export type AcceptedStimulus = Brand.Branded<RootSummary, "AcceptedStimulus">;
+export type AcceptedStimulus = Brand.Branded<
+  RootSummary & { readonly body: readonly BodyNode[]; readonly lang: Option.Option<string> },
+  "AcceptedStimulus"
+>;
 
 /**
  * The brand's constructor, kept to this module.
@@ -945,8 +969,30 @@ const checkTest = (source: SourceDocument, version: Option.Option<CpVersion>): V
 };
 
 /**
+ * Read what M2 holds of a stimulus document: its summary with its root mark, then its body through
+ * the body walk (`stimulusBody`), the body's marks and notices after the root mark, and its
+ * `xml:lang`.
+ *
+ * @param source A stimulus document the validators accepted.
+ * @returns The summary, or the refusal `summarise` or the body walk gives.
+ */
+const summariseStimulus = (source: SourceDocument): Result.Result<StimulusSummary, Refusal> =>
+  Result.gen(function* stimulusSummary() {
+    const summary = yield* summarise(source, "root:qti-assessment-stimulus");
+    const read = yield* stimulusBody(source);
+
+    return {
+      ...summary,
+      body: read.body,
+      lang: valueOf(source.root, "xml:lang"),
+      unsupported: [...summary.unsupported, ...read.unsupported],
+    };
+  });
+
+/**
  * Give the verdict on a section or a stimulus document that every validator accepted and plate can
- * judge: always `accepted-with-unsupported`, with its root's mark, as M2 delivers neither alone.
+ * judge: always `accepted-with-unsupported`, with its root's mark, as M2 delivers neither alone. A
+ * stimulus is accepted with its body and its language ({@link summariseStimulus}).
  *
  * @param source The section or stimulus.
  * @param kind Which of the two it is.
@@ -954,27 +1000,25 @@ const checkTest = (source: SourceDocument, version: Option.Option<CpVersion>): V
  */
 const checkUndelivered = (source: SourceDocument, kind: "section" | "stimulus"): Verdict => {
   const document = source.location;
-  const summary = summarise(
-    source,
-    kind === "section" ? "root:qti-assessment-section" : "root:qti-assessment-stimulus",
-  );
-  if (Result.isFailure(summary)) {
-    return { document, kind, refusals: [summary.failure], verdict: "refused" };
-  }
+  const judged: Result.Result<AcceptedByKind, Refusal> =
+    kind === "section"
+      ? Result.map(summarise(source, "root:qti-assessment-section"), (summary) => ({
+          accepted: acceptSection(summary),
+          kind,
+        }))
+      : Result.map(summariseStimulus(source), (summary) => ({
+          accepted: acceptStimulus(summary),
+          kind,
+        }));
 
-  return kind === "section"
-    ? {
-        accepted: acceptSection(summary.success),
-        document,
-        kind,
-        verdict: "accepted-with-unsupported",
-      }
-    : {
-        accepted: acceptStimulus(summary.success),
-        document,
-        kind,
-        verdict: "accepted-with-unsupported",
-      };
+  return Result.match(judged, {
+    onFailure: (refusal): Verdict => ({ document, kind, refusals: [refusal], verdict: "refused" }),
+    onSuccess: (accepted): Verdict => ({
+      ...accepted,
+      document,
+      verdict: "accepted-with-unsupported",
+    }),
+  });
 };
 
 /**
@@ -1147,10 +1191,10 @@ export const acceptSectionForTest = (section: RootSummary): AcceptedSection =>
  * Construct an {@link AcceptedStimulus} from a hand-built summary: the one named seam for tests.
  * Nothing outside a test calls it.
  *
- * @param stimulus The hand-built summary.
+ * @param stimulus The hand-built summary, its body and its language included.
  * @returns The stimulus accepted as it is.
  */
-export const acceptStimulusForTest = (stimulus: RootSummary): AcceptedStimulus =>
+export const acceptStimulusForTest = (stimulus: StimulusSummary): AcceptedStimulus =>
   acceptStimulus(stimulus);
 
 /**

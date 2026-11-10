@@ -44,7 +44,7 @@ import {
   assetTypes,
   page,
   pageHeaders,
-  pageHtml,
+  pageResponse,
   servedFilePath,
   slot,
 } from "#plate/dev/frame.ts";
@@ -59,7 +59,13 @@ import {
   routePackages,
   testIn,
 } from "#plate/dev/packages.ts";
-import type { PackageCache, PackagesFailure } from "#plate/dev/packages.ts";
+import type {
+  PackageCache,
+  PackageEntry,
+  FileOptions,
+  PackageFileReader,
+  PackagesFailure,
+} from "#plate/dev/packages.ts";
 import { entriesOf, postOf, valuesOf } from "#plate/dev/post.ts";
 import { reviewPath, routeReview } from "#plate/dev/review-page.ts";
 import type { ReviewPlayground } from "#plate/dev/review-page.ts";
@@ -259,12 +265,14 @@ interface Shown {
 
 /**
  * One sitting of an opened item, held in the playground's store under its instance token: the
- * accepted document, the record `begin` started or the last `score` returned, in the form the host
- * stores, the scored attempts, and what the last scored page showed.
+ * accepted document, the reader of its package's files when the item is in a package, the record
+ * `begin` started or the last `score` returned, in the form the host stores, the scored attempts,
+ * and what the last scored page showed.
  */
 interface Session {
   readonly accepted: Accepted;
   readonly attempts: number;
+  readonly files: Option.Option<PackageFileReader>;
   readonly last: Option.Option<Shown>;
   readonly path: string;
   readonly record: StoredRecord;
@@ -668,8 +676,13 @@ const resultId = (instance: string): string => scopedId(instance, "status");
  * `restore`, so its printed variables, template blocks and choices show by its template values;
  * the record itself stays on the server.
  *
+ * `render` gets the reader of the item's package's files when the item is in a package, and none
+ * for an item outside a package, so a content module reads a package-relative file through the
+ * kit's `files` only where there is a package to read it from.
+ *
  * @param accepted The accepted document.
- * @param session The item's corpus path, instance token and stored record.
+ * @param session The item's corpus path, instance token, stored record, and its package's file
+ *   reader when it is in a package.
  * @param configuration The configuration.
  * @param view What the page shows besides the item.
  * @returns The page, or a developer error's page when the record does not restore or a render
@@ -677,7 +690,12 @@ const resultId = (instance: string): string => scopedId(instance, "status");
  */
 const itemPage = (
   accepted: Accepted,
-  session: { readonly instance: string; readonly path: string; readonly record: StoredRecord },
+  session: {
+    readonly files: Option.Option<PackageFileReader>;
+    readonly instance: string;
+    readonly path: string;
+    readonly record: StoredRecord;
+  },
   configuration: Configuration,
   view: ItemView,
 ): Page => {
@@ -693,12 +711,17 @@ const itemPage = (
         onSome: (input) =>
           Result.map(renderStatus(input, configuration), (rendered) => [rendered.html]),
       });
-      const item = yield* render(redacted, configuration, {
+      const options: FileOptions & Options = {
         ...view.options,
         assetBase: assetBaseOf(session.path),
         disabled: view.disabled,
+        ...Option.match(session.files, {
+          onNone: () => ({}),
+          onSome: (files) => ({ files }),
+        }),
         instance: session.instance,
-      });
+      };
+      const item = yield* render(redacted, configuration, options);
       const submitAttributes: Attributes = view.disabled
         ? { disabled: true, type: "submit" }
         : { type: "submit" };
@@ -813,7 +836,12 @@ const refusedPage = (
 ): Page =>
   itemPage(
     target.session.accepted,
-    { instance: target.instance, path: target.session.path, record: target.session.record },
+    {
+      files: target.session.files,
+      instance: target.instance,
+      path: target.session.path,
+      record: target.session.record,
+    },
     configuration,
     {
       disabled: false,
@@ -840,7 +868,12 @@ const scoredPage = (
 ): Page =>
   itemPage(
     target.session.accepted,
-    { instance: target.instance, path: target.session.path, record: target.session.record },
+    {
+      files: target.session.files,
+      instance: target.instance,
+      path: target.session.path,
+      record: target.session.record,
+    },
     configuration,
     {
       disabled:
@@ -876,29 +909,24 @@ const routeFailure = (error: RouteFailure): Page =>
   error._tag === "CorpusFileUnreadable" ? notFound() : failurePage(error);
 
 /**
- * Give the id of the package whose directory holds a member of the document set: the innermost
- * `*.zip.d` directory on its path.
+ * Give the package whose directory holds a member of the document set: the innermost `*.zip.d`
+ * directory on its path.
  *
  * @param playground The playground.
  * @param corpusPath The member's corpus path.
- * @returns The package's id, or none when no package's directory holds the member.
+ * @returns The package, or none when no package's directory holds the member.
  */
 const packageOfMember = Effect.fnUntraced(function* packageOfMember(
   playground: Playground,
   corpusPath: string,
-): Effect.fn.Return<Option.Option<string>, PackagesFailure> {
+): Effect.fn.Return<Option.Option<PackageEntry>, PackagesFailure> {
   const directories = corpusPath.split("/").slice(0, -1);
   const innermost = directories.findLastIndex((directory) => directory.endsWith(packageSuffix));
   if (innermost === -1) {
     return Option.none();
   }
 
-  const found = yield* packageAt(
-    playground.packages,
-    directories.slice(0, innermost + 1).join("/"),
-  );
-
-  return found.pipe(Option.map(({ id }) => id));
+  return yield* packageAt(playground.packages, directories.slice(0, innermost + 1).join("/"));
 });
 
 /**
@@ -1031,8 +1059,14 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
       if (verdict.kind !== "item" || Option.isNone(accepted)) {
         return verdict.kind === "item"
           ? notFound()
-          : rootPage(corpusPath, verdict.kind, yield* packageOfMember(playground, corpusPath));
+          : rootPage(
+              corpusPath,
+              verdict.kind,
+              (yield* packageOfMember(playground, corpusPath)).pipe(Option.map(({ id }) => id)),
+            );
       }
+
+      const packaged = yield* packageOfMember(playground, corpusPath);
 
       const instance = playground.newInstance();
       const begun = begin(
@@ -1046,9 +1080,11 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
         return failurePage(begun.failure);
       }
 
+      const files = packaged.pipe(Option.map((entry) => entry.files));
       playground.sessions.set(instance, {
         accepted: accepted.value,
         attempts: 0,
+        files,
         last: Option.none(),
         path: corpusPath,
         record: begun.success,
@@ -1056,7 +1092,7 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
 
       return itemPage(
         accepted.value,
-        { instance, path: corpusPath, record: begun.success },
+        { files, instance, path: corpusPath, record: begun.success },
         configuration,
         {
           disabled: false,
@@ -1277,7 +1313,7 @@ const serveHost = Effect.fn("playground.serveHost")(function* serveHost(
     ),
   );
   const headers = new Headers(hosted.headers);
-  for (const [name, value] of Object.entries(pageHeaders)) {
+  for (const [name, value] of Object.entries(pageHeaders())) {
     if (!headers.has(name)) {
       headers.set(name, value);
     }
@@ -1293,7 +1329,7 @@ const serveHost = Effect.fn("playground.serveHost")(function* serveHost(
  * @returns The 200 response.
  */
 const cssResponse = (css: Uint8Array<ArrayBuffer> | string): Response =>
-  new Response(css, { headers: { ...pageHeaders, "content-type": cssType } });
+  new Response(css, { headers: { ...pageHeaders(), "content-type": cssType } });
 
 /**
  * Serve one of the package's stylesheets, read from its file.
@@ -1413,7 +1449,7 @@ const postTheme = Effect.fn("playground.postTheme")(function* postTheme(
 
   yield* Ref.set(playground.appearance, { dark: fields.has("dark"), theme: theme.success });
 
-  return new Response(null, { headers: { ...pageHeaders, location }, status: 303 });
+  return new Response(null, { headers: { ...pageHeaders(), location }, status: 303 });
 });
 
 /**
@@ -1601,9 +1637,10 @@ const ownTarget = (request: Request): string => {
 };
 
 /**
- * Answer with a route's outcome: a response as it is, or a page written with its chrome, the
- * stored appearance read now and the theme box returning to the page's own path and query unless
- * the page names another, with the page headers and then the page's own.
+ * Answer with a route's outcome: a response as it is, or a page written with its chrome, the stored
+ * appearance read now and the theme box returning to the page's own path and query unless the page
+ * names another, with the page headers and then the page's own. The page headers' policy admits the
+ * item's style elements the page holds, by the hash of each one's text ({@link pageResponse}).
  *
  * @param playground The playground.
  * @param request The request.
@@ -1617,16 +1654,11 @@ const answer = (
 ): Effect.Effect<Response> =>
   outcome instanceof Response
     ? Effect.succeed(outcome)
-    : Effect.map(
-        Ref.get(playground.appearance),
-        (appearance) =>
-          new Response(
-            pageHtml(outcome, {
-              appearance,
-              back: Option.getOrElse(outcome.back, () => ownTarget(request)),
-            }),
-            { headers: { ...pageHeaders, ...outcome.headers }, status: outcome.status },
-          ),
+    : Effect.map(Ref.get(playground.appearance), (appearance) =>
+        pageResponse(outcome, {
+          appearance,
+          back: Option.getOrElse(outcome.back, () => ownTarget(request)),
+        }),
       );
 
 /**
