@@ -1472,4 +1472,24 @@ describe("postedStrings", () => {
       "1.5",
     ]);
   });
+
+  it("[W0-PCIJSON] postedStrings keeps a module binding's text", () => {
+    const viaModule = moduleBinding();
+    const { name } = viaModule;
+
+    assert.deepStrictEqual(
+      postedStrings(
+        [
+          [name, '{"n":7}'],
+          [`${name}.x`, "9"],
+          ["host", "b"],
+          [name, new Blob(["f"])],
+        ],
+        viaModule,
+      ),
+      ['{"n":7}'],
+      "the one entry under the binding's name comes back; a point suffix, another name and a Blob do not",
+    );
+    assert.deepStrictEqual(postedStrings([], viaModule), []);
+  });
 });

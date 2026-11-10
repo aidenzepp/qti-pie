@@ -349,13 +349,14 @@ export const pointEntryNames = (name: string): readonly [x: string, y: string] =
 
 /**
  * Name the entries a binding posts under: the two {@link pointEntryNames} of a `point` value
- * binding, and the binding's own name for every other binding.
+ * binding, and the binding's own name for every other binding, a {@link ModuleBinding}'s one
+ * entry included.
  *
  * @param binding The response's binding.
  * @returns The entry names the binding's response is posted under.
  */
 const entryNamesOf = (binding: Binding): readonly string[] =>
-  binding.cardinality !== "record" && isPoint(binding.baseType)
+  !isModuleBinding(binding) && binding.cardinality !== "record" && isPoint(binding.baseType)
     ? pointEntryNames(binding.name)
     : [binding.name];
 
