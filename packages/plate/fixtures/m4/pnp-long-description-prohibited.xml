@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A hand-written AfA PNP 3.0 profile that assigns long description and names it in activate-at-initialization-set, and also in prohibit-set, which wins: the feature is off. -->
+<access-for-all-pnp xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <long-description/>
+  <activate-at-initialization-set>
+    <long-description/>
+  </activate-at-initialization-set>
+  <prohibit-set>
+    <long-description/>
+  </prohibit-set>
+</access-for-all-pnp>
