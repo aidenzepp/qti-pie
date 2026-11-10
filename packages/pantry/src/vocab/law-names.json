@@ -726,6 +726,9 @@
     "__branch_target_pk_instance_rule_4phrza24fs": {
       "name": "Branch target"
     },
+    "__card_support_generated_support_ryzzkcsjki": {
+      "name": "E1 derived"
+    },
     "__card_support_in_attribute_fggbjl2umc": {
       "name": "E1 derived"
     },
@@ -834,9 +837,6 @@
     "__cell_leaf_pk_cell_at_imv5774jp7": {
       "name": "E1 derived"
     },
-    "__choice_counted_choice_variable_name_choices_42ortmhb5f": {
-      "name": "E1 derived"
-    },
     "__choice_counted_document_choices_ncmd6ikosc": {
       "name": "E1 derived"
     },
@@ -864,19 +864,16 @@
     "__choice_kind_in_gap_interaction_63rquxzjkz": {
       "name": "N8 nearest"
     },
+    "__choice_or_hottext_in_unclaimed_name_n7ypdvtcx6": {
+      "name": "Choice not variable"
+    },
+    "__choice_or_hottext_key_document_identifier_n6xr2qsavc": {
+      "name": "Choice identifier key"
+    },
     "__choice_pattern_identifier_iv2kv5jarl": {
       "name": "Key text bound"
     },
     "__choice_pk_node_faorkmvhey": {
-      "name": "E1 derived"
-    },
-    "__choice_variable_name_in_document_zm4rvhlzyo": {
-      "name": "E1 derived"
-    },
-    "__choice_variable_name_pattern_identifier_6yz36drgv4": {
-      "name": "Key text bound"
-    },
-    "__choice_variable_name_pk_document_identifier_d7m5fvpr6n": {
       "name": "E1 derived"
     },
     "__cn_attribute_in_attribute_cimryx3a3y": {
@@ -1068,9 +1065,6 @@
     "__declaration_identifier_cardinalities_in_wsxg4tgqdk": {
       "name": "Declaration overlay"
     },
-    "__declaration_identifier_counted_choice_variable_2p7syscyxz": {
-      "name": "E1 derived"
-    },
     "__declaration_identifier_in_attribute_pfiy6bgamt": {
       "name": "Declaration overlay"
     },
@@ -1137,6 +1131,9 @@
     "__declared_reading_in_reading_py6ey2t62q": {
       "name": "E1 derived"
     },
+    "__default_entry_generated_value_e77ljpsg6p": {
+      "name": "E1 derived"
+    },
     "__default_entry_in_attribute_5s2sxygqh6": {
       "name": "E1 derived"
     },
@@ -1153,6 +1150,9 @@
       "name": "Key text bound"
     },
     "__default_entry_pk_node_a76mrcxfzm": {
+      "name": "E1 derived"
+    },
+    "__dependency_generated_ref_5kts7mjr36": {
       "name": "E1 derived"
     },
     "__dependency_in_dependency_target_wev67vfflo": {
@@ -1205,9 +1205,6 @@
     },
     "__document_assembled_in_test_document_jqz4emxjfa": {
       "name": "Test overlay"
-    },
-    "__document_assembled_spliced_in_instance_l5osrb6lhy": {
-      "name": "Inclusion cycle"
     },
     "__document_document_type_in_resource_document_ijayadhuyi": {
       "name": "E1 derived"
@@ -1290,9 +1287,6 @@
     "__document_root_kind_in_test_document_yysbq366x2": {
       "name": "Test overlay"
     },
-    "__document_targeted_by_count_fold_a3qpfrhfna": {
-      "name": "E1 derived"
-    },
     "__document_targeted_by_or_fold_q3muf667kh": {
       "name": "E1 derived"
     },
@@ -1314,6 +1308,9 @@
     "__encoding_decl_pk_node_a7j4hcp5xy": {
       "name": "Document"
     },
+    "__entry_generated_digest_xputgjwyp7": {
+      "name": "Entry family"
+    },
     "__entry_key_package_path_r7brueoqnl": {
       "name": "Entry family"
     },
@@ -1322,6 +1319,9 @@
     },
     "__entry_path_in_file_href_thjljvmult": {
       "name": "File listed"
+    },
+    "__entry_pattern_digest_pz2gby5ynd": {
+      "name": "Entry family"
     },
     "__entry_pattern_path_2dksgqwafq": {
       "name": "Key text bound"
@@ -1506,6 +1506,9 @@
     "__gap_interaction_pk_node_dqub5d67ci": {
       "name": "E1 derived"
     },
+    "__head_document_in_instance_rcc4eijaej": {
+      "name": "Inclusion cycle"
+    },
     "__header_token_generated_piece_xmybyiem25": {
       "name": "E1 derived"
     },
@@ -1561,9 +1564,6 @@
       "name": "Key text bound"
     },
     "__hotspot_pk_node_4qlcq5ceyz": {
-      "name": "E1 derived"
-    },
-    "__hottext_counted_choice_variable_name_hottexts_iikvswz4et": {
       "name": "E1 derived"
     },
     "__hottext_counted_document_hottexts_6jknikjcik": {
@@ -1683,6 +1683,9 @@
     "__instance_in_document_wkkhhvbmlw": {
       "name": "E1 derived"
     },
+    "__instance_in_head_document_4tfnokwavo": {
+      "name": "E1 derived"
+    },
     "__instance_in_test_document_4yr4xuaf4e": {
       "name": "Inclusion cycle"
     },
@@ -1714,9 +1717,6 @@
       "name": "Inclusion cycle"
     },
     "__instance_root_kind_assembly_kind_in_section_scope_6ysryks37i": {
-      "name": "E1 derived"
-    },
-    "__instance_start_in_document_ll2c7whcjh": {
       "name": "E1 derived"
     },
     "__instance_start_in_instance_pgb55h6jzt": {
@@ -1860,34 +1860,13 @@
     "__item_ref_href_in_reference_path_g3b7xm3awo": {
       "name": "Item ref target"
     },
-    "__item_ref_href_in_unread_type_href_6ch72pgwxj": {
-      "name": "Item ref target"
-    },
     "__item_ref_href_pattern_path_o4bchgobx5": {
       "name": "Key text bound"
     },
     "__item_ref_href_pk_node_7yig6zo7cv": {
       "name": "Item ref target"
     },
-    "__item_ref_target_counted_item_ref_href_targets_gabifqyxl2": {
-      "name": "Item ref target"
-    },
-    "__item_ref_target_in_node_rgiwxuoyhv": {
-      "name": "Item ref target"
-    },
-    "__item_ref_target_in_reference_path_kurlgj2gie": {
-      "name": "E1 derived"
-    },
-    "__item_ref_target_in_typed_href_nwfxpvseni": {
-      "name": "Item ref target"
-    },
-    "__item_ref_target_pattern_path_fk6f4eatjb": {
-      "name": "Key text bound"
-    },
-    "__item_ref_target_pk_node_5unlby7q54": {
-      "name": "Item ref target"
-    },
-    "__item_ref_target_type_in_item_ref_document_u6wssd4f23": {
+    "__item_ref_target_in_item_ref_document_u6wssd4f23": {
       "name": "Item ref target"
     },
     "__label_use_in_attribute_hp6uaqod4f": {
@@ -2028,6 +2007,9 @@
     "__lom_string_language_counted_lom_string_languages_sgogdj4qb2": {
       "name": "E1 derived"
     },
+    "__lom_string_language_generated_language_tag_dtnmnv3lll": {
+      "name": "E1 derived"
+    },
     "__lom_string_language_in_attribute_ulxenfqogb": {
       "name": "E1 derived"
     },
@@ -2053,6 +2035,9 @@
       "name": "E1 derived"
     },
     "__lom_title_pk_node_aaoixkeagc": {
+      "name": "E1 derived"
+    },
+    "__lom_title_string_generated_text_value_wyfn2jc5dm": {
       "name": "E1 derived"
     },
     "__lom_title_string_in_lom_title_n54n4vki2h": {
@@ -2130,13 +2115,13 @@
     "__lookup_value_type_pk_node_wvgdb3yr3z": {
       "name": "Mapping overlay"
     },
+    "__manifest_id_generated_identifier_sqyfvutciy": {
+      "name": "E1 derived"
+    },
     "__manifest_id_in_attribute_apxuxhmong": {
       "name": "Manifest overlay"
     },
     "__manifest_id_in_document_e4xdoliiit": {
-      "name": "Manifest overlay"
-    },
-    "__manifest_id_in_manifest_id_space_p7v25bbbpe": {
       "name": "Manifest overlay"
     },
     "__manifest_id_in_node_bi3katgbcv": {
@@ -2157,20 +2142,8 @@
     "__manifest_id_pk_node_zx7lg2i6ei": {
       "name": "Manifest overlay"
     },
-    "__manifest_id_space_key_package_identifier_zjdqk34gnc": {
+    "__manifest_id_space_key_package_identifier_qo5gf5ndwe": {
       "name": "Manifest id space"
-    },
-    "__manifest_id_space_kind_in_manifest_id_tanlssm4a3": {
-      "name": "Manifest overlay"
-    },
-    "__manifest_id_space_kind_in_resource_id_nl6nsoho2o": {
-      "name": "Manifest overlay"
-    },
-    "__manifest_id_space_pattern_identifier_xuvoumekmb": {
-      "name": "Key text bound"
-    },
-    "__manifest_id_space_pk_package_identifier_kind_xbvihpmx6a": {
-      "name": "Manifest overlay"
     },
     "__map_key_base_types_in_map_key_type_h6p4kj2g5s": {
       "name": "Mapping overlay"
@@ -2400,6 +2373,9 @@
     "__mastery_value_pk_node_fanrozhk5w": {
       "name": "Declaration overlay"
     },
+    "__math_action_generated_selection_ltjjnhmmfm": {
+      "name": "E1 derived"
+    },
     "__math_action_in_node_6pmpjpdpts": {
       "name": "E1 derived"
     },
@@ -2407,9 +2383,6 @@
       "name": "E1 derived"
     },
     "__math_action_pattern_selection_lexical_p2zyjkrbja": {
-      "name": "Key text bound"
-    },
-    "__math_action_pattern_selection_text_d4cbjplkck": {
       "name": "Key text bound"
     },
     "__math_action_pk_node_ug4nvjnaca": {
@@ -2868,6 +2841,9 @@
     "__object_identifier_pk_node_x2hsag7dyh": {
       "name": "E1 derived"
     },
+    "__object_lang_generated_lang_tag_r2h3rkb4dm": {
+      "name": "E1 derived"
+    },
     "__object_lang_in_assessment_object_xlhbrpiapc": {
       "name": "E1 derived"
     },
@@ -2881,6 +2857,9 @@
       "name": "Key text bound"
     },
     "__object_lang_pk_node_bxeruzpdw4": {
+      "name": "E1 derived"
+    },
+    "__object_title_generated_title_value_ov4to4ykjq": {
       "name": "E1 derived"
     },
     "__object_title_in_assessment_object_qy5vezebus": {
@@ -3114,9 +3093,6 @@
     "__placed_catalog_ref_pk_instance_id_kxo7vpnhb6": {
       "name": "E1 derived"
     },
-    "__placed_choice_counted_choice_variable_name_placed_56q7a7ilyx": {
-      "name": "E1 derived"
-    },
     "__placed_choice_counted_instance_choices_jh5bkeg4dw": {
       "name": "E1 derived"
     },
@@ -3127,6 +3103,12 @@
       "name": "E1 derived"
     },
     "__placed_choice_key_assembly_kind_identifier_q4ucqz2yhs": {
+      "name": "Choice identifier key"
+    },
+    "__placed_choice_or_hottext_in_unclaimed_name_opernzeyka": {
+      "name": "Choice not variable"
+    },
+    "__placed_choice_or_hottext_key_assembly_identifier_k4h6puwzaf": {
       "name": "Choice identifier key"
     },
     "__placed_choice_pattern_identifier_sw3bwnz7ol": {
@@ -3142,9 +3124,6 @@
       "name": "E1 derived"
     },
     "__placed_document_pk_instance_alxhx2x4ft": {
-      "name": "E1 derived"
-    },
-    "__placed_hottext_counted_choice_variable_name_placed_zk2fcsyysd": {
       "name": "E1 derived"
     },
     "__placed_hottext_counted_instance_hottexts_ra2mmb4tr3": {
@@ -3660,10 +3639,10 @@
     "__resource_href_pk_node_iayf2clp6o": {
       "name": "Manifest overlay"
     },
-    "__resource_id_in_attribute_nkwpqhcia6": {
-      "name": "Manifest overlay"
+    "__resource_id_generated_identifier_gap7r2xfrb": {
+      "name": "E1 derived"
     },
-    "__resource_id_in_manifest_id_space_krto7fwngb": {
+    "__resource_id_in_attribute_nkwpqhcia6": {
       "name": "Manifest overlay"
     },
     "__resource_id_in_resource_oer3y4hb6j": {
@@ -4428,6 +4407,9 @@
     "__test_document_in_document_fu2sciunh5": {
       "name": "Test overlay"
     },
+    "__test_document_in_instance_document_wk7n25u64n": {
+      "name": "Inclusion cycle"
+    },
     "__test_document_pattern_path_t2vm6ffqec": {
       "name": "Key text bound"
     },
@@ -4655,6 +4637,9 @@
     },
     "__typed_value_pk_node_zcrpxf2qdc": {
       "name": "Declaration overlay"
+    },
+    "__untargeted_item_ref_in_unread_type_href_bopgpqc4mj": {
+      "name": "Item ref target"
     },
     "__usage_base_type_in_attribute_mgi7jd62oi": {
       "name": "E1 derived"

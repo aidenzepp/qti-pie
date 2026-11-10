@@ -103,8 +103,8 @@ CREATE VIEW "qti_queries__author"."branch_target" ("assembly", "instance", "inst
 SELECT "r1"."assembly", "r1"."instance", "r1"."instance_start", "r1"."owner_end", "r1"."owner_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."owner_kind" + 1]::"pg_catalog"."text", "r1"."owner_part", "r1"."owner_start", "r1"."rule", "r1"."shuffles", "r1"."target", "r1"."target_end", "r1"."target_instance", "r1"."target_instance_end", "r1"."target_instance_start", "r1"."target_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."target_kind" + 1]::"pg_catalog"."text", "r1"."target_mixes", "r1"."target_node", "r1"."target_part", "r1"."target_replaced", "r1"."target_start", "r1"."via", "r1"."via_end", "r1"."via_parent", "r1"."via_site_start", "r1"."via_start"
 FROM "qti"."branch_target" AS "r1";
 
-CREATE VIEW "qti_queries__author"."card_support" ("catalog", "document", "kind", "kind_name", "lexical", "nearest", "node", "start", "support", "version", "version_name") AS
-SELECT "r1"."catalog", "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."lexical", "r1"."nearest", "r1"."node", "r1"."start", "r1"."support", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti_queries__author"."card_support" ("catalog", "document", "kind", "kind_name", "lexical", "nearest", "node", "start", "version", "version_name", "support") AS
+SELECT "r1"."catalog", "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."lexical", "r1"."nearest", "r1"."node", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text", "r1"."support"
 FROM "qti"."card_support" AS "r1";
 
 CREATE VIEW "qti_queries__author"."catalog_id" ("document", "id", "node", "owner") AS
@@ -138,10 +138,6 @@ FROM "qti"."choice" AS "r1";
 CREATE VIEW "qti_queries__author"."choice_interaction" ("interaction", "node") AS
 SELECT "r1"."interaction", "r1"."node"
 FROM "qti"."choice_interaction" AS "r1";
-
-CREATE VIEW "qti_queries__author"."choice_variable_name" ("choices", "declarations", "document", "hottexts", "identifier", "placed_choices", "placed_hottexts", "root_kind", "root_kind_name") AS
-SELECT "r1"."choices", "r1"."declarations", "r1"."document", "r1"."hottexts", "r1"."identifier", "r1"."placed_choices", "r1"."placed_hottexts", "r1"."root_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."root_kind" + 1]::"pg_catalog"."text"
-FROM "qti"."choice_variable_name" AS "r1";
 
 CREATE VIEW "qti_queries__author"."cn_attribute" ("lexical", "name", "name_name", "node") AS
 SELECT "r1"."lexical", "r1"."name", ("qti"."__attribute_name_names_q6tmzcty4e"())["r1"."name" + 1]::"pg_catalog"."text", "r1"."node"
@@ -211,12 +207,12 @@ CREATE VIEW "qti_queries__author"."declaration_name" ("base_types", "cardinality
 SELECT "r1"."base_types", "r1"."cardinality", ("qti"."__cardinality_names_kqiairsoqa"())["r1"."cardinality" + 1]::"pg_catalog"."text", "r1"."declaration_kind", ("qti"."__declaration_kind_names_o62wpad2p7"())["r1"."declaration_kind" + 1]::"pg_catalog"."text", "r1"."document", "r1"."identifier", "r1"."node", "r1"."parent_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."parent_kind" + 1]::"pg_catalog"."text"
 FROM "qti"."declaration_name" AS "r1";
 
-CREATE VIEW "qti_queries__author"."default_entry" ("card", "document", "kind", "kind_name", "lexical", "nearest", "node", "start", "value", "version", "version_name") AS
-SELECT "r1"."card", "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."lexical", "r1"."nearest", "r1"."node", "r1"."start", "r1"."value", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti_queries__author"."default_entry" ("card", "document", "kind", "kind_name", "lexical", "nearest", "node", "start", "version", "version_name", "value") AS
+SELECT "r1"."card", "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."lexical", "r1"."nearest", "r1"."node", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text", "r1"."value"
 FROM "qti"."default_entry" AS "r1";
 
-CREATE VIEW "qti_queries__author"."dependency" ("document", "kind", "kind_name", "lexical", "nearest", "node", "package", "ref", "resource", "start", "version", "version_name") AS
-SELECT "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."lexical", "r1"."nearest", "r1"."node", "r1"."package", "r1"."ref", "r1"."resource", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti_queries__author"."dependency" ("document", "kind", "kind_name", "lexical", "nearest", "node", "package", "resource", "start", "version", "version_name", "ref") AS
+SELECT "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."lexical", "r1"."nearest", "r1"."node", "r1"."package", "r1"."resource", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text", "r1"."ref"
 FROM "qti"."dependency" AS "r1";
 
 CREATE VIEW "qti_queries__author"."dependency_target" ("node", "package", "ref", "resource", "target") AS
@@ -227,8 +223,8 @@ CREATE VIEW "qti_queries__author"."doctype" ("node", "value") AS
 SELECT "r1"."node", "r1"."value"
 FROM "qti"."doctype" AS "r1";
 
-CREATE VIEW "qti_queries__author"."document" ("assembled", "bindings", "charset", "choices", "context", "context_nearest", "context_nearest_kind", "context_nearest_kind_name", "document_type", "document_type_name", "export_charset", "hottexts", "idref_targets", "ids", "langs", "node", "node_children", "package", "path", "root_kind", "root_kind_name", "spliced", "targeted_by", "variables", "version", "version_name") AS
-SELECT "r1"."assembled", "r1"."bindings", "r1"."charset", "r1"."choices", "r1"."context", "r1"."context_nearest", "r1"."context_nearest_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."context_nearest_kind" + 1]::"pg_catalog"."text", "r1"."document_type", ("qti"."__document_type_names_b6nphfgptk"())["r1"."document_type" + 1]::"pg_catalog"."text", "r1"."export_charset", "r1"."hottexts", "r1"."idref_targets", "r1"."ids", "r1"."langs", "r1"."node", "r1"."node_children", "r1"."package", "r1"."path", "r1"."root_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."root_kind" + 1]::"pg_catalog"."text", "r1"."spliced", "r1"."targeted_by", "r1"."variables", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti_queries__author"."document" ("assembled", "bindings", "charset", "choices", "context", "context_nearest", "context_nearest_kind", "context_nearest_kind_name", "document_type", "document_type_name", "export_charset", "hottexts", "idref_targets", "ids", "langs", "node", "node_children", "package", "path", "root_kind", "root_kind_name", "targeted_by", "variables", "version", "version_name") AS
+SELECT "r1"."assembled", "r1"."bindings", "r1"."charset", "r1"."choices", "r1"."context", "r1"."context_nearest", "r1"."context_nearest_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."context_nearest_kind" + 1]::"pg_catalog"."text", "r1"."document_type", ("qti"."__document_type_names_b6nphfgptk"())["r1"."document_type" + 1]::"pg_catalog"."text", "r1"."export_charset", "r1"."hottexts", "r1"."idref_targets", "r1"."ids", "r1"."langs", "r1"."node", "r1"."node_children", "r1"."package", "r1"."path", "r1"."root_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."root_kind" + 1]::"pg_catalog"."text", "r1"."targeted_by", "r1"."variables", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
 FROM "qti"."document" AS "r1";
 
 CREATE VIEW "qti_queries__author"."document_id" ("admitted", "after", "before", "document", "id", "lexical", "node", "owner") AS
@@ -247,8 +243,8 @@ CREATE VIEW "qti_queries__author"."encoding_decl" ("encoding", "node") AS
 SELECT "r1"."encoding", "r1"."node"
 FROM "qti"."encoding_decl" AS "r1";
 
-CREATE VIEW "qti_queries__author"."entry" ("at", "content", "package", "path") AS
-SELECT "r1"."at", "r1"."content", "r1"."package", "r1"."path"
+CREATE VIEW "qti_queries__author"."entry" ("at", "content", "package", "path", "digest") AS
+SELECT "r1"."at", "r1"."content", "r1"."package", "r1"."path", "r1"."digest"
 FROM "qti"."entry" AS "r1";
 
 CREATE VIEW "qti_queries__author"."expression" ("base_type", "base_type_name", "cardinality", "cardinality_name", "document", "kind", "kind_name", "language", "language_name", "lead_cardinalities", "nearest", "node", "operand_base_types", "operand_cardinalities", "operands", "parent", "parent_kind", "parent_kind_name", "start", "tail_base_types", "tail_cardinalities", "version", "version_name") AS
@@ -347,13 +343,9 @@ CREATE VIEW "qti_queries__author"."item_ref_document" ("document", "node", "pack
 SELECT "r1"."document", "r1"."node", "r1"."package", "r1"."path"
 FROM "qti"."item_ref_document" AS "r1";
 
-CREATE VIEW "qti_queries__author"."item_ref_href" ("node", "package", "path", "targets") AS
-SELECT "r1"."node", "r1"."package", "r1"."path", "r1"."targets"
+CREATE VIEW "qti_queries__author"."item_ref_href" ("node", "package", "path") AS
+SELECT "r1"."node", "r1"."package", "r1"."path"
 FROM "qti"."item_ref_href" AS "r1";
-
-CREATE VIEW "qti_queries__author"."item_ref_target" ("node", "package", "path", "type", "type_name") AS
-SELECT "r1"."node", "r1"."package", "r1"."path", "r1"."type", ("qti"."__resource_type_names_4wps2tgde3"())["r1"."type" + 1]::"pg_catalog"."text"
-FROM "qti"."item_ref_target" AS "r1";
 
 CREATE VIEW "qti_queries__author"."label_use" ("document", "node", "root_kind", "root_kind_name") AS
 SELECT "r1"."document", "r1"."node", "r1"."root_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."root_kind" + 1]::"pg_catalog"."text"
@@ -399,16 +391,16 @@ CREATE VIEW "qti_queries__author"."lom_string" ("language_tag", "languages", "no
 SELECT "r1"."language_tag", "r1"."languages", "r1"."node"
 FROM "qti"."lom_string" AS "r1";
 
-CREATE VIEW "qti_queries__author"."lom_string_language" ("language", "language_tag", "node") AS
-SELECT "r1"."language", "r1"."language_tag", "r1"."node"
+CREATE VIEW "qti_queries__author"."lom_string_language" ("language", "node", "language_tag") AS
+SELECT "r1"."language", "r1"."node", "r1"."language_tag"
 FROM "qti"."lom_string_language" AS "r1";
 
 CREATE VIEW "qti_queries__author"."lom_title" ("document", "kind", "kind_name", "nearest", "node", "parent", "start", "version", "version_name") AS
 SELECT "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."nearest", "r1"."node", "r1"."parent", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
 FROM "qti"."lom_title" AS "r1";
 
-CREATE VIEW "qti_queries__author"."lom_title_string" ("document", "kind", "kind_name", "nearest", "node", "parent", "start", "text", "text_value", "version", "version_name") AS
-SELECT "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."nearest", "r1"."node", "r1"."parent", "r1"."start", "r1"."text", "r1"."text_value", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti_queries__author"."lom_title_string" ("document", "kind", "kind_name", "nearest", "node", "parent", "start", "text", "version", "version_name", "text_value") AS
+SELECT "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."nearest", "r1"."node", "r1"."parent", "r1"."start", "r1"."text", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text", "r1"."text_value"
 FROM "qti"."lom_title_string" AS "r1";
 
 CREATE VIEW "qti_queries__author"."lookup_table" ("base_types", "cardinalities", "declaration", "declaration_kind", "declaration_kind_name", "document", "kind", "kind_name", "nearest", "node", "start", "version", "version_name") AS
@@ -427,13 +419,9 @@ CREATE VIEW "qti_queries__author"."lookup_value_type" ("base_type", "base_type_n
 SELECT "r1"."base_type", ("qti"."__base_type_names_ok3nu5nck4"())["r1"."base_type" + 1]::"pg_catalog"."text", "r1"."declaration", "r1"."node", "r1"."value"
 FROM "qti"."lookup_value_type" AS "r1";
 
-CREATE VIEW "qti_queries__author"."manifest_id" ("document", "identifier", "kind", "kind_name", "lexical", "nearest", "node", "package", "parent", "start", "version", "version_name") AS
-SELECT "r1"."document", "r1"."identifier", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."lexical", "r1"."nearest", "r1"."node", "r1"."package", "r1"."parent", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti_queries__author"."manifest_id" ("document", "kind", "kind_name", "lexical", "nearest", "node", "package", "parent", "start", "version", "version_name", "identifier") AS
+SELECT "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."lexical", "r1"."nearest", "r1"."node", "r1"."package", "r1"."parent", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text", "r1"."identifier"
 FROM "qti"."manifest_id" AS "r1";
-
-CREATE VIEW "qti_queries__author"."manifest_id_space" ("identifier", "kind", "kind_name", "package") AS
-SELECT "r1"."identifier", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."package"
-FROM "qti"."manifest_id_space" AS "r1";
 
 CREATE VIEW "qti_queries__author"."map_key" ("base_types", "case_text", "document", "folded", "key", "kind", "kind_name", "mapping", "matched", "nearest", "node", "start", "version", "version_name") AS
 SELECT "r1"."base_types", "r1"."case_text", "r1"."document", "r1"."folded", "r1"."key", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."mapping", "r1"."matched", "r1"."nearest", "r1"."node", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
@@ -483,8 +471,8 @@ CREATE VIEW "qti_queries__author"."mastery_value" ("lexical", "node") AS
 SELECT "r1"."lexical", "r1"."node"
 FROM "qti"."mastery_value" AS "r1";
 
-CREATE VIEW "qti_queries__author"."math_action" ("element_children", "elements", "node", "selection", "selection_lexical", "selection_text", "selection_written") AS
-SELECT "r1"."element_children", "r1"."elements", "r1"."node", "r1"."selection", "r1"."selection_lexical", "r1"."selection_text", "r1"."selection_written"
+CREATE VIEW "qti_queries__author"."math_action" ("element_children", "elements", "node", "selection_lexical", "selection_written", "selection") AS
+SELECT "r1"."element_children", "r1"."elements", "r1"."node", "r1"."selection_lexical", "r1"."selection_written", "r1"."selection"
 FROM "qti"."math_action" AS "r1";
 
 CREATE VIEW "qti_queries__author"."math_align_group" ("cell", "node") AS
@@ -551,8 +539,8 @@ CREATE VIEW "qti_queries__author"."object_identifier" ("document", "identifier",
 SELECT "r1"."document", "r1"."identifier", "r1"."lead", "r1"."lexical", "r1"."node", "r1"."trail"
 FROM "qti"."object_identifier" AS "r1";
 
-CREATE VIEW "qti_queries__author"."object_lang" ("lang", "lang_tag", "node") AS
-SELECT "r1"."lang", "r1"."lang_tag", "r1"."node"
+CREATE VIEW "qti_queries__author"."object_lang" ("lang", "node", "lang_tag") AS
+SELECT "r1"."lang", "r1"."node", "r1"."lang_tag"
 FROM "qti"."object_lang" AS "r1";
 
 CREATE VIEW "qti_queries__author"."object_title" ("document", "node", "title", "title_value") AS
@@ -731,8 +719,8 @@ CREATE VIEW "qti_queries__author"."resource_href" ("href", "node", "package", "p
 SELECT "r1"."href", "r1"."node", "r1"."package", "r1"."path", "r1"."scope", ("qti"."__href_scope_names_y4pbuo4f5q"())["r1"."scope" + 1]::"pg_catalog"."text"
 FROM "qti"."resource_href" AS "r1";
 
-CREATE VIEW "qti_queries__author"."resource_id" ("identifier", "lexical", "node", "package") AS
-SELECT "r1"."identifier", "r1"."lexical", "r1"."node", "r1"."package"
+CREATE VIEW "qti_queries__author"."resource_id" ("lexical", "node", "package", "identifier") AS
+SELECT "r1"."lexical", "r1"."node", "r1"."package", "r1"."identifier"
 FROM "qti"."resource_id" AS "r1";
 
 CREATE VIEW "qti_queries__author"."resource_lom_language_set" ("carriers", "general", "lang") AS
@@ -1015,9 +1003,9 @@ GRANT "qti_queries__author" TO "qti_queries__author_app" WITH INHERIT FALSE, SET
 
 GRANT USAGE ON SCHEMA "qti", "qti_queries", "qti_queries__author" TO "qti_queries__author";
 
-GRANT USAGE ON DOMAIN "qti"."__attribute_slot_bits_112_aecznthxg5", "qti"."__flag_bits_12_i4uhexylc4", "qti"."__value_base_bits_16_7t6pwwxbsh", "qti"."__value_cardinality_bits_8_mma4mwhphy", "qti"."__domain_gfw43vigph", "qti"."admission_map", "qti"."align_direction", "qti"."align_state", "qti"."attribute_model", "qti"."attribute_name", "qti"."attribute_slot", "qti"."base_type", "qti"."bound_facet", "qti"."bound_zero", "qti"."built_in", "qti"."cardinality", "qti"."cn_base", "qti"."cn_part", "qti"."cn_part_form", "qti"."cn_type", "qti"."content_model", "qti"."declaration_kind", "qti"."document_type", "qti"."domain_primitive", "qti"."flag", "qti"."follow_set", "qti"."governor", "qti"."href_scope", "qti"."identity", "qti"."include_parent", "qti"."include_set", "qti"."language", "qti"."node_kind", "qti"."position", "qti"."reading_form", "qti"."reading_source", "qti"."reference_form", "qti"."reference_resolution", "qti"."reference_role", "qti"."reference_spelling", "qti"."referenced_table", "qti"."resource_type", "qti"."rounding_holds", "qti"."rp_template", "qti"."schema_version", "qti"."shared_model", "qti"."symbol_set", "qti"."type_name", "qti"."use", "qti"."value_base", "qti"."value_cardinality", "qti"."value_domain", "qti"."xml_standalone", "qti"."__text_xj3zno7u3h", "qti"."__text_c6iptmtj2x", "qti"."__text_ca4i7j77gp", "qti"."__text_qhjydx3ufb", "qti"."__text_gke7uypkov", "qti"."__text_mqbstvk5ay", "qti"."__text_d7mwmflg4k", "qti"."__text_l7nqeazg5h", "qti"."__text_k5kwygzatl", "qti"."__text_7dfilirtp3", "qti"."__text_xisvziygi3", "qti"."__text_7j6kgluyjp", "qti"."__text_xey6ryorh5", "qti"."__text_pwaizaq6lx", "qti"."__text_elwnhkz2pq", "qti"."__text_psn65t7m7e", "qti"."__text_23rzixl3a2", "qti"."__text_mpc5fvfrbl", "qti"."__text_zij47sgley", "qti"."__text_piekqyt5fn", "qti"."__text_fgve4r33vj", "qti"."__text_5xaumrdzw7", "qti"."__text_3dlgl63rv6", "qti"."__text_aezrarw5qb", "qti"."__text_3adwbksayk" TO "qti_queries__author";
+GRANT USAGE ON DOMAIN "qti"."__attribute_slot_bits_112_aecznthxg5", "qti"."__flag_bits_12_i4uhexylc4", "qti"."__value_base_bits_16_7t6pwwxbsh", "qti"."__value_cardinality_bits_8_mma4mwhphy", "qti"."__domain_gfw43vigph", "qti"."admission_map", "qti"."align_direction", "qti"."align_state", "qti"."attribute_model", "qti"."attribute_name", "qti"."attribute_slot", "qti"."base_type", "qti"."bound_facet", "qti"."bound_zero", "qti"."built_in", "qti"."cardinality", "qti"."cn_base", "qti"."cn_part", "qti"."cn_part_form", "qti"."cn_type", "qti"."content_model", "qti"."declaration_kind", "qti"."document_type", "qti"."domain_primitive", "qti"."flag", "qti"."follow_set", "qti"."governor", "qti"."href_scope", "qti"."identity", "qti"."include_parent", "qti"."include_set", "qti"."language", "qti"."node_kind", "qti"."position", "qti"."reading_form", "qti"."reading_source", "qti"."reference_form", "qti"."reference_resolution", "qti"."reference_role", "qti"."reference_spelling", "qti"."referenced_table", "qti"."resource_type", "qti"."rounding_holds", "qti"."rp_template", "qti"."schema_version", "qti"."shared_model", "qti"."symbol_set", "qti"."type_name", "qti"."use", "qti"."value_base", "qti"."value_cardinality", "qti"."value_domain", "qti"."xml_standalone", "qti"."__text_xj3zno7u3h", "qti"."__text_c6iptmtj2x", "qti"."__text_ca4i7j77gp", "qti"."__text_qhjydx3ufb", "qti"."__text_gke7uypkov", "qti"."__text_mqbstvk5ay", "qti"."__text_d7mwmflg4k", "qti"."__text_l7nqeazg5h", "qti"."__text_k5kwygzatl", "qti"."__text_7dfilirtp3", "qti"."__text_xisvziygi3", "qti"."__text_7j6kgluyjp", "qti"."__text_xey6ryorh5", "qti"."__text_pwaizaq6lx", "qti"."__text_elwnhkz2pq", "qti"."__text_psn65t7m7e", "qti"."__text_23rzixl3a2", "qti"."__text_mpc5fvfrbl", "qti"."__text_vrcyezm7ka", "qti"."__text_zij47sgley", "qti"."__text_piekqyt5fn", "qti"."__text_fgve4r33vj", "qti"."__text_5xaumrdzw7", "qti"."__text_3dlgl63rv6", "qti"."__text_aezrarw5qb", "qti"."__text_3adwbksayk" TO "qti_queries__author";
 
-GRANT SELECT ON TABLE "qti_queries__author"."area_mapping", "qti_queries__author"."area_mapping_cardinality", "qti_queries__author"."aria_element", "qti_queries__author"."aria_range", "qti_queries__author"."aria_value", "qti_queries__author"."assembled_catalog", "qti_queries__author"."assembled_id", "qti_queries__author"."assembled_lang", "qti_queries__author"."assembled_name", "qti_queries__author"."assembled_reference", "qti_queries__author"."assessment_object", "qti_queries__author"."attribute", "qti_queries__author"."attribute_entity", "qti_queries__author"."binding", "qti_queries__author"."binding_base_type", "qti_queries__author"."binding_cardinality", "qti_queries__author"."binding_declaration", "qti_queries__author"."binding_name", "qti_queries__author"."body_xml_lang", "qti_queries__author"."bound_variable", "qti_queries__author"."branch_resolution", "qti_queries__author"."branch_rule", "qti_queries__author"."branch_shuffle", "qti_queries__author"."branch_target", "qti_queries__author"."card_support", "qti_queries__author"."catalog_id", "qti_queries__author"."catalog_ref", "qti_queries__author"."catalog_scope", "qti_queries__author"."catalog_target", "qti_queries__author"."cell_headers", "qti_queries__author"."cell_leaf", "qti_queries__author"."choice", "qti_queries__author"."choice_interaction", "qti_queries__author"."choice_variable_name", "qti_queries__author"."cn_attribute", "qti_queries__author"."cn_count", "qti_queries__author"."cn_part_text", "qti_queries__author"."cn_slot", "qti_queries__author"."comment", "qti_queries__author"."context_ref", "qti_queries__author"."context_ref_declaration", "qti_queries__author"."count_bound", "qti_queries__author"."count_range", "qti_queries__author"."data_ssml", "qti_queries__author"."data_ssml_member", "qti_queries__author"."data_ssml_property", "qti_queries__author"."declaration", "qti_queries__author"."declaration_base_type", "qti_queries__author"."declaration_cardinality", "qti_queries__author"."declaration_identifier", "qti_queries__author"."declaration_name", "qti_queries__author"."default_entry", "qti_queries__author"."dependency", "qti_queries__author"."dependency_target", "qti_queries__author"."doctype", "qti_queries__author"."document", "qti_queries__author"."document_id", "qti_queries__author"."document_lang", "qti_queries__author"."element_type", "qti_queries__author"."encoding_decl", "qti_queries__author"."entry", "qti_queries__author"."expression", "qti_queries__author"."expression_attribute", "qti_queries__author"."feedback_ref", "qti_queries__author"."feedback_ref_cardinality", "qti_queries__author"."feedback_ref_declaration", "qti_queries__author"."field_value", "qti_queries__author"."file", "qti_queries__author"."file_href", "qti_queries__author"."fragment_value", "qti_queries__author"."gap_interaction", "qti_queries__author"."header_token", "qti_queries__author"."hotspot", "qti_queries__author"."hottext", "qti_queries__author"."id_binding", "qti_queries__author"."identity_text", "qti_queries__author"."idref", "qti_queries__author"."idref_target", "qti_queries__author"."inclusion", "qti_queries__author"."instance", "qti_queries__author"."instance_name", "qti_queries__author"."interaction", "qti_queries__author"."interaction_attribute", "qti_queries__author"."item_mode", "qti_queries__author"."item_ref_document", "qti_queries__author"."item_ref_href", "qti_queries__author"."item_ref_target", "qti_queries__author"."label_use", "qti_queries__author"."least_count", "qti_queries__author"."literal", "qti_queries__author"."literal_typed", "qti_queries__author"."lom_entry", "qti_queries__author"."lom_general", "qti_queries__author"."lom_language", "qti_queries__author"."lom_record", "qti_queries__author"."lom_resource_type", "qti_queries__author"."lom_resource_type_source", "qti_queries__author"."lom_string", "qti_queries__author"."lom_string_language", "qti_queries__author"."lom_title", "qti_queries__author"."lom_title_string", "qti_queries__author"."lookup_table", "qti_queries__author"."lookup_table_cardinality", "qti_queries__author"."lookup_value", "qti_queries__author"."lookup_value_type", "qti_queries__author"."manifest_id", "qti_queries__author"."manifest_id_space", "qti_queries__author"."map_key", "qti_queries__author"."map_key_items", "qti_queries__author"."map_key_type", "qti_queries__author"."mapping", "qti_queries__author"."mapping_base_type", "qti_queries__author"."mapping_cardinality", "qti_queries__author"."mapping_item_ref", "qti_queries__author"."mapping_item_ref_type", "qti_queries__author"."mapping_source_declaration", "qti_queries__author"."mastery_ceiling", "qti_queries__author"."mastery_floor", "qti_queries__author"."mastery_value", "qti_queries__author"."math_action", "qti_queries__author"."math_align_group", "qti_queries__author"."math_align_scope", "qti_queries__author"."math_apply", "qti_queries__author"."math_argument", "qti_queries__author"."math_cell", "qti_queries__author"."math_cn", "qti_queries__author"."math_dir", "qti_queries__author"."math_qualifier", "qti_queries__author"."math_rank", "qti_queries__author"."most_count", "qti_queries__author"."named", "qti_queries__author"."namespace", "qti_queries__author"."node", "qti_queries__author"."normal_maximum", "qti_queries__author"."normal_minimum", "qti_queries__author"."object_identifier", "qti_queries__author"."object_lang", "qti_queries__author"."object_title", "qti_queries__author"."open_attribute_name", "qti_queries__author"."open_element_name", "qti_queries__author"."open_element_type", "qti_queries__author"."operand", "qti_queries__author"."package", "qti_queries__author"."pci_module_form", "qti_queries__author"."pi", "qti_queries__author"."placed_binding", "qti_queries__author"."placed_binding_base_type", "qti_queries__author"."placed_binding_cardinality", "qti_queries__author"."placed_binding_declaration", "qti_queries__author"."placed_body_xml_lang", "qti_queries__author"."placed_catalog_ref", "qti_queries__author"."placed_choice", "qti_queries__author"."placed_document", "qti_queries__author"."placed_hottext", "qti_queries__author"."placed_id", "qti_queries__author"."placed_idref", "qti_queries__author"."placed_math_rank", "qti_queries__author"."placed_reference", "qti_queries__author"."placed_share_target", "qti_queries__author"."placed_variable_ref", "qti_queries__author"."placed_variable_ref_declaration", "qti_queries__author"."placed_xml_lang", "qti_queries__author"."printed_variable_ref", "qti_queries__author"."printed_variable_ref_declaration", "qti_queries__author"."processing", "qti_queries__author"."processing_template", "qti_queries__author"."quotation", "qti_queries__author"."reading", "qti_queries__author"."reading_cardinality", "qti_queries__author"."reading_declaration", "qti_queries__author"."record_field", "qti_queries__author"."record_field_name", "qti_queries__author"."reference", "qti_queries__author"."reference_document", "qti_queries__author"."reference_path", "qti_queries__author"."reference_segment", "qti_queries__author"."referring_document", "qti_queries__author"."resource", "qti_queries__author"."resource_document", "qti_queries__author"."resource_file", "qti_queries__author"."resource_href", "qti_queries__author"."resource_id", "qti_queries__author"."resource_lom_language_set", "qti_queries__author"."resource_typed", "qti_queries__author"."rounding", "qti_queries__author"."rounding_figures", "qti_queries__author"."rounding_mode", "qti_queries__author"."rounding_mode_figures", "qti_queries__author"."sd_decl", "qti_queries__author"."section", "qti_queries__author"."section_context_name", "qti_queries__author"."section_context_ref", "qti_queries__author"."section_context_ref_declaration", "qti_queries__author"."section_feedback_name", "qti_queries__author"."section_feedback_ref", "qti_queries__author"."section_feedback_ref_cardinality", "qti_queries__author"."section_feedback_ref_declaration", "qti_queries__author"."section_identifier", "qti_queries__author"."section_member", "qti_queries__author"."section_ordering", "qti_queries__author"."section_printed_name", "qti_queries__author"."section_printed_ref", "qti_queries__author"."section_printed_ref_declaration", "qti_queries__author"."section_scope", "qti_queries__author"."section_selection", "qti_queries__author"."section_template_name", "qti_queries__author"."section_template_ref", "qti_queries__author"."section_template_ref_cardinality", "qti_queries__author"."section_template_ref_declaration", "qti_queries__author"."share_fragment", "qti_queries__author"."share_target", "qti_queries__author"."site", "qti_queries__author"."site_path", "qti_queries__author"."site_target", "qti_queries__author"."slider", "qti_queries__author"."ssml_attribute", "qti_queries__author"."ssml_scope", "qti_queries__author"."statistic_date", "qti_queries__author"."stimulus_ref", "qti_queries__author"."table_header", "qti_queries__author"."table_scope", "qti_queries__author"."template_default", "qti_queries__author"."template_default_cardinality", "qti_queries__author"."template_default_target", "qti_queries__author"."template_ref", "qti_queries__author"."template_ref_cardinality", "qti_queries__author"."template_ref_declaration", "qti_queries__author"."test_document", "qti_queries__author"."test_flag", "qti_queries__author"."test_reference", "qti_queries__author"."test_token", "qti_queries__author"."text_idref", "qti_queries__author"."text_reference", "qti_queries__author"."text_reference_path", "qti_queries__author"."tolerance", "qti_queries__author"."tolerance_token", "qti_queries__author"."typed_value", "qti_queries__author"."usage_base_type", "qti_queries__author"."usage_value", "qti_queries__author"."usage_value_base_type", "qti_queries__author"."value", "qti_queries__author"."value_base_type", "qti_queries__author"."value_set", "qti_queries__author"."value_set_cardinality", "qti_queries__author"."variable_mapping", "qti_queries__author"."variable_ref", "qti_queries__author"."variable_ref_cardinality", "qti_queries__author"."variable_ref_declaration", "qti_queries__author"."variable_ref_table", "qti_queries__author"."xml_decl", "qti_queries__author"."xml_lang" TO "qti_queries__author";
+GRANT SELECT ON TABLE "qti_queries__author"."area_mapping", "qti_queries__author"."area_mapping_cardinality", "qti_queries__author"."aria_element", "qti_queries__author"."aria_range", "qti_queries__author"."aria_value", "qti_queries__author"."assembled_catalog", "qti_queries__author"."assembled_id", "qti_queries__author"."assembled_lang", "qti_queries__author"."assembled_name", "qti_queries__author"."assembled_reference", "qti_queries__author"."assessment_object", "qti_queries__author"."attribute", "qti_queries__author"."attribute_entity", "qti_queries__author"."binding", "qti_queries__author"."binding_base_type", "qti_queries__author"."binding_cardinality", "qti_queries__author"."binding_declaration", "qti_queries__author"."binding_name", "qti_queries__author"."body_xml_lang", "qti_queries__author"."bound_variable", "qti_queries__author"."branch_resolution", "qti_queries__author"."branch_rule", "qti_queries__author"."branch_shuffle", "qti_queries__author"."branch_target", "qti_queries__author"."card_support", "qti_queries__author"."catalog_id", "qti_queries__author"."catalog_ref", "qti_queries__author"."catalog_scope", "qti_queries__author"."catalog_target", "qti_queries__author"."cell_headers", "qti_queries__author"."cell_leaf", "qti_queries__author"."choice", "qti_queries__author"."choice_interaction", "qti_queries__author"."cn_attribute", "qti_queries__author"."cn_count", "qti_queries__author"."cn_part_text", "qti_queries__author"."cn_slot", "qti_queries__author"."comment", "qti_queries__author"."context_ref", "qti_queries__author"."context_ref_declaration", "qti_queries__author"."count_bound", "qti_queries__author"."count_range", "qti_queries__author"."data_ssml", "qti_queries__author"."data_ssml_member", "qti_queries__author"."data_ssml_property", "qti_queries__author"."declaration", "qti_queries__author"."declaration_base_type", "qti_queries__author"."declaration_cardinality", "qti_queries__author"."declaration_identifier", "qti_queries__author"."declaration_name", "qti_queries__author"."default_entry", "qti_queries__author"."dependency", "qti_queries__author"."dependency_target", "qti_queries__author"."doctype", "qti_queries__author"."document", "qti_queries__author"."document_id", "qti_queries__author"."document_lang", "qti_queries__author"."element_type", "qti_queries__author"."encoding_decl", "qti_queries__author"."entry", "qti_queries__author"."expression", "qti_queries__author"."expression_attribute", "qti_queries__author"."feedback_ref", "qti_queries__author"."feedback_ref_cardinality", "qti_queries__author"."feedback_ref_declaration", "qti_queries__author"."field_value", "qti_queries__author"."file", "qti_queries__author"."file_href", "qti_queries__author"."fragment_value", "qti_queries__author"."gap_interaction", "qti_queries__author"."header_token", "qti_queries__author"."hotspot", "qti_queries__author"."hottext", "qti_queries__author"."id_binding", "qti_queries__author"."identity_text", "qti_queries__author"."idref", "qti_queries__author"."idref_target", "qti_queries__author"."inclusion", "qti_queries__author"."instance", "qti_queries__author"."instance_name", "qti_queries__author"."interaction", "qti_queries__author"."interaction_attribute", "qti_queries__author"."item_mode", "qti_queries__author"."item_ref_document", "qti_queries__author"."item_ref_href", "qti_queries__author"."label_use", "qti_queries__author"."least_count", "qti_queries__author"."literal", "qti_queries__author"."literal_typed", "qti_queries__author"."lom_entry", "qti_queries__author"."lom_general", "qti_queries__author"."lom_language", "qti_queries__author"."lom_record", "qti_queries__author"."lom_resource_type", "qti_queries__author"."lom_resource_type_source", "qti_queries__author"."lom_string", "qti_queries__author"."lom_string_language", "qti_queries__author"."lom_title", "qti_queries__author"."lom_title_string", "qti_queries__author"."lookup_table", "qti_queries__author"."lookup_table_cardinality", "qti_queries__author"."lookup_value", "qti_queries__author"."lookup_value_type", "qti_queries__author"."manifest_id", "qti_queries__author"."map_key", "qti_queries__author"."map_key_items", "qti_queries__author"."map_key_type", "qti_queries__author"."mapping", "qti_queries__author"."mapping_base_type", "qti_queries__author"."mapping_cardinality", "qti_queries__author"."mapping_item_ref", "qti_queries__author"."mapping_item_ref_type", "qti_queries__author"."mapping_source_declaration", "qti_queries__author"."mastery_ceiling", "qti_queries__author"."mastery_floor", "qti_queries__author"."mastery_value", "qti_queries__author"."math_action", "qti_queries__author"."math_align_group", "qti_queries__author"."math_align_scope", "qti_queries__author"."math_apply", "qti_queries__author"."math_argument", "qti_queries__author"."math_cell", "qti_queries__author"."math_cn", "qti_queries__author"."math_dir", "qti_queries__author"."math_qualifier", "qti_queries__author"."math_rank", "qti_queries__author"."most_count", "qti_queries__author"."named", "qti_queries__author"."namespace", "qti_queries__author"."node", "qti_queries__author"."normal_maximum", "qti_queries__author"."normal_minimum", "qti_queries__author"."object_identifier", "qti_queries__author"."object_lang", "qti_queries__author"."object_title", "qti_queries__author"."open_attribute_name", "qti_queries__author"."open_element_name", "qti_queries__author"."open_element_type", "qti_queries__author"."operand", "qti_queries__author"."package", "qti_queries__author"."pci_module_form", "qti_queries__author"."pi", "qti_queries__author"."placed_binding", "qti_queries__author"."placed_binding_base_type", "qti_queries__author"."placed_binding_cardinality", "qti_queries__author"."placed_binding_declaration", "qti_queries__author"."placed_body_xml_lang", "qti_queries__author"."placed_catalog_ref", "qti_queries__author"."placed_choice", "qti_queries__author"."placed_document", "qti_queries__author"."placed_hottext", "qti_queries__author"."placed_id", "qti_queries__author"."placed_idref", "qti_queries__author"."placed_math_rank", "qti_queries__author"."placed_reference", "qti_queries__author"."placed_share_target", "qti_queries__author"."placed_variable_ref", "qti_queries__author"."placed_variable_ref_declaration", "qti_queries__author"."placed_xml_lang", "qti_queries__author"."printed_variable_ref", "qti_queries__author"."printed_variable_ref_declaration", "qti_queries__author"."processing", "qti_queries__author"."processing_template", "qti_queries__author"."quotation", "qti_queries__author"."reading", "qti_queries__author"."reading_cardinality", "qti_queries__author"."reading_declaration", "qti_queries__author"."record_field", "qti_queries__author"."record_field_name", "qti_queries__author"."reference", "qti_queries__author"."reference_document", "qti_queries__author"."reference_path", "qti_queries__author"."reference_segment", "qti_queries__author"."referring_document", "qti_queries__author"."resource", "qti_queries__author"."resource_document", "qti_queries__author"."resource_file", "qti_queries__author"."resource_href", "qti_queries__author"."resource_id", "qti_queries__author"."resource_lom_language_set", "qti_queries__author"."resource_typed", "qti_queries__author"."rounding", "qti_queries__author"."rounding_figures", "qti_queries__author"."rounding_mode", "qti_queries__author"."rounding_mode_figures", "qti_queries__author"."sd_decl", "qti_queries__author"."section", "qti_queries__author"."section_context_name", "qti_queries__author"."section_context_ref", "qti_queries__author"."section_context_ref_declaration", "qti_queries__author"."section_feedback_name", "qti_queries__author"."section_feedback_ref", "qti_queries__author"."section_feedback_ref_cardinality", "qti_queries__author"."section_feedback_ref_declaration", "qti_queries__author"."section_identifier", "qti_queries__author"."section_member", "qti_queries__author"."section_ordering", "qti_queries__author"."section_printed_name", "qti_queries__author"."section_printed_ref", "qti_queries__author"."section_printed_ref_declaration", "qti_queries__author"."section_scope", "qti_queries__author"."section_selection", "qti_queries__author"."section_template_name", "qti_queries__author"."section_template_ref", "qti_queries__author"."section_template_ref_cardinality", "qti_queries__author"."section_template_ref_declaration", "qti_queries__author"."share_fragment", "qti_queries__author"."share_target", "qti_queries__author"."site", "qti_queries__author"."site_path", "qti_queries__author"."site_target", "qti_queries__author"."slider", "qti_queries__author"."ssml_attribute", "qti_queries__author"."ssml_scope", "qti_queries__author"."statistic_date", "qti_queries__author"."stimulus_ref", "qti_queries__author"."table_header", "qti_queries__author"."table_scope", "qti_queries__author"."template_default", "qti_queries__author"."template_default_cardinality", "qti_queries__author"."template_default_target", "qti_queries__author"."template_ref", "qti_queries__author"."template_ref_cardinality", "qti_queries__author"."template_ref_declaration", "qti_queries__author"."test_document", "qti_queries__author"."test_flag", "qti_queries__author"."test_reference", "qti_queries__author"."test_token", "qti_queries__author"."text_idref", "qti_queries__author"."text_reference", "qti_queries__author"."text_reference_path", "qti_queries__author"."tolerance", "qti_queries__author"."tolerance_token", "qti_queries__author"."typed_value", "qti_queries__author"."usage_base_type", "qti_queries__author"."usage_value", "qti_queries__author"."usage_value_base_type", "qti_queries__author"."value", "qti_queries__author"."value_base_type", "qti_queries__author"."value_set", "qti_queries__author"."value_set_cardinality", "qti_queries__author"."variable_mapping", "qti_queries__author"."variable_ref", "qti_queries__author"."variable_ref_cardinality", "qti_queries__author"."variable_ref_declaration", "qti_queries__author"."variable_ref_table", "qti_queries__author"."xml_decl", "qti_queries__author"."xml_lang" TO "qti_queries__author";
 
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."area_mapping" TO "qti_queries__author";
 
@@ -1084,8 +1072,6 @@ GRANT SELECT, INSERT, DELETE ON TABLE "qti"."cell_leaf" TO "qti_queries__author"
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."choice" TO "qti_queries__author";
 
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."choice_interaction" TO "qti_queries__author";
-
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."choice_variable_name" TO "qti_queries__author";
 
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."cn_attribute" TO "qti_queries__author";
 
@@ -1191,8 +1177,6 @@ GRANT SELECT, INSERT, DELETE ON TABLE "qti"."item_ref_document" TO "qti_queries_
 
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."item_ref_href" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."item_ref_target" TO "qti_queries__author";
-
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."label_use" TO "qti_queries__author";
 
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."least_count" TO "qti_queries__author";
@@ -1230,8 +1214,6 @@ GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lookup_value" TO "qti_queries__auth
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lookup_value_type" TO "qti_queries__author";
 
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."manifest_id" TO "qti_queries__author";
-
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."manifest_id_space" TO "qti_queries__author";
 
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."map_key" TO "qti_queries__author";
 
@@ -1547,9 +1529,9 @@ ALTER ROLE "qti_queries__author_app" SET lc_time = 'C.UTF-8';
 
 REVOKE ALL ON SCHEMA "qti", "qti_queries", "qti_queries__author" FROM PUBLIC;
 
-REVOKE ALL ON TABLE "qti"."area_mapping", "qti"."area_mapping_cardinality", "qti"."aria_element", "qti"."aria_range", "qti"."aria_value", "qti"."assembled_catalog", "qti"."assembled_id", "qti"."assembled_lang", "qti"."assembled_name", "qti"."assembled_reference", "qti"."assessment_object", "qti"."attribute", "qti"."attribute_entity", "qti"."binding", "qti"."binding_base_type", "qti"."binding_cardinality", "qti"."binding_declaration", "qti"."binding_name", "qti"."body_xml_lang", "qti"."bound_variable", "qti"."branch_resolution", "qti"."branch_rule", "qti"."branch_shuffle", "qti"."branch_target", "qti"."card_support", "qti"."catalog_id", "qti"."catalog_ref", "qti"."catalog_scope", "qti"."catalog_target", "qti"."cell_headers", "qti"."cell_leaf", "qti"."choice", "qti"."choice_interaction", "qti"."choice_variable_name", "qti"."cn_attribute", "qti"."cn_count", "qti"."cn_part_text", "qti"."cn_slot", "qti"."comment", "qti"."context_ref", "qti"."context_ref_declaration", "qti"."count_bound", "qti"."count_range", "qti"."data_ssml", "qti"."data_ssml_member", "qti"."data_ssml_property", "qti"."declaration", "qti"."declaration_base_type", "qti"."declaration_cardinality", "qti"."declaration_identifier", "qti"."declaration_name", "qti"."default_entry", "qti"."dependency", "qti"."dependency_target", "qti"."doctype", "qti"."document", "qti"."document_id", "qti"."document_lang", "qti"."element_type", "qti"."encoding_decl", "qti"."entry", "qti"."expression", "qti"."expression_attribute", "qti"."feedback_ref", "qti"."feedback_ref_cardinality", "qti"."feedback_ref_declaration", "qti"."field_value", "qti"."file", "qti"."file_href", "qti"."fragment_value", "qti"."gap_interaction", "qti"."header_token", "qti"."hotspot", "qti"."hottext", "qti"."id_binding", "qti"."identity_text", "qti"."idref", "qti"."idref_target", "qti"."inclusion", "qti"."instance", "qti"."instance_name", "qti"."interaction", "qti"."interaction_attribute", "qti"."item_mode", "qti"."item_ref_document", "qti"."item_ref_href", "qti"."item_ref_target", "qti"."label_use", "qti"."least_count", "qti"."literal", "qti"."literal_typed", "qti"."lom_entry", "qti"."lom_general", "qti"."lom_language", "qti"."lom_record", "qti"."lom_resource_type", "qti"."lom_resource_type_source", "qti"."lom_string", "qti"."lom_string_language", "qti"."lom_title", "qti"."lom_title_string", "qti"."lookup_table", "qti"."lookup_table_cardinality", "qti"."lookup_value", "qti"."lookup_value_type", "qti"."manifest_id", "qti"."manifest_id_space", "qti"."map_key", "qti"."map_key_items", "qti"."map_key_type", "qti"."mapping", "qti"."mapping_base_type", "qti"."mapping_cardinality", "qti"."mapping_item_ref", "qti"."mapping_item_ref_type", "qti"."mapping_source_declaration", "qti"."mastery_ceiling", "qti"."mastery_floor", "qti"."mastery_value", "qti"."math_action", "qti"."math_align_group", "qti"."math_align_scope", "qti"."math_apply", "qti"."math_argument", "qti"."math_cell", "qti"."math_cn", "qti"."math_dir", "qti"."math_qualifier", "qti"."math_rank", "qti"."most_count", "qti"."named", "qti"."namespace", "qti"."node", "qti"."normal_maximum", "qti"."normal_minimum", "qti"."object_identifier", "qti"."object_lang", "qti"."object_title", "qti"."open_attribute_name", "qti"."open_element_name", "qti"."open_element_type", "qti"."operand", "qti"."package", "qti"."pci_module_form", "qti"."pi", "qti"."placed_binding", "qti"."placed_binding_base_type", "qti"."placed_binding_cardinality", "qti"."placed_binding_declaration", "qti"."placed_body_xml_lang", "qti"."placed_catalog_ref", "qti"."placed_choice", "qti"."placed_document", "qti"."placed_hottext", "qti"."placed_id", "qti"."placed_idref", "qti"."placed_math_rank", "qti"."placed_reference", "qti"."placed_share_target", "qti"."placed_variable_ref", "qti"."placed_variable_ref_declaration", "qti"."placed_xml_lang", "qti"."printed_variable_ref", "qti"."printed_variable_ref_declaration", "qti"."processing", "qti"."processing_template", "qti"."quotation", "qti"."reading", "qti"."reading_cardinality", "qti"."reading_declaration", "qti"."record_field", "qti"."record_field_name", "qti"."reference", "qti"."reference_document", "qti"."reference_path", "qti"."reference_segment", "qti"."referring_document", "qti"."resource", "qti"."resource_document", "qti"."resource_file", "qti"."resource_href", "qti"."resource_id", "qti"."resource_lom_language_set", "qti"."resource_typed", "qti"."rounding", "qti"."rounding_figures", "qti"."rounding_mode", "qti"."rounding_mode_figures", "qti"."sd_decl", "qti"."section", "qti"."section_context_name", "qti"."section_context_ref", "qti"."section_context_ref_declaration", "qti"."section_feedback_name", "qti"."section_feedback_ref", "qti"."section_feedback_ref_cardinality", "qti"."section_feedback_ref_declaration", "qti"."section_identifier", "qti"."section_member", "qti"."section_ordering", "qti"."section_printed_name", "qti"."section_printed_ref", "qti"."section_printed_ref_declaration", "qti"."section_scope", "qti"."section_selection", "qti"."section_template_name", "qti"."section_template_ref", "qti"."section_template_ref_cardinality", "qti"."section_template_ref_declaration", "qti"."share_fragment", "qti"."share_target", "qti"."site", "qti"."site_path", "qti"."site_target", "qti"."slider", "qti"."ssml_attribute", "qti"."ssml_scope", "qti"."statistic_date", "qti"."stimulus_ref", "qti"."table_header", "qti"."table_scope", "qti"."template_default", "qti"."template_default_cardinality", "qti"."template_default_target", "qti"."template_ref", "qti"."template_ref_cardinality", "qti"."template_ref_declaration", "qti"."test_document", "qti"."test_flag", "qti"."test_reference", "qti"."test_token", "qti"."text_idref", "qti"."text_reference", "qti"."text_reference_path", "qti"."tolerance", "qti"."tolerance_token", "qti"."typed_value", "qti"."usage_base_type", "qti"."usage_value", "qti"."usage_value_base_type", "qti"."value", "qti"."value_base_type", "qti"."value_set", "qti"."value_set_cardinality", "qti"."variable_mapping", "qti"."variable_ref", "qti"."variable_ref_cardinality", "qti"."variable_ref_declaration", "qti"."variable_ref_table", "qti"."xml_decl", "qti"."xml_lang", "qti_queries__author"."area_mapping", "qti_queries__author"."area_mapping_cardinality", "qti_queries__author"."aria_element", "qti_queries__author"."aria_range", "qti_queries__author"."aria_value", "qti_queries__author"."assembled_catalog", "qti_queries__author"."assembled_id", "qti_queries__author"."assembled_lang", "qti_queries__author"."assembled_name", "qti_queries__author"."assembled_reference", "qti_queries__author"."assessment_object", "qti_queries__author"."attribute", "qti_queries__author"."attribute_entity", "qti_queries__author"."binding", "qti_queries__author"."binding_base_type", "qti_queries__author"."binding_cardinality", "qti_queries__author"."binding_declaration", "qti_queries__author"."binding_name", "qti_queries__author"."body_xml_lang", "qti_queries__author"."bound_variable", "qti_queries__author"."branch_resolution", "qti_queries__author"."branch_rule", "qti_queries__author"."branch_shuffle", "qti_queries__author"."branch_target", "qti_queries__author"."card_support", "qti_queries__author"."catalog_id", "qti_queries__author"."catalog_ref", "qti_queries__author"."catalog_scope", "qti_queries__author"."catalog_target", "qti_queries__author"."cell_headers", "qti_queries__author"."cell_leaf", "qti_queries__author"."choice", "qti_queries__author"."choice_interaction", "qti_queries__author"."choice_variable_name", "qti_queries__author"."cn_attribute", "qti_queries__author"."cn_count", "qti_queries__author"."cn_part_text", "qti_queries__author"."cn_slot", "qti_queries__author"."comment", "qti_queries__author"."context_ref", "qti_queries__author"."context_ref_declaration", "qti_queries__author"."count_bound", "qti_queries__author"."count_range", "qti_queries__author"."data_ssml", "qti_queries__author"."data_ssml_member", "qti_queries__author"."data_ssml_property", "qti_queries__author"."declaration", "qti_queries__author"."declaration_base_type", "qti_queries__author"."declaration_cardinality", "qti_queries__author"."declaration_identifier", "qti_queries__author"."declaration_name", "qti_queries__author"."default_entry", "qti_queries__author"."dependency", "qti_queries__author"."dependency_target", "qti_queries__author"."doctype", "qti_queries__author"."document", "qti_queries__author"."document_id", "qti_queries__author"."document_lang", "qti_queries__author"."element_type", "qti_queries__author"."encoding_decl", "qti_queries__author"."entry", "qti_queries__author"."expression", "qti_queries__author"."expression_attribute", "qti_queries__author"."feedback_ref", "qti_queries__author"."feedback_ref_cardinality", "qti_queries__author"."feedback_ref_declaration", "qti_queries__author"."field_value", "qti_queries__author"."file", "qti_queries__author"."file_href", "qti_queries__author"."fragment_value", "qti_queries__author"."gap_interaction", "qti_queries__author"."header_token", "qti_queries__author"."hotspot", "qti_queries__author"."hottext", "qti_queries__author"."id_binding", "qti_queries__author"."identity_text", "qti_queries__author"."idref", "qti_queries__author"."idref_target", "qti_queries__author"."inclusion", "qti_queries__author"."instance", "qti_queries__author"."instance_name", "qti_queries__author"."interaction", "qti_queries__author"."interaction_attribute", "qti_queries__author"."item_mode", "qti_queries__author"."item_ref_document", "qti_queries__author"."item_ref_href", "qti_queries__author"."item_ref_target", "qti_queries__author"."label_use", "qti_queries__author"."least_count", "qti_queries__author"."literal", "qti_queries__author"."literal_typed", "qti_queries__author"."lom_entry", "qti_queries__author"."lom_general", "qti_queries__author"."lom_language", "qti_queries__author"."lom_record", "qti_queries__author"."lom_resource_type", "qti_queries__author"."lom_resource_type_source", "qti_queries__author"."lom_string", "qti_queries__author"."lom_string_language", "qti_queries__author"."lom_title", "qti_queries__author"."lom_title_string", "qti_queries__author"."lookup_table", "qti_queries__author"."lookup_table_cardinality", "qti_queries__author"."lookup_value", "qti_queries__author"."lookup_value_type", "qti_queries__author"."manifest_id", "qti_queries__author"."manifest_id_space", "qti_queries__author"."map_key", "qti_queries__author"."map_key_items", "qti_queries__author"."map_key_type", "qti_queries__author"."mapping", "qti_queries__author"."mapping_base_type", "qti_queries__author"."mapping_cardinality", "qti_queries__author"."mapping_item_ref", "qti_queries__author"."mapping_item_ref_type", "qti_queries__author"."mapping_source_declaration", "qti_queries__author"."mastery_ceiling", "qti_queries__author"."mastery_floor", "qti_queries__author"."mastery_value", "qti_queries__author"."math_action", "qti_queries__author"."math_align_group", "qti_queries__author"."math_align_scope", "qti_queries__author"."math_apply", "qti_queries__author"."math_argument", "qti_queries__author"."math_cell", "qti_queries__author"."math_cn", "qti_queries__author"."math_dir", "qti_queries__author"."math_qualifier", "qti_queries__author"."math_rank", "qti_queries__author"."most_count", "qti_queries__author"."named", "qti_queries__author"."namespace", "qti_queries__author"."node", "qti_queries__author"."normal_maximum", "qti_queries__author"."normal_minimum", "qti_queries__author"."object_identifier", "qti_queries__author"."object_lang", "qti_queries__author"."object_title", "qti_queries__author"."open_attribute_name", "qti_queries__author"."open_element_name", "qti_queries__author"."open_element_type", "qti_queries__author"."operand", "qti_queries__author"."package", "qti_queries__author"."pci_module_form", "qti_queries__author"."pi", "qti_queries__author"."placed_binding", "qti_queries__author"."placed_binding_base_type", "qti_queries__author"."placed_binding_cardinality", "qti_queries__author"."placed_binding_declaration", "qti_queries__author"."placed_body_xml_lang", "qti_queries__author"."placed_catalog_ref", "qti_queries__author"."placed_choice", "qti_queries__author"."placed_document", "qti_queries__author"."placed_hottext", "qti_queries__author"."placed_id", "qti_queries__author"."placed_idref", "qti_queries__author"."placed_math_rank", "qti_queries__author"."placed_reference", "qti_queries__author"."placed_share_target", "qti_queries__author"."placed_variable_ref", "qti_queries__author"."placed_variable_ref_declaration", "qti_queries__author"."placed_xml_lang", "qti_queries__author"."printed_variable_ref", "qti_queries__author"."printed_variable_ref_declaration", "qti_queries__author"."processing", "qti_queries__author"."processing_template", "qti_queries__author"."quotation", "qti_queries__author"."reading", "qti_queries__author"."reading_cardinality", "qti_queries__author"."reading_declaration", "qti_queries__author"."record_field", "qti_queries__author"."record_field_name", "qti_queries__author"."reference", "qti_queries__author"."reference_document", "qti_queries__author"."reference_path", "qti_queries__author"."reference_segment", "qti_queries__author"."referring_document", "qti_queries__author"."resource", "qti_queries__author"."resource_document", "qti_queries__author"."resource_file", "qti_queries__author"."resource_href", "qti_queries__author"."resource_id", "qti_queries__author"."resource_lom_language_set", "qti_queries__author"."resource_typed", "qti_queries__author"."rounding", "qti_queries__author"."rounding_figures", "qti_queries__author"."rounding_mode", "qti_queries__author"."rounding_mode_figures", "qti_queries__author"."sd_decl", "qti_queries__author"."section", "qti_queries__author"."section_context_name", "qti_queries__author"."section_context_ref", "qti_queries__author"."section_context_ref_declaration", "qti_queries__author"."section_feedback_name", "qti_queries__author"."section_feedback_ref", "qti_queries__author"."section_feedback_ref_cardinality", "qti_queries__author"."section_feedback_ref_declaration", "qti_queries__author"."section_identifier", "qti_queries__author"."section_member", "qti_queries__author"."section_ordering", "qti_queries__author"."section_printed_name", "qti_queries__author"."section_printed_ref", "qti_queries__author"."section_printed_ref_declaration", "qti_queries__author"."section_scope", "qti_queries__author"."section_selection", "qti_queries__author"."section_template_name", "qti_queries__author"."section_template_ref", "qti_queries__author"."section_template_ref_cardinality", "qti_queries__author"."section_template_ref_declaration", "qti_queries__author"."share_fragment", "qti_queries__author"."share_target", "qti_queries__author"."site", "qti_queries__author"."site_path", "qti_queries__author"."site_target", "qti_queries__author"."slider", "qti_queries__author"."ssml_attribute", "qti_queries__author"."ssml_scope", "qti_queries__author"."statistic_date", "qti_queries__author"."stimulus_ref", "qti_queries__author"."table_header", "qti_queries__author"."table_scope", "qti_queries__author"."template_default", "qti_queries__author"."template_default_cardinality", "qti_queries__author"."template_default_target", "qti_queries__author"."template_ref", "qti_queries__author"."template_ref_cardinality", "qti_queries__author"."template_ref_declaration", "qti_queries__author"."test_document", "qti_queries__author"."test_flag", "qti_queries__author"."test_reference", "qti_queries__author"."test_token", "qti_queries__author"."text_idref", "qti_queries__author"."text_reference", "qti_queries__author"."text_reference_path", "qti_queries__author"."tolerance", "qti_queries__author"."tolerance_token", "qti_queries__author"."typed_value", "qti_queries__author"."usage_base_type", "qti_queries__author"."usage_value", "qti_queries__author"."usage_value_base_type", "qti_queries__author"."value", "qti_queries__author"."value_base_type", "qti_queries__author"."value_set", "qti_queries__author"."value_set_cardinality", "qti_queries__author"."variable_mapping", "qti_queries__author"."variable_ref", "qti_queries__author"."variable_ref_cardinality", "qti_queries__author"."variable_ref_declaration", "qti_queries__author"."variable_ref_table", "qti_queries__author"."xml_decl", "qti_queries__author"."xml_lang" FROM PUBLIC;
+REVOKE ALL ON TABLE "qti"."area_mapping", "qti"."area_mapping_cardinality", "qti"."aria_element", "qti"."aria_range", "qti"."aria_value", "qti"."assembled_catalog", "qti"."assembled_id", "qti"."assembled_lang", "qti"."assembled_name", "qti"."assembled_reference", "qti"."assessment_object", "qti"."attribute", "qti"."attribute_entity", "qti"."binding", "qti"."binding_base_type", "qti"."binding_cardinality", "qti"."binding_declaration", "qti"."binding_name", "qti"."body_xml_lang", "qti"."bound_variable", "qti"."branch_resolution", "qti"."branch_rule", "qti"."branch_shuffle", "qti"."branch_target", "qti"."card_support", "qti"."catalog_id", "qti"."catalog_ref", "qti"."catalog_scope", "qti"."catalog_target", "qti"."cell_headers", "qti"."cell_leaf", "qti"."choice", "qti"."choice_interaction", "qti"."cn_attribute", "qti"."cn_count", "qti"."cn_part_text", "qti"."cn_slot", "qti"."comment", "qti"."context_ref", "qti"."context_ref_declaration", "qti"."count_bound", "qti"."count_range", "qti"."data_ssml", "qti"."data_ssml_member", "qti"."data_ssml_property", "qti"."declaration", "qti"."declaration_base_type", "qti"."declaration_cardinality", "qti"."declaration_identifier", "qti"."declaration_name", "qti"."default_entry", "qti"."dependency", "qti"."dependency_target", "qti"."doctype", "qti"."document", "qti"."document_id", "qti"."document_lang", "qti"."element_type", "qti"."encoding_decl", "qti"."entry", "qti"."expression", "qti"."expression_attribute", "qti"."feedback_ref", "qti"."feedback_ref_cardinality", "qti"."feedback_ref_declaration", "qti"."field_value", "qti"."file", "qti"."file_href", "qti"."fragment_value", "qti"."gap_interaction", "qti"."header_token", "qti"."hotspot", "qti"."hottext", "qti"."id_binding", "qti"."identity_text", "qti"."idref", "qti"."idref_target", "qti"."inclusion", "qti"."instance", "qti"."instance_name", "qti"."interaction", "qti"."interaction_attribute", "qti"."item_mode", "qti"."item_ref_document", "qti"."item_ref_href", "qti"."label_use", "qti"."least_count", "qti"."literal", "qti"."literal_typed", "qti"."lom_entry", "qti"."lom_general", "qti"."lom_language", "qti"."lom_record", "qti"."lom_resource_type", "qti"."lom_resource_type_source", "qti"."lom_string", "qti"."lom_string_language", "qti"."lom_title", "qti"."lom_title_string", "qti"."lookup_table", "qti"."lookup_table_cardinality", "qti"."lookup_value", "qti"."lookup_value_type", "qti"."manifest_id", "qti"."map_key", "qti"."map_key_items", "qti"."map_key_type", "qti"."mapping", "qti"."mapping_base_type", "qti"."mapping_cardinality", "qti"."mapping_item_ref", "qti"."mapping_item_ref_type", "qti"."mapping_source_declaration", "qti"."mastery_ceiling", "qti"."mastery_floor", "qti"."mastery_value", "qti"."math_action", "qti"."math_align_group", "qti"."math_align_scope", "qti"."math_apply", "qti"."math_argument", "qti"."math_cell", "qti"."math_cn", "qti"."math_dir", "qti"."math_qualifier", "qti"."math_rank", "qti"."most_count", "qti"."named", "qti"."namespace", "qti"."node", "qti"."normal_maximum", "qti"."normal_minimum", "qti"."object_identifier", "qti"."object_lang", "qti"."object_title", "qti"."open_attribute_name", "qti"."open_element_name", "qti"."open_element_type", "qti"."operand", "qti"."package", "qti"."pci_module_form", "qti"."pi", "qti"."placed_binding", "qti"."placed_binding_base_type", "qti"."placed_binding_cardinality", "qti"."placed_binding_declaration", "qti"."placed_body_xml_lang", "qti"."placed_catalog_ref", "qti"."placed_choice", "qti"."placed_document", "qti"."placed_hottext", "qti"."placed_id", "qti"."placed_idref", "qti"."placed_math_rank", "qti"."placed_reference", "qti"."placed_share_target", "qti"."placed_variable_ref", "qti"."placed_variable_ref_declaration", "qti"."placed_xml_lang", "qti"."printed_variable_ref", "qti"."printed_variable_ref_declaration", "qti"."processing", "qti"."processing_template", "qti"."quotation", "qti"."reading", "qti"."reading_cardinality", "qti"."reading_declaration", "qti"."record_field", "qti"."record_field_name", "qti"."reference", "qti"."reference_document", "qti"."reference_path", "qti"."reference_segment", "qti"."referring_document", "qti"."resource", "qti"."resource_document", "qti"."resource_file", "qti"."resource_href", "qti"."resource_id", "qti"."resource_lom_language_set", "qti"."resource_typed", "qti"."rounding", "qti"."rounding_figures", "qti"."rounding_mode", "qti"."rounding_mode_figures", "qti"."sd_decl", "qti"."section", "qti"."section_context_name", "qti"."section_context_ref", "qti"."section_context_ref_declaration", "qti"."section_feedback_name", "qti"."section_feedback_ref", "qti"."section_feedback_ref_cardinality", "qti"."section_feedback_ref_declaration", "qti"."section_identifier", "qti"."section_member", "qti"."section_ordering", "qti"."section_printed_name", "qti"."section_printed_ref", "qti"."section_printed_ref_declaration", "qti"."section_scope", "qti"."section_selection", "qti"."section_template_name", "qti"."section_template_ref", "qti"."section_template_ref_cardinality", "qti"."section_template_ref_declaration", "qti"."share_fragment", "qti"."share_target", "qti"."site", "qti"."site_path", "qti"."site_target", "qti"."slider", "qti"."ssml_attribute", "qti"."ssml_scope", "qti"."statistic_date", "qti"."stimulus_ref", "qti"."table_header", "qti"."table_scope", "qti"."template_default", "qti"."template_default_cardinality", "qti"."template_default_target", "qti"."template_ref", "qti"."template_ref_cardinality", "qti"."template_ref_declaration", "qti"."test_document", "qti"."test_flag", "qti"."test_reference", "qti"."test_token", "qti"."text_idref", "qti"."text_reference", "qti"."text_reference_path", "qti"."tolerance", "qti"."tolerance_token", "qti"."typed_value", "qti"."usage_base_type", "qti"."usage_value", "qti"."usage_value_base_type", "qti"."value", "qti"."value_base_type", "qti"."value_set", "qti"."value_set_cardinality", "qti"."variable_mapping", "qti"."variable_ref", "qti"."variable_ref_cardinality", "qti"."variable_ref_declaration", "qti"."variable_ref_table", "qti"."xml_decl", "qti"."xml_lang", "qti_queries__author"."area_mapping", "qti_queries__author"."area_mapping_cardinality", "qti_queries__author"."aria_element", "qti_queries__author"."aria_range", "qti_queries__author"."aria_value", "qti_queries__author"."assembled_catalog", "qti_queries__author"."assembled_id", "qti_queries__author"."assembled_lang", "qti_queries__author"."assembled_name", "qti_queries__author"."assembled_reference", "qti_queries__author"."assessment_object", "qti_queries__author"."attribute", "qti_queries__author"."attribute_entity", "qti_queries__author"."binding", "qti_queries__author"."binding_base_type", "qti_queries__author"."binding_cardinality", "qti_queries__author"."binding_declaration", "qti_queries__author"."binding_name", "qti_queries__author"."body_xml_lang", "qti_queries__author"."bound_variable", "qti_queries__author"."branch_resolution", "qti_queries__author"."branch_rule", "qti_queries__author"."branch_shuffle", "qti_queries__author"."branch_target", "qti_queries__author"."card_support", "qti_queries__author"."catalog_id", "qti_queries__author"."catalog_ref", "qti_queries__author"."catalog_scope", "qti_queries__author"."catalog_target", "qti_queries__author"."cell_headers", "qti_queries__author"."cell_leaf", "qti_queries__author"."choice", "qti_queries__author"."choice_interaction", "qti_queries__author"."cn_attribute", "qti_queries__author"."cn_count", "qti_queries__author"."cn_part_text", "qti_queries__author"."cn_slot", "qti_queries__author"."comment", "qti_queries__author"."context_ref", "qti_queries__author"."context_ref_declaration", "qti_queries__author"."count_bound", "qti_queries__author"."count_range", "qti_queries__author"."data_ssml", "qti_queries__author"."data_ssml_member", "qti_queries__author"."data_ssml_property", "qti_queries__author"."declaration", "qti_queries__author"."declaration_base_type", "qti_queries__author"."declaration_cardinality", "qti_queries__author"."declaration_identifier", "qti_queries__author"."declaration_name", "qti_queries__author"."default_entry", "qti_queries__author"."dependency", "qti_queries__author"."dependency_target", "qti_queries__author"."doctype", "qti_queries__author"."document", "qti_queries__author"."document_id", "qti_queries__author"."document_lang", "qti_queries__author"."element_type", "qti_queries__author"."encoding_decl", "qti_queries__author"."entry", "qti_queries__author"."expression", "qti_queries__author"."expression_attribute", "qti_queries__author"."feedback_ref", "qti_queries__author"."feedback_ref_cardinality", "qti_queries__author"."feedback_ref_declaration", "qti_queries__author"."field_value", "qti_queries__author"."file", "qti_queries__author"."file_href", "qti_queries__author"."fragment_value", "qti_queries__author"."gap_interaction", "qti_queries__author"."header_token", "qti_queries__author"."hotspot", "qti_queries__author"."hottext", "qti_queries__author"."id_binding", "qti_queries__author"."identity_text", "qti_queries__author"."idref", "qti_queries__author"."idref_target", "qti_queries__author"."inclusion", "qti_queries__author"."instance", "qti_queries__author"."instance_name", "qti_queries__author"."interaction", "qti_queries__author"."interaction_attribute", "qti_queries__author"."item_mode", "qti_queries__author"."item_ref_document", "qti_queries__author"."item_ref_href", "qti_queries__author"."label_use", "qti_queries__author"."least_count", "qti_queries__author"."literal", "qti_queries__author"."literal_typed", "qti_queries__author"."lom_entry", "qti_queries__author"."lom_general", "qti_queries__author"."lom_language", "qti_queries__author"."lom_record", "qti_queries__author"."lom_resource_type", "qti_queries__author"."lom_resource_type_source", "qti_queries__author"."lom_string", "qti_queries__author"."lom_string_language", "qti_queries__author"."lom_title", "qti_queries__author"."lom_title_string", "qti_queries__author"."lookup_table", "qti_queries__author"."lookup_table_cardinality", "qti_queries__author"."lookup_value", "qti_queries__author"."lookup_value_type", "qti_queries__author"."manifest_id", "qti_queries__author"."map_key", "qti_queries__author"."map_key_items", "qti_queries__author"."map_key_type", "qti_queries__author"."mapping", "qti_queries__author"."mapping_base_type", "qti_queries__author"."mapping_cardinality", "qti_queries__author"."mapping_item_ref", "qti_queries__author"."mapping_item_ref_type", "qti_queries__author"."mapping_source_declaration", "qti_queries__author"."mastery_ceiling", "qti_queries__author"."mastery_floor", "qti_queries__author"."mastery_value", "qti_queries__author"."math_action", "qti_queries__author"."math_align_group", "qti_queries__author"."math_align_scope", "qti_queries__author"."math_apply", "qti_queries__author"."math_argument", "qti_queries__author"."math_cell", "qti_queries__author"."math_cn", "qti_queries__author"."math_dir", "qti_queries__author"."math_qualifier", "qti_queries__author"."math_rank", "qti_queries__author"."most_count", "qti_queries__author"."named", "qti_queries__author"."namespace", "qti_queries__author"."node", "qti_queries__author"."normal_maximum", "qti_queries__author"."normal_minimum", "qti_queries__author"."object_identifier", "qti_queries__author"."object_lang", "qti_queries__author"."object_title", "qti_queries__author"."open_attribute_name", "qti_queries__author"."open_element_name", "qti_queries__author"."open_element_type", "qti_queries__author"."operand", "qti_queries__author"."package", "qti_queries__author"."pci_module_form", "qti_queries__author"."pi", "qti_queries__author"."placed_binding", "qti_queries__author"."placed_binding_base_type", "qti_queries__author"."placed_binding_cardinality", "qti_queries__author"."placed_binding_declaration", "qti_queries__author"."placed_body_xml_lang", "qti_queries__author"."placed_catalog_ref", "qti_queries__author"."placed_choice", "qti_queries__author"."placed_document", "qti_queries__author"."placed_hottext", "qti_queries__author"."placed_id", "qti_queries__author"."placed_idref", "qti_queries__author"."placed_math_rank", "qti_queries__author"."placed_reference", "qti_queries__author"."placed_share_target", "qti_queries__author"."placed_variable_ref", "qti_queries__author"."placed_variable_ref_declaration", "qti_queries__author"."placed_xml_lang", "qti_queries__author"."printed_variable_ref", "qti_queries__author"."printed_variable_ref_declaration", "qti_queries__author"."processing", "qti_queries__author"."processing_template", "qti_queries__author"."quotation", "qti_queries__author"."reading", "qti_queries__author"."reading_cardinality", "qti_queries__author"."reading_declaration", "qti_queries__author"."record_field", "qti_queries__author"."record_field_name", "qti_queries__author"."reference", "qti_queries__author"."reference_document", "qti_queries__author"."reference_path", "qti_queries__author"."reference_segment", "qti_queries__author"."referring_document", "qti_queries__author"."resource", "qti_queries__author"."resource_document", "qti_queries__author"."resource_file", "qti_queries__author"."resource_href", "qti_queries__author"."resource_id", "qti_queries__author"."resource_lom_language_set", "qti_queries__author"."resource_typed", "qti_queries__author"."rounding", "qti_queries__author"."rounding_figures", "qti_queries__author"."rounding_mode", "qti_queries__author"."rounding_mode_figures", "qti_queries__author"."sd_decl", "qti_queries__author"."section", "qti_queries__author"."section_context_name", "qti_queries__author"."section_context_ref", "qti_queries__author"."section_context_ref_declaration", "qti_queries__author"."section_feedback_name", "qti_queries__author"."section_feedback_ref", "qti_queries__author"."section_feedback_ref_cardinality", "qti_queries__author"."section_feedback_ref_declaration", "qti_queries__author"."section_identifier", "qti_queries__author"."section_member", "qti_queries__author"."section_ordering", "qti_queries__author"."section_printed_name", "qti_queries__author"."section_printed_ref", "qti_queries__author"."section_printed_ref_declaration", "qti_queries__author"."section_scope", "qti_queries__author"."section_selection", "qti_queries__author"."section_template_name", "qti_queries__author"."section_template_ref", "qti_queries__author"."section_template_ref_cardinality", "qti_queries__author"."section_template_ref_declaration", "qti_queries__author"."share_fragment", "qti_queries__author"."share_target", "qti_queries__author"."site", "qti_queries__author"."site_path", "qti_queries__author"."site_target", "qti_queries__author"."slider", "qti_queries__author"."ssml_attribute", "qti_queries__author"."ssml_scope", "qti_queries__author"."statistic_date", "qti_queries__author"."stimulus_ref", "qti_queries__author"."table_header", "qti_queries__author"."table_scope", "qti_queries__author"."template_default", "qti_queries__author"."template_default_cardinality", "qti_queries__author"."template_default_target", "qti_queries__author"."template_ref", "qti_queries__author"."template_ref_cardinality", "qti_queries__author"."template_ref_declaration", "qti_queries__author"."test_document", "qti_queries__author"."test_flag", "qti_queries__author"."test_reference", "qti_queries__author"."test_token", "qti_queries__author"."text_idref", "qti_queries__author"."text_reference", "qti_queries__author"."text_reference_path", "qti_queries__author"."tolerance", "qti_queries__author"."tolerance_token", "qti_queries__author"."typed_value", "qti_queries__author"."usage_base_type", "qti_queries__author"."usage_value", "qti_queries__author"."usage_value_base_type", "qti_queries__author"."value", "qti_queries__author"."value_base_type", "qti_queries__author"."value_set", "qti_queries__author"."value_set_cardinality", "qti_queries__author"."variable_mapping", "qti_queries__author"."variable_ref", "qti_queries__author"."variable_ref_cardinality", "qti_queries__author"."variable_ref_declaration", "qti_queries__author"."variable_ref_table", "qti_queries__author"."xml_decl", "qti_queries__author"."xml_lang" FROM PUBLIC;
 
-REVOKE ALL ON DOMAIN "qti"."admission_map", "qti"."align_direction", "qti"."align_state", "qti"."attribute_model", "qti"."attribute_name", "qti"."__attribute_name_bits_416_thr6i6sipt", "qti"."attribute_slot", "qti"."__attribute_slot_bits_112_aecznthxg5", "qti"."base_type", "qti"."bound_facet", "qti"."bound_zero", "qti"."built_in", "qti"."cardinality", "qti"."cn_base", "qti"."cn_part", "qti"."cn_part_form", "qti"."cn_type", "qti"."content_model", "qti"."declaration_kind", "qti"."document_type", "qti"."domain_primitive", "qti"."flag", "qti"."__flag_bits_12_i4uhexylc4", "qti"."follow_set", "qti"."governor", "qti"."href_scope", "qti"."identity", "qti"."include_parent", "qti"."include_set", "qti"."language", "qti"."node_kind", "qti"."__node_kind_bits_644_kcdmigfwqm", "qti"."position", "qti"."__position_bits_308_gsnowf36kr", "qti"."reading_form", "qti"."reading_source", "qti"."reference_form", "qti"."reference_resolution", "qti"."reference_role", "qti"."reference_spelling", "qti"."referenced_table", "qti"."resource_type", "qti"."rounding_holds", "qti"."rp_template", "qti"."schema_version", "qti"."shared_model", "qti"."symbol_set", "qti"."type_name", "qti"."use", "qti"."value_base", "qti"."__value_base_bits_16_7t6pwwxbsh", "qti"."value_cardinality", "qti"."__value_cardinality_bits_8_mma4mwhphy", "qti"."value_domain", "qti"."xml_standalone", "qti"."__text_pwaizaq6lx", "qti"."__text_c6iptmtj2x", "qti"."__text_5xaumrdzw7", "qti"."__text_xj3zno7u3h", "qti"."__text_7j6kgluyjp", "qti"."__text_7dfilirtp3", "qti"."__text_l7nqeazg5h", "qti"."__text_xey6ryorh5", "qti"."__text_ca4i7j77gp", "qti"."__text_elwnhkz2pq", "qti"."__text_qhjydx3ufb", "qti"."__text_zij47sgley", "qti"."__text_gke7uypkov", "qti"."__text_d7mwmflg4k", "qti"."__text_piekqyt5fn", "qti"."__text_mpc5fvfrbl", "qti"."__text_fgve4r33vj", "qti"."__text_23rzixl3a2", "qti"."__text_3adwbksayk", "qti"."__text_k5kwygzatl", "qti"."__text_mqbstvk5ay", "qti"."__text_xisvziygi3", "qti"."__text_psn65t7m7e", "qti"."__text_3dlgl63rv6", "qti"."__text_aezrarw5qb", "qti"."__domain_gfw43vigph" FROM PUBLIC;
+REVOKE ALL ON DOMAIN "qti"."admission_map", "qti"."align_direction", "qti"."align_state", "qti"."attribute_model", "qti"."attribute_name", "qti"."__attribute_name_bits_416_thr6i6sipt", "qti"."attribute_slot", "qti"."__attribute_slot_bits_112_aecznthxg5", "qti"."base_type", "qti"."bound_facet", "qti"."bound_zero", "qti"."built_in", "qti"."cardinality", "qti"."cn_base", "qti"."cn_part", "qti"."cn_part_form", "qti"."cn_type", "qti"."content_model", "qti"."declaration_kind", "qti"."document_type", "qti"."domain_primitive", "qti"."flag", "qti"."__flag_bits_12_i4uhexylc4", "qti"."follow_set", "qti"."governor", "qti"."href_scope", "qti"."identity", "qti"."include_parent", "qti"."include_set", "qti"."language", "qti"."node_kind", "qti"."__node_kind_bits_644_kcdmigfwqm", "qti"."position", "qti"."__position_bits_308_gsnowf36kr", "qti"."reading_form", "qti"."reading_source", "qti"."reference_form", "qti"."reference_resolution", "qti"."reference_role", "qti"."reference_spelling", "qti"."referenced_table", "qti"."resource_type", "qti"."rounding_holds", "qti"."rp_template", "qti"."schema_version", "qti"."shared_model", "qti"."symbol_set", "qti"."type_name", "qti"."use", "qti"."value_base", "qti"."__value_base_bits_16_7t6pwwxbsh", "qti"."value_cardinality", "qti"."__value_cardinality_bits_8_mma4mwhphy", "qti"."value_domain", "qti"."xml_standalone", "qti"."__text_pwaizaq6lx", "qti"."__text_c6iptmtj2x", "qti"."__text_5xaumrdzw7", "qti"."__text_xj3zno7u3h", "qti"."__text_7j6kgluyjp", "qti"."__text_7dfilirtp3", "qti"."__text_l7nqeazg5h", "qti"."__text_xey6ryorh5", "qti"."__text_ca4i7j77gp", "qti"."__text_vrcyezm7ka", "qti"."__text_elwnhkz2pq", "qti"."__text_qhjydx3ufb", "qti"."__text_zij47sgley", "qti"."__text_gke7uypkov", "qti"."__text_d7mwmflg4k", "qti"."__text_piekqyt5fn", "qti"."__text_mpc5fvfrbl", "qti"."__text_fgve4r33vj", "qti"."__text_23rzixl3a2", "qti"."__text_3adwbksayk", "qti"."__text_k5kwygzatl", "qti"."__text_mqbstvk5ay", "qti"."__text_xisvziygi3", "qti"."__text_psn65t7m7e", "qti"."__text_3dlgl63rv6", "qti"."__text_aezrarw5qb", "qti"."__domain_gfw43vigph" FROM PUBLIC;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA "qti" REVOKE ALL ON TABLES FROM PUBLIC;
 
@@ -2007,6 +1989,8 @@ COMMENT ON DOMAIN "qti"."__text_23rzixl3a2" IS 'text domain of definition 95eb6c
 
 COMMENT ON DOMAIN "qti"."__text_mpc5fvfrbl" IS 'text domain of definition 9d6d9f9b392e83929bb624b4fb456df092dcf95a88a422c00f3ce1ffe312508f';
 
+COMMENT ON DOMAIN "qti"."__text_vrcyezm7ka" IS 'text domain of definition 9ee012fb79fcb52e1281f9b222071737e340dc146c2082aa3a4646fcd0f11d41';
+
 COMMENT ON DOMAIN "qti"."__text_zij47sgley" IS 'text domain of definition be762dbadbcbdadb1b1e213742dad3ff6da1f56202cbfb8c219acc59e34371bd';
 
 COMMENT ON DOMAIN "qti"."__text_piekqyt5fn" IS 'text domain of definition c9ac9818e2865da0c421a03746d8e278977395fa58d99ace990d8ff079529b94';
@@ -2209,18 +2193,6 @@ COMMENT ON CONSTRAINT "__choice_interaction_pk_dxmiqmyvgh" ON "qti"."choice_inte
 
 COMMENT ON CONSTRAINT "__choice_interaction_key_node_interaction_lkjg3yj2vm" ON "qti"."choice_interaction" IS 'key ChoiceInteraction(node, interaction)';
 
-COMMENT ON CONSTRAINT "__choice_variable_name_pk_wfjhpuxtyt" ON "qti"."choice_variable_name" IS 'primary key of ChoiceVariableName';
-
-COMMENT ON CONSTRAINT "__choice_variable_name_key_document_identifier_rgnwvxtzsy" ON "qti"."choice_variable_name" IS 'key ChoiceVariableName(document, identifier, choices)';
-
-COMMENT ON CONSTRAINT "__choice_variable_name_key_document_identifier_v2scv74yqa" ON "qti"."choice_variable_name" IS 'key ChoiceVariableName(document, identifier, declarations)';
-
-COMMENT ON CONSTRAINT "__choice_variable_name_key_document_identifier_syzbz5s44x" ON "qti"."choice_variable_name" IS 'key ChoiceVariableName(document, identifier, hottexts)';
-
-COMMENT ON CONSTRAINT "__choice_variable_name_key_document_identifier_iboh2dbkyb" ON "qti"."choice_variable_name" IS 'key ChoiceVariableName(document, identifier, placedChoices)';
-
-COMMENT ON CONSTRAINT "__choice_variable_name_key_document_identifier_tnegcmbi67" ON "qti"."choice_variable_name" IS 'key ChoiceVariableName(document, identifier, placedHottexts)';
-
 COMMENT ON CONSTRAINT "__cn_attribute_pk_uahvc6us4g" ON "qti"."cn_attribute" IS 'primary key of CnAttribute';
 
 COMMENT ON CONSTRAINT "__cn_attribute_key_node_name_lexical_cu7muqqogb" ON "qti"."cn_attribute" IS 'key CnAttribute(node, name, lexical)';
@@ -2341,11 +2313,7 @@ COMMENT ON CONSTRAINT "__document_key_package_path_hvs3spxdfn" ON "qti"."documen
 
 COMMENT ON CONSTRAINT "__document_check_document_targeted_by_or_fold_csvia65phb" ON "qti"."document" IS 'check of Document for law or fold over fin(Document, targetedBy) of SiteTarget(target, ancestry) into Document(node, context)';
 
-COMMENT ON CONSTRAINT "__document_check_document_targeted_by_count_fold_kc42aes2uv" ON "qti"."document" IS 'check of Document for law count fold over fin(Document, targetedBy) of SiteTarget(target) where {"kind":"compare","left":{"field":"splices","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}} into Document(node, spliced)';
-
 COMMENT ON CONSTRAINT "__document_key_node_assembled_vnnzfztutg" ON "qti"."document" IS 'key Document(node, assembled)';
-
-COMMENT ON CONSTRAINT "__document_key_node_root_kind_cj4wuxmdom" ON "qti"."document" IS 'key Document(node, rootKind)';
 
 COMMENT ON CONSTRAINT "__document_key_node_idref_targets_assembled_bo6czyldik" ON "qti"."document" IS 'key Document(node, idrefTargets, assembled)';
 
@@ -2353,7 +2321,7 @@ COMMENT ON CONSTRAINT "__document_key_node_ids_idref_targets_choices_mbywmovfuu"
 
 COMMENT ON CONSTRAINT "__document_key_node_bindings_langs_variables_f6674yepot" ON "qti"."document" IS 'key Document(node, bindings, langs, variables)';
 
-COMMENT ON CONSTRAINT "__document_key_node_assembled_spliced_3hmp35jzb5" ON "qti"."document" IS 'key Document(node, assembled, spliced)';
+COMMENT ON CONSTRAINT "__document_key_node_root_kind_cj4wuxmdom" ON "qti"."document" IS 'key Document(node, rootKind)';
 
 COMMENT ON CONSTRAINT "__document_key_node_package_path_g5aeoouets" ON "qti"."document" IS 'key Document(node, package, path)';
 
@@ -2569,19 +2537,9 @@ COMMENT ON CONSTRAINT "__item_mode_key_document_adaptive_bhtaneuhda" ON "qti"."i
 
 COMMENT ON CONSTRAINT "__item_ref_document_pk_ylsc7bhhax" ON "qti"."item_ref_document" IS 'primary key of ItemRefDocument';
 
-COMMENT ON CONSTRAINT "__item_ref_document_key_node_package_path_l66gnify5f" ON "qti"."item_ref_document" IS 'key ItemRefDocument(node, package, path)';
-
 COMMENT ON CONSTRAINT "__item_ref_document_key_node_document_4q4k6bmhov" ON "qti"."item_ref_document" IS 'key ItemRefDocument(node, document)';
 
 COMMENT ON CONSTRAINT "__item_ref_href_pk_gic6tz4yai" ON "qti"."item_ref_href" IS 'primary key of ItemRefHref';
-
-COMMENT ON CONSTRAINT "__item_ref_href_key_node_targets_zb4ttsu4vy" ON "qti"."item_ref_href" IS 'key ItemRefHref(node, targets)';
-
-COMMENT ON CONSTRAINT "__item_ref_target_pk_wnmrsqppcx" ON "qti"."item_ref_target" IS 'primary key of ItemRefTarget';
-
-COMMENT ON CONSTRAINT "__item_ref_target_key_node_package_path_type_v2yrbvib7j" ON "qti"."item_ref_target" IS 'key ItemRefTarget(node, package, path, type)';
-
-COMMENT ON CONSTRAINT "__item_ref_target_key_node_type_gkoymt4mjs" ON "qti"."item_ref_target" IS 'key ItemRefTarget(node, type)';
 
 COMMENT ON CONSTRAINT "__label_use_pk_mebvop4w36" ON "qti"."label_use" IS 'primary key of LabelUse';
 
@@ -2666,12 +2624,6 @@ COMMENT ON CONSTRAINT "__manifest_id_pk_qzrdp24pyf" ON "qti"."manifest_id" IS 'p
 COMMENT ON CONSTRAINT "__manifest_id_key_package_qhfusyezz5" ON "qti"."manifest_id" IS 'key ManifestId(package)';
 
 COMMENT ON CONSTRAINT "__manifest_id_key_node_lexical_f6fcfc24vi" ON "qti"."manifest_id" IS 'key ManifestId(node, lexical)';
-
-COMMENT ON CONSTRAINT "__manifest_id_key_package_identifier_adiahiwxkt" ON "qti"."manifest_id" IS 'key ManifestId(package, identifier)';
-
-COMMENT ON CONSTRAINT "__manifest_id_space_pk_e72n5zuwhr" ON "qti"."manifest_id_space" IS 'primary key of ManifestIdSpace';
-
-COMMENT ON CONSTRAINT "__manifest_id_space_key_package_identifier_h7b7eeosws" ON "qti"."manifest_id_space" IS 'key ManifestIdSpace(package, identifier)';
 
 COMMENT ON CONSTRAINT "__map_key_pk_vv52s26trb" ON "qti"."map_key" IS 'primary key of MapKey';
 
@@ -3923,15 +3875,9 @@ COMMENT ON COLUMN "qti"."cell_leaf"."__copy_leaves_w3sn3wc7dh" IS 'the owner''s 
 
 COMMENT ON COLUMN "qti"."cell_leaf"."__pred_at_xktcobhsti" IS 'pred(at)';
 
-COMMENT ON COLUMN "qti"."choice"."__copy_choices_doqs3ugssb" IS 'the owner''s count of the family ChoiceVariableName.choices';
-
 COMMENT ON COLUMN "qti"."choice"."__copy_choices_ccvgfyuwr3" IS 'the owner''s count of the family Document.choices';
 
-COMMENT ON COLUMN "qti"."choice"."__index_choices_v4mco5ltbj" IS 'the index of the family ChoiceVariableName.choices';
-
 COMMENT ON COLUMN "qti"."choice"."__index_choices_5vetmgyhsz" IS 'the index of the family Document.choices';
-
-COMMENT ON COLUMN "qti"."choice"."__predecessor_choices_6ur2wwlqtm" IS 'the predecessor of the index of the family ChoiceVariableName.choices';
 
 COMMENT ON COLUMN "qti"."choice"."__predecessor_choices_2qadusfgo6" IS 'the predecessor of the index of the family Document.choices';
 
@@ -3944,16 +3890,6 @@ COMMENT ON COLUMN "qti"."choice_interaction"."__copy_choices_ugkbj5bx6b" IS 'the
 COMMENT ON COLUMN "qti"."choice_interaction"."__index_choices_53mnqn3dgv" IS 'the index of the family Interaction.choices';
 
 COMMENT ON COLUMN "qti"."choice_interaction"."__predecessor_choices_ndh64k5ilx" IS 'the predecessor of the index of the family Interaction.choices';
-
-COMMENT ON COLUMN "qti"."choice_variable_name"."__pred_choices_w4bygwsb7b" IS 'pred(choices)';
-
-COMMENT ON COLUMN "qti"."choice_variable_name"."__pred_declarations_s4h6b6fv25" IS 'pred(declarations)';
-
-COMMENT ON COLUMN "qti"."choice_variable_name"."__pred_hottexts_qwkebxoneh" IS 'pred(hottexts)';
-
-COMMENT ON COLUMN "qti"."choice_variable_name"."__pred_placed_choices_jilpkpawr7" IS 'pred(placedChoices)';
-
-COMMENT ON COLUMN "qti"."choice_variable_name"."__pred_placed_hottexts_g3eovodfgk" IS 'pred(placedHottexts)';
 
 COMMENT ON COLUMN "qti"."cn_count"."__tag_name_type_hg2ugkuqxm" IS 'tag CnAttribute.name = type';
 
@@ -4043,12 +3979,6 @@ COMMENT ON COLUMN "qti"."declaration_identifier"."__tag_base_type_boolean_t7f3wg
 
 COMMENT ON COLUMN "qti"."declaration_identifier"."__tag_base_type_float_r43nrhidpr" IS 'tag DeclarationBaseType.baseType = float';
 
-COMMENT ON COLUMN "qti"."declaration_identifier"."__copy_declarations_e32tuiolma" IS 'the owner''s count of the family ChoiceVariableName.declarations';
-
-COMMENT ON COLUMN "qti"."declaration_identifier"."__index_declarations_ghbykmvads" IS 'the index of the family ChoiceVariableName.declarations';
-
-COMMENT ON COLUMN "qti"."declaration_identifier"."__predecessor_declarations_df5pmbo7t6" IS 'the predecessor of the index of the family ChoiceVariableName.declarations';
-
 COMMENT ON COLUMN "qti"."declaration_identifier"."__node_fkiarxhsad" IS 'node where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}} and {"kind":"compare","left":{"field":"declarationKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-outcome-declaration"}} and {"kind":"compare","left":{"field":"identifier","kind":"field"},"op":"eq","right":{"kind":"literal","value":"MAXSCORE"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-test"}}';
 
 COMMENT ON COLUMN "qti"."declaration_identifier"."__node_kjsigse5lq" IS 'node where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}} and {"kind":"compare","left":{"field":"declarationKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-outcome-declaration"}} and {"kind":"compare","left":{"field":"identifier","kind":"field"},"op":"eq","right":{"kind":"literal","value":"PASSED"}}';
@@ -4074,8 +4004,6 @@ COMMENT ON COLUMN "qti"."document"."__tag_start_0_al5mmf4zuu" IS 'tag Node.start
 COMMENT ON COLUMN "qti"."document"."__node_nv676cv335" IS 'node where {"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-section","qti-assessment-test"]}';
 
 COMMENT ON COLUMN "qti"."document"."__node_5zotaizsb2" IS 'node where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
-
-COMMENT ON COLUMN "qti"."document"."__node_ejjgk3z2mi" IS 'node where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"field":"spliced","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}}';
 
 COMMENT ON COLUMN "qti"."document"."__node_qgqgjeibc3" IS 'node where {"kind":"compare","left":{"field":"documentType","kind":"field"},"op":"ne","right":{"kind":"literal","value":"manifest"}}';
 
@@ -4219,15 +4147,9 @@ COMMENT ON COLUMN "qti"."header_token"."__copy_tokens_4vh437gxcl" IS 'the owner'
 
 COMMENT ON COLUMN "qti"."header_token"."__pred_at_xktcobhsti" IS 'pred(at)';
 
-COMMENT ON COLUMN "qti"."hottext"."__copy_hottexts_j7bl6kq45z" IS 'the owner''s count of the family ChoiceVariableName.hottexts';
-
 COMMENT ON COLUMN "qti"."hottext"."__copy_hottexts_wpejikcl5t" IS 'the owner''s count of the family Document.hottexts';
 
-COMMENT ON COLUMN "qti"."hottext"."__index_hottexts_eqri3rdqhy" IS 'the index of the family ChoiceVariableName.hottexts';
-
 COMMENT ON COLUMN "qti"."hottext"."__index_hottexts_ghsfyaknik" IS 'the index of the family Document.hottexts';
-
-COMMENT ON COLUMN "qti"."hottext"."__predecessor_hottexts_atgcpon4wg" IS 'the predecessor of the index of the family ChoiceVariableName.hottexts';
 
 COMMENT ON COLUMN "qti"."hottext"."__predecessor_hottexts_bmouhqkdq3" IS 'the predecessor of the index of the family Document.hottexts';
 
@@ -4264,10 +4186,6 @@ COMMENT ON COLUMN "qti"."idref_target"."__predecessor_idref_targets_krpg64y35b" 
 COMMENT ON COLUMN "qti"."idref_target"."__document_jwyigkitch" IS 'document where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}}';
 
 COMMENT ON COLUMN "qti"."idref_target"."__id_chqpn6jlrw" IS 'id where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}}';
-
-COMMENT ON COLUMN "qti"."instance"."__tag_assembled_true_gg7wow7ogq" IS 'tag Document.assembled = true';
-
-COMMENT ON COLUMN "qti"."instance"."__tag_spliced_0_f6cte5phah" IS 'tag Document.spliced = 0';
 
 COMMENT ON COLUMN "qti"."instance"."__tag_places_true_fsuzemt64t" IS 'tag SiteTarget.places = true';
 
@@ -4545,29 +4463,9 @@ COMMENT ON COLUMN "qti"."item_mode"."__document_gfqaer5w2f" IS 'document where {
 
 COMMENT ON COLUMN "qti"."item_ref_document"."__tag_root_kind_qti_assessment_item_3w5s6t5tqt" IS 'tag Document.rootKind = qti-assessment-item';
 
-COMMENT ON COLUMN "qti"."item_ref_document"."__tag_type_imsqti_item_xmlv_3_p_0_xbm3afyphu" IS 'tag ItemRefTarget.type = imsqti_item_xmlv3p0';
-
 COMMENT ON COLUMN "qti"."item_ref_href"."__tag_kind_qti_assessment_item_ref_7dgpuznkbf" IS 'tag Node.kind = qti-assessment-item-ref';
 
 COMMENT ON COLUMN "qti"."item_ref_href"."__tag_name_href_uly3pfxknv" IS 'tag ReferencePath.name = href';
-
-COMMENT ON COLUMN "qti"."item_ref_href"."__pred_targets_c5nt4iqzuc" IS 'pred(targets)';
-
-COMMENT ON COLUMN "qti"."item_ref_target"."__tag_kind_qti_assessment_item_ref_7dgpuznkbf" IS 'tag Node.kind = qti-assessment-item-ref';
-
-COMMENT ON COLUMN "qti"."item_ref_target"."__tag_name_href_uly3pfxknv" IS 'tag ReferencePath.name = href';
-
-COMMENT ON COLUMN "qti"."item_ref_target"."__copy_targets_asbcxayfal" IS 'the owner''s count of the family ItemRefHref.targets';
-
-COMMENT ON COLUMN "qti"."item_ref_target"."__index_targets_rlmcoes4yz" IS 'the index of the family ItemRefHref.targets';
-
-COMMENT ON COLUMN "qti"."item_ref_target"."__predecessor_targets_zxbe37lwsw" IS 'the predecessor of the index of the family ItemRefHref.targets';
-
-COMMENT ON COLUMN "qti"."item_ref_target"."__node_thuesrvpoz" IS 'node where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}}';
-
-COMMENT ON COLUMN "qti"."item_ref_target"."__package_7yrgppd6sa" IS 'package where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}}';
-
-COMMENT ON COLUMN "qti"."item_ref_target"."__path_s25m4iaxsn" IS 'path where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}}';
 
 COMMENT ON COLUMN "qti"."label_use"."__document_h55jb4nosx" IS 'document where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-item"}}';
 
@@ -4641,17 +4539,7 @@ COMMENT ON COLUMN "qti"."manifest_id"."__tag_document_type_manifest_xf3a5pjxvr" 
 
 COMMENT ON COLUMN "qti"."manifest_id"."__tag_kind_cp_manifest_qkjmtgjag7" IS 'tag Attribute.kind = cp:manifest';
 
-COMMENT ON COLUMN "qti"."manifest_id"."__tag_kind_cp_manifest_urkrtqi6e4" IS 'tag ManifestIdSpace.kind = cp:manifest';
-
 COMMENT ON COLUMN "qti"."manifest_id"."__tag_kind_cp_manifest_5ceu2f7cj4" IS 'tag Node.kind = cp:manifest';
-
-COMMENT ON COLUMN "qti"."manifest_id_space"."__identifier_6zkottivdn" IS 'identifier where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:manifest"}}';
-
-COMMENT ON COLUMN "qti"."manifest_id_space"."__identifier_cei2qn2t7s" IS 'identifier where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"cp:manifest"}}';
-
-COMMENT ON COLUMN "qti"."manifest_id_space"."__package_srcfwxd3vo" IS 'package where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:manifest"}}';
-
-COMMENT ON COLUMN "qti"."manifest_id_space"."__package_f5hzcifi53" IS 'package where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"cp:manifest"}}';
 
 COMMENT ON COLUMN "qti"."map_key"."__tag_base_type_string_du6v7sbmlk" IS 'tag MapKeyType.baseType = string';
 
@@ -5125,29 +5013,17 @@ COMMENT ON COLUMN "qti"."placed_catalog_ref"."__index_placements_dis4hadyxe" IS 
 
 COMMENT ON COLUMN "qti"."placed_catalog_ref"."__predecessor_placements_cimve57ijl" IS 'the predecessor of the index of the family CatalogTarget.placements';
 
-COMMENT ON COLUMN "qti"."placed_choice"."__copy_placed_choices_z45wgnl4dq" IS 'the owner''s count of the family ChoiceVariableName.placedChoices';
-
 COMMENT ON COLUMN "qti"."placed_choice"."__copy_choices_egxmrfmjej" IS 'the owner''s count of the family Instance.choices';
 
-COMMENT ON COLUMN "qti"."placed_choice"."__index_placed_choices_s4ajfflvhe" IS 'the index of the family ChoiceVariableName.placedChoices';
-
 COMMENT ON COLUMN "qti"."placed_choice"."__index_choices_jcfrkre5cf" IS 'the index of the family Instance.choices';
-
-COMMENT ON COLUMN "qti"."placed_choice"."__predecessor_placed_choices_xqz3vcsnrg" IS 'the predecessor of the index of the family ChoiceVariableName.placedChoices';
 
 COMMENT ON COLUMN "qti"."placed_choice"."__predecessor_choices_h6tkr4kyiv" IS 'the predecessor of the index of the family Instance.choices';
 
 COMMENT ON COLUMN "qti"."placed_document"."__pred_references_6abcllx5dz" IS 'pred(references)';
 
-COMMENT ON COLUMN "qti"."placed_hottext"."__copy_placed_hottexts_vpc5lwxf2h" IS 'the owner''s count of the family ChoiceVariableName.placedHottexts';
-
 COMMENT ON COLUMN "qti"."placed_hottext"."__copy_hottexts_jh7a5yugpz" IS 'the owner''s count of the family Instance.hottexts';
 
-COMMENT ON COLUMN "qti"."placed_hottext"."__index_placed_hottexts_qxhnhttlxv" IS 'the index of the family ChoiceVariableName.placedHottexts';
-
 COMMENT ON COLUMN "qti"."placed_hottext"."__index_hottexts_2dh2vqtwre" IS 'the index of the family Instance.hottexts';
-
-COMMENT ON COLUMN "qti"."placed_hottext"."__predecessor_placed_hottexts_j323kwpztn" IS 'the predecessor of the index of the family ChoiceVariableName.placedHottexts';
 
 COMMENT ON COLUMN "qti"."placed_hottext"."__predecessor_hottexts_p5drbl3lbx" IS 'the predecessor of the index of the family Instance.hottexts';
 
@@ -5411,8 +5287,6 @@ COMMENT ON COLUMN "qti"."resource_id"."__tag_document_type_manifest_xf3a5pjxvr" 
 
 COMMENT ON COLUMN "qti"."resource_id"."__tag_kind_cp_resource_2dx6aajhjw" IS 'tag Attribute.kind = cp:resource';
 
-COMMENT ON COLUMN "qti"."resource_id"."__tag_kind_cp_resource_hhhpn2nrwh" IS 'tag ManifestIdSpace.kind = cp:resource';
-
 COMMENT ON COLUMN "qti"."resource_lom_language_set"."__pred_carriers_5eaxdkd6g3" IS 'pred(carriers)';
 
 COMMENT ON COLUMN "qti"."rounding"."__node_32fqjggjvi" IS 'node where {"arg":{"field":"holds","kind":"field"},"kind":"in","values":["both","figures"]}';
@@ -5633,13 +5507,9 @@ COMMENT ON COLUMN "qti"."site_path"."__path_vpc2zw6qyf" IS 'path where {"kind":"
 
 COMMENT ON COLUMN "qti"."site_path"."__path_hvkgesn5nq" IS 'path where {"kind":"compare","left":{"field":"entry","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section-ref"}}';
 
-COMMENT ON COLUMN "qti"."site_target"."__after_targeted_by_0_ewx4pvaau7" IS 'the accumulator after plane 0 of the fold __document_targeted_by_count_fold_a3qpfrhfna over the family Document.targetedBy';
-
 COMMENT ON COLUMN "qti"."site_target"."__after_targeted_by_0_nsll3bu4kk" IS 'the accumulator after plane 0 of the fold __document_targeted_by_or_fold_q3muf667kh over the family Document.targetedBy';
 
 COMMENT ON COLUMN "qti"."site_target"."__after_targets_0_py6ituirmm" IS 'the accumulator after plane 0 of the fold __test_document_targets_count_fold_6lkbv46gdx over the family TestDocument.targets';
-
-COMMENT ON COLUMN "qti"."site_target"."__before_targeted_by_0_73bcd4qah6" IS 'the accumulator before plane 0 of the fold __document_targeted_by_count_fold_a3qpfrhfna over the family Document.targetedBy';
 
 COMMENT ON COLUMN "qti"."site_target"."__before_targeted_by_0_d6tyxe5pt3" IS 'the accumulator before plane 0 of the fold __document_targeted_by_or_fold_q3muf667kh over the family Document.targetedBy';
 
@@ -6041,8 +5911,6 @@ COMMENT ON CONSTRAINT "__branch_shuffle_key_instance_rule_index_shuffles_63mu2qj
 
 COMMENT ON CONSTRAINT "__catalog_ref_key_document_token_index_carriers_pfnakxckk5" ON "qti"."catalog_ref" IS 'key CatalogRef(document, token, the index of the family CatalogTarget.carriers)';
 
-COMMENT ON CONSTRAINT "__choice_key_document_identifier_index_choices_ukpitoc54u" ON "qti"."choice" IS 'key Choice(document, identifier, the index of the family ChoiceVariableName.choices)';
-
 COMMENT ON CONSTRAINT "__choice_key_document_index_choices_ecdiz727hk" ON "qti"."choice" IS 'key Choice(document, the index of the family Document.choices)';
 
 COMMENT ON CONSTRAINT "__choice_interaction_key_interaction_index_choices_7hkirljucn" ON "qti"."choice_interaction" IS 'key ChoiceInteraction(interaction, the index of the family Interaction.choices)';
@@ -6054,8 +5922,6 @@ COMMENT ON CONSTRAINT "__cn_slot_key_node_index_parts_ngyyxxduwj" ON "qti"."cn_s
 COMMENT ON CONSTRAINT "__declaration_base_type_key_node_index_base_types_lfr2itokjz" ON "qti"."declaration_base_type" IS 'key DeclarationBaseType(node, the index of the family Declaration.baseTypes)';
 
 COMMENT ON CONSTRAINT "__declaration_cardinality_key_node_index_akoojvjkc4" ON "qti"."declaration_cardinality" IS 'key DeclarationCardinality(node, the index of the family Declaration.cardinalities)';
-
-COMMENT ON CONSTRAINT "__declaration_identifier_key_document_identifier_eciwx5djiv" ON "qti"."declaration_identifier" IS 'key DeclarationIdentifier(document, identifier, the index of the family ChoiceVariableName.declarations)';
 
 COMMENT ON CONSTRAINT "__document_key_node_2xwkm4raxx" ON "qti"."document" IS 'key Document(node where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-item"}})';
 
@@ -6074,8 +5940,6 @@ COMMENT ON CONSTRAINT "__file_key_package_scope_path_index_files_awqrwzp4b4" ON 
 COMMENT ON CONSTRAINT "__file_key_resource_scope_path_index_files_ur5ftttz4q" ON "qti"."file" IS 'key File(resource, scope, path, the index of the family ResourceFile.files)';
 
 COMMENT ON CONSTRAINT "__gap_interaction_key_interaction_index_gaps_xkaox2p7ga" ON "qti"."gap_interaction" IS 'key GapInteraction(interaction, the index of the family Interaction.gaps)';
-
-COMMENT ON CONSTRAINT "__hottext_key_document_identifier_index_hottexts_vask2ccts4" ON "qti"."hottext" IS 'key Hottext(document, identifier, the index of the family ChoiceVariableName.hottexts)';
 
 COMMENT ON CONSTRAINT "__hottext_key_document_index_hottexts_ytvlcdran7" ON "qti"."hottext" IS 'key Hottext(document, the index of the family Document.hottexts)';
 
@@ -6110,8 +5974,6 @@ COMMENT ON CONSTRAINT "__interaction_attribute_key_node_name_6wfddhnw4e" ON "qti
 COMMENT ON CONSTRAINT "__interaction_attribute_key_node_name_value_7ornt3zlhr" ON "qti"."interaction_attribute" IS 'key InteractionAttribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}, value where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"})';
 
 COMMENT ON CONSTRAINT "__interaction_attribute_key_node_s2a23mqgqv" ON "qti"."interaction_attribute" IS 'key InteractionAttribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-choice-interaction","qti-custom-interaction","qti-drawing-interaction","qti-end-attempt-interaction","qti-extended-text-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-inline-choice-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-portable-custom-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-slider-interaction","qti-text-entry-interaction","qti-upload-interaction"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["response-identifier"]})';
-
-COMMENT ON CONSTRAINT "__item_ref_target_key_node_index_targets_mzjkyz7o2d" ON "qti"."item_ref_target" IS 'key ItemRefTarget(node, the index of the family ItemRefHref.targets)';
 
 COMMENT ON CONSTRAINT "__least_count_key_node_index_leasts_74vfmcveog" ON "qti"."least_count" IS 'key LeastCount(node, the index of the family CountBound.leasts)';
 
@@ -6193,11 +6055,7 @@ COMMENT ON CONSTRAINT "__placed_body_xml_lang_key_assembly_lang_index_mp7ljzv423
 
 COMMENT ON CONSTRAINT "__placed_catalog_ref_key_document_id_index_az7l544ywb" ON "qti"."placed_catalog_ref" IS 'key PlacedCatalogRef(document, id, the index of the family CatalogTarget.placements)';
 
-COMMENT ON CONSTRAINT "__placed_choice_key_assembly_identifier_index_placed_mywmx74625" ON "qti"."placed_choice" IS 'key PlacedChoice(assembly, identifier, the index of the family ChoiceVariableName.placedChoices)';
-
 COMMENT ON CONSTRAINT "__placed_choice_key_instance_index_choices_vrzwl2nfx7" ON "qti"."placed_choice" IS 'key PlacedChoice(instance, the index of the family Instance.choices)';
-
-COMMENT ON CONSTRAINT "__placed_hottext_key_assembly_identifier_index_t36nfksptj" ON "qti"."placed_hottext" IS 'key PlacedHottext(assembly, identifier, the index of the family ChoiceVariableName.placedHottexts)';
 
 COMMENT ON CONSTRAINT "__placed_hottext_key_instance_index_hottexts_itxsmixinj" ON "qti"."placed_hottext" IS 'key PlacedHottext(instance, the index of the family Instance.hottexts)';
 
@@ -6265,7 +6123,7 @@ COMMENT ON CONSTRAINT "__site_target_key_document_index_targets_after_c7xbdgm6ki
 
 COMMENT ON CONSTRAINT "__site_target_key_target_index_targeted_by_gsjiy4nmfd" ON "qti"."site_target" IS 'key SiteTarget(target, the index of the family Document.targetedBy)';
 
-COMMENT ON CONSTRAINT "__site_target_key_target_index_targeted_by_after_ee2ij3ule5" ON "qti"."site_target" IS 'key SiteTarget(target, the index of the family Document.targetedBy, the accumulator after plane 0 of the fold __document_targeted_by_or_fold_q3muf667kh over the family Document.targetedBy, the accumulator after plane 0 of the fold __document_targeted_by_count_fold_a3qpfrhfna over the family Document.targetedBy)';
+COMMENT ON CONSTRAINT "__site_target_key_target_index_targeted_by_after_jm624visni" ON "qti"."site_target" IS 'key SiteTarget(target, the index of the family Document.targetedBy, the accumulator after plane 0 of the fold __document_targeted_by_or_fold_q3muf667kh over the family Document.targetedBy)';
 
 COMMENT ON CONSTRAINT "__ssml_attribute_key_fragment_kind_value_index_ohfqhopgkf" ON "qti"."ssml_attribute" IS 'key SsmlAttribute(fragment, kind, value, the index of the family FragmentValue.carriers)';
 
@@ -6303,8 +6161,6 @@ COMMENT ON CONSTRAINT "__catalog_ref_check_catalog_ref_counted_catalog_cafuo6yk4
 
 COMMENT ON CONSTRAINT "__cell_leaf_check_cell_leaf_ordered_math_cell_leaves_jh2rpirr2u" ON "qti"."cell_leaf" IS 'check of CellLeaf for law ordered CellLeaf(cell, at) in fin(MathCell, leaves)';
 
-COMMENT ON CONSTRAINT "__choice_check_choice_counted_choice_variable_name_ow3nfi2aaq" ON "qti"."choice" IS 'check of Choice for law counted Choice(document, identifier) in fin(ChoiceVariableName, choices)';
-
 COMMENT ON CONSTRAINT "__choice_check_choice_counted_document_choices_5pm6evoj5u" ON "qti"."choice" IS 'check of Choice for law counted Choice(document) in fin(Document, choices)';
 
 COMMENT ON CONSTRAINT "__choice_interaction_check_choice_interaction_icnfyu2frf" ON "qti"."choice_interaction" IS 'check of ChoiceInteraction for law counted ChoiceInteraction(interaction) in fin(Interaction, choices)';
@@ -6316,8 +6172,6 @@ COMMENT ON CONSTRAINT "__cn_slot_check_cn_slot_counted_cn_count_parts_or3h2bklda
 COMMENT ON CONSTRAINT "__declaration_base_type_check_declaration_base_type_7xmtl5uip2" ON "qti"."declaration_base_type" IS 'check of DeclarationBaseType for law counted DeclarationBaseType(node) in fin(Declaration, baseTypes)';
 
 COMMENT ON CONSTRAINT "__declaration_cardinality_check_declaration_j2vlxmr7b4" ON "qti"."declaration_cardinality" IS 'check of DeclarationCardinality for law counted DeclarationCardinality(node) in fin(Declaration, cardinalities)';
-
-COMMENT ON CONSTRAINT "__declaration_identifier_check_declaration_c4jxkzbjwn" ON "qti"."declaration_identifier" IS 'check of DeclarationIdentifier for law counted DeclarationIdentifier(document, identifier) in fin(ChoiceVariableName, declarations)';
 
 COMMENT ON CONSTRAINT "__document_id_check_document_id_counted_document_ids_j7uaelvknc" ON "qti"."document_id" IS 'check of DocumentId for law counted DocumentId(document) in fin(Document, ids)';
 
@@ -6333,8 +6187,6 @@ COMMENT ON CONSTRAINT "__gap_interaction_check_gap_interaction_counted_4i4dola6m
 
 COMMENT ON CONSTRAINT "__header_token_check_header_token_ordered_cell_yuvzddvw7m" ON "qti"."header_token" IS 'check of HeaderToken for law ordered HeaderToken(node, at) in fin(CellHeaders, tokens)';
 
-COMMENT ON CONSTRAINT "__hottext_check_hottext_counted_choice_variable_name_l5p4jksuxz" ON "qti"."hottext" IS 'check of Hottext for law counted Hottext(document, identifier) in fin(ChoiceVariableName, hottexts)';
-
 COMMENT ON CONSTRAINT "__hottext_check_hottext_counted_document_hottexts_ekk3zg43yk" ON "qti"."hottext" IS 'check of Hottext for law counted Hottext(document) in fin(Document, hottexts)';
 
 COMMENT ON CONSTRAINT "__idref_check_idref_ordered_attribute_idrefs_nohvk62icc" ON "qti"."idref" IS 'check of Idref for law ordered Idref(node, attribute, at) in fin(Attribute, idrefs)';
@@ -6348,8 +6200,6 @@ COMMENT ON CONSTRAINT "__instance_check_instance_tree_children_5jm3uhbayb" ON "q
 COMMENT ON CONSTRAINT "__instance_name_check_instance_name_counted_dtdobjhnxy" ON "qti"."instance_name" IS 'check of InstanceName for law counted InstanceName(assembly, node) in fin(AssembledName, placements)';
 
 COMMENT ON CONSTRAINT "__instance_name_check_instance_name_counted_instance_3ucndsyntb" ON "qti"."instance_name" IS 'check of InstanceName for law counted InstanceName(instance) in fin(Instance, names)';
-
-COMMENT ON CONSTRAINT "__item_ref_target_check_item_ref_target_counted_item_sn7sol4uot" ON "qti"."item_ref_target" IS 'check of ItemRefTarget for law counted ItemRefTarget(node) in fin(ItemRefHref, targets)';
 
 COMMENT ON CONSTRAINT "__least_count_check_least_count_counted_count_bound_jqrhgylkgh" ON "qti"."least_count" IS 'check of LeastCount for law counted LeastCount(node) in fin(CountBound, leasts)';
 
@@ -6405,11 +6255,7 @@ COMMENT ON CONSTRAINT "__placed_body_xml_lang_check_placed_body_xml_lang_5jqhk6g
 
 COMMENT ON CONSTRAINT "__placed_catalog_ref_check_placed_catalog_ref_krdhkztrgr" ON "qti"."placed_catalog_ref" IS 'check of PlacedCatalogRef for law counted PlacedCatalogRef(document, id) in fin(CatalogTarget, placements)';
 
-COMMENT ON CONSTRAINT "__placed_choice_check_placed_choice_counted_choice_srddemiias" ON "qti"."placed_choice" IS 'check of PlacedChoice for law counted PlacedChoice(assembly, identifier) in fin(ChoiceVariableName, placedChoices)';
-
 COMMENT ON CONSTRAINT "__placed_choice_check_placed_choice_counted_instance_lesjn7l6q2" ON "qti"."placed_choice" IS 'check of PlacedChoice for law counted PlacedChoice(instance) in fin(Instance, choices)';
-
-COMMENT ON CONSTRAINT "__placed_hottext_check_placed_hottext_counted_choice_xtae73fvqj" ON "qti"."placed_hottext" IS 'check of PlacedHottext for law counted PlacedHottext(assembly, identifier) in fin(ChoiceVariableName, placedHottexts)';
 
 COMMENT ON CONSTRAINT "__placed_hottext_check_placed_hottext_counted_q3vpom5jqq" ON "qti"."placed_hottext" IS 'check of PlacedHottext for law counted PlacedHottext(instance) in fin(Instance, hottexts)';
 
@@ -6460,8 +6306,6 @@ COMMENT ON CONSTRAINT "__section_template_ref_check_section_template_ref_h2kjtct
 COMMENT ON CONSTRAINT "__site_target_check_site_target_counted_document_6rqy4kke2f" ON "qti"."site_target" IS 'check of SiteTarget for law counted SiteTarget(target) in fin(Document, targetedBy)';
 
 COMMENT ON CONSTRAINT "__site_target_check_site_target_counted_test_lcmbcunhdj" ON "qti"."site_target" IS 'check of SiteTarget for law counted SiteTarget(document) in fin(TestDocument, targets)';
-
-COMMENT ON CONSTRAINT "__site_target_check_document_targeted_by_count_fold_2mo6gdanxt" ON "qti"."site_target" IS 'check of SiteTarget for law count fold over fin(Document, targetedBy) of SiteTarget(target) where {"kind":"compare","left":{"field":"splices","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}} into Document(node, spliced)';
 
 COMMENT ON CONSTRAINT "__site_target_check_document_targeted_by_or_fold_h5kd2udvxg" ON "qti"."site_target" IS 'check of SiteTarget for law or fold over fin(Document, targetedBy) of SiteTarget(target, ancestry) into Document(node, context)';
 
@@ -6813,10 +6657,6 @@ COMMENT ON CONSTRAINT "__cell_leaf_fk_node_cell_tag_element_children_0_hzblzfrx3
 
 COMMENT ON CONSTRAINT "__cell_leaf_fk_node_document_kind_start_nearest_6hrxyjqhym" ON "qti"."cell_leaf" IS 'foreign key CellLeaf(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
-COMMENT ON CONSTRAINT "__choice_fk_document_identifier_copy_choices_m5v5tsck7g" ON "qti"."choice" IS 'foreign key Choice(document, identifier, the owner''s count of the family ChoiceVariableName.choices) to ChoiceVariableName(document, identifier, choices)';
-
-COMMENT ON CONSTRAINT "__choice_fk_document_identifier_predecessor_choices_qkoetp45xu" ON "qti"."choice" IS 'foreign key Choice(document, identifier, the predecessor of the index of the family ChoiceVariableName.choices) to Choice(document, identifier, the index of the family ChoiceVariableName.choices)';
-
 COMMENT ON CONSTRAINT "__choice_fk_document_copy_choices_we6mhly2pq" ON "qti"."choice" IS 'foreign key Choice(document, the owner''s count of the family Document.choices) to Document(node, choices)';
 
 COMMENT ON CONSTRAINT "__choice_fk_document_predecessor_choices_farxteztmw" ON "qti"."choice" IS 'foreign key Choice(document, the predecessor of the index of the family Document.choices) to Choice(document, the index of the family Document.choices)';
@@ -6834,18 +6674,6 @@ COMMENT ON CONSTRAINT "__choice_interaction_fk_interaction_copy_choices_rslh7msg
 COMMENT ON CONSTRAINT "__choice_interaction_fk_interaction_predecessor_wajsjivead" ON "qti"."choice_interaction" IS 'foreign key ChoiceInteraction(interaction, the predecessor of the index of the family Interaction.choices) to ChoiceInteraction(interaction, the index of the family Interaction.choices)';
 
 COMMENT ON CONSTRAINT "__choice_interaction_fk_node_interaction_qoe46xodxo" ON "qti"."choice_interaction" IS 'foreign key ChoiceInteraction(node, interaction) to Choice(node, nearest)';
-
-COMMENT ON CONSTRAINT "__choice_variable_name_fk_document_identifier_pred_rqqicsoqfx" ON "qti"."choice_variable_name" IS 'foreign key ChoiceVariableName(document, identifier, pred(choices)) to Choice(document, identifier, the index of the family ChoiceVariableName.choices)';
-
-COMMENT ON CONSTRAINT "__choice_variable_name_fk_document_identifier_pred_sill47ignf" ON "qti"."choice_variable_name" IS 'foreign key ChoiceVariableName(document, identifier, pred(declarations)) to DeclarationIdentifier(document, identifier, the index of the family ChoiceVariableName.declarations)';
-
-COMMENT ON CONSTRAINT "__choice_variable_name_fk_document_identifier_pred_3c3epd4e4x" ON "qti"."choice_variable_name" IS 'foreign key ChoiceVariableName(document, identifier, pred(hottexts)) to Hottext(document, identifier, the index of the family ChoiceVariableName.hottexts)';
-
-COMMENT ON CONSTRAINT "__choice_variable_name_fk_document_identifier_pred_yhwjchqz7d" ON "qti"."choice_variable_name" IS 'foreign key ChoiceVariableName(document, identifier, pred(placedChoices)) to PlacedChoice(assembly, identifier, the index of the family ChoiceVariableName.placedChoices)';
-
-COMMENT ON CONSTRAINT "__choice_variable_name_fk_document_identifier_pred_42gbwv3dkb" ON "qti"."choice_variable_name" IS 'foreign key ChoiceVariableName(document, identifier, pred(placedHottexts)) to PlacedHottext(assembly, identifier, the index of the family ChoiceVariableName.placedHottexts)';
-
-COMMENT ON CONSTRAINT "__choice_variable_name_fk_document_root_kind_crcnbwd4qe" ON "qti"."choice_variable_name" IS 'foreign key ChoiceVariableName(document, rootKind) to Document(node, rootKind)';
 
 COMMENT ON CONSTRAINT "__cn_attribute_fk_node_name_fplssc7kn4" ON "qti"."cn_attribute" IS 'foreign key CnAttribute(node, name) to Attribute(node where {"arg":{"field":"name","kind":"field"},"kind":"in","values":["base","type"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:cn"}}, name where {"arg":{"field":"name","kind":"field"},"kind":"in","values":["base","type"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:cn"}})';
 
@@ -6935,10 +6763,6 @@ COMMENT ON CONSTRAINT "__declaration_cardinality_fk_node_tag_base_types_0_cnup6j
 
 COMMENT ON CONSTRAINT "__declaration_cardinality_fk_node_ixg2qwezdu" ON "qti"."declaration_cardinality" IS 'foreign key DeclarationCardinality(node where {"kind":"compare","left":{"field":"cardinality","kind":"field"},"op":"ne","right":{"kind":"literal","value":"record"}}) to Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-context-declaration","qti-outcome-declaration","qti-response-declaration","qti-template-declaration"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"base-type"}})';
 
-COMMENT ON CONSTRAINT "__declaration_identifier_fk_document_identifier_copy_rpwvfdnstw" ON "qti"."declaration_identifier" IS 'foreign key DeclarationIdentifier(document, identifier, the owner''s count of the family ChoiceVariableName.declarations) to ChoiceVariableName(document, identifier, declarations)';
-
-COMMENT ON CONSTRAINT "__declaration_identifier_fk_document_identifier_fmeehxdehr" ON "qti"."declaration_identifier" IS 'foreign key DeclarationIdentifier(document, identifier, the predecessor of the index of the family ChoiceVariableName.declarations) to DeclarationIdentifier(document, identifier, the index of the family ChoiceVariableName.declarations)';
-
 COMMENT ON CONSTRAINT "__declaration_identifier_fk_node_ekjci54ml7" ON "qti"."declaration_identifier" IS 'foreign key DeclarationIdentifier(node) to Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-context-declaration","qti-outcome-declaration","qti-response-declaration","qti-template-declaration"]} and {"args":[{"field":"lexical","kind":"field"},{"kind":"literal","value":"^[\\t\\n\\r ]*(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)[\\t\\n\\r ]*$"}],"fn":"matches","kind":"compute"} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}})';
 
 COMMENT ON CONSTRAINT "__declaration_identifier_fk_node_document_llk4byuxwo" ON "qti"."declaration_identifier" IS 'foreign key DeclarationIdentifier(node, document, declarationKind, cardinalities, baseTypes) to Declaration(node, document, declarationKind, cardinalities, baseTypes)';
@@ -6993,7 +6817,7 @@ COMMENT ON CONSTRAINT "__document_fk_node_pred_ids_dw7x23y7gt" ON "qti"."documen
 
 COMMENT ON CONSTRAINT "__document_fk_node_pred_langs_bj7nducuid" ON "qti"."document" IS 'foreign key Document(node, pred(langs)) to XmlLang(document, the index of the family Document.langs)';
 
-COMMENT ON CONSTRAINT "__document_fk_node_pred_targeted_by_context_spliced_2cpmrus5fm" ON "qti"."document" IS 'foreign key Document(node, pred(targetedBy), context, spliced) to SiteTarget(target, the index of the family Document.targetedBy, the accumulator after plane 0 of the fold __document_targeted_by_or_fold_q3muf667kh over the family Document.targetedBy, the accumulator after plane 0 of the fold __document_targeted_by_count_fold_a3qpfrhfna over the family Document.targetedBy)';
+COMMENT ON CONSTRAINT "__document_fk_node_pred_targeted_by_context_cftvuggpar" ON "qti"."document" IS 'foreign key Document(node, pred(targetedBy), context) to SiteTarget(target, the index of the family Document.targetedBy, the accumulator after plane 0 of the fold __document_targeted_by_or_fold_q3muf667kh over the family Document.targetedBy)';
 
 COMMENT ON CONSTRAINT "__document_fk_node_pred_variables_vq5wrkejjc" ON "qti"."document" IS 'foreign key Document(node, pred(variables)) to VariableRef(document, the index of the family Document.variables)';
 
@@ -7002,8 +6826,6 @@ COMMENT ON CONSTRAINT "__document_fk_package_path_4ll4pmnoqa" ON "qti"."document
 COMMENT ON CONSTRAINT "__document_fk_node_j5qycvcbyv" ON "qti"."document" IS 'foreign key Document(node where {"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-section","qti-assessment-test"]}) to TestDocument(node)';
 
 COMMENT ON CONSTRAINT "__document_fk_node_sy6d436ezj" ON "qti"."document" IS 'foreign key Document(node where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}) to TestDocument(node)';
-
-COMMENT ON CONSTRAINT "__document_fk_node_ituyhbaimf" ON "qti"."document" IS 'foreign key Document(node where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"field":"spliced","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}}) to Instance(document where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}})';
 
 COMMENT ON CONSTRAINT "__document_fk_node_6kueb3pejs" ON "qti"."document" IS 'foreign key Document(node where {"kind":"compare","left":{"field":"documentType","kind":"field"},"op":"ne","right":{"kind":"literal","value":"manifest"}}) to ResourceDocument(node)';
 
@@ -7125,10 +6947,6 @@ COMMENT ON CONSTRAINT "__hotspot_fk_parent_parent_elements_parent_element_yaqdrq
 
 COMMENT ON CONSTRAINT "__hotspot_fk_parent_parent_kind_meal7oig5k" ON "qti"."hotspot" IS 'foreign key Hotspot(parent, parentKind) to Interaction(node, kind)';
 
-COMMENT ON CONSTRAINT "__hottext_fk_document_identifier_copy_hottexts_xwptpbiu3e" ON "qti"."hottext" IS 'foreign key Hottext(document, identifier, the owner''s count of the family ChoiceVariableName.hottexts) to ChoiceVariableName(document, identifier, hottexts)';
-
-COMMENT ON CONSTRAINT "__hottext_fk_document_identifier_predecessor_xt7zx2mes5" ON "qti"."hottext" IS 'foreign key Hottext(document, identifier, the predecessor of the index of the family ChoiceVariableName.hottexts) to Hottext(document, identifier, the index of the family ChoiceVariableName.hottexts)';
-
 COMMENT ON CONSTRAINT "__hottext_fk_document_copy_hottexts_jtrkhvtrze" ON "qti"."hottext" IS 'foreign key Hottext(document, the owner''s count of the family Document.hottexts) to Document(node, hottexts)';
 
 COMMENT ON CONSTRAINT "__hottext_fk_document_predecessor_hottexts_v2aegkig4e" ON "qti"."hottext" IS 'foreign key Hottext(document, the predecessor of the index of the family Document.hottexts) to Hottext(document, the index of the family Document.hottexts)';
@@ -7192,8 +7010,6 @@ COMMENT ON CONSTRAINT "__instance_fk_document_bindings_langs_variables_7sfmvltz5
 COMMENT ON CONSTRAINT "__instance_fk_document_names_6r253hxpsp" ON "qti"."instance" IS 'foreign key Instance(document where {"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-test"}}, names where {"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-test"}}) to TestDocument(node, names)';
 
 COMMENT ON CONSTRAINT "__instance_fk_document_rules_jex7cewp5v" ON "qti"."instance" IS 'foreign key Instance(document where {"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-test"}}, rules where {"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-test"}}) to TestDocument(node, rules)';
-
-COMMENT ON CONSTRAINT "__instance_fk_document_tag_assembled_true_tag_szhub74ihe" ON "qti"."instance" IS 'foreign key Instance(document where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}}, tag Document.assembled = true, tag Document.spliced = 0) to Document(node, assembled, spliced)';
 
 COMMENT ON CONSTRAINT "__instance_fk_id_document_assembly_assembly_kind_zmuer4p4ok" ON "qti"."instance" IS 'foreign key Instance(id where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"arg":{"field":"assemblyKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]}, document where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"arg":{"field":"assemblyKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]}, assembly where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"arg":{"field":"assemblyKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]}, assemblyKind where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"arg":{"field":"assemblyKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]}) to SectionScope(instance, document, assembly, assemblyKind)';
 
@@ -7281,23 +7097,9 @@ COMMENT ON CONSTRAINT "__item_ref_document_fk_document_package_path_lpl5pzwin3" 
 
 COMMENT ON CONSTRAINT "__item_ref_document_fk_document_tag_root_kind_qti_se4b5qpecr" ON "qti"."item_ref_document" IS 'foreign key ItemRefDocument(document, tag Document.rootKind = qti-assessment-item) to Document(node, rootKind)';
 
-COMMENT ON CONSTRAINT "__item_ref_document_fk_node_package_path_tag_type_urulmvpfcb" ON "qti"."item_ref_document" IS 'foreign key ItemRefDocument(node, package, path, tag ItemRefTarget.type = imsqti_item_xmlv3p0) to ItemRefTarget(node, package, path, type)';
-
 COMMENT ON CONSTRAINT "__item_ref_href_fk_node_package_path_tag_name_href_2kw3eaprte" ON "qti"."item_ref_href" IS 'foreign key ItemRefHref(node, package, path, tag ReferencePath.name = href) to ReferencePath(node, package, path, name)';
 
 COMMENT ON CONSTRAINT "__item_ref_href_fk_node_tag_kind_qti_assessment_item_ifa6ig36c2" ON "qti"."item_ref_href" IS 'foreign key ItemRefHref(node, tag Node.kind = qti-assessment-item-ref) to Node(id, kind)';
-
-COMMENT ON CONSTRAINT "__item_ref_href_fk_node_pred_targets_gh4t655wgw" ON "qti"."item_ref_href" IS 'foreign key ItemRefHref(node, pred(targets)) to ItemRefTarget(node, the index of the family ItemRefHref.targets)';
-
-COMMENT ON CONSTRAINT "__item_ref_target_fk_node_package_path_tag_name_href_tjasyy6d3f" ON "qti"."item_ref_target" IS 'foreign key ItemRefTarget(node, package, path, tag ReferencePath.name = href) to ReferencePath(node, package, path, name)';
-
-COMMENT ON CONSTRAINT "__item_ref_target_fk_node_tag_kind_qti_assessment_diyeuojzam" ON "qti"."item_ref_target" IS 'foreign key ItemRefTarget(node, tag Node.kind = qti-assessment-item-ref) to Node(id, kind)';
-
-COMMENT ON CONSTRAINT "__item_ref_target_fk_node_copy_targets_um3r4i3kf4" ON "qti"."item_ref_target" IS 'foreign key ItemRefTarget(node, the owner''s count of the family ItemRefHref.targets) to ItemRefHref(node, targets)';
-
-COMMENT ON CONSTRAINT "__item_ref_target_fk_node_predecessor_targets_si6qn4iwtf" ON "qti"."item_ref_target" IS 'foreign key ItemRefTarget(node, the predecessor of the index of the family ItemRefHref.targets) to ItemRefTarget(node, the index of the family ItemRefHref.targets)';
-
-COMMENT ON CONSTRAINT "__item_ref_target_fk_node_package_path_rk2wplt7jt" ON "qti"."item_ref_target" IS 'foreign key ItemRefTarget(node where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}}, package where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}}, path where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}}) to ItemRefDocument(node, package, path)';
 
 COMMENT ON CONSTRAINT "__label_use_fk_document_root_kind_am3kvhaace" ON "qti"."label_use" IS 'foreign key LabelUse(document, rootKind) to Document(node, rootKind)';
 
@@ -7391,12 +7193,6 @@ COMMENT ON CONSTRAINT "__manifest_id_fk_node_tag_document_type_manifest_tag_b3vz
 
 COMMENT ON CONSTRAINT "__manifest_id_fk_node_tag_kind_cp_manifest_b7a4wrhoe5" ON "qti"."manifest_id" IS 'foreign key ManifestId(node, tag Node.kind = cp:manifest) to Node(id, kind)';
 
-COMMENT ON CONSTRAINT "__manifest_id_fk_package_identifier_tag_kind_cp_eyqdn2bgrg" ON "qti"."manifest_id" IS 'foreign key ManifestId(package, identifier, tag ManifestIdSpace.kind = cp:manifest) to ManifestIdSpace(package, identifier, kind)';
-
-COMMENT ON CONSTRAINT "__manifest_id_space_fk_package_identifier_l62jomiwhf" ON "qti"."manifest_id_space" IS 'foreign key ManifestIdSpace(package where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:manifest"}}, identifier where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:manifest"}}) to ManifestId(package, identifier)';
-
-COMMENT ON CONSTRAINT "__manifest_id_space_fk_package_identifier_wxqzuyzoxs" ON "qti"."manifest_id_space" IS 'foreign key ManifestIdSpace(package where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"cp:manifest"}}, identifier where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"cp:manifest"}}) to ResourceId(package, identifier)';
-
 COMMENT ON CONSTRAINT "__map_key_fk_mapping_base_types_rmjfuje53w" ON "qti"."map_key" IS 'foreign key MapKey(mapping, baseTypes) to Mapping(node, baseTypes)';
 
 COMMENT ON CONSTRAINT "__map_key_fk_node_document_kind_start_nearest_jqb5mkjfj3" ON "qti"."map_key" IS 'foreign key MapKey(node, document, kind, start, nearest, version, mapping) to Node(id, document, kind, start, nearest, version, parent)';
@@ -7442,8 +7238,6 @@ COMMENT ON CONSTRAINT "__mapping_item_ref_fk_node_item_ref_kdh4hh5idh" ON "qti".
 COMMENT ON CONSTRAINT "__mapping_item_ref_fk_node_pred_types_hrzf345r46" ON "qti"."mapping_item_ref" IS 'foreign key MappingItemRef(node, pred(types)) to MappingItemRefType(node, the index of the family MappingItemRef.types)';
 
 COMMENT ON CONSTRAINT "__mapping_item_ref_fk_node_44jf3bd4kv" ON "qti"."mapping_item_ref" IS 'foreign key MappingItemRef(node where {"kind":"compare","left":{"field":"types","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}}) to MappingSourceDeclaration(node)';
-
-COMMENT ON CONSTRAINT "__mapping_item_ref_type_fk_item_ref_type_rk6dkgqyty" ON "qti"."mapping_item_ref_type" IS 'foreign key MappingItemRefType(itemRef, type) to ItemRefTarget(node, type)';
 
 COMMENT ON CONSTRAINT "__mapping_item_ref_type_fk_node_copy_types_item_ref_djmik3pdtq" ON "qti"."mapping_item_ref_type" IS 'foreign key MappingItemRefType(node, the owner''s count of the family MappingItemRef.types, itemRef) to MappingItemRef(node, types, itemRef)';
 
@@ -7789,10 +7583,6 @@ COMMENT ON CONSTRAINT "__placed_catalog_ref_fk_document_id_predecessor_vkqmcpnlc
 
 COMMENT ON CONSTRAINT "__placed_catalog_ref_fk_instance_id_document_c5tzckbrbm" ON "qti"."placed_catalog_ref" IS 'foreign key PlacedCatalogRef(instance, id, document, assembly) to PlacedIdref(instance, id, document, assembly)';
 
-COMMENT ON CONSTRAINT "__placed_choice_fk_assembly_identifier_copy_placed_n2vdhvmgzo" ON "qti"."placed_choice" IS 'foreign key PlacedChoice(assembly, identifier, the owner''s count of the family ChoiceVariableName.placedChoices) to ChoiceVariableName(document, identifier, placedChoices)';
-
-COMMENT ON CONSTRAINT "__placed_choice_fk_assembly_identifier_predecessor_c6yrzjnrxl" ON "qti"."placed_choice" IS 'foreign key PlacedChoice(assembly, identifier, the predecessor of the index of the family ChoiceVariableName.placedChoices) to PlacedChoice(assembly, identifier, the index of the family ChoiceVariableName.placedChoices)';
-
 COMMENT ON CONSTRAINT "__placed_choice_fk_instance_copy_choices_assembly_z6lox2su6a" ON "qti"."placed_choice" IS 'foreign key PlacedChoice(instance, the owner''s count of the family Instance.choices, assembly, document) to Instance(id, choices, assembly, document)';
 
 COMMENT ON CONSTRAINT "__placed_choice_fk_instance_predecessor_choices_duvwkqkgyr" ON "qti"."placed_choice" IS 'foreign key PlacedChoice(instance, the predecessor of the index of the family Instance.choices) to PlacedChoice(instance, the index of the family Instance.choices)';
@@ -7804,10 +7594,6 @@ COMMENT ON CONSTRAINT "__placed_document_fk_document_references_4lu2ckbtts" ON "
 COMMENT ON CONSTRAINT "__placed_document_fk_instance_assembly_assembly_kind_7dnpqg27qo" ON "qti"."placed_document" IS 'foreign key PlacedDocument(instance, assembly, assemblyKind, document) to Instance(id, assembly, assemblyKind, document)';
 
 COMMENT ON CONSTRAINT "__placed_document_fk_instance_pred_references_xkldscnxbp" ON "qti"."placed_document" IS 'foreign key PlacedDocument(instance, pred(references)) to PlacedReference(instance, the index of the family PlacedDocument.references)';
-
-COMMENT ON CONSTRAINT "__placed_hottext_fk_assembly_identifier_copy_placed_h46sadwsgn" ON "qti"."placed_hottext" IS 'foreign key PlacedHottext(assembly, identifier, the owner''s count of the family ChoiceVariableName.placedHottexts) to ChoiceVariableName(document, identifier, placedHottexts)';
-
-COMMENT ON CONSTRAINT "__placed_hottext_fk_assembly_identifier_predecessor_bde7xdxrvi" ON "qti"."placed_hottext" IS 'foreign key PlacedHottext(assembly, identifier, the predecessor of the index of the family ChoiceVariableName.placedHottexts) to PlacedHottext(assembly, identifier, the index of the family ChoiceVariableName.placedHottexts)';
 
 COMMENT ON CONSTRAINT "__placed_hottext_fk_instance_copy_hottexts_assembly_43g7yoxo66" ON "qti"."placed_hottext" IS 'foreign key PlacedHottext(instance, the owner''s count of the family Instance.hottexts, assembly, document) to Instance(id, hottexts, assembly, document)';
 
@@ -8014,8 +7800,6 @@ COMMENT ON CONSTRAINT "__resource_href_fk_node_scope_path_txhy3mohip" ON "qti"."
 COMMENT ON CONSTRAINT "__resource_id_fk_node_package_ktbenj6fxx" ON "qti"."resource_id" IS 'foreign key ResourceId(node, package) to Resource(node, package)';
 
 COMMENT ON CONSTRAINT "__resource_id_fk_node_tag_document_type_manifest_tag_6kniy2k4hr" ON "qti"."resource_id" IS 'foreign key ResourceId(node, tag Attribute.documentType = manifest, tag Attribute.kind = cp:resource) to Attribute(node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"}, documentType, kind)';
-
-COMMENT ON CONSTRAINT "__resource_id_fk_package_identifier_tag_kind_cp_pwf2aat4oh" ON "qti"."resource_id" IS 'foreign key ResourceId(package, identifier, tag ManifestIdSpace.kind = cp:resource) to ManifestIdSpace(package, identifier, kind)';
 
 COMMENT ON CONSTRAINT "__resource_lom_language_set_fk_general_lang_pred_3khib6vema" ON "qti"."resource_lom_language_set" IS 'foreign key ResourceLomLanguageSet(general, lang, pred(carriers)) to LomLanguage(general, tag, the index of the family ResourceLomLanguageSet.carriers)';
 
@@ -8243,7 +8027,7 @@ COMMENT ON CONSTRAINT "__site_target_fk_package_path_target_target_root_upowqu3p
 
 COMMENT ON CONSTRAINT "__site_target_fk_target_copy_targeted_by_lqikmiv7di" ON "qti"."site_target" IS 'foreign key SiteTarget(target, the owner''s count of the family Document.targetedBy) to Document(node, targetedBy)';
 
-COMMENT ON CONSTRAINT "__site_target_fk_target_predecessor_targeted_by_sj3wcj37xd" ON "qti"."site_target" IS 'foreign key SiteTarget(target, the predecessor of the index of the family Document.targetedBy, the accumulator before plane 0 of the fold __document_targeted_by_or_fold_q3muf667kh over the family Document.targetedBy, the accumulator before plane 0 of the fold __document_targeted_by_count_fold_a3qpfrhfna over the family Document.targetedBy) to SiteTarget(target, the index of the family Document.targetedBy, the accumulator after plane 0 of the fold __document_targeted_by_or_fold_q3muf667kh over the family Document.targetedBy, the accumulator after plane 0 of the fold __document_targeted_by_count_fold_a3qpfrhfna over the family Document.targetedBy)';
+COMMENT ON CONSTRAINT "__site_target_fk_target_predecessor_targeted_by_hcdlxs2zgl" ON "qti"."site_target" IS 'foreign key SiteTarget(target, the predecessor of the index of the family Document.targetedBy, the accumulator before plane 0 of the fold __document_targeted_by_or_fold_q3muf667kh over the family Document.targetedBy) to SiteTarget(target, the index of the family Document.targetedBy, the accumulator after plane 0 of the fold __document_targeted_by_or_fold_q3muf667kh over the family Document.targetedBy)';
 
 COMMENT ON CONSTRAINT "__site_target_fk_node_nvl4ndclqn" ON "qti"."site_target" IS 'foreign key SiteTarget(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"xi:include"}}) to Inclusion(node)';
 
@@ -8613,8 +8397,6 @@ COMMENT ON INDEX "qti"."__choice_ix_node_gfaeb_4_prff_hqakbxexks" IS 'btree inde
 
 COMMENT ON INDEX "qti"."__choice_ix_node_zseimxjpkj_r6ugl4psth" IS 'btree index Choice(__node_zseimxjpkj)';
 
-COMMENT ON INDEX "qti"."__choice_variable_name_ix_document_root_kind_7it7boess2" IS 'btree index ChoiceVariableName(document, rootKind)';
-
 COMMENT ON INDEX "qti"."__cn_count_ix_node_4_zs_7_f_4_hetq_type_lexical_mw_5_32kwnnitcd" IS 'btree index CnCount(__node_4zs7f4hetq, __type_lexical_mw5gnzkqdv)';
 
 COMMENT ON INDEX "qti"."__context_ref_ix_node_55_rq_6_xvhgt_attribute_ofb6ulzvpb" IS 'btree index ContextRef(__node_55rq6xvhgt, __attribute_hfyfakg5bn)';
@@ -8664,8 +8446,6 @@ COMMENT ON INDEX "qti"."__dependency_ix_resource_package_txdc5xfn7z" IS 'btree i
 COMMENT ON INDEX "qti"."__dependency_target_ix_package_ref_target_2iifdwtrng" IS 'btree index DependencyTarget(package, ref, target)';
 
 COMMENT ON INDEX "qti"."__document_ix_node_5_zotaizsb_2_qbvrbvdbck" IS 'btree index Document(__node_5zotaizsb2)';
-
-COMMENT ON INDEX "qti"."__document_ix_node_ejjgk_3_z_2_mi_hqve44he6v" IS 'btree index Document(__node_ejjgk3z2mi)';
 
 COMMENT ON INDEX "qti"."__document_ix_node_nv_676_cv_335_qde4grdoez" IS 'btree index Document(__node_nv676cv335)';
 
@@ -8749,6 +8529,8 @@ COMMENT ON INDEX "qti"."__instance_ix_site_hdx_6_niaggk_document_iu_7_n_6_pecn4q
 
 COMMENT ON INDEX "qti"."__instance_ix_document_ids_idref_targets_choices_yaskm27ja3" IS 'btree index Instance(document, ids, idrefTargets, choices, hottexts)';
 
+COMMENT ON INDEX "qti"."__instance_ix_document_start_nhofcrztpy" IS 'btree index Instance(document, start)';
+
 COMMENT ON INDEX "qti"."__instance_name_ix_assembly_kind_node_replaced_bjyj2ibksd" IS 'btree index InstanceName(assembly, kind, node, replaced)';
 
 COMMENT ON INDEX "qti"."__instance_name_ix_document_node_identifier_6jlosqls2y" IS 'btree index InstanceName(document, node, identifier)';
@@ -8793,13 +8575,11 @@ COMMENT ON INDEX "qti"."__interaction_attribute_ix_document_root_kind_fyhxu2mcle
 
 COMMENT ON INDEX "qti"."__item_mode_ix_document_gfqaer_5_w_2_f_xg25r6slqs" IS 'btree index ItemMode(__document_gfqaer5w2f)';
 
-COMMENT ON INDEX "qti"."__item_ref_document_ix_document_package_path_shtyge55dk" IS 'btree index ItemRefDocument(document, package, path)';
+COMMENT ON INDEX "qti"."__item_ref_document_ix_document_gvnh5jj7cf" IS 'btree index ItemRefDocument(document)';
 
-COMMENT ON INDEX "qti"."__item_ref_href_ix_targets_package_path_uudhkobwy7" IS 'btree index ItemRefHref(targets, package, path)';
+COMMENT ON INDEX "qti"."__item_ref_document_ix_package_path_document_tu47evbzrd" IS 'btree index ItemRefDocument(package, path, document)';
 
-COMMENT ON INDEX "qti"."__item_ref_target_ix_node_thuesrvpoz_package_7_mhuni2s22d" IS 'btree index ItemRefTarget(__node_thuesrvpoz, __package_7yrgppd6sa, __path_s25m4iaxsn)';
-
-COMMENT ON INDEX "qti"."__item_ref_target_ix_package_path_type_5edpacmhmd" IS 'btree index ItemRefTarget(package, path, type)';
+COMMENT ON INDEX "qti"."__item_ref_href_ix_package_path_yxfam2vwx3" IS 'btree index ItemRefHref(package, path)';
 
 COMMENT ON INDEX "qti"."__label_use_ix_document_h_55_jb_4_nosx_4zh43rsle7" IS 'btree index LabelUse(__document_h55jb4nosx)';
 
@@ -8836,10 +8616,6 @@ COMMENT ON INDEX "qti"."__lookup_value_ix_node_qoaju_6_itui_z5dvdvjxx6" IS 'btre
 COMMENT ON INDEX "qti"."__lookup_value_ix_parent_pewwtbkfib_base_types_goa_2_yy5hnznqyq" IS 'btree index LookupValue(__parent_pewwtbkfib, __base_types_goa2xo6h2n, __declaration_ezx2427h26)';
 
 COMMENT ON INDEX "qti"."__lookup_value_type_ix_declaration_base_type_mycheohzbv" IS 'btree index LookupValueType(declaration, baseType)';
-
-COMMENT ON INDEX "qti"."__manifest_id_space_ix_package_f_5_hzcifi_53_eu6anscino" IS 'btree index ManifestIdSpace(__package_f5hzcifi53, __identifier_cei2qn2t7s)';
-
-COMMENT ON INDEX "qti"."__manifest_id_space_ix_package_srcfwxd_3_vo_4ya7dzzwfb" IS 'btree index ManifestIdSpace(__package_srcfwxd3vo, __identifier_6zkottivdn)';
 
 COMMENT ON INDEX "qti"."__map_key_ix_node_qoaju_6_itui_b6axafuyu5" IS 'btree index MapKey(__node_qoaju6itui)';
 
@@ -9107,9 +8883,9 @@ COMMENT ON INDEX "qti"."__reading_ix_assembly_form_variable_l2bvs54pzn" IS 'btre
 
 COMMENT ON INDEX "qti"."__reading_ix_assembly_found_named_named_kind_o2kvu7cbvr" IS 'btree index Reading(assembly, found, named, namedKind, replaced, placements, scope)';
 
-COMMENT ON INDEX "qti"."__reading_ix_form_found_named_named_kind_variable_ry7g2zdmtq" IS 'btree index Reading(form, found, named, namedKind, variable)';
-
 COMMENT ON INDEX "qti"."__reading_ix_form_found_named_kind_variable_edvnj4r7bo" IS 'btree index Reading(form, found, namedKind, variable)';
+
+COMMENT ON INDEX "qti"."__reading_ix_found_named_named_kind_form_variable_aotwn6n4fx" IS 'btree index Reading(found, named, namedKind, form, variable)';
 
 COMMENT ON INDEX "qti"."__reading_cardinality_ix_declaration_decl_zp7xcfaxuu" IS 'btree index ReadingCardinality(declaration, declCardinality)';
 
@@ -9241,6 +9017,8 @@ COMMENT ON INDEX "qti"."__site_target_ix_package_oln_4_z_5_vtzj_path_b_6_vqso424
 
 COMMENT ON INDEX "qti"."__site_target_ix_package_path_target_target_root_gkkyeqczct" IS 'btree index SiteTarget(package, path, target, targetRoot, targetNearest, targetNearestKind)';
 
+COMMENT ON INDEX "qti"."__site_target_ix_splices_target_r3qcvshhbz" IS 'btree index SiteTarget(splices, target)';
+
 COMMENT ON INDEX "qti"."__ssml_attribute_ix_fragment_i_4_kjb_4_h_6_ys_refers_4owtnnaqtn" IS 'btree index SsmlAttribute(__fragment_i4kjb4h6ys, __refers_2eg5hrxumc, __value_3jvhmvrsu5)';
 
 COMMENT ON INDEX "qti"."__ssml_attribute_ix_node_h_3_pswpwibx_refers_po_3_l_yf5ooah4t4" IS 'btree index SsmlAttribute(__node_h3pswpwibx, __refers_po3l65zlgz, __value_ja4a6kvsmy)';
@@ -9365,7 +9143,13 @@ COMMENT ON FUNCTION "qti"."__rule_assembled_name_held_scope_check_e_1_derived_vy
 
 COMMENT ON FUNCTION "qti"."__rule_assembled_name_reading_in_found_name_fbbr5wm3eh"() IS 'function of rule Reading(assembly, scope, named, namedKind, placements, replaced) where {"kind":"compare","left":{"field":"form","kind":"field"},"op":"ne","right":{"kind":"literal","value":"unsplit"}} and {"kind":"compare","left":{"field":"found","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}} in FoundName(assembly, identifier, node, kind, placements, replaced) on AssembledName';
 
-COMMENT ON FUNCTION "qti"."__rule_attribute_item_ref_href_in_unread_type_href_5p67b6tn6q"() IS 'function of rule ItemRefHref(package, path) where {"kind":"compare","left":{"field":"targets","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in UnreadTypeHref(package, path) on Attribute';
+COMMENT ON FUNCTION "qti"."__rule_attribute_untargeted_item_ref_in_unread_type_bk23b3mh62"() IS 'function of rule UntargetedItemRef(package, path) in UnreadTypeHref(package, path) on Attribute';
+
+COMMENT ON FUNCTION "qti"."__rule_choice_choice_or_hottext_in_unclaimed_name_2d2vnjuqck"() IS 'function of rule ChoiceOrHottext(document, identifier) in UnclaimedName(document, identifier) on Choice';
+
+COMMENT ON FUNCTION "qti"."__rule_choice_placed_choice_or_hottext_in_unclaimed_mpoqsm7vgi"() IS 'function of rule PlacedChoiceOrHottext(assembly, identifier) in UnclaimedName(document, identifier) on Choice';
+
+COMMENT ON FUNCTION "qti"."__rule_choice_choice_or_hottext_key_document_5x53meysc3"() IS 'function of rule key ChoiceOrHottext(document, identifier) on Choice';
 
 COMMENT ON FUNCTION "qti"."__rule_data_ssml_member_required_ssml_property_in_eergqouddg"() IS 'function of rule RequiredSsmlProperty(node, member, name) in DataSsmlProperty(node, member, name) on DataSsmlMember';
 
@@ -9381,11 +9165,23 @@ COMMENT ON FUNCTION "qti"."__rule_declaration_identifier_declared_reference_kfak
 
 COMMENT ON FUNCTION "qti"."__rule_declaration_identifier_declared_target_check_5nbwkwen7a"() IS 'function of rule check Variable_mapping_target of DeclaredTarget on DeclarationIdentifier';
 
+COMMENT ON FUNCTION "qti"."__rule_declaration_identifier_choice_or_hottext_in_wycjw2z2ca"() IS 'function of rule ChoiceOrHottext(document, identifier) in UnclaimedName(document, identifier) on DeclarationIdentifier';
+
 COMMENT ON FUNCTION "qti"."__rule_declaration_identifier_declared_reading_in_56zmzkeiib"() IS 'function of rule DeclaredReading(assembly, node, attribute, form, split) in Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} on DeclarationIdentifier';
+
+COMMENT ON FUNCTION "qti"."__rule_declaration_identifier_placed_choice_or_qntrda5olw"() IS 'function of rule PlacedChoiceOrHottext(assembly, identifier) in UnclaimedName(document, identifier) on DeclarationIdentifier';
 
 COMMENT ON FUNCTION "qti"."__rule_declaration_identifier_reading_in_declared_s76fa6bkj6"() IS 'function of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in DeclaredReading(assembly, node, attribute, form, split) on DeclarationIdentifier';
 
 COMMENT ON FUNCTION "qti"."__rule_declaration_identifier_reading_declaration_in_5imma7uh6o"() IS 'function of rule ReadingDeclaration(assembly, node, attribute, form, split, declaration, declarationKind, declBaseTypes, declCardinalities) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in DeclaredReading(assembly, node, attribute, form, split, declaration, declarationKind, baseTypes, cardinalities) on DeclarationIdentifier';
+
+COMMENT ON FUNCTION "qti"."__rule_document_choice_or_hottext_in_unclaimed_name_h3kuqbjoog"() IS 'function of rule ChoiceOrHottext(document, identifier) in UnclaimedName(document, identifier) on Document';
+
+COMMENT ON FUNCTION "qti"."__rule_document_head_document_in_instance_5a4tcjulgk"() IS 'function of rule HeadDocument(node) in Instance(document) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} on Document';
+
+COMMENT ON FUNCTION "qti"."__rule_document_instance_in_head_document_hlq46opl6f"() IS 'function of rule Instance(document) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in HeadDocument(node) on Document';
+
+COMMENT ON FUNCTION "qti"."__rule_document_placed_choice_or_hottext_in_q6gvk2ivtu"() IS 'function of rule PlacedChoiceOrHottext(assembly, identifier) in UnclaimedName(document, identifier) on Document';
 
 COMMENT ON FUNCTION "qti"."__rule_document_lang_described_lang_in_resource_lom_iza6amy2fl"() IS 'function of rule DescribedLang(general, value) in ResourceLomLanguageSet(general, lang) on DocumentLang';
 
@@ -9397,21 +9193,41 @@ COMMENT ON FUNCTION "qti"."__rule_expression_placed_reference_type_check_naqzwfz
 
 COMMENT ON FUNCTION "qti"."__rule_expression_held_type_in_variable_ref_table_7gfwn46kjs"() IS 'function of rule HeldType(node) where {"arg":{"arg":{"field":"heldBase","kind":"field"},"kind":"in","values":["any","integer","unknown"]},"kind":"not"} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-lookup-outcome-value"}} and {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in VariableRefTable(node) where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}} and {"kind":"compare","left":{"field":"table","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-interpolation-table"}} on Expression';
 
+COMMENT ON FUNCTION "qti"."__rule_hottext_choice_or_hottext_in_unclaimed_name_ygfv5i2ygg"() IS 'function of rule ChoiceOrHottext(document, identifier) in UnclaimedName(document, identifier) on Hottext';
+
+COMMENT ON FUNCTION "qti"."__rule_hottext_placed_choice_or_hottext_in_unclaimed_357eezifux"() IS 'function of rule PlacedChoiceOrHottext(assembly, identifier) in UnclaimedName(document, identifier) on Hottext';
+
+COMMENT ON FUNCTION "qti"."__rule_hottext_choice_or_hottext_key_document_ewgfcz4yju"() IS 'function of rule key ChoiceOrHottext(document, identifier) on Hottext';
+
+COMMENT ON FUNCTION "qti"."__rule_instance_head_document_in_instance_7tluiawpuf"() IS 'function of rule HeadDocument(node) in Instance(document) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} on Instance';
+
+COMMENT ON FUNCTION "qti"."__rule_instance_instance_in_head_document_5lnqmk4e52"() IS 'function of rule Instance(document) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in HeadDocument(node) on Instance';
+
+COMMENT ON FUNCTION "qti"."__rule_instance_test_document_in_instance_document_c5vyq6rstb"() IS 'function of rule TestDocument(node) in InstanceDocument(document) on Instance';
+
 COMMENT ON FUNCTION "qti"."__rule_instance_name_reading_in_found_name_eydbssx3i4"() IS 'function of rule Reading(assembly, scope, named, namedKind, placements, replaced) where {"kind":"compare","left":{"field":"form","kind":"field"},"op":"ne","right":{"kind":"literal","value":"unsplit"}} and {"kind":"compare","left":{"field":"found","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}} in FoundName(assembly, identifier, node, kind, placements, replaced) on InstanceName';
 
 COMMENT ON FUNCTION "qti"."__rule_item_ref_document_declared_reading_in_reading_hy4bazecme"() IS 'function of rule DeclaredReading(assembly, node, attribute, form, split) in Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} on ItemRefDocument';
+
+COMMENT ON FUNCTION "qti"."__rule_item_ref_document_item_ref_document_in_item_qqgszmdj62"() IS 'function of rule ItemRefDocument(node, package, path) in ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}} on ItemRefDocument';
+
+COMMENT ON FUNCTION "qti"."__rule_item_ref_document_item_ref_target_in_item_ref_esy73jsbxa"() IS 'function of rule ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}} in ItemRefDocument(node, package, path) on ItemRefDocument';
 
 COMMENT ON FUNCTION "qti"."__rule_item_ref_document_reading_in_declared_reading_hiopj7yw5f"() IS 'function of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in DeclaredReading(assembly, node, attribute, form, split) on ItemRefDocument';
 
 COMMENT ON FUNCTION "qti"."__rule_item_ref_document_reading_declaration_in_fz6ujttujw"() IS 'function of rule ReadingDeclaration(assembly, node, attribute, form, split, declaration, declarationKind, declBaseTypes, declCardinalities) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in DeclaredReading(assembly, node, attribute, form, split, declaration, declarationKind, baseTypes, cardinalities) on ItemRefDocument';
 
-COMMENT ON FUNCTION "qti"."__rule_item_ref_href_item_ref_href_in_unread_type_x4cgd366nd"() IS 'function of rule ItemRefHref(package, path) where {"kind":"compare","left":{"field":"targets","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in UnreadTypeHref(package, path) on ItemRefHref';
+COMMENT ON FUNCTION "qti"."__rule_item_ref_href_link_reading_check_e_1_derived_uqj4f3wgsg"() IS 'function of rule check E1_derived of LinkReading on ItemRefHref';
 
-COMMENT ON FUNCTION "qti"."__rule_item_ref_target_link_reading_check_e_1_tta5vo6xfq"() IS 'function of rule check E1_derived of LinkReading on ItemRefTarget';
+COMMENT ON FUNCTION "qti"."__rule_item_ref_href_item_ref_document_in_item_ref_kq64kxlgb4"() IS 'function of rule ItemRefDocument(node, package, path) in ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}} on ItemRefHref';
 
-COMMENT ON FUNCTION "qti"."__rule_item_ref_target_item_ref_target_in_typed_href_dwoq6ys7iz"() IS 'function of rule ItemRefTarget(package, path, type) in TypedHref(package, path, type) on ItemRefTarget';
+COMMENT ON FUNCTION "qti"."__rule_item_ref_href_item_ref_target_in_item_ref_cwmrm33jos"() IS 'function of rule ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}} in ItemRefDocument(node, package, path) on ItemRefHref';
 
-COMMENT ON FUNCTION "qti"."__rule_item_ref_target_reading_in_link_reading_j4ngkrrzve"() IS 'function of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"link"}} in LinkReading(assembly, node, attribute, form, split) on ItemRefTarget';
+COMMENT ON FUNCTION "qti"."__rule_item_ref_href_mapping_item_ref_type_in_item_rtyqjow3jy"() IS 'function of rule MappingItemRefType(itemRef, type) in ItemRefTarget(node, type) on ItemRefHref';
+
+COMMENT ON FUNCTION "qti"."__rule_item_ref_href_reading_in_link_reading_usuzg4peyv"() IS 'function of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"link"}} in LinkReading(assembly, node, attribute, form, split) on ItemRefHref';
+
+COMMENT ON FUNCTION "qti"."__rule_item_ref_href_untargeted_item_ref_in_unread_4p77jngskj"() IS 'function of rule UntargetedItemRef(package, path) in UnreadTypeHref(package, path) on ItemRefHref';
 
 COMMENT ON FUNCTION "qti"."__rule_lom_entry_listed_identifier_in_matched_op6aeb5kga"() IS 'function of rule ListedIdentifier(record) in MatchedIdentifier(record) on LomEntry';
 
@@ -9437,6 +9253,8 @@ COMMENT ON FUNCTION "qti"."__rule_lom_title_listed_title_in_matched_title_wzvval
 
 COMMENT ON FUNCTION "qti"."__rule_lom_title_string_listed_title_in_matched_fnozdty5cp"() IS 'function of rule ListedTitle(record) in MatchedTitle(record) on LomTitleString';
 
+COMMENT ON FUNCTION "qti"."__rule_manifest_id_manifest_id_space_key_package_ndxi2dfo6x"() IS 'function of rule key ManifestIdSpace(package, identifier) on ManifestId';
+
 COMMENT ON FUNCTION "qti"."__rule_map_key_items_map_key_directed_pair_key_ldt2wp2osm"() IS 'function of rule key MapKeyDirectedPair(mapping, value) on MapKeyItems';
 
 COMMENT ON FUNCTION "qti"."__rule_map_key_items_map_key_pair_key_mapping_value_vkurmnjb6o"() IS 'function of rule key MapKeyPair(mapping, value) on MapKeyItems';
@@ -9453,6 +9271,8 @@ COMMENT ON FUNCTION "qti"."__rule_map_key_type_map_key_pair_key_mapping_value_cp
 
 COMMENT ON FUNCTION "qti"."__rule_map_key_type_map_key_point_key_mapping_x_y_yixndpl7ub"() IS 'function of rule key MapKeyPoint(mapping, x, y) on MapKeyType';
 
+COMMENT ON FUNCTION "qti"."__rule_mapping_item_ref_type_mapping_item_ref_type_ahzbp535yd"() IS 'function of rule MappingItemRefType(itemRef, type) in ItemRefTarget(node, type) on MappingItemRefType';
+
 COMMENT ON FUNCTION "qti"."__rule_mapping_source_declaration_declared_target_yzf6nl7c4b"() IS 'function of rule check Variable_mapping_target of DeclaredTarget on MappingSourceDeclaration';
 
 COMMENT ON FUNCTION "qti"."__rule_object_identifier_listed_identifier_in_2fogs7fy4c"() IS 'function of rule ListedIdentifier(record) in MatchedIdentifier(record) on ObjectIdentifier';
@@ -9461,13 +9281,25 @@ COMMENT ON FUNCTION "qti"."__rule_object_lang_listed_title_in_matched_title_gay5
 
 COMMENT ON FUNCTION "qti"."__rule_object_title_listed_title_in_matched_title_dkd3ndl5dh"() IS 'function of rule ListedTitle(record) in MatchedTitle(record) on ObjectTitle';
 
+COMMENT ON FUNCTION "qti"."__rule_placed_choice_choice_or_hottext_in_unclaimed_dtta7iimrn"() IS 'function of rule ChoiceOrHottext(document, identifier) in UnclaimedName(document, identifier) on PlacedChoice';
+
+COMMENT ON FUNCTION "qti"."__rule_placed_choice_placed_choice_or_hottext_in_mzdkbhq6td"() IS 'function of rule PlacedChoiceOrHottext(assembly, identifier) in UnclaimedName(document, identifier) on PlacedChoice';
+
+COMMENT ON FUNCTION "qti"."__rule_placed_choice_placed_choice_or_hottext_key_qn4o65senh"() IS 'function of rule key PlacedChoiceOrHottext(assembly, identifier) on PlacedChoice';
+
+COMMENT ON FUNCTION "qti"."__rule_placed_hottext_choice_or_hottext_in_unclaimed_4p5s3tsqdj"() IS 'function of rule ChoiceOrHottext(document, identifier) in UnclaimedName(document, identifier) on PlacedHottext';
+
+COMMENT ON FUNCTION "qti"."__rule_placed_hottext_placed_choice_or_hottext_in_pdp2ytnzqz"() IS 'function of rule PlacedChoiceOrHottext(assembly, identifier) in UnclaimedName(document, identifier) on PlacedHottext';
+
+COMMENT ON FUNCTION "qti"."__rule_placed_hottext_placed_choice_or_hottext_key_7plfjiipkz"() IS 'function of rule key PlacedChoiceOrHottext(assembly, identifier) on PlacedHottext';
+
 COMMENT ON FUNCTION "qti"."__rule_placed_variable_ref_declared_placement_check_5eyfihmist"() IS 'function of rule check E1_derived of DeclaredPlacement on PlacedVariableRef';
 
 COMMENT ON FUNCTION "qti"."__rule_placed_variable_ref_declaration_placed_4zjm6fnswv"() IS 'function of rule check Condition_type of PlacedReferenceType on PlacedVariableRefDeclaration';
 
 COMMENT ON FUNCTION "qti"."__rule_reading_held_scope_check_e_1_derived_b6h6b2lmgm"() IS 'function of rule check E1_derived of HeldScope on Reading';
 
-COMMENT ON FUNCTION "qti"."__rule_reading_link_reading_check_e_1_derived_suo3m3khq6"() IS 'function of rule check E1_derived of LinkReading on Reading';
+COMMENT ON FUNCTION "qti"."__rule_reading_link_reading_check_e_1_derived_k54gofgkqi"() IS 'function of rule check E1_derived of LinkReading on Reading';
 
 COMMENT ON FUNCTION "qti"."__rule_reading_mapped_reading_check_e_1_derived_6myzdk2fmf"() IS 'function of rule check E1_derived of MappedReading on Reading';
 
@@ -9475,7 +9307,7 @@ COMMENT ON FUNCTION "qti"."__rule_reading_declared_reading_in_reading_zn72oc344d
 
 COMMENT ON FUNCTION "qti"."__rule_reading_reading_in_declared_reading_54jnq5fe2d"() IS 'function of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in DeclaredReading(assembly, node, attribute, form, split) on Reading';
 
-COMMENT ON FUNCTION "qti"."__rule_reading_reading_in_link_reading_e7yzfgzrwo"() IS 'function of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"link"}} in LinkReading(assembly, node, attribute, form, split) on Reading';
+COMMENT ON FUNCTION "qti"."__rule_reading_reading_in_link_reading_i6mmfmmvb6"() IS 'function of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"link"}} in LinkReading(assembly, node, attribute, form, split) on Reading';
 
 COMMENT ON FUNCTION "qti"."__rule_reading_reading_in_mapped_reading_hokb6tfkhc"() IS 'function of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"mapped"}} in MappedReading(assembly, node, attribute, form, split) on Reading';
 
@@ -9497,27 +9329,39 @@ COMMENT ON FUNCTION "qti"."__rule_resource_document_resource_document_in_typed_z
 
 COMMENT ON FUNCTION "qti"."__rule_resource_document_typed_href_in_resource_vycbzelxhq"() IS 'function of rule TypedHref(package, path, type) where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]} in ResourceDocument(package, path, type) on ResourceDocument';
 
+COMMENT ON FUNCTION "qti"."__rule_resource_href_link_reading_check_e_1_derived_rem2tzc26m"() IS 'function of rule check E1_derived of LinkReading on ResourceHref';
+
 COMMENT ON FUNCTION "qti"."__rule_resource_href_typed_href_check_document_entry_de32iimvpk"() IS 'function of rule check Document_entry of TypedHref on ResourceHref';
 
 COMMENT ON FUNCTION "qti"."__rule_resource_href_described_assembled_lang_in_zkkr4tqv43"() IS 'function of rule DescribedAssembledLang(general, value) in ResourceLomLanguageSet(general, lang) on ResourceHref';
 
 COMMENT ON FUNCTION "qti"."__rule_resource_href_described_lang_in_resource_lom_eiixq44tpc"() IS 'function of rule DescribedLang(general, value) in ResourceLomLanguageSet(general, lang) on ResourceHref';
 
-COMMENT ON FUNCTION "qti"."__rule_resource_href_item_ref_href_in_unread_type_xgochmrs2s"() IS 'function of rule ItemRefHref(package, path) where {"kind":"compare","left":{"field":"targets","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in UnreadTypeHref(package, path) on ResourceHref';
+COMMENT ON FUNCTION "qti"."__rule_resource_href_item_ref_document_in_item_ref_4u3nzktizm"() IS 'function of rule ItemRefDocument(node, package, path) in ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}} on ResourceHref';
 
-COMMENT ON FUNCTION "qti"."__rule_resource_href_item_ref_target_in_typed_href_lqnrsl4qwl"() IS 'function of rule ItemRefTarget(package, path, type) in TypedHref(package, path, type) on ResourceHref';
+COMMENT ON FUNCTION "qti"."__rule_resource_href_item_ref_target_in_item_ref_6rys3k4d3b"() IS 'function of rule ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}} in ItemRefDocument(node, package, path) on ResourceHref';
 
 COMMENT ON FUNCTION "qti"."__rule_resource_href_listed_identifier_in_matched_ssdiwl3wzs"() IS 'function of rule ListedIdentifier(record) in MatchedIdentifier(record) on ResourceHref';
 
 COMMENT ON FUNCTION "qti"."__rule_resource_href_listed_title_in_matched_title_frsw52v7ag"() IS 'function of rule ListedTitle(record) in MatchedTitle(record) on ResourceHref';
 
+COMMENT ON FUNCTION "qti"."__rule_resource_href_mapping_item_ref_type_in_item_lre2dnzihi"() IS 'function of rule MappingItemRefType(itemRef, type) in ItemRefTarget(node, type) on ResourceHref';
+
+COMMENT ON FUNCTION "qti"."__rule_resource_href_reading_in_link_reading_32fxvs6lfx"() IS 'function of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"link"}} in LinkReading(assembly, node, attribute, form, split) on ResourceHref';
+
 COMMENT ON FUNCTION "qti"."__rule_resource_href_resource_document_in_typed_href_t43n2m45um"() IS 'function of rule ResourceDocument(package, path, type) in TypedHref(package, path, type) on ResourceHref';
 
 COMMENT ON FUNCTION "qti"."__rule_resource_href_typed_href_in_resource_document_vby5ir55w6"() IS 'function of rule TypedHref(package, path, type) where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]} in ResourceDocument(package, path, type) on ResourceHref';
 
+COMMENT ON FUNCTION "qti"."__rule_resource_href_untargeted_item_ref_in_unread_be4ibmuna7"() IS 'function of rule UntargetedItemRef(package, path) in UnreadTypeHref(package, path) on ResourceHref';
+
+COMMENT ON FUNCTION "qti"."__rule_resource_id_manifest_id_space_key_package_pwiywksaa7"() IS 'function of rule key ManifestIdSpace(package, identifier) on ResourceId';
+
 COMMENT ON FUNCTION "qti"."__rule_resource_lom_language_set_described_assembled_lvlkvv3khf"() IS 'function of rule DescribedAssembledLang(general, value) in ResourceLomLanguageSet(general, lang) on ResourceLomLanguageSet';
 
 COMMENT ON FUNCTION "qti"."__rule_resource_lom_language_set_described_lang_in_fl4vekjffk"() IS 'function of rule DescribedLang(general, value) in ResourceLomLanguageSet(general, lang) on ResourceLomLanguageSet';
+
+COMMENT ON FUNCTION "qti"."__rule_resource_typed_link_reading_check_e_1_derived_jwlsabinul"() IS 'function of rule check E1_derived of LinkReading on ResourceTyped';
 
 COMMENT ON FUNCTION "qti"."__rule_resource_typed_typed_href_check_document_elwl7we34z"() IS 'function of rule check Document_entry of TypedHref on ResourceTyped';
 
@@ -9525,17 +9369,29 @@ COMMENT ON FUNCTION "qti"."__rule_resource_typed_described_assembled_lang_in_3n4
 
 COMMENT ON FUNCTION "qti"."__rule_resource_typed_described_lang_in_resource_lom_iwqvfr4nqb"() IS 'function of rule DescribedLang(general, value) in ResourceLomLanguageSet(general, lang) on ResourceTyped';
 
-COMMENT ON FUNCTION "qti"."__rule_resource_typed_item_ref_href_in_unread_type_sfprsalhpx"() IS 'function of rule ItemRefHref(package, path) where {"kind":"compare","left":{"field":"targets","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in UnreadTypeHref(package, path) on ResourceTyped';
+COMMENT ON FUNCTION "qti"."__rule_resource_typed_item_ref_document_in_item_ref_24zhal5sy4"() IS 'function of rule ItemRefDocument(node, package, path) in ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}} on ResourceTyped';
 
-COMMENT ON FUNCTION "qti"."__rule_resource_typed_item_ref_target_in_typed_href_gkrht6ed6c"() IS 'function of rule ItemRefTarget(package, path, type) in TypedHref(package, path, type) on ResourceTyped';
+COMMENT ON FUNCTION "qti"."__rule_resource_typed_item_ref_target_in_item_ref_zpxyl5g2dm"() IS 'function of rule ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}} in ItemRefDocument(node, package, path) on ResourceTyped';
 
 COMMENT ON FUNCTION "qti"."__rule_resource_typed_listed_identifier_in_matched_inb3mciold"() IS 'function of rule ListedIdentifier(record) in MatchedIdentifier(record) on ResourceTyped';
 
 COMMENT ON FUNCTION "qti"."__rule_resource_typed_listed_title_in_matched_title_hcen3i4msh"() IS 'function of rule ListedTitle(record) in MatchedTitle(record) on ResourceTyped';
 
+COMMENT ON FUNCTION "qti"."__rule_resource_typed_mapping_item_ref_type_in_item_spc6vjh7nb"() IS 'function of rule MappingItemRefType(itemRef, type) in ItemRefTarget(node, type) on ResourceTyped';
+
+COMMENT ON FUNCTION "qti"."__rule_resource_typed_reading_in_link_reading_mweeinoliw"() IS 'function of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"link"}} in LinkReading(assembly, node, attribute, form, split) on ResourceTyped';
+
 COMMENT ON FUNCTION "qti"."__rule_resource_typed_resource_document_in_typed_qjnmpfadji"() IS 'function of rule ResourceDocument(package, path, type) in TypedHref(package, path, type) on ResourceTyped';
 
 COMMENT ON FUNCTION "qti"."__rule_resource_typed_typed_href_in_resource_v34wopum5h"() IS 'function of rule TypedHref(package, path, type) where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]} in ResourceDocument(package, path, type) on ResourceTyped';
+
+COMMENT ON FUNCTION "qti"."__rule_resource_typed_untargeted_item_ref_in_unread_phzhs543sx"() IS 'function of rule UntargetedItemRef(package, path) in UnreadTypeHref(package, path) on ResourceTyped';
+
+COMMENT ON FUNCTION "qti"."__rule_site_target_head_document_in_instance_3ko6xvtwul"() IS 'function of rule HeadDocument(node) in Instance(document) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} on SiteTarget';
+
+COMMENT ON FUNCTION "qti"."__rule_site_target_instance_in_head_document_wa6ub6v2pg"() IS 'function of rule Instance(document) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in HeadDocument(node) on SiteTarget';
+
+COMMENT ON FUNCTION "qti"."__rule_test_document_test_document_in_instance_dnz2gogl5g"() IS 'function of rule TestDocument(node) in InstanceDocument(document) on TestDocument';
 
 COMMENT ON FUNCTION "qti"."__rule_variable_mapping_mapped_reading_check_e_1_5gkndpbrqz"() IS 'function of rule check E1_derived of MappedReading on VariableMapping';
 
@@ -9557,7 +9413,13 @@ COMMENT ON TRIGGER "__rule_held_scope_check_e_1_derived_j5n3hjxdgp" ON "qti"."as
 
 COMMENT ON TRIGGER "__rule_reading_in_found_name_tav444v4qg" ON "qti"."assembled_name" IS 'trigger of rule Reading(assembly, scope, named, namedKind, placements, replaced) where {"kind":"compare","left":{"field":"form","kind":"field"},"op":"ne","right":{"kind":"literal","value":"unsplit"}} and {"kind":"compare","left":{"field":"found","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}} in FoundName(assembly, identifier, node, kind, placements, replaced)';
 
-COMMENT ON TRIGGER "__rule_item_ref_href_in_unread_type_href_jvwqeo6zct" ON "qti"."attribute" IS 'trigger of rule ItemRefHref(package, path) where {"kind":"compare","left":{"field":"targets","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in UnreadTypeHref(package, path)';
+COMMENT ON TRIGGER "__rule_untargeted_item_ref_in_unread_type_href_7ud3zz4m6k" ON "qti"."attribute" IS 'trigger of rule UntargetedItemRef(package, path) in UnreadTypeHref(package, path)';
+
+COMMENT ON TRIGGER "__rule_choice_or_hottext_in_unclaimed_name_7b3h77iils" ON "qti"."choice" IS 'trigger of rule ChoiceOrHottext(document, identifier) in UnclaimedName(document, identifier)';
+
+COMMENT ON TRIGGER "__rule_placed_choice_or_hottext_in_unclaimed_name_eplwgtuooh" ON "qti"."choice" IS 'trigger of rule PlacedChoiceOrHottext(assembly, identifier) in UnclaimedName(document, identifier)';
+
+COMMENT ON TRIGGER "__rule_choice_or_hottext_key_document_identifier_aonsodhbbb" ON "qti"."choice" IS 'trigger of rule key ChoiceOrHottext(document, identifier)';
 
 COMMENT ON TRIGGER "__rule_required_ssml_property_in_data_ssml_property_rbvm655642" ON "qti"."data_ssml_member" IS 'trigger of rule RequiredSsmlProperty(node, member, name) in DataSsmlProperty(node, member, name)';
 
@@ -9573,11 +9435,23 @@ COMMENT ON TRIGGER "__rule_declared_reference_check_e_1_derived_lajaorm2xf" ON "
 
 COMMENT ON TRIGGER "__rule_declared_target_check_variable_mapping_target_bxacfw57oi" ON "qti"."declaration_identifier" IS 'trigger of rule check Variable_mapping_target of DeclaredTarget';
 
+COMMENT ON TRIGGER "__rule_choice_or_hottext_in_unclaimed_name_7b3h77iils" ON "qti"."declaration_identifier" IS 'trigger of rule ChoiceOrHottext(document, identifier) in UnclaimedName(document, identifier)';
+
 COMMENT ON TRIGGER "__rule_declared_reading_in_reading_6lchrxpe6a" ON "qti"."declaration_identifier" IS 'trigger of rule DeclaredReading(assembly, node, attribute, form, split) in Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}}';
+
+COMMENT ON TRIGGER "__rule_placed_choice_or_hottext_in_unclaimed_name_eplwgtuooh" ON "qti"."declaration_identifier" IS 'trigger of rule PlacedChoiceOrHottext(assembly, identifier) in UnclaimedName(document, identifier)';
 
 COMMENT ON TRIGGER "__rule_reading_in_declared_reading_2iq7z66i5b" ON "qti"."declaration_identifier" IS 'trigger of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in DeclaredReading(assembly, node, attribute, form, split)';
 
 COMMENT ON TRIGGER "__rule_reading_declaration_in_declared_reading_jziwkf6dx4" ON "qti"."declaration_identifier" IS 'trigger of rule ReadingDeclaration(assembly, node, attribute, form, split, declaration, declarationKind, declBaseTypes, declCardinalities) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in DeclaredReading(assembly, node, attribute, form, split, declaration, declarationKind, baseTypes, cardinalities)';
+
+COMMENT ON TRIGGER "__rule_choice_or_hottext_in_unclaimed_name_7b3h77iils" ON "qti"."document" IS 'trigger of rule ChoiceOrHottext(document, identifier) in UnclaimedName(document, identifier)';
+
+COMMENT ON TRIGGER "__rule_head_document_in_instance_pslbjsdhmx" ON "qti"."document" IS 'trigger of rule HeadDocument(node) in Instance(document) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}}';
+
+COMMENT ON TRIGGER "__rule_instance_in_head_document_xgw66xxzij" ON "qti"."document" IS 'trigger of rule Instance(document) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in HeadDocument(node)';
+
+COMMENT ON TRIGGER "__rule_placed_choice_or_hottext_in_unclaimed_name_eplwgtuooh" ON "qti"."document" IS 'trigger of rule PlacedChoiceOrHottext(assembly, identifier) in UnclaimedName(document, identifier)';
 
 COMMENT ON TRIGGER "__rule_described_lang_in_resource_lom_language_set_aditcr3525" ON "qti"."document_lang" IS 'trigger of rule DescribedLang(general, value) in ResourceLomLanguageSet(general, lang)';
 
@@ -9589,21 +9463,41 @@ COMMENT ON TRIGGER "__rule_placed_reference_type_check_condition_type_6itrlcjpvb
 
 COMMENT ON TRIGGER "__rule_held_type_in_variable_ref_table_d5nxy5jest" ON "qti"."expression" IS 'trigger of rule HeldType(node) where {"arg":{"arg":{"field":"heldBase","kind":"field"},"kind":"in","values":["any","integer","unknown"]},"kind":"not"} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-lookup-outcome-value"}} and {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in VariableRefTable(node) where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}} and {"kind":"compare","left":{"field":"table","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-interpolation-table"}}';
 
+COMMENT ON TRIGGER "__rule_choice_or_hottext_in_unclaimed_name_7b3h77iils" ON "qti"."hottext" IS 'trigger of rule ChoiceOrHottext(document, identifier) in UnclaimedName(document, identifier)';
+
+COMMENT ON TRIGGER "__rule_placed_choice_or_hottext_in_unclaimed_name_eplwgtuooh" ON "qti"."hottext" IS 'trigger of rule PlacedChoiceOrHottext(assembly, identifier) in UnclaimedName(document, identifier)';
+
+COMMENT ON TRIGGER "__rule_choice_or_hottext_key_document_identifier_aonsodhbbb" ON "qti"."hottext" IS 'trigger of rule key ChoiceOrHottext(document, identifier)';
+
+COMMENT ON TRIGGER "__rule_head_document_in_instance_pslbjsdhmx" ON "qti"."instance" IS 'trigger of rule HeadDocument(node) in Instance(document) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}}';
+
+COMMENT ON TRIGGER "__rule_instance_in_head_document_xgw66xxzij" ON "qti"."instance" IS 'trigger of rule Instance(document) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in HeadDocument(node)';
+
+COMMENT ON TRIGGER "__rule_test_document_in_instance_document_a6ne44otpq" ON "qti"."instance" IS 'trigger of rule TestDocument(node) in InstanceDocument(document)';
+
 COMMENT ON TRIGGER "__rule_reading_in_found_name_tav444v4qg" ON "qti"."instance_name" IS 'trigger of rule Reading(assembly, scope, named, namedKind, placements, replaced) where {"kind":"compare","left":{"field":"form","kind":"field"},"op":"ne","right":{"kind":"literal","value":"unsplit"}} and {"kind":"compare","left":{"field":"found","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}} in FoundName(assembly, identifier, node, kind, placements, replaced)';
 
 COMMENT ON TRIGGER "__rule_declared_reading_in_reading_6lchrxpe6a" ON "qti"."item_ref_document" IS 'trigger of rule DeclaredReading(assembly, node, attribute, form, split) in Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}}';
+
+COMMENT ON TRIGGER "__rule_item_ref_document_in_item_ref_target_mhxkksbhpv" ON "qti"."item_ref_document" IS 'trigger of rule ItemRefDocument(node, package, path) in ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}}';
+
+COMMENT ON TRIGGER "__rule_item_ref_target_in_item_ref_document_wxepguf3t7" ON "qti"."item_ref_document" IS 'trigger of rule ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}} in ItemRefDocument(node, package, path)';
 
 COMMENT ON TRIGGER "__rule_reading_in_declared_reading_2iq7z66i5b" ON "qti"."item_ref_document" IS 'trigger of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in DeclaredReading(assembly, node, attribute, form, split)';
 
 COMMENT ON TRIGGER "__rule_reading_declaration_in_declared_reading_jziwkf6dx4" ON "qti"."item_ref_document" IS 'trigger of rule ReadingDeclaration(assembly, node, attribute, form, split, declaration, declarationKind, declBaseTypes, declCardinalities) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in DeclaredReading(assembly, node, attribute, form, split, declaration, declarationKind, baseTypes, cardinalities)';
 
-COMMENT ON TRIGGER "__rule_item_ref_href_in_unread_type_href_jvwqeo6zct" ON "qti"."item_ref_href" IS 'trigger of rule ItemRefHref(package, path) where {"kind":"compare","left":{"field":"targets","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in UnreadTypeHref(package, path)';
+COMMENT ON TRIGGER "__rule_link_reading_check_e_1_derived_j2456witxl" ON "qti"."item_ref_href" IS 'trigger of rule check E1_derived of LinkReading';
 
-COMMENT ON TRIGGER "__rule_link_reading_check_e_1_derived_j2456witxl" ON "qti"."item_ref_target" IS 'trigger of rule check E1_derived of LinkReading';
+COMMENT ON TRIGGER "__rule_item_ref_document_in_item_ref_target_mhxkksbhpv" ON "qti"."item_ref_href" IS 'trigger of rule ItemRefDocument(node, package, path) in ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}}';
 
-COMMENT ON TRIGGER "__rule_item_ref_target_in_typed_href_x3bbrw4fae" ON "qti"."item_ref_target" IS 'trigger of rule ItemRefTarget(package, path, type) in TypedHref(package, path, type)';
+COMMENT ON TRIGGER "__rule_item_ref_target_in_item_ref_document_wxepguf3t7" ON "qti"."item_ref_href" IS 'trigger of rule ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}} in ItemRefDocument(node, package, path)';
 
-COMMENT ON TRIGGER "__rule_reading_in_link_reading_3z4uouhn4c" ON "qti"."item_ref_target" IS 'trigger of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"link"}} in LinkReading(assembly, node, attribute, form, split)';
+COMMENT ON TRIGGER "__rule_mapping_item_ref_type_in_item_ref_target_gy4kmjiieu" ON "qti"."item_ref_href" IS 'trigger of rule MappingItemRefType(itemRef, type) in ItemRefTarget(node, type)';
+
+COMMENT ON TRIGGER "__rule_reading_in_link_reading_3z4uouhn4c" ON "qti"."item_ref_href" IS 'trigger of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"link"}} in LinkReading(assembly, node, attribute, form, split)';
+
+COMMENT ON TRIGGER "__rule_untargeted_item_ref_in_unread_type_href_7ud3zz4m6k" ON "qti"."item_ref_href" IS 'trigger of rule UntargetedItemRef(package, path) in UnreadTypeHref(package, path)';
 
 COMMENT ON TRIGGER "__rule_listed_identifier_in_matched_identifier_276y6stz2r" ON "qti"."lom_entry" IS 'trigger of rule ListedIdentifier(record) in MatchedIdentifier(record)';
 
@@ -9629,6 +9523,8 @@ COMMENT ON TRIGGER "__rule_listed_title_in_matched_title_dxnciepe7l" ON "qti"."l
 
 COMMENT ON TRIGGER "__rule_listed_title_in_matched_title_dxnciepe7l" ON "qti"."lom_title_string" IS 'trigger of rule ListedTitle(record) in MatchedTitle(record)';
 
+COMMENT ON TRIGGER "__rule_manifest_id_space_key_package_identifier_i27itivxez" ON "qti"."manifest_id" IS 'trigger of rule key ManifestIdSpace(package, identifier)';
+
 COMMENT ON TRIGGER "__rule_map_key_directed_pair_key_mapping_value_ifwinem53f" ON "qti"."map_key_items" IS 'trigger of rule key MapKeyDirectedPair(mapping, value)';
 
 COMMENT ON TRIGGER "__rule_map_key_pair_key_mapping_value_xlnub3kzxq" ON "qti"."map_key_items" IS 'trigger of rule key MapKeyPair(mapping, value)';
@@ -9645,6 +9541,8 @@ COMMENT ON TRIGGER "__rule_map_key_pair_key_mapping_value_xlnub3kzxq" ON "qti"."
 
 COMMENT ON TRIGGER "__rule_map_key_point_key_mapping_x_y_g2ktvvawz5" ON "qti"."map_key_type" IS 'trigger of rule key MapKeyPoint(mapping, x, y)';
 
+COMMENT ON TRIGGER "__rule_mapping_item_ref_type_in_item_ref_target_gy4kmjiieu" ON "qti"."mapping_item_ref_type" IS 'trigger of rule MappingItemRefType(itemRef, type) in ItemRefTarget(node, type)';
+
 COMMENT ON TRIGGER "__rule_declared_target_check_variable_mapping_target_bxacfw57oi" ON "qti"."mapping_source_declaration" IS 'trigger of rule check Variable_mapping_target of DeclaredTarget';
 
 COMMENT ON TRIGGER "__rule_listed_identifier_in_matched_identifier_276y6stz2r" ON "qti"."object_identifier" IS 'trigger of rule ListedIdentifier(record) in MatchedIdentifier(record)';
@@ -9652,6 +9550,18 @@ COMMENT ON TRIGGER "__rule_listed_identifier_in_matched_identifier_276y6stz2r" O
 COMMENT ON TRIGGER "__rule_listed_title_in_matched_title_dxnciepe7l" ON "qti"."object_lang" IS 'trigger of rule ListedTitle(record) in MatchedTitle(record)';
 
 COMMENT ON TRIGGER "__rule_listed_title_in_matched_title_dxnciepe7l" ON "qti"."object_title" IS 'trigger of rule ListedTitle(record) in MatchedTitle(record)';
+
+COMMENT ON TRIGGER "__rule_choice_or_hottext_in_unclaimed_name_7b3h77iils" ON "qti"."placed_choice" IS 'trigger of rule ChoiceOrHottext(document, identifier) in UnclaimedName(document, identifier)';
+
+COMMENT ON TRIGGER "__rule_placed_choice_or_hottext_in_unclaimed_name_eplwgtuooh" ON "qti"."placed_choice" IS 'trigger of rule PlacedChoiceOrHottext(assembly, identifier) in UnclaimedName(document, identifier)';
+
+COMMENT ON TRIGGER "__rule_placed_choice_or_hottext_key_assembly_dsdcvqjwqh" ON "qti"."placed_choice" IS 'trigger of rule key PlacedChoiceOrHottext(assembly, identifier)';
+
+COMMENT ON TRIGGER "__rule_choice_or_hottext_in_unclaimed_name_7b3h77iils" ON "qti"."placed_hottext" IS 'trigger of rule ChoiceOrHottext(document, identifier) in UnclaimedName(document, identifier)';
+
+COMMENT ON TRIGGER "__rule_placed_choice_or_hottext_in_unclaimed_name_eplwgtuooh" ON "qti"."placed_hottext" IS 'trigger of rule PlacedChoiceOrHottext(assembly, identifier) in UnclaimedName(document, identifier)';
+
+COMMENT ON TRIGGER "__rule_placed_choice_or_hottext_key_assembly_dsdcvqjwqh" ON "qti"."placed_hottext" IS 'trigger of rule key PlacedChoiceOrHottext(assembly, identifier)';
 
 COMMENT ON TRIGGER "__rule_declared_placement_check_e_1_derived_xbr43pqopp" ON "qti"."placed_variable_ref" IS 'trigger of rule check E1_derived of DeclaredPlacement';
 
@@ -9689,27 +9599,39 @@ COMMENT ON TRIGGER "__rule_resource_document_in_typed_href_lxrllkblhu" ON "qti".
 
 COMMENT ON TRIGGER "__rule_typed_href_in_resource_document_ue4bsktdpa" ON "qti"."resource_document" IS 'trigger of rule TypedHref(package, path, type) where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]} in ResourceDocument(package, path, type)';
 
+COMMENT ON TRIGGER "__rule_link_reading_check_e_1_derived_j2456witxl" ON "qti"."resource_href" IS 'trigger of rule check E1_derived of LinkReading';
+
 COMMENT ON TRIGGER "__rule_typed_href_check_document_entry_xwphvvsnee" ON "qti"."resource_href" IS 'trigger of rule check Document_entry of TypedHref';
 
 COMMENT ON TRIGGER "__rule_described_assembled_lang_in_resource_lom_pv6xp5rguo" ON "qti"."resource_href" IS 'trigger of rule DescribedAssembledLang(general, value) in ResourceLomLanguageSet(general, lang)';
 
 COMMENT ON TRIGGER "__rule_described_lang_in_resource_lom_language_set_aditcr3525" ON "qti"."resource_href" IS 'trigger of rule DescribedLang(general, value) in ResourceLomLanguageSet(general, lang)';
 
-COMMENT ON TRIGGER "__rule_item_ref_href_in_unread_type_href_jvwqeo6zct" ON "qti"."resource_href" IS 'trigger of rule ItemRefHref(package, path) where {"kind":"compare","left":{"field":"targets","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in UnreadTypeHref(package, path)';
+COMMENT ON TRIGGER "__rule_item_ref_document_in_item_ref_target_mhxkksbhpv" ON "qti"."resource_href" IS 'trigger of rule ItemRefDocument(node, package, path) in ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}}';
 
-COMMENT ON TRIGGER "__rule_item_ref_target_in_typed_href_x3bbrw4fae" ON "qti"."resource_href" IS 'trigger of rule ItemRefTarget(package, path, type) in TypedHref(package, path, type)';
+COMMENT ON TRIGGER "__rule_item_ref_target_in_item_ref_document_wxepguf3t7" ON "qti"."resource_href" IS 'trigger of rule ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}} in ItemRefDocument(node, package, path)';
 
 COMMENT ON TRIGGER "__rule_listed_identifier_in_matched_identifier_276y6stz2r" ON "qti"."resource_href" IS 'trigger of rule ListedIdentifier(record) in MatchedIdentifier(record)';
 
 COMMENT ON TRIGGER "__rule_listed_title_in_matched_title_dxnciepe7l" ON "qti"."resource_href" IS 'trigger of rule ListedTitle(record) in MatchedTitle(record)';
 
+COMMENT ON TRIGGER "__rule_mapping_item_ref_type_in_item_ref_target_gy4kmjiieu" ON "qti"."resource_href" IS 'trigger of rule MappingItemRefType(itemRef, type) in ItemRefTarget(node, type)';
+
+COMMENT ON TRIGGER "__rule_reading_in_link_reading_3z4uouhn4c" ON "qti"."resource_href" IS 'trigger of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"link"}} in LinkReading(assembly, node, attribute, form, split)';
+
 COMMENT ON TRIGGER "__rule_resource_document_in_typed_href_lxrllkblhu" ON "qti"."resource_href" IS 'trigger of rule ResourceDocument(package, path, type) in TypedHref(package, path, type)';
 
 COMMENT ON TRIGGER "__rule_typed_href_in_resource_document_ue4bsktdpa" ON "qti"."resource_href" IS 'trigger of rule TypedHref(package, path, type) where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]} in ResourceDocument(package, path, type)';
 
+COMMENT ON TRIGGER "__rule_untargeted_item_ref_in_unread_type_href_7ud3zz4m6k" ON "qti"."resource_href" IS 'trigger of rule UntargetedItemRef(package, path) in UnreadTypeHref(package, path)';
+
+COMMENT ON TRIGGER "__rule_manifest_id_space_key_package_identifier_i27itivxez" ON "qti"."resource_id" IS 'trigger of rule key ManifestIdSpace(package, identifier)';
+
 COMMENT ON TRIGGER "__rule_described_assembled_lang_in_resource_lom_pv6xp5rguo" ON "qti"."resource_lom_language_set" IS 'trigger of rule DescribedAssembledLang(general, value) in ResourceLomLanguageSet(general, lang)';
 
 COMMENT ON TRIGGER "__rule_described_lang_in_resource_lom_language_set_aditcr3525" ON "qti"."resource_lom_language_set" IS 'trigger of rule DescribedLang(general, value) in ResourceLomLanguageSet(general, lang)';
+
+COMMENT ON TRIGGER "__rule_link_reading_check_e_1_derived_j2456witxl" ON "qti"."resource_typed" IS 'trigger of rule check E1_derived of LinkReading';
 
 COMMENT ON TRIGGER "__rule_typed_href_check_document_entry_xwphvvsnee" ON "qti"."resource_typed" IS 'trigger of rule check Document_entry of TypedHref';
 
@@ -9717,17 +9639,29 @@ COMMENT ON TRIGGER "__rule_described_assembled_lang_in_resource_lom_pv6xp5rguo" 
 
 COMMENT ON TRIGGER "__rule_described_lang_in_resource_lom_language_set_aditcr3525" ON "qti"."resource_typed" IS 'trigger of rule DescribedLang(general, value) in ResourceLomLanguageSet(general, lang)';
 
-COMMENT ON TRIGGER "__rule_item_ref_href_in_unread_type_href_jvwqeo6zct" ON "qti"."resource_typed" IS 'trigger of rule ItemRefHref(package, path) where {"kind":"compare","left":{"field":"targets","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in UnreadTypeHref(package, path)';
+COMMENT ON TRIGGER "__rule_item_ref_document_in_item_ref_target_mhxkksbhpv" ON "qti"."resource_typed" IS 'trigger of rule ItemRefDocument(node, package, path) in ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}}';
 
-COMMENT ON TRIGGER "__rule_item_ref_target_in_typed_href_x3bbrw4fae" ON "qti"."resource_typed" IS 'trigger of rule ItemRefTarget(package, path, type) in TypedHref(package, path, type)';
+COMMENT ON TRIGGER "__rule_item_ref_target_in_item_ref_document_wxepguf3t7" ON "qti"."resource_typed" IS 'trigger of rule ItemRefTarget(node, package, path) where {"kind":"compare","left":{"field":"type","kind":"field"},"op":"eq","right":{"kind":"literal","value":"imsqti_item_xmlv3p0"}} in ItemRefDocument(node, package, path)';
 
 COMMENT ON TRIGGER "__rule_listed_identifier_in_matched_identifier_276y6stz2r" ON "qti"."resource_typed" IS 'trigger of rule ListedIdentifier(record) in MatchedIdentifier(record)';
 
 COMMENT ON TRIGGER "__rule_listed_title_in_matched_title_dxnciepe7l" ON "qti"."resource_typed" IS 'trigger of rule ListedTitle(record) in MatchedTitle(record)';
 
+COMMENT ON TRIGGER "__rule_mapping_item_ref_type_in_item_ref_target_gy4kmjiieu" ON "qti"."resource_typed" IS 'trigger of rule MappingItemRefType(itemRef, type) in ItemRefTarget(node, type)';
+
+COMMENT ON TRIGGER "__rule_reading_in_link_reading_3z4uouhn4c" ON "qti"."resource_typed" IS 'trigger of rule Reading(assembly, node, attribute, form, split) where {"kind":"compare","left":{"field":"source","kind":"field"},"op":"eq","right":{"kind":"literal","value":"link"}} in LinkReading(assembly, node, attribute, form, split)';
+
 COMMENT ON TRIGGER "__rule_resource_document_in_typed_href_lxrllkblhu" ON "qti"."resource_typed" IS 'trigger of rule ResourceDocument(package, path, type) in TypedHref(package, path, type)';
 
 COMMENT ON TRIGGER "__rule_typed_href_in_resource_document_ue4bsktdpa" ON "qti"."resource_typed" IS 'trigger of rule TypedHref(package, path, type) where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]} in ResourceDocument(package, path, type)';
+
+COMMENT ON TRIGGER "__rule_untargeted_item_ref_in_unread_type_href_7ud3zz4m6k" ON "qti"."resource_typed" IS 'trigger of rule UntargetedItemRef(package, path) in UnreadTypeHref(package, path)';
+
+COMMENT ON TRIGGER "__rule_head_document_in_instance_pslbjsdhmx" ON "qti"."site_target" IS 'trigger of rule HeadDocument(node) in Instance(document) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}}';
+
+COMMENT ON TRIGGER "__rule_instance_in_head_document_xgw66xxzij" ON "qti"."site_target" IS 'trigger of rule Instance(document) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} in HeadDocument(node)';
+
+COMMENT ON TRIGGER "__rule_test_document_in_instance_document_a6ne44otpq" ON "qti"."test_document" IS 'trigger of rule TestDocument(node) in InstanceDocument(document)';
 
 COMMENT ON TRIGGER "__rule_mapped_reading_check_e_1_derived_uk7frj2lf3" ON "qti"."variable_mapping" IS 'trigger of rule check E1_derived of MappedReading';
 
