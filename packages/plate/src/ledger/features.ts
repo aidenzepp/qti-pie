@@ -66,7 +66,7 @@ const decodeFeatures = Schema.decodeUnknownSync(Schema.Array(Feature));
 /**
  * Where the conformance text is cached: `.cache/gr8des/qti3-text/conf.txt` under `HOME`.
  */
-export const confPath = Config.String("HOME").pipe(
+export const confPath = Config.NonEmptyString("HOME").pipe(
   Config.map((home) => `${home}/.cache/gr8des/qti3-text/conf.txt`),
 );
 

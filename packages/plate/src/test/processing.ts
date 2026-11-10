@@ -6,8 +6,9 @@
  * keep ({@link assertKindType}).
  *
  * A family test builds a `Scope` only through {@link scopeOf}, never as a literal, so a field the
- * engine adds to it changes this file alone. It is not a browser module: it reads the item model
- * and the validator, which import Effect.
+ * engine adds to it changes this file alone. It is not a browser module: it reads the validator,
+ * whose tables and refusals import Effect's `Schema`, and it runs the item model's build, a
+ * `Result`, inside an Effect.
  *
  * @module
  */
@@ -204,7 +205,7 @@ export const processed = (
   responses: Variables["responses"],
 ): Effect.Effect<Option.Option<Variables>, EngineFailure | Refusal> =>
   Effect.gen(function* runProcessing() {
-    const item = yield* buildItem(document);
+    const item = yield* Effect.fromResult(buildItem(document));
     if (Option.isNone(item.processing)) {
       return Option.none();
     }

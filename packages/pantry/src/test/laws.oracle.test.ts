@@ -3788,8 +3788,8 @@ describe("the stimulus refs the UP audit's B5 resolves, over generated packages"
   it.effect(
     "Stimulus ref target: a stimulus ref breaks it exactly when its href resolves in the package to no stimulus document",
     (ctx) =>
-      // Oracle: the specification as a checker, the information model §7.6 (info.txt:67012,
-      // :67066) read by hand: `s.xml` is the stimulus; `a.png` is a listed file of no stimulus;
+      // Oracle: the specification as a checker, the information model §7.6 (info.txt:74346,
+      // :74420) read by hand: `s.xml` is the stimulus; `a.png` is a listed file of no stimulus;
       // `missing.xml` names no entry, so File exists breaks too; an external href is not resolved.
       // Bound: every one of the 4 hrefs.
       searched(

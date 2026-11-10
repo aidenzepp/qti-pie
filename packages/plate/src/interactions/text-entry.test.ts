@@ -992,7 +992,10 @@ describe("a Text Entry bound to a record response", () => {
           partsIn(tree, "control").map((control) => [control.tag, control.attrs["name"]]),
           [["input", name]],
         );
-        assert.strictEqual(toHtml(tree), toHtml(yield* page(payloadOf([masked]))));
+        assert.strictEqual(
+          Result.getOrThrow(toHtml(tree)),
+          Result.getOrThrow(toHtml(yield* page(payloadOf([masked])))),
+        );
       }),
   );
 });

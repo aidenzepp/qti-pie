@@ -13,7 +13,7 @@
  */
 import { Array as Arr, Option } from "effect";
 import { controlCap } from "#plate/control-cap.ts";
-import { trimXmlSpace } from "#plate/model/values.ts";
+import { collapseXmlSpace } from "#plate/model/attributes.ts";
 
 /**
  * The eleven QTI base types, as the `base-type` attribute spells them.
@@ -454,11 +454,6 @@ export const templateNames = [
 export type TemplateName = (typeof templateNames)[number];
 
 /**
- * A run of XML whitespace.
- */
-const xmlWhitespaceRun = /[\t\n\r ]+/gu;
-
-/**
  * Resolve a `template` URI to the built-in it names.
  *
  * The XSD types `template` as `xs:anyURI`, whose whitespace facet is `collapse`, so the URI is
@@ -471,7 +466,7 @@ const xmlWhitespaceRun = /[\t\n\r ]+/gu;
  *   by it, with or without `.xml`; none for any other URI.
  */
 export const templateName = (uri: string): Option.Option<TemplateName> => {
-  const collapsed = trimXmlSpace(uri).replaceAll(xmlWhitespaceRun, " ");
+  const collapsed = collapseXmlSpace(uri);
 
   return Arr.findFirst(templatePrefixes, (prefix) => collapsed.startsWith(prefix)).pipe(
     Option.map((prefix) => collapsed.slice(prefix.length)),

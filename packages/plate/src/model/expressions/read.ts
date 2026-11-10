@@ -12,7 +12,7 @@
  *
  * @module
  */
-import { Effect, Option, pipe } from "effect";
+import { Option, Result } from "effect";
 import type { SourceElement } from "#plate/document/source.ts";
 import { elementsOf, isQti } from "#plate/model/attributes.ts";
 import type { ModelWalk } from "#plate/model/attributes.ts";
@@ -57,7 +57,7 @@ export interface ExpressionReading {
    * @param element The element the mark sits on.
    * @param feature The mark's key.
    */
-  readonly mark: (element: SourceElement, feature: string) => Effect.Effect<void>;
+  readonly mark: (element: SourceElement, feature: string) => Result.Result<void>;
   /**
    * Record a mark at an element and build nothing.
    *
@@ -68,7 +68,7 @@ export interface ExpressionReading {
   readonly unread: (
     element: SourceElement,
     feature?: string,
-  ) => Effect.Effect<Option.Option<never>>;
+  ) => Result.Result<Option.Option<never>>;
   /**
    * The walk a reader reads attributes and paths through, and builds refusals in.
    */
@@ -89,7 +89,7 @@ export interface ReaderContext extends ExpressionReading {
    */
   readonly expression: (
     element: SourceElement,
-  ) => Effect.Effect<Option.Option<Expression>, Refusal>;
+  ) => Result.Result<Option.Option<Expression>, Refusal>;
 }
 
 /**
@@ -109,7 +109,7 @@ export interface CustomReader<K extends ExpressionKind> {
   readonly read: (
     context: ReaderContext,
     element: SourceElement,
-  ) => Effect.Effect<Option.Option<Variant<K>>, Refusal>;
+  ) => Result.Result<Option.Option<Variant<K>>, Refusal>;
 }
 
 /**
@@ -142,7 +142,7 @@ interface GenericReader<
   readonly attributes: (
     context: ReaderContext,
     element: SourceElement,
-  ) => Effect.Effect<(operands: O) => Variant<K>, Refusal>;
+  ) => Result.Result<(operands: O) => Variant<K>, Refusal>;
 }
 
 /**
@@ -215,12 +215,15 @@ const kindsByElement: ReadonlyMap<string, ExpressionKind> = new Map(
 const readAll = (
   context: ReaderContext,
   elements: readonly SourceElement[],
-): Effect.Effect<Option.Option<readonly Expression[]>, Refusal> =>
-  pipe(
-    elements,
-    Effect.forEach((element) => context.expression(element)),
-    Effect.map(Option.all),
-  );
+): Result.Result<Option.Option<readonly Expression[]>, Refusal> =>
+  Result.gen(function* readOperandList() {
+    const read: Option.Option<Expression>[] = [];
+    for (const element of elements) {
+      read.push(yield* context.expression(element));
+    }
+
+    return Option.all(read);
+  });
 
 /**
  * Read an element through a generic reader spec: its operand count first, then its attributes,
@@ -236,8 +239,8 @@ const readGeneric = (
   context: ReaderContext,
   element: SourceElement,
   spec: Exclude<ReaderSpec<ExpressionKind>, CustomReader<ExpressionKind>>,
-): Effect.Effect<Option.Option<Expression>, Refusal> =>
-  Effect.gen(function* readOperands() {
+): Result.Result<Option.Option<Expression>, Refusal> =>
+  Result.gen(function* readOperands() {
     const children = elementsOf(element);
     switch (spec.arity) {
       case "none": {
@@ -314,7 +317,7 @@ const readGeneric = (
 export const readExpression = (
   reading: ExpressionReading,
   element: SourceElement,
-): Effect.Effect<Option.Option<Expression>, Refusal> => {
+): Result.Result<Option.Option<Expression>, Refusal> => {
   const kind = isQti(element) ? kindsByElement.get(element.local) : undefined;
   if (kind === undefined) {
     return reading.unread(element);

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result, Schema } from "effect";
 import { storedVersion } from "#plate/codec/record.ts";
+import { ConfigurationSchema } from "#plate/effect.ts";
 import { expressionKinds } from "#plate/model/expression.ts";
 import {
   acceptedItem,
@@ -28,7 +29,7 @@ import type {
   StoredTestSession,
   Value,
 } from "#plate/index.ts";
-import { readImports } from "#plate/test/imports.ts";
+import { readImports, sourceModules } from "#plate/test/imports.ts";
 
 /**
  * The README's opening, rule `17b156bd`: the title, the quoted tagline and the one-line summary,
@@ -52,12 +53,13 @@ const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
 
 /**
  * The README's sections: the eleven it had before M2, the four M2 adds, the one M3.b-2 adds, the
- * one M3.b-3 adds and the two align-54 adds.
+ * one M3.b-3 adds, the two align-54 adds and the one FE adds.
  */
 const headings = [
   "## Install",
   "## Start",
   "## Functions",
+  "## Effect",
   "## Navigation",
   "## Records",
   "## Results",
@@ -122,6 +124,55 @@ const outcomeOnly = [
  * The package's name, which a host imports plate's surface through.
  */
 const packageName = "@qti-pie/plate";
+
+/**
+ * The opt-in entry point for a server that runs Effect, `package.json`'s `./effect`.
+ */
+const effectEntry = `${packageName}/effect`;
+
+/**
+ * Give the names a module's static imports and re-exports carry, value and type alike.
+ *
+ * @param source The module's TypeScript.
+ * @param specifier Only the declarations of this specifier, or every declaration when none.
+ * @returns The names, in source order.
+ */
+const namesOf = (source: string, specifier?: string): readonly string[] =>
+  readImports(source).imports.flatMap((declaration) =>
+    specifier === undefined || declaration.specifier === specifier
+      ? declaration.names.map(({ name }) => name)
+      : [],
+  );
+
+/**
+ * Give the `PLATE_` variable `ConfigurationFromEnv` reads a configuration field from: `PLATE_` and
+ * the field's name in constant case, as `PLATE_HEADING_LEVEL` for `headingLevel`.
+ *
+ * @param field The field's name, in camel case.
+ * @returns The variable's name.
+ */
+const plateVariable = (field: string): string =>
+  `PLATE_${field.replaceAll(/[A-Z]/gu, (letter) => `_${letter}`).toUpperCase()}`;
+
+/**
+ * Give the span names plate's own modules open, tests left out: each name an `Effect.fn` or a
+ * `withSpan` gives under `plate.`.
+ *
+ * @returns The names, each once, in order.
+ */
+const plateSpans = (): readonly string[] =>
+  [
+    ...new Set(
+      [...sourceModules()]
+        .filter(([file]) => file.endsWith(".ts") && !file.endsWith(".test.ts"))
+        .flatMap(([, source]) =>
+          Array.from(
+            source.matchAll(/(?:Effect\.fn|withSpan)\(\s*"(?<span>plate\.[A-Za-z]+)"/gu),
+            ({ groups }) => groups?.["span"] ?? "",
+          ),
+        ),
+    ),
+  ].toSorted();
 
 /**
  * The part of plate's `package.json` the licence case reads.
@@ -615,6 +666,67 @@ describe("README.md", () => {
           paragraph.includes("`postings(redacted, instance)`") && paragraph.includes("Text Entry"),
       ),
       "a paragraph of Hosts names postings(redacted, instance) for a posted Text Entry",
+    );
+  });
+
+  it("[heading level refused] names MarkupRefused and InvalidHeadingLevel in the paragraph of Functions that describes render's parts option", () => {
+    assert.isTrue(
+      paragraphsOf("## Functions").some(
+        (paragraph) =>
+          paragraph.includes("`parts` option") &&
+          paragraph.includes("`MarkupRefused`") &&
+          paragraph.includes("`InvalidHeadingLevel`"),
+      ),
+      "a paragraph of Functions names MarkupRefused and InvalidHeadingLevel beside render's parts option",
+    );
+  });
+
+  it("[Effect entry documented] imports from @qti-pie/plate/effect only names src/effect.ts exports, value or type", () => {
+    const exported = new Set(namesOf(packageFile("src/effect.ts")));
+    const imported = codeBlocks(readme()).flatMap((block) => namesOf(scriptOf(block), effectEntry));
+
+    assert.isAbove(imported.length, 0, `a code block imports from ${effectEntry}`);
+    for (const name of imported) {
+      assert.isTrue(exported.has(name), `${name} is imported from ${effectEntry}`);
+    }
+  });
+
+  it("[Effect entry documented] gives in Effect's table the PLATE_ variable of every configuration field, and no other", () => {
+    const variables = Object.keys(ConfigurationSchema.fields).map(plateVariable).toSorted();
+    const rows = sectionOf("## Effect")
+      .split("\n")
+      .flatMap((line) => {
+        const variable = /^\| `(?<variable>PLATE_[A-Z_]+)` \|/u.exec(line)?.groups?.["variable"];
+
+        return variable === undefined ? [] : [variable];
+      })
+      .toSorted();
+
+    assert.include(variables, "PLATE_HEADING_LEVEL");
+    assert.deepStrictEqual(rows, variables);
+  });
+
+  it("[Effect entry documented] names in Effect every plate.* span plate's modules open, plate.check among them", () => {
+    const spans = plateSpans();
+    const effect = flatSectionOf("## Effect");
+
+    assert.include(spans, "plate.check");
+    for (const span of spans) {
+      assert.include(effect, `\`${span}\``, `Effect names ${span}`);
+    }
+  });
+
+  it("[Effect entry documented] names NotRedacted in the Functions prose, with redact and decodeRedacted, and says only render checks the redaction mark", () => {
+    assert.isTrue(
+      paragraphsOf("## Functions").some(
+        (paragraph) =>
+          paragraph.includes("`NotRedacted`") &&
+          paragraph.includes("`redact` and `decodeRedacted`") &&
+          paragraph.includes(
+            "Only `render` checks the redaction mark, because `renderStatus` and `renderNavigation` take no item.",
+          ),
+      ),
+      "a paragraph of Functions names NotRedacted and says only render checks the mark",
     );
   });
 

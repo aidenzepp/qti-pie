@@ -17,6 +17,7 @@ import type { NavigationPart } from "#plate/emit/navigation.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
 import type { UnknownPart } from "#plate/emit/parts.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
+import type { MarkupRefused } from "#plate/emit/serialise.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { refIdentifiersIn } from "#plate/model/item-refs.ts";
 import type { Test, TestPart } from "#plate/model/test.ts";
@@ -289,14 +290,15 @@ export interface NavigationOptions extends Pick<Options, "parts"> {
  * @param state The navigation, as {@link navigationState} gives it.
  * @param configuration The configuration, which gives the locale.
  * @param options The part overrides and the parts' order, none by default.
- * @returns The Root's HTML, or {@link UnknownPart} for an override the part table lacks, or
- *   {@link PartSwapRefused} for a replacement that breaks the swap invariant.
+ * @returns The Root's HTML, or {@link UnknownPart} for an override the part table lacks,
+ *   {@link PartSwapRefused} for a replacement that breaks the swap invariant, or
+ *   {@link MarkupRefused} for a replacement holding markup the serialiser cannot write.
  */
 export const renderNavigation = (
   state: NavigationState,
   configuration: Configuration,
   options: NavigationOptions = {},
-): Result.Result<string, PartSwapRefused | UnknownPart> =>
+): Result.Result<string, MarkupRefused | PartSwapRefused | UnknownPart> =>
   Result.gen(function* renderNavigationParts() {
     const parts = yield* resolveOverrides(options.parts);
     const root = yield* emitNavigation(
@@ -305,5 +307,5 @@ export const renderNavigation = (
       options.order,
     );
 
-    return toHtml(root);
+    return yield* toHtml(root);
   });

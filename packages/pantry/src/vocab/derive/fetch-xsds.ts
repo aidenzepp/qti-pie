@@ -327,23 +327,26 @@ export interface FetchReport {
 }
 
 /**
- * How many pins download at once.
+ * How many pinned files download at once, here and in the spec cache's fetcher,
+ * `#pantry/test/spec-cache/fetch.ts`.
  */
-const concurrency = 4;
+export const concurrency = 4;
 
 /**
- * How long one file's download may take, its body included: the largest pin, the ASI 3.0.1 XSD,
- * is about 19 MB.
+ * How long one file's download may take, its body included. The largest XSD, the ASI 3.0.1 one, is
+ * about 19 MB, and the largest file the spec cache's fetcher downloads, the QTI 3.0 XML binding's
+ * HTML, about 37 MB.
  */
 const downloadTimeout = Duration.minutes(5);
 
 /**
- * Say what a download ended with, for {@link XsdDownloadFailed}'s `reason`.
+ * Say what a download ended with, for the `reason` of {@link XsdDownloadFailed} and of the spec
+ * cache's `SpecDownloadFailed`.
  *
  * @param error - The request's failure, or the timeout's.
  * @returns A phrase that follows "was not downloaded from <url>:".
  */
-const reasonOf = (error: HttpClientError.HttpClientError | Cause.TimeoutError): string => {
+export const reasonOf = (error: HttpClientError.HttpClientError | Cause.TimeoutError): string => {
   if (Cause.isTimeoutError(error)) {
     return `no complete answer came within ${Duration.format(downloadTimeout)}`;
   }
@@ -386,6 +389,79 @@ const reasonOf = (error: HttpClientError.HttpClientError | Cause.TimeoutError): 
 };
 
 /**
+ * What the cache holds at a pinned path: `pinned` when the file there hashes to the pin, `stale`
+ * when its bytes differ from the pin, `absent` when there is no file there.
+ */
+export type Held = "absent" | "stale" | "pinned";
+
+/**
+ * Compare the file the cache holds at a pinned path with its pin.
+ *
+ * @param destination - The file's path.
+ * @param sha256 - Its pinned SHA-256.
+ * @returns What the cache holds there; any file system failure but a missing file.
+ */
+export const heldAgainstPin = Effect.fn("vocab.heldAgainstPin")(function* heldAgainstPin(
+  destination: string,
+  sha256: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const digest = yield* Digest.Digest;
+  const cached = yield* fs.readFile(destination).pipe(
+    Effect.map(Option.some),
+    Effect.catchIf(
+      (error) => error.reason._tag === "NotFound",
+      () => Effect.succeedNone,
+    ),
+  );
+
+  if (Option.isNone(cached)) {
+    return "absent" satisfies Held;
+  }
+
+  return (yield* digest.digestHex(Digest.sha256, cached.value)) === sha256
+    ? ("pinned" satisfies Held)
+    : ("stale" satisfies Held);
+});
+
+/**
+ * Download one pinned file's bytes, its body read within {@link downloadTimeout}.
+ *
+ * @param client - The client the download is made with.
+ * @param url - The file's URL.
+ * @returns The bytes served; the request's failure or the timeout's, which {@link reasonOf}
+ *   describes.
+ */
+export const downloadBytes = (client: HttpClient.HttpClient, url: string) =>
+  client.get(url).pipe(
+    Effect.flatMap((response) => response.arrayBuffer),
+    Effect.map((buffer) => new Uint8Array(buffer)),
+    Effect.timeout(downloadTimeout),
+  );
+
+/**
+ * Put bytes checked against their pin at the pinned path: write them to a scratch file inside the
+ * cache, then rename it into place, so the path never holds a partial file.
+ *
+ * @param bytes - The bytes, which hash to the pin.
+ * @param scratch - A path in a scratch directory inside the cache that nothing else uses.
+ * @param destination - The pinned path.
+ * @returns Nothing once the file is in place; the file system's failure.
+ */
+export const placeFile = Effect.fn("vocab.placeFile")(function* placeFile(
+  bytes: Uint8Array,
+  scratch: string,
+  destination: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const paths = yield* Path.Path;
+
+  yield* fs.makeDirectory(paths.dirname(destination), { recursive: true });
+  yield* fs.writeFile(scratch, bytes);
+  yield* fs.rename(scratch, destination);
+});
+
+/**
  * Settle one pin: keep the cached file when it hashes to the pin, and otherwise download it and
  * write it when the download does.
  *
@@ -409,27 +485,17 @@ const settle = Effect.fn("vocab.fetchXsd")(function* settle(
 
   yield* Effect.annotateCurrentSpan({ path, url: source.url });
 
-  const fs = yield* FileSystem.FileSystem;
   const paths = yield* Path.Path;
   const digest = yield* Digest.Digest;
   const destination = paths.join(directory, path);
-  const cached = yield* fs.readFile(destination).pipe(
-    Effect.map(Option.some),
-    Effect.catchIf(
-      (error) => error.reason._tag === "NotFound",
-      () => Effect.succeedNone,
-    ),
-  );
-  const staleCopy = Option.isSome(cached);
+  const held = yield* heldAgainstPin(destination, source.sha256);
 
-  if (staleCopy && (yield* digest.digestHex(Digest.sha256, cached.value)) === source.sha256) {
+  if (held === "pinned") {
     return "present" satisfies Settled;
   }
 
-  const bytes = yield* client.get(source.url).pipe(
-    Effect.flatMap((response) => response.arrayBuffer),
-    Effect.map((buffer) => new Uint8Array(buffer)),
-    Effect.timeout(downloadTimeout),
+  const staleCopy = held === "stale";
+  const bytes = yield* downloadBytes(client, source.url).pipe(
     Effect.mapError(
       (error) =>
         new XsdDownloadFailed({ path, reason: reasonOf(error), staleCopy, url: source.url }),
@@ -447,9 +513,7 @@ const settle = Effect.fn("vocab.fetchXsd")(function* settle(
     });
   }
 
-  yield* fs.makeDirectory(paths.dirname(destination), { recursive: true });
-  yield* fs.writeFile(scratch, bytes);
-  yield* fs.rename(scratch, destination);
+  yield* placeFile(bytes, scratch, destination);
 
   return staleCopy ? ("replaced" satisfies Settled) : ("fetched" satisfies Settled);
 });
@@ -533,7 +597,7 @@ export const summaryOf = (report: FetchReport): string => {
  * transient failure (a transport error, a timeout, HTTP 408, 429 or 5xx) tried again up to three
  * times, a second, two and four seconds apart.
  */
-const downloadClient = Layer.effect(
+export const downloadClient = Layer.effect(
   HttpClient.HttpClient,
   HttpClient.HttpClient.pipe(
     Effect.map(

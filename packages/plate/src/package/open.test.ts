@@ -2,7 +2,7 @@ import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { memoryUsage } from "node:process";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option, Result, Tracer } from "effect";
 import { corpusRoot, readCorpusFile } from "#plate/document/corpus.ts";
 import { directoryOf, pathOf, resolveIn, resolveInside } from "#plate/document/href.ts";
 import { readSource } from "#plate/document/read.ts";
@@ -8744,6 +8744,120 @@ describe("openPackage, align-54 r11 reading 152 names nothing: a structure ident
             ["attribute-type", "attribute-type", "branch-target"],
           ],
         );
+      }),
+  );
+});
+
+/**
+ * Run an effect under a tracer that keeps every span it starts, in the order each starts.
+ *
+ * @param effect The effect to trace.
+ * @returns The spans, once the effect has run.
+ */
+const spansOf = <A, E>(
+  effect: Effect.Effect<A, E>,
+): Effect.Effect<readonly Tracer.NativeSpan[], E> => {
+  const spans: Tracer.NativeSpan[] = [];
+  const tracer = Tracer.make({
+    span: (options) => {
+      const span = new Tracer.NativeSpan(options);
+      spans.push(span);
+
+      return span;
+    },
+  });
+
+  return effect.pipe(Effect.provideService(Tracer.Tracer, tracer), Effect.as(spans));
+};
+
+/**
+ * Find the one span of a name; the test fails when there is not exactly one.
+ *
+ * @param spans The spans.
+ * @param name The span's name.
+ * @returns The span.
+ */
+const spanNamed = (spans: readonly Tracer.NativeSpan[], name: string): Tracer.NativeSpan => {
+  const named = spans.filter((span) => span.name === name);
+  if (named.length !== 1 || named[0] === undefined) {
+    return assert.fail(`one span is named ${name}, not ${named.length}`);
+  }
+
+  return named[0];
+};
+
+/**
+ * Give the children of a span, each as its name and the document attributes it carries, in the
+ * order each started.
+ *
+ * @param spans The spans.
+ * @param parent The parent span.
+ * @returns Its children's names, each with its `document.` attributes as key and value, sorted by
+ *   key.
+ */
+const childrenOf = (
+  spans: readonly Tracer.NativeSpan[],
+  parent: Tracer.NativeSpan,
+): readonly (readonly [string, readonly (readonly [string, unknown])[]])[] =>
+  spans
+    .filter((span) => Option.getOrUndefined(span.parent) === parent)
+    .map((span) => [
+      span.name,
+      [...span.attributes]
+        .filter(([key]) => key.startsWith("document."))
+        .toSorted(([left], [right]) => left.localeCompare(right)),
+    ]);
+
+/**
+ * The attributes of a `plate.check` span over an accepted item at a location, sorted by key.
+ *
+ * @param at The item's location.
+ * @returns The span's `document.` attributes.
+ */
+const acceptedItemCheck = (at: string): readonly (readonly [string, string])[] => [
+  ["document.kind", "item"],
+  ["document.location", at],
+  ["document.verdict", "accepted"],
+];
+
+describe("the library's spans", () => {
+  it.effect(
+    "plate span tree: openPackage of a manifest and two items reads each under plate.readSource and judges each item under plate.check, all under plate.openPackage",
+    () =>
+      Effect.gen(function* packageSpans() {
+        const files = packageOf({
+          "items/a.xml": itemXml("a", "SCORE"),
+          "items/b.xml": itemXml("b", "SCORE"),
+          [manifestFile]: manifestXml(
+            resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml"),
+            resourceXml("B", "imsqti_item_xmlv3p0", "items/b.xml"),
+          ),
+        });
+        const spans = yield* spansOf(openPackage(location, files));
+        const a = fileLocation(location, "items/a.xml");
+        const b = fileLocation(location, "items/b.xml");
+
+        assert.deepStrictEqual(childrenOf(spans, spanNamed(spans, "plate.openPackage")), [
+          ["plate.readSource", [["document.location", fileLocation(location, manifestFile)]]],
+          ["plate.readSource", [["document.location", a]]],
+          ["plate.check", acceptedItemCheck(a)],
+          ["plate.readSource", [["document.location", b]]],
+          ["plate.check", acceptedItemCheck(b)],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "plate span tree: open of one item reads it under plate.readSource and judges it under plate.check, both under plate.open",
+    () =>
+      Effect.gen(function* documentSpans() {
+        const bytes = new TextEncoder().encode(itemXml("a", "SCORE"));
+        const spans = yield* spansOf(openDocument("a.xml", bytes));
+
+        assert.deepStrictEqual(childrenOf(spans, spanNamed(spans, "plate.open")), [
+          ["plate.readSource", [["document.location", "a.xml"]]],
+          ["plate.check", acceptedItemCheck("a.xml")],
+        ]);
       }),
   );
 });

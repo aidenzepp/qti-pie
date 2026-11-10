@@ -1669,8 +1669,8 @@ const testBuiltIns = builtInNamesOf(testKind);
 const itemBuiltIns = builtInNamesOf(itemKind);
 
 /**
- * The kinds whose `duration` a part's or a section's prefix names (information model §2.2.2,
- * info.txt:9214: "time spent on test parts or sections are treated as built-in response variables
+ * The kinds whose `duration` a part's or a section's prefix names (information model §2.8.5,
+ * info.txt:5373: "time spent on test parts or sections are treated as built-in response variables
  * declared within each respective scope"; a section ref names its placement as a section does,
  * spec reading 86).
  */

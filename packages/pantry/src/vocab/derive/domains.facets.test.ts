@@ -25,19 +25,11 @@ import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import {
-  Array as Arr,
-  Config,
-  Duration,
-  Effect,
-  FileSystem,
-  Formatter,
-  Option,
-  Result,
-} from "effect";
+import { Array as Arr, Duration, Effect, FileSystem, Formatter, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { compile } from "#pantry/grammar/domains.ts";
+import { cacheDirectory, xsdPart2Text } from "#pantry/test/spec-cache/pins.ts";
 import {
   builtinBases,
   builtinDomainOf,
@@ -1282,26 +1274,13 @@ describe("vocab/derive/domains.ts, length facets", () => {
 });
 
 /**
- * The text rendering of XML Schema 1.0 Part 2, Second Edition, cached once in
- * `~/.cache/gr8des/anyuri-specs/`: the file Appendix A is read from.
- *
- * @see {@link https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/ | XML Schema Part 2, Second Edition}
- */
-const specFile = "anyuri-specs/xsd10-2.txt";
-
-/**
- * The SHA-256 of {@link specFile} as it was read when this suite was written.
- */
-const specSha256 = "6f6119251e62bb162e228e5f8c57c0ca3d7dc0449b9f58d66c451d3b1dbfd66b";
-
-/**
- * The cached specification's text, or `None` when the cache does not hold it.
+ * The cached text rendering of XML Schema 1.0 Part 2, Second Edition ({@link xsdPart2Text}), the
+ * file Appendix A is read from, or `None` when the cache does not hold it.
  */
 const specText = await Effect.runPromise(
   Effect.gen(function* readSpec() {
-    const home = yield* Config.NonEmptyString("HOME");
     const fs = yield* FileSystem.FileSystem;
-    const file = `${home}/.cache/gr8des/${specFile}`;
+    const file = `${yield* cacheDirectory}/${xsdPart2Text.path}`;
 
     return (yield* fs.exists(file)) ? Option.some(yield* fs.readFileString(file)) : Option.none();
   }).pipe(Effect.provide(NodeServices.layer)),
@@ -1400,7 +1379,7 @@ describe.skipIf(Option.isNone(specText))(
     );
 
     it("reads the pinned rendering of the specification", () => {
-      assert.strictEqual(createHash("sha256").update(text).digest("hex"), specSha256);
+      assert.strictEqual(createHash("sha256").update(text).digest("hex"), xsdPart2Text.sha256);
     });
 
     it.effect(

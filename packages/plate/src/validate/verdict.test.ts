@@ -26,6 +26,7 @@ import type { Test } from "#plate/model/test.ts";
 import { InvalidValue } from "#plate/model/values.ts";
 import type { Redacted } from "#plate/payload.ts";
 import { redact } from "#plate/render.ts";
+import { allowedEffectNames, readImports, sourceModules, valueNames } from "#plate/test/imports.ts";
 import { open } from "#plate/validate/open.ts";
 import { Refusal, refusalRules } from "#plate/validate/refusal.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
@@ -5041,5 +5042,30 @@ describe("check, a built-in's name a test declares, read as a response (reading 
         sentence: `**\`${testLocation}\`, at \`qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-correct\`: refused.** \`qti-correct\` names the built-in \`completionStatus\`, which has no declaration, so no mapping or correct response. Rule \`undeclared-variable\`. To make it valid: name a response an item declares, through its item ref, written \`ITEMREF.RESPONSE\`.`,
       },
     ]);
+  });
+});
+
+describe("check, the builders it runs", () => {
+  it("builders without a runtime: check runs no Effect.runSync, and no model module value-imports from effect more than Array, Data, Option, pipe and Result", () => {
+    const modules = sourceModules();
+    const verdict = modules.get("src/validate/verdict.ts");
+    const builders = [...modules].filter(
+      ([module]) =>
+        module.startsWith("src/model/") && module.endsWith(".ts") && !module.endsWith(".test.ts"),
+    );
+    const effectNames = builders.flatMap(([module, source]) =>
+      readImports(source)
+        .imports.filter((declaration) => declaration.specifier === "effect")
+        .flatMap(valueNames)
+        .filter((name) => !allowedEffectNames.has(name))
+        .map((name) => `${module}: ${name}`),
+    );
+
+    assert.isDefined(verdict);
+    assert.isAbove(builders.length, 0);
+    assert.deepStrictEqual(
+      { effectNames, runSync: verdict.includes("Effect.runSync") },
+      { effectNames: [], runSync: false },
+    );
   });
 });

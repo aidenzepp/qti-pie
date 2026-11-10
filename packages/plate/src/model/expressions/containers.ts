@@ -21,7 +21,7 @@
  *
  * @module
  */
-import { Effect } from "effect";
+import { Result } from "effect";
 import { identifierAttribute, requiredValue } from "#plate/model/attributes.ts";
 import {
   accepts,
@@ -337,7 +337,7 @@ export const containersRules: FamilyRules<
 const isNullReader: ReaderSpec<"is-null"> = {
   _tag: "generic",
   arity: "one",
-  attributes: () => Effect.succeed((operands) => ({ kind: "is-null", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "is-null", operands })),
 };
 
 /**
@@ -346,7 +346,7 @@ const isNullReader: ReaderSpec<"is-null"> = {
 const multipleReader: ReaderSpec<"multiple"> = {
   _tag: "generic",
   arity: "any",
-  attributes: () => Effect.succeed((operands) => ({ kind: "multiple", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "multiple", operands })),
 };
 
 /**
@@ -355,7 +355,7 @@ const multipleReader: ReaderSpec<"multiple"> = {
 const orderedReader: ReaderSpec<"ordered"> = {
   _tag: "generic",
   arity: "any",
-  attributes: () => Effect.succeed((operands) => ({ kind: "ordered", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "ordered", operands })),
 };
 
 /**
@@ -372,7 +372,7 @@ const repeatReader: ReaderSpec<"repeat"> = {
   _tag: "generic",
   arity: "some",
   attributes: (context, element) =>
-    Effect.gen(function* readNumberRepeats() {
+    Result.gen(function* readNumberRepeats() {
       const numberRepeats = intOrIdentifierOf(
         yield* requiredValue(context.walk, element, "number-repeats"),
       );
@@ -387,7 +387,7 @@ const repeatReader: ReaderSpec<"repeat"> = {
 const containerSizeReader: ReaderSpec<"container-size"> = {
   _tag: "generic",
   arity: "one",
-  attributes: () => Effect.succeed((operands) => ({ kind: "container-size", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "container-size", operands })),
 };
 
 /**
@@ -403,7 +403,7 @@ const indexReader: ReaderSpec<"index"> = {
   _tag: "generic",
   arity: "one",
   attributes: (context, element) =>
-    Effect.gen(function* readIndexN() {
+    Result.gen(function* readIndexN() {
       const n = intOrIdentifierOf(yield* requiredValue(context.walk, element, "n"));
 
       return (operands) => ({ kind: "index", n, operands });
@@ -416,7 +416,7 @@ const indexReader: ReaderSpec<"index"> = {
 const randomReader: ReaderSpec<"random"> = {
   _tag: "generic",
   arity: "one",
-  attributes: () => Effect.succeed((operands) => ({ kind: "random", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "random", operands })),
 };
 
 /**
@@ -425,7 +425,7 @@ const randomReader: ReaderSpec<"random"> = {
 const memberReader: ReaderSpec<"member"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "member", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "member", operands })),
 };
 
 /**
@@ -434,7 +434,7 @@ const memberReader: ReaderSpec<"member"> = {
 const deleteReader: ReaderSpec<"delete"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "delete", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "delete", operands })),
 };
 
 /**
@@ -443,7 +443,7 @@ const deleteReader: ReaderSpec<"delete"> = {
 const containsReader: ReaderSpec<"contains"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "contains", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "contains", operands })),
 };
 
 /**
@@ -458,7 +458,7 @@ const fieldValueReader: ReaderSpec<"field-value"> = {
   _tag: "generic",
   arity: "one",
   attributes: (context, element) =>
-    Effect.map(
+    Result.map(
       identifierAttribute(context.walk, element, "field-identifier"),
       (fieldIdentifier) => (operands) => ({ fieldIdentifier, kind: "field-value", operands }),
     ),

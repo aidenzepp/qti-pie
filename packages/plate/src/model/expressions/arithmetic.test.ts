@@ -130,43 +130,45 @@ describe("the arithmetic family's reader specs and kind rules", () => {
     "[I-9a] build an item whose inline processing holds qti-sum, qti-product, qti-subtract, qti-divide, qti-min and qti-max, with processing some",
     () =>
       Effect.gen(function* buildsArithmetic() {
-        const built = yield* buildItem(
-          processingItem(
-            [
-              outcomeDeclaration("SUM", "integer"),
-              outcomeDeclaration("PRODUCT", "float"),
-              outcomeDeclaration("DIFFERENCE", "integer"),
-              outcomeDeclaration("QUOTIENT", "float"),
-              outcomeDeclaration("LEAST", "integer"),
-              outcomeDeclaration("GREATEST", "float"),
-            ],
-            [
-              setOutcomeElement(
-                "SUM",
-                expressionElement("sum", [], [integerElement("1"), integerElement("2")]),
-              ),
-              setOutcomeElement(
-                "PRODUCT",
-                expressionElement("product", [], [integerElement("3"), floatElement("0.5")]),
-              ),
-              setOutcomeElement(
-                "DIFFERENCE",
-                expressionElement("subtract", [], [integerElement("5"), integerElement("7")]),
-              ),
-              setOutcomeElement(
-                "QUOTIENT",
-                expressionElement("divide", [], [integerElement("7"), integerElement("2")]),
-              ),
-              setOutcomeElement("LEAST", expressionElement("min", [], [integerElement("4")])),
-              setOutcomeElement(
-                "GREATEST",
-                expressionElement(
-                  "max",
-                  [],
-                  [floatElement("2.5"), integerElement("3"), floatElement("-1")],
+        const built = yield* Effect.fromResult(
+          buildItem(
+            processingItem(
+              [
+                outcomeDeclaration("SUM", "integer"),
+                outcomeDeclaration("PRODUCT", "float"),
+                outcomeDeclaration("DIFFERENCE", "integer"),
+                outcomeDeclaration("QUOTIENT", "float"),
+                outcomeDeclaration("LEAST", "integer"),
+                outcomeDeclaration("GREATEST", "float"),
+              ],
+              [
+                setOutcomeElement(
+                  "SUM",
+                  expressionElement("sum", [], [integerElement("1"), integerElement("2")]),
                 ),
-              ),
-            ],
+                setOutcomeElement(
+                  "PRODUCT",
+                  expressionElement("product", [], [integerElement("3"), floatElement("0.5")]),
+                ),
+                setOutcomeElement(
+                  "DIFFERENCE",
+                  expressionElement("subtract", [], [integerElement("5"), integerElement("7")]),
+                ),
+                setOutcomeElement(
+                  "QUOTIENT",
+                  expressionElement("divide", [], [integerElement("7"), integerElement("2")]),
+                ),
+                setOutcomeElement("LEAST", expressionElement("min", [], [integerElement("4")])),
+                setOutcomeElement(
+                  "GREATEST",
+                  expressionElement(
+                    "max",
+                    [],
+                    [floatElement("2.5"), integerElement("3"), floatElement("-1")],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
 

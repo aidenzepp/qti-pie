@@ -210,8 +210,8 @@ describe.skipIf(!held)("the law sources' citations", () => {
     // A line stands in the section of the heading at or before it: the duration sentence of
     // §2.2.2.2, a variable mapping's source of §7.48.1, the table of contents in none.
     for (const [line, section] of [
-      [8468, Option.some("2.2.2.2")],
-      [71_657, Option.some("7.48.1")],
+      [4656, Option.some("2.2.2.2")],
+      [80_470, Option.some("7.48.1")],
       [1790, Option.none()],
     ] as const) {
       assert.deepStrictEqual(model?.sectionOfLine(line), section, `info.txt:${line}`);
@@ -248,8 +248,8 @@ describe.skipIf(!held)("the law sources' citations", () => {
           ["Overview", `${model}#Main2p12 (§2.12: 'Fragments are packaged as separate resources')`],
           ["Dangling", `${model}#Data_BaseType (§5.130)`],
           ["Unread", "https://www.imsglobal.org/spec/qti/v9p0/info#Data_SetValue"],
-          ["Lined", "the duration of an item (info.txt:8468, and :999999)"],
-          ["Held", `${model}#Data_SetValue (§5.130 and §5.130.2, the expression), info.txt:71657`],
+          ["Lined", "the duration of an item (info.txt:4656, and :999999)"],
+          ["Held", `${model}#Data_SetValue (§5.130 and §5.130.2, the expression), info.txt:80470`],
         ]),
         sections,
       ),
@@ -258,7 +258,7 @@ describe.skipIf(!held)("the law sources' citations", () => {
         "Overview: §2.12 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
         "Dangling: #Data_BaseType names no heading of the QTI 3.0 information model",
         "Unread: https://www.imsglobal.org/spec/qti/v9p0/info#Data_SetValue is no specification whose sections can be judged",
-        "Lined: info.txt:8468 stands in §2.2.2.2 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
+        "Lined: info.txt:4656 stands in §2.2.2.2 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
         "Lined: info.txt:999999 stands in no section of the QTI 3.0 information model",
       ],
     );

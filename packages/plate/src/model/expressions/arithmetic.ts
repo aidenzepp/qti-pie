@@ -14,7 +14,7 @@
  *
  * @module
  */
-import { Effect } from "effect";
+import { Result } from "effect";
 import { everyOperand, singleOf } from "#plate/model/expression.ts";
 import type { FamilyRules, KindRule } from "#plate/model/expression.ts";
 import type { FamilyReaders, ReaderSpec } from "#plate/model/expressions/read.ts";
@@ -109,7 +109,7 @@ export const arithmeticRules: FamilyRules<
 const sumReader: ReaderSpec<"sum"> = {
   _tag: "generic",
   arity: "some",
-  attributes: () => Effect.succeed((operands) => ({ kind: "sum", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "sum", operands })),
 };
 
 /**
@@ -118,7 +118,7 @@ const sumReader: ReaderSpec<"sum"> = {
 const productReader: ReaderSpec<"product"> = {
   _tag: "generic",
   arity: "some",
-  attributes: () => Effect.succeed((operands) => ({ kind: "product", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "product", operands })),
 };
 
 /**
@@ -127,7 +127,7 @@ const productReader: ReaderSpec<"product"> = {
 const subtractReader: ReaderSpec<"subtract"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "subtract", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "subtract", operands })),
 };
 
 /**
@@ -136,7 +136,7 @@ const subtractReader: ReaderSpec<"subtract"> = {
 const divideReader: ReaderSpec<"divide"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "divide", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "divide", operands })),
 };
 
 /**
@@ -145,7 +145,7 @@ const divideReader: ReaderSpec<"divide"> = {
 const minReader: ReaderSpec<"min"> = {
   _tag: "generic",
   arity: "some",
-  attributes: () => Effect.succeed((operands) => ({ kind: "min", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "min", operands })),
 };
 
 /**
@@ -154,7 +154,7 @@ const minReader: ReaderSpec<"min"> = {
 const maxReader: ReaderSpec<"max"> = {
   _tag: "generic",
   arity: "some",
-  attributes: () => Effect.succeed((operands) => ({ kind: "max", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "max", operands })),
 };
 
 /**

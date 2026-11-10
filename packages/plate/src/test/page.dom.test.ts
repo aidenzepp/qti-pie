@@ -13,6 +13,7 @@
  * engines' results apart.
  */
 import { assert, describe, it } from "@effect/vitest";
+import { Result } from "effect";
 import { server } from "vite-plus/test/browser/context";
 import { h, text } from "#plate/emit/node.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
@@ -35,7 +36,7 @@ describe(server.browser, () => {
   });
 
   it("runs a plate browser module", () => {
-    assert.strictEqual(toHtml(h("p", {}, [text("a & <b>")])), written);
+    assert.strictEqual(Result.getOrThrow(toHtml(h("p", {}, [text("a & <b>")]))), written);
   });
 
   it("parses the string back", () => {

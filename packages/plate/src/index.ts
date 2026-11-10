@@ -16,10 +16,10 @@
  *
  * Nothing else under `src/` is reachable from outside the package. The tests' seams
  * (`acceptForTest`, `acceptTestForTest`, `acceptSectionForTest`, `acceptStimulusForTest` and
- * `acceptPackageForTest`) and the redacted item's brand constructor (`brandRedacted`) are never
- * exported here, so only `check` makes an `Accepted` and the other accepted roots, only
- * `openPackage` makes an `AcceptedPackage`, and only `redact` and `decodeRedacted` make a
- * `Redacted`.
+ * `acceptPackageForTest`) and the redacted item's brand constructor (`brandRedacted`) and the
+ * predicate that reads its mark are never exported here, so only `check` makes an `Accepted` and
+ * the other accepted roots, only `openPackage` makes an `AcceptedPackage`, and only `redact` and
+ * `decodeRedacted` make a `Redacted`, which `render` checks at run time too (`NotRedacted`).
  *
  * @module
  */
@@ -58,6 +58,19 @@ export { h } from "#plate/emit/node.ts";
 export type { PartOverrides } from "#plate/emit/parts.ts";
 
 export { UnknownPart } from "#plate/emit/parts.ts";
+
+export type { MarkupRefusal } from "#plate/emit/serialise.ts";
+
+export {
+  EscapableRawTextElementChild,
+  EventHandlerAttribute,
+  MalformedAttributeName,
+  MalformedTagName,
+  MarkupRefused,
+  PlaintextElement,
+  RawTextChildren,
+  VoidElementChildren,
+} from "#plate/emit/serialise.ts";
 
 export { PartSwapRefused } from "#plate/emit/swap.ts";
 
@@ -121,7 +134,15 @@ export { postings } from "#plate/payload.ts";
 
 export type { Options, Rendered } from "#plate/render.ts";
 
-export { InvalidInstance, OutputTooLarge, redact, render, renderStatus } from "#plate/render.ts";
+export {
+  InvalidHeadingLevel,
+  InvalidInstance,
+  NotRedacted,
+  OutputTooLarge,
+  redact,
+  render,
+  renderStatus,
+} from "#plate/render.ts";
 
 export { checkResponses } from "#plate/responses.ts";
 

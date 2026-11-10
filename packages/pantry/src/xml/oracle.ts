@@ -57,7 +57,7 @@ export const OracleLayer = NodeChildProcessSpawner.layer;
  * cannot be resolved: 2.9.13 refuses it. The comparison never sends that fixture to `xmllint`,
  * because it holds an entity reference.
  */
-const xmllintPath = Config.String("XMLLINT").pipe(Config.withDefault("xmllint"));
+export const xmllintPath = Config.String("XMLLINT").pipe(Config.withDefault("xmllint"));
 
 /**
  * How one `xmllint` run ended: its exit status, what it wrote to standard output as bytes, and what

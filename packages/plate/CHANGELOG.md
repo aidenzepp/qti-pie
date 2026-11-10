@@ -7,8 +7,65 @@ changes. [`docs/spec-readings.md`](../../docs/spec-readings.md) numbers the read
 ## Unreleased
 
 These entries list the surface of M1 and M2, what M3 adds to it, and each change to how plate
-reads the specification. plate is not published, and both of its entry points are unstable until
-M3.
+reads the specification. plate is not published, and its entry points are unstable until M3.
+
+### The full-Effect phase (FE)
+
+- `render`, `renderStatus` and `renderNavigation` return, never throw, `MarkupRefused` for host
+  markup in the `parts` option that the serialiser cannot write. Its `reason` is one of seven
+  classes, which `MarkupRefusal` unions: `VoidElementChildren`, `MalformedTagName`,
+  `MalformedAttributeName`, `RawTextChildren`, `EscapableRawTextElementChild`, `PlaintextElement`
+  and `EventHandlerAttribute`. `render` and `renderStatus` also return, never throw,
+  `InvalidHeadingLevel` for a `headingLevel` that `configure` would not make: `renderStatus` for a
+  level that is not an integer from 1 to 6, and `render`, on an item that writes a heading, for a
+  level that, capped at 6, is not an integer (`NaN`, `-Infinity` or a fraction below 6). Every
+  other level renders as before: a fraction above 6 and `Infinity` as `h6`. `src/index.ts` exports
+  `MarkupRefused`, `InvalidHeadingLevel`, the seven reason classes and `MarkupRefusal`. One order
+  of failures changes: `render` with such a level and an `outputBudget` that ends before the item's
+  first heading returns `InvalidHeadingLevel` where it returned `OutputTooLarge`.
+- `render` returns, never throws, `NotRedacted` for an item that neither `redact` nor
+  `decodeRedacted` made: a copy or a cast of a redacted item, a `structuredClone`, an item posted to
+  a worker and not read back with `decodeRedacted`, or one that a second copy of plate's modules
+  made. Before, `render` rendered such a copy. It asks before anything else, so a copy past the
+  output budget is `NotRedacted`, not `OutputTooLarge`. `renderStatus` and `renderNavigation` take
+  no item and check no mark. `src/index.ts` exports `NotRedacted`.
+- The library's spans are named under `plate.`: `open`, `openPackage`, `readSource`,
+  `readCorpusFile`, `corpusDocuments`, `generateTables` and `generateOccurrences` become
+  `plate.open`, `plate.openPackage`, `plate.readSource`, `plate.readCorpusFile`,
+  `plate.corpusDocuments`, `plate.generateTables` and `plate.generateOccurrences`. `plate.check` is
+  new: `open` and `openPackage` judge each document under it, with the attributes
+  `document.location`, `document.kind` and `document.verdict`. `plate.configure` keeps its name.
+- A third entry point, `@qti-pie/plate/effect`, is opt-in and for servers. Neither
+  `@qti-pie/plate` nor any browser module imports it, so a host that does not import it loads none
+  of it.
+  - It exports every name of `@qti-pie/plate`. `acceptedItem`, `advance`, `allowedIntents`,
+    `begin`, `checkResponses`, `current`, `decode`, `decodeRedacted`, `decodeSession`,
+    `encodeRedacted`, `encodeSession`, `itemView`, `navigationState`, `permits`, `redact`,
+    `render`, `renderNavigation`, `renderStatus`, `restore`, `results`, `score` and `startTest`
+    are Effects there. Each calls the plain function, and succeeds and fails as it does.
+    `acceptedItem` fails with the new `Refused` where the plain one gives none. `PlateError` is
+    the union of every failure, for `Effect.catchTags`.
+  - `Configuration` is a service there, with no default, and the functions that take a
+    configuration in `@qti-pie/plate` read it instead. `ConfigurationFromEnv` provides it from
+    twelve variables of the `ConfigProvider` in effect, each a field's name in constant case after
+    `PLATE_`: `PLATE_ALLOW_COMMENT`, `PLATE_ALLOW_REVIEW`, `PLATE_ALLOW_SKIPPING`,
+    `PLATE_ASSET_BASE`, `PLATE_HEADING_LEVEL`, `PLATE_LOCALE`, `PLATE_MAX_ATTEMPTS`,
+    `PLATE_OUTPUT_BUDGET`, `PLATE_SEED`, `PLATE_SHOW_FEEDBACK`, `PLATE_SHOW_SOLUTION` and
+    `PLATE_VALIDATE_RESPONSES`. `configurationLayer` provides it from settings in hand. Both fail
+    with `InvalidConfiguration`.
+  - `startTest` and `advance` take the time from `Clock`, and `results` takes an item's
+    `datestamp` from it when the host leaves one out. `begin` and `startTest` draw an absent seed,
+    and `render` an absent instance, through `Randomness`, a reference of `SecureRandom`'s shape
+    that a program can replace. `drawnSeed` and `drawnInstance` draw from it.
+  - `StoredRecordSchema`, `StoredTestSessionSchema`, `RedactedJsonSchema`, `ConfigurationSchema`
+    and `RefusalSchema` check shape only, and each has a JSON Schema document:
+    `StoredRecordJsonSchema`, `StoredTestSessionJsonSchema`, `RedactedJsonJsonSchema`,
+    `ConfigurationJsonSchema` and `RefusalJsonSchema`.
+  - Its functions that do an item's or a session's work run in spans named for them, from
+    `plate.render` to `plate.decodeRedacted`, and log at the debug level when they draw a seed or
+    an instance or take a datestamp from the `Clock`. No span, log or recorded failure holds a
+    response, a record value, a seed, an item's body or HTML, or a stored record or session. plate
+    wires no exporter.
 
 ### How plate reads the shared readings after pantry's cutover, 2026-11-09 (align-54)
 
@@ -497,11 +554,11 @@ M3.
   of such an expression, is not the variable's, `score`, `startTest` and `advance` return
   `OutcomeMismatchError` and do not throw. For example, a `float` `SCORE` set from `integerValue`
   fails when the candidate types `12`, and so does an `integer` `COUNT` set from the `qti-sum` of
-  `integerValue` and `2.0`, which is a `float`. `startTest` returns it for a template default of
-  the first part that reads a field of a declared record, through `qti-default` or `qti-correct`,
-  before anyone answers. Read the field whose base type is the variable's, such as `floatValue` for
-  a `float`. Keep the type of an expression over a field fixed, such as a `float` set from a sum
-  that includes a `float`.
+  `integerValue` and `2.0`, which is a `float`. `startTest` returns it for a default that it
+  applies as the first part starts, since such a default can read a field of a declared record,
+  through `qti-default` or `qti-correct`, before anyone answers. Read the field whose base type is
+  the variable's, such as `floatValue` for a `float`. Keep the type of an expression over a field
+  fixed, such as a `float` set from a sum that includes a `float`.
 - A `qti-multiple`, `qti-ordered` or `qti-repeat` built over a `qti-field-value` is NULL, as one
   built over `qti-custom-operator` is, even when the field holds a value. So `qti-container-size`
   of one is 0.

@@ -76,9 +76,9 @@ const note = (status: number, title: string, detail: string) =>
  * Build the page's model for this request: the item's page, or a note saying why not.
  */
 const program = Effect.gen(function* astroPage() {
-  const corpus = yield* Config.String("PLATE_CORPUS_DIR").pipe(Config.withDefault(""));
+  const configured = yield* Config.option(Config.NonEmptyString("PLATE_CORPUS_DIR"));
 
-  if (corpus === "") {
+  if (Option.isNone(configured)) {
     return note(
       500,
       "No corpus",
@@ -86,6 +86,7 @@ const program = Effect.gen(function* astroPage() {
     );
   }
 
+  const corpus = configured.value;
   const bytes = yield* Effect.result(
     Effect.tryPromise(() => readFile(path.join(corpus, location))),
   );

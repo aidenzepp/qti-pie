@@ -1094,7 +1094,7 @@ const inlineChoiceWith = (content: string) =>
           ].join(""),
         ),
       ),
-      buildItem,
+      (source) => Effect.fromResult(buildItem(source)),
     ),
     (built) => [childrenOf(built.body[0])[1], built.unsupported] as const,
   );
@@ -1288,8 +1288,8 @@ describe("buildItem", () => {
     "[I-0] [I-1] [I-2] [I-7] [Q-2] builds BG007's Choice, and its template's rule tree is the inline block's",
     () =>
       Effect.gen(function* buildsBg007() {
-        const built: Item = yield* buildItem(bg007(template("match_correct")));
-        const inline = yield* buildItem(bg007(matchCorrectBlock()));
+        const built: Item = yield* Effect.fromResult(buildItem(bg007(template("match_correct"))));
+        const inline = yield* Effect.fromResult(buildItem(bg007(matchCorrectBlock())));
         const interaction = choiceIn(built.body);
 
         assert.strictEqual(built.document, "items/BG007.xml");
@@ -1328,28 +1328,30 @@ describe("buildItem", () => {
 
   it.effect("resolves map_response to its rule tree and reads the mapping", () =>
     Effect.gen(function* buildsMapResponse() {
-      const built = yield* buildItem(
-        item({
-          after: [template("map_response.xml")],
-          body: [el("qti-text-entry-interaction", [attr("response-identifier", "RESPONSE")])],
-          declarations: [
-            declaration("qti-response-declaration", "RESPONSE", "string", "single", [
-              el(
-                "qti-mapping",
-                [attr("default-value", "0")],
-                [
-                  el("qti-map-entry", [
-                    attr("case-sensitive", "true"),
-                    attr("map-key", "York"),
-                    attr("mapped-value", "1"),
-                  ]),
-                  el("qti-map-entry", [attr("map-key", "york"), attr("mapped-value", "0.5")]),
-                ],
-              ),
-            ]),
-            declaration("qti-outcome-declaration", "SCORE", "float", "single"),
-          ],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            after: [template("map_response.xml")],
+            body: [el("qti-text-entry-interaction", [attr("response-identifier", "RESPONSE")])],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "string", "single", [
+                el(
+                  "qti-mapping",
+                  [attr("default-value", "0")],
+                  [
+                    el("qti-map-entry", [
+                      attr("case-sensitive", "true"),
+                      attr("map-key", "York"),
+                      attr("mapped-value", "1"),
+                    ]),
+                    el("qti-map-entry", [attr("map-key", "york"), attr("mapped-value", "0.5")]),
+                  ],
+                ),
+              ]),
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+            ],
+          }),
+        ),
       );
 
       assert.deepStrictEqual(
@@ -1403,20 +1405,22 @@ describe("buildItem", () => {
     "[I-1] holds a point declaration's qti-area-mapping, its entries in document order",
     () =>
       Effect.gen(function* holdsAreaMapping() {
-        const built = yield* buildItem(
-          item({
-            after: [template("map_response_point")],
-            body: [],
-            declarations: [
-              declaration("qti-response-declaration", "RESPONSE", "point", "single", [
-                areaMapping([], "50"),
-              ]),
-              declaration("qti-response-declaration", "OTHER", "identifier", "single", [
-                areaMapping([], "50"),
-              ]),
-              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              after: [template("map_response_point")],
+              body: [],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "point", "single", [
+                  areaMapping([], "50"),
+                ]),
+                declaration("qti-response-declaration", "OTHER", "identifier", "single", [
+                  areaMapping([], "50"),
+                ]),
+                declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -1442,18 +1446,24 @@ describe("buildItem", () => {
     "[I-1] holds an area mapping's bounds and default, and percent for a coordinate 50%",
     () =>
       Effect.gen(function* holdsPercentAreaMapping() {
-        const built = yield* buildItem(
-          item({
-            body: [],
-            declarations: [
-              declaration("qti-response-declaration", "RESPONSE", "point", "multiple", [
-                areaMapping(
-                  [attr("default-value", "-1"), attr("lower-bound", "0"), attr("upper-bound", "2")],
-                  "50%",
-                ),
-              ]),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "point", "multiple", [
+                  areaMapping(
+                    [
+                      attr("default-value", "-1"),
+                      attr("lower-bound", "0"),
+                      attr("upper-bound", "2"),
+                    ],
+                    "50%",
+                  ),
+                ]),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -1480,8 +1490,12 @@ describe("buildItem", () => {
     () =>
       Effect.gen(function* resolvesMapResponsePoint() {
         const rules = yield* templateRules("map_response_point");
-        const inline = yield* buildItem(pointItem(el("qti-response-processing", [], rules)));
-        const built = yield* buildItem(pointItem(template("map_response_point")));
+        const inline = yield* Effect.fromResult(
+          buildItem(pointItem(el("qti-response-processing", [], rules))),
+        );
+        const built = yield* Effect.fromResult(
+          buildItem(pointItem(template("map_response_point"))),
+        );
 
         assert.deepStrictEqual(built.processing, Option.some(mapResponsePoint));
         assert.deepStrictEqual(inline.processing, built.processing);
@@ -1511,8 +1525,8 @@ describe("buildItem", () => {
     "[I-9b] map_response_point scores a point in the circle or on its edge 1, one in no area the default, and NULL 0",
     () =>
       Effect.gen(function* scoresMapResponsePoint() {
-        const built = yield* buildItem(
-          pointItem(template("map_response_point"), [attr("default-value", "0.25")]),
+        const built = yield* Effect.fromResult(
+          buildItem(pointItem(template("map_response_point"), [attr("default-value", "0.25")])),
         );
         const scoreOf = (answer: Value) =>
           Effect.map(
@@ -1544,7 +1558,7 @@ describe("buildItem", () => {
         );
 
         for (const processing of [template("map_response_point"), inline]) {
-          const built = yield* buildItem(pointItem(processing, [], "50%"));
+          const built = yield* Effect.fromResult(buildItem(pointItem(processing, [], "50%")));
 
           assert.deepStrictEqual(built.processing, Option.none());
           assert.deepStrictEqual(built.unsupported, [
@@ -1570,8 +1584,10 @@ describe("buildItem", () => {
 
         for (const { expected, name } of cases) {
           const rules = yield* templateRules(name);
-          const inline = yield* buildItem(cc2Item(el("qti-response-processing", [], rules)));
-          const built = yield* buildItem(cc2Item(template(name)));
+          const inline = yield* Effect.fromResult(
+            buildItem(cc2Item(el("qti-response-processing", [], rules))),
+          );
+          const built = yield* Effect.fromResult(buildItem(cc2Item(template(name))));
 
           assert.deepStrictEqual(built.processing, Option.some(expected), name);
           assert.deepStrictEqual(inline.processing, built.processing, name);
@@ -1581,11 +1597,11 @@ describe("buildItem", () => {
 
         const matchRules = yield* templateRules("match_correct");
         const cc2MatchRules = yield* templateRules("CC2_match");
-        const matchInline = yield* buildItem(
-          cc2Item(el("qti-response-processing", [], matchRules)),
+        const matchInline = yield* Effect.fromResult(
+          buildItem(cc2Item(el("qti-response-processing", [], matchRules))),
         );
-        const cc2MatchInline = yield* buildItem(
-          cc2Item(el("qti-response-processing", [], cc2MatchRules)),
+        const cc2MatchInline = yield* Effect.fromResult(
+          buildItem(cc2Item(el("qti-response-processing", [], cc2MatchRules))),
         );
 
         assert.deepStrictEqual(cc2MatchInline.processing, matchInline.processing);
@@ -1595,7 +1611,7 @@ describe("buildItem", () => {
 
   it.effect("[I-9b] CC2_match scores as match_correct", () =>
     Effect.gen(function* scoresCc2Match() {
-      const built = yield* buildItem(bg007(template("CC2_match.xml")));
+      const built = yield* Effect.fromResult(buildItem(bg007(template("CC2_match.xml"))));
       const scoreOf = (answer: string) =>
         Effect.map(
           Effect.fromResult(
@@ -1615,8 +1631,8 @@ describe("buildItem", () => {
     () =>
       Effect.gen(function* scoresCc2MapResponse() {
         for (const baseType of ["float", "integer"] as const) {
-          const built = yield* buildItem(
-            cc2Item(template("CC2_map_response"), Option.some(baseType)),
+          const built = yield* Effect.fromResult(
+            buildItem(cc2Item(template("CC2_map_response"), Option.some(baseType))),
           );
           const outcomesOf = (answer: Value) =>
             Effect.map(
@@ -1648,7 +1664,7 @@ describe("buildItem", () => {
     "[I-9b] CC2_match_basic sets SCORE to MAXSCORE and FEEDBACKBASIC to correct on a match",
     () =>
       Effect.gen(function* scoresCc2MatchBasic() {
-        const built = yield* buildItem(cc2Item(template("CC2_match_basic")));
+        const built = yield* Effect.fromResult(buildItem(cc2Item(template("CC2_match_basic"))));
         const outcomesOf = (answer: string) =>
           Effect.map(
             Effect.fromResult(
@@ -1672,7 +1688,7 @@ describe("buildItem", () => {
       Effect.gen(function* marksMissingMaxScore() {
         for (const name of ["CC2_map_response", "CC2_match_basic"]) {
           const source = cc2Item(template(name), Option.none());
-          const built = yield* buildItem(source);
+          const built = yield* Effect.fromResult(buildItem(source));
 
           assert.deepStrictEqual(checkRules(source, tables), [], name);
           assert.deepStrictEqual(built.processing, Option.none(), name);
@@ -1739,7 +1755,7 @@ describe("buildItem", () => {
 
         for (const [index, { declarations, features, template: name }] of cases.entries()) {
           const source = item({ after: [template(name)], body: [], declarations });
-          const built = yield* buildItem(source);
+          const built = yield* Effect.fromResult(buildItem(source));
           const label = `case ${index + 1}, ${name}`;
 
           assert.deepStrictEqual(checkRules(source, tables), [], label);
@@ -1772,12 +1788,14 @@ describe("buildItem", () => {
         ];
 
         for (const attributes of [[], [attr("tolerance-mode", "exact")]]) {
-          const built = yield* buildItem(
-            item({
-              after: [equalBlock(attributes, "1", "1.0")],
-              body: [],
-              declarations: [declaration("qti-outcome-declaration", "SAME", "boolean", "single")],
-            }),
+          const built = yield* Effect.fromResult(
+            buildItem(
+              item({
+                after: [equalBlock(attributes, "1", "1.0")],
+                body: [],
+                declarations: [declaration("qti-outcome-declaration", "SAME", "boolean", "single")],
+              }),
+            ),
           );
 
           assert.deepStrictEqual(built.processing, Option.some(expected));
@@ -1790,22 +1808,24 @@ describe("buildItem", () => {
     "reads a qti-equal's tolerance token by token and its bounds, in exact mode, with no mark",
     () =>
       Effect.gen(function* readsTolerance() {
-        const built = yield* buildItem(
-          item({
-            after: [
-              equalBlock(
-                [
-                  attr("tolerance", " 0.5\tSAME "),
-                  attr("include-lower-bound", "false"),
-                  attr("tolerance-mode", "exact"),
-                ],
-                "1",
-                "1.0",
-              ),
-            ],
-            body: [],
-            declarations: [declaration("qti-outcome-declaration", "SAME", "boolean", "single")],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              after: [
+                equalBlock(
+                  [
+                    attr("tolerance", " 0.5\tSAME "),
+                    attr("include-lower-bound", "false"),
+                    attr("tolerance-mode", "exact"),
+                  ],
+                  "1",
+                  "1.0",
+                ),
+              ],
+              body: [],
+              declarations: [declaration("qti-outcome-declaration", "SAME", "boolean", "single")],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -1844,15 +1864,17 @@ describe("buildItem", () => {
 
         for (const { attribute, entry: written } of cases) {
           const refusal = yield* Effect.flip(
-            buildItem(
-              item({
-                body: [],
-                declarations: [
-                  declaration("qti-response-declaration", "RESPONSE", "point", "single", [
-                    el("qti-area-mapping", [], [written]),
-                  ]),
-                ],
-              }),
+            Effect.fromResult(
+              buildItem(
+                item({
+                  body: [],
+                  declarations: [
+                    declaration("qti-response-declaration", "RESPONSE", "point", "single", [
+                      el("qti-area-mapping", [], [written]),
+                    ]),
+                  ],
+                }),
+              ),
             ),
           );
 
@@ -1867,25 +1889,27 @@ describe("buildItem", () => {
 
   it.effect("[I-7] shows a hotspot interaction as a notice and keeps the rest of the body", () =>
     Effect.gen(function* hotspotIsNotice() {
-      const built = yield* buildItem(
-        item({
-          body: [
-            el("p", [], [text("Which one is Highland Lighthouse?")]),
-            el(
-              "qti-hotspot-interaction",
-              [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
-              [
-                el("qti-prompt", [], [text("Pick one")]),
-                el("img", [attr("alt", "a map"), attr("src", "images/map.svg")]),
-                el("qti-hotspot-choice", [attr("coords", "418,29,40"), attr("identifier", "R")]),
-              ],
-            ),
-            el("p", [], [text("After")]),
-          ],
-          declarations: [
-            declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
-          ],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            body: [
+              el("p", [], [text("Which one is Highland Lighthouse?")]),
+              el(
+                "qti-hotspot-interaction",
+                [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
+                [
+                  el("qti-prompt", [], [text("Pick one")]),
+                  el("img", [attr("alt", "a map"), attr("src", "images/map.svg")]),
+                  el("qti-hotspot-choice", [attr("coords", "418,29,40"), attr("identifier", "R")]),
+                ],
+              ),
+              el("p", [], [text("After")]),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+            ],
+          }),
+        ),
       );
       const path = `${body}/qti-hotspot-interaction`;
 
@@ -1909,19 +1933,21 @@ describe("buildItem", () => {
     '[Q-2] builds shuffle="true" with no unsupported feature and keeps the choices in document order',
     () =>
       Effect.gen(function* shuffleIsModelled() {
-        const built = yield* buildItem(
-          item({
-            body: [
-              el(
-                "qti-choice-interaction",
-                [attr("response-identifier", "RESPONSE"), attr("shuffle", "true")],
-                [choice("C", "Cat"), choice("A", "Ant"), choice("B", "Bee")],
-              ),
-            ],
-            declarations: [
-              declaration("qti-response-declaration", "RESPONSE", "identifier", "multiple"),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "qti-choice-interaction",
+                  [attr("response-identifier", "RESPONSE"), attr("shuffle", "true")],
+                  [choice("C", "Cat"), choice("A", "Ant"), choice("B", "Bee")],
+                ),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "identifier", "multiple"),
+              ],
+            }),
+          ),
         );
         const interaction = choiceIn(built.body);
 
@@ -1939,41 +1965,43 @@ describe("buildItem", () => {
     '[Q-2] reads each choice\'s fixed as an xs:boolean: true for "true" and "1", false for "false", "0" and none',
     () =>
       Effect.gen(function* fixedChoices() {
-        const built = yield* buildItem(
-          item({
-            body: [
-              el(
-                "qti-choice-interaction",
-                [attr("response-identifier", "RESPONSE"), attr("shuffle", "true")],
-                [
-                  el(
-                    "qti-simple-choice",
-                    [attr("fixed", "true"), attr("identifier", "T")],
-                    [text("True")],
-                  ),
-                  el(
-                    "qti-simple-choice",
-                    [attr("fixed", "1"), attr("identifier", "O")],
-                    [text("One")],
-                  ),
-                  el(
-                    "qti-simple-choice",
-                    [attr("fixed", "false"), attr("identifier", "F")],
-                    [text("False")],
-                  ),
-                  el(
-                    "qti-simple-choice",
-                    [attr("fixed", " 0 "), attr("identifier", "Z")],
-                    [text("Zero")],
-                  ),
-                  choice("N", "None"),
-                ],
-              ),
-            ],
-            declarations: [
-              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "qti-choice-interaction",
+                  [attr("response-identifier", "RESPONSE"), attr("shuffle", "true")],
+                  [
+                    el(
+                      "qti-simple-choice",
+                      [attr("fixed", "true"), attr("identifier", "T")],
+                      [text("True")],
+                    ),
+                    el(
+                      "qti-simple-choice",
+                      [attr("fixed", "1"), attr("identifier", "O")],
+                      [text("One")],
+                    ),
+                    el(
+                      "qti-simple-choice",
+                      [attr("fixed", "false"), attr("identifier", "F")],
+                      [text("False")],
+                    ),
+                    el(
+                      "qti-simple-choice",
+                      [attr("fixed", " 0 "), attr("identifier", "Z")],
+                      [text("Zero")],
+                    ),
+                    choice("N", "None"),
+                  ],
+                ),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -1993,25 +2021,27 @@ describe("buildItem", () => {
   it.effect('[Q-2] refuses fixed="yes" on a choice with value-type, naming the attribute', () =>
     Effect.gen(function* refusesFixed() {
       const refusal = yield* Effect.flip(
-        buildItem(
-          item({
-            body: [
-              el(
-                "qti-choice-interaction",
-                [attr("response-identifier", "RESPONSE")],
-                [
-                  el(
-                    "qti-simple-choice",
-                    [attr("fixed", "yes"), attr("identifier", "A")],
-                    [text("Ant")],
-                  ),
-                ],
-              ),
-            ],
-            declarations: [
-              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
-            ],
-          }),
+        Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "qti-choice-interaction",
+                  [attr("response-identifier", "RESPONSE")],
+                  [
+                    el(
+                      "qti-simple-choice",
+                      [attr("fixed", "yes"), attr("identifier", "A")],
+                      [text("Ant")],
+                    ),
+                  ],
+                ),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+              ],
+            }),
+          ),
         ),
       );
 
@@ -2037,20 +2067,22 @@ describe("buildItem", () => {
         ] as const;
 
         for (const [written, on] of cases) {
-          const built = yield* buildItem(
-            item({
-              attributes: [attr("adaptive", written)],
-              body: [
-                el(
-                  "qti-choice-interaction",
-                  [attr("response-identifier", "RESPONSE"), attr("shuffle", written)],
-                  [choice("A", "Ant"), choice("B", "Bee")],
-                ),
-              ],
-              declarations: [
-                declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
-              ],
-            }),
+          const built = yield* Effect.fromResult(
+            buildItem(
+              item({
+                attributes: [attr("adaptive", written)],
+                body: [
+                  el(
+                    "qti-choice-interaction",
+                    [attr("response-identifier", "RESPONSE"), attr("shuffle", written)],
+                    [choice("A", "Ant"), choice("B", "Bee")],
+                  ),
+                ],
+                declarations: [
+                  declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+                ],
+              }),
+            ),
           );
 
           assert.strictEqual(choiceIn(built.body).shuffle, on, written);
@@ -2066,11 +2098,13 @@ describe("buildItem", () => {
   it.effect("[Q-2] reads a Choice's aria-label and aria-labelledby, none when absent", () =>
     Effect.gen(function* choiceNames() {
       const named = choiceIn(
-        (yield* buildItem(
-          choiceItem([attr("aria-label", "Pick a city"), attr("aria-labelledby", "intro")]),
+        (yield* Effect.fromResult(
+          buildItem(
+            choiceItem([attr("aria-label", "Pick a city"), attr("aria-labelledby", "intro")]),
+          ),
         )).body,
       );
-      const unnamed = choiceIn((yield* buildItem(choiceItem([]))).body);
+      const unnamed = choiceIn((yield* Effect.fromResult(buildItem(choiceItem([])))).body);
 
       assert.deepStrictEqual(named.ariaLabel, Option.some("Pick a city"));
       assert.deepStrictEqual(named.ariaLabelledby, Option.some("intro"));
@@ -2083,20 +2117,22 @@ describe("buildItem", () => {
     '[Q-12] builds an Inline Choice from XML with every field, reading required=" true " as true',
     () =>
       Effect.gen(function* buildsInlineChoice() {
-        const built = yield* buildItem(
-          yield* fromXml(
-            inlineChoiceXml(
-              [
-                '<qti-inline-choice-interaction aria-label="Colour" aria-labelledby="intro"',
-                ' class="qti-input-width-10" data-min-selections-message="Pick a colour"',
-                ' data-prompt="Choose" min-choices=" 1 " required=" true "',
-                ' response-identifier="RESPONSE" shuffle=" 1 ">',
-                "<qti-label>Sky <em>colour</em></qti-label>",
-                '<qti-inline-choice identifier=" R ">red</qti-inline-choice>',
-                '<qti-inline-choice fixed=" true " identifier="B">blue</qti-inline-choice>',
-                '<qti-inline-choice fixed="0" identifier="G"><em>green</em></qti-inline-choice>',
-                "</qti-inline-choice-interaction>",
-              ].join(""),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            yield* fromXml(
+              inlineChoiceXml(
+                [
+                  '<qti-inline-choice-interaction aria-label="Colour" aria-labelledby="intro"',
+                  ' class="qti-input-width-10" data-min-selections-message="Pick a colour"',
+                  ' data-prompt="Choose" min-choices=" 1 " required=" true "',
+                  ' response-identifier="RESPONSE" shuffle=" 1 ">',
+                  "<qti-label>Sky <em>colour</em></qti-label>",
+                  '<qti-inline-choice identifier=" R ">red</qti-inline-choice>',
+                  '<qti-inline-choice fixed=" true " identifier="B">blue</qti-inline-choice>',
+                  '<qti-inline-choice fixed="0" identifier="G"><em>green</em></qti-inline-choice>',
+                  "</qti-inline-choice-interaction>",
+                ].join(""),
+              ),
             ),
           ),
         );
@@ -2165,14 +2201,16 @@ describe("buildItem", () => {
     "[Q-12] builds an Inline Choice with only its required attributes at the defaults",
     () =>
       Effect.gen(function* inlineChoiceDefaults() {
-        const built = yield* buildItem(
-          yield* fromXml(
-            inlineChoiceXml(
-              [
-                '<qti-inline-choice-interaction response-identifier="RESPONSE">',
-                '<qti-inline-choice identifier="R">red</qti-inline-choice>',
-                "</qti-inline-choice-interaction>",
-              ].join(""),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            yield* fromXml(
+              inlineChoiceXml(
+                [
+                  '<qti-inline-choice-interaction response-identifier="RESPONSE">',
+                  '<qti-inline-choice identifier="R">red</qti-inline-choice>',
+                  "</qti-inline-choice-interaction>",
+                ].join(""),
+              ),
             ),
           ),
         );
@@ -2242,31 +2280,33 @@ describe("buildItem", () => {
           assert.deepStrictEqual(unsupported, [], content);
         }
 
-        const withEntity = yield* buildItem(
-          item({
-            body: [
-              el(
-                "p",
-                [],
-                [
-                  el(
-                    "qti-inline-choice-interaction",
-                    [attr("response-identifier", "RESPONSE")],
-                    [
-                      el(
-                        "qti-inline-choice",
-                        [attr("identifier", "A")],
-                        [text("a"), entity("nbsp"), text("b")],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-            declarations: [
-              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
-            ],
-          }),
+        const withEntity = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "p",
+                  [],
+                  [
+                    el(
+                      "qti-inline-choice-interaction",
+                      [attr("response-identifier", "RESPONSE")],
+                      [
+                        el(
+                          "qti-inline-choice",
+                          [attr("identifier", "A")],
+                          [text("a"), entity("nbsp"), text("b")],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(withEntity.unsupported, [
@@ -2277,24 +2317,26 @@ describe("buildItem", () => {
 
   it.effect("[Q-20] builds a Text Entry with its attributes and base 10 by default", () =>
     Effect.gen(function* buildsTextEntry() {
-      const built = yield* buildItem(
-        item({
-          body: [
-            el(
-              "p",
-              [],
-              [
-                text("Capital: "),
-                el("qti-text-entry-interaction", [
-                  attr("expected-length", " 12 "),
-                  attr("placeholder-text", "a city"),
-                  attr("response-identifier", "RESPONSE"),
-                ]),
-              ],
-            ),
-          ],
-          declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            body: [
+              el(
+                "p",
+                [],
+                [
+                  text("Capital: "),
+                  el("qti-text-entry-interaction", [
+                    attr("expected-length", " 12 "),
+                    attr("placeholder-text", "a city"),
+                    attr("response-identifier", "RESPONSE"),
+                  ]),
+                ],
+              ),
+            ],
+            declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
+          }),
+        ),
       );
       const expected: TextEntryInteraction = {
         ariaLabel: Option.none(),
@@ -2323,7 +2365,9 @@ describe("buildItem", () => {
     '[Q-20] builds a Text Entry with pattern-mask="[0-9]+" holding its pattern, with no notice',
     () =>
       Effect.gen(function* patternMaskIsModelled() {
-        const built = yield* buildItem(textEntryItem([attr("pattern-mask", "[0-9]+")]));
+        const built = yield* Effect.fromResult(
+          buildItem(textEntryItem([attr("pattern-mask", "[0-9]+")])),
+        );
         const [entry] = childrenOf(built.body[0]);
 
         assert.strictEqual(entry?.kind, "text-entry");
@@ -2339,7 +2383,9 @@ describe("buildItem", () => {
     '[Q-20] keeps the notice pattern-mask on a pattern the translator refuses, pattern-mask="[0-9", and builds the item',
     () =>
       Effect.gen(function* refusedPatternIsNotice() {
-        const built = yield* buildItem(textEntryItem([attr("pattern-mask", "[0-9")]));
+        const built = yield* Effect.fromResult(
+          buildItem(textEntryItem([attr("pattern-mask", "[0-9")])),
+        );
         const path = `${body}/p/qti-text-entry-interaction`;
 
         assert.deepStrictEqual(childrenOf(built.body[0]), [
@@ -2355,17 +2401,21 @@ describe("buildItem", () => {
     '[Q-5] builds an Extended Text with format="xhtml" and its pattern-mask, with no notice',
     () =>
       Effect.gen(function* xhtmlIsModelled() {
-        const built = yield* buildItem(
-          item({
-            body: [
-              el("qti-extended-text-interaction", [
-                attr("format", "xhtml"),
-                attr("pattern-mask", "[^<>]*"),
-                attr("response-identifier", "RESPONSE"),
-              ]),
-            ],
-            declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el("qti-extended-text-interaction", [
+                  attr("format", "xhtml"),
+                  attr("pattern-mask", "[^<>]*"),
+                  attr("response-identifier", "RESPONSE"),
+                ]),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "string", "single"),
+              ],
+            }),
+          ),
         );
         const [node] = built.body;
 
@@ -2380,21 +2430,23 @@ describe("buildItem", () => {
 
   it.effect("[Q-5] builds an Extended Text with its prompt and format", () =>
     Effect.gen(function* buildsExtendedText() {
-      const built = yield* buildItem(
-        item({
-          body: [
-            el(
-              "qti-extended-text-interaction",
-              [
-                attr("expected-lines", "5"),
-                attr("format", "preformatted"),
-                attr("response-identifier", "RESPONSE"),
-              ],
-              [el("qti-prompt", [], [text("Write a poem.")])],
-            ),
-          ],
-          declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            body: [
+              el(
+                "qti-extended-text-interaction",
+                [
+                  attr("expected-lines", "5"),
+                  attr("format", "preformatted"),
+                  attr("response-identifier", "RESPONSE"),
+                ],
+                [el("qti-prompt", [], [text("Write a poem.")])],
+              ),
+            ],
+            declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
+          }),
+        ),
       );
       const [node] = built.body;
 
@@ -2432,7 +2484,9 @@ describe("buildItem", () => {
       `[Q-5] builds an Extended Text bound to ${cardinality} with ${attributes.map((attribute) => `${attribute.local}="${attribute.value}"`).join(" ")}, its counts held exactly, with no notice`,
       () =>
         Effect.gen(function* buildsContainer() {
-          const built = yield* buildItem(extendedTextItem(cardinality, attributes));
+          const built = yield* Effect.fromResult(
+            buildItem(extendedTextItem(cardinality, attributes)),
+          );
           const [node] = built.body;
 
           assert.strictEqual(node?.kind, "extended-text");
@@ -2460,7 +2514,9 @@ describe("buildItem", () => {
       `[Q-5] builds an ordered Extended Text with ${attributes.map((attribute) => `${attribute.local}="${attribute.value}"`).join(" ")}, its counts held exactly, and shows min-strings>100 in place of its Controls`,
       () =>
         Effect.gen(function* overTheCap() {
-          const built = yield* buildItem(extendedTextItem("ordered", attributes));
+          const built = yield* Effect.fromResult(
+            buildItem(extendedTextItem("ordered", attributes)),
+          );
           const [node] = built.body;
 
           assert.strictEqual(node?.kind, "extended-text");
@@ -2484,8 +2540,10 @@ describe("buildItem", () => {
   it.effect("[Q-5] refuses a min-strings that is not a count, and shows no notice for it", () =>
     Effect.gen(function* refusesMinStrings() {
       const refused = yield* Effect.flip(
-        buildItem(
-          extendedTextItem("ordered", [attr("max-strings", "3"), attr("min-strings", "x101")]),
+        Effect.fromResult(
+          buildItem(
+            extendedTextItem("ordered", [attr("max-strings", "3"), attr("min-strings", "x101")]),
+          ),
         ),
       );
 
@@ -2496,17 +2554,19 @@ describe("buildItem", () => {
   it.effect("[Q-32] shows a portable custom interaction as a notice", () =>
     Effect.gen(function* pciIsNotice() {
       const path = `${body}/qti-portable-custom-interaction`;
-      const built = yield* buildItem(
-        item({
-          body: [
-            el(
-              "qti-portable-custom-interaction",
-              [attr("module", "fractions"), attr("response-identifier", "RESPONSE")],
-              [el("qti-interaction-markup", [], [el("div", [], [text("Loading")])])],
-            ),
-          ],
-          declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            body: [
+              el(
+                "qti-portable-custom-interaction",
+                [attr("module", "fractions"), attr("response-identifier", "RESPONSE")],
+                [el("qti-interaction-markup", [], [el("div", [], [text("Loading")])])],
+              ),
+            ],
+            declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
+          }),
+        ),
       );
 
       assert.deepStrictEqual(built.body, [
@@ -2522,32 +2582,34 @@ describe("buildItem", () => {
     "[I-5] holds a qti-printed-variable as a printed-variable node with every attribute it carries, and lists no unsupported feature for it",
     () =>
       Effect.gen(function* holdsPrintedVariable() {
-        const built = yield* buildItem(
-          item({
-            body: [
-              el(
-                "p",
-                [],
-                [
-                  text("Score: "),
-                  el("qti-printed-variable", [
-                    attr("base", "B"),
-                    attr("delimiter", ", "),
-                    attr("field", "x"),
-                    attr("format", "%.1f"),
-                    attr("identifier", " SCORE "),
-                    attr("index", "2"),
-                    attr("mapping-indicator", ":"),
-                    attr("power-form", "true"),
-                  ]),
-                ],
-              ),
-            ],
-            declarations: [
-              declaration("qti-outcome-declaration", "B", "integer", "single"),
-              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "p",
+                  [],
+                  [
+                    text("Score: "),
+                    el("qti-printed-variable", [
+                      attr("base", "B"),
+                      attr("delimiter", ", "),
+                      attr("field", "x"),
+                      attr("format", "%.1f"),
+                      attr("identifier", " SCORE "),
+                      attr("index", "2"),
+                      attr("mapping-indicator", ":"),
+                      attr("power-form", "true"),
+                    ]),
+                  ],
+                ),
+              ],
+              declarations: [
+                declaration("qti-outcome-declaration", "B", "integer", "single"),
+                declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(built.body, [
@@ -2581,11 +2643,13 @@ describe("buildItem", () => {
     "[I-5] holds a qti-printed-variable that carries only its identifier at the attributes' defaults: base 10, the delimiter ;, the mapping indicator =, no power form, and no format, field or index",
     () =>
       Effect.gen(function* printedVariableDefaults() {
-        const built = yield* buildItem(
-          item({
-            body: [el("qti-printed-variable", [attr("identifier", "SCORE")])],
-            declarations: [declaration("qti-outcome-declaration", "SCORE", "float", "single")],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [el("qti-printed-variable", [attr("identifier", "SCORE")])],
+              declarations: [declaration("qti-outcome-declaration", "SCORE", "float", "single")],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(built.body, [
@@ -2610,36 +2674,38 @@ describe("buildItem", () => {
     "[I-5] holds a qti-template-block and a qti-template-inline as body nodes with their identifier, template visibility and content, a block's content its qti-content-body's and its qti-stylesheet a mark",
     () =>
       Effect.gen(function* holdsTemplateContent() {
-        const built = yield* buildItem(
-          item({
-            body: [
-              el(
-                "p",
-                [],
-                [
-                  text("Go by "),
-                  el(
-                    "qti-template-inline",
-                    [attr("identifier", " plane "), attr("template-identifier", " TRANSPORT ")],
-                    [el("em", [], [text("air")])],
-                  ),
-                ],
-              ),
-              el(
-                "qti-template-block",
-                [
-                  attr("identifier", "SOLUTION"),
-                  attr("show-hide", "hide"),
-                  attr("template-identifier", "SHOWN"),
-                ],
-                [
-                  el("qti-stylesheet", [attr("href", "block.css"), attr("type", "text/css")]),
-                  el("qti-content-body", [], [el("p", [], [text("Worked solution")])]),
-                ],
-              ),
-            ],
-            declarations: [],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "p",
+                  [],
+                  [
+                    text("Go by "),
+                    el(
+                      "qti-template-inline",
+                      [attr("identifier", " plane "), attr("template-identifier", " TRANSPORT ")],
+                      [el("em", [], [text("air")])],
+                    ),
+                  ],
+                ),
+                el(
+                  "qti-template-block",
+                  [
+                    attr("identifier", "SOLUTION"),
+                    attr("show-hide", "hide"),
+                    attr("template-identifier", "SHOWN"),
+                  ],
+                  [
+                    el("qti-stylesheet", [attr("href", "block.css"), attr("type", "text/css")]),
+                    el("qti-content-body", [], [el("p", [], [text("Worked solution")])]),
+                  ],
+                ),
+              ],
+              declarations: [],
+            }),
+          ),
         );
         const block = `${body}/qti-template-block`;
 
@@ -2696,63 +2762,69 @@ describe("buildItem", () => {
     "[I-5] names in a template block's or inline's responses every response its content binds, an interaction read or shown as a notice and one in nested template content, each once in document order, and none for content that binds none",
     () =>
       Effect.gen(function* namesTemplateResponses() {
-        const built = yield* buildItem(
-          item({
-            body: [
-              el(
-                "qti-template-block",
-                [attr("identifier", "ANSWERS"), attr("template-identifier", "SHOWN")],
-                [
-                  el(
-                    "qti-content-body",
-                    [],
-                    [
-                      el(
-                        "qti-choice-interaction",
-                        [attr("response-identifier", "R1")],
-                        [el("qti-simple-choice", [attr("identifier", "A")], [text("Ant")])],
-                      ),
-                      el(
-                        "qti-order-interaction",
-                        [attr("response-identifier", " R2 ")],
-                        [
-                          el("qti-simple-choice", [attr("identifier", "X")], [text("First")]),
-                          el("qti-simple-choice", [attr("identifier", "Y")], [text("Second")]),
-                        ],
-                      ),
-                      el(
-                        "p",
-                        [],
-                        [
-                          text("Then "),
-                          el(
-                            "qti-template-inline",
-                            [attr("identifier", "ENTRY"), attr("template-identifier", "SHOWN")],
-                            [el("qti-text-entry-interaction", [attr("response-identifier", "R3")])],
-                          ),
-                        ],
-                      ),
-                      el(
-                        "qti-choice-interaction",
-                        [attr("response-identifier", "R1")],
-                        [el("qti-simple-choice", [attr("identifier", "B")], [text("Bee")])],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              el(
-                "qti-template-block",
-                [attr("identifier", "QUIET"), attr("template-identifier", "SHOWN")],
-                [el("qti-content-body", [], [el("p", [], [text("Nothing to answer")])])],
-              ),
-            ],
-            declarations: [
-              declaration("qti-response-declaration", "R1", "identifier", "single"),
-              declaration("qti-response-declaration", "R2", "identifier", "ordered"),
-              declaration("qti-response-declaration", "R3", "string", "single"),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "qti-template-block",
+                  [attr("identifier", "ANSWERS"), attr("template-identifier", "SHOWN")],
+                  [
+                    el(
+                      "qti-content-body",
+                      [],
+                      [
+                        el(
+                          "qti-choice-interaction",
+                          [attr("response-identifier", "R1")],
+                          [el("qti-simple-choice", [attr("identifier", "A")], [text("Ant")])],
+                        ),
+                        el(
+                          "qti-order-interaction",
+                          [attr("response-identifier", " R2 ")],
+                          [
+                            el("qti-simple-choice", [attr("identifier", "X")], [text("First")]),
+                            el("qti-simple-choice", [attr("identifier", "Y")], [text("Second")]),
+                          ],
+                        ),
+                        el(
+                          "p",
+                          [],
+                          [
+                            text("Then "),
+                            el(
+                              "qti-template-inline",
+                              [attr("identifier", "ENTRY"), attr("template-identifier", "SHOWN")],
+                              [
+                                el("qti-text-entry-interaction", [
+                                  attr("response-identifier", "R3"),
+                                ]),
+                              ],
+                            ),
+                          ],
+                        ),
+                        el(
+                          "qti-choice-interaction",
+                          [attr("response-identifier", "R1")],
+                          [el("qti-simple-choice", [attr("identifier", "B")], [text("Bee")])],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                el(
+                  "qti-template-block",
+                  [attr("identifier", "QUIET"), attr("template-identifier", "SHOWN")],
+                  [el("qti-content-body", [], [el("p", [], [text("Nothing to answer")])])],
+                ),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "R1", "identifier", "single"),
+                declaration("qti-response-declaration", "R2", "identifier", "ordered"),
+                declaration("qti-response-declaration", "R3", "string", "single"),
+              ],
+            }),
+          ),
         );
         const [answers, quiet] = built.body;
         const inline = answers?.kind === "template-block" ? answers.content[2] : undefined;
@@ -2777,61 +2849,63 @@ describe("buildItem", () => {
     "[I-5] reads a qti-simple-choice's and a qti-inline-choice's template-identifier and show-hide into its template visibility, show when absent, and gives none to a choice with no template-identifier whatever its show-hide",
     () =>
       Effect.gen(function* readsChoiceVisibility() {
-        const built = yield* buildItem(
-          item({
-            body: [
-              el(
-                "qti-choice-interaction",
-                [attr("response-identifier", "RESPONSE")],
-                [
-                  el(
-                    "qti-simple-choice",
-                    [attr("identifier", "A"), attr("template-identifier", " SHOWN ")],
-                    [text("Ant")],
-                  ),
-                  el(
-                    "qti-simple-choice",
-                    [
-                      attr("identifier", "B"),
-                      attr("show-hide", "hide"),
-                      attr("template-identifier", "HIDDEN"),
-                    ],
-                    [text("Bee")],
-                  ),
-                  el(
-                    "qti-simple-choice",
-                    [attr("identifier", "C"), attr("show-hide", "hide")],
-                    [text("Cat")],
-                  ),
-                ],
-              ),
-              el(
-                "p",
-                [],
-                [
-                  el(
-                    "qti-inline-choice-interaction",
-                    [attr("response-identifier", "COLOUR")],
-                    [
-                      el(
-                        "qti-inline-choice",
-                        [
-                          attr("identifier", "R"),
-                          attr("show-hide", "hide"),
-                          attr("template-identifier", "SHOWN"),
-                        ],
-                        [text("red")],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-            declarations: [
-              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
-              declaration("qti-response-declaration", "COLOUR", "identifier", "single"),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "qti-choice-interaction",
+                  [attr("response-identifier", "RESPONSE")],
+                  [
+                    el(
+                      "qti-simple-choice",
+                      [attr("identifier", "A"), attr("template-identifier", " SHOWN ")],
+                      [text("Ant")],
+                    ),
+                    el(
+                      "qti-simple-choice",
+                      [
+                        attr("identifier", "B"),
+                        attr("show-hide", "hide"),
+                        attr("template-identifier", "HIDDEN"),
+                      ],
+                      [text("Bee")],
+                    ),
+                    el(
+                      "qti-simple-choice",
+                      [attr("identifier", "C"), attr("show-hide", "hide")],
+                      [text("Cat")],
+                    ),
+                  ],
+                ),
+                el(
+                  "p",
+                  [],
+                  [
+                    el(
+                      "qti-inline-choice-interaction",
+                      [attr("response-identifier", "COLOUR")],
+                      [
+                        el(
+                          "qti-inline-choice",
+                          [
+                            attr("identifier", "R"),
+                            attr("show-hide", "hide"),
+                            attr("template-identifier", "SHOWN"),
+                          ],
+                          [text("red")],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+                declaration("qti-response-declaration", "COLOUR", "identifier", "single"),
+              ],
+            }),
+          ),
         );
         assert.deepStrictEqual(visibilities(choiceIn(built.body).choices), [
           ["A", Option.some<TemplateVisibility>({ showHide: "show", templateIdentifier: "SHOWN" })],
@@ -2858,30 +2932,32 @@ describe("buildItem", () => {
 
   it.effect("[I-0] [I-8] marks what it does not render outside the body and on body elements", () =>
     Effect.gen(function* marksUnread() {
-      const built = yield* buildItem(
-        item({
-          after: [el("qti-modal-feedback", [attr("identifier", "fb")], [text("Well done")])],
-          attributes: [attr("adaptive", "true")],
-          body: [
-            el(
-              "p",
-              [
-                attr("base", "images/", xmlNamespace),
-                attr("lang", "fr", xmlNamespace),
-                attr("class", "lead"),
-              ],
-              [text("Bonjour")],
-            ),
-          ],
-          declarations: [
-            declaration("qti-response-declaration", "POINT", "point", "single"),
-            el("qti-template-declaration", [
-              attr("base-type", "integer"),
-              attr("cardinality", "single"),
-              attr("identifier", "T"),
-            ]),
-          ],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            after: [el("qti-modal-feedback", [attr("identifier", "fb")], [text("Well done")])],
+            attributes: [attr("adaptive", "true")],
+            body: [
+              el(
+                "p",
+                [
+                  attr("base", "images/", xmlNamespace),
+                  attr("lang", "fr", xmlNamespace),
+                  attr("class", "lead"),
+                ],
+                [text("Bonjour")],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "POINT", "point", "single"),
+              el("qti-template-declaration", [
+                attr("base-type", "integer"),
+                attr("cardinality", "single"),
+                attr("identifier", "T"),
+              ]),
+            ],
+          }),
+        ),
       );
 
       assert.deepStrictEqual(built.body[0], {
@@ -2908,29 +2984,31 @@ describe("buildItem", () => {
     "[I-1] [I-2] marks each record outcome and each untyped declaration at its path, and holds a record response declaration with no mark",
     () =>
       Effect.gen(function* marksUnmodelledDeclarations() {
-        const built = yield* buildItem(
-          item({
-            body: [],
-            declarations: [
-              el("qti-response-declaration", [
-                attr("cardinality", "record"),
-                attr("identifier", "DETAIL"),
-              ]),
-              el("qti-response-declaration", [
-                attr("cardinality", "single"),
-                attr("identifier", "BARE"),
-              ]),
-              declaration("qti-response-declaration", "RESPONSE", "string", "single"),
-              el("qti-outcome-declaration", [
-                attr("cardinality", "record"),
-                attr("identifier", "CONTEXT"),
-              ]),
-              el("qti-outcome-declaration", [
-                attr("cardinality", "multiple"),
-                attr("identifier", "LIST"),
-              ]),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                el("qti-response-declaration", [
+                  attr("cardinality", "record"),
+                  attr("identifier", "DETAIL"),
+                ]),
+                el("qti-response-declaration", [
+                  attr("cardinality", "single"),
+                  attr("identifier", "BARE"),
+                ]),
+                declaration("qti-response-declaration", "RESPONSE", "string", "single"),
+                el("qti-outcome-declaration", [
+                  attr("cardinality", "record"),
+                  attr("identifier", "CONTEXT"),
+                ]),
+                el("qti-outcome-declaration", [
+                  attr("cardinality", "multiple"),
+                  attr("identifier", "LIST"),
+                ]),
+              ],
+            }),
+          ),
         );
         const response = `${root}/qti-response-declaration`;
         const outcome = `${root}/qti-outcome-declaration`;
@@ -2950,56 +3028,58 @@ describe("buildItem", () => {
     "[I-1] holds a record response declaration bound to a Text Entry in records, its correct and default values read field by field, the first of a repeated identifier kept",
     () =>
       Effect.gen(function* holdsRecordResponse() {
-        const built = yield* buildItem(
-          item({
-            after: [
-              el(
-                "qti-response-processing",
-                [],
-                [
-                  el(
-                    "qti-set-outcome-value",
-                    [attr("identifier", "EMPTY")],
-                    [isNullOf(variableElement("ANSWER"))],
-                  ),
-                ],
-              ),
-            ],
-            body: [el("qti-text-entry-interaction", [attr("response-identifier", "ANSWER")])],
-            declarations: [
-              el(
-                "qti-response-declaration",
-                [attr("cardinality", "record"), attr("identifier", "ANSWER")],
-                [
-                  el(
-                    "qti-correct-response",
-                    [],
-                    [
-                      recordField("stringValue", "string", " 12 "),
-                      recordField(" floatValue ", "float", " 12 "),
-                      recordField("integerValue", "integer", "12"),
-                      recordField("integerValue", "integer", "99"),
-                    ],
-                  ),
-                  el(
-                    "qti-default-value",
-                    [],
-                    [
-                      recordField("stringValue", "string", ""),
-                      recordField("stringValue", "string", "later"),
-                      recordField("exponent", "integer", " 3 "),
-                      recordField("stringValue", "string", "last"),
-                    ],
-                  ),
-                ],
-              ),
-              el("qti-response-declaration", [
-                attr("cardinality", "record"),
-                attr("identifier", "BARE"),
-              ]),
-              declaration("qti-outcome-declaration", "EMPTY", "boolean", "single"),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              after: [
+                el(
+                  "qti-response-processing",
+                  [],
+                  [
+                    el(
+                      "qti-set-outcome-value",
+                      [attr("identifier", "EMPTY")],
+                      [isNullOf(variableElement("ANSWER"))],
+                    ),
+                  ],
+                ),
+              ],
+              body: [el("qti-text-entry-interaction", [attr("response-identifier", "ANSWER")])],
+              declarations: [
+                el(
+                  "qti-response-declaration",
+                  [attr("cardinality", "record"), attr("identifier", "ANSWER")],
+                  [
+                    el(
+                      "qti-correct-response",
+                      [],
+                      [
+                        recordField("stringValue", "string", " 12 "),
+                        recordField(" floatValue ", "float", " 12 "),
+                        recordField("integerValue", "integer", "12"),
+                        recordField("integerValue", "integer", "99"),
+                      ],
+                    ),
+                    el(
+                      "qti-default-value",
+                      [],
+                      [
+                        recordField("stringValue", "string", ""),
+                        recordField("stringValue", "string", "later"),
+                        recordField("exponent", "integer", " 3 "),
+                        recordField("stringValue", "string", "last"),
+                      ],
+                    ),
+                  ],
+                ),
+                el("qti-response-declaration", [
+                  attr("cardinality", "record"),
+                  attr("identifier", "BARE"),
+                ]),
+                declaration("qti-outcome-declaration", "EMPTY", "boolean", "single"),
+              ],
+            }),
+          ),
         );
         const expected: ReadonlyMap<string, RecordDeclaration> = new Map([
           [
@@ -3047,44 +3127,46 @@ describe("buildItem", () => {
     "[Q-20] [Q-5] builds a record-bound control: a Text Entry and an Extended Text bound to a record response the model holds are the string control of cardinality record, their attributes held as for a string binding, with no notice",
     () =>
       Effect.gen(function* buildsRecordBoundControls() {
-        const built = yield* buildItem(
-          item({
-            body: [
-              el(
-                "p",
-                [],
-                [
-                  el("qti-text-entry-interaction", [
-                    attr("base", "16"),
-                    attr("expected-length", "8"),
-                    attr("pattern-mask", "[0-9]+"),
-                    attr("placeholder-text", "a number"),
-                    attr("response-identifier", "NUMBER"),
-                  ]),
-                ],
-              ),
-              el(
-                "qti-extended-text-interaction",
-                [
-                  attr("expected-lines", "3"),
-                  attr("max-strings", "4"),
-                  attr("min-strings", "1"),
-                  attr("response-identifier", "WORKING"),
-                ],
-                [el("qti-prompt", [], [text("Show your working.")])],
-              ),
-            ],
-            declarations: [
-              el("qti-response-declaration", [
-                attr("cardinality", "record"),
-                attr("identifier", "NUMBER"),
-              ]),
-              el("qti-response-declaration", [
-                attr("cardinality", "record"),
-                attr("identifier", "WORKING"),
-              ]),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "p",
+                  [],
+                  [
+                    el("qti-text-entry-interaction", [
+                      attr("base", "16"),
+                      attr("expected-length", "8"),
+                      attr("pattern-mask", "[0-9]+"),
+                      attr("placeholder-text", "a number"),
+                      attr("response-identifier", "NUMBER"),
+                    ]),
+                  ],
+                ),
+                el(
+                  "qti-extended-text-interaction",
+                  [
+                    attr("expected-lines", "3"),
+                    attr("max-strings", "4"),
+                    attr("min-strings", "1"),
+                    attr("response-identifier", "WORKING"),
+                  ],
+                  [el("qti-prompt", [], [text("Show your working.")])],
+                ),
+              ],
+              declarations: [
+                el("qti-response-declaration", [
+                  attr("cardinality", "record"),
+                  attr("identifier", "NUMBER"),
+                ]),
+                el("qti-response-declaration", [
+                  attr("cardinality", "record"),
+                  attr("identifier", "WORKING"),
+                ]),
+              ],
+            }),
+          ),
         );
         const entry: TextEntryInteraction = {
           ariaLabel: Option.none(),
@@ -3133,17 +3215,19 @@ describe("buildItem", () => {
     '[Q-20] builds no record-bound control for a record response the model does not hold, one with a file field: its Text Entry is the notice cardinality="record"',
     () =>
       Effect.gen(function* fileRecordIsNotice() {
-        const built = yield* buildItem(
-          item({
-            body: [el("qti-text-entry-interaction", [attr("response-identifier", "UPLOAD")])],
-            declarations: [
-              el(
-                "qti-response-declaration",
-                [attr("cardinality", "record"), attr("identifier", "UPLOAD")],
-                [el("qti-correct-response", [], [recordField("content", "file", "a.txt")])],
-              ),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [el("qti-text-entry-interaction", [attr("response-identifier", "UPLOAD")])],
+              declarations: [
+                el(
+                  "qti-response-declaration",
+                  [attr("cardinality", "record"), attr("identifier", "UPLOAD")],
+                  [el("qti-correct-response", [], [recordField("content", "file", "a.txt")])],
+                ),
+              ],
+            }),
+          ),
         );
         const path = `${body}/qti-text-entry-interaction`;
 
@@ -3166,36 +3250,38 @@ describe("buildItem", () => {
     "[I-1] keeps a record response declaration of a file field, or of base type file, unheld and marked, and holds one of modelled fields",
     () =>
       Effect.gen(function* keepsFileRecordUnheld() {
-        const built = yield* buildItem(
-          item({
-            body: [],
-            declarations: [
-              el(
-                "qti-response-declaration",
-                [attr("cardinality", "record"), attr("identifier", "UPLOADS")],
-                [
-                  el(
-                    "qti-correct-response",
-                    [],
-                    [
-                      recordField("name", "string", "a.txt"),
-                      recordField("content", "file", "a.txt"),
-                    ],
-                  ),
-                ],
-              ),
-              el("qti-response-declaration", [
-                attr("base-type", "file"),
-                attr("cardinality", "record"),
-                attr("identifier", "FILED"),
-              ]),
-              el(
-                "qti-response-declaration",
-                [attr("cardinality", "record"), attr("identifier", "HELD")],
-                [el("qti-default-value", [], [recordField("name", "string", "a.txt")])],
-              ),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                el(
+                  "qti-response-declaration",
+                  [attr("cardinality", "record"), attr("identifier", "UPLOADS")],
+                  [
+                    el(
+                      "qti-correct-response",
+                      [],
+                      [
+                        recordField("name", "string", "a.txt"),
+                        recordField("content", "file", "a.txt"),
+                      ],
+                    ),
+                  ],
+                ),
+                el("qti-response-declaration", [
+                  attr("base-type", "file"),
+                  attr("cardinality", "record"),
+                  attr("identifier", "FILED"),
+                ]),
+                el(
+                  "qti-response-declaration",
+                  [attr("cardinality", "record"), attr("identifier", "HELD")],
+                  [el("qti-default-value", [], [recordField("name", "string", "a.txt")])],
+                ),
+              ],
+            }),
+          ),
         );
         const response = `${root}/qti-response-declaration`;
 
@@ -3237,26 +3323,28 @@ describe("buildItem", () => {
     "[I-1] [I-2] [T-9] holds each file and record declaration's identifier, base type, cardinality and kind in unheld, a response's with whether it declares a correct response, and no modelled one",
     () =>
       Effect.gen(function* holdsUnheldDeclarations() {
-        const built = yield* buildItem(
-          item({
-            body: [],
-            declarations: [
-              declaration("qti-response-declaration", "UPLOAD", "file", "single"),
-              declaration("qti-response-declaration", "KEYED", "file", "single", [
-                values("qti-correct-response", "answer.txt"),
-              ]),
-              declaration("qti-response-declaration", "RESPONSE", "string", "single"),
-              el("qti-outcome-declaration", [
-                attr("cardinality", "record"),
-                attr("identifier", "DETAIL"),
-              ]),
-              declaration("qti-outcome-declaration", "TYPED", "integer", "record"),
-              declaration("qti-outcome-declaration", "FILES", "file", "multiple"),
-              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
-              templateDeclaration("ROW", "record"),
-              templateDeclaration("T", "single", "integer"),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                declaration("qti-response-declaration", "UPLOAD", "file", "single"),
+                declaration("qti-response-declaration", "KEYED", "file", "single", [
+                  values("qti-correct-response", "answer.txt"),
+                ]),
+                declaration("qti-response-declaration", "RESPONSE", "string", "single"),
+                el("qti-outcome-declaration", [
+                  attr("cardinality", "record"),
+                  attr("identifier", "DETAIL"),
+                ]),
+                declaration("qti-outcome-declaration", "TYPED", "integer", "record"),
+                declaration("qti-outcome-declaration", "FILES", "file", "multiple"),
+                declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+                templateDeclaration("ROW", "record"),
+                templateDeclaration("T", "single", "integer"),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -3330,16 +3418,18 @@ describe("buildItem", () => {
     "[I-1] reads a response's qti-default-value through the value model, none without",
     () =>
       Effect.gen(function* readsResponseDefault() {
-        const built = yield* buildItem(
-          item({
-            body: [],
-            declarations: [
-              declaration("qti-response-declaration", "WITH", "integer", "single", [
-                values("qti-default-value", " 7 "),
-              ]),
-              declaration("qti-response-declaration", "WITHOUT", "integer", "single"),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                declaration("qti-response-declaration", "WITH", "integer", "single", [
+                  values("qti-default-value", " 7 "),
+                ]),
+                declaration("qti-response-declaration", "WITHOUT", "integer", "single"),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -3356,15 +3446,17 @@ describe("buildItem", () => {
 
   it.effect("[I-1] reads an integer correct response beyond 2^53 exactly", () =>
     Effect.gen(function* readsExactCorrect() {
-      const built = yield* buildItem(
-        item({
-          body: [],
-          declarations: [
-            declaration("qti-response-declaration", "RESPONSE", "integer", "single", [
-              values("qti-correct-response", "9007199254740993"),
-            ]),
-          ],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            body: [],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "integer", "single", [
+                values("qti-correct-response", "9007199254740993"),
+              ]),
+            ],
+          }),
+        ),
       );
 
       assert.deepStrictEqual(
@@ -3380,24 +3472,26 @@ describe("buildItem", () => {
 
   it.effect("[I-1] reads an integer map-key of 31 digits exactly", () =>
     Effect.gen(function* readsExactMapKey() {
-      const built = yield* buildItem(
-        item({
-          body: [],
-          declarations: [
-            declaration("qti-response-declaration", "RESPONSE", "integer", "single", [
-              el(
-                "qti-mapping",
-                [],
-                [
-                  el("qti-map-entry", [
-                    attr("map-key", "-1000000000000000000000000000000"),
-                    attr("mapped-value", "1"),
-                  ]),
-                ],
-              ),
-            ]),
-          ],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            body: [],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "integer", "single", [
+                el(
+                  "qti-mapping",
+                  [],
+                  [
+                    el("qti-map-entry", [
+                      attr("map-key", "-1000000000000000000000000000000"),
+                      attr("mapped-value", "1"),
+                    ]),
+                  ],
+                ),
+              ]),
+            ],
+          }),
+        ),
       );
 
       assert.deepStrictEqual(
@@ -3452,7 +3546,9 @@ describe("buildItem", () => {
         ];
 
         for (const { element, feature, path } of cases) {
-          const built = yield* buildItem(item({ after: [element], body: [], declarations }));
+          const built = yield* Effect.fromResult(
+            buildItem(item({ after: [element], body: [], declarations })),
+          );
 
           assert.deepStrictEqual(built.processing, Option.none());
           assert.deepStrictEqual(built.unsupported, [{ feature, path, shown: "mark" }]);
@@ -3463,15 +3559,17 @@ describe("buildItem", () => {
   it.effect("[I-2] refuses an integer qti-value of abc as value-type at its path", () =>
     Effect.gen(function* refusesBadValue() {
       const refusal = yield* Effect.flip(
-        buildItem(
-          item({
-            body: [],
-            declarations: [
-              declaration("qti-outcome-declaration", "COUNT", "integer", "single", [
-                values("qti-default-value", "abc"),
-              ]),
-            ],
-          }),
+        Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                declaration("qti-outcome-declaration", "COUNT", "integer", "single", [
+                  values("qti-default-value", "abc"),
+                ]),
+              ],
+            }),
+          ),
         ),
       );
 
@@ -3498,16 +3596,18 @@ describe("buildItem", () => {
           ["-1.5", -1.5],
         ];
         for (const [written, seconds] of cases) {
-          const built = yield* buildItem(
-            item({
-              body: [],
-              declarations: [
-                declaration("qti-outcome-declaration", "TIME", "duration", "single", [
-                  values("qti-default-value", written),
-                ]),
-                declaration("qti-outcome-declaration", "UPLOAD", "file", "single"),
-              ],
-            }),
+          const built = yield* Effect.fromResult(
+            buildItem(
+              item({
+                body: [],
+                declarations: [
+                  declaration("qti-outcome-declaration", "TIME", "duration", "single", [
+                    values("qti-default-value", written),
+                  ]),
+                  declaration("qti-outcome-declaration", "UPLOAD", "file", "single"),
+                ],
+              }),
+            ),
           );
 
           assert.deepStrictEqual([...built.outcomes.keys()], ["TIME"], written);
@@ -3534,15 +3634,17 @@ describe("buildItem", () => {
         }
 
         const refusal = yield* Effect.flip(
-          buildItem(
-            item({
-              body: [],
-              declarations: [
-                declaration("qti-outcome-declaration", "TIME", "duration", "single", [
-                  values("qti-default-value", "PT1M30.5S"),
-                ]),
-              ],
-            }),
+          Effect.fromResult(
+            buildItem(
+              item({
+                body: [],
+                declarations: [
+                  declaration("qti-outcome-declaration", "TIME", "duration", "single", [
+                    values("qti-default-value", "PT1M30.5S"),
+                  ]),
+                ],
+              }),
+            ),
           ),
         );
 
@@ -3559,47 +3661,49 @@ describe("buildItem", () => {
     "[I-3] holds each template declaration of a modelled type with its default, param-variable and math-variable, and marks only the others, by their type",
     () =>
       Effect.gen(function* holdsTemplates() {
-        const built = yield* buildItem(
-          item({
-            body: [],
-            declarations: [
-              el(
-                "qti-template-declaration",
-                [
-                  attr("base-type", "integer"),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                el(
+                  "qti-template-declaration",
+                  [
+                    attr("base-type", "integer"),
+                    attr("cardinality", "single"),
+                    attr("identifier", "T"),
+                    attr("param-variable", "true"),
+                  ],
+                  [values("qti-default-value", "7")],
+                ),
+                el(
+                  "qti-template-declaration",
+                  [
+                    attr("base-type", "string"),
+                    attr("cardinality", "multiple"),
+                    attr("identifier", "NAMES"),
+                    attr("math-variable", " 1 "),
+                    attr("param-variable", "0"),
+                  ],
+                  [values("qti-default-value", "a", "b")],
+                ),
+                el("qti-template-declaration", [
+                  attr("base-type", "duration"),
                   attr("cardinality", "single"),
-                  attr("identifier", "T"),
-                  attr("param-variable", "true"),
-                ],
-                [values("qti-default-value", "7")],
-              ),
-              el(
-                "qti-template-declaration",
-                [
-                  attr("base-type", "string"),
-                  attr("cardinality", "multiple"),
-                  attr("identifier", "NAMES"),
-                  attr("math-variable", " 1 "),
-                  attr("param-variable", "0"),
-                ],
-                [values("qti-default-value", "a", "b")],
-              ),
-              el("qti-template-declaration", [
-                attr("base-type", "duration"),
-                attr("cardinality", "single"),
-                attr("identifier", "D"),
-              ]),
-              el("qti-template-declaration", [
-                attr("cardinality", "record"),
-                attr("identifier", "R"),
-              ]),
-              el("qti-template-declaration", [
-                attr("base-type", "float"),
-                attr("cardinality", "single"),
-                attr("identifier", "P"),
-              ]),
-            ],
-          }),
+                  attr("identifier", "D"),
+                ]),
+                el("qti-template-declaration", [
+                  attr("cardinality", "record"),
+                  attr("identifier", "R"),
+                ]),
+                el("qti-template-declaration", [
+                  attr("base-type", "float"),
+                  attr("cardinality", "single"),
+                  attr("identifier", "P"),
+                ]),
+              ],
+            }),
+          ),
         );
         const expected: readonly TemplateDeclaration[] = [
           {
@@ -3661,21 +3765,23 @@ describe("buildItem", () => {
     () =>
       Effect.gen(function* refusesTemplateDefault() {
         const refusal = yield* Effect.flip(
-          buildItem(
-            item({
-              body: [],
-              declarations: [
-                el(
-                  "qti-template-declaration",
-                  [
-                    attr("base-type", "integer"),
-                    attr("cardinality", "single"),
-                    attr("identifier", "T"),
-                  ],
-                  [values("qti-default-value", "abc")],
-                ),
-              ],
-            }),
+          Effect.fromResult(
+            buildItem(
+              item({
+                body: [],
+                declarations: [
+                  el(
+                    "qti-template-declaration",
+                    [
+                      attr("base-type", "integer"),
+                      attr("cardinality", "single"),
+                      attr("identifier", "T"),
+                    ],
+                    [values("qti-default-value", "abc")],
+                  ),
+                ],
+              }),
+            ),
           ),
         );
 
@@ -3691,24 +3797,26 @@ describe("buildItem", () => {
     "[I-2] reads an outcome declaration's six reporting attributes as the XSD types them, none when absent",
     () =>
       Effect.gen(function* readsReporting() {
-        const built = yield* buildItem(
-          item({
-            body: [],
-            declarations: [
-              el("qti-outcome-declaration", [
-                attr("base-type", "float"),
-                attr("cardinality", "single"),
-                attr("identifier", "SCORE"),
-                attr("view", " candidate\n\ttutor  scorer "),
-                attr("interpretation", " Points, out of 10 "),
-                attr("long-interpretation", " https://example.org/scales/points\n"),
-                attr("normal-maximum", " 10 "),
-                attr("normal-minimum", "-1.5"),
-                attr("mastery-value", "1e400"),
-              ]),
-              declaration("qti-outcome-declaration", "MAXSCORE", "float", "single"),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                el("qti-outcome-declaration", [
+                  attr("base-type", "float"),
+                  attr("cardinality", "single"),
+                  attr("identifier", "SCORE"),
+                  attr("view", " candidate\n\ttutor  scorer "),
+                  attr("interpretation", " Points, out of 10 "),
+                  attr("long-interpretation", " https://example.org/scales/points\n"),
+                  attr("normal-maximum", " 10 "),
+                  attr("normal-minimum", "-1.5"),
+                  attr("mastery-value", "1e400"),
+                ]),
+                declaration("qti-outcome-declaration", "MAXSCORE", "float", "single"),
+              ],
+            }),
+          ),
         );
         const score = built.outcomes.get("SCORE");
         const bare = built.outcomes.get("MAXSCORE");
@@ -3746,18 +3854,20 @@ describe("buildItem", () => {
   it.effect("[I-2] refuses a malformed normal-maximum as value-type at the attribute", () =>
     Effect.gen(function* refusesNormalMaximum() {
       const refusal = yield* Effect.flip(
-        buildItem(
-          item({
-            body: [],
-            declarations: [
-              el("qti-outcome-declaration", [
-                attr("base-type", "float"),
-                attr("cardinality", "single"),
-                attr("identifier", "SCORE"),
-                attr("normal-maximum", "ten"),
-              ]),
-            ],
-          }),
+        Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                el("qti-outcome-declaration", [
+                  attr("base-type", "float"),
+                  attr("cardinality", "single"),
+                  attr("identifier", "SCORE"),
+                  attr("normal-maximum", "ten"),
+                ]),
+              ],
+            }),
+          ),
         ),
       );
 
@@ -3773,18 +3883,20 @@ describe("buildItem", () => {
   it.effect("[I-2] refuses a view that names no view as attribute-type at the attribute", () =>
     Effect.gen(function* refusesView() {
       const refusal = yield* Effect.flip(
-        buildItem(
-          item({
-            body: [],
-            declarations: [
-              el("qti-outcome-declaration", [
-                attr("base-type", "float"),
-                attr("cardinality", "single"),
-                attr("identifier", "SCORE"),
-                attr("view", "candidate learner"),
-              ]),
-            ],
-          }),
+        Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                el("qti-outcome-declaration", [
+                  attr("base-type", "float"),
+                  attr("cardinality", "single"),
+                  attr("identifier", "SCORE"),
+                  attr("view", "candidate learner"),
+                ]),
+              ],
+            }),
+          ),
         ),
       );
 
@@ -3801,28 +3913,30 @@ describe("buildItem", () => {
     "[I-9a] reads a match table's entries and default-value into its outcome's declaration (readings 7 and 8)",
     () =>
       Effect.gen(function* readsMatchTable() {
-        const built = yield* buildItem(
-          item({
-            body: [],
-            declarations: [
-              declaration("qti-outcome-declaration", "GRADE", "float", "single", [
-                el(
-                  "qti-match-table",
-                  [attr("default-value", "0")],
-                  [
-                    el("qti-match-table-entry", [
-                      attr("source-value", "1"),
-                      attr("target-value", "0.5"),
-                    ]),
-                    el("qti-match-table-entry", [
-                      attr("source-value", " -2 "),
-                      attr("target-value", "1e1"),
-                    ]),
-                  ],
-                ),
-              ]),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                declaration("qti-outcome-declaration", "GRADE", "float", "single", [
+                  el(
+                    "qti-match-table",
+                    [attr("default-value", "0")],
+                    [
+                      el("qti-match-table-entry", [
+                        attr("source-value", "1"),
+                        attr("target-value", "0.5"),
+                      ]),
+                      el("qti-match-table-entry", [
+                        attr("source-value", " -2 "),
+                        attr("target-value", "1e1"),
+                      ]),
+                    ],
+                  ),
+                ]),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -3843,34 +3957,36 @@ describe("buildItem", () => {
     "[I-9a] reads an interpolation table's include-boundary, true when absent, and no default-value as none",
     () =>
       Effect.gen(function* readsInterpolationTable() {
-        const built = yield* buildItem(
-          item({
-            body: [],
-            declarations: [
-              declaration("qti-outcome-declaration", "BAND", "identifier", "single", [
-                el(
-                  "qti-interpolation-table",
-                  [],
-                  [
-                    el("qti-interpolation-table-entry", [
-                      attr("source-value", "7.5"),
-                      attr("target-value", "HIGH"),
-                    ]),
-                    el("qti-interpolation-table-entry", [
-                      attr("include-boundary", "false"),
-                      attr("source-value", "2"),
-                      attr("target-value", "MID"),
-                    ]),
-                    el("qti-interpolation-table-entry", [
-                      attr("include-boundary", "true"),
-                      attr("source-value", "0"),
-                      attr("target-value", "LOW"),
-                    ]),
-                  ],
-                ),
-              ]),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                declaration("qti-outcome-declaration", "BAND", "identifier", "single", [
+                  el(
+                    "qti-interpolation-table",
+                    [],
+                    [
+                      el("qti-interpolation-table-entry", [
+                        attr("source-value", "7.5"),
+                        attr("target-value", "HIGH"),
+                      ]),
+                      el("qti-interpolation-table-entry", [
+                        attr("include-boundary", "false"),
+                        attr("source-value", "2"),
+                        attr("target-value", "MID"),
+                      ]),
+                      el("qti-interpolation-table-entry", [
+                        attr("include-boundary", "true"),
+                        attr("source-value", "0"),
+                        attr("target-value", "LOW"),
+                      ]),
+                    ],
+                  ),
+                ]),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -3906,24 +4022,26 @@ describe("buildItem", () => {
       Effect.gen(function* refusesTargetValue() {
         for (const written of ["A", " 1"]) {
           const refusal = yield* Effect.flip(
-            buildItem(
-              item({
-                body: [],
-                declarations: [
-                  declaration("qti-outcome-declaration", "LEVEL", "integer", "single", [
-                    el(
-                      "qti-match-table",
-                      [],
-                      [
-                        el("qti-match-table-entry", [
-                          attr("source-value", "1"),
-                          attr("target-value", written),
-                        ]),
-                      ],
-                    ),
-                  ]),
-                ],
-              }),
+            Effect.fromResult(
+              buildItem(
+                item({
+                  body: [],
+                  declarations: [
+                    declaration("qti-outcome-declaration", "LEVEL", "integer", "single", [
+                      el(
+                        "qti-match-table",
+                        [],
+                        [
+                          el("qti-match-table-entry", [
+                            attr("source-value", "1"),
+                            attr("target-value", written),
+                          ]),
+                        ],
+                      ),
+                    ]),
+                  ],
+                }),
+              ),
             ),
           );
 
@@ -3939,37 +4057,39 @@ describe("buildItem", () => {
 
   it.effect("[I-9a] marks nothing for an outcome declaration's lookup table, now read", () =>
     Effect.gen(function* marksNoTable() {
-      const built = yield* buildItem(
-        item({
-          body: [],
-          declarations: [
-            declaration("qti-outcome-declaration", "GRADE", "identifier", "single", [
-              values("qti-default-value", "F"),
-              el(
-                "qti-match-table",
-                [attr("default-value", "F")],
-                [
-                  el("qti-match-table-entry", [
-                    attr("source-value", "1"),
-                    attr("target-value", "A"),
-                  ]),
-                ],
-              ),
-            ]),
-            declaration("qti-outcome-declaration", "BAND", "float", "single", [
-              el(
-                "qti-interpolation-table",
-                [attr("default-value", "0")],
-                [
-                  el("qti-interpolation-table-entry", [
-                    attr("source-value", "1"),
-                    attr("target-value", "1"),
-                  ]),
-                ],
-              ),
-            ]),
-          ],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            body: [],
+            declarations: [
+              declaration("qti-outcome-declaration", "GRADE", "identifier", "single", [
+                values("qti-default-value", "F"),
+                el(
+                  "qti-match-table",
+                  [attr("default-value", "F")],
+                  [
+                    el("qti-match-table-entry", [
+                      attr("source-value", "1"),
+                      attr("target-value", "A"),
+                    ]),
+                  ],
+                ),
+              ]),
+              declaration("qti-outcome-declaration", "BAND", "float", "single", [
+                el(
+                  "qti-interpolation-table",
+                  [attr("default-value", "0")],
+                  [
+                    el("qti-interpolation-table-entry", [
+                      attr("source-value", "1"),
+                      attr("target-value", "1"),
+                    ]),
+                  ],
+                ),
+              ]),
+            ],
+          }),
+        ),
       );
 
       assert.deepStrictEqual(built.unsupported, []);
@@ -3986,8 +4106,10 @@ describe("buildItem", () => {
     "[I-9a] reads a qti-lookup-outcome-value into a lookup rule and a qti-exit-response into an exit, with no mark",
     () =>
       Effect.gen(function* readsLookupAndExit() {
-        const built = yield* buildItem(
-          rulesItem([lookupElement("GRADE", "RESPONSE"), el("qti-exit-response"), setScore("1")]),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            rulesItem([lookupElement("GRADE", "RESPONSE"), el("qti-exit-response"), setScore("1")]),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -4015,32 +4137,34 @@ describe("buildItem", () => {
     "[I-9a] reads a qti-response-processing-fragment's rules in its place, nested fragments and a branch's included",
     () =>
       Effect.gen(function* readsFragments() {
-        const built = yield* buildItem(
-          rulesItem([
-            el(
-              "qti-response-processing-fragment",
-              [],
-              [
-                setScore("1"),
-                el("qti-response-processing-fragment", [], [el("qti-exit-response")]),
-              ],
-            ),
-            el(
-              "qti-response-condition",
-              [],
-              [
-                el(
-                  "qti-response-if",
-                  [],
-                  [
-                    el("qti-base-value", [attr("base-type", "boolean")], [text("true")]),
-                    el("qti-response-processing-fragment", [], [setScore("2")]),
-                  ],
-                ),
-              ],
-            ),
-            setScore("0"),
-          ]),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            rulesItem([
+              el(
+                "qti-response-processing-fragment",
+                [],
+                [
+                  setScore("1"),
+                  el("qti-response-processing-fragment", [], [el("qti-exit-response")]),
+                ],
+              ),
+              el(
+                "qti-response-condition",
+                [],
+                [
+                  el(
+                    "qti-response-if",
+                    [],
+                    [
+                      el("qti-base-value", [attr("base-type", "boolean")], [text("true")]),
+                      el("qti-response-processing-fragment", [], [setScore("2")]),
+                    ],
+                  ),
+                ],
+              ),
+              setScore("0"),
+            ]),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -4077,16 +4201,18 @@ describe("buildItem", () => {
     "[I-9a] marks each xi:include in response processing xi:include at its path and runs none, as it is never fetched (S-6)",
     () =>
       Effect.gen(function* marksInclude() {
-        const built = yield* buildItem(
-          rulesItem([
-            setScore("1"),
-            el("include", [attr("href", "rules.xml")], [], xincludeNamespace),
-            el(
-              "qti-response-processing-fragment",
-              [],
-              [el("include", [attr("href", "more.xml")], [], xincludeNamespace)],
-            ),
-          ]),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            rulesItem([
+              setScore("1"),
+              el("include", [attr("href", "rules.xml")], [], xincludeNamespace),
+              el(
+                "qti-response-processing-fragment",
+                [],
+                [el("include", [attr("href", "more.xml")], [], xincludeNamespace)],
+              ),
+            ]),
+          ),
         );
 
         assert.deepStrictEqual(built.processing, Option.none());
@@ -4109,8 +4235,10 @@ describe("buildItem", () => {
     "[I-9a] marks a lookup whose outcome or expression names a variable the engine does not hold, as a set's",
     () =>
       Effect.gen(function* marksUnheldLookup() {
-        const built = yield* buildItem(
-          rulesItem([lookupElement("MISSING", "GRADE"), lookupElement("GRADE", "UNDECLARED")]),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            rulesItem([lookupElement("MISSING", "GRADE"), lookupElement("GRADE", "UNDECLARED")]),
+          ),
         );
 
         assert.deepStrictEqual(built.processing, Option.none());
@@ -4171,7 +4299,7 @@ describe("buildItem", () => {
         ] as const;
 
         for (const { cardinality, marks } of cases) {
-          const built = yield* buildItem(lookedUpItem(cardinality));
+          const built = yield* Effect.fromResult(buildItem(lookedUpItem(cardinality)));
 
           assert.deepStrictEqual(
             built.unsupported,
@@ -4185,7 +4313,9 @@ describe("buildItem", () => {
 
   it.effect('[Q-2] refuses max-choices="-1" as value-type, outside xs:nonNegativeInteger', () =>
     Effect.gen(function* refusesNegativeCount() {
-      const refusal = yield* Effect.flip(buildItem(choiceItem([attr("max-choices", "-1")])));
+      const refusal = yield* Effect.flip(
+        Effect.fromResult(buildItem(choiceItem([attr("max-choices", "-1")]))),
+      );
 
       assert.strictEqual(refusal._tag, "Refusal");
       assert.strictEqual(refusal.rule, "value-type");
@@ -4198,7 +4328,9 @@ describe("buildItem", () => {
 
   it.effect('[Q-20] refuses base="2147483648" as value-type, outside xs:int', () =>
     Effect.gen(function* refusesWideBase() {
-      const refusal = yield* Effect.flip(buildItem(textEntryItem([attr("base", "2147483648")])));
+      const refusal = yield* Effect.flip(
+        Effect.fromResult(buildItem(textEntryItem([attr("base", "2147483648")]))),
+      );
 
       assert.strictEqual(refusal._tag, "Refusal");
       assert.strictEqual(refusal.rule, "value-type");
@@ -4211,7 +4343,9 @@ describe("buildItem", () => {
 
   it.effect('[Q-20] reads base="-2147483648", the least xs:int', () =>
     Effect.gen(function* readsLeastBase() {
-      const built = yield* buildItem(textEntryItem([attr("base", "-2147483648")]));
+      const built = yield* Effect.fromResult(
+        buildItem(textEntryItem([attr("base", "-2147483648")])),
+      );
       const [entry] = childrenOf(built.body[0]);
 
       assert.strictEqual(entry?.kind === "text-entry" ? entry.base : undefined, -2_147_483_648);
@@ -4221,9 +4355,11 @@ describe("buildItem", () => {
   it.effect("[Q-2] refuses a max-choices of 10^30 as count-range and reads -0 as 0", () =>
     Effect.gen(function* refusesHugeCount() {
       const refusal = yield* Effect.flip(
-        buildItem(choiceItem([attr("max-choices", "1000000000000000000000000000000")])),
+        Effect.fromResult(
+          buildItem(choiceItem([attr("max-choices", "1000000000000000000000000000000")])),
+        ),
       );
-      const built = yield* buildItem(choiceItem([attr("min-choices", "-0")]));
+      const built = yield* Effect.fromResult(buildItem(choiceItem([attr("min-choices", "-0")])));
 
       assert.strictEqual(refusal.rule, "count-range");
       assert.deepStrictEqual(refusal.location, {
@@ -4236,7 +4372,9 @@ describe("buildItem", () => {
 
   it.effect("[Q-2] holds a min-choices of 2^53+1 exactly", () =>
     Effect.gen(function* holdsBeyondSafe() {
-      const built = yield* buildItem(choiceItem([attr("min-choices", "9007199254740993")]));
+      const built = yield* Effect.fromResult(
+        buildItem(choiceItem([attr("min-choices", "9007199254740993")])),
+      );
 
       assert.strictEqual(choiceIn(built.body).minChoices, 9_007_199_254_740_993n);
     }),
@@ -4245,7 +4383,9 @@ describe("buildItem", () => {
   it.effect("[Q-2] holds a max-choices of 2^63-1, the greatest count, by its value", () =>
     Effect.gen(function* holdsGreatestCount() {
       for (const written of ["9223372036854775807", "+09223372036854775807"]) {
-        const built = yield* buildItem(choiceItem([attr("max-choices", written)]));
+        const built = yield* Effect.fromResult(
+          buildItem(choiceItem([attr("max-choices", written)])),
+        );
 
         assert.strictEqual(choiceIn(built.body).maxChoices, 9_223_372_036_854_775_807n, written);
       }
@@ -4256,7 +4396,7 @@ describe("buildItem", () => {
     Effect.gen(function* refusesBeyondCount() {
       for (const attribute of ["max-choices", "min-choices"]) {
         const refusal = yield* Effect.flip(
-          buildItem(choiceItem([attr(attribute, "9223372036854775808")])),
+          Effect.fromResult(buildItem(choiceItem([attr(attribute, "9223372036854775808")]))),
         );
 
         assert.strictEqual(refusal.rule, "count-range", attribute);
@@ -4277,19 +4417,21 @@ describe("buildItem", () => {
 
   it.effect("[Q-20] [Q-5] holds expected-length and expected-lines exactly, with no bound", () =>
     Effect.gen(function* holdsUnboundedSizes() {
-      const entry = yield* buildItem(
-        textEntryItem([attr("expected-length", "9223372036854775808")]),
+      const entry = yield* Effect.fromResult(
+        buildItem(textEntryItem([attr("expected-length", "9223372036854775808")])),
       );
-      const extended = yield* buildItem(
-        item({
-          body: [
-            el("qti-extended-text-interaction", [
-              attr("expected-lines", "1000000000000000000000000000000"),
-              attr("response-identifier", "RESPONSE"),
-            ]),
-          ],
-          declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
-        }),
+      const extended = yield* Effect.fromResult(
+        buildItem(
+          item({
+            body: [
+              el("qti-extended-text-interaction", [
+                attr("expected-lines", "1000000000000000000000000000000"),
+                attr("response-identifier", "RESPONSE"),
+              ]),
+            ],
+            declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
+          }),
+        ),
       );
       const [node] = childrenOf(entry.body[0]);
       const [lines] = extended.body;
@@ -4307,7 +4449,9 @@ describe("buildItem", () => {
 
   it.effect("[Q-2] says the too-few count it read from the source exactly, 2^53+1", () =>
     Effect.gen(function* saysExactCount() {
-      const built = yield* buildItem(choiceItem([attr("min-choices", "9007199254740993")]));
+      const built = yield* Effect.fromResult(
+        buildItem(choiceItem([attr("min-choices", "9007199254740993")])),
+      );
       const messages = validateChoice(
         choiceIn(built.body),
         {
@@ -4326,20 +4470,22 @@ describe("buildItem", () => {
 
   it.effect("runs a point RESPONSE's match_correct and marks only what it does not render", () =>
     Effect.gen(function* runsPointMatchCorrect() {
-      const built = yield* buildItem(
-        item({
-          after: [
-            template("match_correct"),
-            el("qti-modal-feedback", [attr("identifier", "fb")], [text("Well done")]),
-          ],
-          body: [],
-          declarations: [
-            declaration("qti-response-declaration", "RESPONSE", "point", "single", [
-              values("qti-correct-response", "10 10"),
-            ]),
-            declaration("qti-outcome-declaration", "SCORE", "float", "single"),
-          ],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            after: [
+              template("match_correct"),
+              el("qti-modal-feedback", [attr("identifier", "fb")], [text("Well done")]),
+            ],
+            body: [],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "point", "single", [
+                values("qti-correct-response", "10 10"),
+              ]),
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+            ],
+          }),
+        ),
       );
 
       assert.isTrue(Option.isSome(built.processing));
@@ -4351,24 +4497,26 @@ describe("buildItem", () => {
 
   it.effect("marks inline rules that read the built-in duration as variable:duration", () =>
     Effect.gen(function* marksBuiltInDuration() {
-      const built = yield* buildItem(
-        item({
-          after: [
-            el(
-              "qti-response-processing",
-              [],
-              [
-                el(
-                  "qti-set-outcome-value",
-                  [attr("identifier", "SCORE")],
-                  [el("qti-variable", [attr("identifier", "duration")])],
-                ),
-              ],
-            ),
-          ],
-          body: [],
-          declarations: [declaration("qti-outcome-declaration", "SCORE", "float", "single")],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            after: [
+              el(
+                "qti-response-processing",
+                [],
+                [
+                  el(
+                    "qti-set-outcome-value",
+                    [attr("identifier", "SCORE")],
+                    [el("qti-variable", [attr("identifier", "duration")])],
+                  ),
+                ],
+              ),
+            ],
+            body: [],
+            declarations: [declaration("qti-outcome-declaration", "SCORE", "float", "single")],
+          }),
+        ),
       );
 
       assert.deepStrictEqual(built.processing, Option.none());
@@ -4380,24 +4528,26 @@ describe("buildItem", () => {
 
   it.effect("keeps inline rules that read the built-in numAttempts, with no mark", () =>
     Effect.gen(function* keepsNumAttempts() {
-      const built = yield* buildItem(
-        item({
-          after: [
-            el(
-              "qti-response-processing",
-              [],
-              [
-                el(
-                  "qti-set-outcome-value",
-                  [attr("identifier", "ATTEMPTS")],
-                  [el("qti-variable", [attr("identifier", "numAttempts")])],
-                ),
-              ],
-            ),
-          ],
-          body: [],
-          declarations: [declaration("qti-outcome-declaration", "ATTEMPTS", "integer", "single")],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            after: [
+              el(
+                "qti-response-processing",
+                [],
+                [
+                  el(
+                    "qti-set-outcome-value",
+                    [attr("identifier", "ATTEMPTS")],
+                    [el("qti-variable", [attr("identifier", "numAttempts")])],
+                  ),
+                ],
+              ),
+            ],
+            body: [],
+            declarations: [declaration("qti-outcome-declaration", "ATTEMPTS", "integer", "single")],
+          }),
+        ),
       );
 
       assert.deepStrictEqual(
@@ -4421,29 +4571,31 @@ describe("buildItem", () => {
 
   it.effect("reads a qti-variable's weight-identifier and holds it, with no mark", () =>
     Effect.gen(function* readsWeightIdentifier() {
-      const built = yield* buildItem(
-        item({
-          after: [
-            el(
-              "qti-response-processing",
-              [],
-              [
-                el(
-                  "qti-set-outcome-value",
-                  [attr("identifier", "ATTEMPTS")],
-                  [
-                    el("qti-variable", [
-                      attr("identifier", "numAttempts"),
-                      attr("weight-identifier", " W "),
-                    ]),
-                  ],
-                ),
-              ],
-            ),
-          ],
-          body: [],
-          declarations: [declaration("qti-outcome-declaration", "ATTEMPTS", "integer", "single")],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            after: [
+              el(
+                "qti-response-processing",
+                [],
+                [
+                  el(
+                    "qti-set-outcome-value",
+                    [attr("identifier", "ATTEMPTS")],
+                    [
+                      el("qti-variable", [
+                        attr("identifier", "numAttempts"),
+                        attr("weight-identifier", " W "),
+                      ]),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+            body: [],
+            declarations: [declaration("qti-outcome-declaration", "ATTEMPTS", "integer", "single")],
+          }),
+        ),
       );
 
       assert.deepStrictEqual(
@@ -4474,22 +4626,28 @@ describe("buildItem", () => {
           [attr("base-type", "identifier")],
           [text("completed")],
         );
-        const reading = yield* buildItem(
-          statusItem(
-            el(
-              "qti-set-outcome-value",
-              [attr("identifier", "STATUS")],
-              [el("qti-variable", [attr("identifier", "completionStatus")])],
+        const reading = yield* Effect.fromResult(
+          buildItem(
+            statusItem(
+              el(
+                "qti-set-outcome-value",
+                [attr("identifier", "STATUS")],
+                [el("qti-variable", [attr("identifier", "completionStatus")])],
+              ),
             ),
           ),
         );
-        const setting = yield* buildItem(
-          statusItem(
-            el("qti-set-outcome-value", [attr("identifier", "completionStatus")], [completed]),
+        const setting = yield* Effect.fromResult(
+          buildItem(
+            statusItem(
+              el("qti-set-outcome-value", [attr("identifier", "completionStatus")], [completed]),
+            ),
           ),
         );
-        const timing = yield* buildItem(
-          statusItem(el("qti-set-outcome-value", [attr("identifier", "duration")], [completed])),
+        const timing = yield* Effect.fromResult(
+          buildItem(
+            statusItem(el("qti-set-outcome-value", [attr("identifier", "duration")], [completed])),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -4551,19 +4709,21 @@ describe("buildItem", () => {
         ];
 
         for (const [index, rule] of rules.entries()) {
-          const built = yield* buildItem(
-            item({
-              after: [el("qti-response-processing", [], [rule])],
-              body: [],
-              declarations: [
-                declaration("qti-outcome-declaration", "STATUS", "identifier", "single"),
-                el("qti-template-declaration", [
-                  attr("base-type", "file"),
-                  attr("cardinality", "single"),
-                  attr("identifier", "completionStatus"),
-                ]),
-              ],
-            }),
+          const built = yield* Effect.fromResult(
+            buildItem(
+              item({
+                after: [el("qti-response-processing", [], [rule])],
+                body: [],
+                declarations: [
+                  declaration("qti-outcome-declaration", "STATUS", "identifier", "single"),
+                  el("qti-template-declaration", [
+                    attr("base-type", "file"),
+                    attr("cardinality", "single"),
+                    attr("identifier", "completionStatus"),
+                  ]),
+                ],
+              }),
+            ),
           );
 
           assert.deepStrictEqual(built.processing, Option.none(), `rule ${String(index)}`);
@@ -4580,21 +4740,25 @@ describe("buildItem", () => {
     "[I-5] runs inline rules that read a template variable named completionStatus, and marks one that sets it, as only template processing sets a template variable",
     () =>
       Effect.gen(function* readsDeclaredCompletionStatus() {
-        const reading = yield* buildItem(
-          statusTemplateItem(
-            el(
-              "qti-set-outcome-value",
-              [attr("identifier", "STATUS")],
-              [el("qti-variable", [attr("identifier", "completionStatus")])],
+        const reading = yield* Effect.fromResult(
+          buildItem(
+            statusTemplateItem(
+              el(
+                "qti-set-outcome-value",
+                [attr("identifier", "STATUS")],
+                [el("qti-variable", [attr("identifier", "completionStatus")])],
+              ),
             ),
           ),
         );
-        const setting = yield* buildItem(
-          statusTemplateItem(
-            el(
-              "qti-set-outcome-value",
-              [attr("identifier", "completionStatus")],
-              [el("qti-base-value", [attr("base-type", "identifier")], [text("completed")])],
+        const setting = yield* Effect.fromResult(
+          buildItem(
+            statusTemplateItem(
+              el(
+                "qti-set-outcome-value",
+                [attr("identifier", "completionStatus")],
+                [el("qti-base-value", [attr("base-type", "identifier")], [text("completed")])],
+              ),
             ),
           ),
         );
@@ -4630,31 +4794,33 @@ describe("buildItem", () => {
     "marks inline rules that read numAttempts where the item declares a variable by that name the model does not hold",
     () =>
       Effect.gen(function* marksDeclaredNumAttempts() {
-        const built = yield* buildItem(
-          item({
-            after: [
-              el(
-                "qti-response-processing",
-                [],
-                [
-                  el(
-                    "qti-set-outcome-value",
-                    [attr("identifier", "ATTEMPTS")],
-                    [el("qti-variable", [attr("identifier", "numAttempts")])],
-                  ),
-                ],
-              ),
-            ],
-            body: [],
-            declarations: [
-              declaration("qti-outcome-declaration", "ATTEMPTS", "integer", "single"),
-              el("qti-template-declaration", [
-                attr("base-type", "integer"),
-                attr("cardinality", "record"),
-                attr("identifier", "numAttempts"),
-              ]),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              after: [
+                el(
+                  "qti-response-processing",
+                  [],
+                  [
+                    el(
+                      "qti-set-outcome-value",
+                      [attr("identifier", "ATTEMPTS")],
+                      [el("qti-variable", [attr("identifier", "numAttempts")])],
+                    ),
+                  ],
+                ),
+              ],
+              body: [],
+              declarations: [
+                declaration("qti-outcome-declaration", "ATTEMPTS", "integer", "single"),
+                el("qti-template-declaration", [
+                  attr("base-type", "integer"),
+                  attr("cardinality", "record"),
+                  attr("identifier", "numAttempts"),
+                ]),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(built.processing, Option.none());
@@ -4677,7 +4843,7 @@ describe("buildItem", () => {
     "[I-5] runs inline rules that read a template variable, with no mark, the record's template value read",
     () =>
       Effect.gen(function* runsTemplateVariable() {
-        const built = yield* buildItem(readsTemplate());
+        const built = yield* Effect.fromResult(buildItem(readsTemplate()));
         const after = yield* Effect.fromResult(
           runRules(
             Option.getOrElse(built.processing, () => assert.fail("no processing")),
@@ -4714,7 +4880,7 @@ describe("buildItem", () => {
     "[I-5] keeps response processing none beside a template processing with a marked element, and marks the template variables its rules read",
     () =>
       Effect.gen(function* stalledTemplateProcessing() {
-        const built = yield* buildItem(readsTemplate([stalledTemplating]));
+        const built = yield* Effect.fromResult(buildItem(readsTemplate([stalledTemplating])));
 
         assert.deepStrictEqual(built.templateProcessing, Option.none());
         assert.deepStrictEqual(built.processing, Option.none());
@@ -4731,7 +4897,7 @@ describe("buildItem", () => {
 
   it.effect("keeps BG007's match_correct tree, every identifier held, with no mark", () =>
     Effect.gen(function* keepsHeldTree() {
-      const built = yield* buildItem(bg007(template("match_correct")));
+      const built = yield* Effect.fromResult(buildItem(bg007(template("match_correct"))));
 
       assert.deepStrictEqual(built.processing, Option.some(matchCorrect));
       assert.deepStrictEqual(built.unsupported, []);
@@ -4742,8 +4908,8 @@ describe("buildItem", () => {
     "[I-5] keeps response processing beside a template processing that runs, and marks neither",
     () =>
       Effect.gen(function* templatedRuns() {
-        const built = yield* buildItem(floatMatchCorrect([setsCorrectResponse]));
-        const plain = yield* buildItem(floatMatchCorrect());
+        const built = yield* Effect.fromResult(buildItem(floatMatchCorrect([setsCorrectResponse])));
+        const plain = yield* Effect.fromResult(buildItem(floatMatchCorrect()));
 
         assert.isTrue(Option.isSome(built.templateProcessing), "the template processing runs");
         assert.deepStrictEqual(built.processing, plain.processing);
@@ -4756,7 +4922,7 @@ describe("buildItem", () => {
     "[I-5] keeps response processing none beside a template processing with a marked element, whatever the tree",
     () =>
       Effect.gen(function* stalledRunsNone() {
-        const built = yield* buildItem(floatMatchCorrect([stalledTemplating]));
+        const built = yield* Effect.fromResult(buildItem(floatMatchCorrect([stalledTemplating])));
 
         assert.deepStrictEqual(built.templateProcessing, Option.none());
         assert.deepStrictEqual(built.processing, Option.none());
@@ -4865,7 +5031,7 @@ describe("buildItem", () => {
     "gives equal outcomes for the correct value and another on an item whose template processing does not run",
     () =>
       Effect.gen(function* stalledScoresNone() {
-        const built = yield* buildItem(floatMatchCorrect([stalledTemplating]));
+        const built = yield* Effect.fromResult(buildItem(floatMatchCorrect([stalledTemplating])));
         const correct = yield* Effect.fromResult(
           runAttempt(built, fresh(built, "i"), { RESPONSE: float(1.5) }),
         );
@@ -4881,7 +5047,7 @@ describe("buildItem", () => {
     "[I-9b] keeps match_correct for the same item without template processing, and scores 1",
     () =>
       Effect.gen(function* untemplatedRuns() {
-        const built = yield* buildItem(floatMatchCorrect());
+        const built = yield* Effect.fromResult(buildItem(floatMatchCorrect()));
         const correct = yield* Effect.fromResult(
           runAttempt(built, fresh(built, "i"), { RESPONSE: float(1.5) }),
         );
@@ -4900,30 +5066,32 @@ describe("buildItem", () => {
     "[I-9b] runs a template URI padded with XML whitespace as the built-in it names, with no mark",
     () =>
       Effect.gen(function* runsPaddedTemplate() {
-        const built = yield* buildItem(
-          item({
-            after: [
-              el("qti-response-processing", [
-                attr(
-                  "template",
-                  " \n\thttps://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct\n ",
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              after: [
+                el("qti-response-processing", [
+                  attr(
+                    "template",
+                    " \n\thttps://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct\n ",
+                  ),
+                ]),
+              ],
+              body: [
+                el(
+                  "qti-choice-interaction",
+                  [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
+                  [choice("A", "Ant"), choice("B", "Bee")],
                 ),
-              ]),
-            ],
-            body: [
-              el(
-                "qti-choice-interaction",
-                [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
-                [choice("A", "Ant"), choice("B", "Bee")],
-              ),
-            ],
-            declarations: [
-              declaration("qti-response-declaration", "RESPONSE", "identifier", "single", [
-                values("qti-correct-response", "A"),
-              ]),
-              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
-            ],
-          }),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "identifier", "single", [
+                  values("qti-correct-response", "A"),
+                ]),
+                declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+              ],
+            }),
+          ),
         );
         const after = yield* Effect.fromResult(
           runAttempt(built, fresh(built, "i"), {
@@ -4943,19 +5111,21 @@ describe("buildItem", () => {
 
   it.effect('[I-1] [Q-2] binds response-identifier=" RESPONSE " to the declaration RESPONSE', () =>
     Effect.gen(function* bindsPaddedReference() {
-      const built = yield* buildItem(
-        item({
-          body: [
-            el(
-              "qti-choice-interaction",
-              [attr("response-identifier", " RESPONSE ")],
-              [choice("A", "Ant"), choice("B", "Bee")],
-            ),
-          ],
-          declarations: [
-            declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
-          ],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            body: [
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", " RESPONSE ")],
+                [choice("A", "Ant"), choice("B", "Bee")],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+            ],
+          }),
+        ),
       );
 
       assert.strictEqual(choiceIn(built.body).response, "RESPONSE");
@@ -4964,19 +5134,21 @@ describe("buildItem", () => {
 
   it.effect('[I-1] [Q-2] keys a declaration identifier="\\tRESPONSE\\n" as RESPONSE', () =>
     Effect.gen(function* keysPaddedDeclaration() {
-      const built = yield* buildItem(
-        item({
-          body: [
-            el(
-              "qti-choice-interaction",
-              [attr("response-identifier", "RESPONSE")],
-              [choice("A", "Ant"), choice("B", "Bee")],
-            ),
-          ],
-          declarations: [
-            declaration("qti-response-declaration", "\tRESPONSE\n", "identifier", "single"),
-          ],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            body: [
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "RESPONSE")],
+                [choice("A", "Ant"), choice("B", "Bee")],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "\tRESPONSE\n", "identifier", "single"),
+            ],
+          }),
+        ),
       );
 
       assert.deepStrictEqual([...built.responses.keys()], ["RESPONSE"]);
@@ -4987,19 +5159,21 @@ describe("buildItem", () => {
 
   it.effect('[Q-2] reads a qti-simple-choice identifier=" A " as A', () =>
     Effect.gen(function* readsPaddedChoice() {
-      const built = yield* buildItem(
-        item({
-          body: [
-            el(
-              "qti-choice-interaction",
-              [attr("response-identifier", "RESPONSE")],
-              [choice(" A ", "Ant"), choice("B", "Bee")],
-            ),
-          ],
-          declarations: [
-            declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
-          ],
-        }),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          item({
+            body: [
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "RESPONSE")],
+                [choice(" A ", "Ant"), choice("B", "Bee")],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+            ],
+          }),
+        ),
       );
 
       assert.deepStrictEqual(
@@ -5013,27 +5187,29 @@ describe("buildItem", () => {
     "reads padded identifiers in inline processing as the declarations they name, with no mark",
     () =>
       Effect.gen(function* readsPaddedProcessing() {
-        const built = yield* buildItem(
-          item({
-            after: [
-              el(
-                "qti-response-processing",
-                [],
-                [
-                  el(
-                    "qti-set-outcome-value",
-                    [attr("identifier", " SCORE ")],
-                    [el("qti-variable", [attr("identifier", " RESPONSE ")])],
-                  ),
-                ],
-              ),
-            ],
-            body: [],
-            declarations: [
-              declaration("qti-response-declaration", "RESPONSE", "float", "single"),
-              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              after: [
+                el(
+                  "qti-response-processing",
+                  [],
+                  [
+                    el(
+                      "qti-set-outcome-value",
+                      [attr("identifier", " SCORE ")],
+                      [el("qti-variable", [attr("identifier", " RESPONSE ")])],
+                    ),
+                  ],
+                ),
+              ],
+              body: [],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "float", "single"),
+                declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -5057,13 +5233,15 @@ describe("buildItem", () => {
 
   it.effect('[I-0] reads a root identifier=" item-1 " as item-1', () =>
     Effect.gen(function* readsPaddedRoot() {
-      const built = yield* buildItem(
-        doc(
-          "items/test.xml",
-          el(
-            root,
-            [attr("identifier", " item-1 "), attr("title", "Item")],
-            [el("qti-item-body", [], [])],
+      const built = yield* Effect.fromResult(
+        buildItem(
+          doc(
+            "items/test.xml",
+            el(
+              root,
+              [attr("identifier", " item-1 "), attr("title", "Item")],
+              [el("qti-item-body", [], [])],
+            ),
           ),
         ),
       );
@@ -5077,19 +5255,21 @@ describe("buildItem", () => {
     () =>
       Effect.gen(function* namesCollapsedReference() {
         const refusal = yield* Effect.flip(
-          buildItem(
-            item({
-              body: [
-                el(
-                  "qti-choice-interaction",
-                  [attr("response-identifier", " OTHER ")],
-                  [choice("A", "Ant")],
-                ),
-              ],
-              declarations: [
-                declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
-              ],
-            }),
+          Effect.fromResult(
+            buildItem(
+              item({
+                body: [
+                  el(
+                    "qti-choice-interaction",
+                    [attr("response-identifier", " OTHER ")],
+                    [choice("A", "Ant")],
+                  ),
+                ],
+                declarations: [
+                  declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+                ],
+              }),
+            ),
           ),
         );
 
@@ -5105,19 +5285,21 @@ describe("buildItem", () => {
   it.effect('[I-1] [Q-2] refuses response-identifier="OTHER" with no such declaration', () =>
     Effect.gen(function* refusesUnboundReference() {
       const refusal = yield* Effect.flip(
-        buildItem(
-          item({
-            body: [
-              el(
-                "qti-choice-interaction",
-                [attr("response-identifier", "OTHER")],
-                [choice("A", "Ant")],
-              ),
-            ],
-            declarations: [
-              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
-            ],
-          }),
+        Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "qti-choice-interaction",
+                  [attr("response-identifier", "OTHER")],
+                  [choice("A", "Ant")],
+                ),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+              ],
+            }),
+          ),
         ),
       );
 
@@ -5140,7 +5322,9 @@ describe("buildItem", () => {
       ] as const;
       for (const [name, written] of cases) {
         const [elapsed, refusal] = yield* Effect.timed(
-          Effect.flip(Effect.suspend(() => buildItem(choiceItem([attr(name, written)])))),
+          Effect.flip(
+            Effect.suspend(() => Effect.fromResult(buildItem(choiceItem([attr(name, written)])))),
+          ),
         );
         assert.strictEqual(refusal.rule, "value-type", name);
         assert.deepStrictEqual(refusal.location, {
@@ -5158,15 +5342,15 @@ describe("buildItem", () => {
       Effect.gen(function* recordsInConstantTime() {
         const fewer = templated(fewerDeclarations);
         const more = templated(fewerDeclarations * growthFactor);
-        const built = yield* buildItem(more);
+        const built = yield* Effect.fromResult(buildItem(more));
         assert.strictEqual(built.unsupported.length, fewerDeclarations * growthFactor);
 
         const growth = yield* growthRatio(
           () => {
-            Effect.runSync(buildItem(fewer));
+            Effect.runSync(Effect.fromResult(buildItem(fewer)));
           },
           () => {
-            Effect.runSync(buildItem(more));
+            Effect.runSync(Effect.fromResult(buildItem(more)));
           },
         );
         assert.isBelow(
@@ -5184,7 +5368,7 @@ describe("buildItem", () => {
       Effect.gen(function* bindsInConstantTime() {
         const fewer = textEntries(fewerDeclarations);
         const more = textEntries(fewerDeclarations * growthFactor);
-        const built = yield* buildItem(more);
+        const built = yield* Effect.fromResult(buildItem(more));
         const entries = childrenOf(built.body[0]);
         assert.strictEqual(entries.length, fewerDeclarations * growthFactor);
         assert.isTrue(entries.every((node) => node.kind === "text-entry"));
@@ -5192,10 +5376,10 @@ describe("buildItem", () => {
 
         const growth = yield* growthRatio(
           () => {
-            Effect.runSync(buildItem(fewer));
+            Effect.runSync(Effect.fromResult(buildItem(fewer)));
           },
           () => {
-            Effect.runSync(buildItem(more));
+            Effect.runSync(Effect.fromResult(buildItem(more)));
           },
         );
         assert.isBelow(
@@ -5238,8 +5422,11 @@ describe("buildItem", () => {
     "control: a quadratic dedupe of the same features fails the growth check",
     () =>
       Effect.gen(function* quadraticControl() {
-        const fewer = (yield* buildItem(templated(fewerDeclarations))).unsupported;
-        const more = (yield* buildItem(templated(fewerDeclarations * growthFactor))).unsupported;
+        const fewer = (yield* Effect.fromResult(buildItem(templated(fewerDeclarations))))
+          .unsupported;
+        const more = (yield* Effect.fromResult(
+          buildItem(templated(fewerDeclarations * growthFactor)),
+        )).unsupported;
         assert.deepStrictEqual(dedupeQuadratically([...fewer, ...fewer]), fewer);
 
         const growth = yield* growthRatio(
@@ -5311,7 +5498,7 @@ describe("buildItem over the corpus", { tags: ["corpus"] }, () => {
       Effect.gen(function* templateDigging() {
         const location = "QTI3_BPIG_Examples/items/template_digging.xml";
         const source = yield* readSource(location, yield* readCorpusFile(location));
-        const built = yield* buildItem(source);
+        const built = yield* Effect.fromResult(buildItem(source));
         const features = built.unsupported.map((entry) => entry.feature);
 
         assert.deepStrictEqual([...built.templates.keys()], ["PEOPLE", "A", "B", "MIN"]);
@@ -5399,39 +5586,41 @@ describe("align-54 built-ins by kind: the engine holds a built-in a rule names b
     "align-54 built-ins by kind E22a: runs template processing that sets a correct response of numAttempts and a default of numAttempts and of completionStatus, and response processing that reads a qti-correct of numAttempts, with no mark",
     () =>
       Effect.gen(function* runsBuiltInTargets() {
-        const built = yield* buildItem(
-          item({
-            after: [
-              el(
-                "qti-response-processing",
-                [],
-                [
-                  naming(
-                    "qti-set-outcome-value",
-                    "N",
-                    el("qti-correct", [attr("identifier", "numAttempts")]),
-                  ),
-                ],
-              ),
-            ],
-            body: [],
-            declarations: [
-              declaration("qti-outcome-declaration", "N", "integer", "single"),
-              el(
-                "qti-template-processing",
-                [],
-                [
-                  naming("qti-set-correct-response", "numAttempts", literal("integer", "7")),
-                  naming("qti-set-default-value", "numAttempts", literal("integer", "5")),
-                  naming(
-                    "qti-set-default-value",
-                    "completionStatus",
-                    literal("identifier", "done"),
-                  ),
-                ],
-              ),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              after: [
+                el(
+                  "qti-response-processing",
+                  [],
+                  [
+                    naming(
+                      "qti-set-outcome-value",
+                      "N",
+                      el("qti-correct", [attr("identifier", "numAttempts")]),
+                    ),
+                  ],
+                ),
+              ],
+              body: [],
+              declarations: [
+                declaration("qti-outcome-declaration", "N", "integer", "single"),
+                el(
+                  "qti-template-processing",
+                  [],
+                  [
+                    naming("qti-set-correct-response", "numAttempts", literal("integer", "7")),
+                    naming("qti-set-default-value", "numAttempts", literal("integer", "5")),
+                    naming(
+                      "qti-set-default-value",
+                      "completionStatus",
+                      literal("identifier", "done"),
+                    ),
+                  ],
+                ),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(built.unsupported, []);
@@ -5444,24 +5633,26 @@ describe("align-54 built-ins by kind: the engine holds a built-in a rule names b
     "align-54 built-ins by kind E22a: still marks a set of duration, which the engine holds no value of, and a correct response of completionStatus, a built-in outcome",
     () =>
       Effect.gen(function* marksUnheldBuiltInTargets() {
-        const built = yield* buildItem(
-          item({
-            body: [],
-            declarations: [
-              el(
-                "qti-template-processing",
-                [],
-                [
-                  naming("qti-set-default-value", "duration", literal("float", "1")),
-                  naming(
-                    "qti-set-correct-response",
-                    "completionStatus",
-                    literal("identifier", "done"),
-                  ),
-                ],
-              ),
-            ],
-          }),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                el(
+                  "qti-template-processing",
+                  [],
+                  [
+                    naming("qti-set-default-value", "duration", literal("float", "1")),
+                    naming(
+                      "qti-set-correct-response",
+                      "completionStatus",
+                      literal("identifier", "done"),
+                    ),
+                  ],
+                ),
+              ],
+            }),
+          ),
         );
 
         assert.deepStrictEqual(

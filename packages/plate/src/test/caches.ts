@@ -34,7 +34,7 @@ import { cachedXsds, xsdPaths } from "#plate/test/xsd-layout.ts";
  * Where QTI 3's response-processing templates are cached, `.cache/gr8des/qti3/rptemplates` under
  * `HOME`, one `<name>.xml` per template.
  */
-export const rptemplatesDirectory: Config.Config<string> = Config.String("HOME").pipe(
+export const rptemplatesDirectory: Config.Config<string> = Config.NonEmptyString("HOME").pipe(
   Config.map((home) => path.join(home, ".cache", "gr8des", "qti3", "rptemplates")),
 );
 
@@ -42,7 +42,7 @@ export const rptemplatesDirectory: Config.Config<string> = Config.String("HOME")
  * Where XML Schema Part 2: Datatypes Second Edition is cached, {@link xsdPart2CachePath} under
  * `HOME`, as the one HTML file of the Recommendation.
  */
-export const xsdPart2Path: Config.Config<string> = Config.String("HOME").pipe(
+export const xsdPart2Path: Config.Config<string> = Config.NonEmptyString("HOME").pipe(
   Config.map((home) => path.join(home, xsdPart2CachePath)),
 );
 

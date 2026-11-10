@@ -118,11 +118,14 @@ export class InvalidConfiguration extends Schema.TaggedError<InvalidConfiguratio
 /**
  * The configuration as an Effect `Config`, read from a provider at its root.
  *
+ * {@link configure} reads it from a host's object, and the `./effect` layer `ConfigurationFromEnv`
+ * from the `PLATE_` variables of the provider in effect, so both decode through one Schema.
+ *
  * `Config.schema` (`effect/src/Config.ts`, Effect 4.1.2) decodes through the Schema's string-tree
  * form, so a field given as a number or a boolean and the same field given as its string, as an
  * environment holds it, decode alike.
  */
-const configuration = Config.schema(Configuration);
+export const configuration = Config.schema(Configuration);
 
 /**
  * Decide whether a property key names a configuration field.
@@ -167,7 +170,7 @@ const failingKey = (issue: SchemaIssue.Issue): Option.Option<PropertyKey> =>
  * @param error The failure `Config.schema` raised.
  * @returns The refusal naming the failing field and what it admits.
  */
-const invalidConfiguration = (error: Config.ConfigError): InvalidConfiguration => {
+export const invalidConfiguration = (error: Config.ConfigError): InvalidConfiguration => {
   const field = Schema.isSchemaError(error.cause)
     ? failingKey(error.cause.issue).pipe(Option.filter(isField))
     : Option.none();

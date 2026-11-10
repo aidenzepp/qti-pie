@@ -169,7 +169,8 @@ export type PromptMarkup = "labelledby" | "legend";
  */
 export interface RowContext {
   /**
-   * The configured heading level of the Status heading, 1 to 6.
+   * The configured heading level of the Status heading, 1 by default: an integer from 1 to 6,
+   * which `renderStatus` checks before the heading is built, so the row writes `h<level>` as given.
    */
   readonly headingLevel?: number;
   /**
@@ -809,25 +810,6 @@ export class PartTableDefect extends Data.TaggedError("PartTableDefect")<{
 }
 
 /**
- * A StatusHeading placed at a heading level outside 1 to 6, a defect of the caller that no checked
- * configuration can cause.
- *
- * It cannot occur through the library: the emit state's heading level comes from a configuration
- * that `configure` decoded, and `configure` admits only 2 to 6. Only a `Configuration` built by
- * hand, which skips `configure`, can reach it. It is thrown, never returned.
- */
-export class HeadingLevelDefect extends Data.TaggedError("HeadingLevelDefect")<{
-  readonly level: number;
-}> {
-  /**
-   * The level given, and how to give a valid one.
-   */
-  override get message(): string {
-    return `A heading level is an integer from 1 to 6, not ${this.level}; build the configuration with configure.`;
-  }
-}
-
-/**
  * Derive a part's `data-slot` marker (operator ruling, rule `0e767b8d`): a Root carries its
  * component's name, and every other part `<component>-<part>`, the part key in kebab case.
  *
@@ -927,8 +909,6 @@ const knownParts: ReadonlyMap<string, readonly string[]> = new Map(
  *   StatusHeading's level, 1 by default; and the Choice Prompt's markup, `labelledby` by default.
  * @returns The part's row.
  * @throws {PartTableDefect} When the table has no row for the keys, which its types rule out.
- * @throws {HeadingLevelDefect} When the heading level is not an integer from 1 to 6, a defect of
- *   the caller, which receives a validated configuration.
  */
 export const rowFor = <I extends InteractionKey>(
   interaction: I,
@@ -955,12 +935,7 @@ export const rowFor = <I extends InteractionKey>(
   }
 
   if (row.interaction === "item" && row.part === "statusHeading") {
-    const level = context.headingLevel ?? 1;
-    if (!Number.isInteger(level) || level < 1 || level > 6) {
-      throw new HeadingLevelDefect({ level });
-    }
-
-    return { ...row, element: `h${level}` };
+    return { ...row, element: `h${context.headingLevel ?? 1}` };
   }
 
   return row;

@@ -49,7 +49,7 @@ export const profiles = [
 /**
  * The folder the XSDs are cached in, `.cache/gr8des/qti3/xsd` under `HOME`.
  */
-export const cacheDirectory = Config.String("HOME").pipe(
+export const cacheDirectory = Config.NonEmptyString("HOME").pipe(
   Config.map((home) => `${home}/.cache/gr8des/qti3/xsd`),
 );
 
