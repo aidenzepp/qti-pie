@@ -388,6 +388,14 @@ export interface BodyAttribute {
  */
 export interface BodyElement {
   readonly attributes: readonly BodyAttribute[];
+  /**
+   * The `data-catalog-idref` the element carries: the `id` of the `qti-catalog` of its own document
+   * whose cards present beside it, kept so the emitter can hand the element to a catalog presenter
+   * (`RenderInteraction.attach` in `#plate/emit/body.ts`). Absent when the element references no
+   * catalog. The attribute itself is dropped with the other marked attributes, so the rendered
+   * HTML carries the reference only through what a presenter attaches.
+   */
+  readonly catalog?: string;
   readonly children: readonly BodyNode[];
   readonly kind: "element";
   readonly path: string;
@@ -2683,6 +2691,31 @@ const withItemContent = (item: Item, content: ItemContentBuild): Item =>
   Object.keys(content).length === 0 ? item : { ...item, content };
 
 /**
+ * Read a body element's catalog reference, its `data-catalog-idref`, and record it for the catalog
+ * module (`Build.references`).
+ *
+ * @param build The build.
+ * @param element The element.
+ * @returns The element's `catalog` field, holding the idref as written; no field when the element
+ *   references no catalog, so an element without one carries no `catalog` key.
+ */
+const catalogOf = (build: Build, element: SourceElement): Pick<BodyElement, "catalog"> =>
+  Option.match(
+    Arr.findFirst(
+      element.attributes,
+      (attribute) => attribute.namespace === "" && attribute.local === "data-catalog-idref",
+    ),
+    {
+      onNone: () => ({}),
+      onSome: (attribute) => {
+        build.references.push({ idref: attribute.value, path: pathOf(build, element) });
+
+        return { catalog: attribute.value };
+      },
+    },
+  );
+
+/**
  * Read one child of a body element.
  *
  * @param build The build.
@@ -2741,11 +2774,6 @@ const bodyNode = (
 
   return Result.gen(function* bodyElement() {
     markElement(build, child, true);
-    for (const attribute of child.attributes) {
-      if (attribute.namespace === "" && attribute.local === "data-catalog-idref") {
-        build.references.push({ idref: attribute.value, path: pathOf(build, child) });
-      }
-    }
 
     const children = yield* bodyNodes(build, child, own);
 
@@ -2755,6 +2783,7 @@ const bodyNode = (
       kind: "element",
       path: pathOf(build, child),
       tag: child.local,
+      ...catalogOf(build, child),
     };
   });
 };
