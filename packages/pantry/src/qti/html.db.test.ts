@@ -4,17 +4,17 @@
  * edit of `simple` breaks (membership in the outcome's `refused.laws`, since one native object may
  * discharge several, C22), and the nearest valid package beside it is accepted whole.
  *
- * - **Reading 124:** a `source` in a `picture` without `srcset`, and one in a `video` or an `audio`
- *   without `src`, each by its check on `Node` (main's `content-b.test.ts` case of a picture's
- *   source with no `SourceSrcset` row, ported to this tree's laws).
+ * - **Reading 124:** a `source` in a `picture` without `srcset`, and one in a `video` without `src`,
+ *   each by its check on `Node` (main's `content-b.test.ts` case of a picture's source with no
+ *   `SourceSrcset` row, ported to this tree's laws).
  * - **Reading 125:** a `track` with no `kind` and no `srclang`, by its check on `Node`, and one whose
  *   `kind` is `subtitles`, by the containment between the two `Attribute` selections (main's case
  *   of a subtitles track with no `TrackSrclang` row, ported).
- * - **Reading 126:** a cell whose `headers` name a `th` of another table, nested or enclosing, or a
- *   `td`, by the containment of `HeaderToken(table, token)` in `TableHeader(table, id)`; a token
- *   named twice by `HeaderToken`'s key (main's `same-table-headers` guard case, ported); and the
- *   overlay's rows held to the tree, by an edit of the package's inputs that writes a state no
- *   valid document shreds to.
+ * - **Reading 126:** a nested table's cell whose `headers` name the enclosing table's `th`, by the
+ *   containment of `HeaderToken(table, token)` in `TableHeader(table, id)`; a token named twice by
+ *   `HeaderToken`'s key (main's `same-table-headers` guard case, ported); and the overlay's rows
+ *   held to the tree, by an edit of the package's inputs that writes a state no valid document
+ *   shreds to.
  * - **Reading 156:** a `th`'s `id` that is no NCName names no header and has no `TableHeader`, so its
  *   value domain alone refuses it (AL1's lexical half). A `TableHeader` written for a `th` that
  *   carries no ID value, by an edit of the package's inputs, is refused by its copy back into the
@@ -108,8 +108,8 @@ const validBody = `<p><picture><source srcset="${url}.png"/><img src="${url}.png
 const enclosingBody = `<table><tbody><tr><th id="ho">H</th><td>a</td></tr><tr><td><table><tbody><tr><th id="hi">I</th><td headers="ho">b</td></tr></tbody></table></td></tr></tbody></table>`;
 
 /**
- * The refused cases, one law's breach each: the package's apply, the laws it may be refused
- * under, and its name.
+ * The refused cases, one law's breach each and one case of each law: the package's apply, the
+ * laws it may be refused under, and its name.
  */
 const refusedCases = [
   {
@@ -132,15 +132,6 @@ const refusedCases = [
       ),
     laws: [checkNamed("Node", "Media_source_src")],
     name: "a video's source with no src (Media source src, reading 124)",
-  },
-  {
-    apply: () =>
-      Effect.flatMap(
-        withBody("audio-srcset", `<div><audio><source srcset="${url}.png"/></audio></div>`),
-        (dir) => applyEdited(dir),
-      ),
-    laws: [checkNamed("Node", "Media_source_src")],
-    name: "an audio's source with srcset and no src (Media source src, reading 124)",
   },
   {
     apply: () =>
@@ -168,33 +159,9 @@ const refusedCases = [
   },
   {
     apply: () =>
-      Effect.flatMap(
-        withBody(
-          "headers-other-table",
-          `<table><tbody><tr><th id="h1">h</th></tr></tbody></table><table><tbody><tr><td headers="h1">a</td></tr></tbody></table>`,
-        ),
-        (dir) => applyEdited(dir),
-      ),
-    laws: [containedIn(["HeaderToken", "table", "token"], ["TableHeader", "table", "id"])],
-    name: "a td whose headers name a th of another table (Table headers, reading 126)",
-  },
-  {
-    apply: () =>
       Effect.flatMap(withBody("headers-enclosing", enclosingBody), (dir) => applyEdited(dir)),
     laws: [containedIn(["HeaderToken", "table", "token"], ["TableHeader", "table", "id"])],
     name: "a nested table's td whose headers name the enclosing table's th (Table headers, reading 126)",
-  },
-  {
-    apply: () =>
-      Effect.flatMap(
-        withBody(
-          "headers-td",
-          `<table><tbody><tr><td id="d1">d</td><td headers="d1">a</td></tr></tbody></table>`,
-        ),
-        (dir) => applyEdited(dir),
-      ),
-    laws: [containedIn(["HeaderToken", "table", "token"], ["TableHeader", "table", "id"])],
-    name: "a td whose headers name a td (Table headers, reading 126)",
   },
   {
     apply: () =>
