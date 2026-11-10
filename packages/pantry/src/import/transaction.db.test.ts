@@ -42,7 +42,7 @@ import type { MemberCounts } from "#pantry/test/gen/every-relation.ts";
 import {
   authorRole,
   loginSession,
-  qtiSchema,
+  qtiSchemaName,
   rowsOf as sessionRows,
 } from "#pantry/test/direct-sql.ts";
 import { hasLease } from "#pantry/test/settings.ts";
@@ -50,7 +50,7 @@ import { hasLease } from "#pantry/test/settings.ts";
 /**
  * `Package`'s table, by grizzle's conversion of a relation's name (`grizzle names`).
  */
-const packageTable = `${qtiSchema}.package`;
+const packageTable = `${qtiSchemaName}.package`;
 
 /**
  * The timeout of each test here: every one imports the package once per case of its box.
@@ -99,7 +99,7 @@ const tablesOf = (client: Client) =>
          FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = $1 AND c.relkind = 'r' AND has_table_privilege(c.oid, 'SELECT')
         ORDER BY name`,
-      [qtiSchema],
+      [qtiSchemaName],
     ),
     (rows) => rows.map(({ name }) => name),
   );
@@ -248,7 +248,7 @@ const waitedOn = (client: Client, table: string) =>
        FROM pg_catalog.pg_locks l
       WHERE l.locktype = 'relation' AND l.relation = $1::regclass AND NOT l.granted
         AND l.pid <> pg_backend_pid()`,
-    [table, qtiSchema],
+    [table, qtiSchemaName],
   ).pipe(
     Effect.flatMap((rows) =>
       rows[0] === undefined ? Effect.fail("not waiting" as const) : Effect.succeed(rows[0]),

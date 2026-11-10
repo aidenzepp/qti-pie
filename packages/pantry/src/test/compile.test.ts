@@ -18,7 +18,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 /**
  * The package directory, where `grizzle.config.ts` lives and where grizzle is run from.

@@ -36,7 +36,7 @@ import {
   constraintDescribed,
   judgedCase,
   loginSession,
-  qtiSchema,
+  qtiSchemaName,
   writtenColumnsOf,
 } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -128,9 +128,9 @@ const copies = {
       starts: "foreign key ExpressionAttribute(node where ",
     },
     // A written copy of a `base-type`; the stored one reads `float`.
-    stored: `SELECT c.* FROM ${qtiSchema}.expression_attribute c
-       JOIN ${qtiSchema}.node n ON n.id = c.node
-       JOIN ${qtiSchema}.document d ON d.node = n.document
+    stored: `SELECT c.* FROM ${qtiSchemaName}.expression_attribute c
+       JOIN ${qtiSchemaName}.node n ON n.id = c.node
+       JOIN ${qtiSchemaName}.document d ON d.node = n.document
       WHERE d.package = $1 AND c.written AND c.lexical = 'float'
       ORDER BY c.node LIMIT 1`,
     table: "expression_attribute",
@@ -142,8 +142,8 @@ const copies = {
     },
     key: ["node"],
     reverse: { holds: "", starts: "foreign key SectionIdentifier(node) to Attribute(node where " },
-    stored: `SELECT c.* FROM ${qtiSchema}.section_identifier c
-       JOIN ${qtiSchema}.document d ON d.node = c.document
+    stored: `SELECT c.* FROM ${qtiSchemaName}.section_identifier c
+       JOIN ${qtiSchemaName}.document d ON d.node = c.document
       WHERE d.package = $1
       ORDER BY c.node LIMIT 1`,
     table: "section_identifier",

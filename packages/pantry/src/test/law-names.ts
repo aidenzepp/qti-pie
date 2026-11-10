@@ -14,7 +14,7 @@ import type { Law } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Predicate, Schema } from "effect";
 import { bucketOf } from "#pantry/import/refusal.ts";
 import type { LawNamesFile, RefusalLaw } from "#pantry/import/refusal.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
 
 /**

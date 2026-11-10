@@ -7,7 +7,7 @@
 import type { ServedLogin } from "@bjornpagen/grizzle/runtime";
 import { Context, Schema } from "effect";
 import { fileURLToPath } from "node:url";
-import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
+import type { AuthorLogin } from "#pantry/qti/logins.ts";
 
 /**
  * The author login's served file could not be read from disk or is no JSON. The usual cause is a
@@ -48,6 +48,7 @@ export const ServedText = Schema.fromJsonString(Schema.Json);
  * `#pantry/db/layer.ts` provides it beside the login's `DbLayer`, read from the file the install
  * names, so its roles are the layer's own.
  */
-export class AuthorLogin extends Context.Service<AuthorLogin, ServedLogin<AuthorAppLogin>>()(
-  "pantry/db/AuthorLogin",
-) {}
+export class ServedAuthorLogin extends Context.Service<
+  ServedAuthorLogin,
+  ServedLogin<AuthorLogin>
+>()("pantry/db/ServedAuthorLogin") {}

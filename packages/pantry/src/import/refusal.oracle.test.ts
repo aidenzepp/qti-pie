@@ -52,7 +52,7 @@ import {
 } from "#pantry/import/refusal.ts";
 import type { LawName, RefusalLaw } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 import { beginsWith, mergedAxes } from "#pantry/test/merged-axes.ts";

@@ -4,12 +4,12 @@ import { Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { connectionServices, loginConnection } from "#pantry/db/connection.ts";
 import { installed, servedPathOf } from "#pantry/db/install.ts";
 import {
-  AuthorLogin,
+  ServedAuthorLogin,
   ServedLoadError,
   ServedText,
   servedPath as committedServed,
 } from "#pantry/db/served.ts";
-import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
+import type { AuthorLogin } from "#pantry/qti/logins.ts";
 
 /**
  * The author application's session pool: at most 10 sessions, 1 kept open once opened, and the
@@ -46,9 +46,9 @@ const servedFilePath = Option.match(installed, {
  * pool, and its install's served workload, read from disk and served as the login's type
  * (grizzle's `served`), with no schema module evaluated: the login's type is an `import type`.
  *
- * It provides the login's `DbLayer`, for the author role, and {@link AuthorLogin}, the served login
- * itself, whose `roles.author` every `Db.open` takes: grizzle opens a `Db` only on a role of the
- * served login its layer was built over.
+ * It provides the login's `DbLayer`, for the author role, and {@link ServedAuthorLogin}, the served
+ * login itself, whose `roles.author` every `Db.open` takes: grizzle opens a `Db` only on a role of
+ * the served login its layer was built over.
  *
  * Building the layer fails with Effect's `ConfigError` for a missing or malformed setting, with a
  * `ClusterConfigError` (`#pantry/db/connection.ts`) when the CA is unreadable, with a
@@ -64,11 +64,11 @@ export const AuthorAppLayer = Layer.unwrap(
       Effect.flatMap(Schema.decodeUnknownEffect(ServedText)),
       Effect.mapError((reason) => new ServedLoadError({ path: servedFilePath, reason })),
     );
-    const login = served<AuthorAppLogin>(file, "author_app");
+    const login = served<AuthorLogin>(file, "author_app");
 
     return Layer.merge(
       DbLayer.make({ ...connectionOf(roleNameOf(login)), login, pool: authorAppPool }),
-      Layer.succeed(AuthorLogin, login),
+      Layer.succeed(ServedAuthorLogin, login),
     );
   }),
 ).pipe(Layer.provide(connectionServices));

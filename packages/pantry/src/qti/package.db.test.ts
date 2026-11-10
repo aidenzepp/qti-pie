@@ -52,7 +52,7 @@ import type { Stated } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { importFacts } from "#pantry/test/import-facts.ts";
 
 /**
@@ -212,7 +212,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
       // file-listed over every entry but the manifest.
       // Bound: one package, a fresh id, one entry.
       Effect.gen(function* manifestOnly() {
-        const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+        const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
         const id = crypto.randomUUID();
         const outcome = yield* db.workload.importWrite.apply(
           importFacts({
@@ -236,7 +236,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
       // FileHref(package, href))`: P3 `file-listed`, reading 33.
       // Bound: one package of the manifest and one other entry, no file listing it.
       Effect.gen(function* unlisted() {
-        const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+        const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
         const outcome = yield* db.workload.importWrite.apply(
           importFacts({
             Package: [
@@ -275,7 +275,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
             "a large entry is one bytes value",
           );
 
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const { facts } = largePackage("past-one-statement", largeEntries);
           const outcome = yield* db.workload.importWrite.apply(facts, {});
 
@@ -298,7 +298,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
         // test holds 64 MiB of content; grizzle copies each value once into its statement's
         // binary array before it counts the flight, 1.9 GB outside the JavaScript heap.
         Effect.gen(function* pastOneFlight() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const { facts, id } = largePackage("past-one-flight", flightEntries);
           const failure = yield* Effect.flip(db.workload.importWrite.apply(facts, {}));
 
@@ -321,7 +321,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
       // members, 0 here.
       // Bound: one row of each projection, each alone.
       Effect.gen(function* emptyProjections() {
-        const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+        const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
         const cases = [
           {
             facts: importFacts({ FileHref: [{ package: stray, path: "a.xml", scope: "entry" }] }),
@@ -354,7 +354,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
         // domain's (spec reading 67), a law of `Attribute`, so no law of the row reads it.
         // Bound: one case per law, every other law of its rows kept.
         Effect.gen(function* resourceChecks() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const cases = [
             {
               facts: importFacts({
@@ -399,7 +399,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
         // Bound: an item resource's document with a stimulus root, and a `manifest` document at
         // another path.
         Effect.gen(function* rootOfType() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const base = {
             assembled: false,
             charset: "UTF-8",
@@ -470,7 +470,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
         //   (CP 1.2 §6.11.5 B ii).
         // Bound: one row per case.
         Effect.gen(function* rowChecks() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const tuple = {
             document: stray,
             nearest: stray,

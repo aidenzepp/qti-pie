@@ -11,7 +11,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option, Schema } from "effect";
 import { lawNames, LawNamesFileSchema, namerFrom } from "#pantry/import/refusal.ts";
 import type { LawNamer } from "#pantry/import/refusal.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
 import { lawNamesOf, lawNamesPath, refusedOf } from "#pantry/test/law-names.ts";
 

@@ -22,9 +22,9 @@
  * The list is a complete key: a ChangeSet's compiled program depends only on its Description and
  * the schema, never on the rows bound at run time, so two packages with one list have one program.
  * The compile reads the committed snapshot, as `grizzle generate` does, and the import's write
- * program is also declared in the author login's workload (`#pantry/qti/own-login.ts`
- * `importWork`). The probe login holds an author role of its own
- * ({@link probeAuthor}), since grizzle puts a role in one login only.
+ * program is also declared in the author login's workload (`#pantry/test/author.ts`
+ * `importWork`). The probe login holds the author role ({@link probeAuthor}), so this file never
+ * builds the author login, since grizzle puts a role in one login only.
  */
 import { login, workload } from "@bjornpagen/grizzle";
 import { compileServed } from "@bjornpagen/grizzle/compile";
@@ -42,8 +42,8 @@ import { readProgram } from "#pantry/import/program.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { Qti } from "#pantry/qti/own.ts";
-import { authorRoleOf } from "#pantry/qti/roles.ts";
+import { Qti } from "#pantry/test/qti.ts";
+import { authorRole } from "#pantry/qti/roles.ts";
 import {
   assemblyLiteral,
   assemblyPackage,
@@ -63,12 +63,12 @@ import { judge, lawsOf } from "#pantry/test/oracle.ts";
 const testTimeoutMs = 1_200_000;
 
 /**
- * The probe login's author role, a role of its own over `Qti` (`#pantry/qti/roles.ts`
- * `authorRoleOf`): grizzle puts a role in one login only, and `AuthorApp` holds the package's own
- * (`#pantry/qti/own-login.ts` `Author`), so a probe login over that one is refused
- * (`LoginRefused`).
+ * The probe login's author role, the one author role over `Qti` (`#pantry/qti/roles.ts`
+ * `authorRole`): grizzle puts a role in one login only, and `AuthorApp` holds it
+ * (`#pantry/test/author.ts`), so this file never loads that module, or a probe login over the role
+ * is refused (`LoginRefused`).
  */
-const probeAuthor = authorRoleOf(Qti);
+const probeAuthor = authorRole(Qti);
 
 /**
  * Every generated package's write program, with the package's literal, in the order the searches
