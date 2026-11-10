@@ -29,6 +29,14 @@ const notImplemented = (): never => {
  * The Shared Stimulus reference module, a stub.
  */
 export const stimulusRefModule: ItemContentModule<typeof element, never> = {
+  /**
+   * Shared Stimulus reference's payload copy: not implemented; issue m3e-02 fills it.
+   */
+  /**
+   * No content: a stub has no payload node, so the heading shift reads none.
+   */
+  content: () => [],
+  copy: notImplemented,
   element,
   feature: ["I-4"],
   /**
@@ -41,9 +49,14 @@ export const stimulusRefModule: ItemContentModule<typeof element, never> = {
    * element it does not read, until issue m3e-02 reads the element.
    */
   parse: (_source, context) => context.mark(element),
+  /**
+   * Refuse the element in a redacted item, as the codec refused every node of it before: the model
+   * holds none until issue m3e-02 reads the element.
+   */
+  payloadSchema: ({ unimplementedContent }) => unimplementedContent({ element }),
   placement: "item",
   /**
-   * Shared Stimulus reference's payload copy: not implemented; issue m3e-02 fills it.
+   * Shared Stimulus reference's redaction: not implemented; issue m3e-02 fills it.
    */
   redact: notImplemented,
   /**
