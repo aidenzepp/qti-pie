@@ -1,11 +1,11 @@
-# Per-PR checks for the cloud fan-out's area branches (renderer/*/main), run off
-# the laptop. It runs only on pull requests into those branches; main is
-# unchanged and has no workflow here.
+# Per-PR checks for the cloud fan-out's area branches (renderer/*/main) and its
+# gate branch (gate/cloud-fanout), run off the laptop. It runs only on pull
+# requests into those branches; main is unchanged and has no workflow here.
 name: plate
 
 on:
   pull_request:
-    branches: ["renderer/*/main"]
+    branches: ["renderer/*/main", "gate/cloud-fanout"]
 
 permissions:
   contents: read
