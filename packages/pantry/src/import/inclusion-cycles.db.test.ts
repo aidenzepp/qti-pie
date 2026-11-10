@@ -12,12 +12,12 @@ import { Effect, FileSystem, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { cyclePackageOf, cycles, includerCounts, tails } from "#pantry/test/inclusion-cycles.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 describe.skipIf(!hasLease)(
   "import/inclusion-cycles.db.test.ts, on the lease",
@@ -25,7 +25,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("an inclusion cycle, refused under its own rule alone", (it) => {
       for (const [cycle, includers, tail] of cycles.flatMap((held) =>
         includerCounts.flatMap((count) => tails.map((has) => [held, count, has] as const)),
@@ -55,7 +54,7 @@ describe.skipIf(!hasLease)(
                   assert.isTrue(
                     outcome._tag === "Failure" &&
                       outcome.failure instanceof ImportRefused &&
-                      outcome.failure.rule === "inclusion-cycle",
+                      outcome.failure.rules.includes("inclusion-cycle"),
                     outcome._tag === "Failure" ? outcome.failure.message : "accepted",
                   );
                 }

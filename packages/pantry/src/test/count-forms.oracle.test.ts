@@ -20,14 +20,13 @@ import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, pipe } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { ruleOfLaws } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
+import { schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The forms of the box, each with the value §3.3.20 gives it, none for a form outside
@@ -121,7 +120,7 @@ const packageOf = (drawn: FormCase): PackageEntries => {
  * @param drawn - The case.
  * @returns The rules, empty where the case is accepted.
  */
-const rulesOf = (drawn: FormCase): ReadonlySet<string> => {
+const expectedRules = (drawn: FormCase): ReadonlySet<string> => {
   const value = expected.get(drawn.form);
   if (value === undefined) {
     return new Set(["attribute-lexical"]);
@@ -181,7 +180,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a count's value", (it)
           (drawn, c) =>
             Effect.scoped(
               Effect.gen(function* oneCase() {
-                const rules = rulesOf(drawn);
+                const rules = expectedRules(drawn);
                 c.note(rules.has("binding-fit") ? "binding cardinality" : "accepted");
                 if (expected.get(drawn.form) === undefined) {
                   c.note("no value");
@@ -207,7 +206,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("a count's value", (it)
                 const rule =
                   first === undefined
                     ? Option.none()
-                    : Option.orElse(ruleOfLaws([first, ...rest]), () => Option.some("unnamed"));
+                    : Option.orElse(Arr.head(schemaRulesOf([first, ...rest])), () =>
+                        Option.some("unnamed"),
+                      );
                 assert.deepStrictEqual(
                   Option.toArray(rule),
                   [...rules],
