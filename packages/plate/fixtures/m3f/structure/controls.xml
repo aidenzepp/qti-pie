@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  identifier="controls" title="Item session control">
+  <qti-test-part identifier="plain" navigation-mode="nonlinear" submission-mode="individual">
+    <qti-assessment-section identifier="defaults" title="No element sets a control" visible="true">
+      <qti-assessment-item-ref identifier="unset" href="choice.xml"/>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="commenting" title="A comment is allowed" visible="true">
+      <qti-assessment-item-ref identifier="commented" href="choice.xml">
+        <qti-item-session-control allow-comment="true"/>
+      </qti-assessment-item-ref>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="strict" title="Skipping is not allowed" visible="true">
+      <qti-item-session-control allow-skipping="false"/>
+      <qti-assessment-item-ref identifier="strict-item" href="choice.xml"/>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="lax" title="Skipping is allowed" visible="true">
+      <qti-assessment-item-ref identifier="lax-item" href="choice.xml"/>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="bounded" title="Responses are validated on one item" visible="true">
+      <qti-assessment-item-ref identifier="validated" href="choices.xml">
+        <qti-item-session-control validate-responses="true"/>
+      </qti-assessment-item-ref>
+      <qti-assessment-item-ref identifier="unvalidated" href="choices.xml"/>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="solving" title="The solution is shown for one item" visible="true">
+      <qti-assessment-item-ref identifier="solved" href="choice.xml">
+        <qti-item-session-control show-solution="true"/>
+      </qti-assessment-item-ref>
+      <qti-assessment-item-ref identifier="unsolved" href="choice.xml"/>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="reviewing" title="Review is off, the solution is on" visible="true">
+      <qti-item-session-control allow-review="false" show-solution="true"/>
+      <qti-assessment-item-ref identifier="outer-item" href="choice.xml"/>
+      <qti-assessment-section identifier="reviewed" title="Review is on again" visible="true">
+        <qti-item-session-control allow-review="true"/>
+        <qti-assessment-item-ref identifier="inner-item" href="choice.xml"/>
+      </qti-assessment-section>
+    </qti-assessment-section>
+  </qti-test-part>
+  <qti-test-part identifier="attempts" navigation-mode="nonlinear" submission-mode="individual">
+    <qti-item-session-control max-attempts="2"/>
+    <qti-assessment-section identifier="inherited" title="The part's attempts" visible="true">
+      <qti-assessment-item-ref identifier="twice" href="choice.xml"/>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="overriding" title="The section's attempts" visible="true">
+      <qti-item-session-control max-attempts="3"/>
+      <qti-assessment-item-ref identifier="thrice" href="choice.xml"/>
+      <qti-assessment-item-ref identifier="once" href="choice.xml">
+        <qti-item-session-control max-attempts="1"/>
+      </qti-assessment-item-ref>
+    </qti-assessment-section>
+  </qti-test-part>
+  <qti-test-part identifier="feedback" navigation-mode="nonlinear" submission-mode="individual">
+    <qti-item-session-control show-feedback="true"/>
+    <qti-assessment-section identifier="shown" title="Feedback is shown" visible="true">
+      <qti-assessment-item-ref identifier="feedbacked" href="choice.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+  <qti-test-part identifier="together" navigation-mode="nonlinear" submission-mode="simultaneous">
+    <qti-item-session-control max-attempts="3"/>
+    <qti-assessment-section identifier="batch" title="One submission for the part" visible="true">
+      <qti-assessment-item-ref identifier="joint-first" href="choice.xml"/>
+      <qti-assessment-item-ref identifier="joint-second" href="choice.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+</qti-assessment-test>
