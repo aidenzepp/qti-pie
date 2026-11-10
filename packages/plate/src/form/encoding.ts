@@ -6,7 +6,8 @@
  * Entries carry QTI's lexical forms, so a value's form is {@link format}'s and its reading is
  * {@link parseLexical}'s, with the allowances a posted form needs: a number is trimmed, and a
  * string's line breaks are a textarea's. A record posts the text it was typed as, and its other
- * fields are read from that text.
+ * fields are read from that text. A point posts its two coordinates as two entries, `<name>.x` and
+ * `<name>.y` ({@link pointEntryNames}), and is read back from the pair at each position.
  *
  * @module
  */
@@ -39,11 +40,37 @@ const pairBaseTypes = ["directedPair", "pair"] as const;
 export type PairBaseType = (typeof pairBaseTypes)[number];
 
 /**
- * The base types an interaction posts: Choice's `identifier`, Text Entry's and Extended Text's
- * `string`, `integer` and `float`, and the {@link PairBaseType}s of the interactions that put
- * identifiers into targets.
+ * The base type whose value is a point, two whole numbers x then y, which an interaction that
+ * places a point on an image (Select Point, Position Object) posts as two entries per value,
+ * `<name>.x` and `<name>.y` ({@link pointEntryNames}), one coordinate in each: the script-free form
+ * gives a point two native number inputs, and no script composes them into one entry.
+ * {@link decode} pairs the entries by position, so the n-th `.x` and the n-th `.y` are one value,
+ * and a `multiple` or `ordered` response repeats the pair once per value.
  */
-const postedBaseTypes = ["identifier", "string", "integer", "float", ...pairBaseTypes] as const;
+const pointBaseType = "point";
+
+/**
+ * The base type whose value is `true` or `false`, which End Attempt posts as one entry holding
+ * that lexical form, `true` from a submit button named by its response; an absent entry is no
+ * response.
+ */
+const booleanBaseType = "boolean";
+
+/**
+ * The base types an interaction posts: Choice's `identifier`, Text Entry's and Extended Text's
+ * `string`, `integer` and `float`, the {@link PairBaseType}s of the interactions that put
+ * identifiers into targets, the `point` of the interactions that place a point on an image, and
+ * End Attempt's `boolean`.
+ */
+const postedBaseTypes = [
+  "identifier",
+  "string",
+  "integer",
+  "float",
+  ...pairBaseTypes,
+  pointBaseType,
+  booleanBaseType,
+] as const;
 
 /**
  * A base type an interaction posts.
@@ -69,8 +96,19 @@ const isPair = (baseType: PostedBaseType): baseType is PairBaseType =>
   pairBaseTypes.some((name) => name === baseType);
 
 /**
+ * Report whether a posted base type is a point, whose value posts as two entries.
+ *
+ * @param baseType A posted base type.
+ * @returns Whether `baseType` is `point`.
+ */
+const isPoint = (baseType: PostedBaseType): baseType is typeof pointBaseType =>
+  baseType === pointBaseType;
+
+/**
  * How a response of a base type travels through the form: the entry name it posts under, from
- * {@link entryName}, and the base type and cardinality of its declaration.
+ * {@link entryName}, and the base type and cardinality of its declaration. A `point` response
+ * posts under the two names {@link pointEntryNames} derives from it, every other base type under
+ * the name itself.
  */
 export interface ValueBinding {
   readonly baseType: PostedBaseType;
@@ -133,12 +171,20 @@ export const isXmlText = (text: string): boolean => xmlText.test(text);
 /**
  * Why posted entries do not decode to a value of their binding.
  */
-type MalformedReason = "character" | "file" | "identifier" | "number" | "single-many";
+type MalformedReason =
+  | "boolean"
+  | "character"
+  | "file"
+  | "identifier"
+  | "number"
+  | "point"
+  | "single-many";
 
 /**
  * What each {@link MalformedReason} asks the poster to change.
  */
 const remedies = {
+  boolean: "is not a boolean; post true or false, as the form gives it",
   character:
     "holds a character XML cannot carry: a control character other than tab, line feed and carriage return, U+FFFE, U+FFFF or a lone surrogate; post the text without it",
   file: "is a file, but this response takes text; post text, not a file",
@@ -146,6 +192,8 @@ const remedies = {
     "is not an identifier, or for a pair response not two identifiers separated by a space; post an NCName such as choiceA, or a pair such as choiceA gapB, as the form gives it",
   number:
     "is not a number; post digits in the interaction's base with an optional sign, or a finite decimal such as 2.5 or 1E3",
+  point:
+    "is not a point; post two whole numbers, x in its .x entry and y in its .y entry, such as 102 and 113, both filled or both empty",
   "single-many": "was posted more than once, but its response takes one value; post it once",
 } satisfies Record<MalformedReason, string>;
 
@@ -153,8 +201,8 @@ const remedies = {
  * The failure of decoding posted entries: they are not a value of their binding, for the reason
  * given.
  *
- * `entry` is the binding's entry name, and `reason` is the first of {@link decode}'s refusals the
- * entries meet.
+ * `entry` is the binding's entry name (for a point, the name its `.x` and `.y` entries extend),
+ * and `reason` is the first of {@link decode}'s refusals the entries meet.
  */
 export class Malformed extends Data.TaggedError("Malformed")<{
   readonly entry: string;
@@ -237,6 +285,20 @@ export const checkInstance = (token: string): Option.Option<InstanceRequirement>
 export const entryName = (instance: string, response: string): string => `${instance}.${response}`;
 
 /**
+ * Name the two entries a point value posts under: `<name>.x` for the horizontal coordinate and
+ * `<name>.y` for the vertical, where `name` is the binding's entry name from {@link entryName}. A
+ * module renders one control under each, and {@link encode} and {@link decode} read the same two
+ * names, so the suffixes are written here once.
+ *
+ * @param name The binding's entry name.
+ * @returns The `.x` name, then the `.y` name.
+ */
+export const pointEntryNames = (name: string): readonly [x: string, y: string] => [
+  `${name}.x`,
+  `${name}.y`,
+];
+
+/**
  * Give the text a record was typed as: its `stringValue` field, which {@link encode} posts for the
  * record and the text control bound to it shows and checks.
  *
@@ -247,21 +309,46 @@ export const recordText = (record: RecordValue): readonly Single[] =>
   record.fields.flatMap(({ identifier, value }) => (identifier === "stringValue" ? [value] : []));
 
 /**
+ * Encode one value as the entries a form posts for it.
+ *
+ * @param single The value.
+ * @param binding The response's binding, which names the entries.
+ * @returns For a point, its two coordinates under the binding's {@link pointEntryNames}, x then y,
+ *   each written as an integer is; for any other single, one entry under the binding's name in
+ *   {@link format}'s lexical form.
+ */
+const entriesOf = (single: Single, binding: Binding): readonly Entry[] => {
+  if (single.baseType === "point") {
+    const [x, y] = pointEntryNames(binding.name);
+
+    return [
+      [x, String(single.value[0])],
+      [y, String(single.value[1])],
+    ];
+  }
+
+  return [[binding.name, format(single)]];
+};
+
+/**
  * Encode a value as the entries a form posts for it.
  *
  * A record posts its `stringValue` field ({@link recordText}), the text {@link decode} reads every
- * other field from, so a record decoded from a post encodes back to that post.
+ * other field from, so a record decoded from a post encodes back to that post. A point posts two
+ * entries per value, `<name>.x` and `<name>.y` ({@link pointEntryNames}), as the form's two number
+ * inputs do.
  *
  * @param value The response's value.
  * @param binding The response's binding, which names the entries.
  * @returns No entries for NULL, one for a `single`, one for each value of a `multiple` or
  *   `ordered`, in order, and for a record one for its `stringValue` field, none when it has none,
- *   all under the binding's name and in {@link format}'s lexical form.
+ *   all under the binding's name and in {@link format}'s lexical form; a point value is two entries
+ *   in that place, its x then its y.
  */
 export const encode = (value: ResponseValue, binding: Binding): readonly Entry[] => {
   const singles = isRecordValue(value) ? recordText(value) : value.values;
 
-  return singles.map((single) => [binding.name, format(single)]);
+  return singles.flatMap((single) => entriesOf(single, binding));
 };
 
 /**
@@ -364,12 +451,17 @@ const notANumber = (): MalformedReason => "number";
  * digits take the value model's one path, so a posted integer is the value the same digits are in
  * content. A float is the value model's reading of the text; it is non-finite only for `INF`,
  * `-INF` and `NaN`, which a posted form refuses. A pair is the value model's reading of the text as
- * written, two identifiers separated by white space, with no outer white space.
+ * written, two identifiers separated by white space, with no outer white space. A boolean is `true`
+ * or `false` as written, nothing else. A point is the value model's reading of its lexical form,
+ * two whole numbers separated by white space, which {@link readCoordinates} composes from the two
+ * entries the form posts.
  *
  * @param baseType The binding's base type.
  * @param text The posted string.
  * @param base The number base of an integer, from 2 to 36.
- * @returns The value, none for empty text, or the reason the text is not a value.
+ * @returns The value, none for empty text, or the reason the text is not a value: `character`,
+ *   `identifier` for an identifier or a pair, `boolean`, `point`, and `number` for an integer or a
+ *   float.
  */
 const readPosted = (
   baseType: PostedBaseType,
@@ -392,6 +484,13 @@ const readPosted = (
   if (baseType === "identifier" || isPair(baseType)) {
     return parseLexical(baseType, lexical).pipe(
       Result.mapError((): MalformedReason => "identifier"),
+      Result.map(Option.some),
+    );
+  }
+
+  if (isPoint(baseType) || baseType === "boolean") {
+    return parseLexical(baseType, lexical).pipe(
+      Result.mapError((): MalformedReason => baseType),
       Result.map(Option.some),
     );
   }
@@ -533,26 +632,122 @@ const readValue = (
   );
 
 /**
- * Give the texts posted under a binding's name, in order.
+ * Read one point value from the two coordinates posted for it.
+ *
+ * Each coordinate is checked and trimmed as a posted number is, then the two are composed into the
+ * point's lexical form for {@link readPosted}. A position where both are empty is no value, as an
+ * empty entry of any other base type is; one empty and one filled is a point with a missing
+ * partner, which the composed form refuses.
+ *
+ * @param x The text posted under the `.x` entry.
+ * @param y The text posted under the `.y` entry.
+ * @returns The point, none when both are empty, or `character` for a character XML cannot carry
+ *   and `point` for anything but two whole numbers.
+ */
+const readCoordinates = (
+  x: string,
+  y: string,
+): Result.Result<Option.Option<Single>, MalformedReason> => {
+  if (!isXmlText(x) || !isXmlText(y)) {
+    return Result.fail("character");
+  }
+
+  const [left, right] = [x.trim(), y.trim()];
+
+  return left === "" && right === ""
+    ? Result.succeedNone
+    : readPosted(pointBaseType, `${left} ${right}`, 10);
+};
+
+/**
+ * Give the texts posted under one entry name, in order.
  *
  * @param entries The posted entries.
- * @param binding The response's binding.
+ * @param name The entry name.
+ * @param cardinality The binding's cardinality.
  * @returns The texts, or `file` when one entry is a file, and `single-many` when a `single` or a
  *   record has more than one.
  */
 const postedTexts = (
   entries: readonly Entry[],
-  binding: Binding,
+  name: string,
+  cardinality: Binding["cardinality"],
 ): Result.Result<readonly string[], MalformedReason> => {
-  const posted = entries.filter(([name]) => name === binding.name).map(([, value]) => value);
+  const posted = entries.filter(([entry]) => entry === name).map(([, value]) => value);
   const texts = posted.filter((value): value is string => typeof value === "string");
   if (texts.length < posted.length) {
     return Result.fail("file");
   }
 
-  const takesOne = binding.cardinality === "single" || binding.cardinality === "record";
+  const takesOne = cardinality === "single" || cardinality === "record";
 
   return takesOne && texts.length > 1 ? Result.fail("single-many") : Result.succeed(texts);
+};
+
+/**
+ * Read a point value from the `.x` and `.y` entries posted for its binding.
+ *
+ * The two names are read as two bindings of the point's cardinality are, so a file under either is
+ * `file` and a second entry under either of a `single` is `single-many`. The entries then pair by
+ * position, the n-th `.x` with the n-th `.y`, each pair read by {@link readCoordinates}; a
+ * `multiple` or `ordered` response holds the pairs in posted order, less those where both are
+ * empty. Unequal counts of `.x` and `.y` entries are `point`: a value is missing a partner.
+ *
+ * @param entries The posted entries.
+ * @param binding The point response's binding.
+ * @returns The value, or the first reason a pair is refused.
+ */
+const readPoints = (
+  entries: readonly Entry[],
+  binding: ValueBinding,
+): Result.Result<Value, MalformedReason> => {
+  const [xName, yName] = pointEntryNames(binding.name);
+
+  return Result.all([
+    postedTexts(entries, xName, binding.cardinality),
+    postedTexts(entries, yName, binding.cardinality),
+  ]).pipe(
+    Result.filterOrFail(
+      ([xs, ys]) => xs.length === ys.length,
+      (): MalformedReason => "point",
+    ),
+    Result.flatMap(([xs, ys]) =>
+      Result.all(Array.zip(xs, ys).map(([x, y]) => readCoordinates(x, y))),
+    ),
+    Result.map((values) => ({
+      baseType: binding.baseType,
+      cardinality: binding.cardinality,
+      values: Array.getSomes(values),
+    })),
+  );
+};
+
+/**
+ * Read the entries posted for a binding of either kind as its value.
+ *
+ * @param entries The posted entries.
+ * @param binding The response's binding.
+ * @param base The number base of an integer.
+ * @returns A record for a record binding, a point from its two entry names for a point binding, a
+ *   value of the binding's base type from its one name for any other, or the reason the entries
+ *   are refused.
+ */
+const readBinding = (
+  entries: readonly Entry[],
+  binding: Binding,
+  base: number,
+): Result.Result<ResponseValue, MalformedReason> => {
+  if (binding.cardinality === "record") {
+    return Result.flatMap(postedTexts(entries, binding.name, binding.cardinality), readRecord);
+  }
+
+  if (isPoint(binding.baseType)) {
+    return readPoints(entries, binding);
+  }
+
+  return Result.flatMap(postedTexts(entries, binding.name, binding.cardinality), (texts) =>
+    readValue(texts, binding, base),
+  );
 };
 
 /**
@@ -569,13 +764,9 @@ const decodeResponse = (
   binding: Binding,
   options: DecodeOptions = {},
 ): Result.Result<ResponseValue, Malformed> =>
-  postedTexts(entries, binding).pipe(
-    Result.flatMap((texts): Result.Result<ResponseValue, MalformedReason> =>
-      binding.cardinality === "record"
-        ? readRecord(texts)
-        : readValue(texts, binding, options.base ?? 10),
-    ),
-    Result.mapError((reason) => new Malformed({ entry: binding.name, reason })),
+  Result.mapError(
+    readBinding(entries, binding, options.base ?? 10),
+    (reason) => new Malformed({ entry: binding.name, reason }),
   );
 
 /**
@@ -619,7 +810,14 @@ interface Decode {
  * follows the value model's lexical rules, as content does, so a decimal beyond the largest double
  * reads as the largest finite double of its sign; only `INF`, `-INF` and `NaN`, which the value
  * model reads as non-finite, are refused. An identifier must be an NCName. A string has CRLF and a
- * lone CR turned into LF, as a textarea's value has, so a value holds LF line breaks only.
+ * lone CR turned into LF, as a textarea's value has, so a value holds LF line breaks only. A
+ * boolean is `true` or `false`, as written.
+ *
+ * A point binding reads two entry names, `<name>.x` and `<name>.y` ({@link pointEntryNames}),
+ * pairing the entries by position: the n-th `.x` and the n-th `.y` are one value, each coordinate
+ * trimmed and read as a whole number, in base 10 whatever `base` says. A position where both are
+ * empty is no value, so NULL when every position is. One filled and one empty, more `.x` entries
+ * than `.y` or the reverse, and a coordinate that is not a whole number are refused as `point`.
  *
  * A record binding reads one text, kept as the record's `stringValue` field with its line breaks
  * made LF, and, when the text trimmed of XML whitespace is a decimal number with an optional
@@ -639,7 +837,7 @@ interface Decode {
  * @returns A value of the binding's base type for a {@link ValueBinding}, a record for a
  *   {@link RecordBinding}, or {@link Malformed}: `file` for a file, `single-many` for two entries
  *   of a `single` or a record, `character` for text holding a character XML cannot carry, and
- *   `number` or `identifier` for text outside the base type's lexical space.
+ *   `number`, `identifier`, `boolean` or `point` for text outside the base type's lexical space.
  */
 export const decode =
   // SAFETY: decodeResponse gives a record exactly when the binding's cardinality is `record`, which only a RecordBinding has, and a Value of the binding's base type otherwise, which is what each overload states.

@@ -2867,6 +2867,23 @@ describe("choiceOrder", () => {
  * @param base The number base its entries are read in.
  * @returns The posting.
  */
+/**
+ * Construct a single response declaration with no correct response, default or mapping.
+ *
+ * @param identifier The response's identifier.
+ * @param baseType Its base type.
+ * @returns The declaration.
+ */
+const declared = (identifier: string, baseType: "boolean" | "point"): ResponseDeclaration => ({
+  areaMapping: Option.none(),
+  baseType,
+  cardinality: "single",
+  correct: Option.none(),
+  defaultValue: Option.none(),
+  identifier,
+  mapping: Option.none(),
+});
+
 const postingOf = (
   identifier: string,
   baseType: ValueBinding["baseType"],
@@ -3025,6 +3042,55 @@ describe("postings", () => {
         options: { base: 10 },
       },
     ]);
+  });
+
+  it("gives a point response and a boolean response an interaction binds their postings, which decode the two-entry and the lexical forms", () => {
+    const bound: Item = {
+      ...item,
+      body: [textEntry("POINT"), textEntry("DONE")],
+      responses: new Map([
+        ...item.responses,
+        ["POINT", declared("POINT", "point")],
+        ["DONE", declared("DONE", "boolean")],
+      ]),
+    };
+    const [point, done, ...others] = postings(redactItem(bound), instance);
+
+    assert.deepStrictEqual(point, postingOf("POINT", "point", 10));
+    assert.deepStrictEqual(done, postingOf("DONE", "boolean", 10));
+    assert.lengthOf(others, 0);
+
+    const { binding: pointBinding, options: pointOptions } =
+      point ?? assert.fail("POINT has no posting.");
+    const { binding: doneBinding, options: doneOptions } =
+      done ?? assert.fail("DONE has no posting.");
+    const threeFour: Value = {
+      baseType: "point",
+      cardinality: "single",
+      values: [{ baseType: "point", value: [3n, 4n] }],
+    };
+    const truth: Value = {
+      baseType: "boolean",
+      cardinality: "single",
+      values: [{ baseType: "boolean", value: true }],
+    };
+    assert.deepStrictEqual(
+      Result.getSuccess(
+        decode(
+          [
+            [`${pointBinding.name}.x`, "3"],
+            [`${pointBinding.name}.y`, "4"],
+          ],
+          pointBinding,
+          pointOptions,
+        ),
+      ),
+      Option.some(threeFour),
+    );
+    assert.deepStrictEqual(
+      Result.getSuccess(decode([[doneBinding.name, "true"]], doneBinding, doneOptions)),
+      Option.some(truth),
+    );
   });
 
   it("gives no posting to a declared response no interaction binds, so a post carries nothing over its record value", () => {

@@ -1162,6 +1162,145 @@
 /* end graphic-associate-interaction */
 
 /* begin graphic-order-interaction (issue ei-10) */
+
+/*
+ * The Root lays the image and the positions side by side, and wraps them when the width is short;
+ * the Prompt takes the whole first line. The hidden inputs are not rendered.
+ */
+:where([data-slot="graphic-order-interaction"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+/* The Prompt: its own line, in the weight a Choice's Prompt has. */
+:where([data-slot="graphic-order-interaction-prompt"]) {
+  display: block;
+  flex-basis: 100%;
+  font-weight: 500;
+}
+
+/*
+ * The image part, the box the hotspots are positioned in: a grid, so the author's image is a block
+ * in it and leaves no line gap under it, and the box is exactly the image's. It takes the image's
+ * own size; an image wider than its line scrolls with the item, with the hotspots over it.
+ */
+:where([data-slot="graphic-order-interaction-image"]) {
+  position: relative;
+  display: inline-grid;
+}
+
+/* The hotspots lie over the image, and take no pointer: without script they are not controls. */
+:where([data-slot="graphic-order-interaction-hotspots"]) {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+}
+
+/* A hotspot covers the image's box. It forms no stacking context, so its parts stack with the others'. */
+:where([data-slot="graphic-order-interaction-hotspot"]) {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+}
+
+/*
+ * The outline fills the image's box, so its coordinates scale with the image. A default area lies
+ * under the others, which it would hide; every Badge lies over them all.
+ */
+:where([data-slot="graphic-order-interaction-outline"]) {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+:where([data-slot="graphic-order-interaction-hotspot"][data-area="default"])
+  :where([data-slot="graphic-order-interaction-outline"]) {
+  z-index: 0;
+}
+
+/*
+ * A drawn area: the theme's dark stroke over a light veil, so the stroke keeps 3:1 against the
+ * veiled image inside it (1.4.11) however dark the image is. The outline sets them on itself and
+ * the shape it holds inherits them.
+ */
+:where([data-slot="graphic-order-interaction-outline"]) {
+  fill: color-mix(in oklab, var(--card, oklch(1 0 0)) 25%, transparent);
+  stroke: var(--primary, oklch(0.205 0 0));
+  stroke-width: 2px;
+}
+
+/*
+ * An ordered hotspot's area: a wider stroke and a stronger veil, which forced colours keep, as
+ * they recolour a stroke and keep its width, so the order never shows by colour alone.
+ */
+:where([data-slot="graphic-order-interaction-hotspot"][data-position])
+  :where([data-slot="graphic-order-interaction-outline"]) {
+  fill: color-mix(in oklab, var(--card, oklch(1 0 0)) 40%, transparent);
+  stroke-width: 4px;
+}
+
+/*
+ * The Badge, a hotspot's position: a round chip centred on its area, where the page's own `left`
+ * and `top` place it. With none it sits at the image's corner. Its number is text, so it is read.
+ */
+:where([data-slot="graphic-order-interaction-badge"]) {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-inline-size: 1.5rem;
+  min-block-size: 1.5rem;
+  padding: 0 0.25rem;
+  border: 2px solid var(--card, oklch(1 0 0));
+  border-radius: 9999px;
+  background-color: var(--primary, oklch(0.205 0 0));
+  color: var(--primary-foreground, oklch(0.985 0 0));
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1;
+  translate: -50% -50%;
+}
+
+/* The positions: a numbered list beside the image. */
+:where([data-slot="graphic-order-interaction-ordered"]) {
+  display: grid;
+  flex: 1 1 12rem;
+  gap: 0.5rem;
+  margin: 0;
+  padding-inline-start: 1.5rem;
+}
+
+/* A position: a bordered row that holds the name of the hotspot placed there. */
+:where([data-slot="graphic-order-interaction-slot"]) {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, oklch(0.922 0 0));
+  border-radius: var(--radius, 0.625rem);
+}
+
+/* An empty position: a dashed border and the muted text, which keeps 4.5:1 on the page. */
+:where([data-slot="graphic-order-interaction-slot"][data-empty]) {
+  border-style: dashed;
+  color: var(--muted-foreground, oklch(0.556 0 0));
+}
+
+/* A Root the author disabled dims its positions, as a disabled Choice row is dimmed. */
+:where([data-slot="graphic-order-interaction"][data-disabled])
+  :where([data-slot="graphic-order-interaction-slot"]) {
+  opacity: 0.5;
+}
+
 /* end graphic-order-interaction */
 
 /* begin position-object-interaction (issue ei-12) */
@@ -1174,6 +1313,118 @@
 /* end drawing-interaction */
 
 /* begin slider-interaction (issue ei-16) */
+
+/*
+ * The Slider Root: a block whose Prompt takes a line of its own, then the Control between the
+ * labels of its two bounds, wrapping when the line is short. The parts stand in the order the page
+ * shows them (a reversed range puts the high bound first), so no rule reorders them.
+ */
+:where([data-slot="slider-interaction"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+}
+
+/* The Slider Prompt: its own line, set apart by weight as Choice's and Extended Text's are. */
+:where([data-slot="slider-interaction-prompt"]) {
+  flex: 0 0 100%;
+  margin-block-end: 0.5rem;
+  font-weight: 500;
+}
+
+/*
+ * The Slider Control, a native range: it takes the line the labels leave, and is 24px tall at the
+ * least, so the whole slider, one target (WCAG 2.5.8, note 1), is not smaller than that. The
+ * thumb and track stay the browser's own, which the host's `accent-color` sets.
+ */
+:where([data-slot="slider-interaction-control"]) {
+  flex: 1 1 10rem;
+  min-inline-size: 0;
+  min-block-size: 24px;
+  margin: 0;
+}
+
+/*
+ * A vertical Slider (`orientation`): the parts in a column, its Control upright and a fixed length.
+ * A range in a vertical writing mode runs with its low bound at the top; the Control's own `dir`
+ * turns it, as `reverse` and the orientation ask, so no rule here reads `reverse`.
+ */
+:where([data-slot="slider-interaction"][data-orientation="vertical"]) {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+:where(
+  [data-slot="slider-interaction"][data-orientation="vertical"]
+    [data-slot="slider-interaction-prompt"]
+) {
+  flex: none;
+  align-self: stretch;
+}
+
+:where(
+  [data-slot="slider-interaction"][data-orientation="vertical"]
+    [data-slot="slider-interaction-control"]
+) {
+  flex: none;
+  inline-size: 10rem;
+  writing-mode: vertical-lr;
+}
+
+/* The bounds' labels of a vertical Slider: centred over the Control, which is a column's width. */
+:where(
+  [data-slot="slider-interaction"][data-orientation="vertical"]
+    [data-slot="slider-interaction-lower-bound"],
+  [data-slot="slider-interaction"][data-orientation="vertical"]
+    [data-slot="slider-interaction-upper-bound"]
+) {
+  min-inline-size: 24px;
+  text-align: center;
+}
+
+/*
+ * A Slider holding a refused answer: a bar down its start edge. A native range takes no border,
+ * shadow or fill from a browser such as WebKit, so the mark is on the Root. The page is rendered
+ * with the refusal, never changed to it, so the bar's width moves nothing.
+ */
+:where(
+  [data-slot="slider-interaction"]:has(
+    [data-slot="slider-interaction-control"][aria-invalid="true"]
+  )
+) {
+  padding-inline-start: 0.75rem;
+  border-inline-start: 0.25rem solid var(--destructive, oklch(0.577 0.245 27.325));
+}
+
+/* A disabled Slider Control. */
+:where([data-slot="slider-interaction-control"]:disabled) {
+  opacity: 0.5;
+}
+
+/*
+ * The Slider Control in review or solution: at full strength, after the rule above. A range has no
+ * readonly, so it is disabled there only because the answer it shows cannot change; a Root the
+ * author disabled, which carries data-disabled, stays dimmed in every mode.
+ */
+:where(
+  [data-slot="slider-interaction"][data-mode="review"]:not([data-disabled])
+    [data-slot="slider-interaction-control"],
+  [data-slot="slider-interaction"][data-mode="solution"]:not([data-disabled])
+    [data-slot="slider-interaction-control"]
+) {
+  opacity: 1;
+}
+
+/* Focus on the Slider Control: the same ring as a text Control's. */
+:where([data-slot="slider-interaction-control"]:focus-visible) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
+
 /* end slider-interaction */
 
 /* begin media-interaction (issue ei-03) */

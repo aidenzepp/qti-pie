@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+  <title>A harbour town</title>
+  <rect width="320" height="200" fill="#e8f1f7"/>
+  <rect x="0" y="140" width="320" height="60" fill="#9cc3d9"/>
+  <rect x="30" y="40" width="70" height="50" fill="#d9b382" stroke="#5a4326" stroke-width="2"/>
+  <circle cx="160" cy="70" r="30" fill="#f4e285" stroke="#7a6b1d" stroke-width="2"/>
+  <polygon points="220,110 260,50 300,110" fill="#8fc48a" stroke="#2f6b2a" stroke-width="2"/>
+  <ellipse cx="90" cy="165" rx="45" ry="20" fill="#c9503e" stroke="#6e241a" stroke-width="2"/>
+</svg>

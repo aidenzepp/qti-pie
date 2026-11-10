@@ -1821,6 +1821,11 @@ const notice = (build: Build, feature: string, path: string): Result.Result<Unsu
  * Read a body element's attributes as written, without namespace declarations, attributes of
  * other namespaces, or the attributes a mark names.
  *
+ * `data-ssml` and `data-qti-suppress-tts` are carried, not marked (decision D22): QTI types
+ * `data-ssml` as "the container for the equivalent JSON value that is to be passed to the SSML
+ * processor" (reading R7-a), and both reach the rendered HTML unchanged so the browser's
+ * read-aloud engine finds the speech plan in the DOM.
+ *
  * @param element The element.
  * @returns Its attributes, `xml:lang` named `xml:lang`.
  */
