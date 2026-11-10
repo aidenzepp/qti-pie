@@ -291,11 +291,36 @@ const submitButtons = (instance: string): PartOverrides => {
 };
 
 /**
+ * Construct the attributes the Save button and the hidden default submit share: `type="submit"`,
+ * the session's intent name, the `go` intent to the current item as the value, and `disabled`
+ * exactly when the session does not take that intent, as a navigation button is.
+ *
+ * @param state The navigation, whose allowed intents decide `disabled`.
+ * @param view The current item.
+ * @param instance The session's instance, the store's id.
+ * @returns The attributes.
+ */
+const saveAttributes = (state: NavigationState, view: ItemView, instance: string): Attributes => {
+  const value = encodeIntent({ kind: "go", sequenceIndex: view.sequenceIndex });
+
+  return {
+    name: intentName(instance),
+    type: "submit",
+    value,
+    ...when(!state.allowed.some((intent) => encodeIntent(intent) === value), {
+      disabled: true,
+    }),
+  };
+};
+
+/**
  * Construct the playground's Save button: a submit button that posts `go` to the current item, so
- * a press saves the responses and stays on the item. It stands before the navigation, so it is the
- * form's first submit button, the one HTML's implicit submission posts when Enter is pressed in a
- * text field: Enter saves and never moves the candidate. It is disabled exactly when the session
- * does not take that intent, as a navigation button is.
+ * a press saves the responses and stays on the item. It stands between the item and the
+ * navigation. The form's first submit button in tree order, the one HTML's implicit submission
+ * posts when Enter is pressed in a text field, is the hidden default submit before the item
+ * ({@link defaultSubmit}), which posts the same intent, so Enter saves and never moves the
+ * candidate, whatever submit button the item holds. It is disabled exactly when the session does
+ * not take that intent, as a navigation button is.
  *
  * @param state The navigation, whose allowed intents decide `disabled`.
  * @param view The current item.
@@ -303,22 +328,27 @@ const submitButtons = (instance: string): PartOverrides => {
  * @returns The button.
  * @see https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#implicit-submission
  */
-const saveButton = (state: NavigationState, view: ItemView, instance: string): Element => {
-  const value = encodeIntent({ kind: "go", sequenceIndex: view.sequenceIndex });
+const saveButton = (state: NavigationState, view: ItemView, instance: string): Element =>
+  h("button", saveAttributes(state, view, instance), [text("Save")]);
 
-  return h(
-    "button",
-    {
-      name: intentName(instance),
-      type: "submit",
-      value,
-      ...when(!state.allowed.some((intent) => encodeIntent(intent) === value), {
-        disabled: true,
-      }),
-    },
-    [text("Save")],
-  );
-};
+/**
+ * Construct the session form's hidden default submit: a `button type="submit" hidden` that stands
+ * first in the form, before the item, carrying the Save button's `name`, `value` and `disabled`.
+ * HTML's default button is the form's first submit button in tree order, the one implicit
+ * submission (Enter in a text field) fires at, and an item can hold a submit button of its own,
+ * an End Attempt's Control, named for its response: with this button first, Enter posts the Save
+ * intent and an End Attempt ends the attempt only when the candidate activates it. `hidden` alone
+ * hides it, so it is not rendered, not focusable and not in the accessibility tree, and the
+ * candidate meets one Save.
+ *
+ * @param state The navigation, whose allowed intents decide `disabled`.
+ * @param view The current item.
+ * @param instance The session's instance, the store's id.
+ * @returns The button.
+ * @see https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#implicit-submission
+ */
+const defaultSubmit = (state: NavigationState, view: ItemView, instance: string): Element =>
+  h("button", { hidden: true, ...saveAttributes(state, view, instance) }, [text("Save")]);
 
 /**
  * Give the title a session page carries: `{state}: Item n of N, {test title}`.
@@ -343,8 +373,10 @@ const itemTitle = (view: ItemView, state: Shown["state"], testTitle: string): st
 
 /**
  * Compose a session page for the current item: the test's title, the Status part when the page
- * answers a refused post, then the playground's form around the item, the Save button and the
- * navigation, then the links home.
+ * answers a refused post, then the playground's form around the hidden default submit, the item,
+ * the Save button and the navigation, in that order, then the links home. The hidden default
+ * ({@link defaultSubmit}) stands first so that the form's default button is the playground's own,
+ * posting the Save intent, whatever submit button the item holds.
  *
  * The form posts to the session's page with, as its fragment, the id of the Status region the
  * current item's instance gives, which the page answering a refused post holds first in reading
@@ -394,6 +426,7 @@ const itemPage = (sitting: Sitting, view: ItemView, shown: Shown): Page => {
           novalidate: true,
         },
         [
+          defaultSubmit(state, view, sitting.session.instance),
           slot(status.length),
           saveButton(state, view, sitting.session.instance),
           slot(status.length + 1),
