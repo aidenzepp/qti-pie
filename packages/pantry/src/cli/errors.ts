@@ -10,7 +10,7 @@ import type { Effect } from "effect";
 import { CliError } from "effect/cli";
 import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
 import type { DatabaseRefusal } from "#pantry/cli/refused.ts";
-import type { exportPackage } from "#pantry/export/package.ts";
+import type { exportPackage } from "#pantry/api/export.ts";
 import type { OverlayConflict } from "#pantry/import/overlays/index.ts";
 import type { importPackage } from "#pantry/import/package.ts";
 import type { UnownedLaws } from "#pantry/import/refusal.ts";
@@ -129,10 +129,11 @@ type KindedTag =
   | "RefusedAbove";
 
 /**
- * Every other failure the export ends with (`#pantry/export/package.ts`): the database holds the
- * package, but the export cannot rebuild a document of it from its rows (`assemble`'s refusals,
- * `DocumentRowCount`, `XmlVersionUnread`), page through them (grizzle's `CursorError`) or write it
- * in its charset (crust's `EncodeError`). Each is a defect of qti, never of the package.
+ * Every other failure the export ends with (pantry's public `exportPackage`,
+ * `#pantry/api/export.ts`): the database holds the package, but the export cannot rebuild a
+ * document of it from its rows (`assemble`'s refusals, `DocumentRowCount`, `XmlVersionUnread`),
+ * page through them (grizzle's `CursorError`) or write it in its charset (crust's `EncodeError`).
+ * Each is a defect of qti, never of the package.
  */
 export type ExportDefectTag = Exclude<
   Effect.Error<ReturnType<typeof exportPackage>>["_tag"],
