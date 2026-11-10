@@ -1101,6 +1101,113 @@
 /* end order-interaction */
 
 /* begin graphic-associate-interaction (issue ei-08) */
+
+/*
+ * The Root lays the image and the pairs side by side, and wraps them when the width is short; the
+ * Prompt takes the whole first line. The hidden inputs are not rendered.
+ */
+:where([data-slot="graphic-associate-interaction"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+/* The Prompt: its own line, in the weight a Choice's Prompt has. */
+:where([data-slot="graphic-associate-interaction-prompt"]) {
+  display: block;
+  flex-basis: 100%;
+  font-weight: 500;
+}
+
+/*
+ * The image part, the box the hotspots are positioned in: a grid, so the author's image is a block
+ * in it and leaves no line gap under it, and the box is exactly the image's.
+ */
+:where([data-slot="graphic-associate-interaction-image"]) {
+  position: relative;
+  display: inline-grid;
+}
+
+/* The hotspots lie over the image, and take no pointer: without script they are not controls. */
+:where([data-slot="graphic-associate-interaction-hotspots"]) {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+}
+
+/* A hotspot covers the image's box. It forms no stacking context, so its parts stack with the others'. */
+:where([data-slot="graphic-associate-interaction-hotspot"]) {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+}
+
+/*
+ * The outline fills the image's box, so its coordinates scale with the image. A default area lies
+ * under the others, which it would hide.
+ */
+:where([data-slot="graphic-associate-interaction-outline"]) {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+:where([data-slot="graphic-associate-interaction-hotspot"][data-area="default"])
+  :where([data-slot="graphic-associate-interaction-outline"]) {
+  z-index: 0;
+}
+
+/*
+ * A drawn area: the theme's dark stroke over a light veil, so the stroke keeps 3:1 against the
+ * veiled image inside it (1.4.11) however dark the image is. The outline sets them on itself and
+ * the shape it holds inherits them.
+ */
+:where([data-slot="graphic-associate-interaction-outline"]) {
+  fill: color-mix(in oklab, var(--card, oklch(1 0 0)) 25%, transparent);
+  stroke: var(--primary, oklch(0.205 0 0));
+  stroke-width: 2px;
+}
+
+/*
+ * A paired hotspot's area: a wider stroke and a stronger veil, which forced colours keep, as they
+ * recolour a stroke and keep its width, so a pairing never shows by colour alone.
+ */
+:where([data-slot="graphic-associate-interaction-hotspot"][data-paired])
+  :where([data-slot="graphic-associate-interaction-outline"]) {
+  fill: color-mix(in oklab, var(--card, oklch(1 0 0)) 40%, transparent);
+  stroke-width: 4px;
+}
+
+/* The pairs: a list beside the image. */
+:where([data-slot="graphic-associate-interaction-pairs"]) {
+  display: grid;
+  flex: 1 1 12rem;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A pair: a bordered row that names its two hotspots. */
+:where([data-slot="graphic-associate-interaction-pair"]) {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, oklch(0.922 0 0));
+  border-radius: var(--radius, 0.625rem);
+}
+
+/* A Root the author disabled dims its pairs, as a disabled Choice row is dimmed. */
+:where([data-slot="graphic-associate-interaction"][data-disabled])
+  :where([data-slot="graphic-associate-interaction-pair"]) {
+  opacity: 0.5;
+}
+
 /* end graphic-associate-interaction */
 
 /* begin graphic-order-interaction (issue ei-10) */
