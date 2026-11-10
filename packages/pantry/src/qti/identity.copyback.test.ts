@@ -229,6 +229,12 @@ const situationsOf = (copyBack: CopyBack, row: AttributeCase): readonly Situatio
   return reached.flatMap(([situation, holds]) => (holds ? [situation] : []));
 };
 
+/**
+ * The timeout, in milliseconds, of each copy-back's test here: a hang guard, never a budget.
+ * Measured 2026-11-10: 18.9 s at a load average of 83 to 103, the slowest of the three.
+ */
+const testTimeoutMs = 120_000;
+
 describe("qti/identity.ts, the copy-backs restated over the ID-typed attributes", () => {
   for (const copyBack of copyBacks) {
     it.effect(
@@ -283,7 +289,7 @@ describe("qti/identity.ts, the copy-backs restated over the ID-typed attributes"
             ),
         });
       },
-      120_000,
+      testTimeoutMs,
     );
   }
 });

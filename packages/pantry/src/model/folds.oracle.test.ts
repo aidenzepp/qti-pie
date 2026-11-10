@@ -27,6 +27,7 @@ import type {
   ElementKind,
   XdmAttribute,
   XdmChild,
+  XdmClosedElement,
   XdmDocument,
 } from "#pantry/model/xdm.ts";
 import {
@@ -49,6 +50,7 @@ import {
 import type {
   GeneratedXdm,
   InvalidVariant,
+  Placed,
   VariantField,
   VariantTarget,
   XdmFamily,
@@ -924,6 +926,114 @@ const unconstructedCase = (
 };
 
 /**
+ * The version a hand-built tree is written in.
+ */
+const builtVersion = "3.0.1" satisfies Composed["version"];
+
+/**
+ * The encoding label of a hand-built tree, spelled as crust's reader reports it, so the tree is one
+ * a read gives back.
+ */
+// oxlint-disable-next-line unicorn/text-encoding-identifier-case -- crust's reader reports the label as `UTF-8`.
+const builtCharset = "UTF-8";
+
+/**
+ * An element of a hand-built tree: its kind, the closed attributes it writes, each with its lexical
+ * form, and the elements it holds in order.
+ */
+interface Built {
+  readonly attributes?: readonly (readonly [name: ClosedName<Composed>, lexical: string])[];
+  readonly children?: readonly Built[];
+  readonly kind: ElementKind<Composed>;
+}
+
+/**
+ * Build a tree by hand, with the model of its shape the generator would have written for it: node 0
+ * is the document, every other node follows in document order under its parent's number and its
+ * own slot, and each interval closes with its subtree. The tree is an item whose item body holds
+ * `body`, which no generator draw reaches, so a case of it fails only where its elements break a
+ * law.
+ *
+ * @param body - The element the item body holds.
+ * @returns The tree, its model, the extent it measures as its bounds, and an empty swarm.
+ */
+const handBuilt = (body: Built): GeneratedXdm => {
+  const model: Placed[] = [{ at: 0, end: 1, kind: "document", parent: 0, start: 0 }];
+  const extent = { attributes: 0, depth: 0, width: 0 };
+  const build = (
+    { attributes = [], children = [], kind }: Built,
+    place: { readonly at: number; readonly depth: number; readonly parent: number },
+  ): XdmClosedElement<Composed> => {
+    const start = model.length;
+    model.push({ at: place.at, end: start + 1, kind, parent: place.parent, start });
+    extent.attributes = Math.max(extent.attributes, attributes.length);
+    extent.depth = Math.max(extent.depth, place.depth);
+    extent.width = Math.max(extent.width, children.length);
+    const held = children.map((child, at) =>
+      build(child, { at, depth: place.depth + 1, parent: start }),
+    );
+    model[start] = { at: place.at, end: model.length, kind, parent: place.parent, start };
+
+    return {
+      _tag: "element",
+      attributes: attributes.map(([name, lexical]) => ({
+        lexical,
+        name: closedName(name),
+        references: [],
+      })),
+      children: held,
+      governs: grammar.xsi.declaredType(builtVersion, kind),
+      kind,
+      namespaces: [],
+      prefix: "",
+    };
+  };
+  const root = build(
+    { children: [{ children: [body], kind: "qti-item-body" }], kind: "qti-assessment-item" },
+    { at: 0, depth: 1, parent: 0 },
+  );
+  model[0] = { at: 0, end: model.length, kind: "document", parent: 0, start: 0 };
+
+  return {
+    bounds: { ...extent, nodes: model.length - 1 },
+    document: {
+      _tag: "document",
+      charset: builtCharset,
+      declaration: Option.none(),
+      doctype: Option.none(),
+      epilog: [],
+      exportCharset: builtCharset,
+      prolog: [],
+      root,
+      version: builtVersion,
+    },
+    model,
+    swarm: {},
+  };
+};
+
+/**
+ * A hand-built tree that breaks an unconstructed law, kept beside the trees a search drew: a case
+ * the generator's draws do not reach, which must still meet every constructed law and still break
+ * the law it names.
+ *
+ * @param note - What the tree holds that breaks the law.
+ * @param law - The unconstructed law it breaks.
+ * @param body - The element its item body holds.
+ * @returns The kept case.
+ */
+const builtCase = (
+  note: string,
+  law: keyof typeof unconstructed,
+  body: Built,
+): Kept<GeneratedXdm, Situation> => ({
+  draws: "",
+  note,
+  reaches: [`${law} refuses`],
+  sketch: handBuilt(body),
+});
+
+/**
  * The trees that broke an unconstructed law in a search that named it constructed, each shrunk by
  * its run:
  *
@@ -932,9 +1042,11 @@ const unconstructedCase = (
  *   (TEST_SEED=2144430066, the rotating stream's case 199), from 4d7eed2f, which stated "Table
  *   headers" without naming it among the unconstructed. The other three are the reds Aiden found at
  *   1ee51d8d (PR #46, comment 6701102861): a table's thead, a td under ssml:audio and a table-less
- *   tfoot. The thead's is kept as a td a table holds, the nearest a search finds: the generator
- *   draws a table's thead (7 of 4,000 trees), but no search of 20,000 cases drew one whose td names
- *   a header.
+ *   tfoot. The thead's is kept twice: as a td a table holds, the nearest a search finds, since the
+ *   generator draws a table's thead (7 of 4,000 trees) but no search of 20,000 cases drew one whose
+ *   td names a header; and as a hand-built tree whose thead td names a header no th of its table
+ *   has, which pins the thead path of the fold, where a td reads its table through its row and its
+ *   thead.
  * - One writes a qti-equal whose tolerance is empty, which holds no value where a tolerance holds one
  *   or two (reading 121): Aiden's red at TEST_SEED=3952699438, with "Equal tolerance" stated over a
  *   lexical form drawn without reading but not named among the unconstructed.
@@ -961,6 +1073,24 @@ const unconstructedCases: readonly Kept<GeneratedXdm, Situation>[] = [
     "a td in a table names a header no th of the table has (TEST_SEED=1119914124)",
     "Table headers",
   ),
+  builtCase("a td in a table's thead names a header no th of the table has", "Table headers", {
+    children: [
+      {
+        children: [
+          {
+            children: [
+              { attributes: [["id", "h1"]], kind: "th" },
+              { attributes: [["headers", "h2"]], kind: "td" },
+            ],
+            kind: "tr",
+          },
+        ],
+        kind: "thead",
+      },
+      { children: [{ children: [{ kind: "td" }], kind: "tr" }], kind: "tbody" },
+    ],
+    kind: "table",
+  }),
   unconstructedCase(
     "3.1.0.0.0.0.0.0.9.f.0.0.0.0.9.0.1.0.0.3.1.0.3.0.0.1.0.2o0.1.2.3.0.0.7.0.0.0.0.0.0.0.0.0.0.0.0.2bd.1.0.2.0.1i.0.1.0.0.0.0.0.0.0.0.0.0.0",
     "a td under ssml:audio, which no table holds, names a header (TEST_SEED=4046452640)",
