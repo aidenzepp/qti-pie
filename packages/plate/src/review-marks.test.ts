@@ -300,6 +300,17 @@ const elementsOf = (nodes: readonly Node[]): readonly Element[] =>
   nodes.flatMap((node) => (node.kind === "element" ? [node, ...elementsOf(node.children)] : []));
 
 /**
+ * Whether an element of the parsed page carries a boolean attribute. The render writes a `true`
+ * attribute as its bare name, which parses to the empty string (`#plate/test/round-trip.ts`
+ * `parseHtml`), so the parsed page holds no `true`: the attribute is carried when it is present.
+ *
+ * @param element The element, as `parseHtml` read it.
+ * @param name The attribute's name.
+ * @returns Whether the element carries it.
+ */
+const carries = (element: Element, name: string): boolean => element.attrs[name] !== undefined;
+
+/**
  * Read an attribute that holds a string.
  *
  * @param element The element.
@@ -364,7 +375,7 @@ const choiceMarks = (
     assert.isAtMost(marks.length, 1, "a choice holds at most one Mark");
 
     return {
-      checked: control?.attrs["checked"] === true,
+      checked: control !== undefined && carries(control, "checked"),
       choice: Option.getOrElse(
         Option.fromUndefinedOr(control).pipe(Option.flatMap((held) => attributeOf(held, "value"))),
         () => "",
@@ -473,8 +484,8 @@ describe("review marks against the solution: the four demo pools", () => {
           );
         const wrong = reviewed(accepted, { RESPONSE: picked("quack") }, configuration);
         const [control] = partsOf(wrong, slot.inlineControl);
-        const shown = elementsOf(control === undefined ? [] : [control]).find(
-          (option) => option.attrs["selected"] === true,
+        const shown = elementsOf(control === undefined ? [] : [control]).find((option) =>
+          carries(option, "selected"),
         );
 
         assert.deepStrictEqual(marksFor(picked("quack")), [
@@ -487,7 +498,10 @@ describe("review marks against the solution: the four demo pools", () => {
         assert.deepStrictEqual(marksFor(nothing("identifier")), [
           { answer: "missed", words: "Right answer: moo" },
         ]);
-        assert.strictEqual(control?.attrs["disabled"], true, "the dropdown stays disabled");
+        assert.isTrue(
+          control !== undefined && carries(control, "disabled"),
+          "the dropdown stays disabled",
+        );
         assert.isTrue(
           Option.exists(Option.fromUndefinedOr(shown), (option) =>
             Option.contains(attributeOf(option, "value"), "quack"),
@@ -536,7 +550,7 @@ describe("review marks against the solution: the four demo pools", () => {
         assert.deepStrictEqual(credits(wrong), ["none"]);
         assert.deepStrictEqual(credits(right), ["full"]);
         assert.isTrue(
-          partsOf(wrong, slot.textControl).every((control) => control.attrs["readonly"] === true),
+          partsOf(wrong, slot.textControl).every((control) => carries(control, "readonly")),
           "the box stays readonly, still a tab stop",
         );
         assert.deepStrictEqual(checkTree(pageOf(wrong), { baseLevel: 2 }), []);
