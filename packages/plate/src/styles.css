@@ -1028,6 +1028,50 @@
 
 /* end item-live */
 
+/* begin select-place (unit W0-BA) */
+
+/*
+ * The select-then-place states, which the runtime's select-then-place driver writes on any kind's
+ * tokens and targets after the SSR, which never writes them: aria-pressed on a token ("true" while
+ * it is held), data-cursor on the target the arrow keys have reached, and aria-disabled on a token
+ * or target a move refuses. This one block styles them for every kind, under the item Root and by
+ * no marker; a kind's own block below may say more by marker, and wins by order.
+ */
+
+/* A held token: the primary surface, so it stands apart from the tokens still in the source. */
+:where([data-slot="item"] [aria-pressed="true"]) {
+  border-color: var(--primary, oklch(0.205 0 0));
+  background-color: var(--primary, oklch(0.205 0 0));
+  color: var(--primary-foreground, oklch(0.985 0 0));
+}
+
+/* Focus on a token, held or not (every token carries aria-pressed): the same ring as a Choice row's. */
+:where([data-slot="item"] [aria-pressed]:focus-visible) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
+
+/*
+ * The target under the cursor: a dashed outline in the primary colour, which forced colours keep,
+ * dashed so it never reads as the solid focus ring. Focus stays on the held token while the cursor
+ * moves, so the two seldom meet; where they do, a kind's focus rule below wins by order.
+ */
+:where([data-slot="item"] [data-cursor]) {
+  outline-width: 2px;
+  outline-offset: 0;
+  outline-style: dashed;
+  outline-color: var(--primary, oklch(0.205 0 0));
+}
+
+/* A token or target a move refuses: dimmed, as a disabled Control is. */
+:where([data-slot="item"] [aria-disabled="true"]) {
+  opacity: 0.5;
+}
+
+/* end select-place */
+
 /* begin gap-match-interaction (issue m3d-03) */
 
 /* The Gap Match Root: a block, holding the Prompt, the word bank and the gapped content. */
@@ -1238,15 +1282,26 @@
  * Each Choice, a label laid over the whole image, takes no pointer event itself, and neither does
  * its Outline: only the drawn shape does, by its own presentation attribute, so a click on the
  * area activates the label and toggles its Control, and a click outside every area reaches
- * nothing. The default hotspot's shape, which would otherwise lie over every other, takes none
- * either (its own presentation attribute); the sheet keys on part markers alone, so no rule can
- * lay it under the others.
+ * nothing. Each Choice is a positioned box, so its z-index orders the Choices, which stack by it
+ * and then by document order: every Choice lies at 1, and the default hotspot's Choice, whose
+ * shape fills the whole image, lies at 0 by the next rule. So the areas listed before the default
+ * lie above it and stay clickable where they overlap it, and a click where no other area is
+ * drawn reaches the default's shape (issue m3d-07b, GitHub issue #194).
  */
 :where([data-slot="hotspot-interaction-choice"]) {
   position: absolute;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
   line-height: normal;
+}
+
+/*
+ * The default hotspot's Choice, which the module marks with its shape as data-area, lies under
+ * every other Choice: its shape is a rectangle over the whole image.
+ */
+:where([data-slot="hotspot-interaction-choice"][data-area="default"]) {
+  z-index: 0;
 }
 
 /*

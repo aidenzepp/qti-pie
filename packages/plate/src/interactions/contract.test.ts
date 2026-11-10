@@ -380,17 +380,39 @@ describe("an interaction module not implemented", () => {
 });
 
 /**
- * The kind the landed fake stands in for: one whose module is still a stub, the last to land, so a
- * real module that lands never meets it. The fake keeps the shape of a Gap Match (gap texts, gaps)
- * whatever the kind, and everything that names the kind reads it from here, so a real module of
- * this kind lands by changing this one line.
+ * The kind the landed fake stands in for. The fake keeps the shape of a Gap Match (gap texts, gaps)
+ * whatever the kind, and everything that names the kind reads it from here. A real module of this
+ * kind lands without meeting it: the fake's node carries {@link landedBrand}, by which alone the
+ * tests tell it apart, and {@link withLanded} registers the fake in place of the kind's whole
+ * module file, so under the mock the real module is never loaded and the two never answer the same
+ * node.
  */
 const landedKind = "select-point" as const;
 
 /**
- * The module file the fake takes the place of, and the name that file exports its module by.
+ * The module file the fake takes the place of.
  */
 const landedFile = `#plate/interactions/${landedKind}.ts`;
+
+/**
+ * The name {@link landedFile} exports its module by, which the mock exports the fake under.
+ */
+const landedExport = "selectPointModule";
+
+/**
+ * The brand of the fake's model and payload nodes: a field no module's node declares, with a value
+ * this file alone writes. The tests narrow to the fake's nodes by this field, never by the kind's
+ * node shape, which the module of the kind owns: a stub's bare node today, a real module's own
+ * once one lands, and the fake's guards hold against either.
+ */
+const landedBrand = "landed-fake" as const;
+
+/**
+ * The element {@link landedGapMatch} declares as the container of its interactions, as a Position
+ * Object's module declares `qti-position-object-stage`: the body walk hands it to the fake's
+ * container `parse` with the interactions inside it parsed.
+ */
+const landedStage = `qti-${landedKind}-stage` as const;
 
 /**
  * One gap text of {@link landedGapMatch}'s model node: a `qti-gap-text`, content it holds beyond
@@ -409,6 +431,7 @@ interface LandedGapText {
  */
 interface LandedModel extends ModuleInteraction<typeof landedKind> {
   readonly baseType: Option.Option<BaseType>;
+  readonly brand: typeof landedBrand;
   readonly class: string;
   readonly gapTexts: readonly LandedGapText[];
   readonly gapped: readonly BodyNode[];
@@ -426,6 +449,7 @@ interface LandedModel extends ModuleInteraction<typeof landedKind> {
  */
 interface LandedPayload {
   readonly autofocus: boolean;
+  readonly brand: typeof landedBrand;
   readonly class: string;
   readonly content: readonly PayloadNode[];
   readonly formName: string;
@@ -542,10 +566,46 @@ const landedGapMatch: InteractionModule<
   "gap" | "itemButton" | "root",
   unknown
 > = {
+  /**
+   * One association where NULL would stand when the form posted nothing for the response, so a
+   * test sees the postings and the decoder reach this member.
+   */
+  absentValue: () => ({
+    baseType: "directedPair",
+    cardinality: "multiple",
+    values: [{ baseType: "directedPair", value: ["W", "G1"] }],
+  }),
   bindings: (interaction) => [{ base: Option.none(), response: interaction.response }],
   connect: () => ({}),
+  /**
+   * The element the fake owns as the container of its interactions ({@link landedStage}): its
+   * `parse` keeps the children the body walk read, marked on the element, so a test sees the walk
+   * hand both in, and its `render` wraps their output in a `div` naming the module, so a test sees
+   * the emitter hand the children's output to the module.
+   */
+  container: {
+    element: landedStage,
+    parse: (element, children, { path, read }) => {
+      read.markElement(element);
+
+      return Result.succeed({ children, kind: "container", module: landedKind, path });
+    },
+    render: (node, children) =>
+      Result.succeed(
+        h(
+          "div",
+          { "data-stage": node.module, "data-stage-size": String(children.length) },
+          children,
+        ),
+      ),
+  },
   content: (interaction) => interaction.content,
   controls: () => 1,
+  /**
+   * The attempt counts only when the submission set the response the node binds, so a test sees
+   * the hub hand the submission's responses to this member.
+   */
+  countsAttempt: (interaction, posted) => Object.hasOwn(posted, interaction.response),
   element: `qti-${landedKind}-interaction`,
   feature: features[landedKind],
   implemented: true,
@@ -585,6 +645,7 @@ const landedGapMatch: InteractionModule<
         ariaLabel: read.valueOf(element, "aria-label"),
         ariaLabelledby: read.valueOf(element, "aria-labelledby"),
         baseType: read.bound.pipe(Option.flatMap((bound) => bound.baseType)),
+        brand: landedBrand,
         class: Option.getOrElse(read.valueOf(element, "class"), () => ""),
         gapTexts,
         gapped,
@@ -602,6 +663,7 @@ const landedGapMatch: InteractionModule<
       ariaLabel: OptionalText,
       ariaLabelledby: OptionalText,
       baseType: Schema.OptionFromOptionalKey(Schema.Literals(baseTypes)),
+      brand: Schema.Literal(landedBrand),
       class: Schema.String,
       gapTexts: Schema.Array(Schema.Struct({ content: BodyNodes, identifier: Schema.String })),
       gapped: BodyNodes,
@@ -618,6 +680,7 @@ const landedGapMatch: InteractionModule<
 
     return {
       autofocus: kit.autofocus,
+      brand: interaction.brand,
       class: interaction.class,
       content: kit.nodes(interaction.gapped),
       formName: kit.formName(interaction.response),
@@ -764,8 +827,11 @@ const itemDerived: Equals<
 const landedSteps: SteppedIn<LandedTable> = landedTable;
 
 /**
- * Run an effect with {@link landedGapMatch} registered in place of the stub of its kind, every
- * module it imports loaded afresh, and the stub restored after.
+ * Run an effect with {@link landedGapMatch} registered in place of the module of its kind, every
+ * module it imports loaded afresh, and the kind's module restored after. The mock is keyed by the
+ * kind's module file ({@link landedFile}), so the table of modules the hubs reload holds the fake
+ * at the kind and never loads that file's own module, stub or real: one module answers the kind's
+ * element under the mock.
  *
  * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
  * @returns The effect, wrapped.
@@ -773,7 +839,7 @@ const landedSteps: SteppedIn<LandedTable> = landedTable;
 const withLanded = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
   Effect.sync(() => {
     vi.resetModules();
-    vi.doMock(landedFile, () => ({ selectPointModule: landedGapMatch }));
+    vi.doMock(landedFile, () => ({ [landedExport]: landedGapMatch }));
   }).pipe(
     Effect.andThen(effect),
     Effect.ensuring(
@@ -791,6 +857,7 @@ const landedJson = {
   body: [
     { kind: "text", text: "Fill the gaps: " },
     {
+      brand: landedBrand,
       class: "gaps",
       gapTexts: [{ content: [{ kind: "text", text: "cat" }], identifier: "G1" }],
       gapped: [],
@@ -867,6 +934,95 @@ const landedDocument = doc(
 );
 
 /**
+ * An item whose body holds one Gap Match with the regions {@link landedGapMatch} gives in order: a
+ * Prompt, two gap texts, and gapped content with no gap in it. The regions test reads its node
+ * from the model the hubs build, as the fake's node reaches a hub typed over the table of modules
+ * only that way: the fake's own type is no member of that table's union.
+ */
+const landedRegionsDocument = doc(
+  "items/landed-regions.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "landed-regions"), attr("title", "Landed regions")],
+    [
+      el(
+        "qti-response-declaration",
+        [
+          attr("base-type", "directedPair"),
+          attr("cardinality", "multiple"),
+          attr("identifier", "RESPONSE"),
+        ],
+        [],
+      ),
+      el(
+        "qti-item-body",
+        [],
+        [
+          el(
+            `qti-${landedKind}-interaction`,
+            [attr("max-associations", "2"), attr("response-identifier", "RESPONSE")],
+            [
+              el("qti-prompt", [], [text("Fill")]),
+              el("qti-gap-text", [attr("identifier", "G1")], [text("cat")]),
+              el("qti-gap-text", [attr("identifier", "G2")], [text("dog")]),
+              text("gapped"),
+            ],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
+/**
+ * An item whose body holds the fake's container ({@link landedStage}) around two of its
+ * interactions, each bound to its own directed-pair response, with a paragraph between them.
+ */
+const landedStageDocument = doc(
+  "items/landed-stage.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "landed-stage"), attr("title", "Landed stage")],
+    [
+      ...["FIRST", "SECOND"].map((identifier) =>
+        el(
+          "qti-response-declaration",
+          [
+            attr("base-type", "directedPair"),
+            attr("cardinality", "multiple"),
+            attr("identifier", identifier),
+          ],
+          [],
+        ),
+      ),
+      el(
+        "qti-item-body",
+        [],
+        [
+          el(
+            landedStage,
+            [],
+            [
+              el(
+                `qti-${landedKind}-interaction`,
+                [attr("max-associations", "1"), attr("response-identifier", "FIRST")],
+                [el("qti-gap-text", [attr("identifier", "A")], [text("ant")])],
+              ),
+              el("p", [], [text("between")]),
+              el(
+                `qti-${landedKind}-interaction`,
+                [attr("max-associations", "1"), attr("response-identifier", "SECOND")],
+                [el("qti-gap-text", [attr("identifier", "B")], [text("bee")])],
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
+/**
  * A host's replacement for a part: the part as a `span`.
  *
  * @param props The part's attributes.
@@ -884,18 +1040,21 @@ const replacement: PartFunction<Attributes> = (props, children) => h("span", pro
 const textNode = (value: string): BodyNode => ({ kind: "text", text: value });
 
 /**
- * Tell whether a body node is the landed Gap Match's model node: the one the mocked module's
- * `parse` gives, which the module table's types, read from the stub, cannot name.
+ * Tell whether a value is the landed Gap Match's model node: the one the mocked module's `parse`
+ * gives, which the module table's types, read from the module of its kind, cannot name. It narrows
+ * by {@link landedBrand} alone, over an erased type, so it holds whatever node the kind's module
+ * declares: a predicate over `BodyNode` would need the fake's node assignable to the kind's, which
+ * a real module's own node refuses.
  *
- * @param node A body node.
- * @returns Whether it is a Gap Match with the landed module's gap texts.
+ * @param value A body node, its type erased.
+ * @returns Whether it is the fake's model node.
  */
-const isLandedModel = (node: BodyNode): node is LandedModel =>
-  node.kind === landedKind && "gapTexts" in node;
+const isLandedModel = (value: unknown): value is LandedModel =>
+  Predicate.isObject(value) && value["brand"] === landedBrand;
 
 /**
- * Tell whether a value is the landed Gap Match's payload node at its kind, by the field no stub's
- * node and no shipped kind's payload holds under that kind.
+ * Tell whether a value is the landed Gap Match's payload node at its kind, by {@link landedBrand}
+ * on the payload the fake's `redact` gives, which no module's payload carries.
  *
  * @param value A payload node, its type erased.
  * @returns Whether it holds the landed payload node.
@@ -904,9 +1063,8 @@ const isLandedPayloadNode = (
   value: unknown,
 ): value is { readonly kind: typeof landedKind; readonly payload: LandedPayload } =>
   Predicate.isObject(value) &&
-  value["kind"] === landedKind &&
   Predicate.isObject(value["payload"]) &&
-  Predicate.isString(value["payload"]["formName"]);
+  value["payload"]["brand"] === landedBrand;
 
 /**
  * Give the landed Gap Match's payload node a payload node holds: the one the mocked module's
@@ -1218,23 +1376,21 @@ describe("a module that lands", () => {
     withLanded(
       Effect.gen(function* regions() {
         const interactions = yield* Effect.promise(() => import("#plate/model/interactions.ts"));
-        const node: LandedModel = {
-          ariaLabel: Option.none(),
-          ariaLabelledby: Option.none(),
-          baseType: Option.none(),
-          class: "",
-          gapTexts: [
-            { content: [textNode("cat")], identifier: "G1" },
-            { content: [textNode("dog")], identifier: "G2" },
-          ],
-          gapped: [textNode("gapped")],
-          gaps: [],
-          kind: landedKind,
-          maxAssociations: 1n,
-          path: `qti-assessment-item/qti-item-body/qti-${landedKind}-interaction`,
-          prompt: Option.some([textNode("Fill")]),
-          response: "RESPONSE",
-        };
+        const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+        const built = yield* Effect.fromResult(model.buildItem(landedRegionsDocument));
+        const [node] = built.body;
+
+        assert.isDefined(node);
+        if (node === undefined || !isLandedModel(node)) {
+          assert.fail(`the body holds a ${node?.kind ?? "nothing"}, not the landed Gap Match`);
+        }
+
+        assert.deepStrictEqual(node.gapTexts, [
+          { content: [textNode("cat")], identifier: "G1" },
+          { content: [textNode("dog")], identifier: "G2" },
+        ]);
+        assert.deepStrictEqual(node.gapped, [textNode("gapped")]);
+
         const found = interactions.regionsOf(node);
 
         assert.deepStrictEqual(
@@ -1279,6 +1435,63 @@ describe("a module that lands", () => {
         );
       }),
     ),
+  );
+
+  it.effect(
+    "says whether a submission counts an attempt and what no posted entry means, which the hubs, the engine and the postings read",
+    () =>
+      withLanded(
+        Effect.gen(function* attemptFacts() {
+          const interactions = yield* Effect.promise(() => import("#plate/model/interactions.ts"));
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const records = yield* Effect.promise(() => import("#plate/model/record.ts"));
+          const engine = yield* Effect.promise(() => import("#plate/engine/attempt.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const form = yield* Effect.promise(() => import("#plate/form/encoding.ts"));
+          const built = yield* Effect.fromResult(model.buildItem(landedDocument));
+          const [node] = built.body;
+
+          assert.isDefined(node);
+          if (node === undefined || !isLandedModel(node)) {
+            assert.fail(`the body holds a ${node?.kind ?? "nothing"}, not the landed Gap Match`);
+          }
+
+          const absent = pairsValue(["W", "G1"]);
+
+          // The hubs hand the node to the module's two members.
+          assert.deepStrictEqual(interactions.absentValueOf(node), absent);
+          assert.isFalse(interactions.countsAttempt(built, {}));
+          assert.isTrue(interactions.countsAttempt(built, { RESPONSE: pairsValue() }));
+
+          // The engine raises the count only when the hub says the attempt counts, and sets the
+          // responses either way.
+          const record = records.fresh(built, "q1");
+          const uncounted = yield* Effect.fromResult(engine.runAttempt(built, record, {}));
+          const counted = yield* Effect.fromResult(
+            engine.runAttempt(built, record, { RESPONSE: pairsValue(["W", "G2"]) }),
+          );
+
+          assert.deepStrictEqual(
+            [uncounted.numAttempts, uncounted.attempt, counted.numAttempts, counted.attempt],
+            [0, "submitted", 1, "submitted"],
+          );
+          assert.deepStrictEqual(counted.responses, { RESPONSE: pairsValue(["W", "G2"]) });
+
+          // The posting carries the module's value, which no entry decodes to.
+          const [posting, ...others] = payload.postings(payload.redactItem(built), "q1");
+
+          assert.lengthOf(others, 0);
+          assert.deepStrictEqual(posting?.options, { absent, base: 10 });
+          if (posting === undefined) {
+            assert.fail("RESPONSE has no posting.");
+          }
+
+          assert.deepStrictEqual(
+            Result.getSuccess(form.decode([], posting.binding, posting.options)),
+            Option.some(absent),
+          );
+        }),
+      ),
   );
 
   it.effect("counts the headings of its payload's content in the item's heading shift", () =>
@@ -1365,4 +1578,104 @@ describe("a module that lands", () => {
       },
     );
   });
+});
+
+describe("a module that declares a container", () => {
+  it.effect(
+    "is handed its element by the body walk with the interactions inside it parsed, its node survives the payload and the JSON form, and the emitter hands their output to its render",
+    () =>
+      withLanded(
+        Effect.gen(function* container() {
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const codec = yield* Effect.promise(() => import("#plate/codec/redacted.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const configuration = yield* configure({});
+          const built = yield* Effect.fromResult(model.buildItem(landedStageDocument));
+          const [node, ...rest] = built.body;
+          const path = `qti-assessment-item/qti-item-body/${landedStage}`;
+
+          // The walk handed the stage to the module's container parse, its children parsed.
+          assert.lengthOf(rest, 0);
+          if (node?.kind !== "container") {
+            assert.fail(`the body holds a ${node?.kind ?? "nothing"}, not the container`);
+          }
+
+          assert.strictEqual(node.module, landedKind);
+          assert.strictEqual(node.path, path);
+          assert.deepStrictEqual(
+            node.children.map((child) => (isLandedModel(child) ? child.response : child.kind)),
+            ["FIRST", "element", "SECOND"],
+          );
+          assert.deepStrictEqual(built.unsupported, []);
+
+          // The redaction keeps the container, and the payload copies its children through the
+          // modules.
+          const redactedItem = payload.redactItem(built);
+          const [kept] = redactedItem.body;
+
+          assert.strictEqual(kept?.kind, "container");
+
+          const view: View = {
+            finished: false,
+            instance: "q1",
+            locale: configuration.locale,
+            messages: [],
+            mode: "answering",
+            names: new Map(),
+            posted: Option.none(),
+            seed: "",
+            values: new Map(),
+          };
+          const [copied] = payload.payload(redactedItem, view).body;
+
+          if (copied?.kind !== "container") {
+            assert.fail(`the payload holds a ${copied?.kind ?? "nothing"}, not the container`);
+          }
+
+          assert.deepStrictEqual(
+            copied.children.map((child) =>
+              Option.match(landedPayloadOf(child), {
+                onNone: () => child.kind,
+                onSome: (landed) => landed.response,
+              }),
+            ),
+            ["FIRST", "element", "SECOND"],
+          );
+
+          // The JSON form carries the container, with no path, and decodes to the same body.
+          const encoded = yield* Effect.fromResult(codec.encodeRedacted(redactedItem));
+          const [json] = encoded.body;
+
+          assert.deepStrictEqual(Object.keys(json ?? {}).toSorted(), [
+            "children",
+            "kind",
+            "module",
+          ]);
+          assert.strictEqual(json?.kind === "container" ? json.module : undefined, landedKind);
+
+          const decoded = yield* Effect.fromResult(
+            // oxlint-disable-next-line unicorn/prefer-structured-clone -- the round trip is the JSON a host sends to a page, which a structured clone does not take.
+            codec.decodeRedacted(JSON.parse(JSON.stringify(encoded))),
+          );
+          const [again] = decoded.body;
+
+          assert.strictEqual(again?.kind, "container");
+          assert.strictEqual(again?.kind === "container" ? again.children.length : 0, 3);
+
+          // The emitter rendered the children, then the container around their output.
+          const { html } = yield* Effect.fromResult(
+            plate.render(decoded, configuration, { instance: "q1" }),
+          );
+
+          assert.match(
+            html,
+            new RegExp(
+              `<div data-stage="${landedKind}" data-stage-size="3"><div [^>]*data-response="FIRST"[^>]*>.*<p>between</p><div [^>]*data-response="SECOND"[^>]*>.*</div></div>`,
+              "u",
+            ),
+          );
+        }),
+      ),
+  );
 });

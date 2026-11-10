@@ -297,7 +297,9 @@ const targetOf = (standing: Standing, intent: MoveIntent): Result.Result<number,
  *
  *   Before the part's modes rule on a move, the test-feature modules do, through `gatedBy`: a
  *   module's refusal is the rule `feature`, and a module's target replaces the modes' (a branch
- *   rule's). Every stub lets every move through.
+ *   rule's). A module's `expire` is neither: the modes decide the move as if no module answered,
+ *   so a list of the moves allowed offers it, and `advance` carries the expiry out in the move's
+ *   place when the host posts it. Every stub lets every move through.
  *
  * @param test The test the session was started from.
  * @param session The session.
@@ -333,17 +335,19 @@ export const moveTargets = (
   return Result.map(standingOf(test.test, session), (standing) => (intent) => {
     const from = Option.some(originOf(standing));
     const gated = gatedBy(features, { intent, now, session, test: test.test });
-    if (Option.isSome(gated)) {
-      return gated.value.kind === "target"
-        ? Result.succeed(gated.value.sequenceIndex)
-        : Result.fail(
-            new MoveRefused({
-              feature: Option.some(gated.value.refusal),
-              from,
-              intent,
-              rule: "feature",
-            }),
-          );
+    if (Option.isSome(gated) && gated.value.kind === "target") {
+      return Result.succeed(gated.value.sequenceIndex);
+    }
+
+    if (Option.isSome(gated) && gated.value.kind === "refused") {
+      return Result.fail(
+        new MoveRefused({
+          feature: Option.some(gated.value.refusal),
+          from,
+          intent,
+          rule: "feature",
+        }),
+      );
     }
 
     return Result.mapError(

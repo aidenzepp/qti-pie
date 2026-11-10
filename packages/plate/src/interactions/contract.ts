@@ -34,7 +34,12 @@
  * form through its `payloadSchema`, each of its parts through {@link partRow}, its own elements
  * through the render function it hands `emitNodes` (`nestedInteraction` in `#plate/emit/body.ts`),
  * and its parts reach a host's overrides and the `data-slot` lookup through the names
- * `#plate/model/interactions.ts` hands the part table as it loads.
+ * `#plate/model/interactions.ts` hands the part table as it loads. A module whose interactions
+ * stand inside an element of their own, as Position Objects stand inside a
+ * `qti-position-object-stage`, declares that element as its container
+ * ({@link InteractionModule.container}): the body walk hands the element to the module with the
+ * interactions inside it already parsed, and the emitter renders the container through the module
+ * (`RenderInteraction.containers`).
  *
  * @module
  */
@@ -43,17 +48,18 @@ import type { Option, Result, Schema } from "effect";
 import type { SchemaKit } from "#plate/codec/redacted.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { SourceChild, SourceElement } from "#plate/document/source.ts";
-import type { Attributes, Element } from "#plate/emit/node.ts";
+import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { slotFor } from "#plate/emit/parts.ts";
 import type { InteractionKey, PartKey, PartRow } from "#plate/emit/parts.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import type { Malformed } from "#plate/form/encoding.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { Region } from "#plate/model/interactions.ts";
-import type { BodyNode, Interaction, Unsupported } from "#plate/model/item.ts";
+import type { BodyNode, ContainerNode, Interaction, Unsupported } from "#plate/model/item.ts";
 import type { AttributeReaders } from "#plate/model/reader.ts";
 import type { ResponseValue, Single, Value } from "#plate/model/values.ts";
 import type {
+  ContainerPayload,
   EmitState,
   Payload,
   PayloadNode,
@@ -106,6 +112,13 @@ export type ModuleKind = keyof typeof moduleKinds;
  * @returns Whether a module parses the kind.
  */
 export const isModuleKind = (kind: string): kind is ModuleKind => Object.hasOwn(moduleKinds, kind);
+
+/**
+ * Every {@link ModuleKind}, in the order the table names them: the one list a Schema over the kinds
+ * is built from (the container node's `module` in `#plate/codec/redacted.ts`), so a kind added to
+ * the table reaches it with no second list.
+ */
+export const moduleKindList: readonly ModuleKind[] = Object.keys(moduleKinds).filter(isModuleKind);
 
 /**
  * A feature of the QTI 3.0 conformance list, Appendix A, by its identifier: `Q-1` to `Q-21` are
@@ -295,7 +308,8 @@ export interface RedactKit {
   /**
    * Give the strings a refused post sent for a response, which the controls show in place of the
    * value: none when the view has no messages, and the strings posted, none of them when the post
-   * carried none for the response, when it has.
+   * carried none for the response, when it has. A point response posts two strings per value, its
+   * x then its y, in the order `encode` writes them.
    *
    * @param response The response identifier, one of the module's `bindings`.
    * @returns The posted strings, when the view restores a post.
@@ -354,6 +368,55 @@ export interface BoundResponse {
 export type OwnRegion = Omit<Region, "owner">;
 
 /**
+ * The element a module owns as the container of its interactions, and what the module does with
+ * it: a `qti-position-object-stage` holds the Position Objects it is the stage of, and is no
+ * interaction and no content of its own, so the module of the interactions inside it owns it. The
+ * body walk reads the element's children as body nodes first, the interactions inside it through
+ * their own modules, then hands the element and those nodes to `parse`; the payload, the redacted
+ * codec and the emitter carry the node `parse` gives as a container (`ContainerNode`,
+ * `ContainerPayload`), whose children are read, copied and emitted as any body nodes are, and the
+ * emitter hands the children's output to `render` for the container's own element. Position
+ * Object (issue ei-12) is the first module to declare one.
+ *
+ * @template K The kind of the module that owns the element.
+ */
+export interface ModuleContainer<K extends ModuleKind> {
+  /**
+   * The QTI element name, which the body walk dispatches on before it gives the notice.
+   */
+  readonly element: `qti-${string}`;
+  /**
+   * Read the container element into the module's container node, or its notice.
+   *
+   * @param element The container element.
+   * @param children The element's children as the body walk read them, in document order: the
+   *   interactions inside it through their modules, any other content as the body holds it.
+   * @param context The element's path, its notice, and the kit it is read with.
+   * @returns The container node at the module's kind, or the unsupported node, or a refusal.
+   */
+  readonly parse: (
+    element: SourceElement,
+    children: readonly BodyNode[],
+    context: ParseContext,
+  ) => Result.Result<ContainerNode<K> | Unsupported, Refusal>;
+  /**
+   * Render the container node around its children's output.
+   *
+   * @param node The container's payload node.
+   * @param children The children as the emitter rendered them, in document order.
+   * @param payload The render's payload.
+   * @param state The render's emit state.
+   * @returns The container's element, or the refusal of a part swap.
+   */
+  readonly render: (
+    node: ContainerPayload,
+    children: readonly Node[],
+    payload: Payload,
+    state: EmitState,
+  ) => Result.Result<Element, PartSwapRefused>;
+}
+
+/**
  * One interaction kind's module.
  *
  * @template K The kind, as the item model names it.
@@ -373,6 +436,23 @@ export interface InteractionModule<
   J = never,
 > {
   /**
+   * The value a response the interaction binds takes when the form posted no entry for it, in
+   * place of NULL. `absentValueOf` in `#plate/model/interactions.ts` reads it, `postings`
+   * (`#plate/payload.ts`) carries it in the response's posting as `decode`'s `absent` option, and
+   * `decode` (`#plate/form/encoding.ts`) gives it for no entry, so a host that decodes through the
+   * postings gets it without naming the kind. Absent, or `undefined` returned, means NULL, which
+   * every shipped kind and every stub leaves in place: a Control that posts nothing has no
+   * response. End Attempt (issue ei-02) is the first module to set it: its button posts `true`
+   * when the candidate ends the attempt through it, and a submission without the button sets the
+   * response to `false`, not NULL, since the information model sets an End Attempt's response to
+   * false whenever the attempt ends another way.
+   *
+   * @param interaction The model node.
+   * @returns The value no entry decodes to, or `undefined` for NULL.
+   * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Root_EndAttemptInteraction
+   */
+  readonly absentValue?: (interaction: I) => Value | undefined;
+  /**
    * The responses the interaction binds, each with its number base, as `postings` reads them.
    */
   readonly bindings: (interaction: I) => readonly BoundResponse[];
@@ -380,6 +460,17 @@ export interface InteractionModule<
    * Compute every attribute of every part once, as `renderInlineChoice`'s connect function does.
    */
   readonly connect: (interaction: P, payload: Payload, locale: Locale) => Connected;
+  /**
+   * The element the module owns as the container of its interactions ({@link ModuleContainer}),
+   * such as the `qti-position-object-stage` Position Objects stand inside. The body walk hands an
+   * element of that name to the module's container `parse` with the interactions inside it already
+   * parsed (`containerFor` in `#plate/model/interactions.ts`), and the emitter renders the
+   * container node through its container `render` (`renderContainer` there). Absent for a module
+   * whose interactions stand in the body on their own, every shipped kind and every stub among
+   * them: an element no module declares stays the notice the body walk gives any other `qti-*`
+   * element. Position Object (issue ei-12) is the first module to declare one.
+   */
+  readonly container?: ModuleContainer<K>;
   /**
    * The payload nodes the render writes as content through `emitNodes`, in document order, as a
    * Prompt's nodes are written: the hubs that read what the emitter writes (the heading levels
@@ -391,6 +482,23 @@ export interface InteractionModule<
    * How many Controls the interaction renders, which numbers the Controls the renderer names.
    */
   readonly controls: (interaction: I) => number;
+  /**
+   * Whether a submission through the item counts an attempt, read once per processed attempt with
+   * the responses the submission set. `countsAttempt` in `#plate/model/interactions.ts` folds every
+   * interaction's answer, and `runAttempt` (`#plate/engine/attempt.ts`) raises `numAttempts` by
+   * one only when every answer is true; otherwise the record keeps its count while the responses
+   * are still set and the rules still run. Absent means true, the answer of every shipped kind and
+   * every stub: every submission counts. End Attempt (issue ei-02) is the first module to set it:
+   * with `count-attempt` false, the attempt the candidate ends through its button is not counted.
+   *
+   * @param interaction The model node.
+   * @param posted The submission's responses, by identifier, as `runAttempt` is given them: the
+   *   module reads the value of the response its node binds from them, absent when the submission
+   *   did not set it.
+   * @returns Whether the attempt is counted.
+   * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Root_EndAttemptInteraction
+   */
+  readonly countsAttempt?: (interaction: I, posted: Readonly<Record<string, Value>>) => boolean;
   /**
    * The interaction's QTI element name, which the body walk dispatches on.
    */

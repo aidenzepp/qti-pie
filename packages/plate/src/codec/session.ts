@@ -30,13 +30,15 @@ const ValuesSchema = Schema.Record(Schema.String, ValueSchema);
 const SavedSchema = Schema.Record(Schema.String, ResponseValueSchema);
 
 /**
- * The Schema of one item of a test session. `saved`, `firstOutcomes` and `templateDefaults` are
- * left out of the stored form when there are none.
+ * The Schema of one item of a test session. `adaptive` and `locked` are always written; `saved`,
+ * `firstOutcomes` and `templateDefaults` are left out of the stored form when there are none.
  */
 const SessionItemSchema = Schema.Struct({
+  adaptive: Schema.Boolean,
   datestamp: Schema.String,
   duration: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
   firstOutcomes: Schema.OptionFromOptionalKey(ValuesSchema),
+  locked: Schema.Boolean,
   presented: Schema.Boolean,
   record: ItemRecordSchema,
   ref: Schema.String,
@@ -46,12 +48,22 @@ const SessionItemSchema = Schema.Struct({
 });
 
 /**
+ * A timed scope that expired, as `TimedScope` of `#plate/test-features/contract.ts` names one.
+ */
+const TimedScopeSchema = Schema.Struct({
+  identifier: Schema.String,
+  kind: Schema.Literals(["item-ref", "part", "section", "test"]),
+});
+
+/**
  * The fields of a test session, as {@link TestSession} has them. `seed` is a string, required: the
  * host's seed or the one `startTest` drew, which every stored session holds. `outcomeRuns` is a
  * whole number, and `shuffleSeed` is left out of the stored form when the session has none.
+ * `expired` is always present, empty until a timed scope expires.
  */
 const sessionFields = {
   document: Schema.String,
+  expired: Schema.Array(TimedScopeSchema),
   instance: Schema.String,
   items: Schema.Array(SessionItemSchema),
   kind: Schema.Literal("test"),
@@ -91,13 +103,14 @@ export const TestSessionSchema = Schema.Struct({
 );
 
 /**
- * A test session in the form the host stores: JSON-safe data that names its version, `4`. Every
+ * A test session in the form the host stores: JSON-safe data that names its version, `6`. Every
  * value is written as the stored item record writes it, integers as their decimal digits, so no
  * integer is rounded on the way through the host, the test's `outcomes` among them; each item's
  * `record` is a stored item record, its seed, template values, correct responses and defaults with
  * it, so it is server data as the record is, and so is the session's own `seed`, which keys every
- * value an item draws; an item's `saved`, `firstOutcomes` and `templateDefaults`, and the
- * session's `shuffleSeed`, are absent when there are none.
+ * value an item draws; each item carries `adaptive` and `locked`; an item's `saved`,
+ * `firstOutcomes` and `templateDefaults`, and the session's `shuffleSeed`, are absent when there
+ * are none.
  */
 export type StoredTestSession = typeof TestSessionSchema.Encoded;
 
@@ -189,7 +202,7 @@ export class InvalidSession extends Data.TaggedError("InvalidSession")<{
    */
   readonly stage: SessionStage;
   /**
-   * The value the stored session holds under `version`, which is `4` when something else is
+   * The value the stored session holds under `version`, which is `6` when something else is
    * wrong; none when it is not an object or names no version, and at stage `encode`, where no
    * stored session was read.
    */

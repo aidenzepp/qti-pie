@@ -20,11 +20,14 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { adaptivePolicy } from "#plate/engine/adaptive.ts";
 import { runAttempt } from "#plate/engine/attempt.ts";
 import { runRules } from "#plate/engine/evaluate.ts";
 import { validateChoice } from "#plate/interactions/choice.ts";
 import { message } from "#plate/messages.ts";
+import { valueOf, xsBooleanOf } from "#plate/model/attributes.ts";
 import type { IntegerOrRef, TemplateRule } from "#plate/model/expression.ts";
+import { modules } from "#plate/model/interactions.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type {
   AreaMapping,
@@ -47,6 +50,7 @@ import { fresh } from "#plate/model/record.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import { rptemplatesDirectory } from "#plate/test/caches.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
+import { stubBaseType, stubCardinality, stubElement } from "#plate/test/stub-kind.ts";
 import { acceptedOf, openCorpus } from "#plate/test/sweep.ts";
 import { checkRules } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
@@ -1932,45 +1936,41 @@ describe("buildItem", () => {
       }),
   );
 
-  it.effect("[I-7] shows a hotspot interaction as a notice and keeps the rest of the body", () =>
-    Effect.gen(function* hotspotIsNotice() {
+  it.effect("[I-7] shows a stub interaction as a notice and keeps the rest of the body", () =>
+    Effect.gen(function* stubIsNotice() {
+      // The stub kind's element, not a hotspot: the point is that an interaction a stub module
+      // shows as a notice leaves the body's other nodes built, so the fixture names the kind the
+      // table of modules holds as a stub the longest, and no module that lands meets it.
       const built = yield* Effect.fromResult(
         buildItem(
           item({
             body: [
               el("p", [], [text("Which one is Highland Lighthouse?")]),
               el(
-                "qti-hotspot-interaction",
-                [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
+                stubElement,
+                [attr("response-identifier", "RESPONSE")],
                 [
                   el("qti-prompt", [], [text("Pick one")]),
                   el("img", [attr("alt", "a map"), attr("src", "images/map.svg")]),
-                  el("qti-hotspot-choice", [attr("coords", "418,29,40"), attr("identifier", "R")]),
                 ],
               ),
               el("p", [], [text("After")]),
             ],
             declarations: [
-              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+              declaration("qti-response-declaration", "RESPONSE", stubBaseType, stubCardinality),
             ],
           }),
         ),
       );
-      const path = `${body}/qti-hotspot-interaction`;
+      const path = `${body}/${stubElement}`;
 
-      assert.deepStrictEqual(built.body[1], {
-        feature: "qti-hotspot-interaction",
-        kind: "unsupported",
-        path,
-      });
+      assert.deepStrictEqual(built.body[1], { feature: stubElement, kind: "unsupported", path });
       assert.deepStrictEqual(
         built.body.map((node) => node.kind),
         ["element", "unsupported", "element"],
       );
       assert.deepStrictEqual(childrenOf(built.body[2]), [{ kind: "text", text: "After" }]);
-      assert.deepStrictEqual(built.unsupported, [
-        { feature: "qti-hotspot-interaction", path, shown: "notice" },
-      ]);
+      assert.deepStrictEqual(built.unsupported, [{ feature: stubElement, path, shown: "notice" }]);
     }),
   );
 
@@ -2135,6 +2135,39 @@ describe("buildItem", () => {
             built.unsupported,
             on ? [{ feature: 'adaptive="true"', path: root, shown: "mark" }] : [],
             written,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    '[W0-BD] adaptive="true" is read into Item.adaptive and, while the policy is a stub, marked; an item without the attribute is neither',
+    () =>
+      Effect.gen(function* adaptiveFact() {
+        const cases: readonly (readonly [readonly SourceAttribute[], boolean])[] = [
+          [[attr("adaptive", "true")], true],
+          [[attr("adaptive", "1")], true],
+          [[attr("adaptive", "false")], false],
+          [[], false],
+        ];
+
+        assert.isFalse(adaptivePolicy.implemented);
+        for (const [attributes, adaptive] of cases) {
+          const built = yield* Effect.fromResult(
+            buildItem(
+              item({
+                attributes,
+                body: [el("p", [], [text("Read on.")])],
+                declarations: [],
+              }),
+            ),
+          );
+
+          assert.strictEqual(built.adaptive, adaptive, JSON.stringify(attributes));
+          assert.deepStrictEqual(
+            built.unsupported,
+            adaptive ? [{ feature: 'adaptive="true"', path: root, shown: "mark" }] : [],
+            JSON.stringify(attributes),
           );
         }
       }),
@@ -2596,31 +2629,48 @@ describe("buildItem", () => {
     }),
   );
 
-  it.effect("[Q-32] shows a portable custom interaction as a notice", () =>
-    Effect.gen(function* pciIsNotice() {
-      const path = `${body}/qti-portable-custom-interaction`;
-      const built = yield* Effect.fromResult(
-        buildItem(
-          item({
-            body: [
-              el(
-                "qti-portable-custom-interaction",
-                [attr("module", "fractions"), attr("response-identifier", "RESPONSE")],
-                [el("qti-interaction-markup", [], [el("div", [], [text("Loading")])])],
-              ),
-            ],
-            declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
-          }),
-        ),
-      );
+  it.effect(
+    "[Q-32] shows a portable custom interaction as a notice while its module is a stub, and builds its node once the module lands",
+    () =>
+      Effect.gen(function* pciIsNoticeOrNode() {
+        // Derived from the module's `implemented` flag, as vertical.test.ts [I-0] derives a
+        // verdict: this case's point is the Portable Custom Interaction itself, so the fixture
+        // keeps its element and gains `custom-interaction-type-identifier`, which the landed
+        // module requires, and reads from the flag whether the body holds the stub's notice or the
+        // module's node. What the landed module marks of this fixture is its own test's to pin.
+        const landed = modules["portable-custom"].implemented;
+        const path = `${body}/qti-portable-custom-interaction`;
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "qti-portable-custom-interaction",
+                  [
+                    attr("custom-interaction-type-identifier", "urn:example:fractions"),
+                    attr("module", "fractions"),
+                    attr("response-identifier", "RESPONSE"),
+                  ],
+                  [el("qti-interaction-markup", [], [el("div", [], [text("Loading")])])],
+                ),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "string", "single"),
+              ],
+            }),
+          ),
+        );
+        const notices = built.unsupported.filter((entry) => entry.shown === "notice");
 
-      assert.deepStrictEqual(built.body, [
-        { feature: "qti-portable-custom-interaction", kind: "unsupported", path },
-      ]);
-      assert.deepStrictEqual(built.unsupported, [
-        { feature: "qti-portable-custom-interaction", path, shown: "notice" },
-      ]);
-    }),
+        assert.deepStrictEqual(
+          built.body.map((node) => node.kind),
+          [landed ? "portable-custom" : "unsupported"],
+        );
+        assert.deepStrictEqual(
+          landed ? notices : built.unsupported,
+          landed ? [] : [{ feature: "qti-portable-custom-interaction", path, shown: "notice" }],
+        );
+      }),
   );
 
   it.effect(
@@ -5603,6 +5653,39 @@ describe("buildItem over the corpus", { tags: ["corpus"] }, () => {
       }),
     corpusTimeoutMs,
   );
+
+  it.effect(
+    '[W0-BD] every corpus item that writes adaptive="true" keeps its mark and reads adaptive, and every other item has neither',
+    () =>
+      Effect.gen(function* adaptiveCorpus() {
+        let adaptiveItems = 0;
+        let seen = 0;
+        for (const member of yield* openCorpus) {
+          const accepted = acceptedOf(member);
+          if (Option.isNone(accepted)) {
+            continue;
+          }
+
+          const source = yield* readSource(member.location, member.bytes);
+          const written = Option.getOrElse(
+            Option.flatMap(valueOf(source.root, "adaptive"), xsBooleanOf),
+            () => false,
+          );
+          const marked = accepted.value.item.unsupported.some(
+            (entry) => entry.feature === 'adaptive="true"',
+          );
+
+          seen += 1;
+          adaptiveItems += written ? 1 : 0;
+          assert.strictEqual(accepted.value.item.adaptive, written, `${member.location}: adaptive`);
+          assert.strictEqual(marked, written, `${member.location}: the mark`);
+        }
+
+        assert.isAbove(seen, 0);
+        assert.isAbove(adaptiveItems, 0);
+      }),
+    corpusTimeoutMs,
+  );
 });
 
 /**
@@ -5704,6 +5787,96 @@ describe("align-54 built-ins by kind: the engine holds a built-in a rule names b
           built.unsupported.map(({ feature }) => feature),
           ["variable:duration", "variable:completionStatus"],
         );
+      }),
+  );
+});
+
+describe("buildItem, catalog references", () => {
+  it.effect(
+    "keeps a body element's data-catalog-idref as its catalog, drops and marks the attribute, and gives an element without one no catalog key",
+    () =>
+      Effect.gen(function* keepsCatalogIdref() {
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "p",
+                  [attr("id", "term"), attr("data-catalog-idref", "glossary")],
+                  [text("tern")],
+                ),
+                el("div", [], [text("No catalog.")]),
+              ],
+              declarations: [],
+            }),
+          ),
+        );
+
+        assert.deepStrictEqual(built.body[0], {
+          attributes: [{ name: "id", value: "term" }],
+          catalog: "glossary",
+          children: [{ kind: "text", text: "tern" }],
+          kind: "element",
+          path: `${body}/p`,
+          tag: "p",
+        });
+        assert.deepStrictEqual(built.body[1], {
+          attributes: [],
+          children: [{ kind: "text", text: "No catalog." }],
+          kind: "element",
+          path: `${body}/div`,
+          tag: "div",
+        });
+        assert.isFalse(Object.hasOwn(built.body[1] ?? {}, "catalog"));
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "data-catalog-idref", path: `${body}/p`, shown: "mark" },
+        ]);
+      }),
+  );
+});
+
+describe("buildItem on an element a module could own as its container", () => {
+  it.effect(
+    "gives qti-position-object-stage the notice while Position Object's module declares no container, its subtree dropped",
+    () =>
+      Effect.gen(function* stageNotice() {
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "qti-position-object-stage",
+                  [],
+                  [
+                    el(
+                      "qti-position-object-interaction",
+                      [attr("response-identifier", "RESPONSE")],
+                      [el("qti-prompt", [], [text("Place it")])],
+                    ),
+                  ],
+                ),
+                el("p", [], [text("After")]),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "point", "single"),
+              ],
+            }),
+          ),
+        );
+        const path = `${body}/qti-position-object-stage`;
+
+        assert.deepStrictEqual(built.body[0], {
+          feature: "qti-position-object-stage",
+          kind: "unsupported",
+          path,
+        });
+        assert.deepStrictEqual(
+          built.body.map((node) => node.kind),
+          ["unsupported", "element"],
+        );
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "qti-position-object-stage", path, shown: "notice" },
+        ]);
       }),
   );
 });

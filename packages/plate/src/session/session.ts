@@ -11,6 +11,7 @@
 import type { Option } from "effect";
 import type { ItemRecord } from "#plate/model/record.ts";
 import type { ResponseValue, Value } from "#plate/model/values.ts";
+import type { TimedScope } from "#plate/test-features/contract.ts";
 
 /**
  * The values a candidate gave an item, by response identifier, each value of base type integer an
@@ -40,6 +41,14 @@ export interface SessionPart {
  */
 export interface SessionItem {
   /**
+   * Whether the item this item delivers is adaptive (`Item.adaptive`, the root's `adaptive`
+   * true), written from the item when the session starts and never changed. The reads that decide
+   * whether the item is closed and what attempt limit a submission checks hand it to the adaptive
+   * policy (`adaptivePolicy` in `#plate/engine/adaptive.ts`), so they need no items map. A
+   * restored session reads it back from the stored form.
+   */
+  readonly adaptive: boolean;
+  /**
    * When the last transition that changed this item happened, in ISO 8601 UTC.
    */
   readonly datestamp: string;
@@ -53,6 +62,14 @@ export interface SessionItem {
    * a delivery engine to report only the first outcomes of a non-adaptive item it does not limit.
    */
   readonly firstOutcomes: Option.Option<ItemRecord["outcomes"]>;
+  /**
+   * Whether a timed scope that holds the item has expired: false from the session's start, set true
+   * by `expireScope` (`#plate/session/expire.ts`) for every item of the scope, and never cleared. A
+   * locked item is closed, as an item of an ended part is: its view is `disabled`, a step posted on
+   * it saves no responses, and `submit-item` is not offered for it. A restored session reads it
+   * back from the stored form.
+   */
+  readonly locked: boolean;
   /**
    * Whether the candidate has been shown the item.
    */
@@ -108,9 +125,15 @@ export interface SessionItem {
  * default, else its starting value, when the session starts, and as the last run of the test's
  * outcome processing left them after. `outcomeRuns` counts those runs, 0 when the session starts;
  * the next run is number `outcomeRuns + 1`, and its number keys the values it draws.
+ *
+ * `expired` lists each timed scope whose time ran out, in the order they expired: empty when the
+ * session starts, and appended to by `expireScope` (`#plate/session/expire.ts`) each time a
+ * test-feature module's `gate` answers `expire`. A host learns of an expiry by comparing it across
+ * `advance`; a restored session reads it back from the stored form.
  */
 export interface TestSession {
   readonly document: string;
+  readonly expired: readonly TimedScope[];
   readonly instance: string;
   readonly items: readonly SessionItem[];
   readonly kind: "test";

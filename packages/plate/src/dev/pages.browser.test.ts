@@ -22,6 +22,7 @@ import { rowFor } from "#plate/emit/parts.ts";
 import type { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml, verdictTable } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
+import { modules } from "#plate/model/interactions.ts";
 import { attribute, textOf } from "#plate/test/accessibility.ts";
 import { Playground, eachEngine, playgroundLayer, withPage } from "#plate/test/browsers.ts";
 import { elementsOf, itemTarget } from "#plate/test/playground-page.ts";
@@ -414,31 +415,41 @@ eachEngine((it) => {
     );
 
     pages.effect(
-      "QTI3-hotspot shows the unsupported-feature notice in place of its hotspot interaction",
+      "QTI3-hotspot shows the unsupported-feature notice in place of its hotspot interaction while the Hotspot module is a stub, and the interaction's controls with no such notice once it lands",
       () =>
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* hotspot() {
-            const features = acceptedOf(yield* verdictOf(paths.hotspot))
-              .unsupported.filter((unsupported) => unsupported.shown === "notice")
+            // Derived from the module's `implemented` flag, as vertical.test.ts [I-0] derives a
+            // verdict: the page shows the hotspot item's notice and no control while the module
+            // is a stub, and once it lands, no notice naming the element and as many native
+            // controls as the module declares for the item's hotspot nodes.
+            const landed = modules.hotspot.implemented;
+            const accepted = acceptedOf(yield* verdictOf(paths.hotspot));
+            const features = accepted.unsupported
+              .filter((unsupported) => unsupported.shown === "notice")
               .map((unsupported) => unsupported.feature);
+            let controls = 0;
+            for (const node of accepted.item.body) {
+              if (landed && node.kind === "hotspot") {
+                controls += modules.hotspot.controls(node);
+              }
+            }
 
-            assert.include(features, hotspotFeature);
+            assert.strictEqual(features.includes(hotspotFeature), !landed);
 
             yield* open(page, itemTarget(paths.hotspot));
 
             const notices = page.locator(`[data-slot="${slots.notice}"]`);
+            const hotspotNotice = notices.filter({
+              hasText: message("en", "notice", { feature: hotspotFeature }),
+            });
 
             assert.deepStrictEqual(
               yield* Effect.promise(() => notices.allTextContents()),
               features.map((feature) => message("en", "notice", { feature })),
             );
-            assert.isTrue(
-              yield* Effect.promise(() =>
-                notices
-                  .filter({ hasText: message("en", "notice", { feature: hotspotFeature }) })
-                  .isVisible(),
-              ),
-            );
+            assert.strictEqual(yield* Effect.promise(() => hotspotNotice.count()), landed ? 0 : 1);
+            assert.strictEqual(yield* Effect.promise(() => hotspotNotice.isVisible()), !landed);
             assert.strictEqual(
               yield* Effect.promise(() =>
                 page.locator("qti-hotspot-interaction, qti-hotspot-choice").count(),
@@ -449,7 +460,7 @@ eachEngine((it) => {
               yield* Effect.promise(() =>
                 page.locator('form[action^="/item"] :is(input, select, textarea)').count(),
               ),
-              0,
+              controls,
             );
           }),
         ),

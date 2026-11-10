@@ -1,57 +1,37 @@
 /**
- * The attempt: the record an item's first attempt starts with, and one non-adaptive submission of
- * an item, from the record before it to the record after its response processing.
+ * The attempt: the record an item's first attempt starts with, and one submission of an item, from
+ * the record before it to the record after its response processing.
  *
  * {@link firstAttempt} starts the record: it runs the item's template processing under the record's
  * seed, from the declared state with any template defaults the test gives, and sets every response
  * and outcome to its default, a record response's being its declared default or the NULL record.
- * {@link runAttempt} sets the responses, counts the attempt, resets the declared outcomes, carries
- * the built-in `completionStatus` over, and runs the item's rules with the evaluator over the
- * record's template values and overrides. Both are pure and return the engine's failure rather
- * than throw it. The author's flow decides whether an attempt may run (rule `a9d04969`); this
- * module only runs it.
+ * {@link runAttempt} sets the responses, counts the attempt when the item's interactions say it
+ * counts (`countsAttempt` in `#plate/model/interactions.ts`), starts the outcomes as the adaptive
+ * policy (`adaptivePolicy` in `#plate/engine/adaptive.ts`) gives them, which for a non-adaptive
+ * item resets the declared outcomes and carries the built-in `completionStatus` over, and runs the
+ * item's rules with the evaluator over the record's template values and overrides. Both are pure
+ * and return the engine's failure rather than throw it. The author's flow decides whether an
+ * attempt may run (rule `a9d04969`); this module only runs it.
  *
- * Value imports point one way: here to the template interpreter (`#plate/engine/template.ts`), and
- * both to the evaluator.
+ * Value imports point one way: here to the adaptive policy and the template interpreter
+ * (`#plate/engine/template.ts`), and the interpreter and this module to the evaluator.
  *
  * @module
  */
 import { Option, Result } from "effect";
+import { adaptivePolicy, outcomeStart } from "#plate/engine/adaptive.ts";
 import { runRules } from "#plate/engine/evaluate.ts";
 import type { EngineFailure, Variables } from "#plate/engine/evaluate.ts";
 import { drawStream, responseLabel, templateLabel } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
 import { checkTemplateDefaults, runTemplates } from "#plate/engine/template.ts";
 import type { TemplateValues } from "#plate/engine/template.ts";
+import { countsAttempt } from "#plate/model/interactions.ts";
 import type { Item } from "#plate/model/item.ts";
-import {
-  completionStatus,
-  completionValue,
-  fresh,
-  holdsCompletionStatus,
-  outcomeDefaults,
-  unrunTemplateProcessing,
-} from "#plate/model/record.ts";
+import { fresh, unrunTemplateProcessing } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf, nullRecord } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
-
-/**
- * Give each declared outcome of an item the value it holds before any processing sets it: the
- * default template processing set for it, else its starting value, and the built-in
- * `completionStatus` at `not_attempted` where the item holds it, as {@link outcomeDefaults} gives
- * them. A default set for a response is not an outcome's, so it never joins the outcomes.
- *
- * @param item The item.
- * @param defaults The defaults template processing set, by identifier.
- * @returns The outcomes, keyed by identifier.
- */
-const outcomeStart = (item: Item, defaults: ItemRecord["defaults"]): ItemRecord["outcomes"] => ({
-  ...outcomeDefaults(item),
-  ...Object.fromEntries(
-    Object.entries(defaults).filter(([identifier]) => item.outcomes.has(identifier)),
-  ),
-});
 
 /**
  * Give each response of an item its default (D4-11): the default template processing set for it,
@@ -92,54 +72,22 @@ const recordStart = (item: Item): ItemRecord["records"] =>
   );
 
 /**
- * Give the value the built-in `completionStatus` holds when an attempt's processing starts. It
- * "starts with the reserved value 'not_attempted'. At the start of the first attempt it changes to
- * the reserved value 'unknown'. It remains with this value for the duration of the item session
- * unless set to a different value by a setOutcomeValue rule" (`info.txt:8488`). So the first
- * attempt, where the record counts none, starts it at `unknown`; every later attempt starts from
- * the record's value, the one the last processing left, `not_attempted` included, adaptive or not,
- * and from `unknown` where the record lacks the built-in, as one written before it was held does.
- * The non-adaptive reset to the declared defaults (`info.txt:8486`) covers declared outcomes, and
- * the built-in has no declaration.
- *
- * @param record The session record before the attempt.
- * @returns The built-in's value as the rules first read it.
- */
-const startingCompletion = (record: ItemRecord): Value =>
-  record.numAttempts === 0
-    ? completionValue("unknown")
-    : (record.outcomes[completionStatus] ?? completionValue("unknown"));
-
-/**
- * Give the outcomes an attempt's processing starts from: each declared outcome at its default, the
- * one the record's template processing set, else its starting value ({@link outcomeStart}),
- * because a non-adaptive item resets them before each response processing run, and the built-in
- * `completionStatus`, where the item holds it, as {@link startingCompletion} gives it. So no
- * declared outcome the record holds reaches the rules.
- *
- * @param item The item.
- * @param record The session record before the attempt.
- * @returns The outcomes, keyed by identifier.
- */
-const startingOutcomes = (item: Item, record: ItemRecord): ItemRecord["outcomes"] => {
-  const defaults = outcomeStart(item, record.defaults);
-
-  return holdsCompletionStatus(item)
-    ? { ...defaults, [completionStatus]: startingCompletion(record) }
-    : defaults;
-};
-
-/**
- * Run one non-adaptive attempt of an item.
+ * Run one attempt of an item.
  *
  * In order: the given responses replace the record's values of the same identifiers, and every
- * other response keeps the record's value; `numAttempts` goes up by one; the declared outcomes
- * reset to their defaults, each the one the record's template processing set, else its starting
- * value, because a non-adaptive item resets them before each response processing run, and the
- * built-in `completionStatus` starts at `unknown` at the first attempt and at the record's value
- * at every later one ({@link startingCompletion}); the item's rules run over those variables, and
- * with no processing the outcomes stay where they started; `attempt` becomes `submitted`. The
- * rules read the built-in `numAttempts` as the raised count, this attempt included, because QTI
+ * other response keeps the record's value; `numAttempts` goes up by one when the item's
+ * interactions count the submission as an attempt (`countsAttempt` in
+ * `#plate/model/interactions.ts`: every shipped kind does, and a module such as End Attempt with
+ * `count-attempt` false may not), and otherwise stays at the record's count while the responses
+ * are still set and the rules still run; the outcomes start as the adaptive policy's
+ * `startingOutcomes` gives them (`adaptivePolicy` in `#plate/engine/adaptive.ts`): for a
+ * non-adaptive item, and for every item while the policy is a stub, the declared outcomes reset to
+ * their defaults, each the one the record's template processing set, else its starting value,
+ * because a non-adaptive item resets them before each response processing run, and the built-in
+ * `completionStatus` starts at `unknown` at the first attempt and at the record's value at every
+ * later one; the item's rules run over those variables, and with no processing the outcomes stay
+ * where they started; `attempt` becomes `submitted`. The rules read the built-in
+ * `numAttempts` as the count after this attempt, the raised count when it is counted, because QTI
  * raises it at the start of each attempt, and may read and set `completionStatus`, which the
  * record then keeps into the next attempt. They read the record's template values, and a
  * `qti-correct` or a `qti-default` reads the correct response or default the record's template
@@ -171,12 +119,12 @@ export const runAttempt = (
   record: ItemRecord,
   responses: ItemRecord["responses"],
 ): Result.Result<ItemRecord, EngineFailure> => {
-  const numAttempts = record.numAttempts + 1;
+  const numAttempts = countsAttempt(item, responses) ? record.numAttempts + 1 : record.numAttempts;
   const before: Variables = {
     correct: record.correct,
     defaults: record.defaults,
     numAttempts: BigInt(numAttempts),
-    outcomes: startingOutcomes(item, record),
+    outcomes: adaptivePolicy.startingOutcomes(item, record),
     records: record.records,
     responses: { ...record.responses, ...responses },
     templates: record.templates,

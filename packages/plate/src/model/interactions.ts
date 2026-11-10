@@ -9,7 +9,9 @@
  * {@link stubSteps} is the one place that hands a module kind's model node to its module, and
  * {@link renderModule} and {@link moduleContent} the ones that hand its payload node to its
  * module's render and content, so each hub delegates a module's kind in one line, and a module that
- * lands changes neither. The types the hubs read of a module kind, its model node
+ * lands changes neither. {@link containerFor} and {@link renderContainer} do the same for the
+ * element a module owns as the container of its interactions, and {@link containerKinds} names
+ * the kinds whose module declares one. The types the hubs read of a module kind, its model node
  * ({@link ModelOf}) and its payload node ({@link PayloadOf}), are read from the table of modules
  * ({@link modules}), and the item model reads its union of module nodes ({@link ModuleModel}) from
  * the same table, so a module declares both in its own file and no shared file names a kind's
@@ -45,7 +47,7 @@ import { positionObjectModule } from "#plate/interactions/position-object.ts";
 import { selectPointModule } from "#plate/interactions/select-point.ts";
 import { sliderModule } from "#plate/interactions/slider.ts";
 import { uploadModule } from "#plate/interactions/upload.ts";
-import type { Element } from "#plate/emit/node.ts";
+import type { Element, Node } from "#plate/emit/node.ts";
 import { adoptModuleParts } from "#plate/emit/parts.ts";
 import type { InteractionKey, PartKey, PartName } from "#plate/emit/parts.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
@@ -53,14 +55,16 @@ import { isModuleKind } from "#plate/interactions/contract.ts";
 import type {
   BoundResponse,
   InteractionModule,
+  ModuleContainer,
   ModuleKind,
   OwnRegion,
   PartSpec,
   RedactKit,
 } from "#plate/interactions/contract.ts";
-import type { BodyNode, Interaction, SimpleChoice } from "#plate/model/item.ts";
+import type { BodyNode, Interaction, Item, SimpleChoice } from "#plate/model/item.ts";
 import type { ResponseValue, Value } from "#plate/model/values.ts";
 import type {
+  ContainerPayload,
   EmitState,
   ModulePayloadOf,
   Payload,
@@ -198,9 +202,12 @@ export type ModuleModel = ModuleModelIn<Modules>;
  */
 type SteppedOf<T extends ModuleTable, K extends ModuleKind> = Pick<
   InteractionModule<K, ModelOfIn<T, K>, PayloadOfIn<T, K>>,
+  | "absentValue"
   | "bindings"
+  | "container"
   | "content"
   | "controls"
+  | "countsAttempt"
   | "nullValue"
   | "redact"
   | "regions"
@@ -271,6 +278,34 @@ const replaceModuleRegions = <K extends ModuleKind>(
   interaction: ModelOf<K>,
   contents: readonly (readonly BodyNode[])[],
 ): ModelOf<K> => stepped[kind].replaceRegions(interaction, contents);
+
+/**
+ * Tell whether a module kind's model node counts a submission as an attempt, by its kind's
+ * module: true when the module does not say.
+ *
+ * @param kind The kind.
+ * @param interaction The node.
+ * @param posted The submission's responses, by identifier.
+ * @returns The module's `countsAttempt` answer, true when it has none.
+ */
+const moduleCountsAttempt = <K extends ModuleKind>(
+  kind: K,
+  interaction: ModelOf<K>,
+  posted: Readonly<Record<string, Value>>,
+): boolean => stepped[kind].countsAttempt?.(interaction, posted) ?? true;
+
+/**
+ * Give the value a module kind's model node takes for its response when the form posted no entry,
+ * by its kind's module: none when the module does not say.
+ *
+ * @param kind The kind.
+ * @param interaction The node.
+ * @returns The module's `absentValue`, `undefined` when it has none.
+ */
+const moduleAbsentValue = <K extends ModuleKind>(
+  kind: K,
+  interaction: ModelOf<K>,
+): Value | undefined => stepped[kind].absentValue?.(interaction);
 
 /**
  * Tell whether a node is one of an interaction plate parses through a module: a model node
@@ -420,6 +455,7 @@ export const mapRegions = (
  * kind added to the body or taken from it changes this table or fails to compile.
  */
 const contentKinds = {
+  container: true,
   content: true,
   element: true,
   "printed-variable": true,
@@ -439,8 +475,9 @@ export const isInteraction = (node: BodyNode): node is Interaction =>
   !Object.hasOwn(contentKinds, node.kind);
 
 /**
- * Collect the interactions of body nodes in document order, inside elements, template blocks and
- * inlines, and every interaction's regions ({@link regionsOf}). A template block's or inline's
+ * Collect the interactions of body nodes in document order, inside elements, a module's
+ * containers, template blocks and inlines, and every interaction's regions ({@link regionsOf}). A
+ * template block's or inline's
  * content is walked whatever its visibility, so over the model its interactions are found; a
  * redacted body holds no template block or inline, its hidden content already gone.
  *
@@ -454,6 +491,7 @@ export const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction
     }
 
     switch (node.kind) {
+      case "container":
       case "element": {
         return interactionsIn(node.children);
       }
@@ -472,6 +510,43 @@ export const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction
       }
     }
   });
+
+/**
+ * Tell whether a submission of an item counts an attempt: the one place the engine asks the item's
+ * interactions, so `runAttempt` (`#plate/engine/attempt.ts`) raises `numAttempts` without naming a
+ * kind. Every interaction the body holds ({@link interactionsIn}) answers through its module's
+ * `countsAttempt` (`InteractionModule` in `#plate/interactions/contract.ts`), and the attempt
+ * counts when every answer is true: a shipped kind, a stub and a module that leaves the member
+ * unset answer true, so an item of those alone counts every submission, and one module that
+ * answers false, as an End Attempt with `count-attempt` false does for the attempt ended through
+ * its button, is enough to leave the count where it was.
+ *
+ * @param item The item, by its body.
+ * @param posted The submission's responses, by identifier, as `runAttempt` is given them.
+ * @returns Whether the attempt is counted.
+ */
+export const countsAttempt = (
+  item: Pick<Item, "body">,
+  posted: Readonly<Record<string, Value>>,
+): boolean =>
+  interactionsIn(item.body).every(
+    (interaction) =>
+      !isStubbed(interaction) || moduleCountsAttempt(interaction.kind, interaction, posted),
+  );
+
+/**
+ * Give the value an interaction's response takes when the form posted no entry for it, in place
+ * of NULL: a module kind's node answers through its module's `absentValue` (`InteractionModule` in
+ * `#plate/interactions/contract.ts`), and every other interaction, a shipped kind, a stub or a
+ * module that leaves the member unset, answers none, so no entry stays NULL for it. `postings`
+ * (`#plate/payload.ts`) reads it into the response's posting, so a host that decodes through the
+ * postings gets the module's value without naming the kind.
+ *
+ * @param interaction The interaction.
+ * @returns The value no entry decodes to, or `undefined` for NULL.
+ */
+export const absentValueOf = (interaction: Interaction): Value | undefined =>
+  isStubbed(interaction) ? moduleAbsentValue(interaction.kind, interaction) : undefined;
 
 /**
  * The steps of one module kind's model node, each bound to it: the members of its module the hubs
@@ -620,3 +695,64 @@ export const renderModule = <K extends ModuleKind>(
 export const moduleContent = <K extends ModuleKind>(
   interaction: ModulePayloadOf<K>,
 ): readonly PayloadNode[] => stepped[interaction.kind].content(interaction.payload);
+
+/**
+ * One module's container declaration beside the kind of the module that owns it.
+ */
+interface DeclaredContainer {
+  readonly container: ModuleContainer<ModuleKind>;
+  readonly kind: ModuleKind;
+}
+
+/**
+ * The container declarations of the modules, each beside its module's kind: the one pass over the
+ * table {@link containerFor} and {@link containerKinds} read.
+ */
+const containers: readonly DeclaredContainer[] = Object.values(modules).flatMap((module) =>
+  module.container === undefined ? [] : [{ container: module.container, kind: module.kind }],
+);
+
+/**
+ * Give the container declaration of the module that owns an element as the container of its
+ * interactions (`ModuleContainer` in `#plate/interactions/contract.ts`), by the element's name:
+ * the body walk hands the element to its `parse` with the interactions inside it parsed.
+ *
+ * @param element The element's local name in the QTI namespace.
+ * @returns The module's container, none when no module declares the element.
+ */
+export const containerFor = (element: string): Option.Option<ModuleContainer<ModuleKind>> =>
+  Option.map(
+    Option.fromUndefinedOr(containers.find((declared) => declared.container.element === element)),
+    (declared) => declared.container,
+  );
+
+/**
+ * The kinds whose module declares a container: the kinds a container node may name, which the
+ * redacted codec limits a container's `module` to, so a container naming a kind that declares none
+ * is refused as the JSON form refuses a stub's interaction. None while no module declares one.
+ */
+export const containerKinds: ReadonlySet<ModuleKind> = new Set(
+  containers.map((declared) => declared.kind),
+);
+
+/**
+ * Render a container node through the container `render` of the module its `module` names, around
+ * its children as the emitter rendered them.
+ *
+ * @param node The container's payload node.
+ * @param children The children's output, in document order.
+ * @param payload The render's payload.
+ * @param state The render's emit state.
+ * @returns The container's element, or the refusal of a part swap; none when the node names a kind
+ *   whose module declares no container, which the codec refuses, so only a payload built by hand
+ *   reaches it.
+ */
+export const renderContainer = (
+  node: ContainerPayload,
+  children: readonly Node[],
+  payload: Payload,
+  state: EmitState,
+): Option.Option<Result.Result<Element, PartSwapRefused>> =>
+  Option.map(Option.fromUndefinedOr(stepped[node.module].container), (container) =>
+    container.render(node, children, payload, state),
+  );

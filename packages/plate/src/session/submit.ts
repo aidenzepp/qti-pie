@@ -19,6 +19,7 @@ import { Array as Arr, Data, Option, Result } from "effect";
 import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord } from "#plate/codec/record.ts";
 import type { Configuration } from "#plate/configuration.ts";
+import { adaptivePolicy } from "#plate/engine/adaptive.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { runOutcomes, testScopeOf } from "#plate/engine/outcome.ts";
 import { drawStream, outcomeLabel } from "#plate/engine/random.ts";
@@ -373,7 +374,8 @@ const skipped = (
  * takes and decoded back, and clear its saved responses.
  *
  * The attempt that processes the item's first attempt writes its outcomes to `firstOutcomes`,
- * which no later attempt changes (F1).
+ * which no later attempt changes (F1). `expireScope` (`#plate/session/expire.ts`) is its second
+ * caller, processing each presented item of an expired scope as a submission does.
  *
  * @param accepted The item the session item delivers.
  * @param item The session item.
@@ -381,7 +383,7 @@ const skipped = (
  * @param datestamp The time of the transition, in ISO 8601.
  * @returns The session item after the attempt, or what `score` or the record's codec failed with.
  */
-const processed = (
+export const processed = (
   accepted: Accepted,
   item: SessionItem,
   values: Responses,
@@ -437,7 +439,9 @@ const processedInPart = (
  * `drawStream(session.seed, outcomeLabel(session.instance, n))`, the processing seed under its own
  * label, never the default key. The session then holds the outcomes it left and `outcomeRuns` `n`.
  * A test whose outcome processing is `absent`, or `marked` because the engine cannot run it, runs
- * nothing: its outcomes stay at their defaults and no run is counted.
+ * nothing: its outcomes stay at their defaults and no run is counted. `expireScope`
+ * (`#plate/session/expire.ts`) is its second caller, running it once over the items an expiry
+ * processed.
  *
  * @param test The test.
  * @param items The accepted items, keyed by item ref identifier.
@@ -446,7 +450,7 @@ const processedInPart = (
  * @returns The session after the run, or the {@link EngineFailure} the run failed with: a stored
  *   item record that lacks a value the processing reads.
  */
-const outcomesProcessed = (
+export const outcomesProcessed = (
   test: Test,
   items: ReadonlyMap<string, Accepted>,
   session: TestSession,
@@ -475,6 +479,8 @@ const outcomesProcessed = (
  * first item is presented (`partStarted`), over the test's outcomes as the session holds them:
  * after a simultaneous part's submission, those its outcome run left. When the test closes, its
  * outcome processing runs once more, at the same `now` as any run before it in the transition.
+ * `expireScope` (`#plate/session/expire.ts`) is its second caller, ending the part an expiry
+ * leaves.
  *
  * @param test The test.
  * @param items The accepted items, keyed by item ref identifier.
@@ -485,7 +491,7 @@ const outcomesProcessed = (
  *   for the next part's first item ref; a failure of `partStarted` or of `present`; or the
  *   `EngineFailure` of the closing outcome run.
  */
-const partEnded = (
+export const partEnded = (
   test: Test,
   items: ReadonlyMap<string, Accepted>,
   session: TestSession,
@@ -533,9 +539,12 @@ const partEnded = (
  * Submit the current item of an individual part: process one attempt over its responses.
  *
  * The step is saved first. Then, in order: a closed test is `test-closed`; a simultaneous part is
- * `wrong-submission-mode`; an item whose processed attempts, the record's `numAttempts`, have
- * reached its effective attempt limit above 0 is `attempts-exhausted`, and an item closed otherwise
- * `item-closed`; under `allow-skipping` false an item whose every response a page can post is NULL
+ * `wrong-submission-mode`; the item is looked up among the items (`deliveredItem`), so the adaptive
+ * policy (`adaptivePolicy` in `#plate/engine/adaptive.ts`) can be given whether it is adaptive; an
+ * item whose processed attempts, the record's `numAttempts`, have reached the attempt limit the
+ * policy's `limit` gives for its effective one, above 0, is `attempts-exhausted`, and an item
+ * closed otherwise, its view `disabled`, which consults the policy's `closed`, is `item-closed`;
+ * under `allow-skipping` false an item whose every response a page can post is NULL
  * or its default, the one its record's template processing set or else its declared one, is
  * `skipping-not-allowed`, a record response counted beside the others; under `validate-responses`
  * true, responses `checkResponses` gives messages for, a record response's typed text among them,
@@ -586,7 +595,11 @@ export const submitItem = (
       return yield* refuse("wrong-submission-mode");
     }
 
-    const limit = view.configuration.maxAttempts;
+    const accepted = yield* deliveredItem(items, saved, item);
+    const limit = adaptivePolicy.limit(
+      accepted.item.adaptive ?? false,
+      view.configuration.maxAttempts,
+    );
     if (limit > 0 && item.record.numAttempts >= limit) {
       return yield* refuse("attempts-exhausted");
     }
@@ -595,7 +608,6 @@ export const submitItem = (
       return yield* refuse("item-closed");
     }
 
-    const accepted = yield* deliveredItem(items, saved, item);
     const values = valuesOf(item);
     if (
       !view.configuration.allowSkipping &&

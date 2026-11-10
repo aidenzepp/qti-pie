@@ -39,6 +39,7 @@ import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions
 import type { Locale } from "#plate/messages.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
 import {
+  absentValueOf,
   interactionsIn,
   isInteraction,
   isStubbed,
@@ -122,6 +123,10 @@ export interface View {
    * The name each response's controls post under, `entryName(instance, response)` when absent.
    */
   readonly names: ReadonlyMap<string, string>;
+  /**
+   * The strings a refused post sent, by response, read only when `messages` is not empty. A point
+   * response posts two strings per value, its x then its y, in the order `encode` writes them.
+   */
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
   /**
    * The configuration's `seed`, a string written as given, which keys a shuffled Choice's or Inline
@@ -184,6 +189,12 @@ export interface AttributePayload {
  */
 export interface ElementPayload {
   readonly attributes: readonly AttributePayload[];
+  /**
+   * The `data-catalog-idref` the element carries, as the model kept it (`BodyElement.catalog`):
+   * the key the emitter hands `RenderInteraction.attach` for the element. Absent when the element
+   * references no catalog.
+   */
+  readonly catalog?: string;
   readonly children: readonly PayloadNode[];
   readonly kind: "element";
   readonly tag: string;
@@ -450,6 +461,18 @@ export interface ModulePayloadOf<K extends ModuleKind> {
 export type ModulePayload = { readonly [K in ModuleKind]: ModulePayloadOf<K> }[ModuleKind];
 
 /**
+ * The payload node of the container an interaction module owns (`ContainerNode` in
+ * `#plate/model/item.ts`): the kind of the module, and its children copied as any body nodes are.
+ * The emitter emits the children, then hands the node and their output to the module's container
+ * render (`RenderInteraction.containers` in `#plate/emit/body.ts`).
+ */
+export interface ContainerPayload {
+  readonly children: readonly PayloadNode[];
+  readonly kind: "container";
+  readonly module: ModuleKind;
+}
+
+/**
  * The payload of one of the four interactions the hubs render inline, which the emitter hands to
  * its interaction's render function.
  */
@@ -460,11 +483,13 @@ export type InteractionPayload =
   | TextEntryPayload;
 
 /**
- * A node of the payload's body: an element, a text, an interaction, a notice, or the payload node
- * of a body-placed content element (`ContentPayload` in `#plate/content/modules.ts`, one member per
- * content module, each as its module's `copy` gives it).
+ * A node of the payload's body: an element, a text, an interaction, a notice, the payload node of a
+ * body-placed content element (`ContentPayload` in `#plate/content/modules.ts`, one member per
+ * content module, each as its module's `copy` gives it), or a module's container
+ * ({@link ContainerPayload}).
  */
 export type PayloadNode =
+  | ContainerPayload
   | ContentPayload
   | ElementPayload
   | InteractionPayload
@@ -677,6 +702,9 @@ const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
           ...node.attributes.flatMap(({ name, value }) => (name === "id" ? [value] : [])),
           ...authoredIdsIn(node.children),
         ];
+      }
+      case "container": {
+        return authoredIdsIn(node.children);
       }
       case "template-block":
       case "template-inline": {
@@ -1301,15 +1329,20 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
 
   switch (node.kind) {
     case "element": {
-      return {
+      const element: ElementPayload = {
         attributes: node.attributes.map(({ name, value }) => ({ name, value })),
         children: copyNodes(node.children, build),
         kind: "element",
         tag: node.tag,
       };
+
+      return node.catalog === undefined ? element : { ...element, catalog: node.catalog };
     }
     case "text": {
       return { kind: "text", text: node.text };
+    }
+    case "container": {
+      return { children: copyNodes(node.children, build), kind: "container", module: node.module };
     }
     case "content": {
       return contentSteps(node).copy(copyKit(build));
@@ -1929,6 +1962,11 @@ const printBody = (
 
           return [node];
         }
+        case "container": {
+          reach(node.path, () => true, seen);
+
+          return [{ ...node, children: nodesOf(node.children, seen) }];
+        }
         case "content": {
           reach(node.path, () => true, seen);
 
@@ -2324,7 +2362,10 @@ export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): Readonly
  * `#plate/form/encoding.ts`), one whole number in each, x then y, so a module renders
  * `name="<entry>.x"` and `name="<entry>.y"` for each value and `decode` pairs them by position. A
  * `boolean` response posts one entry whose value is `true` or `false`; an absent entry is no
- * response.
+ * response, NULL, unless the module of an interaction that binds the response says otherwise
+ * through its `absentValue` (`InteractionModule` in `#plate/interactions/contract.ts`), which the
+ * posting carries as `options.absent` and `decode` gives for no entry: End Attempt's `false`,
+ * once issue ei-02 lands it.
  */
 export interface Posting {
   readonly binding: Binding;
@@ -2332,7 +2373,10 @@ export interface Posting {
   /**
    * The number base its integer is written in: the `base` of the first Text Entry or Extended
    * Text, in document order, that binds the response, and 10 when only a Choice or an Inline
-   * Choice binds it. `decode` does not apply it to a record.
+   * Choice binds it. `decode` does not apply it to a record. And the value no entry decodes to,
+   * `absent`, when the first interaction in document order that binds the response and whose
+   * module gives one (`absentValueOf` in `#plate/model/interactions.ts`) says so; no `absent` when
+   * none does, so no entry is NULL.
    */
   readonly options: DecodeOptions;
 }
@@ -2417,13 +2461,13 @@ export const postingsIn = (
       return [];
     }
 
-    return [
-      {
-        binding: binding.value,
-        identifier,
-        options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
-      },
-    ];
+    const base = Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10);
+    const options: DecodeOptions = Option.match(
+      Arr.findFirst(bound, (interaction) => Option.fromUndefinedOr(absentValueOf(interaction))),
+      { onNone: () => ({ base }), onSome: (absent) => ({ absent, base }) },
+    );
+
+    return [{ binding: binding.value, identifier, options }];
   });
 };
 

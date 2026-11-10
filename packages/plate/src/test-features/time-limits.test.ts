@@ -9,6 +9,7 @@ import { extendedMaxTime, pauseTime, resumeTime } from "#plate/test-features/tim
  */
 const session: TestSession = {
   document: "tests/t.xml",
+  expired: [],
   instance: "sitting",
   items: [],
   kind: "test",

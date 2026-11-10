@@ -42,12 +42,21 @@ export default defineConfig({
       "**/migrations/**",
       "README.md",
       "packages/*/README.md",
+      // These files hold plate's README code blocks character for character, so the formatter leaves them alone.
+      "packages/plate/src/hosts/reference-app/readme-*.tsx",
     ],
     jsdoc: { commentLineStrategy: "multiline", lineWrappingStyle: "balance" },
   },
   lint: {
     extends: [core, antiSlop],
-    ignorePatterns: ["dist/**", ".agents/**", ".claude/**", "**/migrations/**"],
+    ignorePatterns: [
+      "dist/**",
+      ".agents/**",
+      ".claude/**",
+      "**/migrations/**",
+      // These files hold plate's README code blocks character for character, so the linter leaves them alone; TypeScript and the tests still run them.
+      "packages/plate/src/hosts/reference-app/readme-*.tsx",
+    ],
     jsPlugins: ["./tools/lint-plugin.mjs", "@stylistic/eslint-plugin"],
     // Keep source imports stable when files move: each package maps `#<package>/*` to its `src/` in package.json
     // `imports`, which Node resolves at run time and TypeScript resolves under nodenext.
@@ -104,7 +113,12 @@ export default defineConfig({
       "max-classes-per-file": "off",
       // Effect adapters return existing promises without introducing async wrappers.
       "typescript/promise-function-async": "off",
+      // unicorn's rule reads `Schema.TaggedError<Self>()`, the class factory every error class extends,
+      // as an error called without `new`, and has no option to exempt it (oxc exempts `Data.TaggedError`
+      // alone, `throw_new_error.rs`). The workspace rule is unicorn's with `Schema.TaggedError` exempt too.
+      "unicorn/throw-new-error": "off",
       "workspace/no-built-in-try-catch": "error",
+      "workspace/throw-new-error": "error",
     },
   },
 });

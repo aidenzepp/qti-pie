@@ -31,9 +31,10 @@
  *   `data-*` on the foreign kinds (fin.md, D2). On a kind the Schematron's extension rules cover,
  *   only `data-*` is, and no `xml:` name the kind does not declare (spec reading 90, `coveredBy`).
  *
- * Every admitted triple is stated once: a triple two sources state is a `KeyCollision`.
+ * Every admitted triple is stated once: a triple two sources state is a `KeyCollision` of its
+ * family's admission map's `AdmissionIn` rows (`faultOf`, which the tests read).
  */
-import { Function as Fn, Option, Result } from "effect";
+import { Option, Result } from "effect";
 import type { Admission, AdmittedChild } from "#pantry/grammar/admission.ts";
 import { generate as generateAncestry } from "#pantry/grammar/ancestry.ts";
 import type { AncestrySets } from "#pantry/grammar/ancestry.ts";
@@ -52,8 +53,8 @@ import type {
 } from "#pantry/grammar/attributes.ts";
 import { barredByOf } from "#pantry/grammar/children.ts";
 import type { BarredBy, ChildError, LastWhere } from "#pantry/grammar/children.ts";
-import { idField, roster, rowsAt, sourced } from "#pantry/grammar/closed.ts";
-import type { ClosedRelationError, Roster } from "#pantry/grammar/closed.ts";
+import { roster, rowsAt } from "#pantry/grammar/closed.ts";
+import type { Roster } from "#pantry/grammar/closed.ts";
 import { compositions } from "#pantry/grammar/compositions.ts";
 import {
   bindingFit,
@@ -90,7 +91,7 @@ import { heldRootsUnder, namesUnder, typesAvailable } from "#pantry/grammar/name
 import type { HeldRootsUnder, NamesUnder, TypesAvailable } from "#pantry/grammar/names.ts";
 import { packageGrammar } from "#pantry/grammar/package.ts";
 import { references } from "#pantry/grammar/references.ts";
-import { expandedNameOf, noType, xsiTypesOf } from "#pantry/grammar/xsi.ts";
+import { expandedNameOf, xsiTypesOf } from "#pantry/grammar/xsi.ts";
 import type { XsiTypeError, XsiTypes } from "#pantry/grammar/xsi.ts";
 import type { References } from "#pantry/grammar/references.ts";
 import type { PackageGrammar } from "#pantry/grammar/package.ts";
@@ -314,7 +315,7 @@ export const coveredBy = (
  * @returns Its namespace, or nameless for a kind with no row, which names no element: the document
  *   node, the doctype, character data and the foreign kinds.
  */
-const namespaceOfKind = (
+export const namespaceOfKind = (
   kinds: Pick<Kinds<string, string>, "elementName">,
   kind: string,
 ): NamespaceOfKind =>
@@ -373,6 +374,7 @@ const admitsWild = (attribute: { readonly domain: Domain }, declaresId: boolean)
  * `xml:` names are validated, as a `lax` attribute wildcard's are.
  *
  * @param kinds - The composition's kinds.
+ * @param namespaceOf - Each kind's namespace ({@link namespaceOfKind}).
  * @param declared - The keys of the attributes the vocabularies admit ({@link attributeKey}).
  * @param declaresId - The (version, kind)s whose declared uses include an ID-derived one,
  *   `<version> <kind>`.
@@ -380,6 +382,7 @@ const admitsWild = (attribute: { readonly domain: Domain }, declaresId: boolean)
  */
 const layerOf = (
   kinds: Kinds<string, string>,
+  namespaceOf: (kind: string) => NamespaceOfKind,
   declared: ReadonlySet<string>,
   declaresId: ReadonlySet<string>,
 ): readonly Declared[] => {
@@ -390,7 +393,7 @@ const layerOf = (
       .flatMap(({ kind, namespace, processing, versions: holding }) =>
         holding.flatMap((version) =>
           open
-            .attributesUnder({ namespace, processing }, namespaceOfKind(kinds, kind))
+            .attributesUnder({ namespace, processing }, namespaceOf(kind))
             .filter(({ name }) => !covered(version, kind) || name === "data-*")
             .filter((attribute) => admitsWild(attribute, declaresId.has(`${version} ${kind}`)))
             .map((attribute) => ({ attribute, kind, version })),
@@ -454,7 +457,8 @@ const isXsNamespace = (name: NamespaceName): boolean =>
  * `ValueDomain` handle with no pattern (`emptyDomains` of the attribute grammar, C47): a foreign
  * element whose `xsi:type` names it holds no valid text. No pattern spells the empty language that
  * grizzle admits (it refuses a `Compute.matches` pattern no text matches,
- * `scalar/regex/admit.ts:121`), so the laws read the domain's emptiness, not a pattern.
+ * `scalar/regex/admit.ts:98-102`, `matchPattern`), so the laws read the domain's emptiness, not a
+ * pattern.
  *
  * @param namespaces - The namespaces of the composition's vocabularies.
  * @returns The rows.
@@ -513,6 +517,7 @@ interface GovernedAttributes {
  * assesses.
  *
  * @param kinds - The composition's kinds.
+ * @param namespaceOf - Each kind's namespace ({@link namespaceOfKind}).
  * @param xsi - The `xsi:type` law's relations.
  * @param governingTexts - The texts of the named types the composition's elements may be governed
  *   by ({@link governingTextsOf}).
@@ -520,6 +525,7 @@ interface GovernedAttributes {
  */
 const governedOf = (
   kinds: Kinds<string, string>,
+  namespaceOf: (kind: string) => NamespaceOfKind,
   xsi: XsiTypes,
   governingTexts: readonly TypeText[],
 ): GovernedAttributes => {
@@ -529,7 +535,7 @@ const governedOf = (
   const isComplex = (key: string) => declaredBy.has(key) || wildcardOf.has(key);
   const governors: readonly Governor[] = [
     ...xsi.xsiType.rows.flatMap(({ kind, type, version }) =>
-      type === noType || type === xsi.declaredType(version, kind)
+      Option.contains(xsi.declaredType(version, kind), type)
         ? []
         : [{ governs: type, kind, version }],
     ),
@@ -557,7 +563,7 @@ const governedOf = (
     const hosts = [
       ...rowsAt(wildcardOf, key).flatMap(({ namespace, processing }) =>
         open
-          .attributesUnder({ namespace, processing }, namespaceOfKind(kinds, kind))
+          .attributesUnder({ namespace, processing }, namespaceOf(kind))
           .filter(({ name }) => !covered(version, kind) || name === "data-*")
           .filter((attribute) => admitsWild(attribute, declaresId)),
       ),
@@ -597,7 +603,8 @@ const governedOf = (
 export interface Grammar<K extends string, N extends string> {
   /**
    * `Admission`: the admitted (version, parent, child) triples, each with its content position
-   * (`ChildGrammar`), sourced to its particle, or its model at position 0.
+   * (`ChildGrammar`), sourced to its particle, or its model at position 0, read through the content
+   * grammar's admission maps.
    */
   readonly admission: Admission;
   readonly ancestry: AncestrySets;
@@ -659,22 +666,25 @@ export type ComposedGrammar = Grammar<Kind, Name>;
 /**
  * The ways a composition has no grammar: a generator's refusal of its rows.
  */
-export type ComposeError =
-  | AttributeGrammarError
-  | ChildError
-  | ClosedRelationError
-  | ContentError
-  | XsiTypeError;
+export type ComposeError = AttributeGrammarError | ChildError | ContentError | XsiTypeError;
 
 /**
  * Read a `TypeName` handle's namespace.
  *
  * @param type - The handle.
- * @returns Its namespace, or none for the null type, which names no type: the one handle of a
- *   `TypeName` roster that spells no expanded name (`expandedNameOf`).
+ * @returns Its namespace.
+ * @throws {Error} When the handle spells no expanded name (`expandedNameOf`): `typeHandle` spells
+ *   every handle of the roster from one, so this is its defect.
  */
-const typeNamespaceOf = (type: string): Option.Option<NamespaceName> =>
-  Option.map(expandedNameOf(type), ({ namespace }) => namespaceNameOf(namespace));
+const typeNamespaceOf = (type: string): NamespaceName =>
+  Option.match(expandedNameOf(type), {
+    onNone: () => {
+      throw new Error(
+        `The TypeName handle ${type} spells no expanded name, and typeHandle spells each handle from one. Correct typeHandle or expandedNameOf.`,
+      );
+    },
+    onSome: ({ namespace }) => namespaceNameOf(namespace),
+  });
 
 /**
  * Run every generator over a vocabulary list.
@@ -696,53 +706,47 @@ export const compose = <const V extends readonly Vocabulary[]>(
     compositions.publish(list);
 
     const stated = list.map((entry) => entry.facets);
-    const base = yield* generateKinds({
+    const base = generateKinds({
       interactions: stated.flatMap((facet) => facet.interactions),
       layer: [...open.xsiAttributes, ...open.xmlAttributes, ...open.xlinkAttributes].map(
         ({ name }) => name,
       ),
       vocabularies: list,
     });
-    const namespaceOf = (kind: string) => namespaceOfKind(base, kind);
+    // Each kind's namespace, read once from its `ElementName` row: the readers below ask it of a
+    // kind once per wildcard position and global kind.
+    const kindNamespaces: ReadonlyMap<string, NamespaceOfKind> = new Map(
+      base.nodeKind.handles.map((kind) => [kind, namespaceOfKind(base, kind)]),
+    );
+    const namespaceOf = (kind: string): NamespaceOfKind => kindNamespaces.get(kind) ?? nameless;
+    const stating = list.flatMap((entry) => entry.admission);
     const installed = yield* contentOf({
       facets: stated.map((facet) => facet.content),
       foreignRoots: open.foreignRoots,
-      globalKinds: (version, parent) =>
-        globalKinds.flatMap(({ kind, versions }) =>
+      globalKinds: (version, parent) => {
+        const reader = namespaceOf(parent);
+
+        return globalKinds.flatMap(({ kind, versions }) =>
           versions.includes(version) &&
           base.nodeKind.has(kind) &&
-          open.wildcardReads(namespaceOf(parent), namespaceOf(kind))
+          open.wildcardReads(reader, namespaceOf(kind))
             ? [kind]
             : [],
-        ),
+        );
+      },
       kinds: base.nodeKind,
       models: list.flatMap((entry) => entry.models),
       namespaceOf,
+      stated: stating,
       versions: base.versions,
     });
-    const stating = list.flatMap((entry) => entry.admission);
-    const kinds = yield* resolution(base, [...installed.admitted, ...stating]);
-    // A child the models admit carries its position's particle, or its model's at 0; a triple a
-    // vocabulary states beside them carries its own source.
-    const admission = yield* sourced({
-      key: [
-        idField("version", kinds.versions),
-        idField("parent", kinds.nodeKind),
-        idField("child", kinds.nodeKind),
-      ],
-      name: "Admission",
-      payload: [idField("position", installed.content.positions)],
-      rows: [
-        ...installed.admitted.map(({ child, parent, position, source, version }) => ({
-          row: { child, parent, position: String(position), version },
-          source,
-        })),
-        ...stating.map(({ child, parent, source, version }) => ({
-          row: { child, parent, position: "0", version },
-          source,
-        })),
-      ],
-    });
+    // A parent admits a kind where its family's admission map holds the kind in some version.
+    const { admission } = installed;
+    const kinds = resolution(base, (parent, kind) =>
+      base.versions.handles.some((version) =>
+        Option.isSome(admission.lookup({ child: kind, parent, version })),
+      ),
+    );
     const declarations = list.flatMap((entry) => entry.declarations);
     const declared = new Set(
       declarations.flatMap(({ kind, name, versions }) =>
@@ -765,8 +769,8 @@ export const compose = <const V extends readonly Vocabulary[]>(
     const governingTexts = governingTextsOf(list.map(({ namespace }) => namespace));
     const attributes = yield* generateAttributes(
       {
-        declarations: [...declarations, ...layerOf(kinds, declared, declaresId)],
-        ...governedOf(kinds, xsi, governingTexts),
+        declarations: [...declarations, ...layerOf(kinds, namespaceOf, declared, declaresId)],
+        ...governedOf(kinds, namespaceOf, xsi, governingTexts),
         kinds: kinds.nodeKind,
         names: kinds.attributeName,
         texts: textTypes.filter(({ kind }) => kinds.nodeKind.has(kind)),
@@ -784,14 +788,14 @@ export const compose = <const V extends readonly Vocabulary[]>(
         ),
       ),
     ];
-    const baseTypeRoster = yield* roster("BaseType", baseTypes);
-    const cardinalities = yield* roster("TypedCardinality", typedCardinalities);
+    const baseTypeRoster = roster("BaseType", baseTypes);
+    const cardinalities = roster("TypedCardinality", typedCardinalities);
     const expression = stated.map((facet) => facet.expression);
     const fitRosters = { baseTypes: baseTypeRoster, cardinalities, kinds: kinds.nodeKind };
 
     return {
       admission,
-      ancestry: yield* generateAncestry({
+      ancestry: generateAncestry({
         facets: stated.map((facet) => facet.ancestry),
         interactions: kinds.interaction.rows.map(({ kind }) => kind),
         kinds: kinds.nodeKind,
@@ -806,9 +810,9 @@ export const compose = <const V extends readonly Vocabulary[]>(
         versions: kinds.versions,
       }),
       baseTypes: baseTypeRoster,
-      bindingFit: yield* bindingFit({ facets: expression, rosters: fitRosters }),
+      bindingFit: bindingFit({ facets: expression, rosters: fitRosters }),
       content: installed.content,
-      heldRootsUnder: yield* heldRootsUnder({
+      heldRootsUnder: heldRootsUnder({
         classOf: (namespace, parent) => foreignKinds[namespaceClassOf(namespace, parent)],
         held: installed.content.strictlyHeld.rows,
         kinds: kinds.nodeKind,
@@ -826,33 +830,34 @@ export const compose = <const V extends readonly Vocabulary[]>(
         ),
         versions: kinds.versions,
       }),
-      include: yield* includeGrammar({
+      include: includeGrammar({
         alternatives: includeAlternativesOf(list.flatMap((entry) => entry.models)),
         kinds: kinds.nodeKind,
         versions: kinds.versions,
       }),
-      kindByNameUnder: yield* namesUnder({
-        admitted: admission.rows,
+      kindByNameUnder: namesUnder({
+        admissionIn: installed.content.admissionIn,
+        families: installed.content.contentModelOf,
         kinds: kinds.nodeKind,
         nameOf: (kind) => kinds.elementName.lookup({ kind }),
         versions: kinds.versions,
       }),
       kinds,
       lastWhere: stated.flatMap((facet) => facet.children.lastWhere),
-      mappableBaseType: yield* mappableBaseType(baseTypeRoster),
-      operatorArity: yield* operatorArity({ facets: expression, kinds: kinds.nodeKind }),
-      package: yield* packageGrammar({
+      mappableBaseType: mappableBaseType(baseTypeRoster),
+      operatorArity: operatorArity({ facets: expression, kinds: kinds.nodeKind }),
+      package: packageGrammar({
         facets: stated.map((facet) => facet.package),
         kinds: kinds.nodeKind,
       }),
-      recordBindingFit: yield* recordBindingFit({ facets: expression, kinds: kinds.nodeKind }),
-      references: yield* references({
+      recordBindingFit: recordBindingFit({ facets: expression, kinds: kinds.nodeKind }),
+      references: references({
         facets: stated.map((facet) => facet.references),
         kinds: kinds.nodeKind,
         names: kinds.attributeName,
         versions: kinds.versions,
       }),
-      typeAvailable: yield* typesAvailable({
+      typeAvailable: typesAvailable({
         available: open.typeAvailable,
         everywhere: isXsNamespace,
         namespaceOf: typeNamespaceOf,
@@ -865,14 +870,14 @@ export const compose = <const V extends readonly Vocabulary[]>(
   });
 
 /**
- * {@link compose} memoized by its list's identity (Effect's `Function.memoize`), for
- * {@link composed}, which passes it {@link vocabularies} alone.
+ * Production's grammar: {@link vocabularies} composed once, as this module loads, so every reader
+ * of it shares the one composition.
  */
-const production = Fn.memoize((list: typeof vocabularies) => compose(list));
+const production = compose(vocabularies);
 
 /**
- * Compose production's list, {@link vocabularies}, once per process: the first call composes it,
- * and every later call returns that same result.
+ * Read production's grammar, {@link vocabularies} composed once per process, as this module
+ * loaded: every call returns that one result.
  *
  * A composition takes seconds and production's list never changes, so every reader of the grammar
  * shares one: `install.ts` when it loads, and every test, whether or not its file loads
@@ -881,5 +886,4 @@ const production = Fn.memoize((list: typeof vocabularies) => compose(list));
  *
  * @returns The grammar, or the first generator's refusal.
  */
-export const composed = (): Result.Result<ComposedGrammar, ComposeError> =>
-  production(vocabularies);
+export const composed = (): Result.Result<ComposedGrammar, ComposeError> => production;

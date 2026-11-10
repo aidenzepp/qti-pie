@@ -7,21 +7,28 @@ import { partForSlot, rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
 import { isPosted } from "#plate/form/encoding.ts";
 import {
+  acceptedItem,
   checkResponses,
   configure,
   decode,
   entryName,
+  navigationState,
+  noSupports,
   open,
   redact,
   render,
   renderStatus,
+  startTest,
 } from "#plate/index.ts";
 import type {
   Accepted,
+  AcceptedTest,
   Configuration,
   Entry,
   Options,
   Redacted,
+  Supports,
+  TimeState,
   ValidationMessage,
   Verdict,
 } from "#plate/index.ts";
@@ -33,6 +40,7 @@ import type { NavigationOptions, NavigationState } from "#plate/navigation.ts";
 import { compounds, scanSheet } from "#plate/test/css.ts";
 import type { AttributeTest, Compound, Sheet } from "#plate/test/css.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { hasStub, stubBaseType, stubCardinality, stubKind } from "#plate/test/stub-kind.ts";
 import { styledClasses } from "#plate/vocabulary.ts";
 import type { ClassOwner } from "#plate/vocabulary.ts";
 
@@ -201,12 +209,36 @@ const namesModulePart = (compound: Compound): boolean =>
   );
 
 /**
+ * The select-then-place state attributes, which the runtime's select-then-place driver
+ * (`#plate/runtime/select-place-driver.dom.ts`) writes on any kind's tokens and targets after the
+ * SSR, which never writes them: `aria-pressed` on a token, `data-cursor` on the target the arrow
+ * keys have reached, and `aria-disabled` on a token or target a move refuses. No emitted markup
+ * carries them, so a compound that tests one is witnessed by the driver's own tests, not here.
+ */
+const selectPlaceStates: ReadonlySet<string> = new Set([
+  "aria-disabled",
+  "aria-pressed",
+  "data-cursor",
+]);
+
+/**
+ * Tell whether a compound names a select-then-place state: an attribute test on one of the
+ * {@link selectPlaceStates}.
+ *
+ * @param compound The compound.
+ * @returns Whether it tests a state the driver writes at run time.
+ */
+const namesSelectPlaceState = (compound: Compound): boolean =>
+  compound.attributes.some((test) => selectPlaceStates.has(test.name));
+
+/**
  * Find the compounds of a sheet that no element of the trees has.
  *
  * Every compound of every selector counts, descending into the selectors of `:where`, `:is` and
  * `:has` and skipping `:not`'s. Combinators, pseudo-classes and pseudo-elements are not matched,
  * and a compound that names nothing else (`:where(…)` itself, a bare `::before`) matches, as does
- * one that names a part of an interaction module ({@link namesModulePart}).
+ * one that names a part of an interaction module ({@link namesModulePart}) or a select-then-place
+ * state the runtime writes ({@link namesSelectPlaceState}).
  *
  * @param sheet The scanned sheet.
  * @param trees The markup the sheet styles.
@@ -217,7 +249,9 @@ const unmatched = (sheet: Sheet, trees: readonly Node[]): readonly SheetCompound
 
   return matchable(sheet).filter(
     ({ compound }) =>
-      !namesModulePart(compound) && !elements.some((element) => has(element, compound)),
+      !namesModulePart(compound) &&
+      !namesSelectPlaceState(compound) &&
+      !elements.some((element) => has(element, compound)),
   );
 };
 
@@ -294,6 +328,24 @@ describe("unmatched", () => {
         [["qti-underline", "qti-italic"]],
       );
     }),
+  );
+
+  it.effect(
+    "does not report a compound that tests a select-then-place state, which the runtime writes after the SSR, and reports another attribute no element has",
+    () =>
+      Effect.gen(function* selectPlaceState() {
+        const choice = rowFor("choice-interaction", "choice").slot;
+        const states = yield* scanSheet(
+          `:where([data-slot="${choice}"] [aria-pressed="true"]) { color: red }\n:where([data-cursor]) { color: red }\n:where([aria-disabled="true"]) { color: red }`,
+        );
+        const other = yield* scanSheet('[aria-grabbed="true"] { color: red }');
+
+        assert.deepStrictEqual(unmatched(states, [choiceList()]), []);
+        assert.deepStrictEqual(
+          unmatched(other, [choiceList()]).map((entry) => entry.compound.attributes[0]?.name),
+          ["aria-grabbed"],
+        );
+      }),
   );
 
   it.effect("reports an attribute test whose operator is not =", () =>
@@ -382,11 +434,52 @@ const expectedVerdict = (item: Authored): "accepted" | "accepted-with-unsupporte
     : "accepted";
 
 /**
+ * A correct-response value of each base type a row of `stubDeclarations` gives, which the stub
+ * witness writes under its declaration. The stub's element is never read for its choices, so the
+ * identifiers name nothing.
+ */
+const correctOf: Readonly<Record<typeof stubBaseType, string>> = {
+  directedPair: "a b",
+  identifier: "a",
+  pair: "a b",
+  point: "120 80",
+};
+
+/**
+ * The stub witness: an item of the stub kind `#plate/test/stub-kind.ts` derives from the table of
+ * modules, which plate shows as an item Notice, so the stylesheet's compounds that name one keep an
+ * element to match after Order lands and its row's verdict turns `accepted`. Its element, its
+ * declaration and its name all come from that file, so the row follows the stub kind with no edit.
+ * The declaration is the one the stub kind's row of `stubDeclarations` gives, so the bare element
+ * binds. The correct response is one value of its base type, the shape the `match_correct` template
+ * requires of every declaration: `correctOf` holds a value per base type, and a base type a later
+ * row adds fails to compile here until it has one. {@link authored} includes the row only while
+ * {@link hasStub}: when no stub remains, no authored item can show an item Notice, and the
+ * `[Q-12]` compound test finds no element for the stylesheet's Notice compounds, which whoever
+ * lands the last core settles.
+ */
+const stubWitness: Authored = {
+  bytes: itemBytes(
+    `witness-${stubKind}`,
+    `<qti-response-declaration base-type="${stubBaseType}" cardinality="${stubCardinality}" identifier="RESPONSE">
+  <qti-correct-response>
+   <qti-value>${correctOf[stubBaseType]}</qti-value>
+  </qti-correct-response>
+ </qti-response-declaration>`,
+    `<p>Mark where the spider waits on its web.</p>
+  <${modules[stubKind].element} response-identifier="RESPONSE"/>`,
+  ),
+  kinds: [stubKind],
+  location: `witness/${stubKind}.xml`,
+  posted: {},
+};
+
+/**
  * The items the witness renders: both Choice cardinalities, prompt shapes and orientations, a Text
  * Entry inside a `p`, an Extended Text with a prompt, an Inline Choice with a Label and one
- * without, and two interactions whose modules are stubs, so the stylesheet's Notice rules keep an
- * element to match until the last stub lands. Each interaction carries every class the stylesheet
- * styles for it, and a body element every body class.
+ * without, and, while a bare stub remains, one interaction whose module is a stub, so the
+ * stylesheet's Notice rules keep an element to match until the last stub lands. Each interaction
+ * carries every class the stylesheet styles for it, and a body element every body class.
  */
 const authored: readonly Authored[] = [
   {
@@ -500,30 +593,7 @@ const authored: readonly Authored[] = [
     location: "witness/order.xml",
     posted: {},
   },
-  {
-    /*
-     * A Select Point, the stub planned to land last: this row keeps a stub witness, and so an item
-     * Notice for the compounds that name one, after Order lands and its row's verdict turns
-     * `accepted`. Its declaration is the one `skip.test.ts`'s stub item binds under, `multiple`
-     * cardinality of `point`, because the binding rule reads the element's `max-choices` (unwritten,
-     * `0`) against the declaration before any module does, so the bare element binds. The correct
-     * response is the one the `match_correct` template requires of every declaration. When Select
-     * Point lands, W0-AQ retires this row with the other stub-kind tests.
-     */
-    bytes: itemBytes(
-      "witness-select-point",
-      `<qti-response-declaration base-type="point" cardinality="multiple" identifier="RESPONSE">
-  <qti-correct-response>
-   <qti-value>120 80</qti-value>
-  </qti-correct-response>
- </qti-response-declaration>`,
-      `<p>Mark where the spider waits on its web.</p>
-  <${modules["select-point"].element} response-identifier="RESPONSE"/>`,
-    ),
-    kinds: ["select-point"],
-    location: "witness/select-point.xml",
-    posted: {},
-  },
+  ...(hasStub ? [stubWitness] : []),
 ];
 
 /**
@@ -682,6 +752,149 @@ const navigationTrees = (configuration: Configuration, options: NavigationOption
   );
 
 /**
+ * Open an authored item and require an accepted item, as a host hands one to `startTest`.
+ *
+ * @param item The hand-written item.
+ * @returns The accepted item.
+ */
+const acceptedOf = Effect.fnUntraced(function* acceptedOf(item: Authored) {
+  const verdict: Verdict = yield* open(item.location, item.bytes);
+
+  return Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`${item.location} is ${verdict.verdict}, not an accepted item`),
+  );
+});
+
+/**
+ * The authored Choice the test-level and support-driven witnesses deliver: the single-cardinality
+ * Choice, whose row stands first in {@link authored}.
+ */
+const choiceItem: Authored = authored[0] ?? assert.fail("no authored Choice item");
+
+/**
+ * The identifier of {@link choiceItem}'s ref in {@link timedTestBytes}, which keys the items
+ * `startTest` takes.
+ */
+const timedRef = "timed-choice";
+
+/**
+ * The seconds the timed test's part allows, its `max-time`.
+ */
+const maxTime = 600;
+
+/**
+ * A QTI 3.0 test of one linear, individual part that allows {@link maxTime} seconds and holds one
+ * item ref to {@link choiceItem}: the smallest test on which a time limit is in force, so the
+ * navigation emits its `time` part (the time-limits module's styles block, issue m3f-01).
+ */
+const timedTestBytes: Uint8Array = new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+ identifier="witness-timed" title="witness-timed">
+ <qti-test-part identifier="P1" navigation-mode="linear" submission-mode="individual">
+  <qti-time-limits max-time="${maxTime}"/>
+  <qti-assessment-section identifier="S1" title="Timed" visible="true">
+   <qti-assessment-item-ref identifier="${timedRef}" href="choice-single.xml"/>
+  </qti-assessment-section>
+ </qti-test-part>
+</qti-assessment-test>`);
+
+/**
+ * When the timed test's session starts.
+ */
+const startedAt = new Date("2026-11-10T09:00:00.000Z");
+
+/**
+ * The time in force on the timed test at its start, as the time-limits module reads it once issue
+ * m3f-01 lands: the part's whole `max-time` left, no `min-time`, and late submission not allowed.
+ *
+ * The module's stub reads no time, so a session of the timed test carries none until then; this
+ * value stands in for it, so the `time` part is emitted and its styles block has markup to match
+ * ({@link timedNavigationTrees}). Once the module reads the session's own time, that wins.
+ */
+const witnessTime: TimeState = {
+  allowLateSubmission: false,
+  minTimeLeft: Option.none(),
+  timeLeft: Option.some(maxTime),
+};
+
+/**
+ * Open the timed test and require an accepted test: `accepted-with-unsupported` while the
+ * time-limits module is a stub, which `parse` shows as a notice, `accepted` once it lands.
+ *
+ * @returns The accepted test.
+ */
+const timedTest = Effect.gen(function* timedTest() {
+  const location = "witness/timed.xml";
+  const verdict: Verdict = yield* open(location, timedTestBytes);
+
+  return (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") &&
+    verdict.kind === "test"
+    ? verdict.accepted
+    : assert.fail(`${location} is ${verdict.verdict} on a ${verdict.kind}, not an accepted test`);
+});
+
+/**
+ * Render the navigation of a just-started session of the timed test, so the Root holds the `time`
+ * part: the test-level witness of the time-limits module's styles block.
+ *
+ * The session is started and read through the session functions a host uses, `startTest` and
+ * `navigationState`; only the time in force is supplied ({@link witnessTime}) while the session
+ * carries none.
+ *
+ * @param configuration The configuration, which the session and the render take.
+ * @returns The navigation Root's trees, the `time` part among them.
+ */
+const timedNavigationTrees = Effect.fnUntraced(function* timedNavigationTrees(
+  configuration: Configuration,
+) {
+  const test: AcceptedTest = yield* timedTest;
+  const items = new Map([[timedRef, yield* acceptedOf(choiceItem)]]);
+  const session = yield* Effect.fromResult(
+    startTest(test, items, configuration, { instance, now: startedAt }),
+  );
+  const state = yield* Effect.fromResult(navigationState(test, session));
+  const timed = { ...state, time: state.time ?? witnessTime };
+  const trees = yield* Effect.fromResult(renderNavigation(timed, configuration)).pipe(
+    Effect.map(parseHtml),
+  );
+
+  assert.isTrue(
+    elementsOf(trees).some((element) =>
+      Option.contains(attribute(element, "data-slot"), rowFor("test-navigation", "time").slot),
+    ),
+    "the timed navigation emits the time part",
+  );
+
+  return trees;
+});
+
+/**
+ * The supports of a candidate with answer masking on (A-8), every other support off.
+ */
+const masking: Supports = { ...noSupports, answerMasking: true };
+
+/**
+ * Open and render {@link choiceItem} with answer masking on, as a host does for a candidate who
+ * has it: the support-driven witness of the answer-masking styles block (issue m4-05), whose
+ * mask parts the Choice emits under `supports.answerMasking` once that issue lands; until then its
+ * markup is the unmasked Choice's. The redaction takes the same supports as the render, as the
+ * render contract asks.
+ *
+ * @param configuration The configuration.
+ * @returns The render's trees.
+ */
+const maskedTrees = Effect.fnUntraced(function* maskedTrees(configuration: Configuration) {
+  const redacted = redact(yield* acceptedOf(choiceItem), undefined, configuration, {
+    supports: masking,
+  });
+  const rendered = yield* Effect.fromResult(
+    render(redacted, configuration, { instance, supports: masking }),
+  );
+
+  return parseHtml(rendered.html);
+});
+
+/**
  * Read and scan the stylesheet through the package's own import alias.
  */
 const readSheet = Effect.tryPromise(() =>
@@ -690,7 +903,7 @@ const readSheet = Effect.tryPromise(() =>
 
 /**
  * Render every markup the sheet styles: each authored item in every state, both Status headings,
- * and the navigation.
+ * the navigation, the navigation of a timed test and a Choice with answer masking on.
  *
  * @param configuration The configuration.
  * @returns The trees, and the refused answers' messages.
@@ -711,6 +924,8 @@ const markupOf = Effect.fnUntraced(function* markupOf(configuration: Configurati
       ...renders.flatMap((entry) => entry.trees),
       ...status.flatMap((entry) => parseHtml(entry.html)),
       ...(yield* navigationTrees(configuration)),
+      ...(yield* timedNavigationTrees(configuration)),
+      ...(yield* maskedTrees(configuration)),
     ],
   };
 });
