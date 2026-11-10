@@ -15,10 +15,13 @@ is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (public, MIT-licens
 
 - Node 26 or later runs TypeScript source directly. There is no build step.
 - pnpm workspace. Effect is pinned to `4.1.2`, and the workspace must keep exactly one copy (`pnpm why effect -r`).
-- grizzle trunk at commit `89e94c0` (`89e94c040262c587065e84df42829a2f12d9f0c3`) is vendored as tarballs; see
+- grizzle trunk at commit `b927d99` (`b927d9995ecf254230da725c65357a420b392b91`) is vendored as tarballs; see
   `vendor/README.md`.
-- Git LFS holds every `packages/*/migrations/**/snapshot.json` and `manifest.json` (`.gitattributes`). Install
-  `git-lfs` before cloning; without it the snapshot checks out as pointer files and grizzle refuses it.
+- Git LFS holds every `packages/*/migrations/**/snapshot.json` and `manifest.json`, the two files of a grizzle
+  snapshot, and every `packages/*/migrations/**/served/*.json`, the served workload of each login that `grizzle
+  generate` writes (`.gitattributes`). Install `git-lfs` before cloning; without it each checks out as a pointer file:
+  grizzle refuses the snapshot, and pantry fails with `ServedLoadError` opening its author login from
+  `migrations/qti/served/author_app.json`, about 21 MB.
 - Vite+ (`vp`) formats, lints and runs tests. TypeScript `7.0.2` typechecks under the strict settings in `tsconfig.json`.
 
 Run before completing implementation:
@@ -55,7 +58,9 @@ reads `grizzle.config.ts` from there.
 - The lint's `sort-keys` rule orders object keys, a relation's fields included, and field order is column order. Run
   `pnpm fix` before `grizzle generate`, or the lint fix becomes an ungenerated schema change that `grizzle check`
   refuses.
-- Read every drafted SQL file and resolve its markers. Never edit `snapshot.json`, `manifest.json` or `meta.json`.
+- Read every drafted SQL file and resolve its markers. Never edit `snapshot.json`, `manifest.json`, `meta.json` or a
+  `served/*.json` file; `grizzle generate` writes them, and `grizzle check` holds each served file to what its login
+  compiles to.
 - grizzle refuses what its README's Limits section lists: no nullable columns, no timestamp type, no outer joins, no
   window functions, no raw SQL at run time. Its field types (README, "Tables
   and types") include no JSON or XML type. Model within them.
@@ -124,8 +129,15 @@ named (`func-names`).
 Import shape, for every package: it exposes its public parts through an `"exports"` map in `package.json` pointing at
 TypeScript source (no build step), consumers depend with `"workspace:*"`, and it imports its own files through its own
 `#<package>/*` alias from `package.json` `imports` (`#pantry/*` in pantry, `#crust/*` in crust, and `#migrations/*`
-for committed snapshots), never relative paths. pantry's `"exports"` lists its public files; apps use pantry only through them. Nothing outside a package reaches a file its `"exports"` map does not
-list. The checks that enforce it:
+for committed snapshots), never relative paths. pantry's `"exports"` has one entry, `"."` (`src/index.ts`), and apps use
+pantry only through it: the `Qti` schema (`qti`), the author role and login over it (`authorRole`, `authorLogin`), the
+single-CDN level (`singleCdn`, `CdnOptions`), the programs that import, preview, export, read and list packages, the
+export's document scan and the rows-to-XML step it ends with (`documentScanOf`, `documentXml`), their verdicts, types
+and errors, and the published relations an app's own level may reference (`Package`, `Document`, `TestDocument`,
+`Named`, `Section`, `TestFlag`, `SectionSelection`, `SectionMember`, `ItemRefDocument`, `DeclarationIdentifier` and
+`BaseType`, recorded in `publishedRelations`). An app supplies its own served login file and provides it as
+`ServedAuthorLogin` beside the author login's `DbLayer`. No package of this workspace depends on pantry. Nothing outside
+a package reaches a file its `"exports"` map does not list. The checks that enforce it:
 
 - The resolver (`tsc` in `pnpm check`, and Node at run time) refuses a subpath an `"exports"` map does not list, and
   another package's alias.

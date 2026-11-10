@@ -2,7 +2,8 @@
  * The planted value-domain cases (REP-B's and N2's G1-2 finding): three packages of the
  * every-relation package, each with one attribute written inside its lexical space but outside its
  * value domain's bound, which the law oracle and the database both refuse under `Double bound`
- * (attribute-lexical), the bound judged on the attribute's typed value (`DoubleValue`):
+ * (attribute-lexical), the bound judged on the double the database parses from the attribute's
+ * form:
  *
  * - A test part's `qti-time-limits` with `min-time="-1"`, under `NonNegativeDoubleDType`'s
  *   `minInclusive="0.0"`;

@@ -13,7 +13,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Equal, Option } from "effect";
+import { Effect, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import {
   builtInTypes,
@@ -62,7 +62,6 @@ import {
   conditionKindHandles,
   containerKinds,
   declaredKinds,
-  expressionKinds,
   firstKinds,
   LeadCardinality,
   lookupKindHandle,
@@ -72,11 +71,8 @@ import {
   OperandBase,
   outcomeOnlyKinds,
   ReferenceBase,
-  referenceDeclarations,
   ResultBase,
   ResultCardinality,
-  rootLanguages,
-  ruleKindHandles,
   secondKinds,
   setKindHandles,
   TailCardinality,
@@ -85,6 +81,12 @@ import {
   ValueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
+import {
+  expressionKinds,
+  referenceDeclarations,
+  rootLanguages,
+  ruleKindHandles,
+} from "#pantry/vocab/terms/expression-types.ts";
 
 /**
  * The fixtures' directory.
@@ -341,6 +343,18 @@ const languageFrom = (rows: ExpressionRows, row: Folded["row"]): string | undefi
 };
 
 /**
+ * `E1_derived`'s Delete arm (`baseOfTail`, `cardinalityOfTail`): its later operands' one base type,
+ * `any` for none, `unknown` for several, and their one cardinality, `unknown` for none or several.
+ *
+ * @param e - The expression and its folds.
+ * @returns Whether its type is its later operands'.
+ */
+const tailHolds = (e: Folded): boolean =>
+  e.row.baseType === (e.tail.size > 1 ? "unknown" : oneOf(e.tail)) &&
+  e.row.cardinality ===
+    (e.tailCardinalities.size === 1 ? ([...e.tailCardinalities][0] ?? "unknown") : "unknown");
+
+/**
  * `E1_derived`'s result type: the kind's sets, and each dependent typing's rule.
  *
  * @param e - The expression and its folds.
@@ -348,19 +362,15 @@ const languageFrom = (rows: ExpressionRows, row: Folded["row"]): string | undefi
  */
 const resultHolds = (e: Folded): boolean => {
   const { kind } = e.row;
-  const second =
-    e.tailCardinalities.size === 0 ? "unknown" : ([...e.tailCardinalities][0] ?? "unknown");
 
   return (
     ((attributeTyped.has(kind) && e.row.baseType === "unknown") ||
       (resultBases.get(kind)?.has(e.row.baseType) ?? false)) &&
     (resultCardinalities.get(kind)?.has(e.row.cardinality) ?? false) &&
     (!new Set(numericKinds).has(kind) || e.row.baseType === numericOf(e.all)) &&
-    (!new Set(containerKinds).has(kind) ||
+    (!new Set([...containerKinds, ...firstKinds]).has(kind) ||
       e.row.baseType === (e.all.size > 1 ? "unknown" : oneOf(e.all))) &&
-    (!new Set(firstKinds).has(kind) || e.row.baseType === oneOf(e.all)) &&
-    (!new Set(secondKinds).has(kind) ||
-      (e.row.baseType === oneOf(e.tail) && e.row.cardinality === second))
+    (!new Set(secondKinds).has(kind) || tailHolds(e))
   );
 };
 
@@ -504,13 +514,26 @@ const resolves = (v: Reference, rows: ExpressionRows): boolean => {
 };
 
 /**
- * `E1_derived`'s claimed table: none, or the one the reference's element reads, where declared.
+ * The table a reference claims of its declaration (`VariableRefTable`), none where it claims none.
  *
  * @param v - The reference.
+ * @param rows - The rows.
+ * @returns The table, if any.
+ */
+const tableOf = (v: Reference, rows: ExpressionRows): string | undefined =>
+  rows.VariableRefTable.get(JSON.stringify([v.node, v.attribute]))?.table;
+
+/**
+ * `E1_derived`'s claimed table: none, or, by a declared reference's `identifier`, one its element
+ * reads, of its declaration, its claim's kind and declaration copied from its declaration row.
+ *
+ * @param v - The reference.
+ * @param rows - The rows.
  * @returns Whether its claim is lawful.
  */
-const claims = (v: Reference): boolean => {
-  if (v.table === "none") {
+const claims = (v: Reference, rows: ExpressionRows): boolean => {
+  const claim = rows.VariableRefTable.get(JSON.stringify([v.node, v.attribute]));
+  if (claim === undefined) {
     return true;
   }
 
@@ -523,7 +546,9 @@ const claims = (v: Reference): boolean => {
     v.attribute === "identifier" &&
     v.resolution === "declared" &&
     ["qti-map-response", "qti-map-response-point", lookupKindHandle].includes(v.kind) &&
-    wanted.includes(v.table)
+    wanted.includes(claim.table) &&
+    claim.kind === v.kind &&
+    claim.declaration === declarationOf(v, rows)?.declaration
   );
 };
 
@@ -558,7 +583,7 @@ const referenceLawsOnHost: readonly (readonly [
   Law,
   (v: Reference, rows: ExpressionRows) => boolean,
 ])[] = [
-  ["E1_derived", (v, rows) => spells(v) && resolves(v, rows) && claims(v) && copies(v, rows)],
+  ["E1_derived", (v, rows) => spells(v) && resolves(v, rows) && claims(v, rows) && copies(v, rows)],
   [
     "Variable_declared",
     (v) =>
@@ -577,11 +602,11 @@ const referenceLawsOnHost: readonly (readonly [
   ],
   [
     "Lookup_type",
-    (v) =>
+    (v, rows) =>
       v.attribute !== "identifier" ||
       v.kind !== lookupKindHandle ||
       v.resolution !== "declared" ||
-      ["qti-match-table", "qti-interpolation-table"].includes(v.table),
+      ["qti-match-table", "qti-interpolation-table"].includes(tableOf(v, rows) ?? ""),
   ],
   [
     "Reference_type",
@@ -613,22 +638,61 @@ const referenceLawsOnHost: readonly (readonly [
       !["qti-map-response", "qti-map-response-point"].includes(v.kind) ||
       v.resolution !== "declared" ||
       (declarationKindOf(v, rows) === "qti-response-declaration" &&
-        ((v.kind === "qti-map-response" && v.table === "qti-mapping") ||
+        ((v.kind === "qti-map-response" && tableOf(v, rows) === "qti-mapping") ||
           (v.kind === "qti-map-response-point" &&
-            v.table === "qti-area-mapping" &&
+            tableOf(v, rows) === "qti-area-mapping" &&
             ["point", "any", "unknown"].includes(v.baseType)))),
   ],
 ];
 
 /**
- * A `HeldType` row.
+ * A setter's or a lookup's held type, as `HeldType`'s query joins it (`#pantry/qti/queries.ts`):
+ * its reference by `identifier`, and the type of one expression it holds.
  */
-type Held = ExpressionRows["HeldType"] extends ReadonlyMap<string, infer R> ? R : never;
+interface Held {
+  readonly baseType: string;
+  readonly cardinality: string;
+  readonly heldBase: string;
+  readonly heldCardinality: string;
+  readonly kind: string;
+  readonly node: string;
+  readonly resolution: string;
+}
 
 /**
- * Each law over a setter's or a lookup's held type, judged over its row.
+ * The setters and the lookup, whose references by `identifier` hold a type.
  */
-const heldLawsOnHost: readonly (readonly [Law, (h: Held) => boolean])[] = [
+const holders: ReadonlySet<string> = new Set([...setKindHandles, lookupKindHandle]);
+
+/**
+ * Join each setter's and lookup's reference by `identifier` with each expression it holds, as
+ * `HeldType`'s definition does: the database derives these rows, and the import writes none.
+ *
+ * @param rows - The rows.
+ * @returns The held types.
+ */
+const heldTypesOnHost = (rows: ExpressionRows): readonly Held[] =>
+  [...rows.VariableRef.values()]
+    .filter(({ attribute, kind }) => attribute === "identifier" && holders.has(kind))
+    .flatMap((v) =>
+      [...rows.Expression.values()]
+        .filter(({ parent }) => parent === v.node)
+        .map((e) => ({
+          baseType: v.baseType,
+          cardinality: v.cardinality,
+          heldBase: e.baseType,
+          heldCardinality: e.cardinality,
+          kind: v.kind,
+          node: v.node,
+          resolution: v.resolution,
+        })),
+    );
+
+/**
+ * Each law over a setter's or a lookup's held type, judged over its row and the table its lookup
+ * claims, by its node and `identifier`.
+ */
+const heldLawsOnHost: readonly (readonly [Law, (h: Held, rows: ExpressionRows) => boolean])[] = [
   [
     "Set_type",
     (h) =>
@@ -640,11 +704,13 @@ const heldLawsOnHost: readonly (readonly [Law, (h: Held) => boolean])[] = [
   ],
   [
     "Lookup_type",
-    (h) =>
+    (h, rows) =>
       h.kind !== lookupKindHandle ||
       (["single", "unknown"].includes(h.heldCardinality) &&
         ["duration", "float", "integer", "any", "unknown"].includes(h.heldBase) &&
-        (h.table !== "qti-match-table" || ["integer", "any", "unknown"].includes(h.heldBase))),
+        (rows.VariableRefTable.get(JSON.stringify([h.node, "identifier"]))?.table !==
+          "qti-match-table" ||
+          ["integer", "any", "unknown"].includes(h.heldBase))),
   ],
 ];
 
@@ -777,9 +843,9 @@ const breachesOf = (rows: ExpressionRows): ReadonlySet<Law> => {
     }
   }
 
-  for (const h of rows.HeldType.values()) {
+  for (const h of heldTypesOnHost(rows)) {
     for (const [law, holds] of heldLawsOnHost) {
-      if (!holds(h)) {
+      if (!holds(h, rows)) {
         broken.add(law);
       }
     }
@@ -1044,7 +1110,7 @@ const el = (
     references: [],
   })),
   children,
-  governs: "none",
+  governs: Option.none(),
   kind,
   namespaces: [],
   prefix: "",
@@ -1127,8 +1193,10 @@ const packageRowsOf = (
     documents.map(([at, tree], n) => [at, { node: idsIn(n)(0), tree }] as const),
   );
   const nodeAt = (to: string) => Option.fromNullishOr(nodes.get(to));
-  const { assembled: inAssembly } = contextsOf(
-    documents.map(([at, tree], n) => ({ idOf: idsIn(n), named: true, path: at, tree })),
+  const inAssembly = new Set(
+    contextsOf(documents.map(([at, tree], n) => ({ idOf: idsIn(n), named: true, path: at, tree })))
+      .filter(({ assembled }) => assembled)
+      .map(({ listed }) => listed.idOf(0)),
   );
   const inputs = documents.map(([at, tree], n): AssembledExpressionInput => {
     const ids: TestIds = {
@@ -1149,8 +1217,11 @@ const packageRowsOf = (
         })),
     };
 
+    const declared = declarationRowsOf(tree, ids);
+
     return {
-      cardinalities: declarationRowsOf(tree, ids).DeclarationCardinality,
+      cardinalities: declared.DeclarationCardinality,
+      declarations: declared.DeclarationIdentifier,
       expressions: rowsOf(tree, ids),
       ids,
       tests: testRowsOf(tree, ids),
@@ -1480,31 +1551,63 @@ const resolvesOnHost = (r: ReadingRow): boolean =>
   (r.form !== "numbered" || (r.replaced && /^[0-9]*[1-9][0-9]*$/u.test(r.number)));
 
 /**
- * The declaration lookups of a package: each document's, and the probes its documents write
- * together, which must agree where both hold a key.
+ * What a package's readings read of its stored rows, as the queries over them read it
+ * (`#pantry/qti/queries.ts`): each document's declared names by `[document, name]`, the item each
+ * item ref names, the names each item ref maps by `[item ref, name]`, and each test's written
+ * elements by `[assembly, identifier]`, with the instances that place each.
+ */
+interface ReadRows {
+  readonly declared: ReadonlySet<string>;
+  readonly items: ReadonlyMap<string, NodeId>;
+  readonly mapped: ReadonlySet<string>;
+  readonly names: ReadonlyMap<
+    string,
+    { readonly instances: readonly InstanceNameRow[]; readonly node: NodeId }
+  >;
+}
+
+/**
+ * An assembly's `InstanceName` row.
+ */
+type InstanceNameRow =
+  AssembledRows["InstanceName"] extends ReadonlyMap<string, infer R> ? R : never;
+
+/**
+ * Read what a package's readings read of its stored rows ({@link ReadRows}).
  *
  * @param rows - The package's rows.
- * @param breaches - The breaches found so far, which this adds to.
- * @returns The lookups, by `[document, name]`.
+ * @returns The rows read.
  */
-const lookupsOfPackage = (
-  rows: PackageRows,
-  breaches: string[],
-): ReadonlyMap<
-  string,
-  AssembledExpressionRows["VariableLookup"] extends ReadonlyMap<string, infer R> ? R : never
-> => {
-  const lookups = new Map(rows.documents.flatMap((input) => [...input.expressions.VariableLookup]));
-  for (const [at, probe] of rows.together.VariableLookup) {
-    const held = lookups.get(at);
-    if (held !== undefined && !Equal.equals(held, probe)) {
-      breaches.push(`VariableLookup ${at}: a probe beside a document's row`);
-    }
+const readRowsOf = (rows: PackageRows): ReadRows => {
+  const placed = Map.groupBy(rows.assembled.InstanceName.values(), ({ assembly, node }) =>
+    keyOf([assembly, node]),
+  );
 
-    lookups.set(at, probe);
-  }
-
-  return lookups;
+  return {
+    declared: new Set(
+      rows.documents.flatMap((input) =>
+        [...input.declarations.values()].map(({ document, identifier }) =>
+          lookupKey(document, identifier),
+        ),
+      ),
+    ),
+    items: new Map(
+      [...rows.together.ItemRefDocument.values()].map(({ document, node }) => [node, document]),
+    ),
+    mapped: new Set(
+      rows.documents.flatMap((input) =>
+        [...input.tests.VariableMapping.values()].map(({ parent, target }) =>
+          lookupKey(parent, target),
+        ),
+      ),
+    ),
+    names: new Map(
+      [...rows.assembled.AssembledName.values()].map(({ assembly, identifier, node }) => [
+        lookupKey(assembly, identifier),
+        { instances: placed.get(keyOf([assembly, node])) ?? [], node },
+      ]),
+    ),
+  };
 };
 
 /**
@@ -1585,27 +1688,36 @@ const textHolds = (reference: AssembledReferenceOnHost, r: ReadingRow): boolean 
 };
 
 /**
- * Whether a reading's name probe reads its scope's lookup.
+ * Whether a reading's scope is the one its test's assembly holds under its name, as `FoundName`,
+ * `HeldScope` and `Reading`'s `E1_derived` state it: a written element's node, kind and
+ * placements, and one instance's replacement, or, for a name the assembly holds none of, not found
+ * and the null objects.
  *
- * @param rows - The package's rows.
+ * @param read - The rows the readings read.
  * @param r - The reading.
- * @returns Whether it does, or makes none.
+ * @returns Whether it is, or makes none.
  */
-const nameProbeHolds = (rows: PackageRows, r: ReadingRow): boolean => {
+const scopeHolds = (read: ReadRows, r: ReadingRow): boolean => {
   if (r.form === "unsplit") {
     return true;
   }
 
-  const named = rows.together.NameLookup.get(lookupKey(r.assembly, r.scope));
+  const named = read.names.get(lookupKey(r.assembly, r.scope));
+  if (named === undefined) {
+    return (
+      !r.found &&
+      r.named === r.assembly &&
+      r.namedKind === "document" &&
+      r.placements === 0n &&
+      !r.replaced
+    );
+  }
 
   return (
-    named !== undefined &&
-    named.found === r.found &&
+    r.found &&
     named.node === r.named &&
-    named.kind === r.namedKind &&
-    named.placements === r.placements &&
-    named.replaced === r.replaced &&
-    named.itemDocument === r.lookupDocument
+    BigInt(named.instances.length) === r.placements &&
+    named.instances.some(({ kind, replaced }) => kind === r.namedKind && replaced === r.replaced)
   );
 };
 
@@ -1680,33 +1792,41 @@ const rowsReference = (rows: PackageRows, r: ReadingRow): AssembledReferenceOnHo
 };
 
 /**
- * The breaches of one reading's probes: its declaration probe where it reads the test's or an
- * item's declarations, and its mapping probe where it reads an item ref's, each the lookup's
- * verdict.
+ * The document whose declarations a reading reads its variable in, as `DeclaredReading` reads it:
+ * the test's own, unsplit; through a found item ref, its item, where the package holds it.
+ *
+ * @param read - The rows the readings read.
+ * @param r - The reading.
+ * @param itemScoped - Whether its scope is a found item ref.
+ * @returns The document, or none.
+ */
+const documentReadBy = (read: ReadRows, r: ReadingRow, itemScoped: boolean): NodeId | undefined => {
+  if (r.form === "unsplit") {
+    return r.assembly;
+  }
+
+  return itemScoped ? read.items.get(r.named) : undefined;
+};
+
+/**
+ * The breaches of one reading's text, scope and source: its variable declared where the document
+ * it reads declares it, the test's or its item ref's item's, mapped where its item ref maps it,
+ * and its source the first of those, else a built-in of its scope, else none.
  *
  * @param rows - The package's rows.
- * @param lookups - The declaration lookups.
+ * @param read - The rows the readings read.
  * @param r - The reading.
  * @returns The breaches.
  */
-const probeBreaches = (
-  rows: PackageRows,
-  lookups: ReturnType<typeof lookupsOfPackage>,
-  r: ReadingRow,
-): readonly string[] => {
+const readingBreaches = (rows: PackageRows, read: ReadRows, r: ReadingRow): readonly string[] => {
   const where = `${keyOf([r.assembly, r.node, r.attribute])} ${r.form} ${String(r.split)}`;
   const itemScoped =
     (r.form === "split" || r.form === "numbered") &&
     r.found &&
     r.namedKind === "qti-assessment-item-ref";
-  const readsDeclarations =
-    r.form === "unsplit" || (itemScoped && r.resourceType === "imsqti_item_xmlv3p0");
-  const declared = readsDeclarations
-    ? (lookups.get(lookupKey(r.lookupDocument, r.variable))?.declared ?? false)
-    : false;
-  const mapped = itemScoped
-    ? (rows.together.MappingLookup.get(lookupKey(r.named, r.variable))?.mapped ?? false)
-    : false;
+  const document = documentReadBy(read, r, itemScoped);
+  const declared = document !== undefined && read.declared.has(lookupKey(document, r.variable));
+  const mapped = itemScoped && read.mapped.has(lookupKey(r.named, r.variable));
 
   const builtIn = builtInStated(r, itemScoped);
   const source = sourceStated(declared, mapped, builtIn);
@@ -1714,41 +1834,31 @@ const probeBreaches = (
   return [
     ...(source === r.source ? [] : [`${where}: its source`]),
     ...(textHolds(rowsReference(rows, r), r) ? [] : [`${where}: its text`]),
-    ...(nameProbeHolds(rows, r) ? [] : [`${where}: its name probe`]),
-    ...(declared === r.declared ? [] : [`${where}: its declaration probe`]),
-    ...(mapped === r.mapped ? [] : [`${where}: its mapping probe`]),
+    ...(scopeHolds(read, r) ? [] : [`${where}: its scope`]),
   ];
 };
 
 /**
  * The breaches of the structural laws over a package's reference rows: each the law's statement,
  * read on the host: the name's pieces and the readings' count (`AssembledReference`'s and
- * `ReferenceSegment`'s `E1_derived`), each reading's text and each probe it makes, and the lookups'
- * forced and absent rows (M2).
+ * `ReferenceSegment`'s `E1_derived`), and each reading's text, scope and source.
  *
  * @param rows - The package's rows.
  * @returns The breaches, as text.
  */
 const structuralBreaches = (rows: PackageRows): readonly string[] => {
   const breaches: string[] = [];
-  const lookups = lookupsOfPackage(rows, breaches);
+  const read = readRowsOf(rows);
   const readings = Map.groupBy(rows.together.Reading.values(), ({ assembly, attribute, node }) =>
     keyOf([assembly, node, attribute]),
   );
   for (const reference of rows.together.AssembledReference.values()) {
-    const read =
+    const held =
       readings.get(keyOf([reference.assembly, reference.node, reference.attribute])) ?? [];
     breaches.push(
-      ...pieceBreaches(reference, read),
-      ...read.flatMap((r) => probeBreaches(rows, lookups, r)),
+      ...pieceBreaches(reference, held),
+      ...held.flatMap((r) => readingBreaches(rows, read, r)),
     );
-  }
-
-  for (const name of rows.assembled.AssembledName.values()) {
-    const found = rows.together.NameLookup.get(lookupKey(name.assembly, name.identifier));
-    if (found?.found !== true || found.node !== name.node) {
-      breaches.push(`NameLookup ${name.identifier}: not forced in`);
-    }
   }
 
   return breaches;
@@ -1844,6 +1954,96 @@ describe("import/overlays/expressions.ts, a test's references", () => {
     assert.strictEqual(judged, 1536);
     assert.isAbove(accepted, 0);
     assert.isBelow(accepted, judged);
+  });
+
+  it("reads no declaration through an item ref whose item the package lacks, whatever the test declares", () => {
+    // Oracle: the law oracle's readings (`#pantry/test/oracle-laws/tests.ts` `readingsOf`): an
+    // item ref reads the declarations of the item it names only where the package holds its
+    // document, so a reading through one whose item file is missing is declared by nothing, the
+    // test's own declarations of the same name among them, as `DeclaredReading` joins it
+    // (`#pantry/qti/queries.ts`); every structural law over the rows holds.
+    // Bound: item ref `a` of the item type whose file the package lacks, the test declaring each
+    // subset of {SCORE, b.SCORE, QTI_CONTEXT}, under five names read through `a`: 40 packages.
+    const names = ["a.SCORE", "a.b.SCORE", "a.1.SCORE", "a.QTI_CONTEXT", "a.duration"];
+    let judged = 0;
+    for (const declared of subsets(["SCORE", "b.SCORE", "QTI_CONTEXT"])) {
+      for (const reference of names) {
+        const test = el(
+          "qti-assessment-test",
+          [
+            ["identifier", "T"],
+            ["title", "T"],
+          ],
+          [
+            ...["OUT", ...declared].map((identifier) =>
+              el("qti-outcome-declaration", [
+                ["identifier", identifier],
+                ["cardinality", "single"],
+                ["base-type", "float"],
+              ]),
+            ),
+            el(
+              "qti-test-part",
+              [
+                ["identifier", "P"],
+                ["navigation-mode", "linear"],
+                ["submission-mode", "individual"],
+              ],
+              [
+                el(
+                  "qti-assessment-section",
+                  [
+                    ["identifier", "S"],
+                    ["title", "S"],
+                    ["visible", "true"],
+                  ],
+                  [
+                    el("qti-selection", [
+                      ["select", "1"],
+                      ["with-replacement", "true"],
+                    ]),
+                    el("qti-assessment-item-ref", [
+                      ["identifier", "a"],
+                      ["href", "a.xml"],
+                    ]),
+                  ],
+                ),
+              ],
+            ),
+            el(
+              "qti-outcome-processing",
+              [],
+              [
+                el(
+                  "qti-set-outcome-value",
+                  [["identifier", "OUT"]],
+                  [el("qti-variable", [["identifier", reference]])],
+                ),
+              ],
+            ),
+          ],
+        );
+        const rows = packageRowsOf(
+          [["test.xml", documentOfRoot(test)]],
+          [{ path: "a.xml", type: "imsqti_item_xmlv3p0" }],
+        );
+        const where = JSON.stringify({ declared, reference });
+        const throughA = [...rows.together.Reading.values()].filter(
+          ({ form, scope }) => (form === "split" || form === "numbered") && scope === "a",
+        );
+
+        assert.strictEqual(rows.together.ItemRefDocument.size, 0, where);
+        assert.isNotEmpty(throughA, where);
+        assert.isFalse(
+          throughA.some(({ source }) => source === "declared"),
+          `${where}: a reading through a missing item is declared`,
+        );
+        assert.deepStrictEqual(structuralBreaches(rows), [], where);
+        judged += 1;
+      }
+    }
+
+    assert.strictEqual(judged, 40);
   });
 
   it("refuses a name a section document placed twice gives twice, reads that document's own reference once, and accepts it placed once", () => {
@@ -2175,13 +2375,14 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
   });
 
   it.effect(
-    "probes every name a reference claims undeclared, types every unwritten base type unknown, and reads every table a declaration holds",
+    "resolves a reference to a declaration exactly where its document declares its name, types every unwritten base type unknown, and reads every table a declaration holds",
     () =>
       // Oracle: each document's own tree (`declarationsInTree`), a second reading of what it
-      // declares and which tables each declaration holds, against the lookups the builder writes
-      // (M2): a reference that names no declaration has an absent row, every row says what the
-      // document declares, every test variables' unwritten `base-type` is `unknown`, and every
-      // table slot a map response or a lookup reads is the table its declaration holds.
+      // declares and which tables each declaration holds, against the references the builder
+      // writes (M2, `DeclaredReference` of `#pantry/qti/queries.ts`): a reference is declared
+      // exactly where its document declares its name, every test variables' unwritten `base-type`
+      // is `unknown`, and every table a map response claims is the table its declaration holds, no
+      // claim row where it holds none.
       // Bound: every fixture, 37 documents.
       Effect.gen(function* claimsProved() {
         for (const { file } of frozen) {
@@ -2190,19 +2391,10 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
           const declared = declarationsInTree(tree);
 
           for (const reference of rows.VariableRef.values()) {
-            const lookup = rows.VariableLookup.get(
-              lookupKey(reference.document, reference.identifier),
-            );
-            if (reference.resolution !== "declared") {
-              assert.strictEqual(lookup?.declared, false, `${file} ${reference.identifier}`);
-            }
-          }
-
-          for (const lookup of rows.VariableLookup.values()) {
             assert.strictEqual(
-              lookup.declared,
-              declared.has(lookup.name),
-              `${file} ${lookup.name}`,
+              reference.resolution === "declared",
+              declared.has(reference.identifier),
+              `${file} ${reference.identifier}`,
             );
           }
 
@@ -2221,21 +2413,18 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
           }
 
           for (const reference of rows.VariableRef.values()) {
-            const declaration = rows.VariableRefDeclaration.get(
-              JSON.stringify([reference.node, reference.attribute]),
-            );
-            const table =
-              declaration === undefined
-                ? undefined
-                : rows.DeclarationTable.get(declaration.declaration);
             const holds = declared.get(reference.identifier) ?? new Set<string>();
             if (
               reference.resolution === "declared" &&
               reference.attribute === "identifier" &&
               reference.kind === "qti-map-response"
             ) {
-              assert.strictEqual(table?.mapping, holds.has("qti-mapping") ? "qti-mapping" : "none");
-              assert.strictEqual(reference.table, table?.mapping, file);
+              assert.strictEqual(
+                rows.VariableRefTable.get(JSON.stringify([reference.node, reference.attribute]))
+                  ?.table,
+                holds.has("qti-mapping") ? "qti-mapping" : undefined,
+                file,
+              );
             }
           }
         }
@@ -2404,8 +2593,10 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
       ["T"],
     );
     assert.deepStrictEqual(
-      [...rows.together.MappingLookup.values()].map(({ mapped, name }) => [name, mapped]),
-      [["S2", true]],
+      rows.documents.flatMap(({ tests }) =>
+        [...tests.VariableMapping.values()].map(({ target }) => target),
+      ),
+      ["S2"],
     );
   });
 
@@ -2434,6 +2625,11 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
               ...tests.VariableMapping.values(),
             ]);
             const mappingSource = together.MappingSourceDeclaration.get(mapping?.node ?? "");
+            const targetDeclared =
+              mappingSource !== undefined &&
+              readRowsOf(rows).declared.has(
+                lookupKey(mappingSource.itemDocument, mappingSource.target),
+              );
             const where = JSON.stringify(c);
 
             assert.isFalse(
@@ -2464,9 +2660,7 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
               where,
             );
             assert.strictEqual(
-              mappingSource === undefined ||
-                !mappingSource.targetDeclared ||
-                mappingSource.target === mappingSource.source,
+              !targetDeclared || mappingSource.target === mappingSource.source,
               source === "MISSING" || target === "S2" || target === source,
               where,
             );

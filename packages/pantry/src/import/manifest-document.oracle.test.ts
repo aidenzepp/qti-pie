@@ -1,19 +1,22 @@
 /**
  * The manifest is one document, read once: the package's one `imsmanifest.xml`, the description of
  * the package and no resource's document (spec reading 146). A path is one document, of one type
- * (reading 93), and the manifest's is fixed, `none`, since it is read before any resource names a
- * path. So a document-typed resource whose href names `imsmanifest.xml` names no document of its
- * type, and "Document entry" (`entry-kind`) refuses it, on the import's rows as in the law oracle;
- * a `cp:file` naming it only locates it (IMS Content Packaging 1.2, §6.11.3); and a site whose href
- * names it names no document, whatever names it. The import's reader and the oracle shredded the
- * manifest a second time, as the document of each resource whose href named it, so the package
- * held two documents at one path, the copy writing the manifest overlays again, and a site could
- * target the copy (FIX-HOLES).
+ * (reading 93), and the manifest's is fixed, `manifest` (reading 176), since it is read before any
+ * resource names a path. So a document-typed resource whose href names `imsmanifest.xml` names no
+ * document of its type, and "Document entry" (`entry-kind`) refuses it, in the law oracle and, over
+ * the query `TypedHref`, in the database (`#pantry/qti/package.db.test.ts`); a `cp:file` naming it
+ * only locates it (IMS Content Packaging 1.2, §6.11.3); and a site whose href names it names no
+ * document, whatever names it. The import's reader and the oracle shredded the manifest a second
+ * time, as the document of each resource whose href named it, so the package held two documents at
+ * one path, the copy writing the manifest overlays again, and a site could target the copy
+ * (FIX-HOLES).
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`), and
  * the specification as a checker for the documents each side reads: one per path, the manifest's
- * of no type, no site's target.
+ * of no type, no site's target. "Document entry" over a document-typed href is a rule over a query
+ * (`TypedHref`, `#pantry/qti/queries.ts`), which the host judge leaves to the database, so the
+ * oracle's side alone is held to it here.
  *
  * Bound: a manifest with 0 to 2 item resources, each listing as files a subset of
  * {`imsmanifest.xml`, `item.xml`} and naming one of them by its href or none (8 resources), and
@@ -29,7 +32,6 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { manifestPath } from "#pantry/qti/package.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
@@ -37,6 +39,7 @@ import { judgeOne, shownDisagreement } from "#pantry/test/gen/genetic/judge.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * The oracle's law tables over the composed grammar.
@@ -150,7 +153,7 @@ const distinct = (paths: readonly string[]): boolean => new Set(paths).size === 
 
 layer(NodeServices.layer, { excludeTestServices: true })("the manifest", (it) => {
   it.effect(
-    "is one document, of no type, read once and no site's target, and a document-typed href naming it is Document entry on both sides",
+    "is one document, of no type, read once and no site's target, and a document-typed href naming it is Document entry in the law oracle",
     (ctx) =>
       searched(
         ctx,
@@ -208,8 +211,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("the manifest", (it) =>
                 assert.deepStrictEqual(
                   read.documents
                     .filter(({ listed }) => listed.path === manifestPath)
-                    .map(({ listed }) => listed.resourceType),
-                  ["none"],
+                    .map(({ listed }) => listed.documentType),
+                  ["manifest"],
                   said,
                 );
                 for (const { ids, listed } of read.documents) {
@@ -221,7 +224,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("the manifest", (it) =>
 
                 if (of.resources.some(({ href }) => Option.contains(href, manifestPath))) {
                   assert.match(judged.summary.oracle, /\bDocument entry\b/u, said);
-                  assert.match(judged.summary.import, /\bDocument entry\b/u, said);
                 }
               }).pipe(Effect.scoped),
           );

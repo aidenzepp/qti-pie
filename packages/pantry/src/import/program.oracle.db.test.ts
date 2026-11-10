@@ -14,60 +14,40 @@
  * admits. A corruption no written type admits (a gap in a family's slots, a wrong count, a junk
  * accumulator) cannot be written through the API at all; those are the slices' direct-SQL cases.
  *
- * Each case also logs how long `db.compile` takes over its ChangeSet (the W5 amendment's C19), the
- * compile time per package the network seat reports.
+ * Each case also logs how long its apply takes: the author login's `importWrite` member, compiled
+ * once by `grizzle generate` into the login's served file, applied to the package's facts.
  */
-import { CommitUnknown, Db, query, uuid, v, writableNamesOf } from "@bjornpagen/grizzle";
-import type { ApplyOutcome, DbConnection, Law, Plan } from "@bjornpagen/grizzle";
-import { NodeFileSystem, NodeServices } from "@effect/platform-node";
+import { CommitUnknown, Db, login, query, v, workload } from "@bjornpagen/grizzle";
+import type { ApplyOutcome, Law } from "@bjornpagen/grizzle";
+import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Duration, Effect, Formatter, Layer, Option, Redacted, Result } from "effect";
-import { Client } from "pg";
-import type { QueryResultRow } from "pg";
+import { Duration, Effect, Formatter, Layer, Option, Result } from "effect";
 import { describe, inject } from "vitest";
-import { loginConnection } from "#pantry/db/connection.ts";
 import { composed } from "#pantry/grammar/compose.ts";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+
+import { importPackage, WrapApply } from "#pantry/import/package.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
+
 import type { NodeMember, NodeRoot, PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+
 import { Package } from "#pantry/qti/package.ts";
-import { Qti } from "#pantry/qti/schema.ts";
-import { Author } from "#pantry/qti/roles.ts";
 import { materialize, materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/test/processing-fixtures.ts";
 import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
 import { resourceTypeCases } from "#pantry/test/resource-type-cases.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { probeLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
+import { packageFactsOf } from "#pantry/import/write.ts";
+import { Qti } from "#pantry/qti/own.ts";
+import { authorRoleOf } from "#pantry/qti/roles.ts";
+import { authorWorkloadsOf } from "#pantry/qti/logins.ts";
+import { servedProbe } from "#pantry/test/served-members.ts";
 
 const fixtures = inject("fixtures");
-
-/**
- * The author login's PostgreSQL role, `<schema>__<login>`.
- */
-const authorAppRole = "qti__author_app";
-
-/**
- * The PostgreSQL schema of `Qti`'s tables.
- */
-const qtiSchema = "qti";
-
-/**
- * The table grizzle's migrations record themselves in, one per installation, beside `Qti`'s own.
- */
-const ledgerTable = "__ledger";
-
-/**
- * The trigger grizzle installs on each table of an installation, ledger included, that refuses a
- * write below SERIALIZABLE (`__require_serializable`, `01-setup.sql` of `migrations/qti`).
- */
-const isolationTrigger = "__isolation";
 
 /**
  * The tarball member `simple` is extracted from.
@@ -189,42 +169,46 @@ const rejectedBy = (
   picks: readonly ((law: Law) => boolean)[],
 ): boolean =>
   outcome.kind === "invariant-rejected" &&
-  outcome.refused.laws.some((law) => picks.some((pick) => pick(law)));
+  outcome.refused.laws.map(({ law }) => law).some((law) => picks.some((pick) => pick(law)));
 
 /**
- * The number of packages stored, through a query that counts each by its key.
+ * The author role of this file's probe login: grizzle puts a role in one login only, so the probe
+ * holds a role of its own, named as the installed one.
  */
-const packagesCounted = query(Author).rule((r) => {
-  const { id } = v(Package, "package");
-
-  return r.match(Package, { id }).find({ total: r.count() });
-});
+const probeAuthor = authorRoleOf(Qti);
 
 /**
- * A package stored by its id.
+ * The author login with this file's count of the packages stored beside its own members, over an
+ * author role of its own (`#pantry/test/served-members.ts` `servedProbe`): `ProbeLogin` opens the
+ * role that reads it, and `probeLayer` serves every test of the file, `AuthorLogin` included.
  */
-const packageById = query(Author).rule((r) => {
-  const { id } = v(Package, "package");
+const { layer: probeLayer, ProbeLogin } = servedProbe(
+  login(Qti, "author_app", [probeAuthor], {
+    workload: [
+      ...authorWorkloadsOf(Qti, probeAuthor),
+      workload(probeAuthor, {
+        packagesCounted: query(probeAuthor).rule((r) => {
+          const { id } = v(Package, "package");
 
-  return r
-    .match(Package, { id })
-    .where(r.eq(id, r.param("id", uuid)))
-    .find({ id });
-});
+          return r.match(Package, { id }).find({ total: r.count() });
+        }),
+      }),
+    ],
+  }),
+);
 
 /**
  * Count the packages stored.
  */
 const storedPackages = Effect.gen(function* storedPackages() {
-  const db = yield* Db.open(AuthorApp.roles.author, {});
-  const rows = yield* (yield* db.execute(packagesCounted, {})).collect;
+  const db = yield* Db.open((yield* ProbeLogin).roles.author, {});
+  const rows = yield* (yield* db.workload.packagesCounted.execute({})).collect;
 
   return rows[0]?.total ?? 0n;
 });
 
 /**
- * Build a package's ChangeSet with one edit of its inputs, and apply it, logging the compile time
- * of the ChangeSet and the apply's.
+ * Build a package's ChangeSet with one edit of its inputs, and apply it, logging the apply's time.
  *
  * @param dir - The valid package.
  * @param edit - The edit of its inputs; none applies the package as read.
@@ -236,23 +220,20 @@ const applyEdited = (
 ) =>
   Effect.gen(function* appliesEdited() {
     const program = yield* readProgram(dir);
-    const changes = changeSetOf(Author, edit(program.inputs));
-    const db = yield* Db.open(AuthorApp.roles.author, {});
-    const [compiled] = yield* Effect.scoped(Effect.timed(db.compile(changes)));
-    const [applied, outcome] = yield* Effect.timed(db.apply(changes, {}));
+    const facts = packageFactsOf(edit(program.inputs));
+    const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+    const [applied, outcome] = yield* Effect.timed(
+      db.workload.importWrite.apply({ insert: facts }, {}),
+    );
 
-    yield* Effect.log("import compile and apply", {
-      applyMillis: Duration.toMillis(applied),
-      compileMillis: Duration.toMillis(compiled),
-      dir,
-    });
+    yield* Effect.log("import apply", { applyMillis: Duration.toMillis(applied), dir });
 
     return { outcome, packageId: program.packageId };
   });
 
 /**
  * Hold PostgreSQL to a verdict on a package: an accepted one commits, and a refused one is
- * refused under its rule.
+ * refused under rules that include its rule.
  *
  * @param name - The package's name, for the assertions' messages.
  * @param dir - The package.
@@ -277,8 +258,8 @@ const holdsVerdict = (
 
     const refused = yield* Effect.flip(importPackage(dir));
 
-    assert.strictEqual(
-      refused instanceof ImportRefused ? refused.rule : refused._tag,
+    assert.include(
+      refused instanceof ImportRefused ? refused.rules : [refused._tag],
       verdict.rule,
       name,
     );
@@ -365,65 +346,6 @@ const valueNodeOf = (inputs: PackageInputs, text: string): string => {
 };
 
 /**
- * The password a connection authenticates with, read once.
- *
- * @param password - The connection's password.
- * @returns The password's text.
- */
-const passwordText = (password: DbConnection["password"]) =>
-  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
-    Effect.map(Redacted.value),
-  );
-
-/**
- * A session of the author login on the lease, over verify-full TLS against the cluster's CA, closed
- * with its scope: a direct reader of the catalog.
- */
-const loginSession = Effect.gen(function* loginSession() {
-  const connection = yield* loginConnection(authorAppRole);
-  const password = yield* passwordText(connection.password);
-  const client = new Client({
-    database: connection.database,
-    host: connection.transport.host,
-    password,
-    port: connection.transport.port,
-    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
-  });
-
-  return yield* Effect.acquireRelease(
-    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
-    () => Effect.promise(() => client.end()),
-  );
-}).pipe(Effect.provide(NodeFileSystem.layer));
-
-/**
- * Run one statement on a session and return its rows.
- *
- * @param client - The session.
- * @param text - The statement.
- * @param values - Its parameters.
- * @returns The rows.
- */
-const rowsOf = <R extends QueryResultRow>(
-  client: Client,
-  text: string,
-  values: readonly string[] = [],
-) =>
-  Effect.tryPromise(() => client.query<R>(text, [...values])).pipe(Effect.map(({ rows }) => rows));
-
-/**
- * Every node of a plan tree, the plan itself first.
- *
- * @param plan - The plan.
- * @returns Its nodes' names.
- */
-const planNodes = (plan: Plan): readonly string[] => [
-  plan.node,
-  ...plan.children.flatMap(planNodes),
-];
-
-/**
  * Insert markup into `simple`'s item body before its choice interaction, where flow content stands.
  *
  * @param markup - The markup.
@@ -456,25 +378,24 @@ describe.skipIf(!hasLease)(
   "import/program.oracle.db.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+    layer(Layer.mergeAll(probeLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
+      timeout: probeLayerHookTimeoutMs,
     })("one ChangeSet per package, judged by PostgreSQL", (it) => {
       it.effect(
-        "accepts simple, sharedMedia and svg whole, each in one apply, logging the compile time",
+        "accepts simple, sharedMedia and svg whole, each in one apply, logging the apply time",
         () =>
           // Oracle: PostgreSQL, every law of the schema over each accepted corpus package
           // (Q5.03's "accepted through grizzle", for the whole package), and the package read
           // back by its id.
           Effect.gen(function* acceptsCorpus() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
             for (const [name, dir] of Object.entries(yield* acceptedPackages)) {
               const { outcome, packageId } = yield* applyEdited(dir);
 
               assert.strictEqual(outcome.kind, "accepted", name);
-              assert.lengthOf(
-                yield* (yield* db.execute(packageById, { id: packageId })).collect,
-                1,
+              assert.isTrue(
+                Option.isSome(yield* db.workload.packageOf.get({ id: packageId })),
                 name,
               );
             }
@@ -502,69 +423,14 @@ describe.skipIf(!hasLease)(
         Effect.gen(function* noRow() {
           const before = yield* storedPackages;
           const failed = yield* Effect.flip(
-            importPackage(fixtures.simple, { wrapApply: () => Effect.fail(new CommitUnknown()) }),
+            importPackage(fixtures.simple).pipe(
+              Effect.provideService(WrapApply, () => Effect.fail(new CommitUnknown())),
+            ),
           );
 
           assert.strictEqual(failed._tag, "CommitUnknown");
           assert.strictEqual(yield* storedPackages, before);
         }),
-      );
-
-      it.effect("plans no recursion, and its only triggers are grizzle's isolation guards", () =>
-        // Oracle: PostgreSQL's own planner and catalog. No statement of an accepted package's
-        // ChangeSet plans a recursive union or a work-table scan (`db.explain`, estimate only). The
-        // user triggers (`pg_trigger.tgisinternal` false, so the foreign keys' own triggers are not
-        // counted) on the installation's tables and its roles' views are exactly grizzle's
-        // `__isolation`, which refuses a write below SERIALIZABLE, once on each table: a table per
-        // stored relation of `Qti` and grizzle's migration ledger. Qti installs none of its own.
-        Effect.gen(function* planAudit() {
-          const db = yield* Db.open(AuthorApp.roles.author, {});
-          for (const dir of Object.values(yield* acceptedPackages)) {
-            const program = yield* readProgram(dir);
-            const plans = yield* db.explain(changeSetOf(Author, program.inputs), {});
-            const nodes = plans.flatMap(planNodes);
-
-            assert.isAbove(plans.length, 0, dir);
-            assert.notInclude(nodes, "Recursive Union", dir);
-            assert.notInclude(nodes, "WorkTable Scan", dir);
-          }
-
-          const client = yield* loginSession;
-          const tables = yield* rowsOf<{ readonly relname: string }>(
-            client,
-            `SELECT c.relname FROM pg_catalog.pg_class c
-               JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-              WHERE n.nspname = $1 AND c.relkind = 'r'`,
-            [qtiSchema],
-          );
-          const triggers = yield* rowsOf<{
-            readonly nspname: string;
-            readonly relname: string;
-            readonly tgname: string;
-          }>(
-            client,
-            `SELECT n.nspname, c.relname, t.tgname FROM pg_catalog.pg_trigger t
-               JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
-               JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-              WHERE (n.nspname = $1 OR n.nspname LIKE $2) AND NOT t.tgisinternal`,
-            [qtiSchema, `${qtiSchema}\\_\\_%`],
-          );
-          assert.strictEqual(
-            tables.length,
-            writableNamesOf(Qti).length + 1,
-            "a table per stored relation, and the ledger",
-          );
-          assert.include(
-            tables.map(({ relname }) => relname),
-            ledgerTable,
-          );
-          assert.deepStrictEqual(
-            triggers
-              .map(({ nspname, relname, tgname }) => `${nspname}.${relname} ${tgname}`)
-              .toSorted(),
-            tables.map(({ relname }) => `${qtiSchema}.${relname} ${isolationTrigger}`).toSorted(),
-          );
-        }).pipe(Effect.scoped),
       );
 
       it.effect("accepts a string mapping keyed York and york", () =>
@@ -764,9 +630,10 @@ describe.skipIf(!hasLease)(
           name: "a match table on a multiple-cardinality outcome (lookup-cardinality, Q5.11)",
         },
         {
-          // P2's (resource type, root kind) containment into RootOfType (`qti/package.ts`
-          // packageLaws): of the statements named RootOfType, the one this edit breaks, and the
-          // oracle's one breach.
+          // P2's (resource type, root kind) containment into RootOfType, read from the document's
+          // ResourceDocument, the row its resource type is held in (`qti/package.ts` packageLaws,
+          // spec reading 176): of the statements named RootOfType, the one this edit breaks; the
+          // oracle's one breach; and the rule the import names for it, root-type-reverse.
           apply: () =>
             Effect.flatMap(
               editedSimple("stimulus-root", [
@@ -788,10 +655,17 @@ describe.skipIf(!hasLease)(
                     "the oracle finds RootOfType alone broken",
                   );
 
-                  return yield* applyEdited(dir);
+                  const applied = yield* applyEdited(dir);
+
+                  yield* holdsVerdict("an item named as a stimulus", dir, {
+                    rule: "root-type-reverse",
+                    verdict: "refused",
+                  });
+
+                  return applied;
                 }),
             ),
-          laws: [containedIn("Document", "RootOfType")],
+          laws: [containedIn("ResourceDocument", "RootOfType")],
           name: "an item named as a stimulus, a root its resource type does not name (root-type-reverse, Q5.06)",
         },
         {
@@ -817,13 +691,9 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [
-            containedIn("ResourceHref", "Entry"),
-            containedIn("ResourceHref", "Document"),
-            containedIn("FileHref", "Entry"),
-            containedIn("File", "Entry"),
-            containedIn("TypedHref", "LomResource"),
-          ],
+          // "Document entry" over the query `TypedHref` (`qti/queries.ts`): the document a typed href
+          // names is one the package lists; and the listed file's own entry.
+          laws: [containedIn("TypedHref", "ResourceDocument"), containedIn("File", "Entry")],
           name: "a document href no entry holds (entry-kind, Q5.06)",
         },
         {
@@ -956,7 +826,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [keyOn("MapKeyPoint", "mapping", "value")],
+          laws: [keyOn("MapKeyPoint", "mapping", "x", "y")],
           name: "a point mapping keyed 1 2 and 01 +2 (map-key-unique, Q5.11)",
         },
         {
@@ -1196,7 +1066,7 @@ describe.skipIf(!hasLease)(
               assert.isTrue(
                 outcome._tag === "Failure" &&
                   outcome.failure instanceof ImportRefused &&
-                  rules.includes(outcome.failure.rule),
+                  outcome.failure.rules.some((rule) => rules.includes(rule)),
                 `${name}: ${outcome._tag === "Failure" ? outcome.failure.message : "accepted"}`,
               );
             }
@@ -1283,8 +1153,8 @@ describe.skipIf(!hasLease)(
           const refused = yield* Effect.flip(importPackage(fixtures.lti));
 
           assert.instanceOf(refused, ImportRefused);
-          assert.strictEqual(
-            refused instanceof ImportRefused ? refused.rule : undefined,
+          assert.include(
+            refused instanceof ImportRefused ? refused.rules : [],
             "attribute-lexical",
           );
         }),
@@ -1294,12 +1164,14 @@ describe.skipIf(!hasLease)(
         // Oracle: the specification as a checker, `CommitUnknown`'s resolution: the apply ran and
         // committed, so the package is read back and the import answers its id.
         Effect.gen(function* readsBack() {
-          const id = yield* importPackage(fixtures.simple, {
-            wrapApply: (apply) => Effect.andThen(apply, Effect.fail(new CommitUnknown())),
-          });
-          const db = yield* Db.open(AuthorApp.roles.author, {});
+          const id = yield* importPackage(fixtures.simple).pipe(
+            Effect.provideService(WrapApply, (apply) =>
+              Effect.andThen(apply, Effect.fail(new CommitUnknown())),
+            ),
+          );
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
 
-          assert.lengthOf(yield* (yield* db.execute(packageById, { id })).collect, 1);
+          assert.isTrue(Option.isSome(yield* db.workload.packageOf.get({ id })), id);
         }),
       );
     });

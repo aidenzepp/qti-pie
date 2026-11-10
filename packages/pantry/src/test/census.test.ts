@@ -16,6 +16,10 @@ import type { Census, FunctionKind, LawFamily, MigrationFile } from "#pantry/tes
  * types; no seeded tables, seed rows or `INSERT INTO`; no validate files, law functions or
  * constraint triggers; no policies (G6); and no two domains with one definition (G6).
  *
+ * The committed migration meets every target but the validate-file and constraint-trigger parts of
+ * the third: it holds the one validate file and the deferred constraint triggers that judge the
+ * rules over queries, whose counts `census.migration.test.ts` measures in their place.
+ *
  * §13's table count, an estimate below 80, is no target: the committed migration's measured count
  * is asserted instead, one table per stored relation (`census.migration.test.ts`).
  */

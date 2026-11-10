@@ -29,7 +29,6 @@ import { stringValuesOf } from "#pantry/import/overlays/string-values.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { manifestPath } from "#pantry/qti/package.ts";
 import type {
   Dependency,
   DependencyTarget,
@@ -37,7 +36,6 @@ import type {
   FileHref,
   ManifestId,
   ManifestIdSpace,
-  NamedHref,
   Reference,
   ReferencePath,
   Resource,
@@ -47,11 +45,9 @@ import type {
   ResourceTyped,
   TextReference,
   TextReferencePath,
-  TypedHref,
-  UnreadTypeHref,
-  UnreadTypePath,
 } from "#pantry/qti/package.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * The ids a manifest's rows are written under: its package's, and each of its tree's nodes', drawn
@@ -77,15 +73,11 @@ export interface PackageRows {
   readonly FileHref: ReadonlyMap<string, Addition<typeof FileHref>>;
   readonly ManifestId: ReadonlyMap<string, Addition<typeof ManifestId>>;
   readonly ManifestIdSpace: ReadonlyMap<string, Addition<typeof ManifestIdSpace>>;
-  readonly NamedHref: ReadonlyMap<string, Addition<typeof NamedHref>>;
   readonly Resource: ReadonlyMap<string, Addition<typeof Resource>>;
   readonly ResourceFile: ReadonlyMap<string, Addition<typeof ResourceFile>>;
   readonly ResourceHref: ReadonlyMap<string, Addition<typeof ResourceHref>>;
   readonly ResourceId: ReadonlyMap<string, Addition<typeof ResourceId>>;
   readonly ResourceTyped: ReadonlyMap<string, Addition<typeof ResourceTyped>>;
-  readonly TypedHref: ReadonlyMap<string, Addition<typeof TypedHref>>;
-  readonly UnreadTypeHref: ReadonlyMap<string, Addition<typeof UnreadTypeHref>>;
-  readonly UnreadTypePath: ReadonlyMap<string, Addition<typeof UnreadTypePath>>;
 }
 
 /**
@@ -102,15 +94,11 @@ export const noPackageRows: PackageRows = {
   FileHref: new Map(),
   ManifestId: new Map(),
   ManifestIdSpace: new Map(),
-  NamedHref: new Map(),
   Resource: new Map(),
   ResourceFile: new Map(),
   ResourceHref: new Map(),
   ResourceId: new Map(),
   ResourceTyped: new Map(),
-  TypedHref: new Map(),
-  UnreadTypeHref: new Map(),
-  UnreadTypePath: new Map(),
 };
 
 /**
@@ -120,11 +108,10 @@ export const noPackageRows: PackageRows = {
 type ResourceTypeHandle = Addition<typeof ResourceTyped>["type"];
 
 /**
- * The `ResourceType` handles a lexical form can spell: every one but the null object `none`, which
- * no lexical form writes (`ResourceTypeLexical` holds no row for it).
+ * The `ResourceType` handles, each by the lexical form that spells it (`ResourceTypeLexical`).
  */
 const spelledTypes: ReadonlyMap<string, ResourceTypeHandle> = new Map(
-  ResourceType.handles.flatMap((handle) => (handle === "none" ? [] : [[handle, handle] as const])),
+  ResourceType.handles.map((handle) => [handle, handle] as const),
 );
 
 /**
@@ -319,17 +306,12 @@ export const hrefValueOf = (lexical: string, whiteSpace: WhiteSpace): string => 
  * - `colon`: a `:` in the first segment of a path with no scheme (`1:a.png`). RFC 3986, §4.2, makes
  *   it no relative reference ("would be mistaken for a scheme name"), and the URL Standard reads it
  *   as a path.
- * - `srcset`: a `srcset` of several image candidates or with a descriptor, which the HTML Standard's
- *   own parsing algorithm splits (`#pantry/qti/package.ts` `srcsetCandidatePattern`).
+ *
+ * A `srcset` of several image candidates or with a descriptor meets no limit here: the importer
+ * resolves it as one href, and "Href form" refuses its lexical form by `srcsetCandidatePattern`
+ * (`#pantry/qti/package.ts`) whatever its resolution.
  */
-export type Limit =
-  | "backslash"
-  | "colon"
-  | "control"
-  | "octets"
-  | "percent"
-  | "separator"
-  | "srcset";
+export type Limit = "backslash" | "colon" | "control" | "octets" | "percent" | "separator";
 
 /**
  * How an href resolves, the `HrefScope` its row holds (`#pantry/qti/package.ts`): in the
@@ -678,10 +660,10 @@ export const hrefResolverOf = (rows: FlatRows<Composed>, path: string): HrefReso
  * The entry path a resolution names, none for one outside the package.
  *
  * @param resolution - The resolution.
- * @returns Its path where its scope is `entry`.
+ * @returns Its path where its scope is `entry`, and none for every other scope.
  */
-export const entryPathOf = (resolution: HrefResolution): string | undefined =>
-  resolution.scope === "entry" ? resolution.path : undefined;
+export const entryPathOf = (resolution: HrefResolution): Option.Option<string> =>
+  resolution.scope === "entry" ? Option.some(resolution.path) : Option.none();
 
 /**
  * The path an href is compared by, `ResourceHref`'s and `File`'s `path`, and an item ref's or a
@@ -753,28 +735,19 @@ const dependencyTargetsOf = (
 };
 
 /**
- * The `type` a `cp:resource` that writes none is held under, `Resource`'s and `ResourceHref`'s
- * `typeLexical` (`#pantry/qti/package.ts`): the empty form, which spells no handle, as an unspelled
- * written form does, so no `ResourceTyped` or `TypedHref` row stands for it and AL3 refuses the
- * resource alone. It is a field of both rows rather than a row of its own because a typed
- * resource's href is required to have its `TypedHref` without a join of the two optional parts.
- */
-const unwrittenType = "";
-
-/**
  * Build the overlay rows of a package's manifest.
  *
- * An element's identifier is a row only where it is written: a `cp:manifest`'s is its `ManifestId`,
- * a `cp:resource`'s its `ResourceId`, each beside its row of the package's identifier space
- * (`ManifestIdSpace`). A row whose existence an attribute's copy proves is left out where the
- * attribute is absent (a `cp:file`'s `href`, a `cp:dependency`'s `identifierref`), and a resource's
- * `href` is a row only where it is written; AL3 refuses an absent required attribute. A
- * dependency's `Dependency` is left out, too, where its `identifierref` is no NCName once collapsed
- * ({@link isNcName}): `xs:IDREF` restricts `xs:NCName`, so it names no resource, and its value
- * domain refuses it alone (spec reading 152, decision 457 (2)). A resource's absent `type` is held
- * as {@link unwrittenType}. A resource's `href` whose `type` is written and spells no handle has its
- * `UnreadTypeHref`, beside the `UnreadTypePath` of its compared path, where a typed one has its
- * `TypedHref`.
+ * An element's identifier is a row only where it is written: a `cp:manifest`'s is its
+ * `ManifestId`, a `cp:resource`'s its `ResourceId`, each beside its row of the package's
+ * identifier space (`ManifestIdSpace`). A row whose existence an attribute's copy proves is left
+ * out where the attribute is absent (a `cp:file`'s `href`, a `cp:dependency`'s `identifierref`),
+ * and a resource's `href` and its `type`'s code are each a row only where it is written and, for
+ * the code, spelled; AL3 refuses an absent required attribute. A dependency's `Dependency` is left
+ * out, too, where its `identifierref` is no NCName once collapsed ({@link isNcName}): `xs:IDREF`
+ * restricts `xs:NCName`, so it names no resource, and its value domain refuses it alone (spec
+ * reading 152, decision 457 (2)). A resource whose `type` is written and spells no handle has no
+ * code, and its href is a row of the query `UnreadTypeHref` (`#pantry/qti/queries.ts`), which no
+ * table stores ({@link unreadTypePathsOf} reads its paths on the host).
  *
  * Each identifier and `identifierref` row holds its written form (`lexical`) and that form
  * collapsed, its value (an `xs:ID` and an `xs:IDREF` are whiteSpace `collapse` types, decision 457
@@ -812,15 +785,11 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
   const fileHrefs = new Map<string, Addition<typeof FileHref>>();
   const idSpace = new Map<string, Addition<typeof ManifestIdSpace>>();
   const manifests = new Map<string, Addition<typeof ManifestId>>();
-  const namedHrefs = new Map<string, Addition<typeof NamedHref>>();
   const resources = new Map<string, Addition<typeof Resource>>();
   const resourceFiles = new Map<string, Addition<typeof ResourceFile>>();
   const resourceHrefs = new Map<string, Addition<typeof ResourceHref>>();
   const resourceIds = new Map<string, Addition<typeof ResourceId>>();
   const resourceTypes = new Map<string, Addition<typeof ResourceTyped>>();
-  const typedHrefs = new Map<string, Addition<typeof TypedHref>>();
-  const unreadTypeHrefs = new Map<string, Addition<typeof UnreadTypeHref>>();
-  const unreadTypePaths = new Map<string, Addition<typeof UnreadTypePath>>();
   const spaceOf = (identifier: string, kind: "cp:manifest" | "cp:resource"): void => {
     idSpace.set(headingKey([ids.package, identifier, kind]), {
       identifier,
@@ -845,60 +814,33 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
     }
 
     if (node.kind === "cp:resource") {
-      const typeLexical = Option.getOrElse(valueOf(node, "type"), () => unwrittenType);
-      const type = typeOf(typeLexical);
-
-      resources.set(node.id, {
-        ...tupleOf(node),
-        package: ids.package,
-        parent: node.parent,
-        typeLexical,
-      });
+      resources.set(node.id, { ...tupleOf(node), package: ids.package, parent: node.parent });
       for (const lexical of Option.toArray(valueOf(node, "identifier"))) {
         const identifier = collapse(lexical);
         resourceIds.set(node.id, { identifier, lexical, node: node.id, package: ids.package });
         spaceOf(identifier, "cp:resource");
       }
 
-      for (const code of Option.toArray(type)) {
-        resourceTypes.set(node.id, {
-          node: node.id,
-          package: ids.package,
-          type: code,
-          typeLexical,
-        });
+      for (const typeLexical of Option.toArray(valueOf(node, "type"))) {
+        for (const code of Option.toArray(typeOf(typeLexical))) {
+          resourceTypes.set(node.id, {
+            node: node.id,
+            package: ids.package,
+            type: code,
+            typeLexical,
+          });
+        }
       }
 
       for (const href of Option.toArray(valueOf(node, "href"))) {
         const resolution = resolve(node.id, href);
-        const path = comparedPathOf(resolution, href);
         resourceHrefs.set(node.id, {
           href,
           node: node.id,
           package: ids.package,
-          path,
+          path: comparedPathOf(resolution, href),
           scope: resolution.scope,
-          typeLexical,
         });
-        for (const code of Option.toArray(type)) {
-          typedHrefs.set(node.id, {
-            node: node.id,
-            package: ids.package,
-            path,
-            scope: resolution.scope,
-            type: code,
-          });
-          namedHrefs.set(headingKey([ids.package, path, code]), {
-            package: ids.package,
-            path,
-            type: code,
-          });
-        }
-
-        if (Option.isNone(type) && typeLexical !== unwrittenType) {
-          unreadTypeHrefs.set(node.id, { node: node.id, package: ids.package, path, typeLexical });
-          unreadTypePaths.set(headingKey([ids.package, path]), { package: ids.package, path });
-        }
       }
     }
 
@@ -944,16 +886,79 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
     FileHref: fileHrefs,
     ManifestId: manifests,
     ManifestIdSpace: idSpace,
-    NamedHref: namedHrefs,
     Resource: resources,
     ResourceFile: resourceFiles,
     ResourceHref: resourceHrefs,
     ResourceId: resourceIds,
     ResourceTyped: resourceTypes,
-    TypedHref: typedHrefs,
-    UnreadTypeHref: unreadTypeHrefs,
-    UnreadTypePath: unreadTypePaths,
   };
+};
+
+/**
+ * A typed href as the host reads it: a resource's `ResourceHref` beside its `ResourceTyped`'s code.
+ */
+export type TypedHrefRow = Pick<
+  Addition<typeof ResourceHref>,
+  "node" | "package" | "path" | "scope"
+> &
+  Pick<Addition<typeof ResourceTyped>, "type">;
+
+/**
+ * Read the typed hrefs of a manifest's rows: each resource's href beside the code its `type`
+ * spells, the rows of the query `TypedHref` (`#pantry/qti/queries.ts`), which no table stores. The
+ * importer reads them on the host before it writes a row, to name the documents it reads
+ * ({@link namedDocuments}) and the resources an item ref names; the database reads the same join
+ * where a rule over the query judges the rows written.
+ *
+ * @param rows - The manifest's overlay rows.
+ * @returns The typed hrefs, in the manifest's order: none for a resource with no href, or whose
+ *   `type` spells no handle.
+ */
+export const typedHrefsOf = (
+  rows: Pick<PackageRows, "ResourceHref" | "ResourceTyped">,
+): readonly TypedHrefRow[] =>
+  [...rows.ResourceHref.values()].flatMap(({ node, package: pkg, path, scope }) =>
+    Option.toArray(Option.fromUndefinedOr(rows.ResourceTyped.get(node))).map(({ type }) => ({
+      node,
+      package: pkg,
+      path,
+      scope,
+      type,
+    })),
+  );
+
+/**
+ * Read the paths a manifest's resources of an unread type name: each resource whose `type` is
+ * written, nonempty, and spells no handle (so it has no `ResourceTyped`), by its href's compared
+ * path, the rows of the query `UnreadTypeHref` (`#pantry/qti/queries.ts`), which no table stores.
+ * The importer reads them on the host to name no target for an item ref whose path only such a
+ * resource names besides types no law reads (`#pantry/import/overlays/expressions.ts`
+ * `itemRefTargetsOf`); the database reads the same join where "Item ref target" judges it.
+ *
+ * @param doc - The manifest's tree.
+ * @param idOf - The ids its rows are written under.
+ * @param rows - The manifest's overlay rows.
+ * @returns The paths.
+ */
+export const unreadTypePathsOf = (
+  doc: XdmDocument<Composed>,
+  idOf: (index: number) => NodeId,
+  rows: Pick<PackageRows, "ResourceHref" | "ResourceTyped">,
+): ReadonlySet<string> => {
+  const flat = flatten(doc, idOf);
+  const resources = new Set(
+    flat.nodes.flatMap(({ id, kind }) => (kind === "cp:resource" ? [id] : [])),
+  );
+
+  return new Set(
+    flat.attributes.flatMap(({ lexical, name, node }) =>
+      name === "type" && resources.has(node) && lexical !== "" && !rows.ResourceTyped.has(node)
+        ? Option.toArray(Option.fromUndefinedOr(rows.ResourceHref.get(node))).map(
+            ({ path }) => path,
+          )
+        : [],
+    ),
+  );
 };
 
 /**
@@ -972,7 +977,7 @@ export const namedDocuments = (
   rows: PackageRows,
 ): ReadonlyMap<string, { readonly path: string; readonly type: ResourceTypeHandle }> =>
   new Map(
-    [...rows.TypedHref.values()].flatMap(({ path, scope, type }) =>
+    typedHrefsOf(rows).flatMap(({ path, scope, type }) =>
       scope === "entry" && documentTyped.has(type)
         ? [[headingKey([path, type]), { path, type }] as const]
         : [],
@@ -1011,29 +1016,14 @@ export interface DocumentIds extends ManifestIds {
 }
 
 /**
- * How an attribute of the reference census holds its references: one URL, or a `srcset`'s image
- * candidates (`ReferenceAttribute`'s `form`, the grammar's).
- */
-export type ReferenceForm = "srcset" | "uri";
-
-/**
- * A census attribute as the builder reads it: the form of the references it holds, and the
- * whitespace class of its type, which its value is read under before it resolves.
- */
-export interface CensusEntry {
-  readonly form: ReferenceForm;
-  readonly whiteSpace: WhiteSpace;
-}
-
-/**
- * The reference census: how an attribute of a name on an element of a kind holds its references,
- * under a schema version, none for an attribute that names no file.
+ * The reference census: the whitespace class an attribute of a name on an element of a kind is read
+ * under before it resolves, under a schema version, none for an attribute that names no file.
  */
 export type ReferenceCensus = (
   version: string,
   kind: string,
   name: string,
-) => Option.Option<CensusEntry>;
+) => Option.Option<WhiteSpace>;
 
 /**
  * Each declared attribute's whitespace class, by `version kind name`: its type's, a union's read
@@ -1082,12 +1072,11 @@ const whiteSpaceOf = (version: string, kind: string, name: string): WhiteSpace =
  * @param version - The element's schema version.
  * @param kind - Its kind.
  * @param name - The attribute's name.
- * @returns How it holds its references, none for an attribute the census does not list.
+ * @returns Its whitespace class, none for an attribute the census does not list.
  */
 export const referenceCensus: ReferenceCensus = (version, kind, name) =>
-  Option.map(
-    grammar.references.referenceAttribute.lookup({ kind, name, version }),
-    ({ form }): CensusEntry => ({ form, whiteSpace: whiteSpaceOf(version, kind, name) }),
+  Option.map(grammar.references.referenceAttribute.lookup({ kind, name, version }), () =>
+    whiteSpaceOf(version, kind, name),
   );
 
 /**
@@ -1102,33 +1091,6 @@ export interface ReferenceRows {
 }
 
 /**
- * Resolve a census attribute's value as its row holds it: as any href ({@link resolveIn}), but a
- * `srcset` whose value holds a comma or inner whitespace, several candidates or one with a
- * descriptor, is unresolved under the `srcset` limit unless it is external, where `Href_form`'s
- * own pattern over the lexical form refuses it (`srcsetCandidatePattern`).
- *
- * @param resolve - The document's resolver.
- * @param node - The attribute's element.
- * @param lexical - Its lexical form.
- * @param entry - Its census entry.
- * @returns Its resolution.
- */
-const censusResolutionOf = (
-  resolve: HrefResolver,
-  node: NodeId,
-  lexical: string,
-  entry: CensusEntry,
-): HrefResolution => {
-  const resolution = resolve(node, lexical, entry.whiteSpace);
-
-  return entry.form === "srcset" &&
-    resolution.scope !== "external" &&
-    /[,\t\n\r ]/u.test(hrefValueOf(lexical, entry.whiteSpace))
-    ? { limit: "srcset", scope: "unresolved" }
-    : resolution;
-};
-
-/**
  * The whitespace class each kind of the text census reads its text under, by kind.
  */
 const textWhiteSpaces: ReadonlyMap<string, WhiteSpace> = new Map(
@@ -1141,6 +1103,11 @@ const textWhiteSpaces: ReadonlyMap<string, WhiteSpace> = new Map(
  * entry path it names, its `ReferencePath`; and each element of the text census
  * (`textReferenceKinds`, spec reading R9-b) with its string value split and resolved the same way,
  * its `TextReference` and `TextReferencePath`.
+ *
+ * Every value, a `srcset`'s too, resolves as one href ({@link resolveIn}), read by its whitespace
+ * class. A `srcset` of several image candidates or with a descriptor is refused by "Href form" over
+ * its lexical form (`srcsetCandidatePattern`), whatever scope its resolution writes, so the builder
+ * judges no candidate.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under, and its path.
@@ -1203,8 +1170,7 @@ export const referenceRowsOf = (
       continue;
     }
 
-    const entry = listed.value;
-    const resolution = censusResolutionOf(resolve, node, lexical, entry);
+    const resolution = resolve(node, lexical, listed.value);
     const key = headingKey([node, attribute]);
     references.set(key, {
       document,

@@ -104,7 +104,12 @@ export default defineConfig({
       "max-classes-per-file": "off",
       // Effect adapters return existing promises without introducing async wrappers.
       "typescript/promise-function-async": "off",
+      // unicorn's rule reads `Schema.TaggedError<Self>()`, the class factory every error class extends,
+      // as an error called without `new`, and has no option to exempt it (oxc exempts `Data.TaggedError`
+      // alone, `throw_new_error.rs`). The workspace rule is unicorn's with `Schema.TaggedError` exempt too.
+      "unicorn/throw-new-error": "off",
       "workspace/no-built-in-try-catch": "error",
+      "workspace/throw-new-error": "error",
     },
   },
 });

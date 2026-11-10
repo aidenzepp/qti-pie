@@ -2,56 +2,118 @@
 # The QTI package's local database on grizzle's development cluster (grizzle's scripts/pg: pnpm pg:build, pg:init).
 #
 #   scripts/db.sh create    create the database from grizzle_template, owned by the migration identity
-#   scripts/db.sh migrate   grizzle migrate, then give each of this package's logins its local password
+#   scripts/db.sh migrate   grizzle migrate, grant the import's role TEMPORARY on the database, then give each of
+#                           this package's logins its local password
 #   scripts/db.sh reset     drop, then create and migrate again
-#   scripts/db.sh drop      drop the database, this package's PostgreSQL roles and the password directory
-#   scripts/db.sh check-clear  list roles and gr8des_qti databases this one does not own; exit 1 if any, else 0
+#   scripts/db.sh drop      drop the database, the PostgreSQL roles the config installs and the password directory
+#   scripts/db.sh check-clear  list the config's roles left on the cluster and gr8des_qti databases other than this
+#                              one; exit 1 if any, 2 if it cannot list them, else 0
 #
-# Roles are cluster-wide, so drop removes the roles of every schema under the config's migrations/ along with the
-# database.
+# Roles are cluster-wide, so drop removes the config's roles along with the database. Each role is named by grizzle's
+# roleNameOf over the config's logins and their roles, the installer's own naming, which names a login by the level of
+# the installation it is over: one name per role the config installs, never a pattern over a schema's name. A role an
+# earlier installation made for a login the config no longer names (one renamed or removed while the migrations were
+# regenerated from zero) is not found: grizzle lists no installation's roles on the cluster.
 # GR8DES_PG_DATABASE must match ^[a-z_][a-z0-9_]{0,62}$ (lowercase, at most 63 bytes), or every command exits 2.
-# GR8DES_GRIZZLE_CONFIG names the grizzle config migrate runs (grizzle.config.ts by default), whose migrations
-# directory is the folder migrations/ beside it.
+# GR8DES_PG_PASSWORD_COMMAND, when set and not empty, names an executable that prints a role's password: every
+# connection runs it, without a shell, with the role's name as its one argument, and reads its output, trimmed, as
+# src/db/connection.ts does. A run that exits otherwise than 0, whatever it printed, or prints nothing gives no
+# password, and the command stops before psql starts. It then replaces the migration identity's password file, and
+# migrate gives no login a local password, since every login's comes from the command too. This script runs it before
+# psql starts, with no bound; grizzle migrate runs it with GR8DES_PG_PASSWORD_COMMAND_TIMEOUT's.
+# GR8DES_GRIZZLE_CONFIG names the grizzle config migrate runs (grizzle.config.ts by default), whose logins name every
+# role the other commands find.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # The GR8DES_PG_* and GRIZZLE_PG_STATE defaults below are read again, with the same values, by `localCluster` in
 # src/db/connection.ts; change one, change both. They are exported, so the grizzle config connects where this script
-# does.
+# does. The CA is not: unset or empty, GR8DES_PG_CA stays so, and the config finds the same file in GRIZZLE_PG_STATE,
+# so a missing one is reported as the local cluster's.
 : "${GRIZZLE_PG_STATE:=$HOME/.local/var/grizzle/pg19rc1}"
 : "${GRIZZLE_PG_BIN:=$HOME/.local/opt/postgresql/19rc1/bin}"
 : "${GR8DES_PG_HOST:=localhost}"
 : "${GR8DES_PG_PORT:=5433}"
 : "${GR8DES_PG_DATABASE:=gr8des_qti}"
 : "${GR8DES_PG_SECRETS:=$HOME/.local/var/gr8des/$GR8DES_PG_DATABASE}"
-export GRIZZLE_PG_STATE GR8DES_PG_HOST GR8DES_PG_PORT GR8DES_PG_DATABASE GR8DES_PG_SECRETS
+: "${GR8DES_PG_MIGRATION_ROLE:=grizzle_dev}"
+export GRIZZLE_PG_STATE GR8DES_PG_HOST GR8DES_PG_PORT GR8DES_PG_DATABASE GR8DES_PG_SECRETS GR8DES_PG_MIGRATION_ROLE
 config="${GR8DES_GRIZZLE_CONFIG:-grizzle.config.ts}"
-migrations="$(dirname "$config")/migrations"
 
 if ! [[ $GR8DES_PG_DATABASE =~ ^[a-z_][a-z0-9_]{0,62}$ ]]; then
 	echo "GR8DES_PG_DATABASE is '$GR8DES_PG_DATABASE'; use 1 to 63 lowercase letters, digits or underscores, not starting with a digit (create folds an unquoted name to lowercase, but migrate connects as written)." >&2
 	exit 2
 fi
 
-owner=grizzle_dev
-ca="$GRIZZLE_PG_STATE/tls/ca.crt"
-owner_password="$(cat "$GRIZZLE_PG_STATE/$owner.password")"
+owner="$GR8DES_PG_MIGRATION_ROLE"
+ca="${GR8DES_PG_CA:-$GRIZZLE_PG_STATE/tls/ca.crt}"
+
+# Prints the migration identity's password for one connection: GR8DES_PG_PASSWORD_COMMAND's output for it, trimmed,
+# where the command is set, else the password file in the cluster's state folder. Fails, printing nothing, where the
+# command exits otherwise than 0 or prints no password. Its callers read it in a command substitution, where errexit
+# does not reach, so each checks its status.
+owner_password() {
+	if [[ -z "${GR8DES_PG_PASSWORD_COMMAND:-}" ]]; then
+		cat "$GRIZZLE_PG_STATE/$owner.password"
+		return
+	fi
+	local password status=0
+	password="$("$GR8DES_PG_PASSWORD_COMMAND" "$owner")" || status=$?
+	if ((status != 0)); then
+		echo "The password command $GR8DES_PG_PASSWORD_COMMAND exited with code $status for the role $owner, so the connection has no password. Run it by hand with $owner as its one argument to see why it fails, and sign in if it asks you to; or unset GR8DES_PG_PASSWORD_COMMAND to use the local cluster's passwords." >&2
+		return 1
+	fi
+	password="${password#"${password%%[![:space:]]*}"}"
+	password="${password%"${password##*[![:space:]]}"}"
+	if [[ -z "$password" ]]; then
+		echo "The password command $GR8DES_PG_PASSWORD_COMMAND exited with code 0 for the role $owner but printed no password on standard output. GR8DES_PG_PASSWORD_COMMAND must print the role's password; run it by hand with $owner as its one argument to check that it is signed in." >&2
+		return 1
+	fi
+	printf '%s' "$password"
+}
 
 # Usage: as_owner <database> [psql args...]
 as_owner() {
 	local db=$1
 	shift
-	PGPASSWORD="$owner_password" "$GRIZZLE_PG_BIN/psql" -X -q -v ON_ERROR_STOP=1 -At \
+	local password
+	password="$(owner_password)" || return
+	PGPASSWORD="$password" "$GRIZZLE_PG_BIN/psql" -X -q -v ON_ERROR_STOP=1 -At \
 		"host=$GR8DES_PG_HOST port=$GR8DES_PG_PORT dbname=$db user=$owner sslmode=verify-full sslrootcert=$ca" "$@"
 }
 
-# The snake_case schema names the config installs, one per folder under its migrations/.
-schemas() {
-	find "$migrations" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | sort
+# Prints the PostgreSQL role of each login the config installs, one per line, with "all" each role a login reaches as
+# well, and with "author" only each login's author role, the role the import writes as: the names grizzle's roleNameOf
+# gives them, read from the config's own logins, as `grizzle migrate` reads them. Loading the config reads the
+# cluster's CA and connects nowhere.
+# Usage: installed_roles logins|all|author
+installed_roles() {
+	node --input-type=module -e '
+		import { pathToFileURL } from "node:url";
+		import { roleNameOf } from "@bjornpagen/grizzle";
+		const [file, which] = process.argv.slice(1);
+		const { default: config } = await import(pathToFileURL(file).href);
+		for (const login of config.logins) {
+			if (which === "author") {
+				if (login.roles.author !== undefined) {
+					console.log(roleNameOf(login.roles.author.role));
+				}
+				continue;
+			}
+			console.log(roleNameOf(login));
+			if (which === "all") {
+				for (const { role } of Object.values(login.roles)) {
+					console.log(roleNameOf(role));
+				}
+			}
+		}
+	' "$(realpath "$config")" "$1"
 }
 
 create() {
-	if [[ -n "$(as_owner postgres -c "SELECT 1 FROM pg_database WHERE datname = '$GR8DES_PG_DATABASE'")" ]]; then
+	local exists
+	exists="$(as_owner postgres -c "SELECT 1 FROM pg_database WHERE datname = '$GR8DES_PG_DATABASE'")"
+	if [[ -n "$exists" ]]; then
 		echo "$GR8DES_PG_DATABASE: exists"
 		return
 	fi
@@ -59,30 +121,49 @@ create() {
 	echo "$GR8DES_PG_DATABASE: created"
 }
 
+# Grants the import's role TEMPORARY on the database. The import writes a package's nested rows past one Bind message
+# through a temporary table of its write's own, which needs the privilege (grizzle's README, Privileges; without it the
+# write is TemporaryRefused). PostgreSQL grants it to PUBLIC and grizzle never revokes it, so this grant holds where a
+# database's owner has revoked PUBLIC's.
+grant_temporary() {
+	local role
+	for role in $(installed_roles author); do
+		as_owner postgres -c "GRANT TEMPORARY ON DATABASE $GR8DES_PG_DATABASE TO $role"
+		echo "$role: TEMPORARY on $GR8DES_PG_DATABASE"
+	done
+}
+
 # grizzle reads no environment variable for where to connect: the config's connection (src/db/connection.ts) reads
-# the settings exported above and the migration identity's password, which only this command is given.
+# the settings exported above and the migration identity's password, which only this command is given, or runs
+# GR8DES_PG_PASSWORD_COMMAND for it, which also gives every login its password, so no login gets a local one.
 migrate() {
-	GR8DES_PG_MIGRATION_PASSWORD="$owner_password" pnpm exec grizzle migrate "$config"
+	if [[ -n "${GR8DES_PG_PASSWORD_COMMAND:-}" ]]; then
+		pnpm exec grizzle migrate "$config"
+		grant_temporary
+		return
+	fi
+	local password
+	password="$(owner_password)"
+	GR8DES_PG_MIGRATION_PASSWORD="$password" pnpm exec grizzle migrate "$config"
+	grant_temporary
 	mkdir -p "$GR8DES_PG_SECRETS"
 	chmod 700 "$GR8DES_PG_SECRETS"
-	local schema login file
-	for schema in $(schemas); do
-		for login in $(as_owner postgres -c "SELECT rolname FROM pg_roles WHERE rolcanlogin AND rolname LIKE '${schema}\_\_%' ORDER BY 1"); do
-			file="$GR8DES_PG_SECRETS/$login.password"
-			[[ -f "$file" ]] || (umask 077 && openssl rand -hex 24 > "$file")
-			as_owner postgres -c "ALTER ROLE $login PASSWORD '$(cat "$file")'"
-			echo "$login: password in $file"
-		done
+	local logins login file
+	logins="$(installed_roles logins)"
+	for login in $logins; do
+		file="$GR8DES_PG_SECRETS/$login.password"
+		[[ -f "$file" ]] || (umask 077 && openssl rand -hex 24 > "$file")
+		as_owner postgres -c "ALTER ROLE $login PASSWORD '$(cat "$file")'"
+		echo "$login: password in $file"
 	done
 }
 
 drop() {
+	local roles role
+	roles="$(installed_roles all)"
 	as_owner postgres -c "DROP DATABASE IF EXISTS $GR8DES_PG_DATABASE WITH (FORCE)"
-	local schema role
-	for schema in $(schemas); do
-		for role in $(as_owner postgres -c "SELECT rolname FROM pg_roles WHERE rolname LIKE '${schema}\_\_%' ORDER BY rolcanlogin DESC, 1"); do
-			as_owner postgres -c "DROP ROLE $role"
-		done
+	for role in $roles; do
+		as_owner postgres -c "DROP ROLE IF EXISTS $role"
 	done
 	rm -rf "$GR8DES_PG_SECRETS"
 }
@@ -95,15 +176,16 @@ reset() {
 
 # Prints each leftover as "role: <name>" or "database: <name>"; exits 1 if any were found.
 check_clear() {
-	local schema where="rolname LIKE 'qti\_\_%' OR rolname LIKE 'qti_smoke\_\_%'"
-	for schema in $(schemas); do
-		where="$where OR rolname LIKE '${schema}\_\_%'"
+	local roles role names=""
+	roles="$(installed_roles all)" || return 2
+	for role in $roles; do
+		names="${names:+$names, }'$role'"
 	done
 	local found
 	found="$(
-		as_owner postgres -c "SELECT 'role: ' || rolname FROM pg_roles WHERE $where ORDER BY rolname"
-		as_owner postgres -c "SELECT 'database: ' || datname FROM pg_database WHERE datname LIKE 'gr8des_qti%' AND datname <> '$GR8DES_PG_DATABASE' ORDER BY datname"
-	)"
+		as_owner postgres -c "SELECT 'role: ' || rolname FROM pg_roles WHERE rolname IN ($names) ORDER BY rolname" &&
+			as_owner postgres -c "SELECT 'database: ' || datname FROM pg_database WHERE datname LIKE 'gr8des_qti%' AND datname <> '$GR8DES_PG_DATABASE' ORDER BY datname"
+	)" || return 2
 	if [[ -n "$found" ]]; then
 		echo "$found"
 		return 1

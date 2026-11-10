@@ -1,15 +1,16 @@
 /**
  * The import's rows judged on the host: the laws `Qti` states that a package's rows can be held to
  * before any of them is written, evaluated over the rows `readProgram` builds, each named by its
- * law as a refusal names it (`#pantry/import/refusal.ts` `lawNameOf`), each statement's laws as
- * grizzle's `lawsByStatement` gives them.
+ * law as a refusal names it (`#pantry/test/law-namer.ts` `schemaLawNameOf`), each statement's laws
+ * as grizzle's `lawsByStatement` gives them.
  *
  * Four kinds of statement are evaluated, from the statements grizzle keeps for them, never from a
  * list written here:
  *
  * - A key over a relation or a selection of one: no two selected rows share the key's fields;
- * - A containment, either way of a mirrors: every selected row's terms are a tuple of the target, a
- *   closed relation's facts or the import's own rows of a stored relation;
+ * - A containment, either way of a mirrors, or one an alternatives states: every selected row's terms
+ *   are a tuple of the target, a closed relation's facts or the import's own rows of a stored
+ *   relation;
  * - A check: no row of its relation makes its predicate false, as PostgreSQL's CHECK reads it, a
  *   closed read and the `Compute` functions it calls included, NULL passing;
  * - A pattern: every value of a field whose type states it matches it;
@@ -18,24 +19,48 @@
  * A generated field's law holds where the program writes no row of its relation, and is unknown
  * otherwise, since the database computes the field.
  *
+ * Every statement is read and every predicate evaluated by the host's one reader of grizzle's
+ * statements (`#pantry/test/predicates.ts`), which the tests' host judge and the order tests share.
  * A statement is evaluated only where the import writes its relation as rows, every row the
- * selection or the check reads holds every field it reads, and the predicate is of the part of
- * grizzle's language this module reads (fields, literals, comparisons, `in`, `and`, `or`, `not`).
- * Anything else leaves the statement unknown, so a law is held on the host only where every
- * statement and every check of it was evaluated and held.
+ * selection or the check reads holds every field it reads, and the predicate holds only terms that
+ * reader reads; a NULL, a closed read at a key its relation holds no tuple at, passes a CHECK and
+ * drops a row from a selection, as in SQL. Anything else leaves the statement unknown, so a law is
+ * held on the host only where every statement and every check of it was evaluated and held. A
+ * statement over a derived relation, a rule over a query, is never evaluated here, since only the
+ * database evaluates the query: it is unknown, so its law is never held on the host and never found
+ * broken, and the genetic search counts it unjudged, never a disagreement.
+ *
+ * This is a fast pre-filter, never the judge (the owner's Q4 ruling): a disagreement it reports
+ * becomes a known entry (`#pantry/test/gen/genetic/known.ts`) only once it reproduces on
+ * PostgreSQL.
  *
  * The rows also must name no uuid the program did not mint: a row's uuid field that names no id of
  * the program names no row PostgreSQL can hold, as a sentinel standing for an absent target does.
  */
-import { Array as Arr, Formatter, Option, pipe, Predicate, Schema } from "effect";
-import { lawsByStatement, sameLaw } from "@bjornpagen/grizzle";
-import type { Law, LawSide } from "@bjornpagen/grizzle";
-import { lawNameOf, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
+import { Array as Arr, Formatter, Option, Predicate, Schema } from "effect";
+import { sameLaw } from "@bjornpagen/grizzle";
+import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";
+import { lawOfCheck } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { identityOf, keyTextFields } from "#pantry/test/key-copies.ts";
+import {
+  checksOf,
+  closedOf,
+  datumText,
+  evaluate,
+  lawSideOf,
+  SideSchema,
+  sourceOf,
+  StatementSchema,
+  subtermsOf,
+  termOf,
+  unreadIn,
+} from "#pantry/test/predicates.ts";
+import type { Row as HeldRow, StoredSide, Term } from "#pantry/test/predicates.ts";
+import { schemaLawNameOf, statedLaws, statementLawsOf } from "#pantry/test/law-namer.ts";
 
 /**
  * One field's value as a row holds it: a text, a number, a natural, a flag or a set of handles.
@@ -100,218 +125,16 @@ const RowsSchema = Schema.ReadonlyMap(Schema.String, StoredSchema);
 const InputsSchema = Schema.Record(Schema.String, Schema.Unknown);
 
 /**
- * A literal value a predicate compares with.
- */
-type Literal = bigint | boolean | number | ReadonlySet<string> | string;
-
-/**
- * The schema of a {@link Literal}.
- */
-const LiteralSchema = Schema.Union([
-  Schema.String,
-  Schema.Number,
-  Schema.BigInt,
-  Schema.Boolean,
-  Schema.ReadonlySet(Schema.String),
-]);
-
-/**
- * A term of a stored predicate as grizzle keeps it, read field by field.
- */
-interface StoredTerm {
-  readonly arg?: StoredTerm;
-  readonly args?: readonly StoredTerm[];
-  readonly field?: string;
-  readonly fn?: string;
-  readonly kind: string;
-  readonly relation?: string;
-  readonly left?: StoredTerm;
-  readonly op?: string;
-  readonly right?: StoredTerm;
-  readonly value?: Literal;
-  readonly values?: readonly Literal[];
-}
-
-/**
- * The schema of a {@link StoredTerm}: a predicate whose literal is no text, number or flag does not
- * decode, and its statement is not evaluated.
- */
-const StoredTermSchema: Schema.Codec<StoredTerm> = Schema.Struct({
-  arg: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
-  args: Schema.optionalKey(
-    Schema.Array(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
-  ),
-  field: Schema.optionalKey(Schema.String),
-  fn: Schema.optionalKey(Schema.String),
-  kind: Schema.String,
-  left: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
-  op: Schema.optionalKey(Schema.String),
-  relation: Schema.optionalKey(Schema.String),
-  right: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
-  value: Schema.optionalKey(LiteralSchema),
-  values: Schema.optionalKey(Schema.Array(LiteralSchema)),
-});
-
-/**
- * A term of a predicate, the part of grizzle's language this module reads; any other term is
- * `unread`.
- */
-type Term =
-  | { readonly args: readonly Term[]; readonly kind: "and" | "or" }
-  | { readonly arg: Term; readonly kind: "in"; readonly values: readonly string[] }
-  | { readonly arg: Term; readonly kind: "not" }
-  | { readonly field: string; readonly kind: "field" }
-  | { readonly kind: "compare"; readonly left: Term; readonly op: string; readonly right: Term }
-  | { readonly kind: "literal"; readonly value: Literal }
-  | {
-      readonly args: readonly Term[];
-      readonly field: string;
-      readonly kind: "closedAt";
-      readonly relation: string;
-    }
-  | { readonly args: readonly Term[]; readonly kind: "closedRow"; readonly relation: string }
-  | { readonly args: readonly Term[]; readonly kind: "closedHas"; readonly relation: string }
-  | { readonly args: readonly Term[]; readonly fn: string; readonly kind: "compute" }
-  | { readonly kind: "unread" };
-
-/**
- * The term no part of this module reads.
- */
-const unread: Term = { kind: "unread" };
-
-/**
- * Reads a stored term, none for a missing operand, into a {@link Term}.
- */
-type TermReader = (stored: StoredTerm | undefined) => Term;
-
-/**
- * Read the operands of a stored term.
- *
- * @param stored - The term.
- * @param read - Reads one operand.
- * @returns Its operands, each read.
- */
-const operandsOf = (stored: StoredTerm, read: TermReader): readonly Term[] =>
-  (stored.args ?? []).map((arg) => read(arg));
-
-/**
- * Read each kind of stored term this module reads into a {@link Term}, `unread` where its shape
- * lacks a part the kind needs.
- */
-const termReaders: ReadonlyMap<string, (stored: StoredTerm, read: TermReader) => Term> = new Map<
-  string,
-  (stored: StoredTerm, read: TermReader) => Term
->([
-  ["and", (stored, read) => ({ args: operandsOf(stored, read), kind: "and" })],
-  ["or", (stored, read) => ({ args: operandsOf(stored, read), kind: "or" })],
-  ["not", (stored, read) => ({ arg: read(stored.arg), kind: "not" })],
-  [
-    "in",
-    (stored, read) => ({
-      arg: read(stored.arg),
-      kind: "in",
-      values: (stored.values ?? []).map(String),
-    }),
-  ],
-  [
-    "field",
-    (stored) => (stored.field === undefined ? unread : { field: stored.field, kind: "field" }),
-  ],
-  [
-    "compare",
-    (stored, read) =>
-      stored.op === undefined
-        ? unread
-        : {
-            kind: "compare",
-            left: read(stored.left),
-            op: stored.op,
-            right: read(stored.right),
-          },
-  ],
-  [
-    "literal",
-    (stored) => (stored.value === undefined ? unread : { kind: "literal", value: stored.value }),
-  ],
-  [
-    "closedAt",
-    (stored, read) =>
-      stored.relation === undefined || stored.field === undefined
-        ? unread
-        : {
-            args: operandsOf(stored, read),
-            field: stored.field,
-            kind: "closedAt",
-            relation: stored.relation,
-          },
-  ],
-  [
-    "closedRow",
-    (stored, read) =>
-      stored.relation === undefined
-        ? unread
-        : { args: operandsOf(stored, read), kind: "closedRow", relation: stored.relation },
-  ],
-  [
-    "closedHas",
-    (stored, read) =>
-      stored.relation === undefined
-        ? unread
-        : { args: operandsOf(stored, read), kind: "closedHas", relation: stored.relation },
-  ],
-  [
-    "compute",
-    (stored, read) =>
-      stored.fn === undefined
-        ? unread
-        : { args: operandsOf(stored, read), fn: stored.fn, kind: "compute" },
-  ],
-]);
-
-/**
- * Read a stored term into a {@link Term}.
- *
- * @param stored - The term as grizzle keeps it, none for a missing operand.
- * @returns The term, `unread` for one of a kind or shape this module does not read.
- */
-const termOf: TermReader = (stored) =>
-  stored === undefined ? unread : (termReaders.get(stored.kind)?.(stored, termOf) ?? unread);
-
-/**
- * The schema of a stored side: a selection with its predicate, or a whole relation, and its terms.
- */
-const StoredSide = Schema.Struct({
-  source: Schema.Union([
-    Schema.Struct({
-      desc: Schema.Struct({ predicate: StoredTermSchema }),
-      relation: Schema.Struct({ name: Schema.String }),
-    }),
-    Schema.Struct({ name: Schema.String }),
-  ]),
-  terms: Schema.NonEmptyArray(
-    Schema.Union([
-      Schema.String,
-      Schema.Struct({ field: Schema.String, kind: Schema.Literal("pred") }),
-    ]),
-  ),
-});
-
-/**
- * The schema of the stored statements this module evaluates: a key, a containment or a mirrors,
- * and a check whose predicate it reads.
+ * The schema of the stored statements this module evaluates: a key, an alternatives, which holds no
+ * side and states its containments only as its laws, and the containments, mirrors, folds and
+ * checks the host reads (`#pantry/test/predicates.ts` `StatementSchema`), each over relations whose
+ * rows the host holds (`SideSchema`, `judgedKinds`): a side over a derived relation, a query whose
+ * rules the database alone judges, does not decode, so its statement goes unevaluated.
  */
 const StoredStatement = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("key"), side: StoredSide }),
-  Schema.Struct({
-    kind: Schema.Literals(["contained", "mirrors"]),
-    left: StoredSide,
-    right: StoredSide,
-  }),
-  Schema.Struct({
-    desc: Schema.Struct({ name: Schema.String, predicate: StoredTermSchema }),
-    kind: Schema.Literal("check"),
-    relation: Schema.Struct({ name: Schema.String }),
-  }),
+  Schema.Struct({ kind: Schema.Literal("key"), side: SideSchema }),
+  Schema.Struct({ kind: Schema.Literal("alternatives") }),
+  StatementSchema,
 ]);
 
 /**
@@ -350,24 +173,14 @@ interface ReadSide {
  * @param side - The side as grizzle keeps it.
  * @returns The side and its law side.
  */
-const sideOf = (side: typeof StoredSide.Type): ReadSide => {
-  const relation = "relation" in side.source ? side.source.relation.name : side.source.name;
+const sideOf = (side: StoredSide): ReadSide => {
+  const { name, predicate } = sourceOf(side);
 
   return {
-    law: {
-      relation,
-      selection: { conjuncts: [] },
-      terms: pipe(
-        side.terms,
-        Arr.map((term) =>
-          Predicate.isString(term) ? { field: term, kind: "field" as const } : term,
-        ),
-      ),
-    },
+    law: lawSideOf(side),
     side: {
-      predicate:
-        "desc" in side.source ? Option.some(termOf(side.source.desc.predicate)) : Option.none(),
-      relation,
+      predicate,
+      relation: name,
       terms: side.terms.map((term) =>
         Predicate.isString(term) ? { field: term, kind: "field" as const } : undefined,
       ),
@@ -376,8 +189,30 @@ const sideOf = (side: typeof StoredSide.Type): ReadSide => {
 };
 
 /**
+ * Read a law side as grizzle's `lawsOf` names it as a stored side (`SideSchema`): a selection
+ * of its relation whose predicate is the conjunction of its selection's conjuncts, or the whole
+ * relation where it has none, and its terms as a stored side holds them.
+ *
+ * @param side - The side.
+ * @returns The stored side, or none where its relation is no stored or closed relation of `Qti`
+ *   or a conjunct does not decode, which leaves its law unevaluated, as a statement that does not
+ *   decode is.
+ */
+const storedSideOf = (side: LawSide): Option.Option<StoredSide> => {
+  const relations: AnySchema["relations"] = Qti.relations;
+  const relation = relations[side.relation];
+
+  return Schema.decodeUnknownOption(SideSchema)({
+    source: Arr.isReadonlyArrayNonEmpty(side.selection.conjuncts)
+      ? { desc: { predicate: { args: side.selection.conjuncts, kind: "and" } }, relation }
+      : relation,
+    terms: side.terms.map((term) => (term.kind === "field" ? term.field : term)),
+  });
+};
+
+/**
  * A statement this module evaluates, with its law as grizzle's `lawsOf` names it: a key's, a
- * check's, or one containment's, a mirrors' each its own.
+ * check's, or one containment's, a mirrors' or an alternatives' each its own.
  */
 type Evaluated =
   | { readonly kind: "key"; readonly law: Law; readonly side: Side }
@@ -414,7 +249,8 @@ const sameSide = (law: LawSide, read: LawSide): boolean =>
 /**
  * Read the statements of one stored statement this module evaluates, each with its law: a key's, a
  * check's, a containment's, and both containments of a mirrors, each the law of `laws` whose sides
- * are its own.
+ * are its own; and each containment of an alternatives, read from its law, since the statement
+ * holds no side.
  *
  * @param read - The stored statement.
  * @param laws - Its laws, as grizzle's `lawsOf` names them.
@@ -445,6 +281,25 @@ const evaluatedOf = (
     return laws.flatMap((law) => (law.kind === "key" ? [{ kind: "key" as const, law, side }] : []));
   }
 
+  if (read.kind === "fold") {
+    return [];
+  }
+
+  if (read.kind === "alternatives") {
+    return laws.flatMap((law) =>
+      law.kind === "contained"
+        ? Option.toArray(
+            Option.zipWith(storedSideOf(law.from), storedSideOf(law.to), (from, to) => ({
+              from: sideOf(from).side,
+              kind: "contained" as const,
+              law,
+              to: sideOf(to).side,
+            })),
+          )
+        : [],
+    );
+  }
+
   const left = sideOf(read.left);
   const right = sideOf(read.right);
   const pairs: readonly (readonly [ReadSide, ReadSide])[] =
@@ -465,14 +320,10 @@ const evaluatedOf = (
 };
 
 /**
- * Each statement of `Qti` with its laws, as grizzle's `lawsByStatement` names them, in the schema's
- * statement order: the one compile of Qti's law model this module runs.
+ * Each statement of `Qti` with its laws, as grizzle's `lawsByStatement` names them: the one lookup
+ * `#pantry/test/law-namer.ts` builds per process (`statementLawsOf`).
  */
-const statementLaws = (() => {
-  const lawsOfStatement = lawsByStatement(Qti);
-
-  return Qti.statements.map((statement) => ({ laws: lawsOfStatement(statement), statement }));
-})();
+const statementLaws = statementLawsOf(Qti);
 
 /**
  * The stored statements of `Qti`, each as this module reads it with its laws, none for one it does
@@ -490,6 +341,12 @@ const stored = statementLaws.flatMap(({ laws, statement }) =>
 const evaluated: readonly Evaluated[] = stored.flatMap(({ laws, read }) => evaluatedOf(read, laws));
 
 /**
+ * The law of every statement of `Qti` this module evaluates, as grizzle's `lawsOf` names it, so a
+ * test can hold it to the laws `Qti` states (`src/test/host-judge.relations.test.ts`).
+ */
+export const evaluatedLaws: readonly Law[] = evaluated.map(({ law }) => law);
+
+/**
  * Each check's law name, by the check's law.
  */
 const checkLaws: ReadonlyMap<Law, LawName> = new Map(
@@ -503,27 +360,33 @@ const checkLaws: ReadonlyMap<Law, LawName> = new Map(
 );
 
 /**
- * Every law a check of `Qti` states whose predicate this module cannot read, so its database
- * verdict the host never knows: the checks `Qti` states, less those {@link evaluated} holds.
+ * Every law a check of `Qti` states that the host does not read, so its database verdict the host
+ * never knows: each check statement `#pantry/test/predicates.ts` `checksOf` does not read, a check
+ * over a derived relation among them. It is judged per statement, never by the check's name: two
+ * checks of one law share a name, as "Condition type" states one over `Expression`, which the host
+ * reads, and its placed twin over the `PlacedReferenceType` query, which it does not, and the law
+ * is unread for the one it cannot judge.
  */
 const unreadChecks: ReadonlySet<LawName> = new Set(
   Qti.statements.flatMap((statement) =>
     Option.match(Schema.decodeUnknownOption(StoredCheck)(statement), {
       onNone: () => [],
       onSome: ({ desc }) =>
-        stored.some(({ read }) => read.kind === "check" && read.desc.name === desc.name)
-          ? []
-          : Option.toArray(lawOfCheck(desc.name)),
+        checksOf([statement]).length > 0 ? [] : Option.toArray(lawOfCheck(desc.name)),
     }),
   ),
 );
 
 /**
- * The laws no statement states, as `refusal.ts` writes them out: the primary keys, the patterns and
- * the generated fields, each with its name.
+ * The laws no statement states, as grizzle's `lawsOf` lists them, each with the name `law-namer.ts`
+ * gives it (`statedLaws`): the primary keys, the contracts, the patterns and the generated fields.
  */
 const writtenLaws = statedLaws().filter(
-  ([law]) => law.kind === "generated" || law.kind === "pattern" || law.kind === "primaryKey",
+  ([law]) =>
+    law.kind === "contract" ||
+    law.kind === "generated" ||
+    law.kind === "pattern" ||
+    law.kind === "primaryKey",
 );
 
 /**
@@ -535,16 +398,17 @@ const namedLaws: readonly (readonly [Law, LawName])[] = [
     laws.flatMap((law) =>
       law.kind === "check"
         ? []
-        : Option.toArray(Option.map(lawNameOf(law), (name) => [law, name] as const)),
+        : Option.toArray(Option.map(schemaLawNameOf(law), (name) => [law, name] as const)),
     ),
   ),
   ...writtenLaws,
 ];
 
 /**
- * Write a law as a broken law's witness names it, the text the genetic search's known
- * disagreements are keyed by (`known.ts`): a check by its name and its relation, a containment or a
- * fold as `key-copies.ts`'s `identityOf` writes it, any other law as grizzle reports it.
+ * Write a law as a broken law's witness shows it: a check by its name and its relation, a
+ * containment or a fold as `key-copies.ts`'s `identityOf` writes it, its selections left out, any
+ * other law as grizzle reports it. The witness only shows the law: the genetic search keys a class
+ * by the law itself (`judge.ts` `signatureOf`).
  *
  * @param law - The law.
  * @returns Its text.
@@ -573,8 +437,8 @@ const lawsNamed: ReadonlyMap<LawName, readonly Law[]> = new Map(
 );
 
 /**
- * The schema of a relation of `Qti` as the host reads it: its fields' SQL types, and for a closed
- * relation its facts.
+ * The schema of a relation of `Qti` as the host reads it: its fields' SQL types and a text field's
+ * patterns, a conjunction in declared order (grizzle's `RegexText`, `text/field.ts` at `3cc8fbd`).
  */
 const StoredRelation = Schema.Struct({
   fields: Schema.Record(
@@ -588,10 +452,8 @@ const StoredRelation = Schema.Struct({
       sql: Schema.optionalKey(Schema.String),
     }),
   ),
-  key: Schema.optionalKey(Schema.Array(Schema.String)),
   kind: Schema.String,
   name: Schema.String,
-  rows: Schema.optionalKey(Schema.Array(StoredSchema)),
 });
 
 /**
@@ -624,7 +486,7 @@ const unflattened: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * A pattern law: its field's relation and name, and its patterns, each with its source and flags.
+ * A pattern law: its field's relation and name, and its source and flags.
  */
 type PatternLaw = Extract<Law, { readonly kind: "pattern" }>;
 
@@ -661,11 +523,15 @@ const patternFields: ReadonlyMap<PatternLaw, readonly (readonly [string, string]
 })();
 
 /**
- * Each field's pattern law, by `Relation.field`.
+ * Each `keyText` field the import writes, by `Relation.field`, with its pattern law: the law the
+ * database refuses a text past the bound by. An accumulated or generated `keyText` field, which
+ * the database computes and the import never writes, has no pattern law here.
  */
-const fieldPatterns: ReadonlyMap<string, PatternLaw> = new Map(
+const boundFields: ReadonlyMap<string, PatternLaw> = new Map(
   [...patternFields].flatMap(([law, fields]) =>
-    fields.map(([relation, field]) => [`${relation}.${field}`, law] as const),
+    fields.flatMap(([relation, field]) =>
+      keyTextFields.has(`${relation}.${field}`) ? [[`${relation}.${field}`, law] as const] : [],
+    ),
   ),
 );
 
@@ -677,8 +543,9 @@ const generatedRelations: ReadonlyMap<Law, string> = new Map(
 );
 
 /**
- * Judge a pattern law over a program's rows: every row of its field's relation holds a value its
- * pattern matches. A relation the program writes no row of holds it.
+ * Judge a pattern law over a program's rows: every row of its field's relation holds a value each
+ * of its patterns matches, a conjunction's every member (grizzle's `str.and`, whose domain tests
+ * each). A relation the program writes no row of holds it.
  *
  * @param view - The rows.
  * @param law - The pattern law.
@@ -752,9 +619,10 @@ const generatedVerdictOf = (
 };
 
 /**
- * Each stored relation's uuid fields, by relation.
+ * Each stored relation's uuid fields, by relation: the fields the rows are held to the program's
+ * mint by.
  */
-const uuidFields: ReadonlyMap<string, readonly string[]> = new Map(
+export const uuidFields: ReadonlyMap<string, readonly string[]> = new Map(
   [...relations].map(([name, { fields }]) => [
     name,
     Object.entries(fields).flatMap(([field, { sql }]) => (sql === "uuid" ? [field] : [])),
@@ -783,543 +651,50 @@ const ownFields = (row: Stored): Row =>
   );
 
 /**
- * Order two texts by their UTF-16 code units, as a set's members are written.
- *
- * @param left - One text.
- * @param right - The other.
- * @returns Negative, zero or positive as `left` sorts before, with or after `right`.
- */
-const byCodeUnit = (left: string, right: string): number => {
-  if (left === right) {
-    return 0;
-  }
-
-  return left < right ? -1 : 1;
-};
-
-/**
- * Write a value as the text a key or a tuple compares: a text as itself, a number, a natural or a
- * flag as it prints, a set as its members sorted.
+ * Write a row's field as the text a key or a tuple compares (`#pantry/test/predicates.ts`
+ * `datumText`): none for no value or a nested family.
  *
  * @param value - The value.
  * @returns Its text, undefined for no value.
  */
-const textOf = (value: Field | undefined): string | undefined => {
-  if (value === undefined || isFamily(value)) {
-    return undefined;
-  }
-
-  if (Predicate.isString(value)) {
-    return value;
-  }
-
-  return Predicate.isNumber(value) || Predicate.isBigInt(value) || Predicate.isBoolean(value)
-    ? String(value)
-    : [...value].toSorted(byCodeUnit).join(" ");
-};
+const textOf = (value: Field | undefined): string | undefined =>
+  value === undefined || isFamily(value) ? undefined : datumText(value);
 
 /**
- * A value a predicate computes: a text (a number or a natural as it prints), a flag, a set of
- * handles, or SQL's NULL, which a closed read at a key its relation holds no tuple at gives. A term
- * this module cannot evaluate gives no value at all (`undefined`), never NULL: a CHECK that reads
- * NULL passes, and one this module cannot read is unknown.
+ * `Qti`'s closed relations, which a predicate's closed reads look up and a side over a closed
+ * relation reads as its rows.
  */
-type Datum = boolean | ReadonlySet<string> | string | null;
+const closed = closedOf(Qti.relations);
 
 /**
- * Read a row's field, or a literal, as a {@link Datum}.
+ * A predicate's truth over a row as PostgreSQL's CHECK and `WHERE` read it, evaluated by
+ * `#pantry/test/predicates.ts`: true, false, SQL's NULL, which a closed read at a key its relation
+ * holds no tuple at gives, and `unknown` where the predicate holds a term the host does not read or
+ * reads a field the row lacks. A CHECK passes on NULL and a `WHERE` drops its row, while an unknown
+ * leaves the statement unjudged.
+ */
+type Truth = boolean | "null" | "unknown";
+
+/**
+ * Evaluate a predicate over a row ({@link Truth}).
  *
- * @param value - The value.
- * @returns The datum, undefined for no value.
- */
-const datumOf = (value: Field | undefined): Datum | undefined => {
-  if (value === undefined || isFamily(value)) {
-    return undefined;
-  }
-
-  if (Predicate.isString(value) || Predicate.isBoolean(value)) {
-    return value;
-  }
-
-  return Predicate.isNumber(value) || Predicate.isBigInt(value)
-    ? String(value)
-    : new Set([...value].map(String));
-};
-
-/**
- * Write a datum as the text a key or a tuple compares.
- *
- * @param datum - The datum.
- * @returns Its text.
- */
-const datumText = (datum: Datum): string => {
-  if (datum === null) {
-    return "";
-  }
-
-  if (Predicate.isString(datum)) {
-    return datum;
-  }
-
-  return Predicate.isBoolean(datum) ? String(datum) : [...datum].toSorted(byCodeUnit).join(" ");
-};
-
-/**
- * The order comparisons a `compare` term makes, by operator, over the sign of the comparison.
- */
-const orderTests: ReadonlyMap<string, (order: number) => boolean> = new Map([
-  ["ge", (order: number) => order >= 0],
-  ["gt", (order: number) => order > 0],
-  ["le", (order: number) => order <= 0],
-  ["lt", (order: number) => order < 0],
-]);
-
-/**
- * Compare two values as a `compare` term's operator does: equality by text, order as naturals
- * where both spell one, else as texts.
- *
- * @param op - The operator.
- * @param left - The left value's text.
- * @param right - The right value's text.
- * @returns The comparison, undefined for an operator this module does not read.
- */
-const compared = (op: string, left: string, right: string): boolean | undefined => {
-  if (op === "eq" || op === "ne") {
-    return (left === right) === (op === "eq");
-  }
-
-  const naturals = /^-?\d+$/u.test(left) && /^-?\d+$/u.test(right);
-  const order = naturals
-    ? Math.sign(Number(BigInt(left) - BigInt(right)))
-    : Math.sign(left.localeCompare(right));
-
-  return orderTests.get(op)?.(order);
-};
-
-/**
- * Each closed relation's facts as the predicates read them: its key fields in order and its
- * rows.
- */
-const closedFacts: ReadonlyMap<
-  string,
-  { readonly key: readonly string[]; readonly rows: readonly Row[] }
-> = new Map(
-  [...relations].flatMap(([name, relation]) =>
-    relation.kind === "closedRelation" && relation.key !== undefined && relation.rows !== undefined
-      ? [[name, { key: relation.key, rows: relation.rows.map(ownFields) }] as const]
-      : [],
-  ),
-);
-
-/**
- * Each closed relation's rows by a key prefix of one length, built on first read.
- */
-const prefixIndex = new Map<string, ReadonlyMap<string, readonly Row[]>>();
-
-/**
- * Read the rows of a closed relation whose key starts with a prefix.
- *
- * @param relation - The relation's name.
- * @param facts - Its facts.
- * @param facts.key - Its key fields, in order.
- * @param facts.rows - Its rows.
- * @param prefix - The prefix's texts, in key order.
- * @returns The rows, none where no tuple starts with it.
- */
-const rowsStarting = (
-  relation: string,
-  facts: { readonly key: readonly string[]; readonly rows: readonly Row[] },
-  prefix: readonly string[],
-): readonly Row[] => {
-  const label = `${relation}/${String(prefix.length)}`;
-  const known = prefixIndex.get(label);
-  if (known !== undefined) {
-    return known.get(prefix.join("\u001F")) ?? [];
-  }
-
-  const built = new Map<string, Row[]>();
-  for (const row of facts.rows) {
-    const at = facts.key
-      .slice(0, prefix.length)
-      .map((field) => textOf(row[field]) ?? "")
-      .join("\u001F");
-    built.set(at, [...(built.get(at) ?? []), row]);
-  }
-
-  prefixIndex.set(label, built);
-
-  return built.get(prefix.join("\u001F")) ?? [];
-};
-
-/**
- * Read a closed relation as grizzle's closed reads do: `C.at` reads a payload field at a whole
- * key, NULL where the relation holds no tuple there; `C.row` reads the set of the values the key
- * field a prefix leaves open takes among the tuples that start with it, empty where none does.
- *
- * @param relation - The relation's name.
- * @param field - The payload field for `C.at`, undefined for `C.row`.
- * @param args - The key's or the prefix's values, in key order.
- * @returns The read, undefined for a name that is no closed relation.
- */
-const closedRead = (
-  relation: string,
-  field: string | undefined,
-  args: readonly string[],
-): Datum | undefined => {
-  const facts = closedFacts.get(relation);
-  if (facts === undefined) {
-    return undefined;
-  }
-
-  const rows = rowsStarting(relation, facts, args);
-
-  if (field === undefined) {
-    return new Set(
-      rows.flatMap((row) =>
-        Option.toArray(Option.fromUndefinedOr(textOf(row[facts.key[args.length] ?? ""]))),
-      ),
-    );
-  }
-
-  const [first] = rows;
-
-  return first === undefined ? null : (datumOf(first[field]) ?? null);
-};
-
-/**
- * Read whether a closed relation holds a tuple at a whole key, as grizzle's `C.has(…)` does.
- *
- * @param relation - The relation's name.
- * @param args - The key's values, in key order.
- * @returns Whether a tuple is there, undefined for a name that is no closed relation.
- */
-const closedHeld = (relation: string, args: readonly string[]): Datum | undefined => {
-  const facts = closedFacts.get(relation);
-
-  return facts === undefined ? undefined : rowsStarting(relation, facts, args).length > 0;
-};
-
-/**
- * Each pattern a `matches` reads, compiled once: grizzle's `str.regex` grammar under `u`.
- */
-const compiledPatterns = new Map<string, RegExp>();
-
-/**
- * Test a text against a pattern a `matches` reads.
- *
- * @param text - The text.
- * @param pattern - The pattern.
- * @returns Whether it matches.
- */
-const matchesPattern = (text: string, pattern: string): boolean => {
-  const compiled = compiledPatterns.get(pattern) ?? new RegExp(pattern, "u");
-  compiledPatterns.set(pattern, compiled);
-
-  return compiled.test(text);
-};
-
-/**
- * Collapse a text as the database's `Compute.collapse` does,
- * `btrim(regexp_replace(x, '[ \t\n\r]+', ' ', 'g'))` (`@bjornpagen/grizzle-engine`,
- * `src/scalar/compute/registry.ts:657-674` `textCollapse` and
- * `src/lower/conservative/expr/ops.ts:168-184` `collapseText`): XML Schema's `collapse`
- * whitespace class, trimming the one space a run leaves at either end and nothing else, never
- * `String.prototype.trim`, which also strips U+00A0 and the other Unicode whitespace.
- *
- * @param text - The text.
- * @returns It, each run of tabs, line feeds, carriage returns and spaces one space, no space at
- *   either end.
- */
-const collapse = (text: string): string =>
-  text.replaceAll(/[\t\n\r ]+/gu, " ").replaceAll(/^ | $/gu, "");
-
-/**
- * Translate a text's characters as SQL's `translate` does: each character of `from` becomes the
- * character of `to` at its place, or nothing where `to` is shorter.
- *
- * @param text - The text.
- * @param from - The characters replaced.
- * @param to - Their replacements.
- * @returns The text translated.
- */
-const translated = (text: string, from: string, to: string): string =>
-  text
-    .split("")
-    .map((character) => {
-      const at = from.indexOf(character);
-
-      return at === -1 ? character : to.charAt(at);
-    })
-    .join("");
-
-/**
- * The `Compute` functions over texts this module reads, each from its arguments' texts, and
- * `singleton`, the set holding a closed id's one handle, from the handle's text a row holds for the
- * id (grizzle's README, "Tables and types"): AL1's admission, E1 derived's slot and N5's and N7's
- * memberships read `{h} ⊆ S` through it.
- */
-const textFunctions: ReadonlyMap<string, (texts: readonly string[]) => Datum | undefined> = new Map<
-  string,
-  (texts: readonly string[]) => Datum | undefined
->([
-  ["collapse", ([text]) => (text === undefined ? undefined : collapse(text))],
-  ["concat", (texts) => texts.join("")],
-  [
-    "endsWith",
-    ([text, suffix]) =>
-      text === undefined || suffix === undefined ? undefined : text.endsWith(suffix),
-  ],
-  [
-    "matches",
-    ([text, pattern]) =>
-      text === undefined || pattern === undefined ? undefined : matchesPattern(text, pattern),
-  ],
-  ["singleton", ([id]) => (id === undefined ? undefined : new Set([id]))],
-  [
-    "startsWith",
-    ([text, prefix]) =>
-      text === undefined || prefix === undefined ? undefined : text.startsWith(prefix),
-  ],
-  [
-    "translate",
-    ([text, from, to]) =>
-      text === undefined || from === undefined || to === undefined
-        ? undefined
-        : translated(text, from, to),
-  ],
-]);
-
-/**
- * The `Compute` functions over sets this module reads, each from its arguments' sets.
- */
-const setFunctions: ReadonlyMap<
-  string,
-  (left: ReadonlySet<string>, right: ReadonlySet<string> | undefined) => Datum | undefined
-> = new Map<
-  string,
-  (left: ReadonlySet<string>, right: ReadonlySet<string> | undefined) => Datum | undefined
->([
-  ["cardinality", (left) => String(left.size)],
-  [
-    "difference",
-    (left, right) =>
-      right === undefined ? undefined : new Set([...left].filter((member) => !right.has(member))),
-  ],
-  [
-    "disjoint",
-    (left, right) =>
-      right === undefined ? undefined : [...left].every((member) => !right.has(member)),
-  ],
-  [
-    "subset",
-    (left, right) =>
-      right === undefined ? undefined : [...left].every((member) => right.has(member)),
-  ],
-  ["union", (left, right) => (right === undefined ? undefined : new Set([...left, ...right]))],
-]);
-
-/**
- * Apply a `Compute` function to its arguments' values.
- *
- * @param fn - The function.
- * @param args - Its arguments' values, none of them unknown.
- * @returns Its value; NULL where an argument is NULL; undefined for a function, or arguments, this
- *   module does not read.
- */
-const computed = (fn: string, args: readonly Datum[]): Datum | undefined => {
-  if (args.includes(null)) {
-    return null;
-  }
-
-  const texts = args.filter(Predicate.isString);
-  if (texts.length === args.length) {
-    return textFunctions.get(fn)?.(texts);
-  }
-
-  const sets = args.filter((arg): arg is ReadonlySet<string> => arg instanceof Set);
-  const [left, right] = sets;
-
-  return sets.length === args.length && left !== undefined
-    ? setFunctions.get(fn)?.(left, right)
-    : undefined;
-};
-
-/**
- * Combine the values of an `and` or an `or` in Kleene's logic, NULL and an unknown value both
- * unknown to it: a decisive operand decides; else any value this module cannot give leaves it
- * unknown; else a NULL leaves it NULL.
- *
- * @param values - The operands' values.
- * @param decisive - `false` for an `and`, `true` for an `or`.
- * @returns The value.
- */
-const kleene = (values: readonly (Datum | undefined)[], decisive: boolean): Datum | undefined => {
-  if (values.includes(decisive)) {
-    return decisive;
-  }
-
-  if (values.includes(undefined)) {
-    return undefined;
-  }
-
-  return values.includes(null) ? null : !decisive;
-};
-
-/**
- * The value of a term this module cannot evaluate.
- */
-const unknownValue: Datum | undefined = undefined;
-
-/**
- * Evaluates a term over a row: its value, NULL as SQL gives it, undefined where the term reads what
- * the row or this module cannot give.
- */
-type Evaluate = (term: Term, row: Row) => Datum | undefined;
-
-/**
- * Evaluate the operands of a term, the first unknown one or NULL deciding for them all.
- *
- * @param terms - The operands.
+ * @param term - The predicate.
  * @param row - The row.
- * @param ev - Evaluates one operand.
- * @returns Their values; NULL where one is NULL; undefined where one cannot be evaluated.
+ * @returns Its truth.
  */
-const operandValues = (
-  terms: readonly Term[],
-  row: Row,
-  ev: Evaluate,
-): readonly Datum[] | null | undefined => {
-  const values = terms.map((term) => ev(term, row));
-  if (values.includes(undefined)) {
-    return undefined;
-  }
-
-  return values.includes(null)
-    ? null
-    : values.flatMap((value) => (value === undefined ? [] : [value]));
-};
-
-/**
- * Evaluate a negation.
- *
- * @param value - Its operand's value.
- * @returns The negation, NULL for NULL, undefined for no value.
- */
-const negated = (value: Datum | undefined): Datum | undefined => {
+const truthOver = (term: Term, row: HeldRow): Truth => {
+  const value = evaluate(term, row, () => false, closed);
   if (Predicate.isBoolean(value)) {
-    return !value;
+    return value;
   }
 
-  return value === null ? null : undefined;
-};
+  const below = subtermsOf(term);
+  const unreadable =
+    value !== undefined ||
+    unreadIn(below).length > 0 ||
+    below.some((at) => at.kind === "field" && row[at.field] === undefined);
 
-/**
- * Evaluate a comparison.
- *
- * @param term - The comparison.
- * @param row - The row.
- * @param ev - Evaluates an operand.
- * @returns Its value, NULL where an operand is NULL.
- */
-const comparison = (
-  term: Extract<Term, { readonly kind: "compare" }>,
-  row: Row,
-  ev: Evaluate,
-): Datum | undefined => {
-  const values = operandValues([term.left, term.right], row, ev);
-  if (values === undefined || values === null) {
-    return values;
-  }
-
-  const [left, right] = values;
-
-  return left === undefined || right === undefined
-    ? undefined
-    : compared(term.op, datumText(left), datumText(right));
-};
-
-/**
- * Evaluate a closed read.
- *
- * @param term - The read.
- * @param row - The row.
- * @param ev - Evaluates a key value.
- * @returns Its value, NULL where a key value is NULL or the relation holds no tuple there.
- */
-const closedValue = (
-  term: Extract<Term, { readonly kind: "closedAt" | "closedRow" }>,
-  row: Row,
-  ev: Evaluate,
-): Datum | undefined => {
-  const values = operandValues(term.args, row, ev);
-  if (values === undefined || values === null) {
-    return values;
-  }
-
-  return closedRead(
-    term.relation,
-    term.kind === "closedAt" ? term.field : undefined,
-    values.map(datumText),
-  );
-};
-
-/**
- * Evaluate a term over a row.
- *
- * @param term - The term.
- * @param row - The row.
- * @returns Its value; NULL as SQL gives it; undefined where the term reads what the row or this
- *   module cannot give.
- */
-const evaluate: Evaluate = (term, row) => {
-  switch (term.kind) {
-    case "field": {
-      return datumOf(row[term.field]);
-    }
-    case "literal": {
-      return datumOf(term.value);
-    }
-    case "not": {
-      return negated(evaluate(term.arg, row));
-    }
-    case "and":
-    case "or": {
-      return kleene(
-        term.args.map((arg) => evaluate(arg, row)),
-        term.kind === "or",
-      );
-    }
-    case "in": {
-      const value = evaluate(term.arg, row);
-
-      return value === undefined || value === null ? value : term.values.includes(datumText(value));
-    }
-    case "compare": {
-      return comparison(term, row, evaluate);
-    }
-    case "closedAt":
-    case "closedRow": {
-      return closedValue(term, row, evaluate);
-    }
-    case "closedHas": {
-      const values = operandValues(term.args, row, evaluate);
-
-      return values === undefined || values === null
-        ? values
-        : closedHeld(term.relation, values.map(datumText));
-    }
-    case "compute": {
-      const values = operandValues(term.args, row, evaluate);
-
-      return values === undefined || values === null ? values : computed(term.fn, values);
-    }
-    case "unread": {
-      return unknownValue;
-    }
-    default: {
-      return term satisfies never;
-    }
-  }
+  return unreadable ? "unknown" : "null";
 };
 
 /**
@@ -1340,9 +715,10 @@ type Verdict =
  *   this module does not.
  */
 const tuplesOf = (view: View, side: Side): Option.Option<readonly string[]> => {
-  const closed = relations.get(side.relation);
-  const rows: readonly Row[] | undefined =
-    closed?.kind === "closedRelation" ? closed.rows?.map(ownFields) : view.get(side.relation);
+  const rows: readonly HeldRow[] | undefined = Option.match(closed.factsOf(side.relation), {
+    onNone: () => view.get(side.relation),
+    onSome: (facts) => facts.rows,
+  });
   const terms = side.terms.flatMap((term) => (term === undefined ? [] : [term]));
   if (rows === undefined || terms.length !== side.terms.length) {
     return Option.none();
@@ -1351,20 +727,20 @@ const tuplesOf = (view: View, side: Side): Option.Option<readonly string[]> => {
   const tuples: string[] = [];
   for (const row of rows) {
     const selected = Option.match(side.predicate, {
-      onNone: () => true,
-      onSome: (term) => evaluate(term, row),
+      onNone: (): Truth => true,
+      onSome: (term) => truthOver(term, row),
     });
-    if (selected === undefined) {
+    if (selected === "unknown") {
       return Option.none();
     }
 
     if (selected === true) {
-      const values = terms.map((term) => textOf(row[term.field]));
+      const values = terms.map((term) => row[term.field]);
       if (values.includes(undefined)) {
         return Option.none();
       }
 
-      tuples.push(values.join("\u001F"));
+      tuples.push(values.map(datumText).join("\u001F"));
     }
   }
 
@@ -1405,13 +781,13 @@ const verdictOf = (view: View, statement: Evaluated): Verdict => {
       return { kind: "unknown" };
     }
 
-    const values = rows.map((row) => evaluate(statement.predicate, row));
+    const values = rows.map((row) => truthOver(statement.predicate, row));
     const at = values.indexOf(false);
     if (at !== -1) {
       return { kind: "broken", witness: `row ${String(at)} of ${statement.relation}` };
     }
 
-    return values.includes(undefined) ? { kind: "unknown" } : { kind: "held" };
+    return values.includes("unknown") ? { kind: "unknown" } : { kind: "held" };
   }
 
   if (statement.kind === "key") {
@@ -1453,7 +829,7 @@ const familyOf = (row: Stored, name: string): readonly Stored[] => {
  * attribute family's owner copy), which the database fills from the owner's row and the program
  * leaves to it.
  */
-const ownerFields = ["document", "documentType", "governs", "kind", "version"] as const;
+const ownerFields = ["document", "documentType", "governor", "kind", "version"] as const;
 
 /**
  * Read the fields an attribute copies from its owner's row.
@@ -1563,27 +939,54 @@ export const viewOf = (inputs: PackageInputs): View => {
 };
 
 /**
+ * The first law of a name the rows break: the law, as an `invariant-rejected` outcome names it,
+ * and the witness, the law as {@link shownOf} writes it and the tuple that breaks it.
+ */
+export interface Broken {
+  readonly law: Law;
+  readonly witness: string;
+}
+
+/**
+ * A uuid the rows name that the program did not mint: the field that holds it, and the uuid.
+ */
+export interface Dangling {
+  readonly field: string;
+  readonly relation: string;
+  readonly value: string;
+}
+
+/**
+ * Every law {@link hostVerdictOf} can find broken: each law of {@link evaluatedLaws}, each field's
+ * pattern law and each generated field's law, that has a name. A law outside it the host never
+ * finds broken.
+ */
+export const judgedLaws: readonly Law[] = [
+  ...new Set([...evaluatedLaws, ...patternFields.keys(), ...generatedRelations.keys()]),
+].filter((law) => namesOf.has(law) || checkLaws.has(law));
+
+/**
  * What the host judges of a program's rows:
  *
- * - `broken`, each law some statement of which the rows break, with the tuple that breaks it, and
- *   `brokenLaws`, those statements as laws;
+ * - `broken`, each law name some statement of which the rows break, with the first law of it they
+ *   break and its witness, and `brokenLaws`, every statement they break as its law;
  * - `held`, each law every statement and check of which was evaluated and held, so its database
  *   verdict is known;
- * - `overLong`, each `keyText` field, as `Relation.field`, that holds a text past the bound;
- * - `dangling`, each uuid field, as `Relation.field = value`, that names an id the program did not
- *   mint;
+ * - `overLong`, each `keyText` field the import writes, as `Relation.field`, that holds a text past
+ *   the bound, with its pattern law;
+ * - `dangling`, each uuid a row names that the program did not mint;
  * - `written`, each relation the program writes as rows, none of them perhaps.
  */
 export interface HostVerdict {
-  readonly broken: ReadonlyMap<LawName, string>;
+  readonly broken: ReadonlyMap<LawName, Broken>;
   /**
    * Each statement the rows break, as an `invariant-rejected` outcome would name its law, a key
-   * text past its bound as its field type's pattern law: what `ruleOfLaws` names the refusal by.
+   * text past its bound as its field type's pattern law, which the refusal names it by.
    */
   readonly brokenLaws: readonly Law[];
-  readonly dangling: readonly string[];
+  readonly dangling: readonly Dangling[];
   readonly held: ReadonlySet<LawName>;
-  readonly overLong: ReadonlySet<string>;
+  readonly overLong: ReadonlyMap<string, PatternLaw>;
   readonly written: ReadonlySet<string>;
 }
 
@@ -1606,54 +1009,45 @@ export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>
       ([law, relation]) => [law, generatedVerdictOf(view, law, relation, patterns)] as const,
     ),
   ]);
-  const broken = new Map<LawName, string>();
+  const broken = new Map<LawName, Broken>();
   for (const [law, verdict] of verdicts) {
     const name = namesOf.get(law) ?? checkLaws.get(law);
     if (verdict.kind === "broken" && name !== undefined && !broken.has(name)) {
-      broken.set(name, `${shownOf(law)}: ${verdict.witness}`);
+      broken.set(name, { law, witness: `${shownOf(law)}: ${verdict.witness}` });
     }
   }
 
-  const checksOf = new Map<LawName, Law[]>();
+  const checksNamed = new Map<LawName, Law[]>();
   for (const [law, name] of checkLaws) {
-    checksOf.set(name, [...(checksOf.get(name) ?? []), law]);
+    checksNamed.set(name, [...(checksNamed.get(name) ?? []), law]);
   }
 
   const held = new Set(
-    [...new Set([...lawsNamed.keys(), ...checksOf.keys()])].filter(
+    [...new Set([...lawsNamed.keys(), ...checksNamed.keys()])].filter(
       (name) =>
         !unreadChecks.has(name) &&
         !broken.has(name) &&
-        [...(lawsNamed.get(name) ?? []), ...(checksOf.get(name) ?? [])].every(
+        [...(lawsNamed.get(name) ?? []), ...(checksNamed.get(name) ?? [])].every(
           (law) => verdicts.get(law)?.kind === "held",
         ),
     ),
   );
-  const overLong = new Set<string>();
-  const boundLaws = new Set<Law>();
-  const dangling = new Set<string>();
+  const overLong = new Map<string, PatternLaw>();
+  const dangling = new Map<string, Dangling>();
   for (const [relation, rows] of view) {
     const uuids = uuidFields.get(relation) ?? [];
     for (const row of rows) {
       for (const [field, value] of Object.entries(row)) {
-        if (
-          Predicate.isString(value) &&
-          keyTextFields.has(`${relation}.${field}`) &&
-          utf8Length(value) > keyTextBytes
-        ) {
-          overLong.add(`${relation}.${field}`);
-
-          const bound = fieldPatterns.get(`${relation}.${field}`);
-          if (bound !== undefined) {
-            boundLaws.add(bound);
-          }
+        const bound = boundFields.get(`${relation}.${field}`);
+        if (bound !== undefined && Predicate.isString(value) && utf8Length(value) > keyTextBytes) {
+          overLong.set(`${relation}.${field}`, bound);
         }
       }
 
       for (const field of uuids) {
         const value = row[field];
         if (Predicate.isString(value) && !minted.has(value)) {
-          dangling.add(`${relation}.${field} = ${value}`);
+          dangling.set(`${relation}.${field} = ${value}`, { field, relation, value });
         }
       }
     }
@@ -1662,14 +1056,14 @@ export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>
   const brokenLaws = [
     ...new Set([
       ...[...verdicts].flatMap(([law, verdict]) => (verdict.kind === "broken" ? [law] : [])),
-      ...boundLaws,
+      ...overLong.values(),
     ]),
   ];
 
   return {
     broken,
     brokenLaws,
-    dangling: [...dangling],
+    dangling: [...dangling.values()],
     held,
     overLong,
     written: new Set(view.keys()),

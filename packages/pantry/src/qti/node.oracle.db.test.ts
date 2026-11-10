@@ -14,8 +14,8 @@
  * A `Node` tree commits only with its package (the document node's `Document` row, the character
  * arms, the attribute family): those laws are deferred to COMMIT and belong to other slices, so
  * every case is judged at its INSERT's end and rolled back. A law that is itself deferred, the
- * tree's last axis, is set immediate for the case once the rows are in (`SET CONSTRAINTS "qti".…
- * IMMEDIATE`, named with its schema). A lawful document raises nothing; a corruption raises the
+ * tree's last axis, is set immediate for the case once the rows are in (`SET CONSTRAINTS <schema>.…
+ * IMMEDIATE`, named with `Qti`'s schema). A lawful document raises nothing; a corruption raises the
  * SQLSTATE and a constraint that maps to its law (C22: membership, since one row may break several
  * laws whose constraints PostgreSQL checks in an order it does not promise).
  *
@@ -29,22 +29,25 @@ import { Array as Arr, Effect, Formatter, Option, Order } from "effect";
 import type { Client, DatabaseError } from "pg";
 import { describe } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
+import { followPairsOf } from "#pantry/grammar/content.ts";
 import {
   AttributeSlot,
   Banned,
   ContentModelOf,
   Flag,
-  Follow,
-  GoverningOf,
+  FollowMember,
+  FollowSetOf,
   grammar,
   nonElementKinds,
   Position,
   RootOfType,
   SharedModelOf,
-  Symbol as ContentSymbol,
+  SymbolMember,
+  SymbolSetOf,
   TextDomain,
 } from "#pantry/grammar/install.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { symbolRowsOf } from "#pantry/test/indexes.ts";
+import { governorOf, ownContext } from "#pantry/import/fold.ts";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -57,13 +60,20 @@ import { readPackage } from "#pantry/package/read.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { LabelUse } from "#pantry/qti/identity.ts";
-import { copiedTextKinds, Node, universalDomains, vocabularyTermKinds } from "#pantry/qti/node.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import {
+  copiedTextKinds,
+  ElementType,
+  Node,
+  universalDomains,
+  vocabularyTermKinds,
+} from "#pantry/qti/node.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   accumulatorOf,
   assertVerdict,
   authorRole,
+  authorViews,
   constraintDescribed,
   judged,
   loginSession,
@@ -73,6 +83,7 @@ import {
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf, nodeLawNames } from "#pantry/test/oracle.ts";
@@ -283,16 +294,16 @@ const countPerName = (names: readonly string[]): readonly (readonly [string, num
     .toSorted(([left], [right]) => Order.String(left, right));
 
 /**
- * The foreign keys a schema's statements put on `Node`'s table into another stored relation, as
- * the count per target relation: one for each containment from `Node` (or a selection of it), one
- * for the `Node` half of each mirrors, and one for the proof key into its last member of each
- * family `Node` owns.
+ * The foreign keys a schema's laws put on `Node`'s table into another stored relation, as the count
+ * per target relation: one for each containment law from `Node` (or a selection of it), a mirrors'
+ * `Node` half among them, and one for the proof key into its last member of each family `Node`
+ * owns.
  *
- * @param statements - The schema's statements.
+ * @param schema - The schema, `Qti`.
  * @returns Each target relation and how many of Node's keys it takes.
  */
-const outOfNode = (statements: readonly unknown[]) => {
-  const keys = keysOf(statements);
+const outOfNode = (schema: typeof Qti) => {
+  const keys = keysOf(schema);
 
   return countPerName([
     ...keys.laws.filter(({ from, to }) => from === "Node" && to !== "Node").map(({ to }) => to),
@@ -301,26 +312,31 @@ const outOfNode = (statements: readonly unknown[]) => {
 };
 
 /**
- * The role a constraint of `Node` plays, read off its name (a check this slice names) or the
- * identity its COMMENT spells (grizzle's hashed natives), `other` for another slice's.
+ * The role a constraint of `Node` plays, read off its name (a check this slice names, by its
+ * installed name, `checkConstraintOf`) or the identity its COMMENT spells (grizzle's hashed
+ * natives), `other` for another slice's.
  *
  * @param constraint - The constraint.
  * @returns Its role.
  */
 const roleOf = (constraint: Constraint): string => {
-  const named = new Map([
-    ["e_1_derived", "E1 derived"],
-    ["foreign_element_class", "Foreign element class"],
-    ["foreign_simple_content", "Foreign simple content"],
-    ["n_1_sentinel", "N1 sentinel"],
-    ["n_5_admitted", "N5 admitted"],
-    ["n_5_follow", "N5 Follow"],
-    ["n_6_ancestry", "N6 ancestry"],
-    ["n_7_barred_by", "N7 barred by"],
-    ["n_7_counted", "N7 Counted"],
-    ["n_7_last", "N7 Last"],
-    ["n_8_nearest", "N8 nearest"],
-  ]);
+  const named = new Map(
+    (
+      [
+        ["E1_derived", "E1 derived"],
+        ["Foreign_element_class", "Foreign element class"],
+        ["Foreign_simple_content", "Foreign simple content"],
+        ["N1_sentinel", "N1 sentinel"],
+        ["N5_admitted", "N5 admitted"],
+        ["N5_Follow", "N5 Follow"],
+        ["N6_ancestry", "N6 ancestry"],
+        ["N7_barred_by", "N7 barred by"],
+        ["N7_Counted", "N7 Counted"],
+        ["N7_Last", "N7 Last"],
+        ["N8_nearest", "N8 nearest"],
+      ] as const
+    ).map(([check, role]) => [checkConstraintOf(Qti, Node.name, check), role]),
+  );
   const { comment } = constraint;
   const held = named.get(constraint.name);
   if (held !== undefined) {
@@ -370,7 +386,10 @@ const roleOf = (constraint: Constraint): string => {
       "last state pin",
       comment.startsWith("check of Node for law Node(id, pred(children), lastState)"),
     ],
-    ["xsi type", comment.startsWith("check of Node for law Node(version, kind, governs)")],
+    [
+      "xsi type",
+      comment.startsWith("check of ElementType for law ElementType(version, kind, type)"),
+    ],
   ];
 
   return rules.find(([, holds]) => holds)?.[0] ?? "other";
@@ -393,12 +412,13 @@ const treeRoles: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Read `Node`'s constraints from the catalog.
+ * Read a table's constraints from the catalog, `Node`'s by default.
  *
  * @param client - The session.
+ * @param table - The table, `node` or another of `Qti`'s.
  * @returns Its constraints.
  */
-const constraintsOf = (client: Client) =>
+const constraintsOf = (client: Client, table = "node") =>
   rowsOf<{
     readonly columns: readonly string[];
     readonly comment: string | null;
@@ -414,7 +434,8 @@ const constraintsOf = (client: Client) =>
             ARRAY(SELECT a.attname::text FROM unnest(c.conkey) AS k(n)
                     JOIN pg_catalog.pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.n) AS columns
        FROM pg_catalog.pg_constraint c
-      WHERE c.conrelid = 'qti.node'::regclass`,
+      WHERE c.conrelid = pg_catalog.to_regclass($1)`,
+    [`${qtiSchema}.${table}`],
   ).pipe(
     Effect.map((constraints) =>
       constraints.map((constraint): Constraint => ({
@@ -434,13 +455,6 @@ const constraintsOf = (client: Client) =>
  */
 const namesOf = (constraints: readonly Constraint[], role: string): readonly string[] =>
   constraints.filter((constraint) => roleOf(constraint) === role).map(({ name }) => name);
-
-/**
- * `GoverningOf`'s rows by `<version> <kind> <governs>`.
- */
-const governorAt = new Map(
-  GoverningOf.rows.map((row) => [`${row.version} ${row.kind} ${row.governs}`, row.governor]),
-);
 
 /**
  * `TextDomain`'s rows by `<version> <governor>`.
@@ -488,10 +502,12 @@ const inStringValue = (
   member: FoldedNode<Composed>,
   parent: FoldedNode<Composed> | undefined,
 ): boolean => {
-  const governor = governorAt.get(
-    `${member.version} ${member.parentKind} ${parent?.governs ?? ""}`,
+  const governor = governorOf(
+    member.version,
+    member.parentKind,
+    parent === undefined ? Option.none() : parent.governs,
   );
-  const domain = textDomainAt.get(`${member.version} ${governor ?? ""}`);
+  const domain = textDomainAt.get(`${member.version} ${governor}`);
 
   return (
     (domain !== undefined && !universal.has(domain)) ||
@@ -506,23 +522,28 @@ const inStringValue = (
 const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
 
 /**
- * The resource type of a folded document: the one `RootOfType` names for its root element's kind,
- * `none` for a manifest, which no resource lists.
+ * The `DocumentType` of a folded document, as its document node's `documentType` holds it:
+ * `manifest` for the package's manifest, which no resource lists, and for every other document the
+ * type of the resource that lists it, the one `RootOfType` names for its root element's kind, which
+ * `ResourceDocumentType` spells as itself (spec reading 176).
  *
  * @param rows - The document's folded rows.
  * @returns The type.
  */
-const documentTypeOf = (rows: FoldedRows<Composed>) => {
+const documentTypeOf = (rows: FoldedRows<Composed>): string => {
   // The nodes are in pre-order, so the first element below the document node is its root.
   const root = rows.nodes.find(({ kind, start }) => start > 0n && !nonElements.has(kind))?.kind;
   if (root === "cp:manifest") {
-    return "none";
+    return "manifest";
   }
 
-  const types = RootOfType.rows.filter((row) => row.root === root).map(({ type }) => type);
-  assert.lengthOf(types, 1, `${root ?? "no root"}: the one resource type RootOfType names for it`);
+  const [type, ...others] = RootOfType.rows
+    .filter((row) => row.root === root)
+    .map(({ type: rooted }) => rooted);
+  assert.isDefined(type, `${root ?? "no root"}: a resource type RootOfType names for it`);
+  assert.isEmpty(others, `${root ?? "no root"}: the one resource type RootOfType names for it`);
 
-  return types[0] ?? "none";
+  return type;
 };
 
 /**
@@ -591,7 +612,7 @@ const nodeFactsOf = (rows: FoldedRows<Composed>): Stated[] => {
         elementsWas: node.elementsWas,
         end: node.end,
         first: node.first,
-        governs: node.governs,
+        governor: governorOf(node.version, node.kind, node.governs),
         id: node.id,
         kind: node.kind,
         last: node.last,
@@ -601,7 +622,7 @@ const nodeFactsOf = (rows: FoldedRows<Composed>): Stated[] => {
         nearestKind: node.nearestKind,
         parent: node.parent,
         parentAncestry: bitsText(Flag, node.parentAncestry),
-        parentGoverns: parent.governs,
+        parentGovernor: governorOf(parent.version, parent.kind, parent.governs),
         parentKind: node.parentKind,
         parentNearest: node.parentNearest,
         parentNearestKind: node.parentNearestKind,
@@ -743,7 +764,7 @@ const attributeFactsOf = (rows: FoldedRows<Composed>): Stated[] =>
         entities: BigInt(
           rows.attributeEntities.filter((row) => row.attribute === attribute.id).length,
         ),
-        governs: attribute.governs,
+        governor: governorOf(attribute.version, attribute.kind, attribute.governs),
         id: attribute.id,
         idrefText: "",
         kind: attribute.kind,
@@ -793,6 +814,33 @@ const nodeBreaches = (rows: FoldedRows<Composed>): readonly string[] => {
   return [...new Set(documentBreaches("case.xml", rows, laws).map(({ law }) => law))].filter(
     (law) => node.has(law),
   );
+};
+
+/**
+ * Write the `ElementType` fact of one fact's element under a type: its node's tuple, and the
+ * governor the type gives it (`governorOf`), so its own `E1_derived` holds.
+ *
+ * @param rows - The facts.
+ * @param at - The element's fact's index in document order.
+ * @param type - The type's handle.
+ * @returns The fact.
+ */
+const typeFactOf = (rows: readonly Stated[], at: number, type: string): Stated => {
+  const node = rows[at]?.fact ?? assert.fail(`no fact at ${String(at)}`);
+  const version = String(node["version"]);
+  const kind = String(node["kind"]);
+
+  return {
+    fact: {
+      document: node["document"] ?? "",
+      governor: governorOf(version, kind, Option.some(type)),
+      kind,
+      node: node["id"] ?? "",
+      type,
+      version,
+    },
+    relation: ElementType,
+  };
 };
 
 /**
@@ -1109,7 +1157,10 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
           // Bound: the two lawful items under each named edit.
           Effect.gen(function* rowLaws() {
             const client = yield* loginSession;
-            const constraints = yield* constraintsOf(client);
+            const constraints = [
+              ...(yield* constraintsOf(client)),
+              ...(yield* constraintsOf(client, "element_type")),
+            ];
             const lawfulRows = yield* foldedOf(lawfulItem);
             // Each edit is of a lawful item's facts, every value the writer derives for them pinned,
             // so it breaks the one law it names.
@@ -1138,12 +1189,12 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
               (row) => row.version === second["version"] && row.parent === second["parentKind"],
             )?.model;
             const symbolPositions = new Set<string>(
-              ContentSymbol.rows
+              symbolRowsOf(SymbolSetOf, SymbolMember)
                 .filter((row) => row.model === sharedModel && row.kind === "m:ci")
                 .map(({ position }) => position),
             );
             const followed = new Set<string>(
-              Follow.rows
+              followPairsOf({ followMember: FollowMember, followSetOf: FollowSetOf })
                 .filter((row) => row.model === contentModel && row.from === second["was"])
                 .map(({ to }) => to),
             );
@@ -1267,7 +1318,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 codes: ["23514"],
                 name: "an xsi:type outside XsiType",
                 roles: ["xsi type", "other"],
-                rows: edited(lawful, lastElement, { governs: "xs:anyType" }),
+                rows: [...lawful, typeFactOf(lawful, lastElement, "xs:anyType")],
               },
             ];
             for (const { codes, name, roles, rows } of cases) {
@@ -1288,8 +1339,9 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
         () =>
           // Oracle: the specification as a checker, spec reading 117 and node.ts's N1: a document
           // node's ancestry is its document's context, which its `Document` row states through
-          // `nodeContext`, the containment `Document(node, nodeChildren, context, …) to Node(id,
-          // children, ancestry, …)`, set immediate. N1 pins no ancestry, and a flag carried down
+          // its document node's fixed target (`#pantry/qti/chardata.ts`), the containment
+          // `Document(node, nodeChildren, context, …) to Node(id, children, ancestry, …)`, set
+          // immediate. N1 pins no ancestry, and a flag carried down
           // the tree keeps E1 (ancestry is parentAncestry with Enters) and N6 (the flag is one no
           // kind of the item bans), so the containment is the one law the edit breaks: 23503 on
           // its key.
@@ -1332,12 +1384,12 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 context: root["ancestry"] ?? "",
                 contextNearest: root["nearest"] ?? "",
                 contextNearestKind: root["nearestKind"] ?? "",
+                documentType: "imsqti_item_xmlv3p0",
                 exportCharset: utf8Label,
                 node: root["id"] ?? "",
                 nodeChildren: root["children"] ?? 0n,
                 package: "00000000-0000-4000-8000-0000000000ff",
                 path: "item.xml",
-                resourceType: "imsqti_item_xmlv3p0",
                 rootKind: "qti-assessment-item",
                 version: root["version"] ?? "",
               },
@@ -1471,7 +1523,6 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                         context: ownContext(idOf(0)),
                         documentType: "imsqti_item_xmlv3p0",
                         idOf,
-                        targetAt: () => Option.none(),
                       }).LabelUse.values();
                       const verdict = yield* judged(
                         client,
@@ -1509,15 +1560,15 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
           // and, for every other target, `Qti`'s own statements, each containment from Node, each
           // mirrors' Node half and each family Node owns, so a key grizzle merged, split or
           // dropped, or a law a slice put on Node unstated, changes a target's count. On the
-          // drafted _init (20261107020714) that is 40 keys into 38 relations: Document and Site
-          // take two each, and Rounding (ccccaeb3), LomResourceType and LomResourceTypeSource
-          // (96a7ea14) are the three the 2026-11-06 hand list lacked.
+          // committed init migration that is 45 keys into 43 relations: Document and Site take two
+          // each, and Rounding (ccccaeb3), LomResourceType and LomResourceTypeSource (96a7ea14) are
+          // the three the 2026-11-06 hand list lacked.
           // Bound: every constraint of Node's table and every statement of Qti.
           Effect.gen(function* census() {
             const client = yield* loginSession;
             const constraints = yield* constraintsOf(client);
             const foreign = constraints.filter(({ kind }) => kind === "f");
-            const intoNode = foreign.filter(({ target }) => target === "qti.node");
+            const intoNode = foreign.filter(({ target }) => target === `${qtiSchema}.node`);
 
             assert.sameMembers(intoNode.map(roleOf), [
               "owner axis",
@@ -1526,16 +1577,18 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
             ]);
             assert.deepStrictEqual(
               countPerName(
-                foreign.filter(({ target }) => target !== "qti.node").map(targetRelationOf),
+                foreign
+                  .filter(({ target }) => target !== `${qtiSchema}.node`)
+                  .map(targetRelationOf),
               ),
-              outOfNode(Qti.statements),
+              outOfNode(Qti),
             );
 
             const owner = intoNode.find((constraint) => roleOf(constraint) === "owner axis");
             for (const copied of [
               "version",
               "parent_kind",
-              "parent_governs",
+              "parent_governor",
               "parent_ancestry",
               "parent_nearest",
               "parent_nearest_kind",
@@ -1576,8 +1629,8 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
             assert.include(ordered, order?.name, "T1's UNIQUE leads with (document, start)");
 
             const reads = [
-              `SELECT id, start FROM ${authorRole}.node WHERE document = $1 AND start > $2 AND start < $3 ORDER BY start`,
-              `SELECT id, at FROM ${authorRole}.node WHERE document = $1 AND start > $2 AND start < $3 AND parent = $4 ORDER BY start`,
+              `SELECT id, start FROM ${authorViews}.node WHERE document = $1 AND start > $2 AND start < $3 ORDER BY start`,
+              `SELECT id, at FROM ${authorViews}.node WHERE document = $1 AND start > $2 AND start < $3 AND parent = $4 ORDER BY start`,
             ];
             yield* rowsOf(client, "BEGIN");
             yield* rowsOf(client, `SET LOCAL ROLE ${authorRole}`);

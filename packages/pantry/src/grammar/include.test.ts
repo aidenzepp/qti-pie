@@ -4,19 +4,23 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter } from "effect";
+import { followPairsOf } from "#pantry/grammar/content.ts";
 import { documentRoots, fragmentRoots } from "#pantry/grammar/facets.ts";
 import { includeKind } from "#pantry/grammar/include.ts";
 import {
-  ChildGrammar,
+  AdmissionIn,
   ContentModelOf,
-  Follow,
+  FollowMember,
+  FollowSetOf,
   grammar,
   IncludeParentKind,
-  IncludeRoot,
-  Last,
+  IncludeMember,
+  IncludeSetOf,
   SharedModelOf,
-  Symbol as ContentSymbol,
+  SymbolMember,
+  SymbolSetOf,
 } from "#pantry/grammar/install.ts";
+import { admittedOf, includeRowsOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -39,36 +43,55 @@ const modelOf = new Map(
 );
 
 /**
- * Each model's Follow, as `model from` to the set of positions that follow.
+ * Each model's transitions, its follow sets spelled out (`followPairsOf`).
  */
-const follows = Map.groupBy(Follow.rows, (row) => `${row.model} ${row.from}`);
+const transitions = followPairsOf({ followMember: FollowMember, followSetOf: FollowSetOf });
 
 /**
- * Each model's Follow read backward, as `model to` to the positions it follows.
+ * Each model's transitions, as `model from` to the set of positions that follow.
  */
-const precedes = Map.groupBy(Follow.rows, (row) => `${row.model} ${row.to}`);
+const follows = Map.groupBy(transitions, (row) => `${row.model} ${row.from}`);
+
+/**
+ * Each model's transitions read backward, as `model to` to the positions it follows.
+ */
+const precedes = Map.groupBy(transitions, (row) => `${row.model} ${row.to}`);
 
 /**
  * Each model's last positions, as `model position`.
  */
-const lasts = new Set(Last.rows.map((row) => `${row.model} ${row.position}`));
+const lasts = new Set(
+  FollowSetOf.rows.filter(({ ends }) => ends).map((row) => `${row.model} ${row.from}`),
+);
 
 /**
  * Each shared model's positions of a kind, as `model kind`.
  */
-const symbols = Map.groupBy(ContentSymbol.rows, (row) => `${row.model} ${row.kind}`);
+const symbols = Map.groupBy(
+  symbolRowsOf(SymbolSetOf, SymbolMember),
+  (row) => `${row.model} ${row.kind}`,
+);
 
 /**
  * Each family's admitted children with their position cells, by `version parent`.
  */
-const admitted = Map.groupBy(ChildGrammar.rows, (row) => `${row.version} ${row.parent}`);
+const admitted = Map.groupBy(
+  admittedOf(ContentModelOf, AdmissionIn),
+  (row) => `${row.version} ${row.parent}`,
+);
+
+/**
+ * The include sets as installed, spelled out as `IncludeRoot`'s (version, include parent, kind)
+ * rows.
+ */
+const includeRows = includeRowsOf(IncludeSetOf, IncludeMember);
 
 /**
  * The (version, include parent) families `IncludeRoot` holds, each with its parent's kind.
  */
 const includeFamilies = [
   ...new Map(
-    IncludeRoot.rows.map((row) => {
+    includeRows.map((row) => {
       const kind = IncludeParentKind.rows.find(({ parent }) => parent === row.parent)?.kind ?? "";
 
       return [
@@ -143,7 +166,7 @@ const classOf = (kind: string): "content" | "processing" | "section" => {
  */
 const rootsUnder = (version: string, kind: string): ReadonlySet<string> =>
   new Set(
-    IncludeRoot.rows
+    includeRows
       .filter(
         (row) =>
           row.version === version &&
@@ -191,7 +214,7 @@ describe("IncludeRoot", () => {
               assert.lengthOf(own, 1, `${family}: the include's positions`);
 
               const signature = signatureOf(model, Arr.getUnsafe(own, 0));
-              for (const row of IncludeRoot.rows) {
+              for (const row of includeRows) {
                 if (row.version === version && row.parent === parent) {
                   assert.isTrue(
                     positionsOf(family, row.kind).some(
@@ -265,7 +288,7 @@ describe("IncludeRoot", () => {
     // Oracle: the kinds' names, read off the roster by hand: three handles share their element's
     // name with another kind, so a document's root, read by its name, is never one of them (spec
     // reading 116). Bound: every kind IncludeRoot holds.
-    const standing: ReadonlySet<string> = new Set(IncludeRoot.rows.map(({ kind }) => kind));
+    const standing: ReadonlySet<string> = new Set(includeRows.map(({ kind }) => kind));
     const roots = new Set(fragmentRoots.map(({ root }) => root));
 
     assert.deepStrictEqual(

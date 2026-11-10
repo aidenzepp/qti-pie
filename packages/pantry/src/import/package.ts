@@ -3,31 +3,32 @@
  * refusal (plan W5, Q5.15; the W5 amendment's A, C19 and C22).
  *
  * The package is read, shredded and built into its rows once (`readProgram` of
- * `#pantry/import/program.ts`), and written as one ChangeSet step over the author role
- * (`changeSetOf` of `#pantry/import/write.ts`), applied once by `db.apply` and compiled for that
- * call. The apply is one transaction, so the database holds the whole package or nothing of it:
- * there is no split and no completion marker, and a family past one statement's transport bounds
- * is chunked by grizzle into consecutive statements of that transaction (fin.md §4.5a).
+ * `#pantry/import/program.ts`), and written by the author login's `importWrite` member, the one
+ * ChangeSet step over the author role (`changeSetOf` of `#pantry/import/write.ts`) that `grizzle
+ * generate` compiled into the login's served file, applied once to the package's facts
+ * (`packageFactsOf`). The apply is one transaction, so the database holds the whole package or
+ * nothing of it: there is no split and no completion marker, and a family past one statement's
+ * transport bounds is chunked by grizzle into consecutive statements of that transaction (fin.md
+ * §4.5a).
  */
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import {
   CommitUnknown,
   Db,
   ReadFailure,
   StaleSnapshot,
   TransientFailure,
-} from "@bjornpagen/grizzle";
-import type { ApplyError, DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
-import { Clock, Duration, Effect, Option, Random, Ref, Result, Schedule, Schema } from "effect";
+} from "@bjornpagen/grizzle/runtime";
+import type { Uuid } from "@bjornpagen/grizzle";
+import type { ApplyError, DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
+import { Clock, Context, Duration, Effect, Option, Random, Ref, Schedule, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { refusalOfLaws } from "#pantry/import/refusal.ts";
-import type { ImportRefused } from "#pantry/import/refusal.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
-import { Package } from "#pantry/qti/package.ts";
-import type { Author } from "#pantry/qti/roles.ts";
+import { refusalOf } from "#pantry/import/refusal.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
+import { packageFactsOf } from "#pantry/import/write.ts";
+import type { AuthorRole } from "#pantry/qti/roles.ts";
+import type { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The longest the retries of one database call run, in total.
@@ -40,52 +41,53 @@ const retryBound = Duration.seconds(30);
 const retryDelayCap = Duration.seconds(1);
 
 /**
- * The retry between attempts at the database, bounded by elapsed time and not by count.
+ * The schedule the import retries the `importWrite` apply on after a transient refusal. Its
+ * default is the production schedule, so a caller provides nothing; a test provides another
+ * through `Effect.provideService`, to give up sooner than the bound allows.
  *
- * A serialization failure never depends on the call's inputs, and under contention PostgreSQL
- * expects many attempts, so a count says nothing about how long the contention lasts. The wait
- * starts at 50 ms and doubles, is capped at one second so the retries keep sampling while the
- * burst thins out, and is then drawn uniformly from zero to that wait, so attempts that collided do
- * not retry together. The retries stop at the first attempt that ends after thirty seconds, and
- * that attempt's failure is the call's.
+ * The default is bounded by elapsed time and not by count. A serialization failure never depends
+ * on the call's inputs, and under contention PostgreSQL expects many attempts, so a count says
+ * nothing about how long the contention lasts. The wait starts at 50 ms and doubles, is capped at
+ * one second so the retries keep sampling while the burst thins out, and is then drawn uniformly
+ * from zero to that wait, so attempts that collided do not retry together. The retries stop at the
+ * first attempt that ends after thirty seconds, and that attempt's failure is the call's.
  */
-export const retrySchedule = Schedule.exponential("50 millis", 2).pipe(
-  Schedule.modifyDelay(
-    Effect.fnUntraced(function* jitters({ duration }) {
-      const random = yield* Random.next;
+export const RetrySchedule = Context.Reference<Schedule.Schedule<unknown>>(
+  "pantry/import/package/RetrySchedule",
+  {
+    defaultValue: () =>
+      Schedule.exponential("50 millis", 2).pipe(
+        Schedule.modifyDelay(
+          Effect.fnUntraced(function* jitters({ duration }) {
+            const random = yield* Random.next;
 
-      return Duration.times(Duration.min(duration, retryDelayCap), random);
-    }),
-  ),
-  Schedule.upTo({ duration: retryBound }),
+            return Duration.times(Duration.min(duration, retryDelayCap), random);
+          }),
+        ),
+        Schedule.upTo({ duration: retryBound }),
+      ),
+  },
 );
 
 /**
- * What a caller may replace in {@link importPackage}: how the database calls are retried, and what
- * runs in place of the apply, so a test can inject a failure the cluster will not raise on demand.
+ * What runs each attempt of the import's apply: by default the attempt as it is, so a caller
+ * provides nothing. A test provides a wrap through `Effect.provideService` to inject a failure
+ * the cluster will not raise on demand (a `TransientFailure`, a `CommitUnknown` before or after
+ * the apply ran, an interruption while it waits on a lock), and the import's retries and its
+ * read-back then meet that failure as they would meet the database's.
  */
-export interface ImportOptions {
-  /**
-   * The schedule of the retries of `Db.open` and `db.apply`. Defaults to {@link retrySchedule}.
-   */
-  readonly schedule?: Schedule.Schedule<unknown>;
-  /**
-   * Wraps each attempt of the apply, in place of running it as is. Defaults to running it.
-   */
-  readonly wrapApply?: <A, E, R>(
-    apply: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E | ApplyError, R>;
-}
+export const WrapApply = Context.Reference<
+  <A>(apply: Effect.Effect<A, ApplyError>) => Effect.Effect<A, ApplyError>
+>("pantry/import/package/WrapApply", { defaultValue: () => (apply) => apply });
 
 /**
  * Whether the database refused an attempt for a reason outside the call's inputs, so the same call
- * may succeed again: grizzle's `TransientFailure`. `Db.open` contacts no database, so no
- * `OpenError` is transient. Nothing else is retried.
+ * may succeed again: grizzle's `TransientFailure`. Nothing else is retried.
  *
  * @param error - The failure.
  * @returns Whether it is transient.
  */
-const isTransient = (error: ApplyError | OpenError): boolean => error._tag === "TransientFailure";
+const isTransient = (error: ApplyError): boolean => error._tag === "TransientFailure";
 
 /**
  * Run `attempt` again while the database calls the failure transient, on `schedule`. Each retry
@@ -98,7 +100,7 @@ const isTransient = (error: ApplyError | OpenError): boolean => error._tag === "
  * @param schedule - The retries' schedule.
  * @returns The first attempt that succeeds, or the last failure.
  */
-const retried = <A, E extends ApplyError | OpenError, R>(
+const retried = <A, E extends ApplyError, R>(
   name: string,
   attempt: Effect.Effect<A, E, R>,
   schedule: Schedule.Schedule<unknown>,
@@ -183,38 +185,44 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
 /**
  * Import the package at `dir`.
  *
- * Reads the package once, shreds the documents its manifest names, mints every id afresh and
- * builds every row, then applies them as one ChangeSet through the author role. `Db.open` and
- * `db.apply` are retried on a transient refusal and on nothing else. When the commit's outcome is
- * unknown the package row is read back by its id ({@link settleCommitUnknown}): present, the import
- * was accepted; absent, the error is the answer; a read-back that fails is `CommitUnresolved`. The
- * same package imported twice is two packages, each with its own ids.
+ * Reads the package once, shreds the documents its manifest names, mints every id afresh and builds
+ * every row, then applies them as one ChangeSet through the author role. The `importWrite` apply is
+ * retried on a transient refusal and on nothing else; `Db.open` is not, since it contacts nothing
+ * of the database and refuses only what the host decides (grizzle `d994809c`), never a transient
+ * failure. When the commit's outcome is unknown the package row is read back by its id
+ * ({@link settleCommitUnknown}): present, the import was accepted; absent, the error is the answer;
+ * a read-back that fails is `CommitUnresolved`. The same package imported twice is two packages,
+ * each with its own ids. The retries run on {@link RetrySchedule}, and each attempt of the apply
+ * through {@link WrapApply}.
  *
  * @param dir - The package directory or `.zip` file.
- * @param options - Replacements for the retry schedule and the apply step, for tests.
- * @returns The id of the committed package. Fails with `ImportRefused` naming the rule the package
- *   broke, whether the reader, the codec or the database refused it; with the platform's error
- *   when the directory cannot be read; with `CommitUnresolved` when the commit's outcome is
- *   unknown and the read-back failed, so the package may or may not be stored; and with grizzle's
- *   own error when the database failed for a reason that is not a refusal.
+ * @returns The id of the committed package. Fails with `ImportRefused` naming the rules the package
+ *   was refused under, whether the reader, the codec or the database refused it; with the
+ *   platform's error when the directory cannot be read; with `CommitUnresolved` when the commit's
+ *   outcome is unknown and the read-back failed, so the package may or may not be stored; and with
+ *   grizzle's own error when the database failed for a reason that is not a refusal.
  */
 export const importPackage = Effect.fn("import.importPackage")(function* importPackage(
   dir: string,
-  options: ImportOptions = {},
 ): Effect.fn.Return<
   Uuid,
   ImportRefused | PlatformError.PlatformError | ApplyError | OpenError | CommitUnresolved,
-  FileSystem.FileSystem | DbLayer<typeof Author>
+  AuthorLogin | FileSystem.FileSystem | DbLayer<AuthorRole>
 > {
-  const schedule = options.schedule ?? retrySchedule;
-  const wrap = options.wrapApply ?? (<A, E, R>(apply: Effect.Effect<A, E, R>) => apply);
+  const schedule = yield* RetrySchedule;
+  const wrap = yield* WrapApply;
+  const login = yield* AuthorLogin;
   const program = yield* readProgram(dir);
   const { packageId } = program;
-  const changes = changeSetOf(AuthorApp.roles.author.role, program.inputs);
-  const db = yield* retried("Db.open", Db.open(AuthorApp.roles.author, {}), schedule);
-  const [elapsed, outcome] = yield* retried("db.apply", wrap(db.apply(changes, {})), schedule).pipe(
+  const facts = packageFactsOf(program.inputs);
+  const db = yield* Db.open(login.roles.author, {});
+  const [elapsed, outcome] = yield* retried(
+    "importWrite",
+    wrap(db.workload.importWrite.apply({ insert: facts }, {})),
+    schedule,
+  ).pipe(
     Effect.catchTag("CommitUnknown", (commit) =>
-      settleCommitUnknown(commit, packageId, db.get(Package, { id: packageId })),
+      settleCommitUnknown(commit, packageId, db.workload.packageOf.get({ id: packageId })),
     ),
     Effect.timed,
   );
@@ -222,30 +230,32 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   yield* Effect.annotateCurrentSpan({ applyMillis: Duration.toMillis(elapsed), packageId });
 
   if (outcome.kind === "invariant-rejected") {
-    // The laws the refusal names, by how grizzle decided them (grizzle-engine
-    // `src/types/changeset/changeset.ts:1011` and `src/write/program/witness.ts`'s hostJudgement at
-    // `6995af4`):
-    // - `every`: every law of the refused row's table that the stated row breaks, each once, in
-    //   the schema's order, a domain's one per column whose value it refuses; for any other
-    //   refusal, the one law its PostgreSQL object discharges.
-    // - `first`: the laws of the first CHECK PostgreSQL tried, where grizzle's host cannot witness
-    //   the row, for example a law over a family's filled counts (Choice not variable's).
-    // - `some`: the laws one PostgreSQL object discharges, two or more, at least one of them broken
-    //   and nothing deciding which: a family's axis foreign key and every law merged into it, or a
-    //   domain over a row the host does not judge whole. A stated limit: the import cannot yet
-    //   decide which law broke (a recorded follow-up), so its rule stays the most specific among
-    //   them, what it ruled when grizzle named these laws `every` before.
-    // The rule is the most specific among them in every arm (`ruleOfLaws`). A breach in a table
-    // written or checked later, or one the host cannot witness, never reaches the rule, however
-    // specific its law; GEN-A's differential records any such divergence from the oracle.
-    // The witness is grizzle's own, as the refusal carries it: the key of the first stated row
-    // that breaks the law, or `unreported` for a foreign key and for a law no stated row breaks as
-    // the host judges it (README "Errors and outcomes"). Laws no rule owns die as `UnownedLaws`, a
-    // defect of the law table, never a verdict on the package.
-    return yield* Result.match(refusalOfLaws(outcome.refused.laws, outcome.witness, grammar), {
-      onFailure: (unowned) => Effect.die(unowned),
-      onSuccess: (refused) => Effect.fail(refused),
-    });
+    // The refusal is what the outcome says, read from it alone (`refusalOf`): how grizzle decided
+    // its laws (`refused.kind`), every law it names with the set of their rules, and grizzle's
+    // witness (grizzle-engine `src/types/changeset/changeset.ts:1013-1043`, `Witness` and
+    // `Refused`, at `999facc`). `every` names the laws grizzle judged broken; `first` the laws of the CHECK
+    // PostgreSQL tried first, which the row may not be alone in breaking; `some` the laws one
+    // PostgreSQL object discharges, at least one of them broken and nothing deciding which. The
+    // import judges no law and reads no row of its own to decide more than grizzle did, so a
+    // `some` or `first` refusal stays under every rule its laws carry. The witness is the key of
+    // the first stated row that breaks a law, or `unreported` for a foreign key and for a law no
+    // stated row breaks as grizzle's host judges it (README "Errors and outcomes"). A law no row of
+    // the law table names still prints its text, and carries no rule. Naming the laws and
+    // explaining the refusal read the committed dictionary and the installed grammar's rows, so
+    // that step has a span of its own, which records the laws it named and their rules.
+    const { refused } = outcome;
+    const refusal = yield* Effect.sync(() => refusalOf(refused, outcome.witness, grammar)).pipe(
+      Effect.tap((built) =>
+        Effect.annotateCurrentSpan({
+          lawsNamed: refused.laws.length,
+          refusedKind: refused.kind,
+          rules: built.rules.join("|"),
+        }),
+      ),
+      Effect.withSpan("import.nameRefusal"),
+    );
+
+    return yield* refusal;
   }
 
   if (outcome.kind === "accepted") {

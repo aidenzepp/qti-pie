@@ -11,9 +11,9 @@
  * Each set is keyed by (kind, flag), kind first, so kind k's row is the 10 cells from k·10,
  * `substring(S FROM k·10 + 1 FOR 10)`: a `bit(10)` laid out as an ancestry is, `fb` leftmost.
  */
-import { Option, Result } from "effect";
-import { closed, idField, roster } from "#pantry/grammar/closed.ts";
-import type { Closed, ClosedRelationError, IdField, Roster } from "#pantry/grammar/closed.ts";
+import { Option } from "effect";
+import { closed, idField, indexed, roster } from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, Indexed, Roster } from "#pantry/grammar/closed.ts";
 
 /**
  * The ancestry flags in code order. A flag's code is its bit's position in the `bit(10)`, the first
@@ -56,6 +56,12 @@ export type KindFlag = readonly [IdField<"kind", string>, IdField<"flag", Flag>]
 export type KindFlagSet = Closed<KindFlag, readonly []>;
 
 /**
+ * A kind × flag set read by kind: `Enters`, which a node's ancestry steps by on every serving path
+ * (`#pantry/model/folds.ts`), and any set a test reads by kind.
+ */
+export type IndexedFlagSet = Indexed<KindFlag, readonly []>;
+
+/**
  * The ancestry grammar over one `NodeKind` roster.
  */
 export interface AncestrySets {
@@ -66,7 +72,7 @@ export interface AncestrySets {
   /**
    * The flags a kind adds to its children's ancestry.
    */
-  readonly enters: KindFlagSet;
+  readonly enters: IndexedFlagSet;
   /**
    * The flags without which a kind may not sit, read in its parent's ancestry. A flag to be absent
    * is `Banned`; a flag to be present is here, since no set of flags to avoid can state it.
@@ -133,38 +139,36 @@ const rowsOf = (
  * @param vocabulary.kinds - The `NodeKind` roster, the sets' first key field.
  * @param vocabulary.interactions - The interaction kinds.
  * @param vocabulary.facets - Each vocabulary's blocks.
- * @returns The three sets, or the first reason one has no constant, as for a kind a block names
- *   that the roster lacks.
+ * @returns The three sets. A kind a block names that the roster lacks is a fault of the rows
+ *   (`faultOf`), which the tests find and grizzle refuses.
  */
 export const generate = (vocabulary: {
   readonly facets: readonly AncestryFacet[];
   readonly interactions: readonly string[];
   readonly kinds: Roster<string>;
-}): Result.Result<AncestrySets, ClosedRelationError> =>
-  Result.gen(function* generateAncestry() {
-    const { facets, interactions } = vocabulary;
-    const key: KindFlag = [
-      idField("kind", vocabulary.kinds),
-      idField("flag", yield* roster("Flag", flags)),
-    ];
-    const set = (name: string, blocks: readonly Block[]) =>
-      closed({ key, name, payload: [], rows: rowsOf(blocks) });
+}): AncestrySets => {
+  const { facets, interactions } = vocabulary;
+  const key: KindFlag = [idField("kind", vocabulary.kinds), idField("flag", roster("Flag", flags))];
+  const set = (name: string, blocks: readonly Block[]) =>
+    closed({ key, name, payload: [], rows: rowsOf(blocks) });
 
-    const enters = yield* set("Enters", [
+  const enters = indexed(
+    set("Enters", [
       { flags: ["int"], kinds: interactions },
       ...facets.flatMap((facet) => facet.entering),
-    ]);
-    const banned = yield* set("Banned", [
-      { flags: interactionBans, kinds: interactions },
-      ...facets.flatMap((facet) => facet.banning),
-    ]);
-    const needs = yield* set(
-      "Needs",
-      facets.flatMap((facet) => facet.needing),
-    );
+    ]),
+  );
+  const banned = set("Banned", [
+    { flags: interactionBans, kinds: interactions },
+    ...facets.flatMap((facet) => facet.banning),
+  ]);
+  const needs = set(
+    "Needs",
+    facets.flatMap((facet) => facet.needing),
+  );
 
-    return { banned, enters, needs };
-  });
+  return { banned, enters, needs };
+};
 
 /**
  * Read a kind's row of a kind × flag set, the `bit(10)` as the host shows it.
@@ -173,7 +177,7 @@ export const generate = (vocabulary: {
  * @param kind - The `NodeKind` handle.
  * @returns The flags the set holds for the kind, none for a kind outside its roster.
  */
-export const rowOf = (set: KindFlagSet, kind: string): Ancestry =>
+export const rowOf = (set: IndexedFlagSet, kind: string): Ancestry =>
   new Set(flags.filter((flag) => Option.isSome(set.lookup({ flag, kind }))));
 
 /**
@@ -196,10 +200,17 @@ export const step = (sets: AncestrySets, parent: Ancestry, kind: string): Ancest
  * banned under: an interaction enters `int` and may not sit inside one, so a ban over the node's
  * own ancestry would refuse every interaction.
  *
- * @param sets - The ancestry grammar.
+ * @param sets - `Banned` and `Needs`, each indexed by its reader: no serving path reads either by
+ *   kind, so the grammar holds them unindexed and a test indexes them itself.
+ * @param sets.banned - `Banned`, indexed.
+ * @param sets.needs - `Needs`, indexed.
  * @param parent - The ancestry the node sits in, its parent's own.
  * @param kind - The node's kind.
  * @returns Whether the node may sit there.
  */
-export const admits = (sets: AncestrySets, parent: Ancestry, kind: string): boolean =>
+export const admits = (
+  sets: { readonly banned: IndexedFlagSet; readonly needs: IndexedFlagSet },
+  parent: Ancestry,
+  kind: string,
+): boolean =>
   rowOf(sets.banned, kind).isDisjointFrom(parent) && rowOf(sets.needs, kind).isSubsetOf(parent);

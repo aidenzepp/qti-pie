@@ -31,8 +31,8 @@ export default defineConfig({
 	logins: [Web, EtlJob],
 	/** Required: the migrations directory, relative to this file. */
 	migrations: "migrations",
-	/** Required: where grizzle migrate and grizzle drift connect, as the role that owns the schemas. */
-	connection: {
+	/** Required: where grizzle migrate and grizzle drift connect, as the role that owns the schemas, built only when they run. */
+	connection: () => ({
 		driver: pgDriver,
 		transport: {
 			kind: "sslRequest",
@@ -48,7 +48,7 @@ export default defineConfig({
 			Effect.mapError((cause) => new CredentialError({ cause }))
 		),
 		connectTimeoutMs: 10_000
-	}
+	})
 })
 ```
 
@@ -64,37 +64,50 @@ export default defineConfig({
   at stage `acquire`.
 - A level reaches the levels below it only by a containment of plain fields into a key, or through a rule over a
   query; any other law over a lower relation is `LevelRefused` when the schema is built. A process over a lower level
-  opens the installation's snapshot, and a refusal by a law above it is `{ kind: "above", level, law }`.
+  serves its login's file, which holds what its programs may meet of the levels above, and a refusal by a law above it
+  is `{ kind: "above", level, law }`.
 - A login owns its workloads: `login(Blog, "web", [AnonBlog, MemberBlog], { workload: [anonReads, memberReads] })`.
   A workload, `workload(schemaOrRole, { name: program })`, is over the login's base, a level of it, or one of its
-  roles, and names queries, ordered queries, ChangeSets and relation keys. An ordered query the application pages is
-  the member `paged(query)`: only its handle (`db.workload.<name>.page`) pages, and DbLayer.make compiles a page
-  template for no other member. Two programs of one name across a login's workloads are refused when the login is
-  built.
+  roles, and names queries, ordered queries, ChangeSets, relation keys and refreshes. An ordered query the application
+  pages is the member `paged(query)`: only its handle (`db.workload.<name>.page`) pages, and generate compiles a page
+  template for no other member. The member `refresh(tables)`, of a nonempty list, refreshes materialized derived tables the role's
+  `refresh` list names: its handle is one Effect, `db.workload.<name>.refresh`, which refreshes them all in one
+  transaction, lower levels first. Two programs of one name across a login's workloads are refused when the login is
+  built. A ChangeSet member whose `insert`, `insertAll`, `delete` or `put` was given its facts as an array takes them
+  with each call, `db.workload.<name>.apply(facts, params)`: under each such member's op (`insert`, which
+  `insertAll`'s members are too, `put` or `delete`) and then its relation's name one array, typed and checked as that
+  member's own facts, as in `apply({ put: { Blob: stated }, delete: { Blob: removed } }, {})`; every other member is
+  `apply(params)`. Two array members of one op and one relation in two strata are refused: merge them into one.
 - `connection` is the migration role's: `driver` (the pg module), `transport` (`kind: "sslRequest"`, `host`, `port`,
   `open`, which returns a new socket, `ca` and `servername`; TLS is always verify-full, the server certificate chaining
   to `ca` and naming `servername`), `database`, `role`, `password` (a Redacted, or an Effect yielding one, evaluated for
   each connection attempt: an RDS IAM token, a secret manager's lookup) and `connectTimeoutMs`, the bound of each
   connection attempt. README's Deploying shows the RDS IAM password with `@aws-sdk/rds-signer`.
 - Never write a credential into the config file: read it where the config runs, as the password Effect does.
-- `generate`, `check` and `names` never read the connection. `migrate` and `drift` refuse a process environment that
+- `connection` is a function: only `migrate` and `drift` call it, so `generate`, `check` and `names` read no cluster
+  setting and no CA file, and `check` runs in CI where no cluster is reachable. `migrate` and `drift` refuse a process environment that
   sets `PGOPTIONS` or `PGREPLICATION`, which node-postgres would send at their session's startup, at the stage
   environment.
 
 ## The loop
 
-1. Edit the schema, its roles and logins in code. A program the application runs on every request belongs in a
-   workload of its login: its access paths earn indexes, and DbLayer.make compiles it once, at startup. `grizzle
-   generate` compiles it the same way for every role of its login first, so a program the layer would refuse fails
-   generate with the same CompileError. DbLayer.make compiles the laws of the relations its workloads name and write
-   alone, so a program outside them that names or writes another relation compiles that relation's laws at its call.
+1. Edit the schema, its roles and logins in code. Every program the application runs belongs in a workload of its
+   login: its access paths earn indexes, and `grizzle generate` compiles it for every role of its login and commits
+   the login's compiled workload as `migrations/<root>/served/<login>.json`, which the application serves
+   (`served<typeof Login>(file, name)`) and compiles nothing. A program that does not compile fails generate with its
+   CompileError, naming the role and the program.
 2. Run `grizzle generate grizzle.config.ts`, declaring what became of every name the schema no longer holds: a
    `--rename <old>=<new>` for each rename and a `--drop <old>` for each drop ([Renames and drops](#renames-and-drops)).
    It prints one line per written file, then each marker to resolve as `<file>:<line>: <kind>: <what to do>`, its
    kind `placeholder` or `confirm`, then each loss to decide as `<file>: data loss: <what it loses>: <what to do>`,
    then `next: resolve the markers, then run grizzle check`. With no change it writes nothing and prints `no changes`,
    unless the derived facts snapshot.json records are out of date or missing: then it writes `snapshot.json` and
-   `manifest.json` again, drafts no folder, and prints `next: commit snapshot.json, then run grizzle check`. A name the previous snapshot
+   `manifest.json` again, drafts no folder, and prints `next: commit snapshot.json, then run grizzle check`. Beside the
+   snapshot it writes `served/<login>.json` for every login of the configuration over the schema: the login's
+   workload compiled under that snapshot, every program for every role it runs on, which is what the application
+   serves. It writes a served file whose text changed, removes the one of a login the configuration no longer lists,
+   prints each, and prints `next: commit the served files, then run grizzle check` when nothing else changed. A login
+   whose workload does not compile refuses generate, naming the login, the role and the program. A name the previous snapshot
    holds that the schema no longer does and no declaration names refuses the draft before anything is written:
    `<name> is dropped but not declared: declare it with --drop <name>, or --rename it`.
 3. Read every drafted SQL file, and resolve each marker:
@@ -117,7 +130,7 @@ export default defineConfig({
    drift check judges what it built.
 5. Run `grizzle check grizzle.config.ts` until it passes. It prints `<schema>: ok (<n> migrations, snapshot
    <fingerprint>)`.
-6. Commit the folder, `snapshot.json` and `manifest.json`.
+6. Commit the folder, `snapshot.json`, `manifest.json` and the `served` directory.
 7. Run `grizzle migrate grizzle.config.ts` from CI or the deploy, where its connection reaches the database. It prints
    `<schema>: applied <n> migrations, now at <fingerprint>` and each folder's files, or `<schema>: up to date at
    <fingerprint>`.
@@ -289,6 +302,10 @@ as PostgreSQL's scanner reads it: whitespace, comments and the case of unquoted 
   `check` says: snapshot.json and manifest.json do not decode as a snapshot, or are the snapshot of another schema;
   restore them from git. They list each installed statement compact on a line of its own, so a review of their diff
   reads each changed statement as one changed line.
+- `served/<login>.json`: a login's workload compiled under the snapshot beside it, which the application serves.
+  `check` compiles every login again and holds each file to it byte for byte: the login's served file differs from
+  what its workload compiles to under snapshot.json (an ungenerated change), naming the login and the first program
+  where they part; run grizzle generate, which writes the served file again.
 - `meta.json`: it records the folder's place in the chain, the renames and drops it was drafted under, and every
   drafted statement of every file in its place, its confirmed groups and data losses among them, which `check` reads
   every reviewed file against. `check` says: meta.json does not decode as a
@@ -327,6 +344,9 @@ schema or workload that does not compile) are `check`'s alone.
 | the schemas or their logins differ from snapshot.json (an ungenerated change) | run grizzle generate |
 | a workload program's access differs from snapshot.json (an ungenerated change) | run grizzle generate |
 | the derived facts snapshot.json records differ from the ones the schemas compile to, or are missing (an ungenerated change) | run grizzle generate, which writes snapshot.json again and drafts no migration |
+| the login's served file differs from what its workload compiles to under snapshot.json (an ungenerated change) | run grizzle generate, which writes the served file again |
+| the login has no served file beside snapshot.json (an ungenerated change) | run grizzle generate, which writes the served file |
+| the served file is of a login the configuration does not list over the schema | run grizzle generate, which removes the served file |
 | the schema or a login's workload does not compile | fix the schema or workload it names, then run grizzle generate |
 | the schema no longer holds a name snapshot.json holds, and no --drop or --rename declares what became of it | run grizzle generate <config> --drop <name>, or --rename <old>=<new> where it was renamed |
 | a roster declares a handle before one that holds a lower code in snapshot.json | append new handles; a roster's order is its codes' order |
@@ -389,7 +409,7 @@ The command line's own refusals, by stage:
 | Stage | Fix |
 | --- | --- |
 | usage | run grizzle --help for the commands |
-| config | fix the configuration file: export default defineConfig({ schemas: [...], logins: [...], migrations: "...", connection: { ... } }) |
+| config | fix the configuration file: export default defineConfig({ schemas: [...], logins: [...], migrations: "...", connection: () => ({ ... }) }) |
 | environment | unset the variable it names in the environment grizzle runs in, then run the command again |
 | filesystem | fix the migrations directory, then run grizzle check |
 | snapshot | restore snapshot.json, manifest.json and the migration folders from git |
@@ -421,12 +441,15 @@ The command line's own refusals, by stage:
   decide which rows an `approximateNearest` read returns and how many; JIT is the owner's too, and on a server built
   with LLVM `jit_above_cost` can make a large statement compile its plan first; and the server's messages come in its
   `lc_messages` language.
-- Pass the committed snapshot to the login's `DbLayer.make`, and open each `Db` through its login:
+- Serve the login's committed workload, pass it to the login's `DbLayer.make`, and open each `Db` through it, all from
+  `@bjornpagen/grizzle/runtime`, importing the login as a type alone, so the application evaluates no schema module:
 
   ```ts
-  import snapshot from "./migrations/blog/snapshot.json" with { type: "json" }
-  export const WebLayer = DbLayer.make({ ...connection, login: Web, snapshot, password, pool, verify })
-  const db = yield* Db.open(Web.roles.member, { token })
+  import webFile from "./migrations/blog/served/web.json" with { type: "json" }
+  import type { Web } from "./schema.ts"
+  export const WebServed = served<typeof Web>(webFile, "web")
+  export const WebLayer = DbLayer.make({ ...connection, login: WebServed, password, pool, verify })
+  const db = yield* Db.open(WebServed.roles.member, { token })
   const feed = yield* db.workload.memberFeed.execute({})
   ```
 
@@ -437,11 +460,12 @@ The command line's own refusals, by stage:
   `{ max, min, idleTimeoutMs }`. grizzle states no number of its own: a `Db` call waits for a session until it gets
   one or is interrupted, and an interrupted statement sends one CancelRequest and destroys its session.
 
-  `DbLayer.make` compiles every program of the login's workloads once, under the snapshot it is given, which it
-  compares with nothing: `grizzle check` finds a program added, renamed or dropped, or whose access paths moved,
-  since the snapshot was generated; run `grizzle generate`. A program edit that moves no access path just takes
-  effect. `Db.open` contacts nothing and checks nothing of the database: grizzle assumes it is the one the snapshot was
-  migrated to, and the request's first call is its first round trip. `token` is required exactly when the role's
+  `DbLayer.make` loads the served file once and compiles nothing; it refuses, at stage `config`, a file of another
+  login than the name `served` was given. `grizzle check` refuses a served file that is not its login's compile under
+  the committed snapshot: a program added, renamed, dropped or edited since the file was generated; run `grizzle
+  generate`. `roleNameOf(WebServed)` is the login's PostgreSQL role, read from the file. `Db.open` contacts nothing and
+  checks nothing of the database: grizzle assumes it is the one the snapshot was migrated to, and the request's first
+  call is its first round trip. `token` is required exactly when the role's
   relations read a context; the layer's `verify` refuses one at the stage `token`, and a claim of a refined field is
   judged by its domain where a statement reads it. `grizzle migrate` judges the database after every apply and when
   nothing is pending, and refuses drift: the login's and the role's settings and privileges exactly the snapshot's,
@@ -453,7 +477,8 @@ The command line's own refusals, by stage:
   applied is a mismatch of its own), so it can watch a production database from CI or a schedule; it connects as the
   migration identity, since the check replays the snapshot into a scratch schema in a transaction it rolls back.
 - Open a `Db` per request or handler: `Db.open` sends nothing, so this costs no round trip.
-- `db.page` takes any safe integer of at least 1 as its size: there is no default and no cap.
+- A paged member's `page` (`db.workload.<name>.page`) takes any safe integer of at least 1 as its size: there is no
+  default and no cap.
 - Every transaction of a `Db` checks the ledger first, in the same round trip, and runs nothing unless the database
   holds its snapshot: while a migration runs, its calls fail with `StaleSnapshot` (reason `Migrating`), and once a
   migration to another snapshot completed, with `StaleSnapshot` (reason `Migrated`). An apply with nothing to write
@@ -472,9 +497,12 @@ The command line's own refusals, by stage:
   `Sqlstate.parse(code)`, which is `undefined` for a code that is no SQLSTATE; and `ApplyOutcome.committed(counts,
   reads)`, `invariantRejected(refused, witness)` and `outsideWorld(relation)` build what `db.apply` answers.
 - A broken rule is an outcome of `db.apply`, never an error. `invariant-rejected` carries `refused`,
-  `{ kind: "every" | "first" | "some", laws }`, whose `laws` are the laws as the schema states them, never empty, such
-  as `[{ kind: "check", relation: "Grant", name: "WithinGrant" }]`: match on them directly, never on a constraint's
-  name. A pattern's law names its field, `{ kind: "pattern", relation, field, patterns }`, each `{ source, flags }`
+  `{ kind: "every" | "first" | "some", laws }`, whose `laws` are never empty, each `{ law, id, by }`: `law` the law as
+  the schema states it, such as `{ kind: "check", relation: "Grant", name: "WithinGrant" }`, which you match on
+  directly, never on a constraint's name; `id` its identity, a LawId, or a GeneratedLawId for a generated field's law;
+  and `by` the installed object that refused it, `{ kind: "constraint", table, name }`, `{ kind: "domain", domain,
+  name }`, `{ kind: "statement" }` for a write statement's refusal, or `{ kind: "notNull", table, column }` for a
+  generated column. A pattern's law names its field, `{ kind: "pattern", relation, field, patterns }`, each `{ source, flags }`
   spelled as that field spells it, every pattern of a `str.and` in order and one law for the field all the same, so two
   fields of one pattern are two laws. `lawsOf(schema)` lists every law a schema states,
   each once, as an outcome names it: each table's primary key, each statement's laws, each contract's, each stored
@@ -554,9 +582,11 @@ The command line's own refusals, by stage:
   `Compute.or(Compute.not(C.has(k…)), φ(C.at(field, k…)))`, or a value there,
   `Compute.cond(C.has(k…), C.at(field, k…), d)`. Every closed read is NULL where a key value is NULL.
 - A `bytes` field, a `Uint8Array`, is written and read back whole and nothing more: never in a key, a rule's side, a
-  filter, a parameter, a `Compute` call, a contract, or a generated or accumulated field. A value holds at most
-  1,073,741,819 bytes (`bytesMaxLength`), PostgreSQL's longest bytea, and is read back in chunks, one round trip
-  still; a write reads back only its SHA-256 digest. grizzle copies a value once, as the call is sent; one changed
+  filter, a parameter, a contract, a generated or accumulated field, or a `Compute` call but `Compute.sha256(x)`, its
+  SHA-256 digest as 64 lowercase hex digits. Store a digest PostgreSQL computes from the bytes, never one the caller
+  sends: `generated(str.regex("^[0-9a-f]{64}$"), Compute.sha256(row.content))`. A value holds at most 1,073,741,819
+  bytes (`bytesMaxLength`), PostgreSQL's longest bytea, and is read back in chunks, one round trip still; a write reads
+  back only its SHA-256 digest. grizzle copies a value once, as the call is sent; one changed
   before then is `bytesChanged`. An attachment whose rows hold one is a statement of its own, so under rows that read
   `.approximateNearest` attach in a second query instead.
 - A call's flight, every byte the driver writes for its one round trip, is at most 1,908,342,784 bytes

@@ -31,8 +31,11 @@
  *
  * Every copy of an attribute into an overlay follows C18 the other way round, as `identity.ts`
  * states it: from `select(Attribute, φ)` into the overlay, beside a key over the same selection
- * whose UNIQUE serves the copy's reverse probe. Every copied text that takes part in a cross-row
- * equality is `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
+ * whose UNIQUE serves the copy's reverse probe, but a `th`'s `id`: it lies inside the ID values
+ * (`namingIdAttributes` of `#pantry/qti/identity.ts`), which the key over the ID-typed attributes
+ * holds to one per element, and the copy back from its {@link TableHeader} meets them at the `th`
+ * kind ({@link namingIdAttributesOf}). Every copied text that takes part in a cross-row equality is
+ * `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
  * (`#pantry/test/oracle.ts` `LawName`) with spaces written as underscores.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_Source | QTI 3.0 information model, §5.135 Source}
@@ -62,23 +65,22 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
-import { namingPattern } from "#pantry/grammar/domains.ts";
 import {
+  AttributeGrammar,
   AttributeModelOf,
-  AttributeSlotOf,
-  GoverningOf,
   NodeKind,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
-import { Attribute, Space } from "#pantry/qti/attributes.ts";
-import { DocumentId, idValuePattern, spacePattern } from "#pantry/qti/identity.ts";
+import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
+import {
+  DocumentId,
+  idValuePattern,
+  namingIdAttributesOf,
+  spacePattern,
+} from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
-
-/**
- * {@link namingPattern} as a `Compute.matches` pattern.
- */
-const naming = Compute.pattern(namingPattern);
+import { cellKinds } from "#pantry/vocab/terms/html.ts";
 
 /**
  * The nil uuid: the start of a header token's owner-axis copy of its cell's table, which every
@@ -90,11 +92,6 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  * The kinds of the media elements, whose `source` children carry `src` (reading 124).
  */
 export const mediaKinds = ["audio", "video"] as const;
-
-/**
- * The kinds of the table cells, whose `headers` reading 126 reads.
- */
-export const cellKinds = ["td", "th"] as const;
 
 /**
  * One element on the way from a table cell an overlay reads up to the table it takes part in,
@@ -212,15 +209,7 @@ const carries = (n: NodeRow, name: "kind" | "src" | "srclang" | "srcset") =>
   n.eq(
     Compute.subset(
       Compute.singleton(
-        AttributeSlotOf.at(
-          "slot",
-          AttributeModelOf.at(
-            "model",
-            n.version,
-            GoverningOf.at("governor", n.version, n.kind, n.governs),
-          ),
-          name,
-        ),
+        AttributeGrammar.at("slot", AttributeModelOf.at("model", n.version, n.governor), name),
       ),
       n.attrs,
     ),
@@ -287,7 +276,7 @@ const headersAttributes = select(Attribute, (a) =>
  * no {@link DocumentId}, and its value domain refuses it alone (spec reading 156).
  */
 const headerIds = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "th"), a.eq(a.name, "id"), Compute.matches(a.lexical, naming)),
+  a.and(a.eq(a.kind, "th"), a.eq(a.name, "id"), Compute.matches(a.lexical, namingPattern)),
 );
 
 /**
@@ -326,16 +315,17 @@ export const tableHeaders = contained(
  * - **CellHeaders:** each cell's `headers` copied into its row, both ways, its table its scope's; its
  *   tokens a family whose concatenation is the value, or none for a value of whitespace alone, each
  *   token a maximal run of no whitespace (`E1_derived`), each holding its cell's table;
- * - **TableHeader:** each `th`'s `id` that is an ID value copied into its row, both ways, its value
- *   its {@link DocumentId}'s, its table its scope's; one row per (table, id) among those in a
- *   table, which an ID held twice in a document already breaks;
+ * - **TableHeader:** each `th`'s `id` that is an ID value copied into its row, both ways, the way
+ *   back an ID value of a `th` at its node, since a `th`'s one ID-typed attribute is its `id`
+ *   (`#pantry/qti/identity.copyback.test.ts`); its value its {@link DocumentId}'s, its table its
+ *   scope's; one row per (table, id) among those in a table, which an ID held twice in a document
+ *   already breaks;
  * - **Reading 126:** a cell's tokens unique, and {@link tableHeaders}.
  */
 export const htmlLawsByName = {
   "DocumentId key": [
     key(on(trackSrclangs, "node")),
     key(on(headersAttributes, "node")),
-    key(on(headerIds, "node")),
     key(on(tabledHeaders, "table", "id")),
   ],
   "E1 derived": [
@@ -372,7 +362,7 @@ export const htmlLawsByName = {
       t.and(Compute.matches(t.token, idValuePattern), t.or(t.eq(t.at, 0n), t.ne(t.before, ""))),
     ),
     contained(on(headerIds, "node", "document"), on(TableHeader, "node", "document")),
-    contained(on(TableHeader, "node"), on(headerIds, "node")),
+    contained(on(TableHeader, "node"), on(namingIdAttributesOf("th"), "node")),
     contained(
       on(TableHeader, "node", "document", "id", "owner"),
       on(DocumentId, "node", "document", "id", "owner"),

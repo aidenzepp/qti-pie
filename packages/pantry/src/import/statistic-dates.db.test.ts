@@ -13,11 +13,11 @@ import { Effect, FileSystem, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The text `usage3`'s first statistic writes, which each case replaces.
@@ -48,7 +48,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("a usage statistic's lastUpdated, refused under one rule", (it) => {
       for (const [lexical, day] of dates) {
         it.effect(`${day ? "accepts" : "refuses"} lastUpdated ${lexical}`, () =>
@@ -76,11 +75,19 @@ describe.skipIf(!hasLease)(
               if (day) {
                 assert.strictEqual(outcome._tag, "Success", lexical);
               } else {
-                assert.isTrue(
-                  outcome._tag === "Failure" &&
-                    outcome.failure instanceof ImportRefused &&
-                    outcome.failure.rule === "attribute-lexical",
-                  `${lexical}: ${outcome._tag === "Failure" ? outcome.failure.message : "accepted"}`,
+                if (outcome._tag !== "Failure") {
+                  assert.fail(`${lexical}: accepted`);
+                }
+
+                const refused = outcome.failure;
+                if (!(refused instanceof ImportRefused)) {
+                  assert.fail(`${lexical}: failed with ${refused.message}`);
+                }
+
+                assert.deepStrictEqual(
+                  [...new Set(refused.rules)],
+                  ["attribute-lexical"],
+                  `${lexical}: ${refused.message}`,
                 );
               }
             }),
