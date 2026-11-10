@@ -22,12 +22,14 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import {
+  Clock,
   ConfigProvider,
   Duration,
   Effect,
   FileSystem,
   Formatter,
   Option,
+  Predicate,
   Redacted,
   Result,
 } from "effect";
@@ -37,8 +39,11 @@ import {
   loginConnection,
   migrationConnection,
   PasswordCommandFailed,
+  PasswordCommandNotRun,
   PasswordCommandSilent,
+  PasswordCommandTimedOut,
 } from "#pantry/db/connection.ts";
+import type { PasswordCommandError } from "#pantry/db/connection.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -101,9 +106,36 @@ const rootConnection = loginConnection.pipe(
 );
 
 /**
+ * The connections a password command case builds: the migration identity's and a login's, each of
+ * which runs the command at each attempt.
+ */
+const commandSides = ["migration", "login"] as const;
+
+/**
+ * Build the connection of one side under the settings provided.
+ *
+ * @param side - The connection.
+ * @returns The connection.
+ */
+const connectionOfSide = (side: (typeof commandSides)[number]) =>
+  ({ login: rootConnection, migration: migrationConnection })[side];
+
+/**
  * The migration identity's password, as `scripts/db.sh migrate` exports it.
  */
 const migrationPassword = "the migration identity's password";
+
+/**
+ * The connect timeout of a connection that runs no password command, in milliseconds: the
+ * network's bound alone.
+ */
+const networkTimeoutMs = 5000;
+
+/**
+ * A password command's bound, in milliseconds, where `GR8DES_PG_PASSWORD_COMMAND_TIMEOUT` is unset
+ * or empty.
+ */
+const defaultCommandTimeoutMs = 60_000;
 
 /**
  * One named variant of a setting: the text the environment holds for it, if any, and the value
@@ -316,6 +348,8 @@ interface Environment {
   GR8DES_PG_HOST?: string;
   GR8DES_PG_MIGRATION_PASSWORD?: string;
   GR8DES_PG_MIGRATION_ROLE?: string;
+  GR8DES_PG_PASSWORD_COMMAND?: string;
+  GR8DES_PG_PASSWORD_COMMAND_TIMEOUT?: string;
   GR8DES_PG_PORT?: string;
   GR8DES_PG_SECRETS?: string;
   GRIZZLE_PG_STATE?: string;
@@ -411,6 +445,113 @@ type CommandReached = "command" | "exited" | "local" | "not run" | "silent";
 const passwordText = (password: DbConnection["password"]) =>
   (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
     Effect.map(Redacted.value),
+  );
+
+/**
+ * A password command that counts its runs in the file beside it and prints which run it is and the
+ * role it was run for.
+ */
+const countingScript =
+  '#!/bin/sh\nruns=$(( $(cat "$0.runs" 2>/dev/null || echo 0) + 1 ))\nprintf \'%s\\n\' "$runs" > "$0.runs"\nprintf \'run %s for %s\' "$runs" "$1"\n';
+
+/**
+ * Password commands that outlive a 1-second bound, by how they take SIGTERM: each writes its
+ * process ID beside it, then waits 30 seconds in a child `sleep`, which shares its process group,
+ * before it would print a password.
+ */
+const lingeringScripts = [
+  {
+    file: "lingering.sh",
+    text: "#!/bin/sh\necho $$ > \"$0.pid\"\nsleep 30\nprintf 'too late'\n",
+    variant: "ends on SIGTERM",
+  },
+  {
+    file: "stubborn.sh",
+    text: "#!/bin/sh\ntrap '' TERM\necho $$ > \"$0.pid\"\nsleep 30\nprintf 'too late'\n",
+    variant: "ignores SIGTERM",
+  },
+] as const;
+
+/**
+ * Read a connection's first attempt: its connect timeout and the password the attempt reads.
+ *
+ * @param connection - The connection.
+ * @param connection.connectTimeoutMs - Its connect timeout.
+ * @param connection.password - Its password.
+ * @returns The connect timeout and the password's text.
+ */
+const firstAttempt = ({ connectTimeoutMs, password }: DbConnection) =>
+  passwordText(password).pipe(Effect.map((text) => ({ connectTimeoutMs, password: text })));
+
+/**
+ * Test whether a value is one of the password command's errors.
+ *
+ * @param cause - The value.
+ * @returns Whether it is an instance of one of their classes.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A guard over a `CredentialError`'s cause, which grizzle types as unknown.
+const isPasswordCommandError = (cause: unknown): cause is PasswordCommandError =>
+  cause instanceof PasswordCommandFailed ||
+  cause instanceof PasswordCommandNotRun ||
+  cause instanceof PasswordCommandSilent ||
+  cause instanceof PasswordCommandTimedOut;
+
+/**
+ * The cause of a connection attempt's failure, which must be grizzle's `CredentialError`.
+ *
+ * @param failure - What the attempt failed with.
+ * @returns The `CredentialError`'s cause where it is a password command's error, else nothing.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A test reads the failure of a `Result` it already narrowed to no type.
+const attemptCause = (failure: unknown): PasswordCommandError | undefined => {
+  assert.strictEqual(
+    Predicate.hasProperty(failure, "_tag") ? failure._tag : undefined,
+    "CredentialError",
+  );
+
+  const cause = Predicate.hasProperty(failure, "cause") ? failure.cause : undefined;
+
+  return isPasswordCommandError(cause) ? cause : undefined;
+};
+
+/**
+ * Assert that a password command's refusal is its own error, whose message, which the command line
+ * prints, names the command, the role and `GR8DES_PG_PASSWORD_COMMAND`, never the local cluster.
+ *
+ * @param refusal - The command's error.
+ * @param command - The command the case set.
+ * @param role - The role the command was run for.
+ */
+const assertReported = (
+  refusal: PasswordCommandError | undefined,
+  command: string,
+  role: string,
+): void => {
+  const message = refusal?.message ?? "";
+
+  assert.include(message, command);
+  assert.include(message, role);
+  assert.include(message, "GR8DES_PG_PASSWORD_COMMAND");
+  assert.notInclude(message, "pnpm pg");
+};
+
+/**
+ * Test whether any process is left in a process group: a signal 0 to the group reaches one.
+ *
+ * @param group - The process group's ID, its leader's process ID.
+ * @returns Whether a process of the group is alive.
+ */
+const groupAlive = (group: number) =>
+  Effect.try({
+    catch: (cause) => cause,
+    try: () => process.kill(-group, 0),
+  }).pipe(
+    Effect.as(true),
+    Effect.catchIf(
+      (cause) => Predicate.hasProperty(cause, "code") && cause.code === "ESRCH",
+      () => Effect.succeed(false),
+    ),
+    Effect.orDie,
   );
 
 layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (it) => {
@@ -510,11 +651,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                     connection.transport.ca,
                     settings.state === "set, with a CA" ? stateCa : homeCa,
                   );
-                  assert.isTrue(
-                    Number.isInteger(connection.connectTimeoutMs) &&
-                      connection.connectTimeoutMs >= 1 &&
-                      connection.connectTimeoutMs <= 2_147_483_647,
-                  );
+                  assert.strictEqual(connection.connectTimeoutMs, networkTimeoutMs);
 
                   const socket = connection.transport.open();
 
@@ -722,7 +859,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
       }),
   );
   it.effect(
-    "runs GR8DES_PG_PASSWORD_COMMAND, never a shell, with the role as its one argument at each connection attempt of either connection, its output trimmed the password, in place of both local passwords, and fails the attempt with CredentialError when it exits otherwise than 0, prints no password or names no executable: every variant, exhausted",
+    "runs GR8DES_PG_PASSWORD_COMMAND, never a shell, with the role as its one argument, its output trimmed the password, in place of both local passwords, with the network's connect timeout plus its own bound, and refuses a run that exits otherwise than 0, whatever it printed, prints no password or names no executable, with the command's own error, whose message names the command, the role and the setting, as the cause of the attempt's CredentialError: every variant, exhausted",
     (ctx) =>
       Effect.gen(function* passwordCommands() {
         const fs = yield* FileSystem.FileSystem;
@@ -746,10 +883,10 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                 "silent",
               ]),
               generator: (source) => ({
-                side: source.draw(element(["migration", "login"] as const)),
+                side: source.draw(element(commandSides)),
                 variant: source.draw(element(commandVariants)),
               }),
-              limit: commandVariants.length * 2,
+              limit: commandVariants.length * commandSides.length,
               literal: Formatter.format,
               oracle: {
                 kind: "specification",
@@ -759,7 +896,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
             },
             ({ side, variant }, c) =>
               Effect.gen(function* oneCase() {
-                const environment: Environment & { GR8DES_PG_PASSWORD_COMMAND?: string } = {
+                const environment: Environment = {
                   GR8DES_PG_MIGRATION_PASSWORD: migrationPassword,
                   GR8DES_PG_SECRETS: scratch.secrets,
                   HOME: scratch.home,
@@ -783,11 +920,8 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                 }
 
                 const provider = ConfigProvider.layer(ConfigProvider.fromUnknown(environment));
-                const password =
-                  side === "migration"
-                    ? (yield* migrationConnection.pipe(Effect.provide(provider))).password
-                    : (yield* rootConnection.pipe(Effect.provide(provider))).password;
-                const read = yield* passwordText(password).pipe(
+                const read = yield* connectionOfSide(side).pipe(
+                  Effect.flatMap(firstAttempt),
                   Effect.result,
                   Effect.provide(provider),
                 );
@@ -796,7 +930,10 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                   c.note("local");
                   assert.deepStrictEqual(
                     read,
-                    Result.succeed(side === "migration" ? migrationPassword : secretsPassword),
+                    Result.succeed({
+                      connectTimeoutMs: networkTimeoutMs,
+                      password: side === "migration" ? migrationPassword : secretsPassword,
+                    }),
                   );
 
                   return;
@@ -806,42 +943,159 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                   c.note("command");
                   assert.deepStrictEqual(
                     read,
-                    Result.succeed(
-                      variant === "printing" ? `password of ${role}` : `spaced password of ${role}`,
-                    ),
+                    Result.succeed({
+                      connectTimeoutMs: networkTimeoutMs + defaultCommandTimeoutMs,
+                      password:
+                        variant === "printing"
+                          ? `password of ${role}`
+                          : `spaced password of ${role}`,
+                    }),
                   );
 
                   return;
                 }
 
                 const failure = Result.isFailure(read) ? read.failure : undefined;
+                const refusal = attemptCause(failure);
 
-                assert.strictEqual(failure?._tag, "CredentialError", variant);
-
-                const cause: unknown = failure?.cause;
                 if (variant === "failing") {
                   c.note("exited");
-                  assert.instanceOf(cause, PasswordCommandFailed);
+                  assert.instanceOf(refusal, PasswordCommandFailed);
                   assert.deepStrictEqual(
-                    cause instanceof PasswordCommandFailed
-                      ? { exitCode: cause.exitCode, role: cause.role }
+                    refusal instanceof PasswordCommandFailed
+                      ? { exitCode: refusal.exitCode, role: refusal.role }
                       : undefined,
                     { exitCode: 3, role },
                   );
-
-                  return;
-                }
-
-                if (variant === "silent") {
+                } else if (variant === "silent") {
                   c.note("silent");
-                  assert.instanceOf(cause, PasswordCommandSilent);
+                  assert.instanceOf(refusal, PasswordCommandSilent);
+                } else {
+                  c.note("not run");
+                  assert.instanceOf(refusal, PasswordCommandNotRun);
+                }
+
+                assertReported(refusal, environment.GR8DES_PG_PASSWORD_COMMAND ?? "", role);
+              }),
+          ),
+        );
+      }),
+  );
+
+  it.effect(
+    "runs the password command at each attempt of the migration identity's connection and of a login's, never when either is built",
+    () =>
+      Effect.gen(function* commandRuns() {
+        const fs = yield* FileSystem.FileSystem;
+        const scratch = yield* scratchFolders;
+        const command = `${scratch.secrets}/counting.sh`;
+
+        yield* fs.writeFileString(command, countingScript);
+        yield* fs.chmod(command, 0o755);
+
+        const provider = ConfigProvider.layer(
+          ConfigProvider.fromUnknown({
+            GR8DES_PG_PASSWORD_COMMAND: command,
+            GR8DES_PG_SECRETS: scratch.secrets,
+            HOME: scratch.home,
+          }),
+        );
+        const runs = fs.readFileString(`${command}.runs`).pipe(
+          Effect.orElseSucceed(() => ""),
+          Effect.map((text) => text.trim()),
+        );
+        const migration = yield* migrationConnection.pipe(Effect.provide(provider));
+
+        assert.strictEqual(yield* runs, "");
+        assert.strictEqual(yield* passwordText(migration.password), "run 1 for grizzle_dev");
+        assert.strictEqual(yield* passwordText(migration.password), "run 2 for grizzle_dev");
+
+        const perAttempt = yield* rootConnection.pipe(Effect.provide(provider));
+
+        assert.strictEqual(yield* runs, "2");
+        assert.strictEqual(yield* passwordText(perAttempt.password), `run 3 for ${loginRole}`);
+        assert.strictEqual(yield* passwordText(perAttempt.password), `run 4 for ${loginRole}`);
+      }),
+  );
+
+  it.effect(
+    "bound a password command's run by GR8DES_PG_PASSWORD_COMMAND_TIMEOUT, 60 seconds where unset or empty, and give both connections the network's 5,000 ms plus that bound, refusing a bound that is not a positive duration or would carry the connect timeout past 2,147,483,647 ms: every variant, exhausted",
+    (ctx) =>
+      Effect.gen(function* commandTimeouts() {
+        const fs = yield* FileSystem.FileSystem;
+        const scratch = yield* scratchFolders;
+        const [, printing] = commandScripts;
+        const command = `${scratch.secrets}/${printing.file}`;
+
+        yield* fs.writeFileString(command, printing.text);
+        yield* fs.chmod(command, 0o755);
+
+        const timeouts = [
+          unset(defaultCommandTimeoutMs),
+          kept("empty", "", defaultCommandTimeoutMs),
+          kept("seconds", "90 seconds", 90_000),
+          kept("a fraction of a millisecond", "1.5 millis", 2),
+          kept("the greatest", "2147478647 millis", 2_147_478_647),
+          refused<number>("past the greatest", "2147478648 millis"),
+          refused<number>("zero", "0 seconds"),
+          refused<number>("infinite", "Infinity"),
+          refused<number>("not a duration", "soon"),
+        ] as const;
+
+        return yield* searched(
+          ctx,
+          exhaust(
+            {
+              box: "every variant of GR8DES_PG_PASSWORD_COMMAND_TIMEOUT, for the migration identity and for the login",
+              caseHang: Duration.seconds(10),
+              coverage: requiredInSpace<"bounded" | "refused">(["bounded", "refused"]),
+              generator: (source) => ({
+                side: source.draw(element(commandSides)),
+                timeout: source.draw(element(timeouts)),
+              }),
+              limit: timeouts.length * commandSides.length,
+              literal: Formatter.format,
+              oracle: {
+                kind: "specification",
+                name: "grizzle's connectTimeoutMs range, 1 to 2,147,483,647",
+              },
+              suite: "db/connection/password-command-timeout",
+            },
+            ({ side, timeout }, c) =>
+              Effect.gen(function* oneCase() {
+                const environment: Environment = {
+                  GR8DES_PG_PASSWORD_COMMAND: command,
+                  GR8DES_PG_SECRETS: scratch.secrets,
+                  HOME: scratch.home,
+                };
+                if (Option.isSome(timeout.text)) {
+                  environment.GR8DES_PG_PASSWORD_COMMAND_TIMEOUT = timeout.text.value;
+                }
+
+                const built = yield* connectionOfSide(side).pipe(
+                  Effect.result,
+                  Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(environment))),
+                );
+
+                if (Option.isNone(timeout.value)) {
+                  c.note("refused");
+
+                  const failure = Result.isFailure(built) ? built.failure : undefined;
+
+                  assert.strictEqual(
+                    Object.getOwnPropertyDescriptor(failure, "_tag")?.value,
+                    "ConfigError",
+                  );
+                  assert.include(String(failure?.message), "GR8DES_PG_PASSWORD_COMMAND_TIMEOUT");
 
                   return;
                 }
 
-                c.note("not run");
-                assert.notInstanceOf(cause, PasswordCommandFailed);
-                assert.notInstanceOf(cause, PasswordCommandSilent);
+                c.note("bounded");
+                assert.strictEqual(
+                  Result.isSuccess(built) ? built.success.connectTimeoutMs : undefined,
+                  networkTimeoutMs + timeout.value.value,
+                );
               }),
           ),
         );
@@ -887,7 +1141,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
               Effect.gen(function* oneCase() {
                 const each = loginsByLevel[at];
                 const role = roleNameOf(each);
-                const environment: Environment & { GR8DES_PG_PASSWORD_COMMAND?: string } = {
+                const environment: Environment = {
                   GR8DES_PG_SECRETS: scratch.secrets,
                   HOME: scratch.home,
                 };
@@ -911,3 +1165,86 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
       }),
   );
 });
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "db/connection.ts, a password command's bound on the live clock",
+  (it) => {
+    it.effect(
+      "stop a password command its bound outlives, killing its process group, SIGKILL after a second where it ignores SIGTERM, and refuse the run with PasswordCommandTimedOut: the first attempt of the migration identity's connection and of a login's, each command, exhausted",
+      (ctx) =>
+        Effect.gen(function* lingeringCommands() {
+          const fs = yield* FileSystem.FileSystem;
+          const scratch = yield* scratchFolders;
+          for (const { file, text } of lingeringScripts) {
+            yield* fs.writeFileString(`${scratch.secrets}/${file}`, text);
+            yield* fs.chmod(`${scratch.secrets}/${file}`, 0o755);
+          }
+
+          return yield* searched(
+            ctx,
+            exhaust(
+              {
+                box: "a command that ends on SIGTERM and one that ignores it, for the migration identity and for the login, under a 1-second bound",
+                caseHang: Duration.seconds(20),
+                coverage: requiredInSpace<(typeof lingeringScripts)[number]["variant"]>([
+                  "ends on SIGTERM",
+                  "ignores SIGTERM",
+                ]),
+                generator: (source) => ({
+                  script: source.draw(element(lingeringScripts)),
+                  side: source.draw(element(commandSides)),
+                }),
+                limit: lingeringScripts.length * commandSides.length,
+                literal: Formatter.format,
+                oracle: {
+                  kind: "specification",
+                  name: "GR8DES_PG_PASSWORD_COMMAND_TIMEOUT, the bound of one run of the command",
+                },
+                suite: "db/connection/password-command-killed",
+              },
+              ({ script, side }, c) =>
+                Effect.gen(function* oneCase() {
+                  const command = `${scratch.secrets}/${script.file}`;
+                  const role = side === "migration" ? "grizzle_dev" : loginRole;
+                  const provider = ConfigProvider.layer(
+                    ConfigProvider.fromUnknown({
+                      GR8DES_PG_PASSWORD_COMMAND: command,
+                      GR8DES_PG_PASSWORD_COMMAND_TIMEOUT: "1 second",
+                      GR8DES_PG_SECRETS: scratch.secrets,
+                      HOME: scratch.home,
+                    }),
+                  );
+                  const started = yield* Clock.currentTimeMillis;
+                  const read = yield* connectionOfSide(side).pipe(
+                    Effect.flatMap(firstAttempt),
+                    Effect.result,
+                    Effect.provide(provider),
+                  );
+                  const elapsed = (yield* Clock.currentTimeMillis) - started;
+                  const failure = Result.isFailure(read) ? read.failure : undefined;
+                  const refusal = attemptCause(failure);
+                  const group = Number((yield* fs.readFileString(`${command}.pid`)).trim());
+
+                  c.note(script.variant);
+                  assert.instanceOf(refusal, PasswordCommandTimedOut);
+                  assert.deepStrictEqual(
+                    refusal instanceof PasswordCommandTimedOut
+                      ? { role: refusal.role, timeout: refusal.timeout }
+                      : undefined,
+                    { role, timeout: "1s" },
+                  );
+                  assertReported(refusal, command, role);
+                  assert.isAtLeast(elapsed, 1000);
+                  assert.isBelow(elapsed, 10_000, "the run waited for the command's 30 seconds");
+                  assert.isFalse(
+                    yield* groupAlive(group),
+                    `process group ${String(group)} lives on`,
+                  );
+                }),
+            ),
+          );
+        }),
+      testTimeoutMs,
+    );
+  },
+);
