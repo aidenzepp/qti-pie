@@ -6,8 +6,11 @@
  *
  * Each case is a package of `#pantry/test/gen/attribute-order.ts`, drawn under its own swarm and
  * imported twice, as read and reordered. The free tier holds the oracle to the same relation
- * (`attribute-order.oracle.test.ts`) and the export's path without the database
- * (`attribute-order.export.test.ts`).
+ * (`attribute-order.oracle.test.ts`, the search that found d31495a8) and the export's path without
+ * the database (`attribute-order.export.test.ts`), so the lease draws only four cases, each under
+ * its own swarm, so each weighs a different corner of the seven corruptions and four orderings:
+ * what only PostgreSQL decides is which of a package's broken laws it names, the order its
+ * checks run in (issues #103 and #104).
  */
 import type { Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -50,8 +53,8 @@ import { hasLease } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
- * How long the search may run: each case imports its package twice and exports what it accepts,
- * a few seconds a case on the lease.
+ * How long the search may run, a hang guard: each case imports its package twice and exports what
+ * it accepts, a few seconds a case on the lease.
  */
 const orderTimeoutMs = 900_000;
 
@@ -402,7 +405,7 @@ describe.skipIf(!hasLease)(
                   kind: "postgresql",
                   name: "import ∘ reorder = import, its rule one of the law oracle's",
                 },
-                runs: 16,
+                runs: 4,
                 shrink: completeShrink,
                 steerEvery: 4,
                 suite: "pantry/test/attribute-order-db",
