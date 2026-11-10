@@ -8,15 +8,24 @@
  */
 import type { Uuid } from "@bjornpagen/grizzle";
 import type { RefusedAbove } from "#pantry/import/above.ts";
-import type { ImportRefused, Rule } from "#pantry/import/refusal.ts";
+import type { ImportRefused, Rule } from "#pantry/import/rules.ts";
 import type { RefusalOrigin } from "#pantry/package/refusal-origin.ts";
 
 /**
- * Why a package was refused, named by the level whose rule it broke.
+ * Why a package was refused, named by the level whose rules it broke.
  *
- * `qti`: the `Qti` schema refused it, under `rule`, one name of pantry's roster (`ImportRule` of
- * `#pantry/import/refusal.ts`, the names the verdict file uses). `above`: a level an app builds
- * above `Qti` refused it, under that level's own `rule`, which pantry's roster does not hold.
+ * `qti`: one of pantry's own levels refused it (`Qti`, or the `QtiQueries` level over it, each
+ * named `Qti`), under `rules`, names of pantry's roster (`ImportRule` of
+ * `#pantry/import/rules.ts`, the names the verdict file uses). `rules` is a set, listed in the
+ * roster's order (`ruleOrder`): the one rule of a refusal made before the database, or every rule
+ * the laws of the database's refusal carry, since under grizzle's `some` and `first` outcomes the
+ * database does not say which law broke; it is empty where the law table holds none of those laws.
+ * `rule` is the first of `rules`, and absent exactly when `rules` is empty.
+ *
+ * `above`: a level an app builds above `Qti` refused it, under that level's own rules, which
+ * pantry's roster does not hold: `rules` the distinct names of the laws it named, in the outcome's
+ * order, and `rule` the first of them.
+ *
  * `detail` says what was refused in one sentence, and `origin` says who refused it: the reader,
  * the container or the codec before any row existed, or the database with the laws it named.
  */
@@ -24,7 +33,8 @@ export type Refusal =
   | {
       readonly kind: "qti";
       readonly level: "Qti";
-      readonly rule: Rule;
+      readonly rule?: Rule;
+      readonly rules: readonly Rule[];
       readonly detail: string;
       readonly origin: typeof RefusalOrigin.Type;
     }
@@ -32,6 +42,7 @@ export type Refusal =
       readonly kind: "above";
       readonly level: string;
       readonly rule: string;
+      readonly rules: readonly [string, ...string[]];
       readonly detail: string;
       readonly origin: typeof RefusalOrigin.Type;
     };
@@ -63,19 +74,33 @@ export type PreviewVerdict =
 
 /**
  * Convert an importer refusal into the {@link Refusal} an app reads: `ImportRefused` into the
- * `qti` case at level `Qti`, `RefusedAbove` into the `above` case at its level, each with its rule,
- * detail and origin unchanged.
+ * `qti` case at level `Qti`, its rules as listed and `rule` the first of them; `RefusedAbove` into
+ * the `above` case at its level, with its rule and rules. Each keeps its detail and origin
+ * unchanged.
  *
  * @param error - The importer's refusal.
  * @returns The refusal as plain data.
  */
-export const refusalOf = (error: ImportRefused | RefusedAbove): Refusal =>
-  error._tag === "ImportRefused"
-    ? { detail: error.detail, kind: "qti", level: "Qti", origin: error.origin, rule: error.rule }
-    : {
-        detail: error.detail,
-        kind: "above",
-        level: error.level,
-        origin: error.origin,
-        rule: error.rule,
-      };
+export const refusalOf = (error: ImportRefused | RefusedAbove): Refusal => {
+  if (error._tag === "RefusedAbove") {
+    return {
+      detail: error.detail,
+      kind: "above",
+      level: error.level,
+      origin: error.origin,
+      rule: error.rule,
+      rules: error.rules,
+    };
+  }
+
+  const refusal = {
+    detail: error.detail,
+    kind: "qti",
+    level: "Qti",
+    origin: error.origin,
+    rules: error.rules,
+  } as const;
+  const [rule] = error.rules;
+
+  return rule === undefined ? refusal : { ...refusal, rule };
+};

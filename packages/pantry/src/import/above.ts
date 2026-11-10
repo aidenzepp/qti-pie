@@ -13,8 +13,9 @@
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import type { Law } from "@bjornpagen/grizzle";
 import { Array as Arr, Formatter, Option, pipe, Schema } from "effect";
-import type { RefusalWitness } from "#pantry/import/refusal.ts";
+import type { RefusalOf, RefusalWitness } from "#pantry/import/refusal.ts";
 import { RefusalOrigin } from "#pantry/package/refusal-origin.ts";
+import { qtiOwnLevels } from "#pantry/qti/schema.ts";
 
 /**
  * A law a level above the schema states, as an `invariant-rejected` outcome names it.
@@ -25,15 +26,17 @@ type AboveLaw = Extract<Law, { readonly kind: "above" }>;
  * The package was refused under a law a level above `Qti` states, so no rule of pantry's roster
  * names it.
  *
- * `level` is the level that states the law and `rule` the law's own name there; `detail` lists
- * every law the refusal named, and `origin` is the database's case, with each law's identity and
- * the level as the laws' one source. Nothing was written: the apply refused the whole package.
+ * `level` is the level that states the laws; `rules` their own names there, each once, in the
+ * outcome's order, and `rule` the first of them; `detail` lists every law the refusal named, and
+ * `origin` is the database's case, with how grizzle decided the laws, each law's text and the level
+ * as the laws' one source. Nothing was written: the apply refused the whole package.
  */
 export class RefusedAbove extends Schema.TaggedError<RefusedAbove>()("RefusedAbove", {
   detail: Schema.String,
   level: Schema.String,
   origin: RefusalOrigin,
   rule: Schema.String,
+  rules: Schema.NonEmptyArray(Schema.String),
 }) {
   /**
    * The level and rule that refused the package, what it named, and the repair.
@@ -44,12 +47,15 @@ export class RefusedAbove extends Schema.TaggedError<RefusedAbove>()("RefusedAbo
 }
 
 /**
- * Test whether a law is one a level above the schema states.
+ * Test whether a law is one a level above the schema states: an `above` law of a level that is
+ * none of pantry's own ({@link qtiOwnLevels}). A law grizzle reports as `above` at `Qti` or at the
+ * `QtiQueries` level over it is `Qti`'s, and the law table names it (decision 499).
  *
  * @param law - The law.
- * @returns Whether it is an `above` law.
+ * @returns Whether it is an `above` law of a level above pantry's own.
  */
-const isAbove = (law: Law): law is AboveLaw => law.kind === "above";
+const isAbove = (law: Law): law is AboveLaw =>
+  law.kind === "above" && !qtiOwnLevels().some(({ name }) => name === law.level);
 
 /**
  * Test whether every law of a refusal is one a level above the schema states.
@@ -78,14 +84,23 @@ const ruleOf = ({ law }: AboveLaw): string =>
  * A set that holds any `Qti` law is left to the law table, whose rule names `Qti`, and so is a set
  * of laws of two levels, since no one level names it; both are none here.
  *
- * @param laws - The outcome's `laws`.
+ * @param refused - The outcome's `refused`, as `refusalOf` of `#pantry/import/refusal.ts` takes
+ *   it: how grizzle decided its laws, and each law as the schema states it.
  * @param witness - Its `witness`, whose kind the refusal's origin keeps.
- * @returns The refusal, named by the level and its first law's own name, or none.
+ * @returns The refusal, named by the level and its laws' own names, or none.
  */
 export const aboveRefusalOf = (
-  laws: Arr.NonEmptyReadonlyArray<Law>,
+  refused: {
+    readonly kind: RefusalOf["kind"];
+    readonly laws: Arr.NonEmptyReadonlyArray<{ readonly law: Law }>;
+  },
   witness: RefusalWitness,
 ): Option.Option<RefusedAbove> => {
+  const laws: Arr.NonEmptyReadonlyArray<Law> = pipe(
+    refused.laws,
+    Arr.map(({ law }) => law),
+  );
+
   if (!allAbove(laws)) {
     return Option.none();
   }
@@ -97,6 +112,7 @@ export const aboveRefusalOf = (
   }
 
   const { level } = first;
+  const rules = pipe(laws, Arr.map(ruleOf), Arr.dedupe);
 
   return Option.some(
     new RefusedAbove({
@@ -104,14 +120,16 @@ export const aboveRefusalOf = (
       level,
       origin: {
         _tag: "Database",
+        kind: refused.kind,
         laws: pipe(
           laws,
-          Arr.map((law) => ({ identity: Formatter.format(law) })),
+          Arr.map((law) => ({ text: Formatter.format(law) })),
         ),
         sources: [`the ${level} level, which states these laws above Qti`],
         witness: witness.kind,
       },
-      rule: ruleOf(first),
+      rule: rules[0],
+      rules,
     }),
   );
 };

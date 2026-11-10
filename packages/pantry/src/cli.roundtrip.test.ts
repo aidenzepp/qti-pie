@@ -77,6 +77,7 @@ describe.skipIf(!hasLease)("cli.roundtrip.test.ts, on the lease", () => {
               rules.some((rule) => rule.startsWith("lom-")),
               `a lom- rule among ${rules.join(", ")}`,
             );
+            assert.strictEqual(error.rule, rules[0], "rule is the first of rules");
             assert.isAbove(error.laws?.length ?? 0, 0, stderr);
             assert.isTrue(
               rules.every((rule) => (error.laws ?? []).some((law) => law.rule === rule)),
