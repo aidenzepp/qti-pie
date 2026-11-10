@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m4-catalog-sign-language" title="Signed ferry notice" adaptive="false" time-dependent="false"
+  xml:lang="en">
+  <qti-item-body>
+    <p data-catalog-idref="ferry-notice">The ferry leaves the harbour at nine and is back before the evening tide.</p>
+  </qti-item-body>
+  <qti-catalog-info>
+    <qti-catalog id="ferry-notice">
+      <qti-card support="sign-language">
+        <qti-card-entry xml:lang="ase" default="true">
+          <qti-html-content>
+            <video controls="controls" width="320" height="180">
+              <source src="sign/ase.mp4" type="video/mp4"/>
+            </video>
+          </qti-html-content>
+        </qti-card-entry>
+        <qti-card-entry xml:lang="bfi">
+          <qti-html-content>
+            <video controls="controls" width="320" height="180">
+              <source src="sign/bfi.mp4" type="video/mp4"/>
+            </video>
+          </qti-html-content>
+        </qti-card-entry>
+      </qti-card>
+      <qti-card support="transcript">
+        <qti-html-content>
+          <p>Written out in full: the harbour ferry departs at nine and returns by dusk.</p>
+        </qti-html-content>
+      </qti-card>
+    </qti-catalog>
+  </qti-catalog-info>
+</qti-assessment-item>

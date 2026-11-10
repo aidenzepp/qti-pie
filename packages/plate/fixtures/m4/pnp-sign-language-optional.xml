@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A hand-written AfA PNP 3.0 profile that assigns sign language in American Sign Language (ase) and names it only in activate-as-option-set, so the candidate may turn it on and it is off at the start of the delivery. -->
+<access-for-all-pnp xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <sign-language xml:lang="ase"/>
+  <activate-as-option-set>
+    <sign-language/>
+  </activate-as-option-set>
+</access-for-all-pnp>
