@@ -77,12 +77,12 @@ export const xsdPart2Html: FetchedSource = {
 
 /**
  * The text rendering of {@link xsdPart2Html}, whose Appendix A the built-in datatypes' facets are
- * read from, pinned as it was read when that suite was written.
+ * read from, as the spec-cache renderer makes it.
  */
 export const xsdPart2Text: Rendering = {
   from: xsdPart2Html.path,
   path: "anyuri-specs/xsd10-2.txt",
-  sha256: "6f6119251e62bb162e228e5f8c57c0ca3d7dc0449b9f58d66c451d3b1dbfd66b",
+  sha256: "13a9dc9a85dc5ce55773a42e2cc45f689692cfa9fee45b29c7ef3cd6291ef090",
 };
 
 /**
