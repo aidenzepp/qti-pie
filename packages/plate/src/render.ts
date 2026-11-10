@@ -22,6 +22,7 @@ import { contentNodes, renderContent, renderItemContent } from "#plate/content/m
 import type { ContentPayload } from "#plate/content/modules.ts";
 import { emitBody, emitNodes, writesMalformedHeading } from "#plate/emit/body.ts";
 import type { AttachCatalog, RenderInteraction } from "#plate/emit/body.ts";
+import type { Node } from "#plate/emit/node.ts";
 import { emitItem, emitStatus, itemPart } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
@@ -35,11 +36,12 @@ import { renderChoice } from "#plate/interactions/choice.ts";
 import { renderExtendedText } from "#plate/interactions/extended-text.ts";
 import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { renderTextEntry } from "#plate/interactions/text-entry.ts";
-import { moduleContent, renderModule } from "#plate/model/interactions.ts";
+import { moduleContent, renderContainer, renderModule } from "#plate/model/interactions.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
 import type { ResponseValue } from "#plate/model/values.ts";
 import { isRedacted, payload, redactItem } from "#plate/payload.ts";
 import type {
+  ContainerPayload,
   EmitState,
   ModulePayload,
   Payload,
@@ -478,17 +480,20 @@ const attachNothing: AttachCatalog = () => Result.succeed([]);
  * with its `modules`, which hands an interaction a module parses to its module's render, its
  * `moduleContent`, which gives that interaction's content through its module, its `content`,
  * which hands a body-placed content element's node to its module's render with the content kit,
- * its `contentNodes`, which gives that node's content, so the emitter reads all four without
- * importing a module, and its `attach`, which answers an element's catalog reference with nothing
- * ({@link attachNothing}).
+ * its `contentNodes`, which gives that node's content, its `containers`, which hands a module's
+ * container and its children's output to the module's container render, so the emitter reads all
+ * five without importing a module, and its `attach`, which answers an element's catalog reference
+ * with nothing ({@link attachNothing}).
  *
  * @param built The render's payload.
  * @param state The render's emit state.
- * @returns The function that renders one interaction or content node through its module.
+ * @returns The function that renders one interaction, container or content node through its module.
  */
 const interactionRenderer = (built: Payload, state: EmitState): RenderInteraction => {
   const renderer: RenderInteraction = Object.assign(shippedRenderer(built, state), {
     attach: attachNothing,
+    containers: (node: ContainerPayload, children: readonly Node[]) =>
+      renderContainer(node, children, built, state),
     content: (node: ContentPayload) =>
       renderContent(node, state, contentKitOf(built, state, renderer)),
     contentNodes,

@@ -2,7 +2,7 @@
  * Test-level Rubric Block (S-5, T-13), a stub module: the test model dispatches each
  * `qti-rubric-block` to its `parse`, which records the mark `qti-rubric-block` the model records
  * for every test feature it does not deliver, and its hooks have no effect, so the verdict, the
- * sequence and the HTML stay what they were. Issue m3e-01 fills the module.
+ * sequence and the HTML stay what they were. Issue m3e-01b fills the module.
  *
  * @module
  */
@@ -11,12 +11,12 @@ import type { TestFeatureModule } from "#plate/test-features/contract.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
 
 /**
- * The Test-level Rubric Block module, a stub until issue m3e-01 lands it.
+ * The Test-level Rubric Block module, a stub until issue m3e-01b lands it.
  */
 export const rubricBlockModule: TestFeatureModule<"qti-rubric-block", never> = stub({
   element: "qti-rubric-block",
   feature: ["S-5", "T-13"],
-  issue: "m3e-01",
+  issue: "m3e-01b",
   key: "qti-rubric-block",
   namespace: qtiNamespace,
 });
