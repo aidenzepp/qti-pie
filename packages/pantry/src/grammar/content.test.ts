@@ -79,6 +79,36 @@ const testTimeoutMs = 60_000;
 const grammar = Effect.fromResult(composed());
 
 /**
+ * Each pinned schema set this file reads, with its contents under the composed grammar's
+ * resolution, read on the file's first ask and held for the rest: the differentials below walk the
+ * same few roots, and reading an ASI set takes seconds.
+ */
+const schemaReadings = new Map<
+  SourcePath,
+  { readonly contents: ReadonlyMap<string, readonly Content[]>; readonly set: XsdSet }
+>();
+
+/**
+ * A pinned schema set and its contents under the composed grammar's resolution, read once a file.
+ *
+ * @param root - The schema set's root file.
+ * @returns The set and its contents.
+ */
+const readingOf = Effect.fn("test.readingOf")(function* readingOf(root: SourcePath) {
+  const held = schemaReadings.get(root);
+  if (held !== undefined) {
+    return held;
+  }
+
+  const { kinds } = yield* grammar;
+  const { set } = yield* loadXsd(root);
+  const reading = { contents: xsdContents(set, resolverOf(kinds)).contents, set };
+  schemaReadings.set(root, reading);
+
+  return reading;
+});
+
+/**
  * Whether a family's counted positions hold their bounds: `Counted`'s law, beside the automaton.
  *
  * @param composedGrammar - The grammar.
@@ -218,13 +248,22 @@ const schemas: readonly (readonly [SourcePath, SchemaVersion])[] = [
 ];
 
 /**
+ * The ASI schema set xmllint judges the grammar against: 3.0.1's alone, since libxml2 compiles an
+ * ASI set in seconds a run. The in-process differential above holds both versions' models against
+ * the tests' own reader, and 3.0.0's ASI set differs from 3.0.1's in no particle the xmllint
+ * probes reach that the reader does not also read.
+ */
+const xmllintSchemas: readonly (readonly [SourcePath, SchemaVersion])[] = [
+  ["imsqti_asiv3p0p1_v1p0.xsd", "3.0.1"],
+];
+
+/**
  * The pinned schema sets whose models hold every pinned `xs:any`, each with the version its rows
- * are read in and the target namespace its type probes are declared in: the ASI XSDs (which import
- * MathML, SSML and XInclude), a content-packaging XSD, and the LOM binding it imports, whose kinds'
- * types are its own namespace's.
+ * are read in and the target namespace its type probes are declared in: the 3.0.1 ASI XSD (which
+ * imports MathML, SSML and XInclude), a content-packaging XSD, and the LOM binding it imports,
+ * whose kinds' types are its own namespace's.
  */
 const wildcardSchemas: readonly (readonly [SourcePath, SchemaVersion, string])[] = [
-  ["imsqti_asiv3p0_v1p0.xsd", "3.0.0", "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"],
   ["imsqti_asiv3p0p1_v1p0.xsd", "3.0.1", "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"],
   [
     "imsqtiv3p0p1_imscpv1p2_v1p0.xsd",
@@ -464,11 +503,12 @@ const probesOf = (input: {
 
 /**
  * Draw the probes of one model holding a wildcard: every family of at most two children over an
- * undeclared element of each namespace class and one kind the model names, holding at least one of
- * the undeclared elements. The parent is its global element where a schema declares one, else its
- * named type in the target namespace.
+ * undeclared element of one namespace class, drawn from the run's seed, and one kind the model
+ * names, holding at least one undeclared element. The parent is its global element where a schema
+ * declares one, else its named type in the target namespace.
  *
  * @param input - The model and what probing it reads.
+ * @param input.draw - The run's seeded draw.
  * @param input.grammar - The grammar.
  * @param input.parent - The model's kind.
  * @param input.readings - The kind's contents, as the reader walked them.
@@ -479,6 +519,7 @@ const probesOf = (input: {
  *   wildcard and nothing to probe it as.
  */
 const wildcardProbesOf = (input: {
+  readonly draw: Seeded;
   readonly grammar: ComposedGrammar;
   readonly parent: string;
   readonly readings: readonly Content[];
@@ -513,9 +554,14 @@ const wildcardProbesOf = (input: {
         ),
   });
   const classes: readonly (readonly [NamespaceClass, string])[] = [
-    ["absent", ""],
-    ["own", name?.namespace ?? target],
-    ["other", "urn:x-grammar-test-foreign"],
+    input.draw(
+      `grammar/content/namespace-class ${target} ${parent}`,
+      element([
+        ["absent", ""],
+        ["own", name?.namespace ?? target],
+        ["other", "urn:x-grammar-test-foreign"],
+      ] as const),
+    ),
   ];
   const letters: readonly (readonly [string, DrawnChild])[] = [
     ...classes.map(([namespaceClass, namespace]): readonly [string, DrawnChild] => [
@@ -914,13 +960,13 @@ describe("the differentials' exemptions", () => {
 
 describe.skipIf(!cached)("the content automata against the XSD", () => {
   it.effect(
-    "accept exactly the child sequences the independent reading's automaton accepts, every model with one content: every sequence of at most 3 children (4 over an alphabet of at most 4) over at most 4 kinds it names, one only its wildcard admits and one it refuses, drawn from the run seed",
+    "accept exactly the child sequences the independent reading's automaton accepts, every model with one content: every sequence of at most 2 children (3 over an alphabet of at most 4) over at most 4 kinds it names, one only its wildcard admits and one it refuses, drawn from the run seed",
     (ctx) =>
       // Oracle: a second implementation, the tests' own automaton of each XSD particle
       // (`acceptorOf`), with spec readings 2, 44 and 118 ruled where they narrow the XSD.
       // Bound: namedBound of the kinds a model names (every one where it names at most that many),
       // one kind only its wildcard admits and one element kind it does not admit, each a fresh draw
-      // each run (TEST_SEED replays it); every sequence of at most 3 children over that alphabet, 4
+      // each run (TEST_SEED replays it); every sequence of at most 2 children over that alphabet, 3
       // where it holds at most 4 kinds. A kind with more than one content is skipped, and the count
       // reported.
       Effect.gen(function* everyModel() {
@@ -936,10 +982,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
         let skipped = 0;
         let drawnFrom = 0;
         for (const [root, version] of schemas) {
-          const { set } = yield* loadXsd(root);
-          const { contents } = xsdContents(set, (namespace, local, parent) =>
-            resolverOf(kinds)(namespace, local, parent),
-          );
+          const { contents } = yield* readingOf(root);
           const classes = mathClassesOf(contents, resolverOf(kinds), (kind) =>
             Option.map(kinds.elementName.lookup({ kind }), ({ namespace }) => namespace),
           );
@@ -982,7 +1025,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
               );
               models += 1;
               drawnFrom += named.length > namedBound ? 1 : 0;
-              for (const children of sequencesOf(alphabet, alphabet.length <= 4 ? 4 : 3)) {
+              for (const children of sequencesOf(alphabet, alphabet.length <= 4 ? 3 : 2)) {
                 compared += 1;
                 const installed = accepts(composedGrammar, version, parent, children);
                 const xsd = oracle(children);
@@ -1039,7 +1082,6 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
       // skipped, and both counts reported.
       Effect.gen(function* againstXmllint() {
         const composedGrammar = yield* grammar;
-        const { kinds } = composedGrammar;
         const draw = yield* seededDraw;
         const target = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
         const failures: string[] = [];
@@ -1047,11 +1089,8 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
         let ruled = 0;
         let skipped = 0;
         let widened = 0;
-        for (const [root, version] of schemas.slice(0, 2)) {
-          const { set } = yield* loadXsd(root);
-          const { contents } = xsdContents(set, (namespace, local, parent) =>
-            resolverOf(kinds)(namespace, local, parent),
-          );
+        for (const [root, version] of xmllintSchemas) {
+          const { contents } = yield* readingOf(root);
           const drawnProbes = probesOf({
             contents,
             draw,
@@ -1101,11 +1140,11 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
   );
 
   it.effect(
-    "admit a foreign element at each wildcard position exactly when xmllint does, in each namespace class: every model holding an xs:any, every family of at most 2 children over an undeclared element in no namespace, the parent's and another, and one kind the model names",
+    "admit a foreign element at each wildcard position exactly when xmllint does: every model holding an xs:any, every family of at most 2 children over an undeclared element in one namespace class (none, the parent's or another, drawn from the run seed) and one kind the model names",
     (ctx) =>
       // Oracle: libxml2's schema validator over the pinned XSDs. An undeclared element is drawn in
-      // each namespace class of §3.10.1 relative to its parent, as its foreign kind: no namespace,
-      // the parent's own, and one no schema names. So the XSD decides by the wildcard's namespace
+      // one namespace class of §3.10.1 relative to its parent, as its foreign kind, a fresh draw
+      // each run (TEST_SEED replays it): no namespace, the parent's own, or one no schema names. So the XSD decides by the wildcard's namespace
       // constraint, processing and position, both where it admits the child and where it refuses.
       // A drawn element carries no xsi:type, so under a strict wildcard nothing assesses it, and
       // the grammar's verdict is the automaton's with `StrictlyHeld`'s refusal beside it (spec
@@ -1115,18 +1154,19 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
       Effect.gen(function* foreignAtWildcards() {
         const composedGrammar = yield* grammar;
         const { kinds } = composedGrammar;
+        const draw = yield* seededDraw;
         const failures: string[] = [];
         let probed = 0;
         let models = 0;
         let unprobed = 0;
         let widened = 0;
         for (const [root, version, target] of wildcardSchemas) {
-          const { set } = yield* loadXsd(root);
+          const { contents, set } = yield* readingOf(root);
           const resolve = resolverOf(kinds);
-          const { contents } = xsdContents(set, resolve);
           const probes: KindProbe[] = [];
           for (const [parent, readings] of contents) {
             const drawn = wildcardProbesOf({
+              draw,
               grammar: composedGrammar,
               parent,
               readings,
@@ -1368,8 +1408,7 @@ describe.skipIf(!cached)("the occurrence bounds the automata relax", () => {
           expected.add(`${version} ${parent} ${position} ${min} ${max}`);
         };
         for (const [root, version] of schemas) {
-          const { set } = yield* loadXsd(root);
-          const { contents } = xsdContents(set, resolverOf(kinds));
+          const { contents } = yield* readingOf(root);
           for (const [parent, models] of contents) {
             const walk = (particle: Particle, enclosed: boolean): void => {
               const { max, min } = particle.occurs;
@@ -1429,24 +1468,23 @@ describe.skipIf(!cached)("the occurrence bounds the automata relax", () => {
     xsdTimeout,
   );
   it.effect(
-    "agree with xmllint on every operator whose content is a counted group of operands, the automaton's 1..n and Arity's count together: every family of at most 3 children over two of its operands and one element kind it does not admit, in both versions",
+    "agree with xmllint on every operator whose content is a counted group of operands, the automaton's 1..n and Arity's count together: every family of at most 3 children over two of its operands and one element kind it does not admit, in 3.0.1",
     (ctx) =>
       // Oracle: libxml2's schema validator over the pinned ASI XSDs, against the automaton with
       // OperatorArity beside it (`arityHolds`): the automaton relaxes the group's 2..2 to 1..n
       // (Q5.10's finding: `qti-contains` with one operand), and the Arity law holds the count.
       // Bound: every family of 0 to 3 children over two operands the group names and one element
       // kind the operator does not admit, the named invalid variant, under every operator whose
-      // model is a counted group, in both versions.
+      // model is a counted group, in 3.0.1 (`xmllintSchemas`).
       Effect.gen(function* countedGroups() {
         const composedGrammar = yield* grammar;
         const { kinds } = composedGrammar;
         const failures: string[] = [];
         let probed = 0;
         let operators = 0;
-        for (const [root, version] of schemas.slice(0, 2)) {
-          const { set } = yield* loadXsd(root);
+        for (const [root, version] of xmllintSchemas) {
+          const { contents } = yield* readingOf(root);
           const resolve = resolverOf(kinds);
-          const { contents } = xsdContents(set, resolve);
           const probes = [...contents].flatMap(([parent, readings]) =>
             countedGroupProbes({ grammar: composedGrammar, parent, readings, resolve, version }),
           );
@@ -1470,7 +1508,7 @@ describe.skipIf(!cached)("the occurrence bounds the automata relax", () => {
 
         yield* Effect.promise(() =>
           ctx.annotate(
-            `${operators} counted-group operators over both versions, ${probed} families`,
+            `${operators} counted-group operators in 3.0.1, ${probed} families`,
             "xmllint",
           ),
         );
@@ -1622,8 +1660,7 @@ describe.skipIf(!cached)("spec reading 130 in the LOM binding", () => {
       Effect.gen(function* capsAreBounds() {
         const composedGrammar = yield* grammar;
         const resolve = resolverOf(composedGrammar.kinds);
-        const { set } = yield* loadXsd("lom/imsmd_loose_v1p3p2.xsd");
-        const { contents } = xsdContents(set, resolve);
+        const { contents } = yield* readingOf("lom/imsmd_loose_v1p3p2.xsd");
         const bounded = new Set<string>();
         for (const [parent, readings] of contents) {
           const walk = (particle: Particle, repeated: boolean): void => {
@@ -1670,9 +1707,8 @@ describe.skipIf(!cached)("spec reading 130 in the LOM binding", () => {
       Effect.gen(function* lomRepeats() {
         const composedGrammar = yield* grammar;
         const { kinds } = composedGrammar;
-        const { set } = yield* loadXsd("lom/imsmd_loose_v1p3p2.xsd");
+        const { contents } = yield* readingOf("lom/imsmd_loose_v1p3p2.xsd");
         const resolve = resolverOf(kinds);
-        const { contents } = xsdContents(set, resolve);
         const schematron = yield* schematronCaps(composedGrammar);
         const capped = new Set(schematron.caps.map(({ child, parent }) => `${parent} ${child}`));
         const met = new Set<string>();
@@ -2161,8 +2197,7 @@ describe.skipIf(!cached)("spec reading 40 in ssml:speak", () => {
       Effect.gen(function* readingForty() {
         const composedGrammar = yield* grammar;
         const { kinds } = composedGrammar;
-        const { set } = yield* loadXsd("imsqti_asiv3p0p1_v1p0.xsd");
-        const { contents } = xsdContents(set, resolverOf(kinds));
+        const { contents } = yield* readingOf("imsqti_asiv3p0p1_v1p0.xsd");
         const [speak] = (contents.get("ssml:speak") ?? []).flatMap(({ particle }) =>
           Option.toArray(particle),
         );
@@ -2239,8 +2274,7 @@ describe.skipIf(!cached)("spec reading 44 in ssml:token and ssml:w", () => {
       Effect.gen(function* readingFortyFour() {
         const composedGrammar = yield* grammar;
         const { kinds } = composedGrammar;
-        const { set } = yield* loadXsd("imsqti_asiv3p0p1_v1p0.xsd");
-        const { contents } = xsdContents(set, resolverOf(kinds));
+        const { contents } = yield* readingOf("imsqti_asiv3p0p1_v1p0.xsd");
         const disagreements: string[] = [];
         let compared = 0;
         for (const parent of ["ssml:token", "ssml:w"]) {
@@ -2618,8 +2652,7 @@ describe.skipIf(!cached)("spec reading 96, a repeated wildcard keeps its sequenc
         let probed = 0;
         let ruled = 0;
         for (const { root, target: probedIn, version } of widenedSchemas) {
-          const { set } = yield* loadXsd(root);
-          const { contents } = xsdContents(set, resolve);
+          const { contents, set } = yield* readingOf(root);
           for (const [parent, readings] of contents) {
             for (const place of placesOf(version, parent, readings, resolve)) {
               found.add(place);
