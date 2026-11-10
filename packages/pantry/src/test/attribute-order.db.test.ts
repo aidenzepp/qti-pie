@@ -58,11 +58,15 @@ const orderTimeoutMs = 900_000;
 /**
  * What an import of a package did: accepted under the id it answered, or refused under rules, with
  * each law the database named, by its installed name where it has one and its text where it has
- * none (none for a reader's refusal).
+ * none (none for a reader's refusal), and whether every rule it names is decided broken. A refusal
+ * before the database names its one rule; grizzle decides each law of an `every` or `first`
+ * refusal broken, and of a `some` refusal only that one or more of its laws broke
+ * (`#pantry/package/refusal-origin.ts`, `RefusedKind`).
  */
 type Imported =
   | { readonly id: Uuid; readonly verdict: "accepted" }
   | {
+      readonly decided: boolean;
       readonly laws: readonly string[];
       readonly rules: readonly string[];
       readonly verdict: "refused";
@@ -89,6 +93,7 @@ const importedOf = Effect.fn("test.attributeOrder.imported")(function* importedO
   }
 
   return {
+    decided: refused.origin._tag !== "Database" || refused.origin.kind !== "some",
     laws:
       refused.origin._tag === "Database"
         ? refused.origin.laws.map(({ installed, text }) => installed ?? text)
@@ -108,6 +113,26 @@ const verdictOf = (imported: Imported) =>
   imported.verdict === "accepted"
     ? { verdict: imported.verdict }
     : { rules: imported.rules, verdict: imported.verdict };
+
+/**
+ * Whether the oracle predicts the rules a refusal names, compared as sets. The refusal names a
+ * rule, and its most specific, the first it lists, is one the oracle predicts. A decided refusal's
+ * rules are moreover a subset of the oracle's: it names no rule the oracle does not predict. A
+ * `some` refusal is held to no more, since grizzle decides only that one or more of its laws broke,
+ * so its other laws' rules may be rules the package does not break.
+ *
+ * @param imported - What the import did, refused.
+ * @param predicted - What the oracle predicts.
+ * @returns Whether the oracle refuses the package under rules that hold the refusal's.
+ */
+const predictsRules = (
+  imported: Extract<Imported, { readonly verdict: "refused" }>,
+  predicted: OracleVerdict,
+): boolean =>
+  predicted.kind === "refused" &&
+  imported.rules[0] !== undefined &&
+  predicted.rules.has(imported.rules[0]) &&
+  (!imported.decided || imported.rules.every((rule) => predicted.rules.has(rule)));
 
 /**
  * The attributes the grammar types as QTI's identifier class, the value domain an `identifier` base
@@ -421,9 +446,7 @@ describe.skipIf(!hasLease)(
 
                     // Issue #103: the keyed family of exceptions to the oracle (knownException).
                     assert.isTrue(
-                      (predicted.kind === "refused" &&
-                        after.rules.some((rule) => predicted.rules.has(rule))) ||
-                        knownException(after, predicted, entries),
+                      predictsRules(after, predicted) || knownException(after, predicted, entries),
                       `refused under ${after.rules.join(", ")}, and the oracle predicts ${JSON.stringify(predicted.kind === "refused" ? [...predicted.rules] : predicted.kind)}`,
                     );
                   } else {
