@@ -25,7 +25,7 @@ const output = fileURLToPath(new URL("../src/model/blocks.generated.json", impor
 /**
  * Where the Recommendation is cached: {@link xsdPart2CachePath} under `HOME`.
  */
-const xsdPart2Path = Config.String("HOME").pipe(
+const xsdPart2Path = Config.NonEmptyString("HOME").pipe(
   Config.map((home) => `${home}/${xsdPart2CachePath}`),
 );
 
