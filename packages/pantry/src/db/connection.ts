@@ -19,6 +19,7 @@ import {
   Layer,
   Option,
   Redacted,
+  Ref,
   Schema,
   Stream,
 } from "effect";
@@ -45,8 +46,9 @@ export class ClusterConfigError extends Schema.TaggedError<ClusterConfigError>()
 
 /**
  * The password command `GR8DES_PG_PASSWORD_COMMAND` names exited with a code other than 0 for a
- * role, so it gave no password, whatever it printed: the cause of a connection attempt's
- * `CredentialError`.
+ * role, so it gave no password, whatever it printed: the failure of building the runtime's login
+ * connection, which runs it before any attempt (`primedLoginConnection`), and the cause of a
+ * connection attempt's `CredentialError`.
  *
  * Its message names the command, the role and the exit code, and says how to see why, as
  * {@link ClusterConfigError}'s names its remedy: the command line prints a failure's message.
@@ -414,6 +416,40 @@ const attemptPassword = (
   );
 
 /**
+ * Run the password command for a login's role before any connection attempt, and give the
+ * password Effect its attempts read: the password that run printed, for the first attempt, then a
+ * run of its own for each later one.
+ *
+ * The run here is the one the caller waits for, outside every attempt, so a sign-in it runs by
+ * hand is bounded by the command's bound alone, and its failure is this package's own error as it
+ * is. In an attempt the same failure is only the cause of grizzle's failure at stage `acquire`,
+ * whose message says no more than that the password Effect failed. Each later attempt runs the
+ * command again, so a credential that expires, such as an RDS IAM token, is new for each session.
+ *
+ * @param passwordCommand - The command and its bound.
+ * @param role - The login's PostgreSQL role.
+ * @returns The password Effect, once the first run has given a password; fails as
+ *   {@link runPasswordCommand} does.
+ */
+const primedPassword = Effect.fnUntraced(function* primedPassword(
+  passwordCommand: PasswordCommand,
+  role: string,
+) {
+  const first = yield* runPasswordCommand(passwordCommand, role);
+  const waiting = yield* Ref.make(Option.some(first));
+  const password: DbConnection["password"] = Ref.getAndSet(waiting, Option.none()).pipe(
+    Effect.flatMap((primed) =>
+      Option.match(primed, {
+        onNone: () => attemptPassword(passwordCommand, role),
+        onSome: (printed) => Effect.succeed(printed),
+      }),
+    ),
+  );
+
+  return password;
+});
+
+/**
  * Read the cluster's settings and its CA, as every connection to it is built from them: TCP to the
  * host and port, verify-full TLS against the CA file, whose server certificate must name the host
  * (grizzle's development CA names `localhost`, `127.0.0.1` and `::1`), node-postgres as the driver,
@@ -515,7 +551,8 @@ const filePassword = (
  *
  * A missing password, a password file absent or a command that fails, is not found here: it fails
  * each connection attempt with grizzle's `CredentialError`, whose cause is the command's
- * {@link PasswordCommandError}.
+ * {@link PasswordCommandError}. {@link primedLoginConnection} finds a failing command before any
+ * attempt.
  *
  * It fails with Effect's `ConfigError` for a missing or malformed setting, before any file is read,
  * and with a {@link ClusterConfigError} when the CA is unreadable.
@@ -534,6 +571,31 @@ export const loginConnection = Effect.gen(function* loginConnection() {
     }),
   });
 }).pipe(Effect.withSpan("db.loginConnection"));
+
+/**
+ * Read the cluster's settings and its CA, and give from them the Effect that builds a login's
+ * connection as {@link loginConnection} does, except where `GR8DES_PG_PASSWORD_COMMAND` names a
+ * command: building the connection then runs it once for the login's role, before any attempt,
+ * and fails with its {@link PasswordCommandError}; the first attempt reads that run's password,
+ * and each later attempt runs the command again ({@link primedPassword}). `AuthorAppLayer`
+ * (src/db/layer.ts) builds the runtime's connection with it, so a failing command fails the
+ * layer's build with the command's own error, whose message the command line prints.
+ *
+ * It fails as {@link loginConnection} does.
+ */
+export const primedLoginConnection = Effect.gen(function* primedLoginConnection() {
+  const fs = yield* FileSystem.FileSystem;
+  const { command, connection, secrets } = yield* clusterConnection;
+
+  return (role: string): Effect.Effect<DbConnection, PasswordCommandError> =>
+    Option.match(command, {
+      onNone: () => Effect.succeed({ ...connection, password: filePassword(fs, secrets, role) }),
+      onSome: (passwordCommand) =>
+        primedPassword(passwordCommand, role).pipe(
+          Effect.map((password): DbConnection => ({ ...connection, password })),
+        ),
+    });
+}).pipe(Effect.withSpan("db.primedLoginConnection"));
 
 /**
  * The services building either connection reads: the file system its CA and the logins' password

@@ -42,6 +42,7 @@ import {
   PasswordCommandNotRun,
   PasswordCommandSilent,
   PasswordCommandTimedOut,
+  primedLoginConnection,
 } from "#pantry/db/connection.ts";
 import type { PasswordCommandError } from "#pantry/db/connection.ts";
 
@@ -106,10 +107,19 @@ const rootConnection = loginConnection.pipe(
 );
 
 /**
- * The connections a password command case builds: the migration identity's and a login's, each of
- * which runs the command at each attempt.
+ * The root login's connection as the runtime's layer builds it, running the password command
+ * before any attempt where one is set.
  */
-const commandSides = ["migration", "login"] as const;
+const primedRootConnection = primedLoginConnection.pipe(
+  Effect.flatMap((connectionOf) => connectionOf(roleNameOf(rootLogin))),
+);
+
+/**
+ * The connections a password command case builds: the migration identity's, a login's, which runs
+ * the command at each attempt, and a login's as the runtime's layer builds it, which runs it once
+ * before the first.
+ */
+const commandSides = ["migration", "login", "primed login"] as const;
 
 /**
  * Build the connection of one side under the settings provided.
@@ -118,7 +128,11 @@ const commandSides = ["migration", "login"] as const;
  * @returns The connection.
  */
 const connectionOfSide = (side: (typeof commandSides)[number]) =>
-  ({ login: rootConnection, migration: migrationConnection })[side];
+  ({
+    login: rootConnection,
+    migration: migrationConnection,
+    "primed login": primedRootConnection,
+  })[side];
 
 /**
  * The migration identity's password, as `scripts/db.sh migrate` exports it.
@@ -859,7 +873,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
       }),
   );
   it.effect(
-    "runs GR8DES_PG_PASSWORD_COMMAND, never a shell, with the role as its one argument, its output trimmed the password, in place of both local passwords, with the network's connect timeout plus its own bound, and refuses a run that exits otherwise than 0, whatever it printed, prints no password or names no executable, with the command's own error, whose message names the command, the role and the setting, as the cause of the attempt's CredentialError: every variant, exhausted",
+    "runs GR8DES_PG_PASSWORD_COMMAND, never a shell, with the role as its one argument, its output trimmed the password, in place of both local passwords, with the network's connect timeout plus its own bound, and refuses a run that exits otherwise than 0, whatever it printed, prints no password or names no executable, with the command's own error, whose message names the command, the role and the setting: the cause of the attempt's CredentialError, or the failure of the runtime's build, which runs it first; every variant, exhausted",
     (ctx) =>
       Effect.gen(function* passwordCommands() {
         const fs = yield* FileSystem.FileSystem;
@@ -873,7 +887,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
           ctx,
           exhaust(
             {
-              box: "every variant of the password command, for the migration identity and for the login",
+              box: "every variant of the password command, for the migration identity, the login and the runtime's login",
               caseHang: Duration.seconds(10),
               coverage: requiredInSpace<CommandReached>([
                 "command",
@@ -956,7 +970,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                 }
 
                 const failure = Result.isFailure(read) ? read.failure : undefined;
-                const refusal = attemptCause(failure);
+                const refusal = side === "primed login" ? failure : attemptCause(failure);
 
                 if (variant === "failing") {
                   c.note("exited");
@@ -983,9 +997,9 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
   );
 
   it.effect(
-    "runs the password command at each attempt of the migration identity's connection and of a login's, never when either is built",
+    "runs the password command at each attempt of the migration identity's connection and of a login's, never when either is built, and once when the runtime's login connection is built, before any attempt, whose first attempt reads that run's password and each later one a run of its own",
     () =>
-      Effect.gen(function* commandRuns() {
+      Effect.gen(function* primedRuns() {
         const fs = yield* FileSystem.FileSystem;
         const scratch = yield* scratchFolders;
         const command = `${scratch.secrets}/counting.sh`;
@@ -1015,6 +1029,14 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
         assert.strictEqual(yield* runs, "2");
         assert.strictEqual(yield* passwordText(perAttempt.password), `run 3 for ${loginRole}`);
         assert.strictEqual(yield* passwordText(perAttempt.password), `run 4 for ${loginRole}`);
+
+        const primed = yield* primedRootConnection.pipe(Effect.provide(provider));
+
+        assert.strictEqual(yield* runs, "5");
+        assert.strictEqual(yield* passwordText(primed.password), `run 5 for ${loginRole}`);
+        assert.strictEqual(yield* runs, "5");
+        assert.strictEqual(yield* passwordText(primed.password), `run 6 for ${loginRole}`);
+        assert.strictEqual(yield* passwordText(primed.password), `run 7 for ${loginRole}`);
       }),
   );
 
@@ -1046,7 +1068,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
           ctx,
           exhaust(
             {
-              box: "every variant of GR8DES_PG_PASSWORD_COMMAND_TIMEOUT, for the migration identity and for the login",
+              box: "every variant of GR8DES_PG_PASSWORD_COMMAND_TIMEOUT, for the migration identity, the login and the runtime's login",
               caseHang: Duration.seconds(10),
               coverage: requiredInSpace<"bounded" | "refused">(["bounded", "refused"]),
               generator: (source) => ({
@@ -1170,7 +1192,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
   "db/connection.ts, a password command's bound on the live clock",
   (it) => {
     it.effect(
-      "stop a password command its bound outlives, killing its process group, SIGKILL after a second where it ignores SIGTERM, and refuse the run with PasswordCommandTimedOut: the first attempt of the migration identity's connection and of a login's, each command, exhausted",
+      "stop a password command its bound outlives, killing its process group, SIGKILL after a second where it ignores SIGTERM, and refuse the run with PasswordCommandTimedOut: the first attempt of the migration identity's connection and of a login's, and the build of the runtime's login connection, each command, exhausted",
       (ctx) =>
         Effect.gen(function* lingeringCommands() {
           const fs = yield* FileSystem.FileSystem;
@@ -1184,7 +1206,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             ctx,
             exhaust(
               {
-                box: "a command that ends on SIGTERM and one that ignores it, for the migration identity and for the login, under a 1-second bound",
+                box: "a command that ends on SIGTERM and one that ignores it, for the migration identity, the login and the runtime's login, under a 1-second bound",
                 caseHang: Duration.seconds(20),
                 coverage: requiredInSpace<(typeof lingeringScripts)[number]["variant"]>([
                   "ends on SIGTERM",
@@ -1222,7 +1244,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   );
                   const elapsed = (yield* Clock.currentTimeMillis) - started;
                   const failure = Result.isFailure(read) ? read.failure : undefined;
-                  const refusal = attemptCause(failure);
+                  const refusal = side === "primed login" ? failure : attemptCause(failure);
                   const group = Number((yield* fs.readFileString(`${command}.pid`)).trim());
 
                   c.note(script.variant);
