@@ -296,6 +296,23 @@ export interface RedactKit {
    */
   readonly formName: (response: string) => string;
   /**
+   * Give the value the redaction held for the interaction's node under an identifier its module's
+   * `variables` named: the record's template value of that identifier, read from the redacted
+   * item's `held` under the node's response, so the module writes it into the configuration it
+   * emits. None when the module named no such identifier, the record held no template value by
+   * that name, or the item was redacted with no record and its template processing runs. The
+   * operator's ruling: "Expose template-variable and context-variable values to configuration,
+   * through RedactKit, with a node-scoped exemption. Never expose response or outcome correct
+   * values, mappings, or anything response processing withholds." Context variables are not in a
+   * record today; issue `m3f-08` brings them, and their values come through this same member when
+   * it lands.
+   *
+   * @param identifier The template or context variable's identifier, one the module's `variables`
+   *   names.
+   * @returns The held value, when there is one.
+   */
+  readonly held: (identifier: string) => Option.Option<Value>;
+  /**
    * The host's facts, the view's `host` as the author passed it to `render`, the empty record when
    * the author passed none: what only the host knows, such as the URL of a script it serves
    * (`HostFacts` in `#plate/pci/host.ts`). A module reads only its own member and writes what its
@@ -657,6 +674,24 @@ export interface InteractionModule<
     input: Value | Malformed,
     configuration: Configuration,
   ) => readonly ValidationMessage[];
+  /**
+   * The identifiers of the template variables and context variables the interaction's
+   * configuration is bound to, which the redaction holds for its node alone: `redactItem` in
+   * `#plate/payload.ts` reads it through `variablesOf` (`#plate/model/interactions.ts`), copies
+   * the record's template value of each identifier it names into the redacted item's `held` under
+   * the node's response, and `RedactKit.held` hands the module each one back at its `redact`. The
+   * operator's ruling: "Expose template-variable and context-variable values to configuration,
+   * through RedactKit, with a node-scoped exemption. Never expose response or outcome correct
+   * values, mappings, or anything response processing withholds." An identifier that names no
+   * template value of the record is not held, whatever else holds a value by that name. Absent
+   * means the interaction binds no variable, as every shipped kind and every stub does. Context
+   * variables are not in a record today; issue `m3f-08` brings them, and their values reach
+   * `held` through this same member when it lands.
+   *
+   * @param interaction The model node.
+   * @returns The identifiers, in no particular order.
+   */
+  readonly variables?: (interaction: I) => readonly string[];
 }
 
 /**

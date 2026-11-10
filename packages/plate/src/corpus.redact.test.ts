@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Exit, Option, Predicate, Result, Schema } from "effect";
 import { RedactedSchema } from "#plate/codec/redacted.ts";
 import { bodyModuleFor } from "#plate/content/modules.ts";
@@ -8,11 +8,14 @@ import { walk as walkSource } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import { configure, encodeRedacted, open, redact } from "#plate/index.ts";
 import type { Accepted, Configuration, RedactedJson } from "#plate/index.ts";
+import { h } from "#plate/emit/node.ts";
+import type { Node } from "#plate/emit/node.ts";
 import { formatPrinted } from "#plate/engine/format.ts";
 import { integerOf } from "#plate/engine/numbers.ts";
 import { own } from "#plate/engine/refs.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
-import { isStubbed, mapRegions, regionsOf } from "#plate/model/interactions.ts";
+import { isStubbed, mapRegions, regionsOf, variablesOf } from "#plate/model/interactions.ts";
+import type { ModelOf, Modules } from "#plate/model/interactions.ts";
 import type {
   BodyElement,
   BodyNode,
@@ -21,6 +24,7 @@ import type {
   Expression,
   ExtendedTextInteraction,
   InlineChoiceInteraction,
+  Interaction,
   Item,
   PrintedVariable,
   ResponseDeclaration,
@@ -33,7 +37,9 @@ import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import { format } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { templateShows } from "#plate/payload.ts";
-import type { RedactedFields } from "#plate/payload.ts";
+import type { HeldValues, RedactedFields } from "#plate/payload.ts";
+import { parseHtml } from "#plate/test/round-trip.ts";
+import { stubElement, stubKind } from "#plate/test/stub-kind.ts";
 import {
   acceptedOf,
   noRecord,
@@ -456,23 +462,57 @@ const textOfJson = (json: RedactedJson): JsonText => {
 const decodeStrictly = Schema.decodeResult(RedactedSchema, { onExcessProperty: "error" });
 
 /**
- * List the keys of a JSON form, at any depth, that name a hidden field.
+ * The template variables a module's node binds its configuration to, as the sweep asks a table of
+ * modules: `variablesOf` of the table the sweep imported, or of one a control imported afresh
+ * under a mock.
+ */
+type Variables = (interaction: Interaction) => readonly string[];
+
+/**
+ * What the sweep reads of a table of modules: the strict decode of {@link RedactedSchema} as the
+ * table's modules' `payloadSchema` build it, and the template variables each module's node names.
+ * The sweep reads the table it imported ({@link sweepTable}); a control that mocks a module reads
+ * the table it imported afresh under the mock, whose `RedactedSchema` reads the mocked module's
+ * node.
+ */
+interface SweepTable {
+  readonly decode: typeof decodeStrictly;
+  readonly variables: Variables;
+}
+
+/**
+ * The table of modules the sweep imported, as {@link SweepTable}.
+ */
+const sweepTable: SweepTable = { decode: decodeStrictly, variables: variablesOf };
+
+/**
+ * List the keys of a JSON form, at any depth, that name a hidden field. The keys beneath the
+ * form's own `held` are not read: they are the responses and the template variable identifiers a
+ * module's node binds, which an item names as it likes, and the keys of their values; the strings
+ * there are read by {@link leakProblems} like every other string, and the values by
+ * {@link heldProblems}.
  *
  * @param json The JSON form.
  * @returns Each such key, once per occurrence.
  */
-const hiddenKeysOf = (json: RedactedJson): readonly string[] =>
-  textOfJson(json).keys.filter((key) => hiddenKeys.has(key));
+const hiddenKeysOf = (json: RedactedJson): readonly string[] => {
+  const { held, ...outside } = json;
+
+  return [...(held === undefined ? [] : ["held"]), ...textOfJson(outside).keys].filter((key) =>
+    hiddenKeys.has(key),
+  );
+};
 
 /**
  * Check a redacted item's JSON against the allowlist: every key at every depth is a field of
  * {@link RedactedSchema} where it sits, and no key names a hidden field.
  *
  * @param subject The item and its JSON.
+ * @param table The table of modules the JSON is read by; the sweep's by default.
  * @returns Each problem, naming the item; empty when the JSON holds.
  */
-const keyProblems = (subject: Subject): readonly string[] => [
-  ...Result.match(decodeStrictly(subject.json), {
+const keyProblems = (subject: Subject, table: SweepTable = sweepTable): readonly string[] => [
+  ...Result.match(table.decode(subject.json), {
     onFailure: (error) => [
       `${subject.location}: the JSON is not RedactedSchema's form with every key a field: ${error.message}`,
     ],
@@ -505,6 +545,79 @@ const leakProblems = (subject: Subject, secrets: readonly Secret[]): readonly st
     ];
   });
 };
+
+/**
+ * The `data-slot` of the one element whose `data-pci-configuration` attribute may write a held
+ * value: a portable custom interaction's Root, where the pci half of this gap writes the bound
+ * variables' values into the configuration.
+ */
+const configuredSlot = "portable-custom-interaction";
+
+/**
+ * The attribute of a {@link configuredSlot} element that may write a held value.
+ */
+const configurationAttribute = "data-pci-configuration";
+
+/**
+ * Collect where a text occurs in a rendered tree outside the one exempt place: in a text node, in
+ * an attribute of an element whose `data-slot` is not {@link configuredSlot}, or in an attribute of
+ * one that is not {@link configurationAttribute}.
+ *
+ * @param nodes The tree's nodes.
+ * @param text The text looked for, of three characters or more.
+ * @returns Where it occurs: `text` for a text node, `<tag> <attribute>` for an attribute, once per
+ *   occurrence in document order.
+ */
+const placesOf = (nodes: readonly Node[], text: string): readonly string[] =>
+  nodes.flatMap((node): readonly string[] => {
+    if (node.kind === "text") {
+      return node.text.includes(text) ? ["text"] : [];
+    }
+
+    const exempt = node.attrs["data-slot"] === configuredSlot;
+
+    return [
+      ...Object.entries(node.attrs).flatMap(([name, value]) =>
+        Predicate.isString(value) &&
+        value.includes(text) &&
+        !(exempt && name === configurationAttribute)
+          ? [`${node.tag} ${name}`]
+          : [],
+      ),
+      ...placesOf(node.children, text),
+    ];
+  });
+
+/**
+ * Check that a held value reaches the page only where a module's configuration may read it: the
+ * lexical form of each member of each held value of the redaction is nowhere in the HTML of any
+ * of its three states but in the {@link configurationAttribute} attribute of a
+ * {@link configuredSlot} element. The redaction's `held` says what is held; a module's own
+ * payload node may carry it in the JSON, so the JSON is not read. A lexical form of fewer than
+ * three characters, which occurs in unrelated markup too often to say anything, is not looked for
+ * ({@link longEnough}).
+ *
+ * @param subject The item, its redaction and its states.
+ * @returns Each occurrence, naming the item, the response, the identifier, the text, the state
+ *   and where it showed; empty when none is outside the exempt place.
+ */
+const heldProblems = (subject: Subject): readonly string[] =>
+  Object.entries(subject.redacted.held ?? {}).flatMap(([response, values]) =>
+    Object.entries(values).flatMap(([identifier, value]) =>
+      value.values
+        .map(format)
+        .flatMap((text) =>
+          longEnough.test(text)
+            ? subject.states.flatMap((state) =>
+                placesOf(parseHtml(state.html), text).map(
+                  (place) =>
+                    `${subject.location}: the held value ${response}.${identifier} ${JSON.stringify(text)} is in the HTML of ${state.name}, in ${place}`,
+                ),
+              )
+            : [],
+        ),
+    ),
+  );
 
 /**
  * Make the subject the sweep checks of one member: its accepted item, redacted by a record or by
@@ -1178,18 +1291,67 @@ const noticesOf = (item: Item, values: Option.Option<RedactRecord>): readonly st
 };
 
 /**
+ * Give the values a redaction must hold for its modules' nodes, decided from the item and the
+ * values alone, never from `redact`'s output: for each module node on content the page sees
+ * (content {@link noticeStep} does not hide, at any depth), under its response, the value the
+ * values hold in `templates` for each template variable `variables` names for it and nothing for
+ * any other name; absent when no node holds anything. With no values there is nothing to hold
+ * (H3). A node the page does not see holds nothing, wherever it sits.
+ *
+ * @param item The item, with the paths its source gives.
+ * @param values The values `redact` showed the item by.
+ * @param variables The template variables each module's node names.
+ * @returns The held values by response, then by identifier; `undefined` when nothing is held.
+ */
+const heldOf = (
+  item: Item,
+  values: Option.Option<RedactRecord>,
+  variables: Variables,
+): RedactedFields["held"] => {
+  const held: Record<string, Record<string, Value>> = {};
+  const walk = (nodes: readonly BodyNode[], seen: boolean): void => {
+    for (const node of nodes) {
+      if (seen && isStubbed(node) && Option.isSome(values)) {
+        const named = variables(node).flatMap((identifier) =>
+          Option.toArray(
+            Option.map(
+              own(values.value.templates, identifier),
+              (value) => [identifier, value] as const,
+            ),
+          ),
+        );
+        if (named.length > 0) {
+          held[node.response] = { ...held[node.response], ...Object.fromEntries(named) };
+        }
+      }
+
+      const step = noticeStep(item, values, node);
+      for (const [run, visible] of step.runs) {
+        walk(run, seen && visible);
+      }
+    }
+  };
+  walk(item.body, true);
+
+  return Object.keys(held).length > 0 ? held : undefined;
+};
+
+/**
  * Report whether redacted fields are the item's as the page may see them (P7§4.9): the document,
  * identifier, `lang`, title and response bindings as the item holds them; a body that
  * {@link fits} the nodes {@link slotsOf} decides, so a template value shows only as the text a
  * printed variable prints from the values, and no hidden template content, template visibility,
  * template-set correct response or default, seed or template rule shows at all; no record of a
- * text past its bound, since no corpus item prints one; and notices that are, as a multiset, the
+ * text past its bound, since no corpus item prints one; held values that are exactly the ones
+ * {@link heldOf} decides, absent when it decides none; and notices that are, as a multiset, the
  * ones {@link noticesOf} decides.
  *
  * @param item The item.
  * @param fields The redacted fields, as `redact` gave them or as the JSON decodes.
  * @param values The values `redact` showed the item by.
  * @param notices The notices the fields must name, from {@link noticesOf}.
+ * @param variables The template variables each module's node names; the sweep's table's by
+ *   default.
  * @returns Whether the fields hold nothing the item's body does not show.
  */
 const fieldsFit = (
@@ -1197,27 +1359,27 @@ const fieldsFit = (
   fields: RedactedFields,
   values: Option.Option<RedactRecord>,
   notices: readonly string[],
+  variables: Variables = variablesOf,
 ): boolean => {
   const showing: Showing = { templates: item.templates, values };
+  const held = heldOf(item, values, variables);
+  const expected: RedactedFields = {
+    body: fields.body,
+    document: item.document,
+    identifier: item.identifier,
+    lang: item.lang,
+    notices: fields.notices,
+    responses: Array.from(item.responses.values(), ({ baseType, cardinality, identifier }) => ({
+      baseType,
+      cardinality,
+      identifier,
+    })),
+    title: item.title,
+    unprinted: Option.none(),
+  };
 
   return (
-    isDeepStrictEqual(
-      {
-        body: fields.body,
-        document: item.document,
-        identifier: item.identifier,
-        lang: item.lang,
-        notices: fields.notices,
-        responses: Array.from(item.responses.values(), ({ baseType, cardinality, identifier }) => ({
-          baseType,
-          cardinality,
-          identifier,
-        })),
-        title: item.title,
-        unprinted: Option.none(),
-      },
-      { ...fields },
-    ) &&
+    isDeepStrictEqual(held === undefined ? expected : { ...expected, held }, { ...fields }) &&
     fits(slotsOf(item.body, showing), fields.body, showing) &&
     isDeepStrictEqual(fields.notices.toSorted(), notices.toSorted())
   );
@@ -1298,19 +1460,21 @@ const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
  * every path `""`. Both name the notices {@link noticesOf} decides from the item with its paths.
  *
  * @param subject The item, its redaction and its JSON.
+ * @param table The table of modules the JSON is read by and the template variables each module's
+ *   node names are asked of; the sweep's by default.
  * @returns Each problem, naming the item and its record state; empty when both fit. A JSON that
  *   does not decode is {@link keyProblems}' to report.
  */
-const templateProblems = (subject: Subject): readonly string[] => {
+const templateProblems = (subject: Subject, table: SweepTable = sweepTable): readonly string[] => {
   const notices = noticesOf(subject.item, subject.record);
 
   return [
-    ...(fieldsFit(subject.item, subject.redacted, subject.record, notices)
+    ...(fieldsFit(subject.item, subject.redacted, subject.record, notices, table.variables)
       ? []
       : [
           `${subject.location}: the redacted fields hold more than the item's body shows, or not as it writes it`,
         ]),
-    ...Result.match(decodeStrictly(subject.json), {
+    ...Result.match(table.decode(subject.json), {
       onFailure: () => [],
       onSuccess: (fields) =>
         fieldsFit(
@@ -1318,6 +1482,7 @@ const templateProblems = (subject: Subject): readonly string[] => {
           fields,
           subject.record,
           notices,
+          table.variables,
         )
           ? []
           : [
@@ -1540,7 +1705,10 @@ describe("the allowlist sweep over the corpus", () => {
         const { problems, subjects } = yield* corpusSubjects;
 
         assert.isNotEmpty(subjects, "no corpus item renders");
-        assert.deepStrictEqual([...problems, ...subjects.flatMap(keyProblems)], []);
+        assert.deepStrictEqual(
+          [...problems, ...subjects.flatMap((subject) => keyProblems(subject))],
+          [],
+        );
       }),
     { tags: ["corpus"], timeout: sweepTimeoutMs },
   );
@@ -1896,6 +2064,375 @@ describe("the template sweep over the corpus", () => {
           "templateVisibility",
           "showHide",
           "templateIdentifier",
+        ]);
+      }),
+  );
+});
+
+/**
+ * The module file of the stub kind, which {@link withHolding} mocks.
+ */
+const stubFile = `#plate/interactions/${stubKind}.ts`;
+
+/**
+ * The template variables the mocked stub kind's module names ({@link withHolding}): `HELD`, which
+ * the held control declares and sets, and `OTHER_HELD`, which it does not declare.
+ */
+const holdingVariables = ["HELD", "OTHER_HELD"] as const;
+
+/**
+ * Run an effect with the stub kind's module naming {@link holdingVariables} as the template
+ * variables its configuration is bound to, and filling the steps a redaction, an encoding and a
+ * render of an item that holds its bare node reach: it binds its one response, renders one
+ * Control, gives its node as its payload node and writes it as a `div` naming its response, and
+ * its `payloadSchema` reads the bare node. Its render writes no held value: the control forges
+ * where one shows. Every module it imports is loaded afresh, and the module is restored after.
+ *
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withHolding = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(stubFile, async (importOriginal) => {
+      const actual = await importOriginal<Record<string, Modules[typeof stubKind]>>();
+
+      return Object.fromEntries(
+        Object.entries(actual).map(([name, module]) => [
+          name,
+          {
+            ...module,
+            bindings: (interaction: { readonly response: string }) => [
+              { base: Option.none(), response: interaction.response },
+            ],
+            controls: () => 1,
+            payloadSchema: ({
+              NoPath,
+              OptionalText,
+              Schema: schema,
+            }: {
+              readonly NoPath: Schema.Schema<string>;
+              readonly OptionalText: Schema.Schema<Option.Option<string>>;
+              readonly Schema: typeof Schema;
+            }) =>
+              schema.Struct({
+                ariaLabel: OptionalText,
+                ariaLabelledby: OptionalText,
+                kind: schema.Literal(stubKind),
+                path: NoPath,
+                response: schema.String,
+              }),
+            redact: (interaction: ModelOf<typeof stubKind>) => interaction,
+            render: (interaction: { readonly response: string }) =>
+              Result.succeed(h("div", { "data-response": interaction.response }, [])),
+            unnamed: () => false,
+            variables: () => holdingVariables,
+          },
+        ]),
+      );
+    });
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(stubFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
+ * The held control's location.
+ */
+const heldControlLocation = "held-control.xml";
+
+/**
+ * The value the held control's template processing sets `HELD` to.
+ */
+const heldControlValue = "beacon";
+
+/**
+ * The held control, built by hand from the template control: it declares the response `HOLDER`
+ * (single identifier, correct `zebra-77`) the stub kind's node binds and the template variable
+ * `HELD`, which its template processing sets to {@link heldControlValue}; its body is the
+ * template control's, and {@link heldControl} adds the node to it.
+ */
+const heldControlBytes = new TextEncoder().encode(
+  new TextDecoder()
+    .decode(templateControlBytes)
+    .replace(
+      'identifier="template-control" title="Pick the shown one"',
+      'identifier="held-control" title="Pick the shown one, and hold"',
+    )
+    .replace(
+      '<qti-template-declaration identifier="SHOWN"',
+      `<qti-response-declaration identifier="HOLDER" cardinality="single" base-type="identifier"><qti-correct-response><qti-value>${controlSecret}</qti-value></qti-correct-response></qti-response-declaration><qti-template-declaration identifier="HELD" cardinality="single" base-type="identifier"/><qti-template-declaration identifier="SHOWN"`,
+    )
+    .replace(
+      "<qti-template-processing>",
+      `<qti-template-processing><qti-set-template-value identifier="HELD"><qti-base-value base-type="identifier">${heldControlValue}</qti-base-value></qti-set-template-value>`,
+    ),
+);
+
+/**
+ * Accept the held control with the stub kind's bare node, bound to `HOLDER`, added at the end of
+ * its body, through the accepting seam of the graph `verdict` comes from.
+ *
+ * @param accepted The held control as `open` accepted it.
+ * @param accept The accepting seam (`acceptForTest`) of the graph the control is redacted through.
+ * @returns The control with the node.
+ */
+const heldControl = (accepted: Accepted, accept: (item: Item) => Accepted): Accepted => {
+  const node: ModelOf<typeof stubKind> = {
+    ariaLabel: Option.none(),
+    ariaLabelledby: Option.none(),
+    kind: stubKind,
+    path: `qti-assessment-item/qti-item-body/${stubElement}`,
+    response: "HOLDER",
+  };
+
+  return accept({ ...accepted.item, body: [...accepted.item.body, node] });
+};
+
+/**
+ * Forge a subject's states: the markup `appended` gives, appended to each state's HTML.
+ *
+ * @param subject The honest subject.
+ * @param appended The markup, after the state's HTML.
+ * @returns The subject with the forged states.
+ */
+const forgeStates = (subject: Subject, appended: string): Subject => ({
+  ...subject,
+  states: subject.states.map((state) => ({ ...state, html: `${state.html}${appended}` })),
+});
+
+/**
+ * Forge a subject's held values.
+ *
+ * @param subject The honest subject.
+ * @param held The held values the forged redaction carries.
+ * @returns The subject with the forged fields, its JSON the honest one.
+ */
+const forgeHeld = (subject: Subject, held: HeldValues): Subject => ({
+  ...subject,
+  redacted: { ...subject.redacted, held },
+});
+
+/**
+ * A single identifier value.
+ *
+ * @param value The identifier.
+ * @returns The value.
+ */
+const identifierValue = (value: string): Value => ({
+  baseType: "identifier",
+  cardinality: "single",
+  values: [{ baseType: "identifier", value }],
+});
+
+/**
+ * A single string value.
+ *
+ * @param value The string.
+ * @returns The value.
+ */
+const stringValue = (value: string): Value => ({
+  baseType: "string",
+  cardinality: "single",
+  values: [{ baseType: "string", value }],
+});
+
+describe("the held sweep over the corpus", () => {
+  it.effect(
+    "[W0-PCIVARS] the corpus sweep: every corpus item, with and without a record, holds nothing, so the exemption changes no count",
+    () =>
+      Effect.gen(function* nothingHeld() {
+        const everything = yield* corpusSubjects;
+        const templatedOnes = yield* templatedSubjects;
+        const subjects = [...everything.subjects, ...templatedOnes.subjects];
+
+        assert.isNotEmpty(everything.subjects, "no corpus item renders");
+        assert.isAbove(templatedOnes.files, 0, "no accepted corpus item has template processing");
+        assert.deepStrictEqual([...everything.problems, ...templatedOnes.problems], []);
+        assert.deepStrictEqual(
+          subjects.flatMap((subject) => [
+            ...(subject.redacted.held === undefined ? [] : [`${subject.location}: redact held`]),
+            ...(Object.hasOwn(subject.json, "held")
+              ? [`${subject.location}: the JSON holds held`]
+              : []),
+            ...(heldOf(subject.item, subject.record, variablesOf) === undefined
+              ? []
+              : [`${subject.location}: the sweep decides a held value`]),
+            ...heldProblems(subject),
+          ]),
+          [],
+        );
+      }),
+    { tags: ["corpus"], timeout: sweepTimeoutMs },
+  );
+
+  it.effect(
+    "[W0-PCIVARS] the sweep's exemption is node-scoped: held is exactly the record's template values for the identifiers each seen module node names, keys beneath it are the author's, and a held value shows in the HTML only inside the PCI root's configuration attribute",
+    () =>
+      withHolding(
+        Effect.gen(function* nodeScoped() {
+          const plate = yield* Effect.promise(() => import("#plate/index.ts"));
+          const sweep = yield* Effect.promise(() => import("#plate/test/sweep.ts"));
+          const hub = yield* Effect.promise(() => import("#plate/model/interactions.ts"));
+          const codec = yield* Effect.promise(() => import("#plate/codec/redacted.ts"));
+          const verdictModule = yield* Effect.promise(() => import("#plate/validate/verdict.ts"));
+          const payloads = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const table: SweepTable = {
+            decode: Schema.decodeResult(codec.RedactedSchema, { onExcessProperty: "error" }),
+            variables: hub.variablesOf,
+          };
+          const verdict = yield* plate.open(heldControlLocation, heldControlBytes);
+          const member: Member = {
+            bytes: heldControlBytes,
+            location: heldControlLocation,
+            verdict: Exit.succeed(verdict),
+          };
+          const opened = Option.getOrElse(acceptedOf(member), () =>
+            assert.fail(`the held control is ${verdict.verdict}`),
+          );
+          const accepted = heldControl(opened, verdictModule.acceptForTest);
+          const configuration = yield* plate.configure({});
+          const subjects = Result.getOrThrow(sweep.recordStates(opened)).map((state): Subject => {
+            const record = Option.getOrUndefined(state.record);
+            const redacted = plate.redact(accepted, record);
+
+            return {
+              bodySource: bodySourceOf(heldControlBytes),
+              item: accepted.item,
+              json: Result.getOrThrow(plate.encodeRedacted(redacted)),
+              location: `${heldControlLocation} (${state.name})`,
+              record: state.record,
+              redacted,
+              state: state.name,
+              states: Result.getOrThrow(sweep.threeStates(accepted, configuration, record)),
+            };
+          });
+          const [honest, , unrecorded] = subjects;
+          if (honest === undefined || unrecorded === undefined) {
+            assert.fail("the held control lacks a record state");
+          }
+
+          const record = Option.getOrThrow(honest.record);
+          const inRecord = `${heldControlLocation} (seed "1")`;
+          const fieldsProblem = `${inRecord}: the redacted fields hold more than the item's body shows, or not as it writes it`;
+          const unnamed = forgeHeld(honest, {
+            HOLDER: { HELD: identifierValue(heldControlValue), SHOWN: identifierValue("A") },
+          });
+          const outcomeHeld = forgeHeld(honest, {
+            HOLDER: {
+              HELD: identifierValue(heldControlValue),
+              OTHER_HELD: Option.getOrThrow(own(record.outcomes, "completionStatus")),
+            },
+          });
+          const seedHeld = forgeHeld(honest, {
+            HOLDER: { HELD: identifierValue(heldControlValue), seed: stringValue(record.seed) },
+          });
+          const inParagraph = forgeStates(honest, `<p>${heldControlValue}</p>`);
+          const inConfiguration = forgeStates(
+            honest,
+            `<div data-slot="${configuredSlot}" ${configurationAttribute}="{&quot;HELD&quot;:&quot;${heldControlValue}&quot;}"></div>`,
+          );
+          const inOtherSlot = forgeStates(
+            honest,
+            `<div data-slot="other" ${configurationAttribute}="{&quot;HELD&quot;:&quot;${heldControlValue}&quot;}"></div>`,
+          );
+
+          assert.deepStrictEqual(
+            subjects.map((subject) => subject.state),
+            ['seed "1"', 'seed "2"', "no record"],
+          );
+          assert.deepStrictEqual(honest.redacted.held, {
+            HOLDER: { HELD: identifierValue(heldControlValue) },
+          });
+          assert.isUndefined(unrecorded.redacted.held);
+          assert.deepStrictEqual(
+            subjects.flatMap((subject) => [
+              ...keyProblems(subject, table),
+              ...leakProblems(subject, secretsOf(subject)),
+              ...templateProblems(subject, table),
+              ...heldProblems(subject),
+            ]),
+            [],
+          );
+          assert.deepStrictEqual(secretsOf(honest), [
+            { origin: "correct response", text: controlSecret },
+          ]);
+          for (const forged of [unnamed, outcomeHeld, seedHeld]) {
+            assert.deepStrictEqual(templateProblems(forged, table), [fieldsProblem]);
+            assert.deepStrictEqual(heldProblems(forged), []);
+          }
+          assert.deepStrictEqual(
+            hiddenKeysOf(
+              Result.getOrThrow(plate.encodeRedacted(payloads.brandRedacted(seedHeld.redacted))),
+            ),
+            [],
+          );
+
+          const seedOutside = { ...seedHeld.json, seed: record.seed };
+
+          assert.deepStrictEqual(hiddenKeysOf(seedOutside), ["seed"]);
+          assert.deepStrictEqual(
+            heldProblems(inParagraph),
+            honest.states.map(
+              (state) =>
+                `${inRecord}: the held value HOLDER.HELD "${heldControlValue}" is in the HTML of ${state.name}, in text`,
+            ),
+          );
+          assert.deepStrictEqual(heldProblems(inConfiguration), []);
+          assert.deepStrictEqual(
+            heldProblems(inOtherSlot),
+            honest.states.map(
+              (state) =>
+                `${inRecord}: the held value HOLDER.HELD "${heldControlValue}" is in the HTML of ${state.name}, in div ${configurationAttribute}`,
+            ),
+          );
+        }),
+      ),
+  );
+
+  it.effect(
+    "[W0-PCIVARS] a forged redacted JSON with a held correct response is caught by the secret check too",
+    () =>
+      Effect.gen(function* heldSecret() {
+        const verdict = yield* open(controlLocation, controlBytes);
+        const member: Member = {
+          bytes: controlBytes,
+          location: controlLocation,
+          verdict: Exit.succeed(verdict),
+        };
+        const made = subjectOf(member, yield* configure({}));
+        if (Option.isNone(made) || Result.isFailure(made.value)) {
+          assert.fail(`the control item does not render: ${verdict.verdict}`);
+        }
+
+        const honest = made.value.success;
+        const secrets = secretsOf(honest);
+        const forged: Subject = {
+          ...honest,
+          json: {
+            ...honest.json,
+            held: {
+              RESPONSE: {
+                HELD: {
+                  baseType: "string",
+                  cardinality: "single",
+                  values: [{ baseType: "string", value: controlSecret }],
+                },
+              },
+            },
+          },
+        };
+
+        assert.deepStrictEqual(secrets, [{ origin: "correct response", text: controlSecret }]);
+        assert.deepStrictEqual(keyProblems(honest), []);
+        assert.deepStrictEqual(leakProblems(honest, secrets), []);
+        assert.deepStrictEqual(leakProblems(forged, secrets), [
+          `${controlLocation}: the correct response "${controlSecret}" is in the JSON`,
         ]);
       }),
   );

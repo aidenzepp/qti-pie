@@ -41,7 +41,7 @@ import type { RedactRecord } from "#plate/model/record.ts";
 import type { EmitState, PayloadNode } from "#plate/payload.ts";
 import type { CatalogSupport, Supports } from "#plate/supports.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
-import type { UncheckedReason } from "#plate/validate/verdict.ts";
+import type { AcceptedStimulus, UncheckedReason } from "#plate/validate/verdict.ts";
 import type { OutcomeView } from "#plate/vocabulary.ts";
 
 export type { AttachAnswer } from "#plate/emit/body.ts";
@@ -122,6 +122,14 @@ export interface ItemParseContext {
  * a feedback whose outcome does not show never reaches the page.
  */
 export interface ContentRedactKit {
+  /**
+   * The stimulus documents the host handed `redact`, keyed by the document's location as the host
+   * named it (`AcceptedStimulus.document`); empty when it handed none. The module that reads a
+   * stimulus reference (`m3e-02`'s) resolves a reference's `href` against `Item.document` and looks
+   * the document up here, since a resource names a document only through its `href`, and a
+   * resource with no `href` names none; a stimulus the host did not hand is that module's to mark.
+   */
+  readonly documents: ReadonlyMap<string, AcceptedStimulus>;
   /**
    * Walk body nodes the page sees, as the redaction walks the body: their printed variables
    * printed, their template content settled, their notices reached as shown.
@@ -347,6 +355,19 @@ export interface ItemContentModule<
     kit: ContentRenderKit,
     nodes: readonly P[],
   ) => Result.Result<AttachAnswer, PartSwapRefused>;
+  /**
+   * How a body element docks one of the module's nodes: `key` gives the identifier a body element
+   * names the node by through its `data-stimulus-idref` (`ElementPayload.stimulus`), and `undocked`
+   * says where the render emits a node no element docks, before or after the body. A docked node
+   * renders through the module's `render` inside the element that names it, in place of the
+   * element's content (`RenderInteraction.dock` in `#plate/emit/body.ts`). Absent for a module
+   * nothing docks, whose nodes are emitted after the body, today's place; the module that reads a
+   * stimulus reference (`m3e-02`'s) declares it.
+   */
+  readonly dock?: {
+    readonly key: (node: P) => string;
+    readonly undocked: "after-body" | "before-body";
+  };
   /**
    * Read the element into its model node, or none once it has recorded the element's mark.
    */

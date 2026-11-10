@@ -30,6 +30,8 @@ import type { PayloadNode } from "#plate/payload.ts";
 import { catalogSupports, noSupports } from "#plate/supports.ts";
 import type { Supports } from "#plate/supports.ts";
 import { tables } from "#plate/validate/tables.ts";
+import { acceptStimulusForTest } from "#plate/validate/verdict.ts";
+import type { AcceptedStimulus } from "#plate/validate/verdict.ts";
 
 /**
  * Whether two types are identical, by the conditional-type identity check: `true` when they are,
@@ -618,6 +620,245 @@ describe("a content module that lands", () => {
           assert.notInclude(scorer.html, "<dialog");
           assert.notInclude(scorer.html, "Read ");
         }),
+      ),
+  );
+
+  it.effect(
+    "[W0-AR] a module without dock keeps today's place: the Root's children are the body, then the item-placed content, then the live region",
+    () =>
+      withLanded(
+        Effect.gen(function* undockedPlace() {
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const configuration = yield* configure({});
+          const built = yield* Effect.fromResult(model.buildItem(landedDocument));
+          const { html } = yield* Effect.fromResult(
+            plate.render(payload.redactItem(built, undefined, undefined, glossary), configuration, {
+              instance: "q1",
+              supports: glossary,
+            }),
+          );
+          const places = [
+            html.indexOf('<div data-heading="2"'),
+            html.indexOf("The passage."),
+            html.indexOf("<ul"),
+            html.indexOf("<dialog"),
+            html.indexOf("item-live"),
+          ];
+
+          assert.notInclude(places, -1);
+          assert.deepStrictEqual(
+            places,
+            places.toSorted((a, b) => a - b),
+          );
+          assert.isBelow(html.indexOf("<qti-assessment-item"), places[0] ?? -1);
+        }),
+      ),
+  );
+});
+
+/**
+ * The model node of {@link fakeStimulusRef}: the identifier a body element docks it by, the href
+ * of the stimulus document it names, and that document's body once the redaction found it, empty
+ * as parsed.
+ */
+interface FakeStimulusRef {
+  readonly body: readonly BodyNode[];
+  readonly href: string;
+  readonly identifier: string;
+}
+
+/**
+ * The payload node of {@link fakeStimulusRef}: its identifier and the document's body copied.
+ */
+interface FakeStimulusRefPayload {
+  readonly identifier: string;
+  readonly nodes: readonly PayloadNode[];
+}
+
+/**
+ * The JSON form of {@link FakeStimulusRef}.
+ */
+interface FakeStimulusRefJson {
+  readonly body: RedactedJson["body"];
+  readonly href: string;
+  readonly identifier: string;
+}
+
+/**
+ * A test-only item-placed module in the stimulus ref stub's place: it reads a
+ * `qti-assessment-stimulus-ref` element's `identifier` and `href`, keeps its node when the
+ * documents the host handed hold the href's document, and declares that a body element docks its
+ * node by the identifier, an undocked node emitted before the body. It stands at the stub's
+ * element because the hubs' tables key a module's steps by that literal. The item sits at the
+ * package root, so its href resolves to itself. Nothing here is `m3e-02`'s reading of the element.
+ */
+const fakeStimulusRef: ItemContentModule<
+  "qti-assessment-stimulus-ref",
+  FakeStimulusRef,
+  FakeStimulusRefPayload,
+  FakeStimulusRefJson
+> = {
+  content: (payload) => payload.nodes,
+  copy: (node, kit) => ({ identifier: node.identifier, nodes: kit.nodes(node.body) }),
+  dock: { key: (node) => node.identifier, undocked: "before-body" },
+  element: "qti-assessment-stimulus-ref",
+  feature: ["I-4"],
+  implemented: true,
+  namespace: qtiNamespace,
+  parse: (element, context) =>
+    Result.gen(function* parseFakeStimulusRef() {
+      const identifier = yield* context.read.requiredValue(element, "identifier");
+      const href = yield* context.read.requiredValue(element, "href");
+
+      return Option.some({ body: [], href, identifier });
+    }),
+  payloadSchema: ({ BodyNodes, Schema }) =>
+    Schema.Struct({ body: BodyNodes, href: Schema.String, identifier: Schema.String }),
+  placement: "item",
+  redact: (node, kit) =>
+    Option.map(Option.fromUndefinedOr(kit.documents.get(node.href)), (document) => ({
+      ...node,
+      body: kit.nodes(document.body),
+    })),
+  render: (payload, _state, kit) =>
+    Result.map(kit.nodes(payload.nodes), (nodes) =>
+      h("section", { "data-stimulus": payload.identifier }, nodes),
+    ),
+};
+
+/**
+ * The item that hosts a stimulus: a body `div` naming `S1` through `data-stimulus-idref`, a
+ * paragraph after it, and two fake stimulus refs, `S1`, which the `div` docks, and `S2`, which no
+ * element docks.
+ */
+const hostingDocument: SourceDocument = doc(
+  "hosting.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "hosting"), attr("title", "Hosting")],
+    [
+      el(
+        "qti-item-body",
+        [],
+        [
+          el("div", [attr("data-stimulus-idref", "S1")], [el("p", [], [text("Loading.")])]),
+          el("p", [], [text("After the passage.")]),
+        ],
+      ),
+      el("qti-assessment-stimulus-ref", [
+        attr("identifier", "S1"),
+        attr("href", "passages/tide.xml"),
+      ]),
+      el("qti-assessment-stimulus-ref", [
+        attr("identifier", "S2"),
+        attr("href", "passages/night.xml"),
+      ]),
+    ],
+  ),
+);
+
+/**
+ * Accept a hand-built stimulus document holding one paragraph.
+ *
+ * @param location The document's location as the host named it.
+ * @param identifier The root's identifier.
+ * @param sentence The paragraph's text.
+ * @returns The accepted stimulus, with no language.
+ */
+const stimulusOf = (location: string, identifier: string, sentence: string): AcceptedStimulus =>
+  acceptStimulusForTest({
+    body: [paragraph(`qti-assessment-stimulus/qti-stimulus-body/p`, [textNode(sentence)])],
+    document: location,
+    identifier,
+    lang: Option.none(),
+    title: identifier,
+    unsupported: [],
+  });
+
+/**
+ * The stimulus documents the host hands: the two the hosting item names, keyed as the item's
+ * hrefs resolve from the package root.
+ */
+const handedDocuments: ReadonlyMap<string, AcceptedStimulus> = new Map([
+  ["passages/tide.xml", stimulusOf("passages/tide.xml", "tide", "The tide turns.")],
+  ["passages/night.xml", stimulusOf("passages/night.xml", "night", "Night falls.")],
+]);
+
+/**
+ * The fake stimulus ref module registered in the stimulus ref stub's place.
+ */
+const fakeLanded: readonly Mock[] = [
+  { exports: { stimulusRefModule: fakeStimulusRef }, specifier: "#plate/content/stimulus-ref.ts" },
+];
+
+describe("a module whose node a body element docks", () => {
+  it.effect(
+    "[W0-AR] docks its node into the element that names it, and emits an undocked node before the body, the live region last",
+    () =>
+      withLanded(
+        Effect.gen(function* docked() {
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const configuration = yield* configure({});
+          const built = yield* Effect.fromResult(model.buildItem(hostingDocument));
+          const redacted = payload.redactItem(
+            built,
+            undefined,
+            undefined,
+            noSupports,
+            defaultView,
+            true,
+            handedDocuments,
+          );
+          const { html } = yield* Effect.fromResult(
+            plate.render(redacted, configuration, { instance: "q1" }),
+          );
+          const tide = '<section data-stimulus="S1"><p>The tide turns.</p></section>';
+          const night = '<section data-stimulus="S2"><p>Night falls.</p></section>';
+
+          assert.include(html, `<div data-stimulus-idref="S1" id="q1-stimulus-S1-0">${tide}</div>`);
+          assert.strictEqual(html.split(tide).length, 2);
+          assert.strictEqual(html.split(night).length, 2);
+          assert.notInclude(html, "Loading.");
+          assert.isBelow(html.indexOf(night), html.indexOf('<div data-stimulus-idref="S1"'));
+          assert.isBelow(
+            html.indexOf('<div data-stimulus-idref="S1"'),
+            html.indexOf("After the passage."),
+          );
+          assert.isBelow(html.indexOf("After the passage."), html.indexOf("item-live"));
+          assert.isBelow(html.indexOf("<qti-assessment-item"), html.indexOf(night));
+        }),
+        fakeLanded,
+      ),
+  );
+
+  it.effect(
+    "[W0-AR] with no documents handed, the module's node is dropped and the element renders as written",
+    () =>
+      withLanded(
+        Effect.gen(function* undocked() {
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const configuration = yield* configure({});
+          const built = yield* Effect.fromResult(model.buildItem(hostingDocument));
+          const redacted = payload.redactItem(built);
+          const { html } = yield* Effect.fromResult(
+            plate.render(redacted, configuration, { instance: "q1" }),
+          );
+
+          assert.isFalse("content" in redacted);
+          assert.include(
+            html,
+            '<div data-stimulus-idref="S1"><p>Loading.</p></div><p>After the passage.</p>',
+          );
+          assert.notInclude(html, "data-stimulus=");
+          assert.notInclude(html, "q1-stimulus-");
+        }),
+        fakeLanded,
       ),
   );
 });

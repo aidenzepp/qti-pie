@@ -85,6 +85,33 @@ const FloatFromJson = Schema.Union([Schema.Finite, FloatNames]).pipe(
 export const decodeStoredFloat = Schema.decodeOption(FloatFromJson);
 
 /**
+ * A MIME type as a posted file reports it: `type/subtype`, each a token of RFC 2045's `token`
+ * production, with no parameters, in any case; or the empty string, which a browser reports for a
+ * file whose type it does not know. A `File`'s `type` is one of these two and nothing else.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc2045#section-5.1
+ */
+const mimeType = /^(?:[!#$%&'*+\-.^_`|~0-9A-Za-z]+\/[!#$%&'*+\-.^_`|~0-9A-Za-z]+)?$/u;
+
+/**
+ * A posted file's metadata as a Schema; its type is `FileValue`. The name holds only characters
+ * XML can carry, since a result writes it; the size is a count of bytes, a non-negative safe
+ * integer; the type is a MIME type or the empty string ({@link mimeType}). No field holds a byte of
+ * the file.
+ */
+const FileValueSchema = Schema.Struct({
+  name: XmlText,
+  size: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  type: Schema.String.check(
+    Schema.makeFilter((text: string) =>
+      mimeType.test(text)
+        ? undefined
+        : "a file's type must be a MIME type such as image/png, or empty when the browser reports none",
+    ),
+  ),
+});
+
+/**
  * The Schema of one QTI value, tagged by its base type; its type is {@link Single}.
  *
  * An integer is exact at any size. Its encoded form is its decimal digits, which `parseLexical`
@@ -92,7 +119,9 @@ export const decodeStoredFloat = Schema.decodeOption(FloatFromJson);
  * point is two such integers, x then y, each encoded as its decimal digits. A string or a URI holds
  * only characters XML can carry. A float is an xs:double. Its encoded form is a JSON number when it
  * is finite and not negative zero, and otherwise `"INF"`, `"-INF"`, `"NaN"` or `"-0"`, so
- * `JSON.stringify` keeps every float.
+ * `JSON.stringify` keeps every float. A file is its name, size and type ({@link FileValueSchema}),
+ * never its bytes. The stored record form changes by this added arm only, so `storedVersion` in
+ * `#plate/codec/record.ts` does not move.
  */
 export const SingleSchema = Schema.Union([
   Schema.Struct({ baseType: Schema.Literal("identifier"), value: IdentifierText }),
@@ -114,6 +143,7 @@ export const SingleSchema = Schema.Union([
   }),
   Schema.Struct({ baseType: Schema.Literal("duration"), value: FloatFromJson }),
   Schema.Struct({ baseType: Schema.Literal("uri"), value: XmlText }),
+  Schema.Struct({ baseType: Schema.Literal("file"), value: FileValueSchema }),
 ]);
 
 /**

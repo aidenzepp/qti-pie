@@ -165,7 +165,7 @@ describe("the closed value sets", () => {
     assertDistinct(areaShapes);
   });
 
-  it("holds exactly the members spec §4.5 names, each once", () => {
+  it("[W0-AY] holds exactly the members spec §4.5 names, each once", () => {
     const lists: readonly (readonly [string, readonly string[], readonly string[]])[] = [
       [
         "interactionNames",
@@ -260,7 +260,6 @@ describe("the closed value sets", () => {
         [
           "string-identifier",
           'adaptive="true"',
-          'base-type="file"',
           'cardinality="record"',
           'base-type=""',
           "xml:base",
@@ -413,7 +412,7 @@ describe("the closed value sets", () => {
     }
   });
 
-  it("[I-1] puts the record mark on outcome and template declarations, never on a record response declaration, which the item model holds", () => {
+  it("[I-1] [W0-AY] puts the record mark on outcome and template declarations, never on a record response declaration, which the item model holds, and no mark on a base type, every one of which the value model holds", () => {
     assert.deepStrictEqual(
       renders.marks.find((mark) => mark.feature === 'cardinality="record"'),
       {
@@ -422,11 +421,15 @@ describe("the closed value sets", () => {
         when: { kind: "attribute-value", name: "cardinality", value: "record" },
       },
     );
-    // The control: a file declaration is marked whatever its kind.
-    assert.include(
-      renders.marks.find((mark) => mark.feature === 'base-type="file"')?.on ?? [],
-      "qti-response-declaration",
-    );
+    // A `file` declaration was the control, marked whatever its kind; `[W0-AY]` holds a file by its
+    // name, size and type, so no base type in the list is a mark now.
+    for (const baseType of baseTypes) {
+      assert.notInclude(
+        renders.marks.map((mark) => mark.feature),
+        `base-type="${baseType}"`,
+        baseType,
+      );
+    }
   });
 
   it("has every engine name in elements", () => {
