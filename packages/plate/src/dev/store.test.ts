@@ -51,12 +51,14 @@ const owner: SessionTest = {
  */
 const sessionOf = (id: string): TestSession => ({
   document: owner.test.document,
+  expired: [],
   instance: id,
   items: [
     {
       datestamp: "2026-11-05T10:00:12.500Z",
       duration: 12.5,
       firstOutcomes: Option.some(fresh(bg007Item, `${id}.1`).outcomes),
+      locked: false,
       presented: true,
       record: { ...fresh(bg007Item, `${id}.1`), attempt: "submitted", numAttempts: 1 },
       ref: "item-1",

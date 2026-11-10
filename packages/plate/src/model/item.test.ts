@@ -5766,3 +5766,49 @@ describe("buildItem, catalog references", () => {
       }),
   );
 });
+
+describe("buildItem on an element a module could own as its container", () => {
+  it.effect(
+    "gives qti-position-object-stage the notice while Position Object's module declares no container, its subtree dropped",
+    () =>
+      Effect.gen(function* stageNotice() {
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "qti-position-object-stage",
+                  [],
+                  [
+                    el(
+                      "qti-position-object-interaction",
+                      [attr("response-identifier", "RESPONSE")],
+                      [el("qti-prompt", [], [text("Place it")])],
+                    ),
+                  ],
+                ),
+                el("p", [], [text("After")]),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "point", "single"),
+              ],
+            }),
+          ),
+        );
+        const path = `${body}/qti-position-object-stage`;
+
+        assert.deepStrictEqual(built.body[0], {
+          feature: "qti-position-object-stage",
+          kind: "unsupported",
+          path,
+        });
+        assert.deepStrictEqual(
+          built.body.map((node) => node.kind),
+          ["unsupported", "element"],
+        );
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "qti-position-object-stage", path, shown: "notice" },
+        ]);
+      }),
+  );
+});
