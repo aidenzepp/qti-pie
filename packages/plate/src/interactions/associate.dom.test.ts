@@ -19,6 +19,7 @@ import type { RenderMode } from "#plate/payload.ts";
 import { redact, render } from "#plate/render.ts";
 import { upgrade } from "#plate/runtime.dom.ts";
 import type { RuntimeKind, Upgraded } from "#plate/runtime.dom.ts";
+import { tabTo } from "#plate/test/tab.dom.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -304,24 +305,6 @@ const clickChoices = (page: Page, identifiers: readonly string[]): void => {
 };
 
 /**
- * Press Tab until an element has focus, as a keyboard user reaches it, without calling `focus()`.
- * Focus may leave the document and come back to its start, so the presses are bounded rather than
- * stopped by the first time it does.
- *
- * @param target The element to reach.
- * @param presses How many more presses to make before failing the case.
- */
-const tabTo = async (target: Element, presses = 14): Promise<void> => {
-  if (document.activeElement === target) {
-    return;
-  }
-
-  assert.isAbove(presses, 0, "Tab never reached the element.");
-  await userEvent.tab();
-  await tabTo(target, presses - 1);
-};
-
-/**
  * Read what the item's live region says once the frame that writes it has run.
  *
  * @param page The mounted page.
@@ -387,7 +370,7 @@ describe(server.browser, () => {
       const page = await started();
       const [a, c] = [choice(page, "A"), choice(page, "C")];
 
-      await tabTo(a);
+      await tabTo(a, userEvent);
       await userEvent.keyboard(" ");
       assert.strictEqual(a.getAttribute("aria-pressed"), "true");
 
@@ -430,7 +413,7 @@ describe(server.browser, () => {
       const page = await started();
       const a = choice(page, "A");
 
-      await tabTo(a);
+      await tabTo(a, userEvent);
       await userEvent.keyboard(" ");
       await userEvent.keyboard("{ArrowRight}");
       assert.isTrue(Object.hasOwn(a.dataset, "cursor"));
@@ -522,7 +505,7 @@ describe(server.browser, () => {
 
       const e = choice(page, "E");
 
-      await tabTo(e);
+      await tabTo(e, userEvent);
       await userEvent.keyboard(" ");
 
       assert.strictEqual(e.getAttribute("aria-pressed"), "false");
@@ -549,7 +532,7 @@ describe(server.browser, () => {
 
       assert.isDefined(first);
       assert.isDefined(second);
-      await tabTo(first ?? page.root);
+      await tabTo(first ?? page.root, userEvent);
       await userEvent.keyboard("{Delete}");
 
       assert.deepStrictEqual(posted(page), ["C D"]);
@@ -569,7 +552,7 @@ describe(server.browser, () => {
 
       const [made] = rowsOf(page);
 
-      await tabTo(made ?? page.root);
+      await tabTo(made ?? page.root, userEvent);
       await userEvent.keyboard("{Backspace}");
       assert.deepStrictEqual(posted(page), []);
       assert.deepStrictEqual(pairTexts(page), []);
@@ -654,7 +637,7 @@ describe(server.browser, () => {
       const page = await started();
       const b = choice(page, "B");
 
-      await tabTo(b);
+      await tabTo(b, userEvent);
       await userEvent.keyboard(" ");
       await userEvent.keyboard("{End}");
       assert.isTrue(Object.hasOwn(choice(page, "E").dataset, "cursor"));

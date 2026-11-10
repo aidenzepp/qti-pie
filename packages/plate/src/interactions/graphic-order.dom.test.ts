@@ -25,6 +25,7 @@ import { upgrade } from "#plate/runtime.dom.ts";
 import type { Upgraded } from "#plate/runtime/contract.dom.ts";
 import { announcements } from "#plate/runtime/select-place.dom.ts";
 import { readHidden } from "#plate/runtime/wire.dom.ts";
+import { tabTo } from "#plate/test/tab.dom.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -422,9 +423,7 @@ describe(server.browser, () => {
 
               item.begin();
 
-              for (let tabs = 0; tabs < 12 && document.activeElement !== sun; tabs += 1) {
-                yield* Effect.promise(() => userEvent.tab());
-              }
+              yield* Effect.promise(() => tabTo(sun, userEvent, 12));
 
               assert.strictEqual(document.activeElement, sun);
 
@@ -716,9 +715,7 @@ describe(server.browser, () => {
             item.begin();
             placeByKeys(item.hotspot("H2"), 1);
 
-            for (let tabs = 0; tabs < 12 && document.activeElement !== house; tabs += 1) {
-              yield* Effect.promise(() => userEvent.tab());
-            }
+            yield* Effect.promise(() => tabTo(house, userEvent, 12));
 
             assert.strictEqual(document.activeElement, house);
 
@@ -1045,9 +1042,10 @@ describe(server.browser, () => {
 
           yield* withItem(xml, {}, (item) =>
             Effect.gen(function* drive() {
-              yield* Effect.promise(() => userEvent.tab());
-
               const anchor = need(item.container, '[data-test="anchor"]');
+
+              yield* Effect.promise(() => tabTo(anchor, userEvent));
+
               const focused: EventTarget[] = [];
               const record = (event: FocusEvent) => {
                 focused.push(event.target ?? document);
