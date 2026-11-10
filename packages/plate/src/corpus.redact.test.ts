@@ -8,6 +8,7 @@ import { formatPrinted } from "#plate/engine/format.ts";
 import { integerOf } from "#plate/engine/numbers.ts";
 import { own } from "#plate/engine/refs.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
+import { isStubbed } from "#plate/model/interactions.ts";
 import type {
   BodyElement,
   BodyNode,
@@ -905,6 +906,10 @@ const interactionFits = (
  * @returns Whether the redacted node fits.
  */
 const nodeFits = (written: BodyNode, shown: BodyNode, showing: Showing): boolean => {
+  if (isStubbed(written)) {
+    return isDeepStrictEqual(written, shown);
+  }
+
   switch (written.kind) {
     case "element": {
       return (
@@ -1011,6 +1016,10 @@ const noticeStep = (
   values: Option.Option<RedactRecord>,
   node: BodyNode,
 ): NoticeStep => {
+  if (isStubbed(node)) {
+    return { ...quietStep, runs: [[Option.getOrElse(node.prompt, () => []), true]] };
+  }
+
   switch (node.kind) {
     case "element": {
       const withheld = Option.exists(
@@ -1163,6 +1172,14 @@ const fieldsFit = (
  */
 const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
   nodes.map((node): BodyNode => {
+    if (isStubbed(node)) {
+      return {
+        ...node,
+        path: "",
+        prompt: node.prompt.pipe(Option.map((prompt) => withoutPaths(prompt))),
+      };
+    }
+
     switch (node.kind) {
       case "element": {
         return { ...node, children: withoutPaths(node.children), path: "" };
@@ -1296,6 +1313,10 @@ const choicePartsOf = (choices: readonly SimpleChoice[], path: string): readonly
  */
 const templatePartsOf = (nodes: readonly BodyNode[]): readonly TemplatePart[] =>
   nodes.flatMap((node): readonly TemplatePart[] => {
+    if (isStubbed(node)) {
+      return Option.toArray(node.prompt).flatMap((lead) => templatePartsOf(lead));
+    }
+
     switch (node.kind) {
       case "element": {
         return templatePartsOf(node.children);

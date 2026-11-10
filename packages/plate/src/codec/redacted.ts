@@ -18,12 +18,29 @@
  */
 import { Data, Option, Predicate, Result, Schema, SchemaGetter } from "effect";
 import { greatestCount } from "#plate/count-range.ts";
+import { associateModule } from "#plate/interactions/associate.ts";
+import { drawingModule } from "#plate/interactions/drawing.ts";
+import { endAttemptModule } from "#plate/interactions/end-attempt.ts";
+import { gapMatchModule } from "#plate/interactions/gap-match.ts";
+import { graphicAssociateModule } from "#plate/interactions/graphic-associate.ts";
+import { graphicGapMatchModule } from "#plate/interactions/graphic-gap-match.ts";
+import { graphicOrderModule } from "#plate/interactions/graphic-order.ts";
+import { hotspotModule } from "#plate/interactions/hotspot.ts";
+import { hottextModule } from "#plate/interactions/hottext.ts";
+import { matchModule } from "#plate/interactions/match.ts";
+import { mediaModule } from "#plate/interactions/media.ts";
+import { orderModule } from "#plate/interactions/order.ts";
+import { portableCustomModule } from "#plate/interactions/portable-custom.ts";
+import { positionObjectModule } from "#plate/interactions/position-object.ts";
+import { selectPointModule } from "#plate/interactions/select-point.ts";
+import { sliderModule } from "#plate/interactions/slider.ts";
+import { uploadModule } from "#plate/interactions/upload.ts";
+import { isInteraction, regionsOf } from "#plate/model/interactions.ts";
+import type { Region } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
-  Interaction,
-  SimpleChoice,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { modelledBaseTypes, modelledCardinalities } from "#plate/model/values.ts";
@@ -346,10 +363,48 @@ const textControlFields = {
 };
 
 /**
- * The Schema of one body node, a union over the ten kinds of `BodyNode`, every field included; its
+ * The placeholder node of an interaction plate parses through a stub module, which the JSON form
+ * never holds: the stub's `parse` gives the notice, so `redact` never writes one, and its module
+ * has no step past `parse`. Its encoded side is `Never`, so decoding refuses a body node of its
+ * kind, as for a printed variable ({@link NoPrintedVariable}), and `render` never meets one. Its
+ * type side holds every field of the model's placeholder, so the codec's body-node union stays the
+ * model's `BodyNode`.
+ *
+ * @param module The kind's stub module, which names the kind, its feature and its element.
+ * @returns The kind's member of {@link BodyNodeSchema}.
+ */
+const NoStubInteraction = <K extends string>(module: {
+  readonly element: string;
+  readonly feature: string;
+  readonly kind: K;
+}) => {
+  const refusal = `a redacted body holds no ${module.kind} interaction (${module.feature}): plate reads ${module.element} as its notice until its module lands, so redact never writes one`;
+
+  return Schema.Never.pipe(
+    Schema.decodeTo(
+      Schema.Struct({
+        ariaLabel: Schema.Option(Schema.String),
+        ariaLabelledby: Schema.Option(Schema.String),
+        class: Schema.String,
+        kind: Schema.Literal(module.kind),
+        path: Schema.String,
+        prompt: Schema.Option(BodyNodes),
+        response: Schema.String,
+      }),
+      {
+        decode: SchemaGetter.forbidden(() => refusal),
+        encode: SchemaGetter.forbidden(() => refusal),
+      },
+    ),
+  );
+};
+
+/**
+ * The Schema of one body node, a union over every kind of `BodyNode`, every field included; its
  * type is {@link BodyNode} and its encoded form {@link BodyNodeJson}, which holds no path
- * ({@link NoPath}), no printed variable ({@link NoPrintedVariable}) and no template block or inline
- * ({@link NoTemplateContent}).
+ * ({@link NoPath}), no printed variable ({@link NoPrintedVariable}), no template block or inline
+ * ({@link NoTemplateContent}) and no interaction a stub module parses
+ * ({@link NoStubInteraction}).
  */
 const BodyNodeSchema = Schema.Union([
   Schema.Struct({
@@ -413,6 +468,23 @@ const BodyNodeSchema = Schema.Union([
   }),
   NoPrintedVariable,
   NoTemplateContent,
+  NoStubInteraction(associateModule),
+  NoStubInteraction(drawingModule),
+  NoStubInteraction(endAttemptModule),
+  NoStubInteraction(gapMatchModule),
+  NoStubInteraction(graphicAssociateModule),
+  NoStubInteraction(graphicGapMatchModule),
+  NoStubInteraction(graphicOrderModule),
+  NoStubInteraction(hotspotModule),
+  NoStubInteraction(hottextModule),
+  NoStubInteraction(matchModule),
+  NoStubInteraction(mediaModule),
+  NoStubInteraction(orderModule),
+  NoStubInteraction(portableCustomModule),
+  NoStubInteraction(positionObjectModule),
+  NoStubInteraction(selectPointModule),
+  NoStubInteraction(sliderModule),
+  NoStubInteraction(uploadModule),
 ]);
 
 /**
@@ -594,60 +666,19 @@ interface PendingNode {
 }
 
 /**
- * Content an interaction holds where QTI's schema admits no interaction, with the words that name
- * where it sits.
- */
-interface Region {
-  readonly nodes: readonly BodyNode[];
-  readonly within: string;
-}
-
-/**
- * The content each choice of a Choice or an Inline Choice holds, in document order.
+ * Name where a region of an interaction sits, as an issue of {@link misplacedInteraction} says it:
+ * the Prompt or the Label of its owner, or the content of one of its owner's choices.
  *
- * @param choices The interaction's choices.
- * @param owner The words that name the interaction.
- * @returns One region per choice.
+ * @param region The region, with its owner ({@link regionsOf}).
+ * @returns The words that name it.
  */
-const choiceRegions = (choices: readonly SimpleChoice[], owner: string): readonly Region[] =>
-  choices.map((simple) => ({
-    nodes: simple.content,
-    within: `the content of the choice ${JSON.stringify(simple.identifier)} of ${owner}`,
-  }));
+const withinWords = (region: Region): string => {
+  const owner = `the ${region.owner.kind} interaction for the response ${JSON.stringify(region.owner.response)}`;
 
-/**
- * The content an interaction holds where QTI's schema admits no interaction, in document order: a
- * Choice's Prompt then its choices' content, an Extended Text's Prompt, an Inline Choice's Label
- * then its choices' content, and nothing of a Text Entry's.
- *
- * @param interaction The interaction.
- * @returns Its regions, first in the document first.
- */
-const regionsOf = (interaction: Interaction): readonly Region[] => {
-  const owner = `the ${interaction.kind} interaction for the response ${JSON.stringify(interaction.response)}`;
-  const named = (nodes: Option.Option<readonly BodyNode[]>, part: string): readonly Region[] =>
-    Option.match(nodes, {
-      onNone: () => [],
-      onSome: (content) => [{ nodes: content, within: `the ${part} of ${owner}` }],
-    });
-
-  switch (interaction.kind) {
-    case "choice": {
-      return [...named(interaction.prompt, "Prompt"), ...choiceRegions(interaction.choices, owner)];
-    }
-    case "extended-text": {
-      return named(interaction.prompt, "Prompt");
-    }
-    case "inline-choice": {
-      return [...named(interaction.label, "Label"), ...choiceRegions(interaction.choices, owner)];
-    }
-    case "text-entry": {
-      return [];
-    }
-    default: {
-      return interaction satisfies never;
-    }
-  }
+  return Option.match(region.choice, {
+    onNone: () => `the ${region.part === "label" ? "Label" : "Prompt"} of ${owner}`,
+    onSome: (identifier) => `the content of the choice ${JSON.stringify(identifier)} of ${owner}`,
+  });
 };
 
 /**
@@ -675,6 +706,19 @@ const misplacedInteraction = (body: readonly BodyNode[]): Option.Option<string> 
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
     const { node, within } = next;
 
+    if (isInteraction(node)) {
+      if (Option.isSome(within)) {
+        return Option.some(
+          `a ${node.kind} interaction for the response ${JSON.stringify(node.response)} sits inside ${within.value}, where QTI's schema admits no interaction and render cannot emit one`,
+        );
+      }
+
+      for (const region of regionsOf(node).toReversed()) {
+        enqueue(region.nodes, Option.some(withinWords(region)));
+      }
+      continue;
+    }
+
     switch (node.kind) {
       case "element": {
         enqueue(node.children, within);
@@ -689,21 +733,6 @@ const misplacedInteraction = (body: readonly BodyNode[]): Option.Option<string> 
       case "printed-variable":
       case "text":
       case "unsupported": {
-        break;
-      }
-      case "choice":
-      case "extended-text":
-      case "inline-choice":
-      case "text-entry": {
-        if (Option.isSome(within)) {
-          return Option.some(
-            `a ${node.kind} interaction for the response ${JSON.stringify(node.response)} sits inside ${within.value}, where QTI's schema admits no interaction and render cannot emit one`,
-          );
-        }
-
-        for (const region of regionsOf(node).toReversed()) {
-          enqueue(region.nodes, Option.some(region.within));
-        }
         break;
       }
       default: {

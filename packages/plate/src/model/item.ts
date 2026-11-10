@@ -44,6 +44,24 @@ import {
   xsBooleanOf,
   xsInt,
 } from "#plate/model/attributes.ts";
+import { associateModule } from "#plate/interactions/associate.ts";
+import { drawingModule } from "#plate/interactions/drawing.ts";
+import { endAttemptModule } from "#plate/interactions/end-attempt.ts";
+import { gapMatchModule } from "#plate/interactions/gap-match.ts";
+import { graphicAssociateModule } from "#plate/interactions/graphic-associate.ts";
+import { graphicGapMatchModule } from "#plate/interactions/graphic-gap-match.ts";
+import { graphicOrderModule } from "#plate/interactions/graphic-order.ts";
+import { hotspotModule } from "#plate/interactions/hotspot.ts";
+import { hottextModule } from "#plate/interactions/hottext.ts";
+import { matchModule } from "#plate/interactions/match.ts";
+import { mediaModule } from "#plate/interactions/media.ts";
+import { orderModule } from "#plate/interactions/order.ts";
+import { portableCustomModule } from "#plate/interactions/portable-custom.ts";
+import { positionObjectModule } from "#plate/interactions/position-object.ts";
+import { selectPointModule } from "#plate/interactions/select-point.ts";
+import { sliderModule } from "#plate/interactions/slider.ts";
+import { uploadModule } from "#plate/interactions/upload.ts";
+import type { ParseContext } from "#plate/interactions/contract.ts";
 import type { AttributeRefusal, ModelWalk } from "#plate/model/attributes.ts";
 import type {
   Branch,
@@ -598,6 +616,114 @@ export interface ExtendedTextInteraction extends Omit<
 }
 
 /**
+ * The placeholder model node of an interaction plate parses through a stub module in
+ * `#plate/interactions/`: the fields every interaction the model holds shares, the bound response,
+ * the authored names and `class`, the path and the Prompt. A stub's `parse` gives the notice, so
+ * the model holds no node of this shape; the issue that lands a kind's module replaces its
+ * placeholder by the kind's own fields.
+ */
+export interface StubInteraction<K extends string> {
+  readonly ariaLabel: Option.Option<string>;
+  readonly ariaLabelledby: Option.Option<string>;
+  /**
+   * The author's `class` value, empty when absent.
+   */
+  readonly class: string;
+  readonly kind: K;
+  readonly path: string;
+  readonly prompt: Option.Option<readonly BodyNode[]>;
+  /**
+   * The identifier of the response it binds, `response-identifier`.
+   */
+  readonly response: string;
+}
+
+/**
+ * A `qti-associate-interaction`, which plate parses through its stub module as its notice.
+ */
+export type AssociateInteraction = StubInteraction<"associate">;
+
+/**
+ * A `qti-drawing-interaction`, which plate parses through its stub module as its notice.
+ */
+export type DrawingInteraction = StubInteraction<"drawing">;
+
+/**
+ * A `qti-end-attempt-interaction`, which plate parses through its stub module as its notice.
+ */
+export type EndAttemptInteraction = StubInteraction<"end-attempt">;
+
+/**
+ * A `qti-gap-match-interaction`, which plate parses through its stub module as its notice.
+ */
+export type GapMatchInteraction = StubInteraction<"gap-match">;
+
+/**
+ * A `qti-graphic-associate-interaction`, which plate parses through its stub module as its notice.
+ */
+export type GraphicAssociateInteraction = StubInteraction<"graphic-associate">;
+
+/**
+ * A `qti-graphic-gap-match-interaction`, which plate parses through its stub module as its notice.
+ */
+export type GraphicGapMatchInteraction = StubInteraction<"graphic-gap-match">;
+
+/**
+ * A `qti-graphic-order-interaction`, which plate parses through its stub module as its notice.
+ */
+export type GraphicOrderInteraction = StubInteraction<"graphic-order">;
+
+/**
+ * A `qti-hotspot-interaction`, which plate parses through its stub module as its notice.
+ */
+export type HotspotInteraction = StubInteraction<"hotspot">;
+
+/**
+ * A `qti-hottext-interaction`, which plate parses through its stub module as its notice.
+ */
+export type HottextInteraction = StubInteraction<"hottext">;
+
+/**
+ * A `qti-match-interaction`, which plate parses through its stub module as its notice.
+ */
+export type MatchInteraction = StubInteraction<"match">;
+
+/**
+ * A `qti-media-interaction`, which plate parses through its stub module as its notice.
+ */
+export type MediaInteraction = StubInteraction<"media">;
+
+/**
+ * A `qti-order-interaction`, which plate parses through its stub module as its notice.
+ */
+export type OrderInteraction = StubInteraction<"order">;
+
+/**
+ * A `qti-portable-custom-interaction`, which plate parses through its stub module as its notice.
+ */
+export type PortableCustomInteraction = StubInteraction<"portable-custom">;
+
+/**
+ * A `qti-position-object-interaction`, which plate parses through its stub module as its notice.
+ */
+export type PositionObjectInteraction = StubInteraction<"position-object">;
+
+/**
+ * A `qti-select-point-interaction`, which plate parses through its stub module as its notice.
+ */
+export type SelectPointInteraction = StubInteraction<"select-point">;
+
+/**
+ * A `qti-slider-interaction`, which plate parses through its stub module as its notice.
+ */
+export type SliderInteraction = StubInteraction<"slider">;
+
+/**
+ * A `qti-upload-interaction`, which plate parses through its stub module as its notice.
+ */
+export type UploadInteraction = StubInteraction<"upload">;
+
+/**
  * A `qti-printed-variable` (the information model's PrintedVariable): the place in the body where
  * the value of an outcome or a template variable is written as text, with the attributes that say
  * how. The validator has judged what it names (`printed-variable-ref`) and its `format` (R38).
@@ -697,26 +823,47 @@ export interface Unsupported {
 }
 
 /**
- * An interaction of the item model, the four plate renders: Choice, Extended Text, Inline Choice
- * and Text Entry.
+ * An interaction plate parses through a stub module, by its placeholder node
+ * ({@link StubInteraction}), which the model never holds.
+ */
+export type StubbedInteraction =
+  | AssociateInteraction
+  | DrawingInteraction
+  | EndAttemptInteraction
+  | GapMatchInteraction
+  | GraphicAssociateInteraction
+  | GraphicGapMatchInteraction
+  | GraphicOrderInteraction
+  | HotspotInteraction
+  | HottextInteraction
+  | MatchInteraction
+  | MediaInteraction
+  | OrderInteraction
+  | PortableCustomInteraction
+  | PositionObjectInteraction
+  | SelectPointInteraction
+  | SliderInteraction
+  | UploadInteraction;
+
+/**
+ * An interaction of the item model: the four plate renders, Choice, Extended Text, Inline Choice
+ * and Text Entry, and the seventeen it parses through a stub module ({@link StubbedInteraction}).
  */
 export type Interaction =
   | ChoiceInteraction
   | ExtendedTextInteraction
   | InlineChoiceInteraction
+  | StubbedInteraction
   | TextEntryInteraction;
 
 /**
- * A node of the item body: an element, a text, one of the four interactions, a printed variable,
- * a template block or inline, or a notice.
+ * A node of the item body: an element, a text, an interaction, a printed variable, a template
+ * block or inline, or a notice.
  */
 export type BodyNode =
   | BodyElement
   | BodyText
-  | ChoiceInteraction
-  | InlineChoiceInteraction
-  | TextEntryInteraction
-  | ExtendedTextInteraction
+  | Interaction
   | PrintedVariable
   | TemplateContent
   | Unsupported;
@@ -2330,14 +2477,93 @@ const templateContent = (
   });
 
 /**
+ * Read a QTI interaction element plate parses through a stub module, by its module's `parse`,
+ * which the element's notice and path are handed to.
+ *
+ * @param build The build.
+ * @param element The element.
+ * @returns Its body node, or a refusal; none when the element is no interaction a stub module
+ *   reads.
+ */
+const stubNode = (
+  build: Build,
+  element: SourceElement,
+): Option.Option<Result.Result<BodyNode, Refusal>> => {
+  if (!isQti(element)) {
+    return Option.none();
+  }
+
+  const path = pathOf(build, element);
+  const context: ParseContext = { notice: (feature) => notice(build, feature, path), path };
+
+  switch (element.local) {
+    case associateModule.element: {
+      return Option.some(associateModule.parse(element, context));
+    }
+    case drawingModule.element: {
+      return Option.some(drawingModule.parse(element, context));
+    }
+    case endAttemptModule.element: {
+      return Option.some(endAttemptModule.parse(element, context));
+    }
+    case gapMatchModule.element: {
+      return Option.some(gapMatchModule.parse(element, context));
+    }
+    case graphicAssociateModule.element: {
+      return Option.some(graphicAssociateModule.parse(element, context));
+    }
+    case graphicGapMatchModule.element: {
+      return Option.some(graphicGapMatchModule.parse(element, context));
+    }
+    case graphicOrderModule.element: {
+      return Option.some(graphicOrderModule.parse(element, context));
+    }
+    case hotspotModule.element: {
+      return Option.some(hotspotModule.parse(element, context));
+    }
+    case hottextModule.element: {
+      return Option.some(hottextModule.parse(element, context));
+    }
+    case matchModule.element: {
+      return Option.some(matchModule.parse(element, context));
+    }
+    case mediaModule.element: {
+      return Option.some(mediaModule.parse(element, context));
+    }
+    case orderModule.element: {
+      return Option.some(orderModule.parse(element, context));
+    }
+    case portableCustomModule.element: {
+      return Option.some(portableCustomModule.parse(element, context));
+    }
+    case positionObjectModule.element: {
+      return Option.some(positionObjectModule.parse(element, context));
+    }
+    case selectPointModule.element: {
+      return Option.some(selectPointModule.parse(element, context));
+    }
+    case sliderModule.element: {
+      return Option.some(sliderModule.parse(element, context));
+    }
+    case uploadModule.element: {
+      return Option.some(uploadModule.parse(element, context));
+    }
+    default: {
+      return Option.none();
+    }
+  }
+};
+
+/**
  * Read one child of a body element.
  *
  * @param build The build.
  * @param parent The element that holds it.
  * @param child The child.
- * @returns Its body node: text as itself, an HTML element with its subtree, an interaction's model,
- *   a printed variable's, a template block's or inline's with its content, or a notice for
- *   anything else, its subtree dropped; or a refusal.
+ * @returns Its body node: text as itself, an HTML element with its subtree, an interaction's model
+ *   or, for one a stub module reads, what its `parse` gives, a printed variable's, a template
+ *   block's or inline's with its content, or a notice for anything else, its subtree dropped; or a
+ *   refusal.
  */
 const bodyNode = (
   build: Build,
@@ -2355,6 +2581,11 @@ const bodyNode = (
   const interaction = interactionNames.find((name) => isQti(child, name));
   if (interaction !== undefined) {
     return interactionNode(build, child, interaction);
+  }
+
+  const stub = stubNode(build, child);
+  if (Option.isSome(stub)) {
+    return stub.value;
   }
 
   if (isQti(child, "qti-printed-variable")) {

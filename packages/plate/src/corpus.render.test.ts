@@ -4,6 +4,7 @@ import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import { configure } from "#plate/index.ts";
 import type { Accepted, Configuration, Element, Node, Verdict } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
+import { isStubbed } from "#plate/model/interactions.ts";
 import type {
   BodyElement,
   BodyNode,
@@ -222,6 +223,10 @@ const withheldOf = (item: Item, values: Option.Option<RedactRecord>): readonly s
   let choiceWithheld = false;
   const walk = (nodes: readonly BodyNode[]): readonly string[] =>
     nodes.flatMap((node): readonly string[] => {
+      if (isStubbed(node)) {
+        return walk(Option.getOrElse(node.prompt, () => []));
+      }
+
       switch (node.kind) {
         case "element": {
           return Option.match(parameterOf(item, node), {
@@ -505,6 +510,10 @@ const treeProblems = (_rendering: Rendering, where: string, root: Element): read
  */
 const inlineChoicesOf = (nodes: readonly BodyNode[]): readonly InlineChoiceInteraction[] =>
   nodes.flatMap((node): readonly InlineChoiceInteraction[] => {
+    if (isStubbed(node)) {
+      return [];
+    }
+
     switch (node.kind) {
       case "element": {
         return inlineChoicesOf(node.children);

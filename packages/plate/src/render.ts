@@ -18,7 +18,7 @@ import { Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import { emitBody, writesMalformedHeading } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
-import { emitItem, emitStatus } from "#plate/emit/item.ts";
+import { emitItem, emitStatus, itemPart } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
 import type { PartOverrides, Resolved, UnknownPart } from "#plate/emit/parts.ts";
@@ -355,6 +355,13 @@ const stateOf = (configuration: Configuration, parts: Resolved, assetBase?: stri
 });
 
 /**
+ * The attributes of the item's Live part: an empty polite status region, read whole, which the
+ * runtime announces into (plan D1). The Root holds it once, after the body; nothing is written in
+ * it on the server.
+ */
+const liveRegion = { "aria-atomic": "true", "aria-live": "polite", role: "status" } as const;
+
+/**
  * Construct the render function each interaction of a body is handed to, dispatching on its kind.
  *
  * @param built The render's payload.
@@ -390,7 +397,8 @@ const interactionRenderer =
  * lowercase UUID v4 (`drawInstance`, from `crypto.getRandomValues`, never derived from the seed;
  * not `crypto.randomUUID`, which a browser gives only in a secure context, so a page served over
  * plain HTTP lacks it), builds the payload from the redacted item and the options, and emits the
- * body and the Root. A shuffled Choice is presented in the order the configuration's `seed`, the
+ * body and the Root, which holds the body and then the empty Live part the runtime announces into.
+ * A shuffled Choice is presented in the order the configuration's `seed`, the
  * instance and its response key give. The Root's `data-mode` names `options.mode`. It writes no
  * form, submit control, title or record. Given the same instance, configuration and inputs, it
  * gives the same HTML, and it returns the instance it used.
@@ -473,7 +481,8 @@ export const render = (
     const state = stateOf(configuration, parts, options.assetBase);
     const built = payload(item, viewOf(instance, configuration, options));
     const body = yield* emitBody(built, state, interactionRenderer(built, state));
-    const root = yield* emitItem(built, state, body);
+    const live = yield* itemPart(state.parts, "live", liveRegion, []);
+    const root = yield* emitItem(built, state, [...body, live]);
 
     if (writesMalformedHeading(built.body, configuration.headingLevel)) {
       return yield* Result.fail(new InvalidHeadingLevel({ level: configuration.headingLevel }));

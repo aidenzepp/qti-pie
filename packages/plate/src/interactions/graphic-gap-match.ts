@@ -1,0 +1,113 @@
+/**
+ * Graphic Gap Match (Q-8), a stub module: its `parse` gives the notice the body walk gives any QTI
+ * element it does not read, so a `qti-graphic-gap-match-interaction` renders as it did, and every
+ * other step throws {@link NotImplemented}. No hub reaches those: the model holds no node of this
+ * kind. Issue m3d-05 fills the module.
+ *
+ * @module
+ */
+import { NotImplemented } from "#plate/interactions/contract.ts";
+import type { InteractionModule } from "#plate/interactions/contract.ts";
+import type { GraphicGapMatchInteraction } from "#plate/model/item.ts";
+
+/**
+ * The owner of every Graphic Gap Match part in the part table.
+ */
+const owner = "graphic-gap-match-interaction";
+
+/**
+ * Graphic Gap Match's identifier in the QTI 3.0 conformance list, Appendix A.
+ */
+const feature = "Q-8";
+
+/**
+ * The QTI element Graphic Gap Match is read from, which its notice names.
+ */
+const element = "qti-graphic-gap-match-interaction";
+
+/**
+ * Throw for a step the stub does not implement.
+ *
+ * @returns Nothing: it always throws.
+ * @throws {NotImplemented} Always, naming Graphic Gap Match's feature.
+ */
+const notImplemented = (): never => {
+  throw new NotImplemented({ feature });
+};
+
+/**
+ * The Graphic Gap Match module, a stub.
+ */
+export const graphicGapMatchModule: InteractionModule<
+  "graphic-gap-match",
+  GraphicGapMatchInteraction,
+  never
+> = {
+  /**
+   * The responses Graphic Gap Match binds, which `postings` reads: not implemented; issue m3d-05
+   * fills it.
+   */
+  bindings: notImplemented,
+  /**
+   * Graphic Gap Match's connect function: not implemented; issue m3d-05 fills it.
+   */
+  connect: notImplemented,
+  /**
+   * How many Controls Graphic Gap Match renders: not implemented; issue m3d-05 fills it.
+   */
+  controls: notImplemented,
+  element,
+  feature,
+  /**
+   * False: the module is a stub until issue m3d-05 lands it.
+   */
+  implemented: false,
+  kind: "graphic-gap-match",
+  /**
+   * The NULL of Graphic Gap Match's own binding: not implemented; issue m3d-05 fills it.
+   */
+  nullValue: notImplemented,
+  owner,
+  /**
+   * Give the notice `qti-graphic-gap-match-interaction`, as the body walk gives any QTI element it
+   * does not read, so the verdict and the HTML stay what they were until issue m3d-05 reads the
+   * element.
+   */
+  parse: (_source, context) => context.notice(element),
+  /**
+   * No row: issue m3d-05 adds Graphic Gap Match's parts.
+   */
+  parts: {},
+  /**
+   * Graphic Gap Match's payload copy: not implemented; issue m3d-05 fills it.
+   */
+  redact: notImplemented,
+  /**
+   * Graphic Gap Match's render function: not implemented; issue m3d-05 fills it.
+   */
+  render: notImplemented,
+  /**
+   * The value Graphic Gap Match shows for a stored response: not implemented; issue m3d-05 fills
+   * it.
+   */
+  restore: notImplemented,
+  /**
+   * The order Graphic Gap Match's choices were presented in: not implemented; issue m3d-05 fills
+   * it.
+   */
+  sequence: notImplemented,
+  /**
+   * The value Graphic Gap Match shows for the correct response: not implemented; issue m3d-05 fills
+   * it.
+   */
+  solution: notImplemented,
+  /**
+   * Whether the renderer names Graphic Gap Match's Controls: not implemented; issue m3d-05 fills
+   * it.
+   */
+  unnamed: notImplemented,
+  /**
+   * Graphic Gap Match's response validation: not implemented; issue m3d-05 fills it.
+   */
+  validate: notImplemented,
+};

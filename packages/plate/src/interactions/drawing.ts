@@ -1,0 +1,103 @@
+/**
+ * Drawing (Q-3), a stub module: its `parse` gives the notice the body walk gives any QTI element it
+ * does not read, so a `qti-drawing-interaction` renders as it did, and every other step throws
+ * {@link NotImplemented}. No hub reaches those: the model holds no node of this kind. Issue ei-17
+ * fills the module.
+ *
+ * @module
+ */
+import { NotImplemented } from "#plate/interactions/contract.ts";
+import type { InteractionModule } from "#plate/interactions/contract.ts";
+import type { DrawingInteraction } from "#plate/model/item.ts";
+
+/**
+ * The owner of every Drawing part in the part table.
+ */
+const owner = "drawing-interaction";
+
+/**
+ * Drawing's identifier in the QTI 3.0 conformance list, Appendix A.
+ */
+const feature = "Q-3";
+
+/**
+ * The QTI element Drawing is read from, which its notice names.
+ */
+const element = "qti-drawing-interaction";
+
+/**
+ * Throw for a step the stub does not implement.
+ *
+ * @returns Nothing: it always throws.
+ * @throws {NotImplemented} Always, naming Drawing's feature.
+ */
+const notImplemented = (): never => {
+  throw new NotImplemented({ feature });
+};
+
+/**
+ * The Drawing module, a stub.
+ */
+export const drawingModule: InteractionModule<"drawing", DrawingInteraction, never> = {
+  /**
+   * The responses Drawing binds, which `postings` reads: not implemented; issue ei-17 fills it.
+   */
+  bindings: notImplemented,
+  /**
+   * Drawing's connect function: not implemented; issue ei-17 fills it.
+   */
+  connect: notImplemented,
+  /**
+   * How many Controls Drawing renders: not implemented; issue ei-17 fills it.
+   */
+  controls: notImplemented,
+  element,
+  feature,
+  /**
+   * False: the module is a stub until issue ei-17 lands it.
+   */
+  implemented: false,
+  kind: "drawing",
+  /**
+   * The NULL of Drawing's own binding: not implemented; issue ei-17 fills it.
+   */
+  nullValue: notImplemented,
+  owner,
+  /**
+   * Give the notice `qti-drawing-interaction`, as the body walk gives any QTI element it does not
+   * read, so the verdict and the HTML stay what they were until issue ei-17 reads the element.
+   */
+  parse: (_source, context) => context.notice(element),
+  /**
+   * No row: issue ei-17 adds Drawing's parts.
+   */
+  parts: {},
+  /**
+   * Drawing's payload copy: not implemented; issue ei-17 fills it.
+   */
+  redact: notImplemented,
+  /**
+   * Drawing's render function: not implemented; issue ei-17 fills it.
+   */
+  render: notImplemented,
+  /**
+   * The value Drawing shows for a stored response: not implemented; issue ei-17 fills it.
+   */
+  restore: notImplemented,
+  /**
+   * The order Drawing's choices were presented in: not implemented; issue ei-17 fills it.
+   */
+  sequence: notImplemented,
+  /**
+   * The value Drawing shows for the correct response: not implemented; issue ei-17 fills it.
+   */
+  solution: notImplemented,
+  /**
+   * Whether the renderer names Drawing's Controls: not implemented; issue ei-17 fills it.
+   */
+  unnamed: notImplemented,
+  /**
+   * Drawing's response validation: not implemented; issue ei-17 fills it.
+   */
+  validate: notImplemented,
+};

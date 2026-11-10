@@ -1006,3 +1006,72 @@
     display: inline;
   }
 }
+
+/* begin item-live (unit W0-B) */
+
+/*
+ * The Live part: the empty status region the runtime announces into, hidden from sight only, as
+ * the Choice Control is, so assistive technology still reads what it is given; never by clip,
+ * which is below the floor.
+ */
+:where([data-slot="item-live"]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* end item-live */
+
+/* begin gap-match-interaction (issue m3d-03) */
+/* end gap-match-interaction */
+
+/* begin graphic-gap-match-interaction (issue m3d-05) */
+/* end graphic-gap-match-interaction */
+
+/* begin hotspot-interaction (issue m3d-07) */
+/* end hotspot-interaction */
+
+/* begin hottext-interaction (issue m3d-09) */
+/* end hottext-interaction */
+
+/* begin match-interaction (issue m3d-11) */
+/* end match-interaction */
+
+/* begin associate-interaction (issue ei-04) */
+/* end associate-interaction */
+
+/* begin order-interaction (issue ei-06) */
+/* end order-interaction */
+
+/* begin graphic-associate-interaction (issue ei-08) */
+/* end graphic-associate-interaction */
+
+/* begin graphic-order-interaction (issue ei-10) */
+/* end graphic-order-interaction */
+
+/* begin position-object-interaction (issue ei-12) */
+/* end position-object-interaction */
+
+/* begin select-point-interaction (issue ei-14) */
+/* end select-point-interaction */
+
+/* begin drawing-interaction (issue ei-17) */
+/* end drawing-interaction */
+
+/* begin slider-interaction (issue ei-16) */
+/* end slider-interaction */
+
+/* begin media-interaction (issue ei-03) */
+/* end media-interaction */
+
+/* begin upload-interaction (issue ei-01) */
+/* end upload-interaction */
+
+/* begin end-attempt-interaction (issue ei-02) */
+/* end end-attempt-interaction */
+
+/* begin portable-custom-interaction (issue pci-03) */
+/* end portable-custom-interaction */

@@ -25,7 +25,7 @@ import { xmlnsNamespace } from "#plate/document/source.ts";
 import { writeDocument } from "#plate/document/write.ts";
 import { attemptsStarted } from "#plate/engine/scope.ts";
 import { isXmlText } from "#plate/form/encoding.ts";
-import { interactionsIn } from "#plate/model/interactions.ts";
+import { interactionsIn, isStubbed, stubSteps } from "#plate/model/interactions.ts";
 import type {
   Interaction,
   Item,
@@ -812,6 +812,10 @@ const choiceSequence = (
   seed: Option.Option<string>,
   instance: string,
 ): Option.Option<string> => {
+  if (isStubbed(interaction)) {
+    return stubSteps(interaction).sequence(seed, instance);
+  }
+
   switch (interaction.kind) {
     case "choice":
     case "inline-choice": {
