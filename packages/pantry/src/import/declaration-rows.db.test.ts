@@ -18,8 +18,7 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { layer } from "@effect/vitest";
-import { drawn, explore } from "@grizzle/testing/explore";
-import { completeShrink } from "@grizzle/testing/shrink";
+import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
@@ -36,11 +35,20 @@ import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { hasLease } from "#pantry/test/settings.ts";
 
 /**
- * Every (site, state) of the scope, by its number.
+ * The declaration kinds the base writes, in their first site's order.
  */
-const cases = declarationSites.flatMap((site) =>
-  declarationStates.filter((state) => state.applies(site)).map((state) => ({ site, state })),
-);
+const kinds = [...new Set(declarationSites.map(({ kind }) => kind))];
+
+/**
+ * Each state once, at the first site it applies to of a kind that turns with the state's place, so
+ * the box meets every state and every declaration kind: built, not drawn.
+ */
+const cases = declarationStates.flatMap((state, at) => {
+  const applicable = declarationSites.filter((site) => state.applies(site));
+  const site = applicable.find(({ kind }) => kind === kinds[at % kinds.length]) ?? applicable[0];
+
+  return site === undefined ? [] : [{ site, state }];
+});
 
 describe.skipIf(!hasLease)("import/declaration-rows.db.test.ts, on the lease", () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
@@ -50,18 +58,18 @@ describe.skipIf(!hasLease)("import/declaration-rows.db.test.ts, on the lease", (
       "the database refuses every case under a rule the law oracle predicts",
       (ctx) =>
         // Oracle: a second implementation, the law oracle's verdict over the same entries. Bound:
-        // 32 of the 294 (declaration, untyped state) cases of the every-relation items and test,
-        // drawn from the run's seed, one import each; `src/test/declaration-rows.oracle.test.ts`
-        // exhausts the scope against the same oracle on the host.
+        // every untyped state once, 9 cases, each at a declaration of a kind the box turns through,
+        // exhausted, one import each; `src/test/declaration-rows.oracle.test.ts` exhausts the
+        // (declaration, state) scope against the same oracle on the host.
         searched(
           ctx,
-          explore(
+          exhaust(
             {
+              box: "every untyped state once, at a declaration of each kind in turn",
               caseHang: Duration.seconds(120),
-              concurrency: 1,
               coverage: noCoverage,
-              draw: drawn(int(0, cases.length - 1)),
-              kept: [],
+              generator: int(0, cases.length - 1),
+              limit: cases.length,
               literal: (at) => {
                 const held = cases[at];
 
@@ -70,9 +78,6 @@ describe.skipIf(!hasLease)("import/declaration-rows.db.test.ts, on the lease", (
                   : `${held.site.path} ${held.site.identifier} ${held.state.name}`;
               },
               oracle: { kind: "second-implementation", name: "the law oracle's verdict" },
-              runs: 32,
-              shrink: completeShrink,
-              steerEvery: 16,
               suite: "pantry/declaration-rows-db",
             },
             (at) =>
