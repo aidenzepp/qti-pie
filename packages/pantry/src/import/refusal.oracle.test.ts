@@ -1640,6 +1640,24 @@ describe("the refusals made before the database", () => {
     const refused = new ImportRefused({ detail: "x", origin: readerOrigin, rule: "admission" });
     assert.strictEqual(ruleOfError(refused), refused);
   });
+
+  it("names a reader refusal's line and column when it has a position, as a well-formedness error's", () => {
+    const placed = ruleOfError(
+      new ReaderRefusal({
+        detail: "d",
+        position: Option.some({ column: 7, line: 3 }),
+        rule: "element-depth",
+      }),
+    );
+    const unplaced = ruleOfError(
+      new ReaderRefusal({ detail: "d", position: Option.none(), rule: "element-depth" }),
+    );
+
+    assert.strictEqual(placed.rule, "reader-refusal");
+    assert.isTrue(placed.detail.endsWith(" at line 3, column 7"), placed.detail);
+    assert.strictEqual(unplaced.rule, "reader-refusal");
+    assert.notInclude(unplaced.detail, " at line ");
+  });
 });
 
 /**
