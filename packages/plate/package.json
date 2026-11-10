@@ -10,6 +10,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./effect": "./src/effect.ts",
     "./react": "./src/react.tsx",
     "./runtime": "./src/runtime.dom.ts",
     "./styles.css": "./src/styles.css"
