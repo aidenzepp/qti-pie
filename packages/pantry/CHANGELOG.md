@@ -15,7 +15,8 @@ exported nothing, so no app could import any of its modules.
 
 - `package.json` `"exports"` is `{ ".": "./src/index.ts" }`. `@qti-pie/pantry` is the only entry point, and no other
   module of `src/` resolves from outside the package.
-- Importing the entry opens no file and builds no schema, role, login, workload or query.
+- Importing the entry opens no file, needs no `GR8DES_*` variable, and builds no schema, role, login, workload or
+  query.
 - `qti(options?)` builds pantry's `Qti` level on its first call and returns that one value on every call. `QtiSchema`
   is its type. `QtiOptions` holds no option yet.
 - `authorRole(qti)` and `authorLogin(qti)` give the author role and the `author_app` login over a `Qti` value, with
