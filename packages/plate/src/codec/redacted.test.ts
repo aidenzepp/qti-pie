@@ -623,6 +623,7 @@ const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
       case "template-inline": {
         return { ...node, content: withoutPaths(node.content), path: "" };
       }
+      case "content":
       case "printed-variable":
       case "text-entry":
       case "unsupported": {
@@ -689,6 +690,7 @@ const pathsOf = (nodes: readonly BodyNode[]): readonly string[] =>
       case "template-inline": {
         return [node.path, ...pathsOf(node.content)];
       }
+      case "content":
       case "printed-variable":
       case "text-entry":
       case "unsupported": {
