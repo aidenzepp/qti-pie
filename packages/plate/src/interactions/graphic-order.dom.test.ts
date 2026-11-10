@@ -180,6 +180,17 @@ const need = (scope: ParentNode, selector: string): HTMLElement => {
 };
 
 /**
+ * The interaction roots an upgrade attached a controller to, in document order. The runtime also
+ * upgrades the item Root through its content controller (`#plate/content/root.dom.ts`) and reports
+ * it after the interactions, so a case about the Graphic Order reads the interaction entries alone.
+ *
+ * @param result The upgrade.
+ * @returns The roots of its interaction entries.
+ */
+const interactionRoots = (result: Upgraded): readonly HTMLElement[] =>
+  result.controllers.flatMap((entry) => ("kind" in entry ? [entry.root] : []));
+
+/**
  * Put rendered HTML inside a form, with a button before it to hold focus, at the end of the page's
  * body.
  *
@@ -389,10 +400,7 @@ describe(server.browser, () => {
 
             const upgraded = item.begin();
 
-            assert.deepStrictEqual(
-              upgraded.controllers.map(({ root }) => root),
-              [item.root],
-            );
+            assert.deepStrictEqual(interactionRoots(upgraded), [item.root]);
             assert.isUndefined(item.root.dataset["runtime"]);
 
             upgraded.teardown();
@@ -1002,7 +1010,10 @@ describe(server.browser, () => {
         document.body.append(container);
 
         const live = need(container, '[data-slot="item-live"]');
-        const before = container.cloneNode(true);
+        // The item Root's own controller marks the Root element (`#plate/content/root.dom.ts`),
+        // so the markup held still is what lies inside it.
+        const item = need(container, '[data-slot="item"]');
+        const before = item.innerHTML;
         const focused: EventTarget[] = [];
         const record = (event: FocusEvent) => {
           focused.push(event.target ?? document);
@@ -1015,13 +1026,13 @@ describe(server.browser, () => {
         yield* frames;
         document.removeEventListener("focusin", record);
 
-        assert.strictEqual(upgraded.controllers.length, 2);
+        assert.strictEqual(interactionRoots(upgraded).length, 2);
         assert.deepStrictEqual(focused, []);
         assert.strictEqual(live.textContent, "");
-        assert.isTrue(container.isEqualNode(before));
+        assert.strictEqual(item.innerHTML, before);
 
         upgraded.teardown();
-        assert.isTrue(container.isEqualNode(before));
+        assert.strictEqual(item.innerHTML, before);
         container.remove();
       }),
     );

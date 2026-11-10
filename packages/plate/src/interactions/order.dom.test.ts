@@ -186,6 +186,17 @@ const need = (scope: ParentNode, selector: string): HTMLElement => {
 };
 
 /**
+ * The interaction roots an upgrade attached a controller to, in document order. The runtime also
+ * upgrades the item Root through its content controller (`#plate/content/root.dom.ts`) and reports
+ * it after the interactions, so a case about the Order reads the interaction entries alone.
+ *
+ * @param result The upgrade.
+ * @returns The roots of its interaction entries.
+ */
+const interactionRoots = (result: Upgraded): readonly HTMLElement[] =>
+  result.controllers.flatMap((entry) => ("kind" in entry ? [entry.root] : []));
+
+/**
  * Put rendered HTML inside a form, with a button before it to hold focus, at the end of the page's
  * body.
  *
@@ -413,10 +424,7 @@ describe(server.browser, () => {
 
             const upgraded = item.begin();
 
-            assert.deepStrictEqual(
-              upgraded.controllers.map(({ root }) => root),
-              [item.root],
-            );
+            assert.deepStrictEqual(interactionRoots(upgraded), [item.root]);
             assert.isUndefined(item.root.dataset["runtime"]);
 
             upgraded.teardown();
@@ -978,10 +986,7 @@ describe(server.browser, () => {
 
               const second = item.begin();
 
-              assert.deepStrictEqual(
-                second.controllers.map(({ root }) => root),
-                [item.root],
-              );
+              assert.deepStrictEqual(interactionRoots(second), [item.root]);
               assert.strictEqual(shownIn(item.slot(1)), words.B);
               assert.strictEqual(shownIn(item.slot(2)), words.A);
               assert.deepStrictEqual(inSource(item), [words.C, words.D]);
@@ -1001,7 +1006,10 @@ describe(server.browser, () => {
         container.innerHTML = `<div data-slot="item"><div data-slot="item-live" aria-live="polite" aria-atomic="true"></div><div data-slot="${rootSlot}" data-entry-name="r"></div><div data-slot="${rootSlot}" data-entry-name="s"><ul data-slot="${choicesSlot}"></ul></div><div data-slot="${rootSlot}"><ul data-slot="${choicesSlot}"><li data-slot="${choiceSlot}" data-identifier="A">a</li></ul><ol data-slot="${rootSlot}-ordered"><li data-slot="${positionSlot}" data-position="1"></li></ol></div></div>`;
         document.body.append(container);
 
-        const before = container.innerHTML;
+        // The item Root's own controller marks the Root element (`#plate/content/root.dom.ts`),
+        // so the markup held still is what lies inside it.
+        const item = need(container, '[data-slot="item"]');
+        const before = item.innerHTML;
         const live = need(container, '[data-slot="item-live"]');
         const focused: EventTarget[] = [];
         const record = (event: FocusEvent) => {
@@ -1016,14 +1024,14 @@ describe(server.browser, () => {
         yield* frames;
         document.removeEventListener("focusin", record);
 
-        assert.strictEqual(upgraded.controllers.length, 3);
-        assert.strictEqual(container.innerHTML, before);
+        assert.strictEqual(interactionRoots(upgraded).length, 3);
+        assert.strictEqual(item.innerHTML, before);
         assert.strictEqual(live.textContent, "");
         assert.strictEqual(document.activeElement, active);
         assert.deepStrictEqual(focused, []);
 
         upgraded.teardown();
-        assert.strictEqual(container.innerHTML, before);
+        assert.strictEqual(item.innerHTML, before);
         container.remove();
       }),
     );

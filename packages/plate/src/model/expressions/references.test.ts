@@ -166,17 +166,31 @@ describe("the references family's reader specs", () => {
       }),
   );
 
-  it.effect('mark a qti-base-value of base-type="file" at its path', () =>
-    Effect.gen(function* marksFile() {
-      const built = yield* Effect.fromResult(
-        buildItem(outItem(baseValueElement("file", "upload.txt"))),
-      );
+  it.effect(
+    '[W0-AY] read a qti-base-value of base-type="file" as a file of its text\'s name, with no bytes, unmarked',
+    () =>
+      Effect.gen(function* readsFile() {
+        // This was the mark `base-type="file"` at the element's path until `[W0-AY]` held the type.
+        const read = yield* readOut(baseValueElement("file", " upload.txt "));
+        const built = yield* Effect.fromResult(
+          buildItem(outItem(baseValueElement("file", "upload.txt"))),
+        );
 
-      assert.deepStrictEqual(built.processing, Option.none());
-      assert.deepStrictEqual(built.unsupported, [
-        { feature: 'base-type="file"', path: `${setOut}/qti-base-value`, shown: "mark" },
-      ]);
-    }),
+        assert.deepStrictEqual(
+          read,
+          Option.some<Expression>({
+            kind: "base-value",
+            operands: [],
+            value: {
+              baseType: "file",
+              cardinality: "single",
+              values: [{ baseType: "file", value: { name: "upload.txt", size: 0, type: "" } }],
+            },
+          }),
+        );
+        assert.isTrue(Option.isSome(built.processing));
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
   );
 
   it.effect("refuse a qti-base-value outside its lexical space as value-type at its path", () =>

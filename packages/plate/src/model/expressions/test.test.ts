@@ -230,28 +230,38 @@ describe("the test family's reader specs", () => {
   );
 
   it.effect(
-    "[T-9] mark a qti-test-variables of base-type file, whose values the engine does not hold, and a count with an operand, so the outcome processing is marked",
+    "[T-9] [W0-AY] read a qti-test-variables of base-type file, which the engine holds now, and mark a count with an operand, so the outcome processing is marked",
     () =>
       Effect.gen(function* marksUnheld() {
+        // The `file` test-variables was the mark `base-type="file"` at its path until `[W0-AY]`
+        // held the type; alone it runs, and beside the count with an operand only the count is
+        // the mark it was.
+        const fileVariables = el("qti-test-variables", [
+          attr("base-type", "file"),
+          attr("variable-identifier", "UPLOAD"),
+        ]);
+        const alone = yield* readAll([fileVariables]);
         const read = yield* readAll([
-          el("qti-test-variables", [
-            attr("base-type", "file"),
-            attr("variable-identifier", "UPLOAD"),
-          ]),
+          fileVariables,
           el(
             "qti-number-correct",
             [],
             [el("qti-base-value", [attr("base-type", "integer")], [text("1")])],
           ),
         ]);
+        const uploads: Expression = {
+          ...unfiltered,
+          baseType: Option.some("file"),
+          kind: "test-variables",
+          operands: [],
+          variableIdentifier: "UPLOAD",
+          weightIdentifier: Option.none(),
+        };
 
+        assert.deepStrictEqual(alone, { expressions: [uploads], marks: [], state: "runs" });
         assert.deepStrictEqual(read, {
           expressions: [],
           marks: [
-            mark(
-              'base-type="file"',
-              `${processingPath}/qti-set-outcome-value[1]/qti-test-variables`,
-            ),
             mark(
               "qti-number-correct",
               `${processingPath}/qti-set-outcome-value[2]/qti-number-correct`,

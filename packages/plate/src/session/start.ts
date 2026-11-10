@@ -27,8 +27,8 @@ import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
 import { fresh, startingValue } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
-import { itemRefsIn } from "#plate/model/item-refs.ts";
-import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
+import { itemRefsIn, refIdentifiersIn } from "#plate/model/item-refs.ts";
+import type { ItemRef, Section, SectionChild, Test, TestPart } from "#plate/model/test.ts";
 import type { Value } from "#plate/model/values.ts";
 import { defaultOutputBudget } from "#plate/output-budget.ts";
 import { drawSeed } from "#plate/seed.ts";
@@ -40,8 +40,10 @@ import {
 } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
-import { sequencedBy } from "#plate/test-features/dispatch.ts";
+import type { TestContent, TimedScope } from "#plate/test-features/contract.ts";
+import { enteredBy, presentedBy, sequencedBy } from "#plate/test-features/dispatch.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
+import type { TestFeatureTable } from "#plate/test-features/table.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 import type { NavigationMode, SubmissionMode } from "#plate/vocabulary.ts";
 
@@ -174,6 +176,14 @@ export interface ItemView {
    */
   readonly configuration: Configuration;
   /**
+   * The content the test-feature modules present with the item, each module's nodes in table order
+   * ({@link TestContent}): a rubric block, a test feedback. The host renders it beside the item
+   * through `renderTestContent` (`#plate/session/content.ts`). Empty while every module is a stub,
+   * and for an item no module presents anything at. It is server data like the rest of the view,
+   * and holds nothing of the session a module did not choose to show.
+   */
+  readonly content: readonly TestContent[];
+  /**
    * Whether the item is closed: its part has ended, the test has closed, or its attempt limit is
    * above 0 and reached. Its controls render disabled, and `advance` ignores the responses a step
    * carries for it, so its `values` stay the ones it closed with whatever a host posts.
@@ -233,9 +243,11 @@ export interface SummaryItem {
 }
 
 /**
- * What a closed test shows instead of an item: each of its items, in sequence.
+ * What a closed test shows instead of an item: each of its items, in sequence, and the content the
+ * test-feature modules present with the summary, as {@link ItemView.content} holds an item's.
  */
 export interface TestSummary {
+  readonly content: readonly TestContent[];
   readonly items: readonly SummaryItem[];
   readonly kind: "summary";
 }
@@ -269,6 +281,81 @@ const placesOf = (test: Test): readonly Place[] =>
   test.parts.flatMap((part) => itemRefsIn(part.children).map((ref) => ({ part, ref })));
 
 /**
+ * Find a section by identifier among some section children, nested sections included.
+ *
+ * @param children The children.
+ * @param identifier The section's identifier.
+ * @returns The section, none when no section among the children has the identifier.
+ */
+const sectionIn = (children: readonly SectionChild[], identifier: string): Option.Option<Section> =>
+  Arr.findFirst(children, (child) => {
+    if (child.kind !== "section") {
+      return Option.none();
+    }
+
+    return child.identifier === identifier
+      ? Option.some(child)
+      : sectionIn(child.children, identifier);
+  });
+
+/**
+ * Give the identifiers of the item refs a scope holds within a part, when the part holds the scope.
+ *
+ * @param part The part.
+ * @param scope The scope: an item ref, a section or a part; the test is held by no part.
+ * @returns The scope's refs, none when the part does not hold the scope.
+ */
+const membersIn = (part: TestPart, scope: TimedScope): Option.Option<ReadonlySet<string>> => {
+  const refs = refIdentifiersIn(part.children);
+  switch (scope.kind) {
+    case "item-ref": {
+      return refs.includes(scope.identifier)
+        ? Option.some(new Set([scope.identifier]))
+        : Option.none();
+    }
+    case "section": {
+      return Option.map(
+        sectionIn(part.children, scope.identifier),
+        (section) => new Set(refIdentifiersIn(section.children)),
+      );
+    }
+    case "part": {
+      return part.identifier === scope.identifier ? Option.some(new Set(refs)) : Option.none();
+    }
+    case "test": {
+      return Option.none();
+    }
+    default: {
+      return scope.kind satisfies never;
+    }
+  }
+};
+
+/**
+ * The part that holds a scope: its index among the test's parts, the part, and the identifiers of
+ * the item refs the scope holds.
+ */
+export interface ScopeHolder {
+  readonly index: number;
+  readonly members: ReadonlySet<string>;
+  readonly part: TestPart;
+}
+
+/**
+ * Find the part that holds a scope, with the identifiers of the item refs the scope holds. The
+ * expiry and the exit of a scope (`#plate/session/expire.ts`) and the entering gate here read a
+ * scope's place in the test through this, so a test-feature module never does.
+ *
+ * @param test The test.
+ * @param scope The scope: an item ref, a section or a part; the test is held by no part.
+ * @returns The part's index, the part and the scope's refs; none when no part holds the scope.
+ */
+export const partHoldingScope = (test: Test, scope: TimedScope): Option.Option<ScopeHolder> =>
+  Arr.findFirst(test.parts, (part, index) =>
+    Option.map(membersIn(part, scope), (members) => ({ index, members, part })),
+  );
+
+/**
  * What a read of a session derives from the test once, so each item it reads is looked up instead
  * of found by walking the test again, which would grow with the square of the item count.
  */
@@ -282,14 +369,45 @@ interface Index {
    */
   readonly ended: ReadonlySet<string>;
   /**
+   * The test, which a test-feature module's `present` is handed.
+   */
+  readonly model: Test;
+  /**
    * Each item ref's place, by identifier.
    */
   readonly places: ReadonlyMap<string, Place>;
+  /**
+   * The sections that enclose each item ref, outermost first, by identifier.
+   */
+  readonly sections: ReadonlyMap<string, readonly Section[]>;
   /**
    * The test's identifier, which an {@link UnknownItemRef} names.
    */
   readonly test: string;
 }
+
+/**
+ * List the sections that enclose each item ref of some section children, outermost first, by the
+ * item ref's identifier, in one walk. An identifier keeps its first item ref in document order, as
+ * {@link placesOf} does.
+ *
+ * @param children The children, whose item refs the sections enclose.
+ * @param enclosing The sections that already enclose the children, outermost first.
+ * @param held The map to write into, one entry per identifier.
+ */
+const collectSections = (
+  children: readonly SectionChild[],
+  enclosing: readonly Section[],
+  held: Map<string, readonly Section[]>,
+): void => {
+  for (const child of children) {
+    if (child.kind === "section") {
+      collectSections(child.children, [...enclosing, child], held);
+    } else if (!held.has(child.identifier)) {
+      held.set(child.identifier, enclosing);
+    }
+  }
+};
 
 /**
  * Derive what a read of a session looks its items up in, in one walk of the test each.
@@ -308,12 +426,19 @@ const indexOf = (test: Test, session: TestSession): Index => {
     }
   }
 
+  const sections = new Map<string, readonly Section[]>();
+  for (const part of test.parts) {
+    collectSections(part.children, [], sections);
+  }
+
   return {
     controls: sessionControls(test),
     ended: new Set(
       session.parts.filter((part) => part.status === "ended").map((part) => part.identifier),
     ),
+    model: test,
     places,
+    sections,
     test: test.identifier,
   };
 };
@@ -934,6 +1059,126 @@ const startingParts = (
 };
 
 /**
+ * What `startTest` delivers for one place of the sequence: the accepted item and the session item
+ * it starts from.
+ */
+interface DeliveredPlace {
+  readonly accepted: Accepted;
+  readonly item: SessionItem;
+}
+
+/**
+ * Give the index of the place a session goes to when, at its start, the modules exit a scope from
+ * a place not yet presented: the first place after the scope's last member when the scope holds
+ * the place, or the test's end for the test; the place itself for an item ref in a nonlinear part,
+ * whose exit stays where it is, and for a scope that does not hold the place, those the test lacks
+ * among them, so the place is entered. Nothing of the part has been presented, so leaving its last
+ * member moves on to the next part, as ending it would.
+ *
+ * @param test The test.
+ * @param places The places, in the order the candidate meets them.
+ * @param index The index of the place the exit leaves from.
+ * @param scope The scope.
+ * @returns The index of the place to ask for next; the places' count when none follows.
+ */
+const indexAfterExit = (
+  test: Test,
+  places: readonly Place[],
+  index: number,
+  scope: TimedScope,
+): number => {
+  if (scope.kind === "test") {
+    return scope.identifier === test.identifier ? places.length : index;
+  }
+
+  return Option.match(partHoldingScope(test, scope), {
+    onNone: () => index,
+    onSome: ({ members, part }) => {
+      const place = places[index];
+      if (place === undefined || !members.has(place.ref.identifier)) {
+        return index;
+      }
+
+      return scope.kind === "item-ref" && part.navigation !== "linear"
+        ? index
+        : places.findLastIndex((each) => members.has(each.ref.identifier)) + 1;
+    },
+  });
+};
+
+/**
+ * Enter the first place of a session's sequence: ask the test-feature modules for each place in
+ * turn, from the first, and present the first one every module lets be entered. A skipped place is
+ * passed over, its item never presented; an exit moves on past the scope ({@link indexAfterExit}).
+ * Each part is started once, as the first place asked for in it is reached, so a nonlinear part's
+ * template defaults are evaluated before its first place is asked for. When every place is passed
+ * over, the session starts closed, every part ended and no outcome run counted, as a test with no
+ * item starts.
+ *
+ * @param test The test.
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param features The test-feature modules.
+ * @param now When the session starts.
+ * @param session The session, no part started and no item presented.
+ * @param places The places, in the order the candidate meets them.
+ * @param delivered What each place delivers, in the same order.
+ * @returns The session on its first entered place, or closed; a failure of `partStarted` or of the
+ *   presentation.
+ */
+const enteredFirst = (
+  test: Test,
+  items: ReadonlyMap<string, Accepted>,
+  features: TestFeatureTable,
+  now: Date,
+  session: TestSession,
+  places: readonly Place[],
+  delivered: readonly DeliveredPlace[],
+): Result.Result<TestSession, EngineFailure | TestNotDeliverable> =>
+  Result.gen(function* enterFirstPlace() {
+    let index = 0;
+    let begun = session;
+    let begunPart: Option.Option<TestPart> = Option.none();
+    while (index < places.length) {
+      const place = places[index];
+      const entry = delivered[index];
+      if (place === undefined || entry === undefined) {
+        break;
+      }
+
+      const positioned: TestSession = {
+        ...begun,
+        parts: startingParts(test.parts, Option.some(place.part)),
+        position: index,
+        status: "interacting",
+      };
+      begun = Option.exists(begunPart, (part) => part === place.part)
+        ? positioned
+        : yield* partStarted(test, items, positioned, place.part);
+      begunPart = Option.some(place.part);
+
+      const verdict = enteredBy(features, {
+        items: Option.some(items),
+        now: Option.some(now),
+        sequenceIndex: index + 1,
+        session: begun,
+        test,
+      });
+      if (Option.isNone(verdict)) {
+        const shown = begun.items[index] ?? entry.item;
+
+        return yield* presentedIn(test, items, begun, index, shown, entry.accepted, begun.started);
+      }
+
+      index =
+        verdict.value.kind === "skip"
+          ? index + 1
+          : indexAfterExit(test, places, index, verdict.value.scope);
+    }
+
+    return { ...begun, parts: startingParts(test.parts, Option.none()), status: "closed" };
+  });
+
+/**
  * Check a session instance token.
  *
  * @param token The token passed as `context.instance`.
@@ -969,6 +1214,12 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * `templateDefaults`, which its first presentation applies ({@link partStarted}). A test with no
  * item at all starts closed.
  *
+ * Before the first place is presented, the test-feature modules are asked whether it is entered
+ * (`enter`, through `enteredBy`), as `advance` asks for each place it lands on: a `skip` passes the
+ * place over, its item never presented and its record fresh, and the next place is asked for; an
+ * `exit` moves on past the scope it names; and the first place every module lets through is
+ * presented. A test whose every place is passed over starts closed, with no outcome run.
+ *
  * @example
  *   // The instance is the host's own token for the sitting, such as its key in the host's store.
  *   // A page served over plain HTTP has no `crypto.randomUUID`.
@@ -981,6 +1232,8 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * @param configuration The host's configuration, whose `seed` the session keeps as its shuffle
  *   seed, none when it has none.
  * @param context The sitting.
+ * @param context.features The test-feature modules the sequence and the entering gate consult,
+ *   the table by default; a test hands in one holding a module that has landed.
  * @param context.instance The host's name for this sitting, which scopes every item's ids: a token
  *   `checkInstance` passes, such as a lowercase UUID.
  * @param context.now When the session starts.
@@ -1005,7 +1258,12 @@ export const startTest = (
   test: AcceptedTest,
   items: ReadonlyMap<string, Accepted>,
   configuration: Configuration,
-  context: { readonly instance: string; readonly now: Date; readonly seed?: string },
+  context: {
+    readonly features?: TestFeatureTable;
+    readonly instance: string;
+    readonly now: Date;
+    readonly seed?: string;
+  },
 ): Result.Result<
   TestSession,
   EngineFailure | InvalidSessionInstance | InvalidTime | TestNotDeliverable
@@ -1014,7 +1272,8 @@ export const startTest = (
     const instance = yield* checkedInstance(context.instance);
     const datestamp = yield* datestampOf(context.now, "context.now");
     const seed = context.seed ?? drawSeed();
-    const places = sequencedBy(testFeatures, {
+    const features = context.features ?? testFeatures;
+    const places = sequencedBy(features, {
       places: placesOf(test.test),
       seed,
       test: test.test,
@@ -1038,12 +1297,11 @@ export const startTest = (
               templateDefaults: Option.none(),
             };
 
-            return { accepted, item };
+            return { accepted, item } satisfies DeliveredPlace;
           },
         ),
       ),
     );
-    const first = Option.map(Arr.head(places), (place) => place.part);
     const session: TestSession = {
       document: test.test.document,
       expired: [],
@@ -1057,26 +1315,17 @@ export const startTest = (
           startingValue(outcome),
         ]),
       ),
-      parts: startingParts(test.test.parts, first),
+      parts: startingParts(test.test.parts, Option.none()),
       position: 0,
       seed,
       shuffleSeed: Option.fromUndefinedOr(configuration.seed),
       started: datestamp,
-      status: Option.isSome(first) ? "interacting" : "closed",
+      status: "closed",
       test: test.test.identifier,
       updated: datestamp,
     };
 
-    const begun = yield* Option.match(first, {
-      onNone: () => Result.succeed(session),
-      onSome: (part) => partStarted(test.test, items, session, part),
-    });
-
-    return yield* Option.match(Arr.head(Arr.zip(begun.items, delivered)), {
-      onNone: () => Result.succeed(begun),
-      onSome: ([item, { accepted }]) =>
-        presentedIn(test.test, items, begun, 0, item, accepted, datestamp),
-    });
+    return yield* enteredFirst(test.test, items, features, context.now, session, places, delivered);
   });
 
 /**
@@ -1234,6 +1483,7 @@ export const valuesOf = (item: SessionItem): Responses => {
  * @param session The session.
  * @param configuration The host's configuration.
  * @param item The session item.
+ * @param features The table whose modules present the view's content.
  * @returns The view, or {@link UnknownItemRef}.
  */
 const viewOf = (
@@ -1241,9 +1491,21 @@ const viewOf = (
   session: TestSession,
   configuration: Configuration,
   item: SessionItem,
+  features: TestFeatureTable,
 ): Result.Result<ItemView, UnknownItemRef> =>
   Result.map(inspect(index, session, configuration, item), (inspected) => ({
     configuration: inspected.configuration,
+    content: presentedBy(features, {
+      place: {
+        kind: "item",
+        part: inspected.place.part,
+        ref: item.ref,
+        sections: index.sections.get(item.ref) ?? [],
+        sequenceIndex: item.sequenceIndex,
+      },
+      session,
+      test: index.model,
+    }),
     count: session.items.length,
     disabled: inspected.closed,
     instance: `${session.instance}.${item.sequenceIndex}`,
@@ -1265,6 +1527,8 @@ const viewOf = (
  * @param session The session.
  * @param configuration The host's configuration.
  * @param sequenceIndex The item's sequence index, counted from 1.
+ * @param features The table whose modules present the view's content, the package's
+ *   `testFeatures` by default; a test passes one holding a module that has landed.
  * @returns The item's view; {@link ItemNotInSession} for a sequence index the session lacks;
  *   {@link UnknownItemRef} when the test holds no item ref the item names, as when the session
  *   belongs to another test.
@@ -1274,9 +1538,10 @@ export const itemView = (
   session: TestSession,
   configuration: Configuration,
   sequenceIndex: number,
+  features: TestFeatureTable = testFeatures,
 ): Result.Result<ItemView, ItemNotInSession | UnknownItemRef> =>
   Result.flatMap(itemAt(session, sequenceIndex), ([, item]) =>
-    viewOf(indexOf(test.test, session), session, configuration, item),
+    viewOf(indexOf(test.test, session), session, configuration, item, features),
   );
 
 /**
@@ -1294,6 +1559,8 @@ export const itemView = (
  * @param session The session.
  * @param configuration The host's configuration.
  * @param sequenceIndices The items' sequence indices, each counted from 1.
+ * @param features The table whose modules present the views' content, the package's
+ *   `testFeatures` by default.
  * @returns Each item's view, in the order of `sequenceIndices`; {@link ItemNotInSession} for the
  *   first sequence index the session lacks; {@link UnknownItemRef} when the test holds no item ref
  *   an item names, as when the session belongs to another test.
@@ -1303,6 +1570,7 @@ export const itemViews = (
   session: TestSession,
   configuration: Configuration,
   sequenceIndices: readonly number[],
+  features: TestFeatureTable = testFeatures,
 ): Result.Result<readonly ItemView[], ItemNotInSession | UnknownItemRef> => {
   const index = indexOf(test.test, session);
   const bySequence = new Map<number, SessionItem>();
@@ -1319,7 +1587,7 @@ export const itemViews = (
           Option.fromUndefinedOr(bySequence.get(sequenceIndex)),
           () => new ItemNotInSession({ count: session.items.length, sequenceIndex }),
         ),
-        (item) => viewOf(index, session, configuration, item),
+        (item) => viewOf(index, session, configuration, item, features),
       ),
     ),
   );
@@ -1396,6 +1664,8 @@ export const permits = (
  * @param test The test the session was started from.
  * @param session The session.
  * @param configuration The host's configuration.
+ * @param features The table whose modules present the content the view or the summary carries, the
+ *   package's `testFeatures` by default.
  * @returns The view or the summary; {@link ItemNotInSession} for an open session whose position is
  *   past its items; {@link UnknownItemRef} when the test holds no item ref an item names.
  */
@@ -1403,11 +1673,12 @@ export const current = (
   test: AcceptedTest,
   session: TestSession,
   configuration: Configuration,
+  features: TestFeatureTable = testFeatures,
 ): Result.Result<Current, ItemNotInSession | UnknownItemRef> => {
   const index = indexOf(test.test, session);
   if (session.status === "interacting") {
     return Result.flatMap(itemAtPosition(session), ([, item]) =>
-      viewOf(index, session, configuration, item),
+      viewOf(index, session, configuration, item, features),
     );
   }
 
@@ -1423,6 +1694,10 @@ export const current = (
         })),
       ),
     ),
-    (items): TestSummary => ({ items, kind: "summary" }),
+    (items): TestSummary => ({
+      content: presentedBy(features, { place: { kind: "summary" }, session, test: index.model }),
+      items,
+      kind: "summary",
+    }),
   );
 };
