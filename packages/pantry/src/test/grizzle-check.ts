@@ -1,8 +1,8 @@
 /**
- * Grizzle's own check run in a child process, and the configuration of an installation whose top
- * level is the `Cdn` level, as the free suite's compile witnesses use them:
- * `src/test/compile.test.ts` over `grizzle.config.ts`, and each CDN rule's test
- * (`src/levels/cdn-*.test.ts`) over the level.
+ * Grizzle's own check run in a child process, and the configuration files it reads, as the free
+ * suite's compile witnesses use them: `src/test/compile.test.ts` over `grizzle.config.ts`, each CDN
+ * rule's test (`src/levels/cdn-*.test.ts`) over an installation whose top level is the `Cdn` level,
+ * and `src/qti/limits.test.ts` over a probe schema of its own.
  *
  * The witnesses spawn `grizzle check` because grizzle exports no compile function to this package:
  * the engine's compiler is no declared dependency of pantry, and the CLI is the supported way in.
@@ -61,44 +61,59 @@ export const grizzleCheck = (config: string) =>
   });
 
 /**
- * Write the configuration of an installation whose top level is the `Cdn` level over `Qti` for
- * one origin, with the author's login and the committed migrations, as `grizzle.config.ts`
- * configures `Qti`. It is written into its own folder under the package's `work/`, which is removed
- * when the scope closes.
+ * Write a configuration file into its own folder under the package's `work/`, which is removed
+ * when the scope closes. A file there imports this package's modules through its `#pantry/*`
+ * aliases, as `grizzle.config.ts` does.
  *
- * @param folder - The folder's name under `work/`, one per test file, so files running at once
+ * @param folder - The folder's name under `work/`, one per configuration, so checks running at once
  *   never share one.
- * @param origin - The origin the level is built for.
+ * @param text - The configuration's source, given the folder's path.
  * @returns The configuration file's path.
  */
-export const writtenCdnConfig = (folder: string, origin: string) => {
+export const writtenConfig = (folder: string, text: (directory: string) => string) => {
   const directory = path.join(packageDirectory, "work", folder);
-  const text = `import { defineConfig } from "@bjornpagen/grizzle";
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
-import { Effect } from "effect";
-import { migrationConnection } from "#pantry/db/connection.ts";
-import { singleCdn } from "#pantry/levels/cdn.ts";
-import { authorLogin } from "#pantry/qti/logins.ts";
-import { qti } from "#pantry/qti/schema.ts";
-
-export default defineConfig({
-  connection: await Effect.runPromise(
-    migrationConnection.pipe(Effect.provide(NodeFileSystem.layer)),
-  ),
-  logins: [authorLogin(qti())],
-  migrations: ${JSON.stringify(path.join(packageDirectory, "migrations"))},
-  schemas: [singleCdn(qti(), { origin: ${JSON.stringify(origin)} })],
-});
-`;
 
   return Effect.acquireRelease(
     Effect.tryPromise(async () => {
       await mkdir(directory, { recursive: true });
       const file = path.join(directory, "grizzle.config.ts");
-      await writeFile(file, text);
+      await writeFile(file, text(directory));
 
       return file;
     }),
     () => Effect.promise(() => rm(directory, { force: true, recursive: true })),
   );
 };
+
+/**
+ * Write the configuration of an installation whose top level is the `Cdn` level over `Qti` for
+ * one origin, with the author's login and the committed migrations, as `grizzle.config.ts`
+ * configures `Qti`, through {@link writtenConfig}.
+ *
+ * @param folder - The folder's name under `work/`, one per test file, so files running at once
+ *   never share one.
+ * @param origin - The origin the level is built for.
+ * @returns The configuration file's path.
+ */
+export const writtenCdnConfig = (folder: string, origin: string) =>
+  writtenConfig(
+    folder,
+    () => `import { defineConfig } from "@bjornpagen/grizzle";
+import { Effect } from "effect";
+import { connectionServices, migrationConnection } from "#pantry/db/connection.ts";
+import { singleCdn } from "#pantry/levels/cdn.ts";
+import { authorLogin } from "#pantry/qti/logins.ts";
+import { qti } from "#pantry/qti/schema.ts";
+
+const connection = await Effect.runPromise(
+  migrationConnection.pipe(Effect.provide(connectionServices)),
+);
+
+export default defineConfig({
+  connection: () => connection,
+  logins: [authorLogin(qti())],
+  migrations: ${JSON.stringify(path.join(packageDirectory, "migrations"))},
+  schemas: [singleCdn(qti(), { origin: ${JSON.stringify(origin)} })],
+});
+`,
+  );
