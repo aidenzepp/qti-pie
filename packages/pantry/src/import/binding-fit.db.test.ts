@@ -7,8 +7,9 @@
  * declared" alone. A declared binding now has its `BindingDeclaration` (or
  * `PlacedBindingDeclaration`) row and an undeclared one none, whose existence law is "Binding
  * declared", and the fit laws read the binding's cardinality row (`#pantry/qti/interactions.ts`;
- * lane NIL's audit, B1 and B2). This suite holds the database to that over every site and state the
- * host guard (`src/test/binding-fit.oracle.test.ts`) exhausts. Under the old sentinel, a binding
+ * lane NIL's audit, B1 and B2). This suite holds the database to that over every state, each at
+ * one site, where the host guard (`src/test/binding-fit.oracle.test.ts`) exhausts every site and
+ * state. Under the old sentinel, a binding
  * renamed to an undeclared name, an outcome or a built-in, at a site whose nil or borrowed type its
  * interaction does not fit, refused under BindingFit: the containment into the closed `BindingFit`
  * is a CHECK on the binding's table, which PostgreSQL judges as the row is inserted, before the
@@ -24,8 +25,7 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { layer } from "@effect/vitest";
-import { drawn, explore } from "@grizzle/testing/explore";
-import { completeShrink } from "@grizzle/testing/shrink";
+import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
@@ -43,9 +43,14 @@ import { hasLease } from "#pantry/test/settings.ts";
 const base = everyRelationPackage({ choices: 2, hotspots: 1, hottexts: 1 });
 
 /**
- * Every (site, state) of the scope, by its number.
+ * Each state once, at the site that turns with the state's place, so the box meets every state and
+ * every site, the renamed states at three different interactions: built, not drawn.
  */
-const cases = bindingSites.flatMap((site) => bindingStates.map((state) => ({ site, state })));
+const cases = bindingStates.flatMap((state, at) => {
+  const site = bindingSites[at % bindingSites.length];
+
+  return site === undefined ? [] : [{ site, state }];
+});
 
 describe.skipIf(!hasLease)("import/binding-fit.db.test.ts, on the lease", () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
@@ -55,26 +60,24 @@ describe.skipIf(!hasLease)("import/binding-fit.db.test.ts, on the lease", () => 
       "the database refuses every binding case under a rule the law oracle predicts, or accepts it where the oracle does",
       (ctx) =>
         // Oracle: a second implementation, the law oracle's verdict over the same entries. Bound:
-        // 24 (site, state) cases of binding-cases.ts, drawn from the run's seed, one import each;
-        // `src/test/binding-fit.oracle.test.ts` judges the scope against the oracle on the host.
+        // every binding state once, 11 cases, each at a site the box turns through, exhausted, one
+        // import each; `src/test/binding-fit.oracle.test.ts` judges the whole (site, state) scope
+        // against the oracle on the host.
         searched(
           ctx,
-          explore(
+          exhaust(
             {
+              box: "every binding state once, at each site in turn",
               caseHang: Duration.seconds(120),
-              concurrency: 1,
               coverage: noCoverage,
-              draw: drawn(int(0, cases.length - 1)),
-              kept: [],
+              generator: int(0, cases.length - 1),
+              limit: cases.length,
               literal: (at) => {
                 const held = cases[at];
 
                 return held === undefined ? String(at) : `${held.site.identifier} ${held.state}`;
               },
               oracle: { kind: "second-implementation", name: "the law oracle's verdict" },
-              runs: 24,
-              shrink: completeShrink,
-              steerEvery: 16,
               suite: "pantry/binding-fit-db",
             },
             (at) =>
