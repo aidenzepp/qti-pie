@@ -2,8 +2,7 @@
  * The one reader of a TypeScript module's imports, for the tests that hold pantry's module graph to
  * a rule: the command line's startup graph (`src/cli/startup.test.ts`), the boundary between the
  * XML side and the PostgreSQL side (`src/import/boundary.test.ts`), the pure layers
- * (`src/grammar/purity.test.ts`), the import's read, which evaluates no schema module
- * (`src/import/schema-free.test.ts`), and the modules an install outside this package loads
+ * (`src/grammar/purity.test.ts`), and the modules an install outside this package loads
  * (`src/qti/schema.test.ts`).
  */
 import { Predicate } from "effect";
