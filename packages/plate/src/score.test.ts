@@ -1998,7 +1998,7 @@ describe("the public surface", () => {
   it.effect("exports isPosted, which narrows a declaration's base type to PostedBaseType", () =>
     Effect.gen(function* narrowsBaseType() {
       const surface = yield* Effect.promise(() => import("#plate/index.ts"));
-      const posted: readonly PostedBaseType[] = ["float", "point"].filter(surface.isPosted);
+      const posted: readonly PostedBaseType[] = ["float", "duration"].filter(surface.isPosted);
 
       assert.deepStrictEqual(posted, ["float"]);
     }),
