@@ -184,12 +184,12 @@ const identifiers = ["a", "b", "ab", "ba"] as const;
 /**
  * The trimmed-token pattern, as a host reads it.
  */
-const trimmed = new RegExp(trimmedPattern, "u");
+const trimmed = new RegExp(trimmedPattern.source, "u");
 
 /**
  * The identifier pattern, as a host reads it.
  */
-const identifierForm = new RegExp(identifierPattern, "u");
+const identifierForm = new RegExp(identifierPattern.source, "u");
 
 describe("qti/metadata.ts, declared", () => {
   it("builds a schema of Qti's relations and the metadata overlays with the layers' laws, each statement once", () => {
@@ -331,7 +331,7 @@ const dateDomains = [
 /**
  * Grizzle's lexical form of `date`, which `StatisticDate.day` is typed by, as a host reads it.
  */
-const dateForm = new RegExp(lexicalForm(date), "u");
+const dateForm = new RegExp(lexicalForm(date).source, "u");
 
 /**
  * One `lastUpdated` of the calendar box: a year, a month, a day and the whitespace around them.

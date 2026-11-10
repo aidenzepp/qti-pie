@@ -122,7 +122,7 @@ const copyOf = ({ baseType, cardinality, declarationKind }: Declared): Declarati
  * The map keys of a float mapping, every one of which holds a typed value (reading 154), as
  * `floatKeys` selects them.
  */
-const doubleKey = new RegExp(doublePattern, "u");
+const doubleKey = new RegExp(doublePattern.source, "u");
 
 /**
  * The map keys of a pair or directed pair mapping that hold a typed value, as `pairKeys` and
@@ -134,7 +134,7 @@ const doubleKey = new RegExp(doublePattern, "u");
  * and on any other character no `Char` is. The integer and point keys need no such test, since
  * their parsers' languages are their patterns' (`mapping.test.ts`).
  */
-const pairKey = new RegExp(pairKeyPattern, "u");
+const pairKey = new RegExp(pairKeyPattern.source, "u");
 
 /**
  * A point key's or a pair key's split: its two items and the whitespace between them.

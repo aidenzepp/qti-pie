@@ -261,7 +261,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           // the value domain, and no law of the table, and no place in the precedence, is a calendar's.
           const dayLaws = statedLaws().filter(
             ([law]) =>
-              (law.kind === "pattern" && law.source === lexical(date).pattern.source) ||
+              (law.kind === "pattern" &&
+                law.patterns[0].source === lexical(date).patterns[0].source) ||
               (law.kind === "generated" && law.relation === "StatisticDate"),
           );
 

@@ -13,7 +13,7 @@ import {
   fold,
   generated,
   key,
-  lawsOf,
+  lawsByStatement,
   lexical,
   Monoid,
   mirrors,
@@ -30,7 +30,7 @@ import {
   tree,
   uuid,
 } from "@bjornpagen/grizzle";
-import type { AnySchema, Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
+import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
@@ -129,16 +129,11 @@ interface Axis {
  * @param prefix - The terms.
  * @returns Whether they begin it.
  */
-const beginsWith = (side: LawSourceSide, prefix: readonly LawSide["terms"][number][]): boolean =>
+const beginsWith = (side: LawSide, prefix: readonly LawSide["terms"][number][]): boolean =>
   prefix.every((term, at) => {
     const own = side.terms[at];
 
-    return (
-      own !== undefined &&
-      own.kind !== "constant" &&
-      own.kind === term.kind &&
-      own.field === term.field
-    );
+    return own !== undefined && own.kind === term.kind && own.field === term.field;
   });
 
 /**
@@ -147,7 +142,7 @@ const beginsWith = (side: LawSourceSide, prefix: readonly LawSide["terms"][numbe
  * @param side - The side.
  * @returns Whether it selects.
  */
-const selects = (side: LawSourceSide): boolean => side.selection.conjuncts.length > 0;
+const selects = (side: LawSide): boolean => side.selection.conjuncts.length > 0;
 
 /**
  * Read the axes of every family of a schema, each with the laws its foreign key carries: the
@@ -400,16 +395,15 @@ const scratch = (() => {
     mirrors(on(Choice, "node"), on(Node, "id")),
     key(on(Choice, "interaction", "identifier")),
   ]);
-  const statementLaws = lawsOf(built);
+  const lawsOfStatement = lawsByStatement(built);
   const lawOf = (statement: (typeof built.statements)[number]): Law =>
     pipe(
-      Arr.findFirst(statementLaws, (held) => held.statement === statement),
-      Option.flatMap(({ laws }) => Arr.head(laws)),
+      Arr.head(lawsOfStatement(statement)),
       Option.getOrThrowWith(() => new Error("a scratch statement grizzle states no law of")),
     );
 
   return {
-    laws: statementLaws.flatMap(({ laws }) => laws),
+    laws: built.statements.flatMap((statement) => lawsOfStatement(statement)),
     named: {
       attributeFamily: lawOf(attributeFamily),
       attributeOwner: lawOf(attributeOwner),
@@ -435,18 +429,13 @@ const scratch = (() => {
  * @param expected - The side, as {@link sideOf} builds it.
  * @returns Whether it reads it.
  */
-const readsAs = (side: LawSourceSide, expected: LawSide): boolean =>
+const readsAs = (side: LawSide, expected: LawSide): boolean =>
   side.relation === expected.relation &&
   side.terms.length === expected.terms.length &&
   side.terms.every((term, at) => {
     const held = expected.terms[at];
 
-    return (
-      held !== undefined &&
-      term.kind !== "constant" &&
-      term.kind === held.kind &&
-      term.field === held.field
-    );
+    return held !== undefined && term.kind === held.kind && term.field === held.field;
   });
 
 /**
@@ -1623,7 +1612,13 @@ describe("the refusals made before the database", () => {
           "entity-cycle",
           "entity-expansion",
         ] as const
-      ).map((rule) => [new ReaderRefusal({ detail: "d", rule }), "reader-refusal"] as const),
+      ).map(
+        (rule) =>
+          [
+            new ReaderRefusal({ detail: "d", position: Option.none(), rule }),
+            "reader-refusal",
+          ] as const,
+      ),
       [new WellFormednessError({ column: 1, line: 1, message: "m" }), "well-formedness"],
     ];
 
@@ -1633,6 +1628,24 @@ describe("the refusals made before the database", () => {
 
     const refused = new ImportRefused({ detail: "x", origin: readerOrigin, rule: "admission" });
     assert.strictEqual(ruleOfError(refused), refused);
+  });
+
+  it("names a reader refusal's line and column when it has a position, as a well-formedness error's", () => {
+    const placed = ruleOfError(
+      new ReaderRefusal({
+        detail: "d",
+        position: Option.some({ column: 7, line: 3 }),
+        rule: "element-depth",
+      }),
+    );
+    const unplaced = ruleOfError(
+      new ReaderRefusal({ detail: "d", position: Option.none(), rule: "element-depth" }),
+    );
+
+    assert.strictEqual(placed.rule, "reader-refusal");
+    assert.isTrue(placed.detail.endsWith(" at line 3, column 7"), placed.detail);
+    assert.strictEqual(unplaced.rule, "reader-refusal");
+    assert.notInclude(unplaced.detail, " at line ");
   });
 });
 
@@ -1650,7 +1663,9 @@ describe("the refusals made before the database", () => {
 const textFields = (
   relations: AnySchema["relations"],
 ): readonly { readonly law: Law; readonly type: unknown }[] => {
-  const Pattern = Schema.Struct({ flags: Schema.Literals(["u", "su"]), source: Schema.String });
+  const Patterns = Schema.NonEmptyArray(
+    Schema.Struct({ flags: Schema.Literals(["u", "su"]), source: Schema.String }),
+  );
   const Stored = Schema.Struct({
     fields: Schema.Record(Schema.String, Schema.Unknown),
     kind: Schema.Literal("relation"),
@@ -1669,13 +1684,13 @@ const textFields = (
           onSome: (written) => (written.writing === "generated" ? written.type : written.field),
         });
 
-        return Predicate.hasProperty(type, "pattern")
+        return Predicate.hasProperty(type, "patterns")
           ? [
               {
                 law: {
-                  ...Schema.decodeUnknownSync(Pattern)(type.pattern),
                   field,
                   kind: "pattern",
+                  patterns: Schema.decodeUnknownSync(Patterns)(type.patterns),
                   relation: name,
                 } satisfies Law,
                 type,
@@ -1720,10 +1735,9 @@ const missingFrom = (laws: readonly Law[], among: readonly Law[]): readonly stri
  */
 const clubLaw = (field: string): Extract<Law, { readonly kind: "pattern" }> => ({
   field,
-  flags: "u",
   kind: "pattern",
+  patterns: [{ flags: "u", source: "^[a-z]*$" }],
   relation: "Club",
-  source: "^[a-z]*$",
 });
 
 /**
@@ -1788,12 +1802,14 @@ const composedQti = Effect.promise(() => import("#pantry/qti/schema.ts")).pipe(
 );
 
 /**
- * Every law a schema's statements state, as grizzle's `lawsOf` names them, compiled once per
- * schema.
+ * Every law a schema's statements state, as grizzle's `lawsByStatement` names them, compiled once
+ * per schema.
  */
-const statementLawsOf = Fn.memoize((built: AnySchema): readonly Law[] =>
-  lawsOf(built).flatMap(({ laws }) => laws),
-);
+const statementLawsOf = Fn.memoize((built: AnySchema): readonly Law[] => {
+  const lawsOfStatement = lawsByStatement(built);
+
+  return built.statements.flatMap((statement) => lawsOfStatement(statement));
+});
 
 describe("the pattern laws, one per field", () => {
   it("names each text field by its own type's row, a generated field's included, and refuses a field whose type no row holds", () => {
@@ -1845,8 +1861,7 @@ describe("the pattern laws, one per field", () => {
       assert.isTrue(
         chars.kind === "pattern" &&
           namespace.kind === "pattern" &&
-          chars.source === namespace.source &&
-          chars.flags === namespace.flags,
+          Formatter.format(chars.patterns) === Formatter.format(namespace.patterns),
         "the two fields spell one pattern",
       );
       assert.isFalse(sameLaw(chars, namespace));
@@ -1915,7 +1930,7 @@ describe("the census of the composed Qti schema", () => {
         assert.deepStrictEqual(
           [...textLaws.keys(), ...plainTexts]
             .filter((type) => !typed.has(type))
-            .map(({ pattern }) => Formatter.format(pattern)),
+            .map((type) => Formatter.format(type.patterns)),
           [],
           "rows of textLaws or plainTexts that type no field",
         );

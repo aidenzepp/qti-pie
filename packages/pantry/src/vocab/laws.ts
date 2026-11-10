@@ -471,7 +471,7 @@ export const lawTable = {
   "Item ref target": {
     rule: "item-ref-target",
     source:
-      "the UP audit's B2: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_AssessmentItemRef.Attr_href (§5.6.5: 'The URI used to refer to the item's file (e.g., elsewhere in the same content package)', info.txt:14764): an item ref's href names a document of the package, and that document's root is an item (tests.ts ItemRefTarget)",
+      "the UP audit's B2: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_AssessmentItemRef.Attr_href (§5.6.5: 'The URI used to refer to the item's file (e.g., elsewhere in the same content package)', info.txt:12356): an item ref's href names a document of the package, and that document's root is an item (tests.ts ItemRefTarget)",
   },
   "Key text bound": {
     rule: "key-text-bound",
@@ -486,7 +486,7 @@ export const lawTable = {
   "Label tools": {
     rule: "label-tool",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BaseSequence.Attr_label (§5.16.5, and §5.15.5, §5.17.5 to §5.21.5 and §5.79.4: 'If an item uses labels then values for the associated toolName and toolVersion characteristics must also be provided'), of the label of each kind whose type takes it from one of those classes, in both versions (labels.ts toolLabelKinds), and not of ItemFileInfo's ('A human readable label/short description for the file', §5.80.2) or PrintedVariable's ('such as would be appropriate for a tooltip', §7.30.4), which state none; reading 128: https://www.imsglobal.org/sites/default/files/spec/qti/v3/info/imsqti_asi_v3p0p1_infomodel_v1p0.html (QTI 3.0.1 §4.1.3, the item's label: 'If an item uses labels then values for the associated toolName and toolVersion attributes must also be provided'; ~/.cache/gr8des/qti301/info301.txt:11490) of a 3.0.1 item root's own label, where 3.0.0's §4.1.3 ('A human readable label that can be used to describe the Item', ~/.cache/gr8des/anyuri-specs/qti/info.txt:10162) states none; the version is the manifest's schemaversion (reading 67), and the sentence binds an item, not a stimulus or a test",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BaseSequence.Attr_label (§5.16.5, and §5.15.5, §5.17.5 to §5.21.5 and §5.79.4: 'If an item uses labels then values for the associated toolName and toolVersion characteristics must also be provided'), of the label of each kind whose type takes it from one of those classes, in both versions (labels.ts toolLabelKinds), and not of ItemFileInfo's ('A human readable label/short description for the file', §5.80.2) or PrintedVariable's ('such as would be appropriate for a tooltip', §7.30.4), which state none; reading 128: https://www.imsglobal.org/sites/default/files/spec/qti/v3/info/imsqti_asi_v3p0p1_infomodel_v1p0.html (QTI 3.0.1 §4.1.3, the item's label: 'If an item uses labels then values for the associated toolName and toolVersion attributes must also be provided'; ~/.cache/gr8des/qti301/info301.txt:6420) of a 3.0.1 item root's own label, where 3.0.0's §4.1.3 ('A human readable label that can be used to describe the Item', ~/.cache/gr8des/anyuri-specs/qti/info.txt:6370) states none; the version is the manifest's schemaversion (reading 67), and the sentence binds an item, not a stimulus or a test",
   },
   "Literal lexical": {
     rule: "attribute-lexical",
@@ -738,7 +738,7 @@ export const lawTable = {
   "Quotation punctuation": {
     rule: "q-punctuation",
     source:
-      "reading 127: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Q (§5.111, Q: 'Quotation punctuation (such as quotation marks) that is quoting the contents of the tag must not appear immediately before, after, or inside q tags; they will be inserted into the rendering by the user agent'; ~/.cache/gr8des/anyuri-specs/qti/info.txt:38400, and the 3.0.1 model's ~/.cache/gr8des/qti301/info301.txt:55430): a q is refused where the last character of its sibling before it, the first of its sibling after it, or the first or last character of its own content is a quotation mark, one of \" « » ‘ ‚ ‛ “ ” „ ‟ ‹ › (main's set, which leaves out the apostrophes ' and ’), each read off a text, whitespace or entity reference row, so an element, a comment or an instruction beside the q holds no punctuation (quotation.ts Quotation_punctuation)",
+      "reading 127: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Q (§5.111, Q: 'Quotation punctuation (such as quotation marks) that is quoting the contents of the tag must not appear immediately before, after, or inside q tags; they will be inserted into the rendering by the user agent'; ~/.cache/gr8des/anyuri-specs/qti/info.txt:38355, and the 3.0.1 model's ~/.cache/gr8des/qti301/info301.txt:39222): a q is refused where the last character of its sibling before it, the first of its sibling after it, or the first or last character of its own content is a quotation mark, one of \" « » ‘ ‚ ‛ “ ” „ ‟ ‹ › (main's set, which leaves out the apostrophes ' and ’), each read off a text, whitespace or entity reference row, so an element, a comment or an instruction beside the q holds no punctuation (quotation.ts Quotation_punctuation)",
   },
   "Record field key": {
     rule: "value-cardinality",
@@ -792,7 +792,7 @@ export const lawTable = {
   "Section identifier target": {
     rule: "section-identifier-target",
     source:
-      "readings 5 and 86: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_Number.Attr_section-identifier (§7.27.1, and §7.28.1, §7.39.1: 'If specified, only variables from items in the qti-assessment-section with matching identifier are matched', info.txt:69115), resolved over each test that places the document: a section-identifier names exactly one section or section ref of the assembled test (expressions.ts Reading, form name; the UP audit's A61)",
+      "readings 5 and 86: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_Number.Attr_section-identifier (§7.27.1, and §7.28.1, §7.39.1: 'If specified, only variables from items in the qti-assessment-section with matching identifier are matched', info.txt:77086), resolved over each test that places the document: a section-identifier names exactly one section or section ref of the assembled test (expressions.ts Reading, form name; the UP audit's A61)",
   },
   "Selection bound": {
     rule: "selection-bounds",
@@ -827,7 +827,7 @@ export const lawTable = {
   "Stimulus ref target": {
     rule: "stimulus-ref-target",
     source:
-      "info.txt:67012 and :67066 (https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentStimulusRef, §7.6: the stimulus ref 'enables reference to a 'qti-assessment-stimulus' instance', and its href is 'The uri used to refer to the stimulus file'): a stimulus ref's href that resolves in the package names a listed document whose root is a qti-assessment-stimulus; an external href is not resolved (reading 35's reading of an absolute URI) (package.ts ReferencePath, the UP audit's B5)",
+      "info.txt:74346 and :74420 (https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentStimulusRef, §7.6: the stimulus ref 'enables reference to a 'qti-assessment-stimulus' instance', and its href is 'The uri used to refer to the stimulus file'): a stimulus ref's href that resolves in the package names a listed document whose root is a qti-assessment-stimulus; an external href is not resolved (reading 35's reading of an absolute URI) (package.ts ReferencePath, the UP audit's B5)",
   },
   "Strictly held": {
     rule: "unmodeled-vocabulary",
@@ -946,7 +946,7 @@ export const lawTable = {
   "Variable mapping source": {
     rule: "variable-mapping-source",
     source:
-      "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:71657): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSourceDeclaration, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it, and a mapping under it is accepted unchecked (reading 110, expressions.ts heldMappings leaves out a mapping whose MappingItemRefType names an LTI link)",
+      "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:80470): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSourceDeclaration, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it, and a mapping under it is accepted unchecked (reading 110, expressions.ts heldMappings leaves out a mapping whose MappingItemRefType names an LTI link)",
   },
   "Variable mapping target": {
     rule: "variable-mapping-target",

@@ -2,16 +2,12 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { committedRosters, decodeCommittedRosters, inCommittedOrder } from "#pantry/db/codes.ts";
 
-interface RelationText {
-  readonly codes?: readonly { readonly handle?: string; readonly kind: string }[];
-  readonly kind?: string;
-}
+type Codes = readonly { readonly handle?: string; readonly kind: string }[];
 
 const slots = (...entries: readonly (string | null)[]) =>
   entries.map((entry) => (entry === null ? { kind: "hole" } : { handle: entry, kind: "live" }));
 
-const snapshotText = (relations: Readonly<Record<string, RelationText>>) =>
-  JSON.stringify({ theory: { relations } });
+const snapshotText = (rosters: Readonly<Record<string, Codes>>) => JSON.stringify({ rosters });
 
 describe("inCommittedOrder", () => {
   it("keeps the committed order and appends new handles in the grammar's order", () => {
@@ -39,13 +35,16 @@ describe("decodeCommittedRosters", () => {
     Effect.gen(function* readsLive() {
       const rosters = yield* decodeCommittedRosters(
         "/snapshot.json",
-        snapshotText({
-          Closed: { codes: slots("a", null, "b"), kind: "closed" },
-          Plain: { kind: "open" },
-        }),
+        snapshotText({ Closed: slots("a", null, "b"), Empty: slots(null) }),
       );
 
-      assert.deepStrictEqual([...rosters], [["Closed", ["a", "b"]]]);
+      assert.deepStrictEqual(
+        [...rosters],
+        [
+          ["Closed", ["a", "b"]],
+          ["Empty", []],
+        ],
+      );
     }),
   );
 
@@ -64,7 +63,7 @@ describe("decodeCommittedRosters", () => {
     Effect.gen(function* failsOnLayout() {
       const failure = yield* decodeCommittedRosters(
         "/snapshot.json",
-        snapshotText({ Closed: { codes: [{ kind: "other" }] } }),
+        snapshotText({ Closed: [{ kind: "other" }] }),
       ).pipe(Effect.flip);
 
       assert.strictEqual(failure._tag, "SnapshotLoadError");

@@ -66,21 +66,22 @@ import { mathmlNamespace, namespaceClassOf, namespaceNameOf } from "#pantry/voca
  * the field's own flags, so JavaScript's `RegExp` decides exactly the language PostgreSQL's CHECK
  * holds the column to.
  *
- * @param field - The field.
- * @param field.desc - Its description, the pattern's source and flags.
+ * @param field - The field, of one pattern, as every text field of chardata.ts is.
+ * @param field.patterns - Its patterns, its one pattern's source and flags first.
  * @returns The compiled pattern.
  */
-const patternOf = (field: { readonly desc: { readonly flags: string; readonly source: string } }) =>
-  new RegExp(field.desc.source, field.desc.flags);
+const patternOf = (field: {
+  readonly patterns: readonly [{ readonly flags: string; readonly source: string }, ...unknown[]];
+}) => new RegExp(field.patterns[0].source, field.patterns[0].flags);
 
 /**
  * The patterns of `Node.chars` by kind that the arm checks match, under `Compute.matches`'s flags,
  * `u`.
  */
 const charsPatterns = {
-  entityRef: new RegExp(entityRefChars, "u"),
-  text: new RegExp(textChars, "u"),
-  ws: new RegExp(whitespaceChars, "u"),
+  entityRef: new RegExp(entityRefChars.source, "u"),
+  text: new RegExp(textChars.source, "u"),
+  ws: new RegExp(whitespaceChars.source, "u"),
 } as const;
 
 /**

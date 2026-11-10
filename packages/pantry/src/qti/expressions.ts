@@ -62,7 +62,6 @@ import {
   check,
   closedId,
   Compute,
-  constant,
   contained,
   counted,
   drawn,
@@ -180,6 +179,16 @@ import {
 } from "#pantry/qti/tests.ts";
 
 /**
+ * {@link integerMathOperators} as a `Compute.matches` pattern.
+ */
+const integerMath = Compute.pattern(integerMathOperators);
+
+/**
+ * {@link spelledBasesPattern} as a `Compute.matches` pattern.
+ */
+const spelledBases = Compute.pattern(spelledBasesPattern);
+
+/**
  * What a reference's lexical form holds around the name it spells: XML whitespace `S`, possibly
  * none, which a collapsing type absorbs, or one brace of a braced reference. Exported for
  * `src/import/refusal.ts`, which names its pattern law.
@@ -189,7 +198,7 @@ export const Affix = str.regex("^(?:[\\t\\n\\r ]*|\\{|\\})$");
 /**
  * XML whitespace `S`, possibly none, as a pattern.
  */
-const spacePattern = "^[\\t\\n\\r ]*$";
+const spacePattern = Compute.pattern("^[\\t\\n\\r ]*$");
 
 /**
  * The pattern of a name a reference spells: an NCName (`ncNamePattern`), the reference member of a
@@ -197,7 +206,7 @@ const spacePattern = "^[\\t\\n\\r ]*$";
  * braced one), which no integer or float literal is but `INF` and `NaN`. Any other value names
  * nothing, and its value domain refuses it alone (spec reading 152).
  */
-const namePattern = `^${ncNamePattern}$`;
+const namePattern = Compute.pattern<string>(`^${ncNamePattern}$`);
 
 /**
  * The empty base-type set, every operand fold's start.
@@ -1140,18 +1149,18 @@ const silentBases = ["any", "unknown"] as const;
  * The bare and braced spellings a reference's lexical form takes: the name with the whitespace a
  * collapsing type absorbs, or the name between braces exactly (`EncVariableStringDType`).
  */
-const bareReference = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
+const bareReference = Compute.pattern<string>(`^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`);
 
 /**
  * A braced reference's lexical form.
  */
-const bracedReference = `^\\{${ncNamePattern}\\}$`;
+const bracedReference = Compute.pattern<string>(`^\\{${ncNamePattern}\\}$`);
 
 /**
  * A float literal that is also a name, which a float-or-reference attribute reads as the literal:
  * the union's first member, `xs:double`, takes it (XML Schema Part 2, 4.1.2.3).
  */
-const floatName = "^[\\t\\n\\r ]*(?:INF|NaN)[\\t\\n\\r ]*$";
+const floatName = Compute.pattern("^[\\t\\n\\r ]*(?:INF|NaN)[\\t\\n\\r ]*$");
 
 /**
  * The kinds whose references stand in place of a float literal.
@@ -1350,7 +1359,7 @@ const builtInNamesOf = (root: string): readonly string[] =>
  * A prefixed name, one a test's outcome processing reads through its parts and items: a name
  * holding a `.` (spec reading 48; the UP audit's L-P), which no unprefixed declaration has.
  */
-const prefixedName = "^.*[.].*$";
+const prefixedName = Compute.pattern("^.*[.].*$");
 
 /**
  * State the type a reference's resolution gives it: a declared variable's, which its
@@ -1624,7 +1633,7 @@ const absentNames = select(VariableLookup, (l) => l.eq(l.declared, false));
  * The published templates, each with the pattern its `template` URI matches.
  */
 const publishedTemplates = rpTemplates.flatMap((template) =>
-  template === "none" ? [] : [[template, rpTemplatePattern(template)] as const],
+  template === "none" ? [] : [[template, Compute.pattern(rpTemplatePattern(template))] as const],
 );
 
 /**
@@ -1632,17 +1641,17 @@ const publishedTemplates = rpTemplates.flatMap((template) =>
  * no bound (a number beyond the instances drawn names one never drawn, which no static rule
  * refuses).
  */
-export const positiveNumberPattern = "^[0-9]*[1-9][0-9]*$";
+export const positiveNumberPattern = Compute.pattern("^[0-9]*[1-9][0-9]*$");
 
 /**
  * A name piece of all digits: an instance number's form.
  */
-export const digitsPattern = "^[0-9]+$";
+export const digitsPattern = Compute.pattern("^[0-9]+$");
 
 /**
  * A segment's piece: no dot.
  */
-export const piecePattern = "^[^.]*$";
+export const piecePattern = Compute.pattern("^[^.]*$");
 
 /**
  * The built-in variables a test's own processing names unsplit, as the installed `BuiltInVariable`
@@ -1660,8 +1669,8 @@ const testBuiltIns = builtInNamesOf(testKind);
 const itemBuiltIns = builtInNamesOf(itemKind);
 
 /**
- * The kinds whose `duration` a part's or a section's prefix names (information model §2.2.2,
- * info.txt:9214: "time spent on test parts or sections are treated as built-in response variables
+ * The kinds whose `duration` a part's or a section's prefix names (information model §2.8.5,
+ * info.txt:5373: "time spent on test parts or sections are treated as built-in response variables
  * declared within each respective scope"; a section ref names its placement as a section does,
  * spec reading 86).
  */
@@ -2108,8 +2117,8 @@ export const referenceLawsByName = {
     // declaration of a name would break both. Declaration key alone says a name's declaration is
     // one, and the justification makes a found row that one, with its kind and counts.
     contained(
-      on(DeclarationIdentifier, "document", "identifier", constant(true)),
-      on(VariableLookup, "document", "name", "declared"),
+      on(DeclarationIdentifier, "document", "identifier"),
+      on(declaredNames, "document", "name"),
     ),
     contained(
       on(
@@ -3249,19 +3258,13 @@ export const expressionLawsByName = {
             x.and(
               x.eq(x.attribute, "base-type"),
               x.eq(x.baseType, "unknown"),
-              x.not(Compute.matches(x.lexical, spelledBasesPattern)),
+              x.not(Compute.matches(x.lexical, spelledBases)),
             ),
             x.and(
               x.eq(x.attribute, "name"),
               x.or(
-                x.and(
-                  Compute.matches(x.lexical, integerMathOperators),
-                  x.eq(x.baseType, "integer"),
-                ),
-                x.and(
-                  x.not(Compute.matches(x.lexical, integerMathOperators)),
-                  x.eq(x.baseType, "float"),
-                ),
+                x.and(Compute.matches(x.lexical, integerMath), x.eq(x.baseType, "integer")),
+                x.and(x.not(Compute.matches(x.lexical, integerMath)), x.eq(x.baseType, "float")),
               ),
             ),
             x.eq(x.attribute, "weight-identifier"),

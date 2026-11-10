@@ -329,12 +329,12 @@ const configTags: ReadonlySet<string> = new Set([
 
 /**
  * Whether `failure` is grizzle's report of a password file that could not be read. grizzle never
- * raises a bare `CredentialError`: an `OpenError` carries it as its `reason`, and a write's failed
- * acquisition is a `TransportFailure` that does.
+ * raises a bare `CredentialError`: `Db.open` contacts no database, so a call's failed acquisition
+ * is a `TransportFailure` that carries it as its `reason`.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
 const isCredentialFailure = (failure: unknown): boolean =>
-  (tagOf(failure) === "OpenError" || tagOf(failure) === "TransportFailure") &&
+  tagOf(failure) === "TransportFailure" &&
   Predicate.hasProperty(failure, "reason") &&
   tagOf(failure.reason) === "CredentialError";
 

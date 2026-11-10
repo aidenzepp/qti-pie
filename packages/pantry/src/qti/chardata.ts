@@ -31,7 +31,6 @@ import {
   closed,
   closedId,
   Compute,
-  constant,
   contained,
   drawn,
   fin,
@@ -64,8 +63,13 @@ import {
   vocabularyNamespacePattern,
 } from "#pantry/grammar/install.ts";
 import { keyTextBytes, namespaceBytes, prefixBytes } from "#pantry/qti/limits.ts";
-import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
+import { Node, nodeRef } from "#pantry/qti/node.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
+
+/**
+ * {@link vocabularyNamespacePattern} as a `Compute.matches` pattern.
+ */
+const vocabularyNamespaces = Compute.pattern(vocabularyNamespacePattern);
 
 /**
  * XML 1.0's `Char` as the body of a class: tab, line feed, carriage return and every scalar from
@@ -122,12 +126,12 @@ const ncName = `[${ncStart}][${ncChar}]*`;
  *
  * @see {@link https://www.w3.org/TR/xml/#syntax | XML 1.0, §2.4 Character Data and Markup}
  */
-export const textChars = `^[${xmlChar}]*[${xmlNonSpace}][${xmlChar}]*$`;
+export const textChars = Compute.pattern(`^[${xmlChar}]*[${xmlNonSpace}][${xmlChar}]*$`);
 
 /**
  * The text of a node of kind `ws`: a non-empty run of XML whitespace (`XdmWhitespace`).
  */
-export const whitespaceChars = "^[ \\t\\n\\r]+$";
+export const whitespaceChars = Compute.pattern("^[ \\t\\n\\r]+$");
 
 /**
  * The characters of a node of kind `entityRef`: the reference as written, `&name;`, its name an
@@ -135,7 +139,7 @@ export const whitespaceChars = "^[ \\t\\n\\r]+$";
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-EntityRef | XML 1.0, EntityRef}
  */
-export const entityRefChars = `^&${ncName};$`;
+export const entityRefChars = Compute.pattern(`^&${ncName};$`);
 
 /**
  * The nodes of kind `text`, whose characters are {@link textChars}. A selection of `Node`, since a
@@ -369,10 +373,10 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  *   and `Hottext` rows), `ids` (Q5.07's `DocumentId` rows), `idrefTargets` (Q5.07's `IdrefTarget`
  *   rows), `langs` (Q5.07's `XmlLang` rows) and `variables` (Q5.10's `VariableRef` rows).
  * - **its document node's copies:** `nodeChildren` and `version`, the document node's own, so the row
- *   states the node's context through {@link nodeContext}, the owner axis's own UNIQUE, and no
- *   other index on `Node` holds it. What every document node holds alike is no field: the
- *   containment's source reads `node` again as the node's `document` and states its governing type
- *   `none`, its kind and its parent's `document`, and its start 0 as constants.
+ *   states the node's context through `Node`'s key, `id`, and no other index on `Node` holds it.
+ *   What every document node holds alike is no field: the containment's target selects the nodes
+ *   that are their own `document`, govern `none`, are of kind `document` under a parent of kind
+ *   `document`, and start at 0.
  */
 export const Document = relation(
   "Document",
@@ -502,7 +506,7 @@ const rootElements = select(Node, (n) =>
  *   XML declaration, where it writes one, is a document's; and an `encoding` or a `standalone` is a
  *   declaration's, since neither is written outside one (XML 1.0 §2.8, `XMLDecl`).
  * - **its context** (spec reading 117): its document node's ancestry and nearest interaction are its
- *   `context`, `contextNearest` and `contextNearestKind`, through {@link nodeContext}; and
+ *   `context`, `contextNearest` and `contextNearestKind`, through its document node's context; and
  *   (`E1_derived`) the nearest is the document node itself, unless sites name the document from
  *   inside one interaction.
  * - **"Namespace family":** each element's declarations in order, and one per prefix on an element
@@ -558,17 +562,29 @@ export const chardataLawsByName = {
         "node",
         "nodeChildren",
         "context",
-        "node",
         "resourceType",
-        constant("none"),
-        constant("document"),
         "contextNearest",
         "contextNearestKind",
-        constant("document"),
-        constant(0n),
         "version",
       ),
-      nodeContext,
+      on(
+        select(Node, (n) =>
+          n.and(
+            n.eq(n.document, n.id),
+            n.eq(n.governs, "none"),
+            n.eq(n.kind, "document"),
+            n.eq(n.parentKind, "document"),
+            n.eq(n.start, 0n),
+          ),
+        ),
+        "id",
+        "children",
+        "ancestry",
+        "documentType",
+        "nearest",
+        "nearestKind",
+        "version",
+      ),
     ),
     check("E1_derived", Document, (d) =>
       d.or(
@@ -671,7 +687,7 @@ export const chardataLawsByName = {
     check("XsiType_available", OpenElementName, (o) =>
       o.or(
         Compute.matches(o.parentNamespace, TypeAvailable.at("namespaces", o.governs)),
-        o.not(Compute.matches(o.parentNamespace, vocabularyNamespacePattern)),
+        o.not(Compute.matches(o.parentNamespace, vocabularyNamespaces)),
       ),
     ),
   ],
