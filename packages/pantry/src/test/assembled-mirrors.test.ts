@@ -63,7 +63,8 @@ const unjudged = {
   "ElementType: a cond term": unreadTerm("cond"),
   "Expression: a between term": unreadTerm("between"),
   "LeastCount: a base term": unreadTerm("base"),
-  "MathAction: a base term": unreadTerm("base"),
+  "MathAction.selection":
+    "a field PostgreSQL generates from the selection's lexical form (`relation.generated`, mathml-align.ts), which the host computes none of",
   "MathApply: a base term": unreadTerm("base"),
   "MathApply: a between term": unreadTerm("between"),
   "MostCount: a base term": unreadTerm("base"),
