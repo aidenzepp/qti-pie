@@ -470,6 +470,19 @@ export const contentNodes = <E extends BodyContentElement>(
 type Held<E extends ItemContentElement, V> = { [X in E]?: V[] };
 
 /**
+ * The model nodes the redaction accumulates, by element, each element's as its own module declares
+ * them: typed per element key, so a module's node type reaches no other element's member, and the
+ * accumulator is an `ItemNodesHeld` once written.
+ */
+type HeldNodes = { -readonly [E in ItemContentElement]?: NodeOf<ItemModules[E]>[] };
+
+/**
+ * The payload nodes the payload accumulates, by element, each element's as its own module's `copy`
+ * gives them.
+ */
+type HeldPayloads = { -readonly [E in ItemContentElement]?: PayloadOf<ItemModules[E]>[] };
+
+/**
  * Decide what the redacted item keeps of the nodes an item-placed module read from one element,
  * through its `redact`, writing the kept nodes under the element when any is kept.
  *
@@ -515,7 +528,7 @@ export const redactItemContent = (
     return Option.none();
   }
 
-  const kept: Held<ItemContentElement, NodeOf<ItemPlacedModule>> = {};
+  const kept: HeldNodes = {};
   for (const module of Object.values(itemModules)) {
     redactElement(module.element, content, kept, kit);
   }
@@ -562,7 +575,7 @@ export const copyItemContent = (
     return Option.none();
   }
 
-  const copied: Held<ItemContentElement, PayloadOf<ItemPlacedModule>> = {};
+  const copied: HeldPayloads = {};
   for (const module of Object.values(itemModules)) {
     copyElement(module.element, content, copied, kit);
   }

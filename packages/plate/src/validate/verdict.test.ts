@@ -739,6 +739,79 @@ describe("check, E3: attributes only a wildcard admits", () => {
     );
   });
 
+  it("keeps a wildcard data-* parameter on qti-card-entry and qti-portable-custom-interaction as written, and still removes and marks one on a body p", () => {
+    const catalogPath = `${root}/qti-catalog-info/qti-catalog/qti-card`;
+    const portablePath = `${bodyPath}/qti-portable-custom-interaction`;
+    const accepted = acceptedOf(
+      verdictOf(
+        item([
+          response("identifier", "single"),
+          score(),
+          body([
+            el("p", [attr("data-note", "aside")], [text("Hi")]),
+            el(
+              "qti-portable-custom-interaction",
+              [
+                attr("custom-interaction-type-identifier", "urn:example:widget"),
+                attr("data-config", "1"),
+                attr("module", "widget"),
+                attr("response-identifier", "RESPONSE"),
+              ],
+              [el("qti-interaction-markup", [], [])],
+            ),
+          ]),
+          el(
+            "qti-catalog-info",
+            [],
+            [
+              el(
+                "qti-catalog",
+                [attr("id", "c1")],
+                [
+                  el(
+                    "qti-card",
+                    [attr("support", "spoken")],
+                    [
+                      el(
+                        "qti-card-entry",
+                        [attr("data-reading-type", "screen-reader")],
+                        [el("qti-html-content", [], [el("p", [], [text("Aloud.")])])],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ]),
+      ),
+      "accepted-with-unsupported",
+    );
+    const entry =
+      accepted.item.content?.["qti-catalog-info"]?.[0]?.catalogs[0]?.cards[0]?.entries[0];
+
+    assert.deepStrictEqual(
+      accepted.unsupported.filter((mark) => mark.feature.startsWith("attribute:")),
+      [{ feature: "attribute:data-note", path: `${bodyPath}/p`, shown: "mark" }],
+    );
+    assert.deepStrictEqual(namesOf(bodyElement(accepted, `${bodyPath}/p`)), []);
+    assert.isFalse(
+      accepted.unsupported.some(
+        (mark) => mark.path.startsWith(portablePath) && mark.feature.startsWith("attribute:"),
+      ),
+      "the PCI's data-config earns no attribute mark",
+    );
+    assert.isFalse(
+      accepted.unsupported.some(
+        (mark) => mark.path.startsWith(catalogPath) && mark.feature.startsWith("attribute:"),
+      ),
+      "the card entry's data-reading-type earns no attribute mark",
+    );
+    assert.deepStrictEqual(entry?.attributes, [
+      { name: "data-reading-type", value: "screen-reader" },
+    ]);
+  });
+
   it("align-54 extension lists E10: compares names exactly: an HREF is no attribute a declares, refused as unknown-attribute (reading 90), and an element A is refused", () => {
     const undeclared = verdictOf(
       item([
