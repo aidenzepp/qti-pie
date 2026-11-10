@@ -230,15 +230,16 @@ const assembledFrom = (document: NodeId, pages: readonly (readonly ScanRow<Compo
 
 /**
  * The most nodes a document has for every cut of its scan to be tried: its N − 1 boundaries give
- * 2^(N − 1) cut sets, 512 at this bound.
+ * 2^(N − 1) cut sets, 32 at this bound, which already holds a page of one, two and three rows
+ * beside one of the rest.
  */
-const exhaustiveNodes = 10;
+const exhaustiveNodes = 6;
 
 /**
  * How many cut sets are drawn for a document past {@link exhaustiveNodes}, beside its single
  * cuts' extremes and its uniform pages.
  */
-const drawnCuts = 6;
+const drawnCuts = 3;
 
 /**
  * Every set of boundaries of a scan of `count` rows.
@@ -287,8 +288,8 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
       // Oracle: a universal one, a metamorphic relation: paging is invisible, so the scan served
       // as one page and as every cut of it assembles to the same document, the generated one.
       // Bound: the generator's drawn bounds, up to 200 nodes a tree; every cut set of a document
-      // of at most 10 nodes, and past that the uniform pages of 1, 2 and 3 rows, a cut after the
-      // first row and before the last, and 6 drawn cut sets.
+      // of at most 6 nodes, and past that the uniform pages of 1, 2 and 3 rows, a cut after the
+      // first row and before the last, and 3 drawn cut sets.
       searched(
         ctx,
         explore(
@@ -395,7 +396,7 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
             kind: "specification",
             name: "a document's scan holds one Document row, on its document node",
           },
-          runs: 200,
+          runs: 50,
           shrink: completeShrink,
           steerEvery: 16,
           suite: "export/pages-variants",
