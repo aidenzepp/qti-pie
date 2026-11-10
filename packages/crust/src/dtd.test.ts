@@ -1,4 +1,4 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { lexProlog, substitute } from "#crust/dtd.ts";
 import type { AttlistEntry, ValuePiece } from "#crust/dtd.ts";
@@ -821,6 +821,32 @@ const assertPositioned = (
   );
 };
 
+/**
+ * Run `effect` and count how many times it scans a text for line breaks, which finding a line and
+ * column does and nothing else in the prolog's lexer does.
+ *
+ * @param effect - The lexing to watch.
+ * @returns The number of scans, once `effect` succeeds.
+ */
+const lineScans = <A, E>(effect: Effect.Effect<A, E>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => vi.spyOn(String.prototype, "matchAll")),
+    (spy) =>
+      effect.pipe(
+        Effect.map(
+          () =>
+            spy.mock.calls.filter(
+              ([pattern]) =>
+                pattern instanceof RegExp && pattern.source === String.raw`\r\n|[\n\r]`,
+            ).length,
+        ),
+      ),
+    (spy) =>
+      Effect.sync(() => {
+        spy.mockRestore();
+      }),
+  );
+
 describe("a refusal from the internal subset", () => {
   it.effect("is placed at a default's reference to an entity the subset declares after it", () =>
     Effect.gen(function* placesEarlyReference() {
@@ -871,6 +897,22 @@ describe("a refusal from the internal subset", () => {
       const error = yield* refusalOf(`<!DOCTYPE a [\n${subset}\n\n  %p20;\n]><a/>`);
 
       assertPositioned(error, "entity-expansion", 4, 3);
+    }),
+  );
+
+  it.effect("finds no line or column while the subset is admitted, only for a refusal", () =>
+    Effect.gen(function* findsNoPositionUntilRefused() {
+      const scans = yield* lineScans(
+        lexProlog(
+          `<!DOCTYPE a SYSTEM "a.dtd" [\n<!ENTITY e "x">\n<!ENTITY % p "<!-- c -->">\n${"%p;\n".repeat(2000)}<!ATTLIST a d CDATA "${"&e;&u;".repeat(2000)}">\n]><a/>`,
+        ),
+      );
+      const refused = yield* lineScans(
+        Effect.flip(lexProlog('<!DOCTYPE a [\n<!ATTLIST a d CDATA "1&e;2">\n]><a/>')),
+      );
+
+      assert.strictEqual(scans, 0);
+      assert.strictEqual(refused, 1);
     }),
   );
 });
