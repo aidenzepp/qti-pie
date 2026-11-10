@@ -1,6 +1,7 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "@bjornpagen/grizzle";
 import type { MigrationConnectionConfig } from "@bjornpagen/grizzle";
-import { Console, Effect, Option } from "effect";
+import { Console, Effect, FileSystem, Option, PlatformError } from "effect";
 import { migrationConnection } from "#pantry/db/connection.ts";
 import { authorAppOf } from "#pantry/qti/logins.ts";
 import { qtiSchema } from "#pantry/qti/schema.ts";
@@ -11,6 +12,28 @@ import { qtiSchema } from "#pantry/qti/schema.ts";
  * its own config's to generate.
  */
 const ownQti = qtiSchema(Option.none());
+
+/**
+ * The file system the migration identity's connection reads the cluster's CA through
+ * (`#pantry/db/connection.ts`): `readFileString`, read synchronously, so that building the
+ * connection finishes under `Effect.runSync`, since grizzle calls `connection` synchronously and
+ * Node's (`NodeFileSystem`) reads a file only asynchronously. Building the connection reads no
+ * other file, so every other operation fails, as `FileSystem.layerNoop` leaves it.
+ */
+const synchronousFiles = FileSystem.layerNoop({
+  readFileString: (path) =>
+    Effect.try({
+      catch: (cause) =>
+        PlatformError.systemError({
+          _tag: "Unknown",
+          cause,
+          method: "readFileString",
+          module: "FileSystem",
+          pathOrDescriptor: path,
+        }),
+      try: () => readFileSync(path, "utf-8"),
+    }),
+});
 
 /**
  * Build the migration identity's connection to the cluster from its settings and CA
@@ -28,7 +51,10 @@ const ownQti = qtiSchema(Option.none());
  */
 const connection = (): MigrationConnectionConfig =>
   Effect.runSync(
-    migrationConnection.pipe(Effect.tapError((failure) => Console.error(failure.message))),
+    migrationConnection.pipe(
+      Effect.provide(synchronousFiles),
+      Effect.tapError((failure) => Console.error(failure.message)),
+    ),
   );
 
 /**

@@ -33,7 +33,7 @@ import {
   clusterState,
   loginConnection,
   migrationConnection,
-  passwordCommand,
+  passwordCommandSetting,
 } from "#pantry/db/connection.ts";
 import { Qti, QtiBase } from "#pantry/qti/own.ts";
 import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
@@ -119,7 +119,7 @@ export const loginSession = Effect.gen(function* loginSession() {
 export const ownerSession = Effect.gen(function* ownerSession() {
   const fs = yield* FileSystem.FileSystem;
   const connection = yield* migrationConnection;
-  const password = yield* Option.match(yield* passwordCommand, {
+  const password = yield* Option.match(yield* passwordCommandSetting, {
     onNone: () =>
       clusterState.pipe(
         Effect.flatMap((state) => fs.readFileString(`${state}/${connection.role}.password`)),
