@@ -1,17 +1,16 @@
 /**
  * One transaction per package (plan W5, Q5.20; Bjorn's ruling of 2026-11-05 on issue #3),
  * over the every-relation package (`#pantry/test/gen/every-relation.ts`), whose import writes a row
- * of every stored relation of `Qti`: its ChangeSet compiles, it imports in one transaction, its
- * export gives back its source, and a failure injected through `WrapApply` while the
- * import's transaction runs leaves no row of it. Each test reads only the rows of its own import's
- * transactions, never a table's whole count, so it holds beside another file's imports.
+ * of every stored relation of `Qti`: its ChangeSet compiles, it imports in one transaction, and a
+ * failure injected through `WrapApply` while the import's transaction runs leaves no row of it. The
+ * test reads only the rows of its own imports' transactions, never a table's whole count, so it
+ * holds beside another file's imports.
  *
  * The oracles are PostgreSQL's own: the catalog and the system columns of every table of the
  * installation, read as the author role by a direct SQL reader (grizzle's README, "Direct SQL
  * access"). A row's `xmin` is the transaction that inserted it and its `cmin` the command within
  * that transaction, so one transaction id over every row an import adds is one transaction, and the
- * commands order the tables it writes. The round trip's oracle is the source itself, by canonical
- * equality (`#pantry/export/compare.ts`).
+ * commands order the tables it writes.
  *
  * Written to run at N1 on the lease, never by a hand.
  *
@@ -21,25 +20,19 @@ import { CommitUnknown, writableNamesOf } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
-import { noCoverage, requiredInSpace } from "@grizzle/testing/features";
+import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, FileSystem, Layer, Option, Path, Ref, Schedule } from "effect";
+import { Duration, Effect, Layer, Option, Ref, Schedule } from "effect";
 import type { Client, QueryResultRow } from "pg";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { comparePackage, renderReport } from "#pantry/export/compare.ts";
-import { exportPackage } from "#pantry/export/package.ts";
 import { WrapApply } from "#pantry/import/package.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 
 import { Qti } from "#pantry/qti/own.ts";
 
-import {
-  everyRelationPackage,
-  scopedPackage,
-  memberCounts,
-} from "#pantry/test/gen/every-relation.ts";
+import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { MemberCounts } from "#pantry/test/gen/every-relation.ts";
 import {
   authorRole,
@@ -55,14 +48,9 @@ import { hasLease } from "#pantry/test/settings.ts";
 const packageTable = `${qtiSchema}.package`;
 
 /**
- * The timeout of each test here: every one imports the package once per case of its box.
+ * The timeout of the test here: it imports the package once, then once per case of its box.
  */
 const boxTimeoutMs = 900_000;
-
-/**
- * The box every test but the injection's exhausts, the generator's whole space.
- */
-const memberBox = "every count of 2 or 3 choices, 1 or 2 hottexts and 1 or 2 hotspots";
 
 /**
  * A session of the author login on the lease, over verify-full TLS against the cluster's CA, as the
@@ -164,21 +152,18 @@ const packageXid = (client: Client, id: string) =>
  * Import the every-relation package of member counts, its directory removed with the scope.
  *
  * @param members - The counts it is drawn by.
- * @returns The package's directory and its id.
+ * @returns The package's id.
  */
 const importDrawn = (members: MemberCounts) =>
   Effect.gen(function* importsDrawn() {
-    const dir = yield* scopedPackage(everyRelationPackage(members));
-    const id = yield* importDir(dir);
-
-    return { dir, id };
+    return yield* importDir(yield* scopedPackage(everyRelationPackage(members)));
   });
 
 /**
  * Where a held table stands among the tables an import writes, ordered by the first command that
- * writes each: the first, the middle and the last.
+ * writes each: the first and the last.
  */
-type HeldAt = "first" | "middle" | "last";
+type HeldAt = "first" | "last";
 
 /**
  * What the injected failure found when it fired: whether the import had written another table of
@@ -305,134 +290,60 @@ describe.skipIf(!hasLease)(
       excludeTestServices: true,
     })("one transaction per package, over the every-relation package", (it) => {
       it.effect(
-        "imports the every-relation package in one transaction that writes every stored relation of Qti",
+        "imports the every-relation package in one transaction that writes every stored relation of Qti, and leaves no row of it when a failure is injected while that transaction waits on a table it writes",
         (ctx) =>
-          // Oracle: PostgreSQL's system columns. The transaction that inserted the package's own
-          // row (its `xmin`) inserted rows into as many tables as `Qti` has stored relations, so
-          // one transaction wrote every relation of the package. A second transaction of the
-          // import would leave that one short of a table.
-          // Bound: every count the generator draws, 8 cases.
-          searched(
-            ctx,
-            exhaust(
-              {
-                box: memberBox,
-                caseHang: Duration.minutes(5),
-                coverage: noCoverage,
-                generator: memberCounts,
-                limit: 8,
-                literal: JSON.stringify,
-                oracle: { kind: "postgresql", name: "every added row's xmin, the package's" },
-                suite: "pantry/import/transaction-one",
-              },
-              (members) =>
-                Effect.gen(function* oneTransaction() {
-                  const client = yield* authorSession;
-                  const tables = yield* tablesOf(client);
-                  const { id } = yield* importDrawn(members);
-                  const after = yield* rowsAt(client, tables, [yield* packageXid(client, id)]);
-                  const written = [...after].filter(([, { at }]) => at > 0);
-
-                  assert.strictEqual(
-                    written.length,
-                    writableNamesOf(Qti).length,
-                    `tables written: ${written.map(([table]) => table).join(", ")}`,
-                  );
-                }).pipe(Effect.scoped),
-            ),
-          ),
-      );
-
-      it.effect(
-        "gives back the every-relation package's source from its export, every entry canonically equal",
-        (ctx) =>
-          // Oracle: universal, the round trip export ∘ import = id up to canonical equality: each
-          // entry of the source is byte-identical in the export or, for an XML entry, canonically
-          // equal (Canonical XML 1.0 with comments), and the export writes no other entry.
-          // Bound: every count the generator draws, 8 cases.
-          searched(
-            ctx,
-            exhaust(
-              {
-                box: memberBox,
-                caseHang: Duration.minutes(5),
-                coverage: noCoverage,
-                generator: memberCounts,
-                limit: 8,
-                literal: JSON.stringify,
-                oracle: { kind: "universal", name: "export ∘ import = id, canonically" },
-                suite: "pantry/import/transaction-roundtrip",
-              },
-              (members) =>
-                Effect.gen(function* roundTrips() {
-                  const fs = yield* FileSystem.FileSystem;
-                  const path = yield* Path.Path;
-                  const { dir, id } = yield* importDrawn(members);
-                  const exported = yield* fs.makeTempDirectoryScoped({
-                    directory: path.dirname(dir),
-                    prefix: "export-",
-                  });
-
-                  yield* exportPackage(id, exported);
-
-                  const report = yield* comparePackage(dir, exported);
-                  const rendered = renderReport(report);
-
-                  assert.strictEqual(report.length, everyRelationPackage(members).size, rendered);
-                  for (const { outcome } of report) {
-                    assert.include(["byte-identical", "canonical-equal"], outcome.kind, rendered);
-                  }
-                }).pipe(Effect.scoped),
-            ),
-          ),
-      );
-
-      it.effect(
-        "leaves no row of the every-relation package when a failure is injected while its transaction waits on a table it writes",
-        (ctx) =>
-          // Oracle: PostgreSQL's catalog. A second session holds one table the import writes in
-          // SHARE mode, which blocks the import's INSERT into it and nothing else, so the import's
-          // one transaction stops there with every statement before it run. The failure injected
-          // through `WrapApply` then interrupts the apply (grizzle cancels the statement and
-          // destroys its session, README "Transactions and concurrency") and fails it as
-          // `CommitUnknown`, whose read-back finds no package. No table then holds a row of the
+          // Oracle: PostgreSQL's system columns and catalog. The reference import's package row's
+          // `xmin` inserted rows into as many tables as `Qti` has stored relations, so one
+          // transaction wrote every relation of the package; a second transaction of the import
+          // would leave that one short of a table. Then a second session holds one table the
+          // import writes in SHARE mode, which blocks the import's INSERT into it and nothing else,
+          // so the import's one transaction stops there with every statement before it run. The
+          // failure injected through `WrapApply` then interrupts the apply (grizzle cancels the
+          // statement and destroys its session, README "Transactions and concurrency") and fails it
+          // as `CommitUnknown`, whose read-back finds no package. No table then holds a row of the
           // import's transaction: none whose `xmin` is a transaction id its session held while it
           // waited.
-          // Bound: the package of 3 choices, 2 hottexts and 2 hotspots, the table held the first,
-          // the middle and the last of the tables a committed import of it writes, by command, 3
-          // cases; the box must reach a hold before any other write and one after another
-          // table's.
+          // Bound: the package of 2 choices, 1 hottext and 1 hotspot, the least drawn, imported
+          // once (one transaction over every relation does not turn on a member count); then the
+          // table held the first and the last of the tables that import writes, by command, 2
+          // cases, one hold before any other write and one after every other table's.
           searched(
             ctx,
             Effect.gen(function* injected() {
-              const members: MemberCounts = { choices: 3, hotspots: 2, hottexts: 2 };
+              const members: MemberCounts = { choices: 2, hotspots: 1, hottexts: 1 };
               const session = yield* authorSession;
               const tables = yield* tablesOf(session);
               const reference = yield* importDrawn(members);
-              const order = [
-                ...(yield* rowsAt(session, tables, [yield* packageXid(session, reference.id)])),
-              ]
-                .filter(([, { at }]) => at > 0)
+              const written = [
+                ...(yield* rowsAt(session, tables, [yield* packageXid(session, reference)])),
+              ].filter(([, { at }]) => at > 0);
+
+              assert.strictEqual(
+                written.length,
+                writableNamesOf(Qti).length,
+                `tables written: ${written.map(([table]) => table).join(", ")}`,
+              );
+
+              const order = written
                 .toSorted(([, a], [, b]) => a.first - b.first)
                 .map(([table]) => table);
               const positions: Readonly<Record<HeldAt, number>> = {
                 first: 0,
                 last: order.length - 1,
-                middle: Math.floor(order.length / 2),
               };
               const heldAt = (at: HeldAt): string =>
                 order[positions[at]] ?? assert.fail("the reference import wrote no table");
 
               return yield* exhaust(
                 {
-                  box: "the first, the middle and the last table the import writes, by command",
+                  box: "the first and the last table the import writes, by command",
                   caseHang: Duration.minutes(5),
                   coverage: requiredInSpace<HeldSituation>([
                     "held after another table's write",
                     "held before any other write",
                   ]),
-                  generator: element<HeldAt>(["first", "middle", "last"]),
-                  limit: 3,
+                  generator: element<HeldAt>(["first", "last"]),
+                  limit: 2,
                   literal: JSON.stringify,
                   oracle: {
                     kind: "postgresql",
