@@ -250,9 +250,9 @@ export const readProgram = Effect.fn("import.readProgram")(function* readProgram
 
 /**
  * Count the rows a program writes, relation by relation, each nested member under its own
- * relation: a tree's nodes, attributes, declarations and their families, an attribute's and a
- * text's typed double, an identity text's IDREF tokens, a cell's `headers` tokens, a table cell's
- * leaves, a `tolerance`'s values, an assembly's instances, a record's entries.
+ * relation: a tree's nodes, attributes, declarations and their families, an identity text's IDREF
+ * tokens, a cell's `headers` tokens, a table cell's leaves, a `tolerance`'s values, an assembly's
+ * instances, a record's entries.
  *
  * @param program - The program.
  * @returns Each relation's number of rows, zero for a relation whose keyed set is empty.

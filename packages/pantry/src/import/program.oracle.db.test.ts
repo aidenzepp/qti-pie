@@ -208,8 +208,7 @@ const storedPackages = Effect.gen(function* storedPackages() {
 });
 
 /**
- * Build a package's ChangeSet with one edit of its inputs, and apply it, logging the compile time
- * of the ChangeSet and the apply's.
+ * Build a package's ChangeSet with one edit of its inputs, and apply it, logging the apply's time.
  *
  * @param dir - The valid package.
  * @param edit - The edit of its inputs; none applies the package as read.
@@ -384,7 +383,7 @@ describe.skipIf(!hasLease)(
       timeout: probeLayerHookTimeoutMs,
     })("one ChangeSet per package, judged by PostgreSQL", (it) => {
       it.effect(
-        "accepts simple, sharedMedia and svg whole, each in one apply, logging the compile time",
+        "accepts simple, sharedMedia and svg whole, each in one apply, logging the apply time",
         () =>
           // Oracle: PostgreSQL, every law of the schema over each accepted corpus package
           // (Q5.03's "accepted through grizzle", for the whole package), and the package read

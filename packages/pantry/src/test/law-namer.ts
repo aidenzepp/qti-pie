@@ -50,17 +50,63 @@ import { SelectForm, testLawsByName } from "#pantry/qti/tests.ts";
 import type { testRelations } from "#pantry/qti/tests.ts";
 import { builtLawsByName, Qti } from "#pantry/qti/own.ts";
 import {
-  bucketOf,
   contractNames,
   generatedNames,
   lawNames,
   lawOfCheck,
   namedBy,
 } from "#pantry/import/refusal.ts";
-import type { LawName, LawOf } from "#pantry/import/refusal.ts";
+import type { LawName } from "#pantry/import/refusal.ts";
 import { ruleOrder } from "#pantry/import/rules.ts";
 import type { Rule } from "#pantry/import/rules.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
+
+/**
+ * The relation each side of a law reads, in the order the law names its sides: the part of a law
+ * {@link bucketOf} files it under beside its kind. A contract reads no relation, and a law of a
+ * level above the schema reads its own law's relations: `Qti` is one level, which no level extends,
+ * so no outcome names one (grizzle `999facc6`'s `above`), and none is in the table.
+ *
+ * @param law - A law as grizzle names it.
+ * @returns Its sides' relations.
+ */
+export const relationsOf = (law: Law): readonly string[] =>
+  Match.value(law).pipe(
+    Match.discriminatorsExhaustive("kind")({
+      above: ({ law: stated }) => relationsOf(stated),
+      check: ({ relation }) => [relation],
+      contained: ({ from, to }) => [from.relation, to.relation],
+      contract: () => [],
+      coverage: ({ from, to }) => [from.relation, to.relation],
+      family: ({ member, slots }) => [member.relation, slots.owner],
+      fold: ({ end, family, step }) => [family.owner, step.relation, end.relation],
+      generated: ({ relation }) => [relation],
+      key: ({ side }) => [side.relation],
+      pattern: ({ relation }) => [relation],
+      primaryKey: ({ relation }) => [relation],
+      tree: ({ member, slots }) => [member.relation, slots.owner],
+    }),
+  );
+
+/**
+ * File a law by its kind and its sides' relations, so a search of the stated laws for the one an
+ * outcome's law is ({@link statementNamesOf}, and `lawIdOf` of `src/test/law-names.ts`) reads the
+ * few laws of that kind over those relations, never every law of Qti.
+ *
+ * This is no identity of the law: grizzle's `sameLaw` decides whether two laws are one, comparing
+ * them whole, and two laws one bucket holds may still differ in their terms or selections. The
+ * bucket only needs one law's two descriptions to fall in it together, which they do, since
+ * `sameLaw` holds only of laws of one kind whose sides read the same relations.
+ *
+ * @param law - A law as grizzle names it.
+ * @returns Its bucket.
+ */
+export const bucketOf = (law: Law): string => [law.kind, ...relationsOf(law)].join(" ");
+
+/**
+ * The law of a given kind.
+ */
+export type LawOf<Kind extends Law["kind"]> = Extract<Law, { readonly kind: Kind }>;
 
 /**
  * Name every stored relation of a module's relations by one law: a module whose rows one law holds
