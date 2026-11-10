@@ -105,7 +105,7 @@ import type {
 import { expressionKinds, integerOrRefOf } from "#plate/model/expression.ts";
 import { kindRules, readExpression } from "#plate/model/expressions/read.ts";
 import type { ExpressionReading } from "#plate/model/expressions/read.ts";
-import { containerFor } from "#plate/model/interactions.ts";
+import { containerFor, modules } from "#plate/model/interactions.ts";
 import type { ModuleModel } from "#plate/model/interactions.ts";
 import { readersOf } from "#plate/model/reader.ts";
 import { translate } from "#plate/model/regex.ts";
@@ -421,6 +421,15 @@ export interface BodyElement {
   readonly children: readonly BodyNode[];
   readonly kind: "element";
   readonly path: string;
+  /**
+   * The `data-stimulus-idref` the element carries: the author's identifier of the stimulus whose
+   * body renders inside the element, kept so the emitter can ask the module that reads the stimulus
+   * reference (`m3e-02`'s) to dock its node into the element (`RenderInteraction.dock` in
+   * `#plate/emit/body.ts`). Never a path. Absent when the element names no stimulus. Unlike
+   * `catalog`, the attribute itself stays in `attributes`: it is an author `data-*` attribute,
+   * whose pass-through is decision D24's.
+   */
+  readonly stimulus?: string;
   readonly tag: string;
 }
 
@@ -942,6 +951,12 @@ interface Build extends ModelWalk {
    * read. The declarations precede the item body, so a text interaction bound to one finds it here.
    */
   readonly records: Map<string, RecordDeclaration>;
+  /**
+   * Whether the walk reads a stimulus document's body ({@link stimulusBody}), where an interaction
+   * is the notice keyed by its element rather than a binding: a stimulus declares no response, so
+   * there is nothing to bind it to.
+   */
+  readonly stimulus: boolean;
   readonly unsupported: UnsupportedFeature[];
 }
 
@@ -2796,6 +2811,49 @@ const catalogOf = (build: Build, element: SourceElement): Pick<BodyElement, "cat
   );
 
 /**
+ * Read a body element's stimulus reference, its `data-stimulus-idref`, as the element's `stimulus`
+ * key. The attribute itself stays among the element's attributes ({@link bodyAttributes}): it is
+ * an author `data-*` attribute, not a marked one.
+ *
+ * @param element The element.
+ * @returns The element's `stimulus` field, holding the idref as written; no field when the element
+ *   names no stimulus, so an element without one carries no `stimulus` key.
+ */
+const stimulusOf = (element: SourceElement): Pick<BodyElement, "stimulus"> =>
+  Option.match(
+    Arr.findFirst(
+      element.attributes,
+      (attribute) => attribute.namespace === "" && attribute.local === "data-stimulus-idref",
+    ),
+    { onNone: () => ({}), onSome: (attribute) => ({ stimulus: attribute.value }) },
+  );
+
+/**
+ * The elements of every interaction the model reads: the four shipped kinds and each module's.
+ */
+const interactionElements: ReadonlySet<string> = new Set([
+  ...interactionNames,
+  ...Object.values(modules).map((module) => module.element),
+]);
+
+/**
+ * Read an interaction met in a stimulus body as its notice, keyed by its element: a stimulus
+ * declares no response, so the interaction has nothing to bind to ({@link Build.stimulus}). The
+ * structural validator does not refuse one there, so the walk gives the notice.
+ *
+ * @param build The build.
+ * @param child A QTI-namespace element of a stimulus body.
+ * @returns The notice, when the build reads a stimulus body and the element is an interaction's.
+ */
+const stimulusInteraction = (
+  build: Build,
+  child: SourceElement,
+): Option.Option<Result.Result<BodyNode, Refusal>> =>
+  build.stimulus && isQti(child) && interactionElements.has(child.local)
+    ? Option.some(notice(build, child.local, pathOf(build, child)))
+    : Option.none();
+
+/**
  * Read one child of a body element.
  *
  * @param build The build.
@@ -2803,10 +2861,11 @@ const catalogOf = (build: Build, element: SourceElement): Pick<BodyElement, "cat
  * @param child The child.
  * @param own The `qti-*` elements the module reading this content owns, each read as an element.
  * @returns Its body node: text as itself, an HTML element with its subtree, an interaction's model
- *   or, for one a module or a body-placed content module reads, what its `parse` gives, a module's
- *   container with its children ({@link containerNode}), a printed variable's, a template block's
- *   or inline's with its content, a module's own element as an element with its subtree, or a
- *   notice for anything else, its subtree dropped; or a refusal.
+ *   or, for one a module or a body-placed content module reads, what its `parse` gives (in a
+ *   stimulus body, an interaction's notice: {@link stimulusInteraction}), a module's container with
+ *   its children ({@link containerNode}), a printed variable's, a template block's or inline's with
+ *   its content, a module's own element as an element with its subtree, or a notice for anything
+ *   else, its subtree dropped; or a refusal.
  */
 const bodyNode = (
   build: Build,
@@ -2820,6 +2879,11 @@ const bodyNode = (
 
   if (child.kind === "entity") {
     return notice(build, `&${child.name};`, pathOf(build, parent));
+  }
+
+  const unbound = stimulusInteraction(build, child);
+  if (Option.isSome(unbound)) {
+    return unbound.value;
   }
 
   const interaction = interactionNames.find((name) => isQti(child, name));
@@ -2870,6 +2934,7 @@ const bodyNode = (
       path: pathOf(build, child),
       tag: child.local,
       ...catalogOf(build, child),
+      ...stimulusOf(child),
     };
   });
 };
@@ -4181,6 +4246,75 @@ const recordResponseNames = (
   );
 
 /**
+ * Begin a fresh build of a document: nothing read yet, its declarations, its names and every
+ * element's path indexed.
+ *
+ * @param source The document.
+ * @param stimulus Whether the build reads a stimulus body ({@link Build.stimulus}), false by
+ *   default.
+ * @returns The build.
+ */
+const freshBuild = (source: SourceDocument, stimulus = false): Build => ({
+  builder: "buildItem",
+  declarations: declarationsOf(source),
+  document: source,
+  names: declaredNames(source.root),
+  paths: pathsOf(source),
+  recorded: new Map(),
+  records: new Map(),
+  references: [],
+  stimulus,
+  unsupported: [],
+});
+
+/**
+ * What {@link stimulusBody} reads of a stimulus document: its body, and the features the walk
+ * recorded reading it.
+ */
+export interface StimulusBody {
+  /**
+   * The children of the document's `qti-stimulus-body`, read as the item body is read; empty when
+   * the document holds none.
+   */
+  readonly body: readonly BodyNode[];
+  /**
+   * The marks and notices the walk recorded in the body, in document order: the body's own marks,
+   * each `qti-*` element the walk does not read as a notice, and each interaction as a notice,
+   * since a stimulus binds no response.
+   */
+  readonly unsupported: readonly UnsupportedFeature[];
+}
+
+/**
+ * Read a stimulus document's body through the body walk, over a fresh build of the document as
+ * {@link parseContextOf} builds one: its one `qti-stimulus-body`'s children, read as
+ * {@link buildItem} reads the item body, with the body's marks and notices. The root's own mark and
+ * its attributes are the verdict's to record (`summarise` in `#plate/validate/verdict.ts`), so this
+ * reads nothing of the root but the body. An interaction in the body is the notice keyed by its
+ * element, the four shipped kinds and the module-parsed alike: a stimulus declares no response, so
+ * none can be bound ({@link Build.stimulus}).
+ *
+ * @param source A stimulus document the structural validator accepted.
+ * @returns The body and what the walk recorded, or a refusal the body walk gives.
+ */
+export const stimulusBody = (source: SourceDocument): Result.Result<StimulusBody, Refusal> => {
+  const build = freshBuild(source, true);
+  const part = elementsOf(source.root).find((child) => isQti(child, "qti-stimulus-body"));
+
+  return Result.map(
+    Option.match(Option.fromUndefinedOr(part), {
+      onNone: (): Result.Result<readonly BodyNode[], Refusal> => Result.succeed([]),
+      onSome: (body) => {
+        markElement(build, body, true);
+
+        return bodyNodes(build, body);
+      },
+    }),
+    (body) => ({ body, unsupported: build.unsupported }),
+  );
+};
+
+/**
  * Build the item model of a valid `qti-assessment-item`.
  *
  * The body keeps text and HTML elements as written. Choice, Inline Choice, Text Entry and Extended
@@ -4230,17 +4364,7 @@ const recordResponseNames = (
  */
 export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> =>
   Result.gen(function* readItem() {
-    const build: Build = {
-      builder: "buildItem",
-      declarations: declarationsOf(source),
-      document: source,
-      names: declaredNames(source.root),
-      paths: pathsOf(source),
-      recorded: new Map(),
-      records: new Map(),
-      references: [],
-      unsupported: [],
-    };
+    const build = freshBuild(source);
     const { records } = build;
     const { root } = source;
     markElement(build, root, false);
@@ -4431,17 +4555,7 @@ export interface ParseContextOf {
  * @returns The context, and the features parsing through it records.
  */
 export const parseContextOf = (source: SourceDocument, element: SourceElement): ParseContextOf => {
-  const build: Build = {
-    builder: "buildItem",
-    declarations: declarationsOf(source),
-    document: source,
-    names: declaredNames(source.root),
-    paths: pathsOf(source),
-    recorded: new Map(),
-    records: new Map(),
-    references: [],
-    unsupported: [],
-  };
+  const build = freshBuild(source);
 
   return { context: contextOf(build, element), unsupported: build.unsupported };
 };
