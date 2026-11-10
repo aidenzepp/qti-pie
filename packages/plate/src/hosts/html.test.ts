@@ -152,6 +152,18 @@ const textEntryName = (elements: readonly Element[]): string => {
 };
 
 /**
+ * Read which of a page's Choice Controls are checked.
+ *
+ * @param elements The page's elements.
+ * @returns Each Choice Control's `value` with whether it carries `checked`, in document order.
+ */
+const choiceStates = (elements: readonly Element[]): readonly (readonly [unknown, boolean])[] =>
+  slotted(elements, rowFor("choice-interaction", "control").slot).map((control) => [
+    control.attrs["value"],
+    control.attrs["checked"] !== undefined,
+  ]);
+
+/**
  * Construct the post a browser sends for the page's form.
  *
  * @param entries The form's entries, in order.
@@ -163,6 +175,22 @@ const formPost = (entries: readonly (readonly [string, string])[]): Request =>
     headers: { "content-type": "application/x-www-form-urlencoded" },
     method: "POST",
   });
+
+/**
+ * Construct the post a browser sends for a page whose form is `multipart/form-data`. The request
+ * writes its own `content-type`, with the boundary.
+ *
+ * @param entries The form's entries, in order.
+ * @returns A POST to the page, its body multipart.
+ */
+const multipartPost = (entries: readonly (readonly [string, string])[]): Request => {
+  const body = new FormData();
+  for (const [name, value] of entries) {
+    body.append(name, value);
+  }
+
+  return new Request(`${origin}/`, { body, method: "POST" });
+};
 
 describe("the plain-HTML host", () => {
   it.effect(
@@ -191,8 +219,15 @@ describe("the plain-HTML host", () => {
         assert.strictEqual(form?.attrs["method"], "post");
         assert.lengthOf(slotted(inside, rowFor("item", "root").slot), 1);
         assert.deepStrictEqual(
-          inside.flatMap((element) => (element.tag === "button" ? [element.attrs["type"]] : [])),
-          ["submit"],
+          inside.flatMap((element) =>
+            element.tag === "button"
+              ? [[element.attrs["type"], Object.hasOwn(element.attrs, "hidden")]]
+              : [],
+          ),
+          [
+            ["submit", true],
+            ["submit", false],
+          ],
         );
         assert.lengthOf(slotted(elements, rowFor("item", "status").slot), 0);
       }),
@@ -254,6 +289,195 @@ describe("the plain-HTML host", () => {
         );
       }),
     { tags: ["corpus"] },
+  );
+
+  it.effect(
+    "[W0-HOSTS] a multipart/form-data POST of the correct answer scores 1, with no script",
+    () =>
+      Effect.gen(function* postCorrectMultipart() {
+        const { locale } = yield* configure({});
+        const handler = yield* hostOf();
+        const page = yield* pageOf(yield* Effect.promise(() => handler(new Request(`${origin}/`))));
+        const response = yield* Effect.promise(() =>
+          handler(multipartPost([[controlName(page.elements, "true"), "true"]])),
+        );
+        const { elements, html } = yield* pageOf(response);
+        const [status, ...otherStatuses] = slotted(elements, rowFor("item", "status").slot);
+
+        assert.strictEqual(response.status, 200);
+        assert.notInclude(html.toLowerCase(), "<script");
+        assert.lengthOf(otherStatuses, 0);
+        assert.include(
+          textOf(status ?? assert.fail("the page holds no Status part")),
+          message(locale, "score", { score: "1" }),
+        );
+      }),
+    { tags: ["corpus"] },
+  );
+
+  it.effect(
+    "[W0-HOSTS] a multipart POST of two answers to the single response is refused with the Status messages and the form again",
+    () =>
+      Effect.gen(function* postTwoMultipart() {
+        const { locale } = yield* configure({});
+        const handler = yield* hostOf();
+        const page = yield* pageOf(yield* Effect.promise(() => handler(new Request(`${origin}/`))));
+        const name = controlName(page.elements, "true");
+        const response = yield* Effect.promise(() =>
+          handler(
+            multipartPost([
+              [name, "true"],
+              [name, "false"],
+            ]),
+          ),
+        );
+        const { elements } = yield* pageOf(response);
+        const [status] = slotted(elements, rowFor("item", "status").slot);
+
+        assert.strictEqual(response.status, 200);
+        assert.include(
+          textOf(status ?? assert.fail("the page holds no Status part")),
+          message(locale, "notAccepted"),
+        );
+        assert.lengthOf(slotted(elements, rowFor("item", "message").slot), 1);
+        assert.lengthOf(
+          elements.filter((element) => element.tag === "form"),
+          1,
+        );
+      }),
+    { tags: ["corpus"] },
+  );
+
+  it.effect("[W0-HOSTS] a multipart body that is not multipart answers 400", () =>
+    Effect.gen(function* unreadableMultipart() {
+      const configuration = yield* configure({});
+      const handler = itemHost(acceptForTest(answerItem), configuration);
+      const response = yield* Effect.promise(() =>
+        handler(
+          new Request(`${origin}/`, {
+            body: "not a form",
+            headers: { "content-type": "multipart/form-data; boundary=x" },
+            method: "POST",
+          }),
+        ),
+      );
+
+      assert.strictEqual(response.status, 400);
+      assert.lengthOf(
+        elementsOf(parseHtml(yield* Effect.promise(() => response.text()))).filter(
+          (element) => element.tag === "form",
+        ),
+        0,
+      );
+    }),
+  );
+
+  it.effect("[W0-HOSTS] a POST of another content type still answers 415", () =>
+    Effect.gen(function* otherTypes() {
+      const configuration = yield* configure({});
+      const handler = itemHost(acceptForTest(answerItem), configuration);
+      const statuses = yield* Effect.promise(() =>
+        Promise.all(
+          ["text/plain", "application/json", "multipart/mixed; boundary=x"].map((type) =>
+            handler(
+              new Request(`${origin}/`, {
+                body: "a",
+                headers: { "content-type": type },
+                method: "POST",
+              }),
+            ).then(({ status }) => status),
+          ),
+        ),
+      );
+
+      assert.deepStrictEqual(statuses, [415, 415, 415]);
+    }),
+  );
+
+  it.effect(
+    "[W0-HOSTS] the host's posted strings come through postedStrings: a refused form-urlencoded post shows the posted choices checked",
+    () =>
+      Effect.gen(function* refusedShowsPosted() {
+        const handler = yield* hostOf();
+        const page = yield* pageOf(yield* Effect.promise(() => handler(new Request(`${origin}/`))));
+        const name = controlName(page.elements, "true");
+        const refused = yield* pageOf(
+          yield* Effect.promise(() =>
+            handler(
+              formPost([
+                [name, "true"],
+                [name, "false"],
+              ]),
+            ),
+          ),
+        );
+
+        assert.deepStrictEqual(choiceStates(page.elements), [
+          ["true", false],
+          ["false", false],
+        ]);
+        assert.deepStrictEqual(choiceStates(refused.elements), [
+          ["true", true],
+          ["false", true],
+        ]);
+      }),
+    { tags: ["corpus"] },
+  );
+
+  it.effect(
+    "[W0-DEFAULT-SUBMIT] the HTML host's form begins with a hidden default submit and ends with the visible Submit",
+    () =>
+      Effect.gen(function* defaultSubmitFirst() {
+        const handler = yield* htmlHost(hexItem.location, hexItem.bytes);
+        const { elements } = yield* pageOf(
+          yield* Effect.promise(() => handler(new Request(`${origin}/`))),
+        );
+        const form = elements.find((element) => element.tag === "form");
+        const children = (form?.children ?? []).filter(
+          (child): child is Element => child.kind === "element",
+        );
+        const [first, root, last, ...others] = children;
+
+        assert.lengthOf(others, 0);
+        assert.strictEqual(first?.tag, "button");
+        assert.strictEqual(first?.attrs["type"], "submit");
+        assert.isTrue(Object.hasOwn(first?.attrs ?? {}, "hidden"));
+        assert.isFalse(Object.hasOwn(first?.attrs ?? {}, "name"));
+        assert.isFalse(Object.hasOwn(first?.attrs ?? {}, "aria-hidden"));
+        assert.isFalse(Object.hasOwn(first?.attrs ?? {}, "tabindex"));
+        assert.isTrue(Object.hasOwn(root?.attrs ?? {}, "lang"));
+        assert.strictEqual(last?.tag, "button");
+        assert.strictEqual(last?.attrs["type"], "submit");
+        assert.strictEqual(textOf(last ?? assert.fail("the form has no last button")), "Submit");
+        assert.isFalse(Object.hasOwn(last?.attrs ?? {}, "hidden"));
+      }),
+  );
+
+  it.effect("[W0-DEFAULT-SUBMIT] a form-urlencoded post with no button entry still scores", () =>
+    Effect.gen(function* postWithoutButton() {
+      const { locale } = yield* configure({});
+      const handler = yield* htmlHost(hexItem.location, hexItem.bytes);
+      const page = yield* pageOf(yield* Effect.promise(() => handler(new Request(`${origin}/`))));
+      const buttons = page.elements.filter((element) => element.tag === "button");
+
+      // No button of the form names an entry, so a post through either submit carries only the
+      // Text Entry's entry, which is what this post sends.
+      assert.isAbove(buttons.length, 0);
+      assert.isTrue(buttons.every((button) => !Object.hasOwn(button.attrs, "name")));
+
+      const response = yield* Effect.promise(() =>
+        handler(formPost([[textEntryName(page.elements), "ff"]])),
+      );
+      const { elements } = yield* pageOf(response);
+      const [status] = slotted(elements, rowFor("item", "status").slot);
+
+      assert.strictEqual(response.status, 200);
+      assert.lengthOf(slotted(elements, rowFor("item", "message").slot), 0);
+      assert.include(
+        textOf(status ?? assert.fail("the page holds no Status part")),
+        message(locale, "score", { score: "1" }),
+      );
+    }),
   );
 
   it.effect("scores a Text Entry's integer in the base it declares: ff in base 16 scores 1", () =>

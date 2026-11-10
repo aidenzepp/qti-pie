@@ -2,17 +2,21 @@ import { readdirSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
-import { attr, doc, el, qtiNamespace, xincludeNamespace } from "#plate/document/source.ts";
+import { attr, doc, el, qtiNamespace, text, xincludeNamespace } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { pathsOf } from "#plate/model/item.ts";
+import { parseContextOf, pathsOf } from "#plate/model/item.ts";
+import type { BodyNode } from "#plate/model/item.ts";
 import { readersOf } from "#plate/model/reader.ts";
 import { buildTest } from "#plate/model/test.ts";
 import type { Test } from "#plate/model/test.ts";
+import { advance } from "#plate/session/advance.ts";
 import { moveTargets } from "#plate/session/navigate.ts";
 import { startTest } from "#plate/session/start.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import { TestFeatureNotImplemented, stub, testFeatureKeys } from "#plate/test-features/contract.ts";
 import type {
+  EnterContext,
+  FeatureOwner,
   SequencePlace,
   TestFeatureId,
   TestFeatureKey,
@@ -20,7 +24,14 @@ import type {
   TestFeatureNodes,
   TestParseContext,
 } from "#plate/test-features/contract.ts";
-import { deliveredBy, featureAt, gatedBy, sequencedBy } from "#plate/test-features/dispatch.ts";
+import {
+  deliveredBy,
+  enteredBy,
+  featureAt,
+  gatedBy,
+  sequencedBy,
+} from "#plate/test-features/dispatch.ts";
+import { rubricBlockModule } from "#plate/test-features/rubric-block.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
 import type { AnyTestFeature, TestFeatureTable } from "#plate/test-features/table.ts";
 import { open } from "#plate/validate/open.ts";
@@ -164,12 +175,15 @@ const recording = (source: SourceDocument): MarkRecording => {
 
   return {
     context: {
+      expression: () => Result.succeed(Option.none()),
       mark: (feature) => {
         marked.push(feature);
 
         return Result.succeed(Option.none());
       },
+      owner: { kind: "test" },
       path: "qti-assessment-test/x",
+      read: parseContextOf(source, source.root).context.read,
       readers: readersOf({ builder: "buildTest", document: source, paths: pathsOf(source) }),
     },
     marked,
@@ -262,6 +276,36 @@ const landedTimeLimits: TestFeatureModule<"qti-time-limits", TimeLimitsNode> = {
       return Option.some({ maxTime: maxTime.value, path: context.path });
     }),
   sequence: (context) => context.places.toReversed(),
+};
+
+/**
+ * What the landed rubric-block module reads a block into: the owner of the block and the body nodes
+ * of its content, as the context gave them.
+ */
+interface RubricNode {
+  readonly nodes: readonly BodyNode[];
+  readonly owner: FeatureOwner;
+  readonly path: string;
+}
+
+/**
+ * A rubric-block module as it would land, for this test alone: it reads the block's children
+ * through the context's reader kit, letting its `qti-content-body` through as an element, and
+ * keeps the owner the context names.
+ */
+const landedRubricBlock: TestFeatureModule<"qti-rubric-block", RubricNode> = {
+  ...stub({
+    element: "qti-rubric-block",
+    feature: ["S-5", "T-13"],
+    issue: "m3e-01b",
+    key: "qti-rubric-block",
+    namespace: qtiNamespace,
+  }),
+  implemented: true,
+  parse: (element, context) =>
+    Result.map(context.read.nodes(element, { own: ["qti-content-body"] }), (nodes) =>
+      Option.some({ nodes, owner: context.owner, path: context.path }),
+    ),
 };
 
 /**
@@ -366,7 +410,7 @@ const startedSession = Effect.gen(function* startSession() {
     (failure) => assert.fail(`startTest refused: ${failure.message}`),
   );
 
-  return { session, test };
+  return { items, session, test };
 });
 
 describe("the test-feature modules", () => {
@@ -398,6 +442,10 @@ describe("the test-feature modules", () => {
 });
 
 describe("a test-feature module not implemented", () => {
+  it("[W0-AT] the rubric-block stub names its filling issue", () => {
+    assert.strictEqual(rubricBlockModule.issue, "m3e-01b");
+  });
+
   it("parses its element as none, its key recorded once as the mark, and is found by its element", () => {
     const source = testOf([]);
     for (const module of stubs) {
@@ -431,7 +479,7 @@ describe("a test-feature module not implemented", () => {
         { kind: "end-part" },
       ] as const) {
         assert.deepStrictEqual(
-          gatedBy(stubbed, { intent, now: Option.none(), session, test }),
+          gatedBy(stubbed, { intent, items: Option.none(), now: Option.none(), session, test }),
           Option.none(),
           intent.kind,
         );
@@ -453,6 +501,7 @@ describe("a test-feature module not implemented", () => {
         assert.deepStrictEqual(
           gatedBy(expiring, {
             intent: { kind: "submit-item" },
+            items: Option.none(),
             now: Option.none(),
             session,
             test: test.test,
@@ -462,12 +511,33 @@ describe("a test-feature module not implemented", () => {
         assert.deepStrictEqual(
           gatedBy(expiring, {
             intent: { kind: "next" },
+            items: Option.none(),
             now: Option.none(),
             session,
             test: test.test,
           }),
           Option.none(),
         );
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] lets every place be entered: its enter answers none, as enteredBy does over the stubs",
+    () =>
+      Effect.gen(function* enters() {
+        const { items, session, test } = yield* startedSession;
+        const context: EnterContext = {
+          items: Option.some(items),
+          now: Option.none(),
+          sequenceIndex: 2,
+          session,
+          test: test.test,
+        };
+        for (const module of stubs) {
+          assert.deepStrictEqual(module.enter(context), Option.none(), module.key);
+        }
+
+        assert.deepStrictEqual(enteredBy(stubbed, context), Option.none());
       }),
   );
 
@@ -480,6 +550,39 @@ describe("a test-feature module not implemented", () => {
 });
 
 describe("a test-feature module that has landed", () => {
+  it("[W0-AT] the landed fake compiles against the new context and reads a body: landedTimeLimits keeps reading through readers, a second fake reads the body and its owner and records both", () => {
+    const rubric = el(
+      "qti-rubric-block",
+      [attr("view", "candidate")],
+      [el("qti-content-body", [], [el("p", [], [text("Show your working.")])])],
+    );
+    const source = testOf(["a"], [rubric, timeLimits(60)]);
+    const table = stubbed.map((module) => {
+      if (module.key === "qti-rubric-block") {
+        return landedRubricBlock;
+      }
+
+      return module.key === "qti-time-limits" ? landedTimeLimits : module;
+    });
+    const withBoth = built(source, table);
+    const nodes:
+      | TestFeatureNodes<AnyTestFeature | typeof landedTimeLimits | typeof landedRubricBlock>
+      | undefined = withBoth.features;
+    const sectionPath = "qti-assessment-test/qti-test-part/qti-assessment-section";
+    const [read] = nodes?.["qti-rubric-block"] ?? [];
+
+    assert.deepStrictEqual(nodes?.["qti-time-limits"], [
+      { maxTime: 60, path: `${sectionPath}/qti-time-limits` },
+    ]);
+    assert.deepStrictEqual(read?.owner, { identifier: "S1", kind: "section" });
+    assert.strictEqual(read?.path, `${sectionPath}/qti-rubric-block`);
+    assert.deepStrictEqual(
+      read?.nodes.map((node) => (node.kind === "element" ? node.tag : node.kind)),
+      ["qti-content-body"],
+    );
+    assert.deepStrictEqual(withBoth.unsupported, []);
+  });
+
   it("reaches the model: buildTest holds its node under its key and records no mark for it, where the stub marked it", () => {
     const source = testOf(["a"], [timeLimits(60)]);
     const withStub = built(source, stubbed);
@@ -531,6 +634,47 @@ describe("a test-feature module that has landed", () => {
         }
 
         assert.deepStrictEqual(decide({ kind: "go", sequenceIndex: 2 }), Result.succeed(2));
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] reaches the gate with the items: advance hands its gate the items it was given, and moveTargets alone hands none",
+    () =>
+      Effect.gen(function* gateItems() {
+        const { items, session, test } = yield* startedSession;
+        const configuration = yield* configure({});
+        const seen: Option.Option<ReadonlyMap<string, Accepted>>[] = [];
+        const recordingGate: TestFeatureTable = stubbed.map((module) =>
+          module.key === "qti-time-limits"
+            ? {
+                ...landedTimeLimits,
+                gate: (context) => {
+                  seen.push(context.items);
+
+                  return Option.none();
+                },
+              }
+            : module,
+        );
+        const decide = yield* Effect.fromResult(moveTargets(test, session, recordingGate));
+        decide({ kind: "next" });
+        yield* Effect.fromResult(
+          advance(test, items, session, { intent: { kind: "next" } }, configuration, {
+            features: recordingGate,
+            now: new Date(1000),
+          }),
+        );
+
+        const [alone, ...withinAdvance] = seen;
+
+        assert.deepStrictEqual(alone, Option.none());
+        assert.isNotEmpty(withinAdvance);
+        for (const held of withinAdvance) {
+          assert.deepStrictEqual(
+            held.pipe(Option.map((map) => [...map.keys()])),
+            Option.some(["i1", "i2"]),
+          );
+        }
       }),
   );
 

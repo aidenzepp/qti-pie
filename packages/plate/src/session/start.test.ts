@@ -1,12 +1,15 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { decodeSession, encodeSession } from "#plate/codec/session.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
+import type * as Adaptive from "#plate/engine/adaptive.ts";
+import type { AdaptivePolicy } from "#plate/engine/adaptive.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
 import { decode } from "#plate/form/encoding.ts";
 import { defaultLabel, drawBelow, drawStream, templateLabel } from "#plate/engine/random.ts";
+import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
@@ -27,6 +30,10 @@ import {
 } from "#plate/session/start.ts";
 import type { Current, ItemView } from "#plate/session/start.ts";
 import { submitItem } from "#plate/session/submit.ts";
+import { stub } from "#plate/test-features/contract.ts";
+import type { EnterContext, EnterVerdict } from "#plate/test-features/contract.ts";
+import { testFeatures } from "#plate/test-features/table.ts";
+import type { TestFeatureTable } from "#plate/test-features/table.ts";
 import { open } from "#plate/validate/open.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { acceptedItem, acceptForTest } from "#plate/validate/verdict.ts";
@@ -997,7 +1004,7 @@ describe("startTest", () => {
   );
 
   it.effect(
-    "[T-1] keeps the configuration's seed as the shuffle seed, none when it has none, and a session stored at version 6 keeps either",
+    "[T-1] keeps the configuration's seed as the shuffle seed, none when it has none, and a session stored at version 7 keeps either",
     () =>
       Effect.gen(function* keepsShuffleSeed() {
         const delivery = yield* builtDelivery("shuffled", [
@@ -1225,6 +1232,111 @@ describe("a locked item", () => {
       );
       assert.deepStrictEqual(session.expired, []);
     }),
+  );
+});
+
+/**
+ * Write the text of a hand-built adaptive item: one Choice over `A` and `B` bound to the single
+ * identifier `RESPONSE`, with `adaptive="true"` on its root.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const adaptiveXml = (identifier: string): string =>
+  itemXml(identifier, { choices: ["A", "B"], defaultValue: false, shuffle: false }).replace(
+    'adaptive="false"',
+    'adaptive="true"',
+  );
+
+/**
+ * The adaptive policy's module file, which {@link withUnlimitedAdaptive} mocks.
+ */
+const policyFile = "#plate/engine/adaptive.ts";
+
+/**
+ * Run an effect with an adaptive policy under which an adaptive item's attempts never close it,
+ * every module that reads the policy loaded afresh, and the stub restored after. A non-adaptive
+ * item keeps the stub's answers.
+ *
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withUnlimitedAdaptive = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(policyFile, async (importOriginal) => {
+      const actual = await importOriginal<typeof Adaptive>();
+      const unlimited: AdaptivePolicy = {
+        ...actual.adaptivePolicy,
+        closed: (adaptive, record, limit) =>
+          adaptive ? false : actual.adaptivePolicy.closed(adaptive, record, limit),
+        limit: (adaptive, limit) => (adaptive ? 0 : limit),
+      };
+
+      return { ...actual, adaptivePolicy: unlimited };
+    });
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(policyFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+describe("the adaptive fact on a session item", () => {
+  it.effect(
+    "[W0-BD] startTest writes the adaptive fact on each session item from its item, and inspect closes through the policy: the stub closes an adaptive item at its limit, a policy that lifts the limit does not",
+    () =>
+      Effect.gen(function* adaptiveFact() {
+        const delivery = yield* builtDelivery("adaptive", [
+          ["first", adaptiveXml("first")],
+          [
+            "second",
+            itemXml("second", { choices: ["A", "B"], defaultValue: false, shuffle: false }),
+          ],
+        ]);
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration);
+        const attempted: TestSession = {
+          ...session,
+          items: session.items.map((item) => ({
+            ...item,
+            record: { ...item.record, attempt: "submitted", numAttempts: 1 },
+          })),
+        };
+
+        assert.deepStrictEqual(
+          session.items.map((item) => item.adaptive),
+          [true, false],
+        );
+        assert.deepStrictEqual(
+          [1, 2].map(
+            (sequenceIndex) => viewAt(delivery, session, configuration, sequenceIndex).disabled,
+          ),
+          [false, false],
+        );
+        assert.deepStrictEqual(
+          [1, 2].map(
+            (sequenceIndex) => viewAt(delivery, attempted, configuration, sequenceIndex).disabled,
+          ),
+          [true, true],
+        );
+
+        yield* withUnlimitedAdaptive(
+          Effect.gen(function* underUnlimited() {
+            const sessions = yield* Effect.promise(() => import("#plate/session/start.ts"));
+            const disabledAt = (sequenceIndex: number): boolean =>
+              Result.getOrElse(
+                sessions.itemView(delivery.test, attempted, configuration, sequenceIndex),
+                (failure) => assert.fail(`itemView failed: ${failure.message}`),
+              ).disabled;
+
+            assert.deepStrictEqual([disabledAt(1), disabledAt(2)], [false, true]);
+          }),
+        );
+      }),
   );
 });
 
@@ -3172,7 +3284,7 @@ describe("a package whose test reads a numbered name through an item ref", () =>
   );
 
   it.effect(
-    "align-54 r11 numbered reading counted once P1-1: a test with its own a and a section document holding a.2 marks its processing that reads a.2.SCORE by name, and end-part leaves TOTAL at its default 0",
+    "align-54 r11 numbered reading counted once P1-1: a test with its own a and a section document holding a.2 holds its processing that reads a.2.SCORE, as the delivered test places that section document and a.2 is its own item ref, so the processing runs unmarked and end-part gives TOTAL item a.2's SCORE, 7 (issue m3f-03b)",
     () =>
       Effect.gen(function* numberedThroughSection() {
         const { closed, delivery } = yield* numberedRun({
@@ -3191,13 +3303,12 @@ describe("a package whose test reads a numbered name through an item ref", () =>
           ),
         });
 
-        assert.deepStrictEqual(delivery.test.test.outcomeProcessing, { kind: "marked" });
-        assert.isTrue(
-          delivery.test.test.unsupported.some(
-            (feature) => feature.feature === "variable:a.2.SCORE",
-          ),
+        assert.strictEqual(delivery.test.test.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(
+          delivery.test.test.unsupported.map((feature) => feature.feature),
+          [],
         );
-        assert.deepStrictEqual(closed.outcomes["TOTAL"], float(0));
+        assert.deepStrictEqual(closed.outcomes["TOTAL"], float(7));
       }),
   );
 
@@ -3254,8 +3365,8 @@ const moreRefXml = '<qti-assessment-section-ref identifier="referred" href="sect
 /**
  * The cases N1 names: a name read in a test that holds its own item ref `a`, part `part` and
  * section `section`, and the item ref of the section document that gives the name's one resolving
- * reading, which the session does not deliver. Through the test's own prefix, each name's rest is
- * itself dotted, so it names no variable of the test's own items.
+ * reading, which the delivered test places and so holds. Through the test's own prefix, each
+ * name's rest is itself dotted, so it names no variable of the test's own items.
  */
 const ownPrefixCases: readonly (readonly [name: string, sectionRef: string])[] = [
   ["a.b.SCORE", "a.b"],
@@ -3291,7 +3402,7 @@ const markedFeatures = (delivery: Delivery): readonly string[] =>
 
 describe("a package whose test reads a dotted name through its own prefix and a section document", () => {
   it.effect(
-    "align-54 r12 own prefix through a section document N1: outcome processing that sets TOTAL from a.b.SCORE, section.x.SCORE, part.x.SCORE or a.SCORE.SCORE, whose one resolving reading is a section document's item ref, is marked by name, and end-part leaves TOTAL at its default 0",
+    "align-54 r12 own prefix through a section document N1: outcome processing that sets TOTAL from a.b.SCORE, section.x.SCORE, part.x.SCORE or a.SCORE.SCORE, whose one resolving reading is a section document's item ref, is held, as the delivered test places that section document, so it runs unmarked and end-part gives TOTAL that item ref's SCORE, 7 (issue m3f-03b)",
     () =>
       Effect.gen(function* marksOwnPrefixReads() {
         for (const [name, sectionRef] of ownPrefixCases) {
@@ -3304,17 +3415,17 @@ describe("a package whose test reads a dotted name through its own prefix and a 
             ),
           });
 
-          assert.strictEqual(verdict, "accepted-with-unsupported", name);
-          assert.deepStrictEqual(delivery.test.test.outcomeProcessing, { kind: "marked" }, name);
-          assert.include(markedFeatures(delivery), `variable:${name}`, name);
-          assert.deepStrictEqual(closed.outcomes["TOTAL"], float(0), name);
+          assert.strictEqual(verdict, "accepted", name);
+          assert.strictEqual(delivery.test.test.outcomeProcessing.kind, "runs", name);
+          assert.notInclude(markedFeatures(delivery), `variable:${name}`, name);
+          assert.deepStrictEqual(closed.outcomes["TOTAL"], float(7), name);
           assert.strictEqual(closed.status, "closed", name);
         }
       }),
   );
 
   it.effect(
-    "align-54 r12 own prefix through a section document N1: item ref c's template default of T that reads such a name is marked by name and left out, so startTest succeeds on a fresh session, in a nonlinear part, which end-part closes, and in a linear one that presents c first, which next closes",
+    "align-54 r12 own prefix through a section document N1: item ref c's template default of T that reads such a name is held, as the delivered test places that section document, so startTest succeeds on a fresh session and c's T is that item ref's SCORE, 7, in a nonlinear part, which end-part closes, and in a linear one that presents c first, which next closes (issue m3f-03b)",
     () =>
       Effect.gen(function* leavesOwnPrefixDefaults() {
         const configuration = yield* configure({});
@@ -3348,11 +3459,19 @@ describe("a package whose test reads a dotted name through its own prefix and a 
                 (failure) => assert.fail(`${kind} refused: ${failure._tag}: ${failure.message}`),
               );
             }
-            const presented = session.items.find((item) => item.ref === "c");
+            const at =
+              session.items.find((item) => item.ref === "c")?.sequenceIndex ??
+              assert.fail(`${label} delivers no item c`);
 
-            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", label);
-            assert.include(markedFeatures(delivery), `variable:${name}`, label);
-            assert.deepStrictEqual(presented?.templateDefaults, Option.none(), label);
+            assert.strictEqual(verdict.verdict, "accepted", label);
+            assert.notInclude(markedFeatures(delivery), `variable:${name}`, label);
+            // The default is held, not left out: the section document's item ref is the delivered
+            // test's own, and its SCORE defaults to 7.
+            assert.deepStrictEqual(
+              templatesAt(presentedAt(delivery, session, at, after(500)), at)["T"],
+              float(7),
+              label,
+            );
             assert.strictEqual(closed.status, "closed", label);
           }
         }
@@ -3432,7 +3551,7 @@ const unscoredItemXml = [
  * One case N1's residual names: a name the test reads whose reading through the test's own item
  * ref counts in the test document alone, though that ref's item, {@link unscoredItemXml}, declares
  * no `SCORE`, so the name's one counting reading is the section document's item ref, which names
- * `i2`, which the session does not deliver.
+ * `i2`, which the delivered test places and so holds.
  */
 interface CountingCase {
   /**
@@ -3506,7 +3625,7 @@ const countingItems = (
 
 describe("a package whose test reads a name whose one counting reading is a section document's", () => {
   it.effect(
-    "align-54 r12 counting reading in a section document N1: outcome processing that sets TOTAL from a.2.SCORE beside an own repeatable a whose item declares no SCORE, or from x.y.SCORE beside an own x.y whose item declares no SCORE, read through a section document's a.2 or x alone, is marked by name, and end-part leaves TOTAL at its default 0",
+    "align-54 r12 counting reading in a section document N1: outcome processing that sets TOTAL from a.2.SCORE beside an own repeatable a whose item declares no SCORE, or from x.y.SCORE beside an own x.y whose item declares no SCORE, read through a section document's a.2 or x alone, is held, as the delivered test places that section document, so it runs unmarked and end-part gives TOTAL that item ref's SCORE, 7 (issue m3f-03b)",
     () =>
       Effect.gen(function* marksCountingReads() {
         for (const { declarations, name, own, placed } of countingCases) {
@@ -3519,17 +3638,17 @@ describe("a package whose test reads a name whose one counting reading is a sect
             ),
           });
 
-          assert.strictEqual(verdict, "accepted-with-unsupported", name);
-          assert.deepStrictEqual(delivery.test.test.outcomeProcessing, { kind: "marked" }, name);
-          assert.include(markedFeatures(delivery), `variable:${name}`, name);
-          assert.deepStrictEqual(closed.outcomes["TOTAL"], float(0), name);
+          assert.strictEqual(verdict, "accepted", name);
+          assert.strictEqual(delivery.test.test.outcomeProcessing.kind, "runs", name);
+          assert.notInclude(markedFeatures(delivery), `variable:${name}`, name);
+          assert.deepStrictEqual(closed.outcomes["TOTAL"], float(7), name);
           assert.strictEqual(closed.status, "closed", name);
         }
       }),
   );
 
   it.effect(
-    "align-54 r12 counting reading in a section document N1: item ref c's template default of T that reads such a name is marked by name and left out, so startTest succeeds on a fresh session, in a nonlinear part, which end-part closes, and in a linear one that presents c first, which next closes",
+    "align-54 r12 counting reading in a section document N1: item ref c's template default of T that reads such a name is held, as the delivered test places that section document, so startTest succeeds on a fresh session and c's T is that item ref's SCORE, 7, in a nonlinear part, which end-part closes, and in a linear one that presents c first, which next closes (issue m3f-03b)",
     () =>
       Effect.gen(function* leavesCountingDefaults() {
         const configuration = yield* configure({});
@@ -3563,11 +3682,19 @@ describe("a package whose test reads a name whose one counting reading is a sect
                 (failure) => assert.fail(`${kind} refused: ${failure._tag}: ${failure.message}`),
               );
             }
-            const presented = session.items.find((item) => item.ref === "c");
+            const at =
+              session.items.find((item) => item.ref === "c")?.sequenceIndex ??
+              assert.fail(`${label} delivers no item c`);
 
-            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", label);
-            assert.include(markedFeatures(delivery), `variable:${name}`, label);
-            assert.deepStrictEqual(presented?.templateDefaults, Option.none(), label);
+            assert.strictEqual(verdict.verdict, "accepted", label);
+            assert.notInclude(markedFeatures(delivery), `variable:${name}`, label);
+            // The default is held, not left out: the section document's item ref is the delivered
+            // test's own, and its SCORE defaults to 7.
+            assert.deepStrictEqual(
+              templatesAt(presentedAt(delivery, session, at, after(500)), at)["T"],
+              float(7),
+              label,
+            );
             assert.strictEqual(closed.status, "closed", label);
           }
         }
@@ -3783,6 +3910,128 @@ describe("a package whose item ref's template default reads a field of an item's
           [mismatch.identifier, mismatch.actual, mismatch.expected],
           ["T", "float single", "integer single"],
         );
+      }),
+  );
+});
+
+/**
+ * Build a table of stubs with a pre-condition module, landed for these tests alone, whose `enter`
+ * is the function given.
+ *
+ * @param enter What it answers when a place is entered.
+ * @returns The table.
+ */
+const entering = (
+  enter: (context: EnterContext) => Option.Option<EnterVerdict>,
+): TestFeatureTable =>
+  testFeatures.map((module) =>
+    module.key === "qti-pre-condition"
+      ? {
+          ...stub({
+            element: module.element,
+            feature: module.feature,
+            issue: module.issue,
+            key: module.key,
+            namespace: module.namespace,
+          }),
+          enter,
+          implemented: true,
+        }
+      : module,
+  );
+
+/**
+ * The hand-built items the entering tests deliver: three Choices in one linear part.
+ */
+const enteringRefs: readonly DefaultedRef[] = ["one", "two", "three"].map(
+  (ref) =>
+    [ref, "", itemXml(ref, { choices: ["A", "B"], defaultValue: false, shuffle: false })] as const,
+);
+
+describe("[W0-BE] the entering gate at the start", () => {
+  it.effect(
+    "[W0-BE] a first place the modules skip is never presented: the session starts on the place after it, with the skipped item's record untouched",
+    () =>
+      Effect.gen(function* skipsFirst() {
+        const delivery = yield* linearDelivery("entering", enteringRefs);
+        const configuration = yield* configure({});
+        const asked: EnterContext[] = [];
+        const features = entering((context) => {
+          asked.push(context);
+
+          return context.sequenceIndex === 1 ? Option.some({ kind: "skip" }) : Option.none();
+        });
+        const session = Result.getOrElse(
+          startTest(delivery.test, delivery.items, configuration, {
+            features,
+            instance,
+            now: startedAt,
+          }),
+          (failure) => assert.fail(`startTest refused: ${failure.message}`),
+        );
+        const plain = started(delivery, configuration);
+
+        assert.strictEqual(session.position, 1);
+        assert.deepStrictEqual(
+          session.items.map((item) => item.presented),
+          [false, true, false],
+        );
+        assert.deepStrictEqual(
+          session.items[0]?.record,
+          fresh((delivery.items.get("one") ?? assert.fail("no item one")).item, `${instance}.1`),
+        );
+        assert.notDeepEqual(session.items[0]?.record, plain.items[0]?.record);
+        assert.deepStrictEqual(
+          asked.map((context) => context.sequenceIndex),
+          [1, 2],
+        );
+        assert.deepStrictEqual(
+          (asked[0]?.items ?? Option.none()).pipe(Option.map((items) => [...items.keys()])),
+          Option.some(["one", "two", "three"]),
+        );
+        assert.deepStrictEqual(asked[0]?.now, Option.some(startedAt));
+        assert.strictEqual(asked[0]?.session.status, "interacting");
+        assert.deepStrictEqual(session.parts, [{ identifier: "part", status: "current" }]);
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] a test whose every place is skipped starts closed; an exit from the test at the first place does the same; and the default table enters the first place",
+    () =>
+      Effect.gen(function* skipsAll() {
+        const delivery = yield* linearDelivery("entering", enteringRefs);
+        const configuration = yield* configure({});
+        const skipping = entering(() => Option.some({ kind: "skip" }));
+        const exiting = entering(() =>
+          Option.some({ kind: "exit", scope: { identifier: "entering", kind: "test" } }),
+        );
+        const closed = Result.getOrElse(
+          startTest(delivery.test, delivery.items, configuration, {
+            features: skipping,
+            instance,
+            now: startedAt,
+          }),
+          (failure) => assert.fail(`startTest refused: ${failure.message}`),
+        );
+        const exited = Result.getOrElse(
+          startTest(delivery.test, delivery.items, configuration, {
+            features: exiting,
+            instance,
+            now: startedAt,
+          }),
+          (failure) => assert.fail(`startTest refused: ${failure.message}`),
+        );
+
+        for (const session of [closed, exited]) {
+          assert.strictEqual(session.status, "closed");
+          assert.deepStrictEqual(session.parts, [{ identifier: "part", status: "ended" }]);
+          assert.deepStrictEqual(
+            session.items.map((item) => item.presented),
+            [false, false, false],
+          );
+        }
+
+        assert.strictEqual(started(delivery, configuration).items[0]?.presented, true);
       }),
   );
 });

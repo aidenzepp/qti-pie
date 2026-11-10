@@ -88,6 +88,7 @@ const Written = Schema.Option(Schema.String);
  */
 const supportsFields = {
   additionalTestingTime: Schema.Option(AdditionalTestingTime),
+  alternativeText: Schema.Boolean,
   answerMasking: Schema.Boolean,
   braille: Schema.Option(
     Schema.Struct({
@@ -99,13 +100,31 @@ const supportsFields = {
     }),
   ),
   breaks: Schema.Boolean,
+  captions: Schema.Boolean,
   catalog: Schema.ReadonlySet(CatalogSupport),
   display: Schema.Struct({
     invertDisplayPolarity: Schema.Boolean,
+    invertedColors: Schema.Option(Schema.Struct({ background: Written, foreground: Written })),
     keywordEmphasis: Schema.Boolean,
     languageOfInterface: Schema.Option(Schema.String),
     layoutSingleColumn: Schema.Boolean,
     magnification: Schema.Option(Positive),
+    text: Schema.Option(
+      Schema.Struct({
+        colorTheme: Written,
+        fontNames: Schema.Array(Schema.String),
+        fontSize: Schema.Option(
+          Schema.Struct({ kind: Schema.Literals(["factor", "points"]), value: Schema.Finite }),
+        ),
+        genericFontFace: Schema.Option(Schema.Literals(genericFontFaces)),
+        letterSpacing: Schema.Option(Schema.Finite),
+        lineHeight: Schema.Option(Schema.Finite),
+        lineSpacing: Schema.Option(Schema.Finite),
+        uniformFontSizing: Schema.Boolean,
+        wordSpacing: Schema.Option(Schema.Finite),
+        wordWrapping: Schema.Boolean,
+      }),
+    ),
     textAppearance: Schema.Option(TextAppearance),
   }),
   keywordTranslationLanguage: Written,
@@ -142,7 +161,6 @@ export const PnpSupportsSchema: Schema.Codec<PnpSupports> = Schema.Struct({
   hazards: Schema.ReadonlySet(extensible(hazardAvoidances)),
   ignored: Schema.Array(Schema.String),
   inputRequirements: Schema.ReadonlySet(extensible(inputRequirementValues)),
-  invertedColors: Schema.Option(Schema.Struct({ background: Written, foreground: Written })),
   languages: Schema.ReadonlyMap(Schema.Literals(languageFeatures), Schema.String),
   optional: Schema.ReadonlySet(PnpFeature),
   prohibited: Schema.ReadonlySet(PnpFeature),
@@ -155,22 +173,6 @@ export const PnpSupportsSchema: Schema.Codec<PnpSupports> = Schema.Struct({
       speechRate: Schema.Finite,
       typingEcho: Schema.Option(Schema.Literals(typingEchoes)),
       volume: Schema.Finite,
-    }),
-  ),
-  text: Schema.Option(
-    Schema.Struct({
-      colorTheme: Written,
-      fontNames: Schema.Array(Schema.String),
-      fontSize: Schema.Option(
-        Schema.Struct({ kind: Schema.Literals(["factor", "points"]), value: Schema.Finite }),
-      ),
-      genericFontFace: Schema.Option(Schema.Literals(genericFontFaces)),
-      letterSpacing: Schema.Option(Schema.Finite),
-      lineHeight: Schema.Option(Schema.Finite),
-      lineSpacing: Schema.Option(Schema.Finite),
-      uniformFontSizing: Schema.Boolean,
-      wordSpacing: Schema.Option(Schema.Finite),
-      wordWrapping: Schema.Boolean,
     }),
   ),
   toolSettings: Schema.Struct({

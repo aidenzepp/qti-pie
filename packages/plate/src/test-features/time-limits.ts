@@ -490,11 +490,13 @@ const timeAt = (session: TestSession, now: Option.Option<Date>): Date =>
  * in `expired`, naming the widest such scope, which the session hub then expires in the intent's
  * place. Otherwise it refuses, under the rule `min-time`, the intents that would leave a scope
  * whose `min-time` still holds the candidate while no `max-time` in force has run out. It places
- * nothing and orders nothing.
+ * nothing, orders nothing and lets every place be entered: a scope whose time has run out answers
+ * the next intent through `gate`.
  */
 export const timeLimitsModule: TestFeatureModule<"qti-time-limits", TimeLimitsNode> = {
   deliver: (context) => context.test,
   element: "qti-time-limits",
+  enter: () => Option.none(),
   feature: ["T-2", "S-2", "T-6", "I-16"],
   gate: ({ intent, now, session, test }) => {
     if (session.status === "closed" || !timed(test)) {

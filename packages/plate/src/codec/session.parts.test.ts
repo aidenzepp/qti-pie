@@ -393,7 +393,7 @@ describe("a session of a test that places one section document in two parts", ()
         assert.deepStrictEqual(refusal(given, edited), [
           "InvalidSession",
           "decode",
-          Option.some(6),
+          Option.some(7),
         ]);
       }),
   );
@@ -411,7 +411,7 @@ describe("a session of a test that places one section document in two parts", ()
         assert.deepStrictEqual(refusal(given, edited), [
           "InvalidSession",
           "decode",
-          Option.some(6),
+          Option.some(7),
         ]);
       }),
   );

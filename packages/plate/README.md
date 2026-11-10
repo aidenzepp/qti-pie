@@ -24,11 +24,12 @@ plate is a private workspace package of [qti-pie](../../README.md). In a sibling
 "dependencies": { "@qti-pie/plate": "workspace:*", "effect": "4.1.2" }
 ```
 
-Then run `pnpm install` from the repository root. The package has two entry points:
+Then run `pnpm install` from the repository root. The package has three entry points:
 
 | Entry point | Gives | Stability |
 | --- | --- | --- |
 | `@qti-pie/plate` | Every function, type and error in [`src/index.ts`](src/index.ts) | Unstable until M3 |
+| `@qti-pie/plate/effect` | The same names as Effects, for a server that runs Effect, in [`src/effect.ts`](src/effect.ts) ([Effect](#effect)) | Unstable until M3 |
 | `@qti-pie/plate/styles.css` | The default theme, [`src/styles.css`](src/styles.css) | Unstable until M3 |
 
 Until M3, plate's next milestone, any name or signature can change in any commit. The
@@ -138,7 +139,142 @@ make is `InvalidHeadingLevel` where no heading can be written at it: from `rende
 to 6, and from `render` when the item writes a heading and the level, capped at 6 as headings are,
 is not an integer. A host that builds its own Status part reads the fields `StatusInput`
 documents.
+
+`redact` and `decodeRedacted` mark the item they make, and `render` returns `NotRedacted` for an
+item without that mark: a copy or a cast of a redacted item, a `structuredClone`, an item posted to
+a worker and not read back with `decodeRedacted`, or one that a second copy of plate's modules
+made. Only `render` checks the redaction mark, because `renderStatus` and `renderNavigation` take
+no item. To show an item's correct responses or a candidate's answers, render the item `redact`
+made in `render`'s `solution` or `review` mode.
+
 [`src/index.ts`](src/index.ts) lists every export, and the TSDoc on each name is its reference.
+
+## Effect
+
+`@qti-pie/plate/effect` is a second entry point, for a server that runs Effect. It is opt-in and
+server-side: a host that does not import it loads none of it, and no browser module imports it.
+It exports every name of `@qti-pie/plate`. Each function there that returns a `Result` or takes a
+configuration, and `acceptedItem`, is an Effect here. It calls the plain function, and succeeds
+and fails as that function does. The rest are the plain functions themselves: `open`,
+`openPackage`, `configure` and `readPnp`, which already return Effects, and the functions that never
+fail, such as `partition`, `postings` and `solution`.
+
+```ts
+import { readFile } from "node:fs/promises";
+import { Effect } from "effect";
+import {
+  acceptedItem,
+  ConfigurationFromEnv,
+  open,
+  redact,
+  render,
+  score,
+} from "@qti-pie/plate/effect";
+import type { Responses } from "@qti-pie/plate/effect";
+
+const bytes = await readFile("item.xml");
+const item = Effect.flatMap(open("item.xml", bytes), acceptedItem);
+
+const page = Effect.gen(function* page() {
+  const redacted = yield* redact(yield* item);
+  const rendered = yield* render(redacted);
+
+  return rendered.html;
+});
+
+const submit = (responses: Responses) =>
+  Effect.flatMap(item, (accepted) => score(accepted, responses));
+
+const html = await Effect.runPromise(
+  page.pipe(
+    Effect.catchTags({
+      OutputTooLarge: () => Effect.succeed("<p>This item is too long to show.</p>"),
+      Refused: () => Effect.succeed("<p>This document holds no item to show.</p>"),
+    }),
+    Effect.provide(ConfigurationFromEnv),
+  ),
+);
+```
+
+`submit` takes the responses `decode` reads from the post, as in [Start](#start), and gives the
+record to store.
+
+Every failure is a tagged error in the error channel. `PlateError` is their union: each error
+class `@qti-pie/plate` exports, and `Refused`, which `acceptedItem` fails with when the verdict
+holds no item. `Effect.catchTags` handles them by tag. A `MarkupRefused` holds one of seven
+reasons in its `reason` field.
+`Effect.catchReason("MarkupRefused", "VoidElementChildren", handler)` handles one reason and
+leaves the others.
+
+Here `Configuration` is a service, not the settings type. The functions that take a configuration
+in `@qti-pie/plate` read it from the service instead. Nothing provides it by default, so a program
+that leaves it out does not type-check. Provide it in one of three ways:
+
+- `ConfigurationFromEnv` reads the `PLATE_` variables below from the `ConfigProvider` in effect,
+  which is the process environment unless the program provides another with
+  `ConfigProvider.layer`. A variable that is absent or empty leaves its field at the default.
+- `configurationLayer(settings)` reads an object of settings, as `configure` does.
+- `Layer.succeed(Configuration, configuration)` or
+  `Effect.provideService(Configuration, configuration)` provides a configuration the host already
+  holds.
+
+`ConfigurationFromEnv` and `configurationLayer` fail with `InvalidConfiguration` when a setting is
+outside what its field admits. To name the settings type, import it from the plain entry,
+`import type { Configuration } from "@qti-pie/plate"`, or write
+`(typeof Configuration)["Service"]`.
+
+| Variable | Field | Admits | Default |
+| --- | --- | --- | --- |
+| `PLATE_ALLOW_COMMENT` | `allowComment` | `true` or `false` | `false` |
+| `PLATE_ALLOW_REVIEW` | `allowReview` | `true` or `false` | `true` |
+| `PLATE_ALLOW_SKIPPING` | `allowSkipping` | `true` or `false` | `true` |
+| `PLATE_ASSET_BASE` | `assetBase` | A string | `""` |
+| `PLATE_HEADING_LEVEL` | `headingLevel` | An integer from 2 to 6 | `2` |
+| `PLATE_LOCALE` | `locale` | `en` | `en` |
+| `PLATE_MAX_ATTEMPTS` | `maxAttempts` | An integer of at least 0, where 0 is unlimited | `1` |
+| `PLATE_OUTPUT_BUDGET` | `outputBudget` | An integer from 1 to 536,870,888 | `16777216` |
+| `PLATE_SEED` | `seed` | A string | None |
+| `PLATE_SHOW_FEEDBACK` | `showFeedback` | `true` or `false` | `false` |
+| `PLATE_SHOW_SOLUTION` | `showSolution` | `true` or `false` | `false` |
+| `PLATE_VALIDATE_RESPONSES` | `validateResponses` | `true` or `false` | `false` |
+
+The tooling's own variables, such as `PLATE_CORPUS_DIR`, are not configuration, and
+`ConfigurationFromEnv` never reads them.
+
+`startTest` and `advance` take the time from Effect's `Clock`, and `results` takes an item's
+`datestamp` from it when you leave one out, so a test fixes the time with `TestClock`. `begin` and
+`startTest` draw an absent seed, and `render` an absent instance, through `Randomness`, which
+takes its bytes from `crypto.getRandomValues`. A program replaces it with
+`Effect.provideService(Randomness, SecureRandom.make(source))`, and `drawnSeed` and
+`drawnInstance` draw from it too. `score` with no record draws its own seed as the plain function
+does, not through `Randomness`.
+
+`StoredRecordSchema`, `StoredTestSessionSchema`, `RedactedJsonSchema`, `ConfigurationSchema` and
+`RefusalSchema` are the Schemas plate reads its data with. Each has a JSON Schema document, draft
+2020-12, such as `StoredRecordJsonSchema`, for a first check in a form or in another language.
+Where a document and its Schema disagree, the Schema decides. The Schemas check shape only, and none
+makes a `Redacted`, so nothing they decode is an item `render` takes. `decodeSession` and
+`decodeRedacted` stay the full checks: `decodeSession` also checks that a stored session fits its
+test, and `decodeRedacted` gives the `Redacted` that `render` takes.
+
+plate's work runs in spans:
+
+- `plate.open` and `plate.openPackage` hold a `plate.readSource` for each document they read, and
+  a `plate.check` for each document they judge, which carries `document.location`,
+  `document.kind` and `document.verdict`.
+- `plate.configure` runs `configure` and `ConfigurationFromEnv`.
+- `plate.readPnp` runs `readPnp`, which reads a PNP document into supports.
+- The tooling reads the corpus under `plate.readCorpusFile` and `plate.corpusDocuments`, and
+  builds its tables under `plate.generateTables` and `plate.generateOccurrences`.
+- The Effect functions that do an item's or a session's work run under `plate.` and their name:
+  `plate.render`, `plate.renderStatus`, `plate.redact`, `plate.checkResponses`, `plate.score`,
+  `plate.restore`, `plate.begin`, `plate.startTest`, `plate.advance`, `plate.results`,
+  `plate.encodeSession`, `plate.decodeSession`, `plate.encodeRedacted` and `plate.decodeRedacted`.
+
+A span's attributes are identifiers, counts and fixed words. The Effect functions log at the debug
+level when they draw a seed or an instance, or take a datestamp from the `Clock`. No span, log or
+recorded failure holds a response, a record value, a seed, an item's body or HTML, or a stored
+record or session. plate wires no exporter: the host provides its own tracer and logger.
 
 ## Navigation
 
@@ -316,7 +452,7 @@ export const step = (
 ## Records
 
 The host stores two records as JSON and hands each back on the next request. plate writes both.
-Each function that reads one back checks that it has version 6, that each field has its type, and
+Each function that reads one back checks that it has version 7, that each field has its type, and
 that each value is well formed. `restore` also checks that each response and outcome in an item's
 record fits the item's declarations, as `results` does, and refuses another item's record with
 `RecordMismatch`, as `score` does. For an item whose template processing runs, `score` and
@@ -342,10 +478,10 @@ one does not fit. Keep the stored session where only your server can change it.
 
 | Record | Holds | Written by | Read by |
 | --- | --- | --- | --- |
-| `StoredRecord`, `version: 6` | One item's seed, template values, attempts, responses and outcomes, its `record` answers in `records`, and the correct responses and defaults its template processing set | `begin`, `score` | `score`, `restore`, `results` |
-| `StoredTestSession`, `version: 6` | A test session, with its processing seed and its shuffle seed, its items' records and template defaults, each item's saved responses and `record` answers in `saved`, its position and its parts, and the test's outcomes with the count of its outcome processing runs | `encodeSession` | `decodeSession`, `results` |
+| `StoredRecord`, `version: 7` | One item's seed, template values, attempts, responses and outcomes, its `record` answers in `records`, and the correct responses and defaults its template processing set | `begin`, `score` | `score`, `restore`, `results` |
+| `StoredTestSession`, `version: 7` | A test session, with its processing seed and its shuffle seed, its items' records and template defaults, each item's saved responses and `record` answers in `saved`, its position and its parts, and the test's outcomes with the count of its outcome processing runs | `encodeSession` | `decodeSession`, `results` |
 
-plate reads only version 6, and refuses a record of another version with `InvalidRecord` or
+plate reads only version 7, and refuses a record of another version with `InvalidRecord` or
 `InvalidSession`. A change to either form is a changelog entry. The TSDoc on each type documents
 its fields.
 
@@ -396,6 +532,8 @@ A host can rely on these, and [`src/interactions/`](src/interactions/) documents
 - An Extended Text with `format="xhtml"` is a plain `textarea`.
 - A `multiple` or `ordered` Extended Text renders at most 100 `textarea`s, and shows a notice in
   their place when `min-strings` is above 100.
+- A `single` or `record` Extended Text renders one `textarea`, so with `validateResponses` on, a
+  `min-strings` from 2 to 100 can never be met: `checkResponses` gives a message for every post.
 - A Text Entry or Extended Text bound to a `record` response is one text control, and the form
   posts the text typed into it. `postings` gives the response a `RecordBinding`, and `decode` reads
   the text into a record *(pending)*. Its `stringValue` is the text as typed, with each CRLF and
@@ -1087,6 +1225,9 @@ this split. A host that sends the accepted item to the browser sends what `redac
 - A form that holds a Choice carries `autocomplete="off"`, and its pages send `Cache-Control: no-store`.
   HTML does not allow the attribute on a radio or a checkbox, and without both, the browser can
   show a choice that plate did not render.
+- A host form's first submit button in tree order is the host's own: a `hidden` submit at the
+  form's start when the visible one follows the item, so Enter in a text field submits the item
+  and never activates an End Attempt. In React, `DefaultSubmit` renders it.
 - Render a restored item with the instance and the configuration you first rendered it with. Its
   record holds the instance and the seed `begin` was given or drew, but not the configuration,
   whose `seed` orders a shuffled Choice or Inline Choice. A record that `score` started holds the

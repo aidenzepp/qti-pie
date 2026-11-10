@@ -88,6 +88,7 @@ import {
 } from "#plate/index.ts";
 import type {
   Accepted,
+  Attributes,
   Configuration,
   Element,
   InvalidConfiguration,
@@ -645,6 +646,16 @@ const resultId = (instance: string): string => scopedId(instance, "status");
  * The form is named by the item's title, so a screen reader announces it by that name and not as
  * an unnamed group.
  *
+ * The form begins with a hidden default submit, a `button type="submit" hidden` before the
+ * rendered item, and ends with the visible Submit after it. HTML's default button is the form's
+ * first submit button in tree order, the one implicit submission (Enter in a text field) fires
+ * at, and an item can hold a submit button of its own, an End Attempt's Control, named for its
+ * response: with the hidden default first, Enter is the item's ordinary submission and an End
+ * Attempt ends the attempt only when the candidate activates it. The hidden default carries no
+ * `name`, so it posts no entry, and `disabled` exactly when the Submit does, so a disabled page
+ * takes no implicit submission either; `hidden` alone hides it, so it is not rendered, not
+ * focusable and not in the accessibility tree.
+ *
  * The form posts to the item's target with its instance token and, as its fragment, the id of the
  * Status region that every page after a submit holds first in reading order. That page is the
  * answer to the post, so the browser opens it at the fragment, with no script: HTML's "scroll to
@@ -688,11 +699,13 @@ const itemPage = (
         disabled: view.disabled,
         instance: session.instance,
       });
-      const submit = h(
-        "button",
-        view.disabled ? { disabled: true, type: "submit" } : { type: "submit" },
-        [text(message(locale, "submit"))],
-      );
+      const submitAttributes: Attributes = view.disabled
+        ? { disabled: true, type: "submit" }
+        : { type: "submit" };
+      const defaultSubmit = h("button", { hidden: true, ...submitAttributes }, [
+        text(message(locale, "submit")),
+      ]);
+      const submit = h("button", submitAttributes, [text(message(locale, "submit"))]);
       const form = h(
         "form",
         {
@@ -702,7 +715,7 @@ const itemPage = (
           method: "post",
           novalidate: true,
         },
-        [slot(status.length), submit],
+        [defaultSubmit, slot(status.length), submit],
       );
 
       return page(

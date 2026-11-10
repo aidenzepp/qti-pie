@@ -1,8 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Result } from "effect";
 import {
   assembleTest,
   assemblyDepthLimit,
+  assemblyElementLimit,
   assemblyInstanceLimit,
 } from "#plate/package/assemble.ts";
 import type { AssembledTest, AssemblyInput } from "#plate/package/assemble.ts";
@@ -120,6 +121,7 @@ const input: AssemblyInput = {
     { element: refB, path: "sections/b.xml" },
   ],
   test,
+  testPath: "tests/test.xml",
 };
 
 /**
@@ -134,8 +136,10 @@ const part = "qti-assessment-test/qti-test-part";
  * @returns The assembled test.
  */
 const assembledOf = (given: AssemblyInput): AssembledTest =>
-  Option.getOrElse(assembleTest(given), () =>
-    assert.fail("the assembly gave none, though the document is within its limits"),
+  Result.getOrElse(assembleTest(given), (passed) =>
+    assert.fail(
+      `the assembly passed the ${passed.limit} limit, though the document is within its limits`,
+    ),
   );
 
 /**
@@ -202,6 +206,7 @@ const chain = (length: number, twice: boolean): AssemblyInput => {
         ],
       ),
     ),
+    testPath: "tests/test.xml",
   };
 };
 
@@ -388,13 +393,324 @@ describe("assembleTest", () => {
     // The test, its part and the chain's sections are open at once at the chain's last item ref.
     const deepest = assembledOf(chain(assemblyDepthLimit - 3, false));
     assert.strictEqual(deepest.depth, assemblyDepthLimit);
-    assert.isTrue(Option.isNone(assembleTest(chain(assemblyDepthLimit - 2, false))));
+    assert.isTrue(Result.isFailure(assembleTest(chain(assemblyDepthLimit - 2, false))));
     // Eleven documents each placing the next twice are 2^11 - 1 = 2,047 instances, within the
     // limit of 2,048; twelve pass it long before the copy would write all 4,095 of them.
     assert.strictEqual(assemblyInstanceLimit, 2048);
 
     const widest = assembledOf(chain(11, true));
     assert.strictEqual(widest.items.size, 11);
-    assert.isTrue(Option.isNone(assembleTest(chain(12, true))));
+    assert.isTrue(Result.isFailure(assembleTest(chain(12, true))));
+  });
+});
+
+/**
+ * Write a hand-built test whose one section holds the given children: the test's one part holds
+ * that section.
+ *
+ * @param location The test document's location.
+ * @param children The section's children.
+ * @returns The test document.
+ */
+const testHolding = (location: string, children: readonly SourceElement[]): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-assessment-test",
+      [attr("identifier", "T"), attr("title", "T")],
+      [
+        el(
+          "qti-test-part",
+          [
+            attr("identifier", "P1"),
+            attr("navigation-mode", "linear"),
+            attr("submission-mode", "individual"),
+          ],
+          [
+            el(
+              "qti-assessment-section",
+              [attr("identifier", "S0"), attr("title", "S0"), attr("visible", "true")],
+              children,
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+/**
+ * Write a placed section document that holds the given children.
+ *
+ * @param location The document's location.
+ * @param children The section's children.
+ * @returns The section document.
+ */
+const sectionHolding = (location: string, children: readonly SourceElement[]): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-assessment-section",
+      [attr("identifier", "X"), attr("title", "X"), attr("visible", "true")],
+      children,
+    ),
+  );
+
+/**
+ * Give the `href` of each item ref of a document, keyed by the item ref's identifier.
+ *
+ * @param document The document.
+ * @returns The `href`s, in document order.
+ */
+const hrefsOf = (document: SourceDocument): ReadonlyMap<string, string> =>
+  new Map(
+    Array.from(walk(document), ({ element }) => element).flatMap((element) => {
+      const identifier = element.attributes.find((attribute) => attribute.local === "identifier");
+      const href = element.attributes.find((attribute) => attribute.local === "href");
+
+      return element.local === "qti-assessment-item-ref" &&
+        identifier !== undefined &&
+        href !== undefined
+        ? [[identifier.value, href.value] as const]
+        : [];
+    }),
+  );
+
+/**
+ * The section document `sections/lamp/a.xml`, a folder deeper than the test, which writes `a-item`
+ * and `a-spaced` with the `href`s `../../items/...` it resolves them from and places
+ * `sections/lamp/b.xml`, which writes `b-item`.
+ */
+const lampA = {
+  first: itemRef("a-item", "../../items/two.xml"),
+  nested: sectionRef("RB", "b.xml"),
+  spaced: itemRef("a-spaced", "../../items/two%20part.xml"),
+};
+
+/**
+ * The item ref `b-item` of `sections/lamp/b.xml`.
+ */
+const lampB = itemRef("b-item", "../../items/three.xml");
+
+/**
+ * Hand-build a test at `testPath` that holds its own item ref `own` and places the section
+ * documents {@link lampA} and {@link lampB}, as the package's judging would hand them to the
+ * assembly, with the item each item ref resolves to.
+ *
+ * @param testPath The test's path in the package.
+ * @param location The test document's location.
+ * @returns The assembly's input.
+ */
+const lamp = (testPath: string, location: string): AssemblyInput => {
+  const ownRef = itemRef("own", "../items/one.xml");
+  const placed = sectionRef("RA", "../sections/lamp/a.xml");
+
+  return {
+    documents: new Map([
+      [
+        "sections/lamp/a.xml",
+        sectionHolding("pkg/sections/lamp/a.xml", [lampA.first, lampA.spaced, lampA.nested]),
+      ],
+      ["sections/lamp/b.xml", sectionHolding("pkg/sections/lamp/b.xml", [lampB])],
+    ]),
+    itemRefs: [
+      { element: ownRef, identifier: "own", link: false, path: "items/one.xml" },
+      { element: lampA.first, identifier: "a-item", link: false, path: "items/two.xml" },
+      {
+        element: lampA.spaced,
+        identifier: "a-spaced",
+        link: false,
+        path: "items/two part.xml",
+      },
+      { element: lampB, identifier: "b-item", link: false, path: "items/three.xml" },
+    ],
+    sectionRefs: [
+      { element: placed, path: "sections/lamp/a.xml" },
+      { element: lampA.nested, path: "sections/lamp/b.xml" },
+    ],
+    test: testHolding(location, [ownRef, placed]),
+    testPath,
+  };
+};
+
+/**
+ * Assemble a test at `tests/t.xml` that places one section document holding one item ref `x`,
+ * resolved to the item at a path, and give the `href` the copy writes for it.
+ *
+ * @param testPath The test's path in the package.
+ * @param itemPath The path of the item `x` resolves to.
+ * @returns The `href` of the placed item ref `x`.
+ */
+const placedHref = (testPath: string, itemPath: string): string => {
+  const placed = sectionRef("RA", "../sections/a.xml");
+  const item = itemRef("x", "../../items/x.xml");
+  const assembled = assembledOf({
+    documents: new Map([["sections/a.xml", sectionHolding("pkg/sections/a.xml", [item])]]),
+    itemRefs: [{ element: item, identifier: "x", link: false, path: itemPath }],
+    sectionRefs: [{ element: placed, path: "sections/a.xml" }],
+    test: testHolding(`pkg/${testPath}`, [placed]),
+    testPath,
+  });
+
+  return hrefsOf(assembled.document).get("x") ?? assert.fail("the copy holds no item ref x");
+};
+
+/**
+ * Decode each path segment of an `href` once, as a session's resolution does.
+ *
+ * @param href The `href`.
+ * @returns Its segments, decoded.
+ */
+const decodedSegments = (href: string): readonly string[] =>
+  href.split("/").map((segment) => decodeURIComponent(segment));
+
+/**
+ * Hand-build a test that places one section document of `count` empty `p` elements, whose
+ * assembled document holds `count + 3` elements: the test, its part, the placed section's root and
+ * the `p`s.
+ *
+ * @param count How many `p` elements the section document holds.
+ * @returns The assembly's input.
+ */
+const filled = (count: number): AssemblyInput => {
+  const placed = sectionRef("RF", "../sections/f.xml");
+
+  return {
+    documents: new Map([
+      [
+        "sections/f.xml",
+        sectionHolding(
+          "pkg/sections/f.xml",
+          Array.from({ length: count }, () => el("p")),
+        ),
+      ],
+    ]),
+    itemRefs: [],
+    sectionRefs: [{ element: placed, path: "sections/f.xml" }],
+    test: doc(
+      "pkg/tests/t.xml",
+      el(
+        "qti-assessment-test",
+        [attr("identifier", "T"), attr("title", "T")],
+        [
+          el(
+            "qti-test-part",
+            [
+              attr("identifier", "P1"),
+              attr("navigation-mode", "linear"),
+              attr("submission-mode", "individual"),
+            ],
+            [placed],
+          ),
+        ],
+      ),
+    ),
+    testPath: "tests/t.xml",
+  };
+};
+
+describe("assembleTest and the hrefs of the item refs it places", () => {
+  it("[S-9] a placed item ref's href resolves from the test document, and the test's own item ref keeps its href", () => {
+    const given = lamp("tests/t.xml", "pkg/tests/t.xml");
+    const assembled = assembledOf(given);
+    const section =
+      given.documents.get("sections/lamp/a.xml") ?? assert.fail("the input has no a.xml");
+
+    assert.deepStrictEqual(
+      [...hrefsOf(assembled.document)],
+      [
+        ["own", "../items/one.xml"],
+        ["a-item", "../items/two.xml"],
+        ["a-spaced", "../items/two%20part.xml"],
+        ["b-item", "../items/three.xml"],
+      ],
+    );
+    assert.deepStrictEqual(
+      [...assembled.items],
+      [
+        ["own", "items/one.xml"],
+        ["a-item", "items/two.xml"],
+        ["a-spaced", "items/two part.xml"],
+        ["b-item", "items/three.xml"],
+      ],
+    );
+    // The judged documents are plain immutable data: the section document's item refs keep the
+    // `href`s they were written with.
+    assert.deepStrictEqual(
+      [...hrefsOf(section)],
+      [
+        ["a-item", "../../items/two.xml"],
+        ["a-spaced", "../../items/two%20part.xml"],
+      ],
+    );
+  });
+
+  it("[S-9] the rewritten href climbs one folder for each folder of the test's path, and none for a test at the package's root", () => {
+    const deeper = assembledOf(lamp("tests/exam/t.xml", "pkg/tests/exam/t.xml"));
+    const root = assembledOf(lamp("t.xml", "pkg/t.xml"));
+
+    assert.strictEqual(hrefsOf(deeper.document).get("a-item"), "../../items/two.xml");
+    assert.strictEqual(hrefsOf(deeper.document).get("b-item"), "../../items/three.xml");
+    assert.strictEqual(hrefsOf(root.document).get("a-item"), "items/two.xml");
+    assert.strictEqual(hrefsOf(root.document).get("a-spaced"), "items/two%20part.xml");
+  });
+
+  it("[S-9] the rewritten href encodes each segment so that decoding it gives the file's name back", () => {
+    assert.strictEqual(placedHref("tests/t.xml", "items/50%.xml"), "../items/50%25.xml");
+    assert.strictEqual(placedHref("tests/t.xml", "items/a?b#c.xml"), "../items/a%3Fb%23c.xml");
+    assert.strictEqual(placedHref("t.xml", "a:b/x.xml"), "a%3Ab/x.xml");
+    assert.deepStrictEqual(
+      decodedSegments(placedHref("tests/t.xml", "items/caf\u00E9 \u00FC.xml")),
+      ["..", "items", "caf\u00E9 \u00FC.xml"],
+    );
+  });
+
+  it("[S-9] within every limit a placed test is delivered assembled", () => {
+    const assembled = assembleTest(lamp("tests/t.xml", "pkg/tests/t.xml"));
+
+    assert.isTrue(Result.isSuccess(assembled));
+
+    const given = assembledOf(lamp("tests/t.xml", "pkg/tests/t.xml"));
+
+    assert.isBelow(given.depth, assemblyDepthLimit);
+    assert.isBelow(given.elements, assemblyElementLimit);
+    assert.strictEqual([...walk(given.document)].length, given.elements);
+  });
+});
+
+describe("assembleTest past a limit of the delivery", () => {
+  it("[S-9] [P-2] the assembly names the depth limit it passes and the count it stopped at", () => {
+    const passed = assembleTest(chain(assemblyDepthLimit - 2, false));
+
+    assert.deepStrictEqual(Result.isFailure(passed) ? passed.failure : undefined, {
+      allowed: 256,
+      limit: "depth",
+      reached: 257,
+    });
+  });
+
+  it("[S-9] [P-2] the assembly names the instance limit it passes and the count it stopped at", () => {
+    const passed = assembleTest(chain(12, true));
+
+    assert.deepStrictEqual(Result.isFailure(passed) ? passed.failure : undefined, {
+      allowed: 2048,
+      limit: "instances",
+      reached: 2049,
+    });
+  });
+
+  it("[S-9] the assembly counts every element it opens, and names the size limit at the first past it", () => {
+    assert.strictEqual(assemblyElementLimit, 262_144);
+
+    const within = assembledOf(filled(assemblyElementLimit - 3));
+
+    assert.strictEqual(within.elements, assemblyElementLimit);
+
+    const passed = assembleTest(filled(assemblyElementLimit - 2));
+
+    assert.deepStrictEqual(Result.isFailure(passed) ? passed.failure : undefined, {
+      allowed: 262_144,
+      limit: "size",
+      reached: 262_145,
+    });
   });
 });
