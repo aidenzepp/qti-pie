@@ -37,12 +37,14 @@ const documents = {
  */
 const session: TestSession = {
   document: "tests/m2.xml",
+  expired: [],
   instance: "s1",
   items: [
     {
       datestamp: "2026-11-05T10:00:00.000Z",
       duration: 0,
       firstOutcomes: Option.none(),
+      locked: false,
       presented: false,
       record: fresh(bg007Item, "s1.1"),
       ref: "item-1",
