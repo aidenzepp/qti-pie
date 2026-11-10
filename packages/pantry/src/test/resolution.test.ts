@@ -10,21 +10,15 @@
  *   walk over code points. The two agree on every form.
  * - **Size**: a value of {@link largeLength} characters, which the ZIP reader's entry bound
  *   (`entryBytes` of `#pantry/package/zip.ts`, 64 MiB) admits, is read within Node's default heap
- *   in each class, and the law oracle (`documentBreaches` of `#pantry/test/oracle.ts`) judges an
- *   item whose `class` attribute holds one.
+ *   in each class.
+ *
+ * It reads `oracleValueOf` alone and names no law oracle module, so it is not an oracle test
+ * (`src/grammar/purity.test.ts`); the judgment of an item that holds a value this long is
+ * `resolution-value.oracle.test.ts`'s.
  */
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Result } from "effect";
-import { readXml } from "@qti-pie/crust/read.ts";
-import { composed } from "#pantry/grammar/compose.ts";
-import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
-import { fold } from "#pantry/model/folds.ts";
-import { shred } from "#pantry/model/shred.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
-import { documentBreaches, lawsOf, typedReadingOf } from "#pantry/test/oracle.ts";
 import { oracleValueOf } from "#pantry/test/resolution.ts";
 import type { OracleWhiteSpace } from "#pantry/test/resolution.ts";
-import { asiNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
  * The length, in characters, of the large values: the ZIP reader admits an entry of 64 MiB, and a
@@ -41,14 +35,6 @@ const largeLength = 64_000_000;
  * 321, likewise.
  */
 const readTimeoutMs = 2000;
-
-/**
- * The timeout, in milliseconds, of the test that judges an item with an attribute of
- * {@link largeLength} characters, which reads the value beside the document's other laws: a hang
- * guard, never a budget. Measured 2026-11-10: 0.8 s at a load average of 138 to 321, beside 320
- * busy processes on 8 cores. Measured 2026-11-10: 0.8 s at a load average of 140 to 321, likewise.
- */
-const judgeTimeoutMs = 30_000;
 
 /**
  * The three whitespace classes.
@@ -222,51 +208,4 @@ describe("oracleValueOf over a value of 64,000,000 characters", () => {
       readTimeoutMs,
     );
   }
-});
-
-/**
- * The composed grammar the item is read and folded under.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The law oracle's tables over the grammar.
- */
-const laws = lawsOf(grammar);
-
-/**
- * An item that breaks no law, with one `class` attribute on its paragraph.
- */
-const item = `<qti-assessment-item xmlns="${asiNamespace}" identifier="i" title="t" time-dependent="false" adaptive="false"><qti-item-body><p class="x">x</p></qti-item-body></qti-assessment-item>`;
-
-describe("documentBreaches over an item whose class attribute holds 64,000,000 characters", () => {
-  it.effect(
-    "judges the item, and reads the attribute's value in full",
-    () =>
-      Effect.gen(function* judgesLargeClass() {
-        const read = yield* Effect.orDie(readXml(new TextEncoder().encode(item)));
-        const tree = yield* Effect.orDie(shred(read, "3.0.1", shredGrammarOf(grammar)));
-        const rows = Result.getOrThrow(fold(tree, idOf, foldGrammarOf(grammar)));
-        assert.deepStrictEqual(
-          documentBreaches("doc.xml", rows, laws).map(({ law }) => law),
-          [],
-          "the item as written breaks no law",
-        );
-
-        const lexical = "x".repeat(largeLength);
-        const edited = {
-          ...rows,
-          attributes: rows.attributes.map((attribute) =>
-            attribute.name === "class" ? { ...attribute, lexical } : attribute,
-          ),
-        };
-        const held = edited.attributes.find(({ name }) => name === "class");
-        assert.isDefined(held);
-
-        const typed = typedReadingOf(laws)(held);
-        assert.isTrue(Option.isSome(typed) && typed.value.length === largeLength);
-        assert.isArray(documentBreaches("doc.xml", edited, laws));
-      }),
-    judgeTimeoutMs,
-  );
 });
