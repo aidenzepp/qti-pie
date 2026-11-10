@@ -17,14 +17,6 @@ import { schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
 import { lawNamesOf, lawNamesPath, refusedOf } from "#pantry/test/law-names.ts";
 
 /**
- * The timeout, in milliseconds, of the tests that compile `Qti`'s law model: a hang guard, never a
- * budget. Measured 2026-11-08: 51 s at a load average of 60 to 76, a compile of the law model
- * (`#pantry/test/law-namer.ts`'s record of `lawsByStatement`), so this is about twice that and
- * more.
- */
-const lawModelTimeoutMs = 300_000;
-
-/**
  * The committed dictionary, decoded.
  */
 const committed = Schema.decodeUnknownSync(Schema.fromJsonString(LawNamesFileSchema))(
@@ -49,61 +41,49 @@ const disagreements = (namer: LawNamer, laws: readonly Law[]): readonly string[]
   });
 
 describe("the law-name dictionary", () => {
-  it(
-    "is the one the schema generates",
-    () => {
-      // Oracle: the generator over the schema's own naming and the ids grizzle's lawIdsOf(Qti)
-      // gives the laws. Bound: every law of lawIdsOf(Qti) the dictionary enters.
-      assert.deepStrictEqual(
-        committed,
-        lawNamesOf(),
-        "The committed law-name dictionary is stale: run `node src/test/law-names.ts` in packages/pantry, with GR8DES_QTI_INSTALL unset, and commit src/vocab/law-names.json.",
-      );
-    },
-    lawModelTimeoutMs,
-  );
+  it("is the one the schema generates", () => {
+    // Oracle: the generator over the schema's own naming and the ids grizzle's lawIdsOf(Qti)
+    // gives the laws. Bound: every law of lawIdsOf(Qti) the dictionary enters.
+    assert.deepStrictEqual(
+      committed,
+      lawNamesOf(),
+      "The committed law-name dictionary is stale: run `node src/test/law-names.ts` in packages/pantry, with GR8DES_QTI_INSTALL unset, and commit src/vocab/law-names.json.",
+    );
+  });
 
-  it(
-    "names every law of Qti as the schema's own naming does",
-    () => {
-      // Oracle: the schema's own naming, `lawsByStatement` over Qti, the second implementation.
-      // Bound: every law lawsOf(Qti) states, exhausted.
-      assert.deepStrictEqual(disagreements(namerFrom(committed), schemaLawsOf(Qti)), []);
-    },
-    lawModelTimeoutMs,
-  );
+  it("names every law of Qti as the schema's own naming does", () => {
+    // Oracle: the schema's own naming, `lawsByStatement` over Qti, the second implementation.
+    // Bound: every law lawsOf(Qti) states, exhausted.
+    assert.deepStrictEqual(disagreements(namerFrom(committed), schemaLawsOf(Qti)), []);
+  });
 
-  it(
-    "finds a dictionary that misses an entry, names one wrongly, or misses a pattern's, a generated field's or a contract's",
-    () => {
-      // Oracle: the comparison above, on planted dictionaries. Live: an entry dropped, an entry's
-      // name changed, and the entry of a pattern law, of a generated field's law and of the
-      // contract each dropped, each yield a disagreement. Stale: the committed dictionary yields
-      // none (the case above).
-      const [firstId, firstEntry] = Object.entries(committed.laws)[0] ?? ["", { name: "" }];
-      const other = lawNames.find((name) => name !== firstEntry.name) ?? "comment arm";
-      const laws = schemaLawsOf(Qti);
-      const idOfKind = (kind: Law["kind"]): string =>
-        refusedOf(
-          Option.getOrThrowWith(
-            Arr.findFirst(laws, (law) => law.kind === kind),
-            () => new Error(`lawsOf(Qti) states no ${kind} law`),
-          ),
-        ).id;
-      const without = (dropped: string): LawNamesFile => ({
-        laws: Object.fromEntries(Object.entries(committed.laws).filter(([id]) => id !== dropped)),
-      });
+  it("finds a dictionary that misses an entry, names one wrongly, or misses a pattern's, a generated field's or a contract's", () => {
+    // Oracle: the comparison above, on planted dictionaries. Live: an entry dropped, an entry's
+    // name changed, and the entry of a pattern law, of a generated field's law and of the
+    // contract each dropped, each yield a disagreement. Stale: the committed dictionary yields
+    // none (the case above).
+    const [firstId, firstEntry] = Object.entries(committed.laws)[0] ?? ["", { name: "" }];
+    const other = lawNames.find((name) => name !== firstEntry.name) ?? "comment arm";
+    const laws = schemaLawsOf(Qti);
+    const idOfKind = (kind: Law["kind"]): string =>
+      refusedOf(
+        Option.getOrThrowWith(
+          Arr.findFirst(laws, (law) => law.kind === kind),
+          () => new Error(`lawsOf(Qti) states no ${kind} law`),
+        ),
+      ).id;
+    const without = (dropped: string): LawNamesFile => ({
+      laws: Object.fromEntries(Object.entries(committed.laws).filter(([id]) => id !== dropped)),
+    });
 
-      for (const planted of [
-        without(firstId),
-        { laws: { ...committed.laws, [firstId]: { name: other } } },
-        without(idOfKind("pattern")),
-        without(idOfKind("generated")),
-        without(idOfKind("contract")),
-      ]) {
-        assert.isAbove(disagreements(namerFrom(planted), laws).length, 0);
-      }
-    },
-    lawModelTimeoutMs,
-  );
+    for (const planted of [
+      without(firstId),
+      { laws: { ...committed.laws, [firstId]: { name: other } } },
+      without(idOfKind("pattern")),
+      without(idOfKind("generated")),
+      without(idOfKind("contract")),
+    ]) {
+      assert.isAbove(disagreements(namerFrom(planted), laws).length, 0);
+    }
+  });
 });

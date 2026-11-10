@@ -77,11 +77,12 @@ import { schemaRuleOfLaw, statedLaws } from "#pantry/test/law-namer.ts";
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
  * describe: a hang guard, never a budget. Measured 2026-11-07: 35.7 s at a load average of 87 to
  * 98, its slowest test then. The restatement test, which compiles Qti's law model to pair each
- * statement with its laws and so ran past the free project's 60 s, states it too: it ran 86.8 s on
- * 695e408e on 2026-11-08 beside other suites, at a load average sampled at 57 to 65 around the run
- * but not through it. It owes a re-measure through a run at a load average of 60 or more.
+ * statement with its laws, ran 86.8 s on 695e408e on 2026-11-08 beside other suites, at a load
+ * average sampled at 57 to 65 around the run but not through it. On grizzle eb56d58 (2026-11-10),
+ * alone at a load average of 43 to 54, the restatement test took 16.4 s and the slowest, the
+ * swarm's, 35.9 s. The value is twice the 86.8 s, rounded up to the next minute.
  */
-const testTimeoutMs = 1_200_000;
+const testTimeoutMs = 180_000;
 
 /**
  * The oracle's tables over the installed grammar, built once.
