@@ -23,7 +23,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { Author, AuthorApp } from "#pantry/test/qti.ts";
+import { Author, AuthorApp } from "#pantry/test/author.ts";
 import {
   AreaMappingCardinality,
   LookupTableCardinality,

@@ -28,7 +28,7 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { AttributeName, Flag, NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { Author, AuthorApp } from "#pantry/test/qti.ts";
+import { Author, AuthorApp } from "#pantry/test/author.ts";
 import {
   Dependency,
   DependencyTarget,

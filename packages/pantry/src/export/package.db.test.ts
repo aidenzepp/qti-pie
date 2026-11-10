@@ -36,7 +36,8 @@ import { compareWithRecord, exportEntries, exportPackage } from "#pantry/export/
 import { authorReadsOf, documentScanOf } from "#pantry/export/scan.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { AuthorApp, Qti } from "#pantry/test/qti.ts";
+import { AuthorApp } from "#pantry/test/author.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";

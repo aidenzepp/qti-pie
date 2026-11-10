@@ -41,7 +41,8 @@ import { readProgram } from "#pantry/import/program.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { Author, Qti } from "#pantry/test/qti.ts";
+import { authorRole } from "#pantry/qti/roles.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import {
   assemblyLiteral,
   assemblyPackage,
@@ -59,6 +60,14 @@ import { judge, lawsOf } from "#pantry/test/oracle.ts";
  * 73, its slowest test.
  */
 const testTimeoutMs = 1_200_000;
+
+/**
+ * The author role over the fixture's `Qti`, which the ChangeSets are built for and the probe login
+ * of {@link compileKept} holds. grizzle puts a role in one login only, so this file never loads
+ * `#pantry/test/author.ts`, whose module builds the author login over this same role
+ * (`authorRole` builds one role per schema value).
+ */
+const Author = authorRole(Qti);
 
 /**
  * Every generated package's write program, with the package's literal, in the order the searches
@@ -192,8 +201,9 @@ const snapshotOf = Effect.gen(function* snapshotOf() {
 });
 
 /**
- * Build a layer of the author login whose workload holds the {@link distinct} kept programs, each
- * under the name `case<n>` of its index and nothing else, and release it at once:
+ * Build a layer of a login like the author login, over {@link Author}, which no other login holds,
+ * whose workload holds the {@link distinct} kept programs, each under the name `case<n>` of its
+ * index and nothing else, and release it at once:
  * `DbLayer.make` compiles every program before it compares their access with the snapshot
  * (grizzle's `adapter/pool/registry.ts` `startupCheck`, `loginAccess` then `accessDrift`), and
  * opens no session.

@@ -70,7 +70,7 @@ import {
   TemplateRefCardinality,
   TemplateRefDeclaration,
 } from "#pantry/qti/interactions.ts";
-import { Author, AuthorApp } from "#pantry/test/qti.ts";
+import { Author, AuthorApp } from "#pantry/test/author.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import {
   assertVerdict,
