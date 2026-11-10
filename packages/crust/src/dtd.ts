@@ -1804,7 +1804,9 @@ const declaredReferenceAt = (
  * literal it goes in with both quotes written as character references, so it cannot end the
  * literal. Comments, processing instructions and CDATA sections, undeclared names and character
  * references are left as written. Each replacement text opened is charged against the budget the
- * prolog began, so nesting past `EXPANSION_DEPTH` or amplification past its limit is refused.
+ * prolog began, so nesting past `EXPANSION_DEPTH` or amplification past its limit is refused. A
+ * document that declares no general entity has no reference to replace, so its text is the result
+ * as it stands, unscanned.
  *
  * @param text - The decoded document text.
  * @param prolog - The prolog, for its general entities, where the body starts and the replacement
@@ -1814,60 +1816,24 @@ const declaredReferenceAt = (
  * @see {@link https://www.w3.org/TR/2008/REC-xml-20081126/#entproc XML 1.0, section 4.4}
  */
 export const substitute = (text: string, prolog: Prolog): Effect.Effect<string, ReaderRefusal> =>
-  Effect.suspend(() => {
-    const { bodyStart, entities } = prolog;
-    const budget = expansionBudget(text.length, prolog.expanded);
-    const opened = { refusal: Option.none<ReaderRefusal>() };
-    let body = text.slice(0, bodyStart);
+  prolog.entities.size === 0
+    ? Effect.succeed(text)
+    : Effect.suspend(() => {
+        const { bodyStart, entities } = prolog;
+        const budget = expansionBudget(text.length, prolog.expanded);
+        const opened = { refusal: Option.none<ReaderRefusal>() };
+        let body = text.slice(0, bodyStart);
 
-    const open = (length: number, depth: number, name: string): boolean => {
-      opened.refusal = overBudget(budget, length, depth, name, Option.none());
+        const open = (length: number, depth: number, name: string): boolean => {
+          opened.refusal = overBudget(budget, length, depth, name, Option.none());
 
-      return Option.isNone(opened.refusal);
-    };
+          return Option.isNone(opened.refusal);
+        };
 
-    const expandAttribute = (source: string, depth: number): string => {
-      let result = "";
-      let offset = 0;
-      while (offset < source.length && Option.isNone(opened.refusal)) {
-        const reference =
-          source[offset] === "&" ? declaredReferenceAt(source, offset, entities) : Option.none();
-        if (Option.isSome(reference)) {
-          const { name, replacement } = reference.value;
-          if (open(replacement.length, depth + 1, name)) {
-            result += expandAttribute(replacement, depth + 1);
-          }
-
-          offset = reference.value.end;
-        } else {
-          const char = source.charAt(offset);
-          result += ATTRIBUTE_QUOTES.get(char) ?? char;
-          offset += 1;
-        }
-      }
-
-      return result;
-    };
-
-    const scanTag = (source: string, start: number, depth: number): number => {
-      let offset = start + 1;
-      body += "<";
-      while (offset < source.length && Option.isNone(opened.refusal)) {
-        const char = source[offset];
-        if (char === ">") {
-          body += ">";
-
-          return offset + 1;
-        }
-
-        if (char === '"' || char === "'") {
-          body += char;
-          offset += 1;
-          while (
-            offset < source.length &&
-            source[offset] !== char &&
-            Option.isNone(opened.refusal)
-          ) {
+        const expandAttribute = (source: string, depth: number): string => {
+          let result = "";
+          let offset = 0;
+          while (offset < source.length && Option.isNone(opened.refusal)) {
             const reference =
               source[offset] === "&"
                 ? declaredReferenceAt(source, offset, entities)
@@ -1875,64 +1841,104 @@ export const substitute = (text: string, prolog: Prolog): Effect.Effect<string, 
             if (Option.isSome(reference)) {
               const { name, replacement } = reference.value;
               if (open(replacement.length, depth + 1, name)) {
-                body += expandAttribute(replacement, depth + 1);
+                result += expandAttribute(replacement, depth + 1);
               }
 
               offset = reference.value.end;
             } else {
-              body += source[offset];
+              const char = source.charAt(offset);
+              result += ATTRIBUTE_QUOTES.get(char) ?? char;
               offset += 1;
             }
           }
-          if (offset < source.length) {
-            body += char;
-            offset += 1;
-          }
-        } else {
-          body += char;
-          offset += 1;
-        }
-      }
 
-      return offset;
-    };
+          return result;
+        };
 
-    const scanContent = (source: string, depth: number): void => {
-      let offset = 0;
-      while (offset < source.length && Option.isNone(opened.refusal)) {
-        const hidden = hiddenEnd(source, offset);
-        if (hidden > offset) {
-          body += source.slice(offset, hidden);
-          offset = hidden;
-        } else if (source[offset] === "<") {
-          offset = scanTag(source, offset, depth);
-        } else if (source[offset] === "&") {
-          const reference = declaredReferenceAt(source, offset, entities);
-          if (Option.isSome(reference)) {
-            const { name, replacement } = reference.value;
-            if (open(replacement.length, depth + 1, name)) {
-              scanContent(replacement, depth + 1);
+        const scanTag = (source: string, start: number, depth: number): number => {
+          let offset = start + 1;
+          body += "<";
+          while (offset < source.length && Option.isNone(opened.refusal)) {
+            const char = source[offset];
+            if (char === ">") {
+              body += ">";
+
+              return offset + 1;
             }
 
-            offset = reference.value.end;
-          } else {
-            body += "&";
-            offset += 1;
+            if (char === '"' || char === "'") {
+              body += char;
+              offset += 1;
+              while (
+                offset < source.length &&
+                source[offset] !== char &&
+                Option.isNone(opened.refusal)
+              ) {
+                const reference =
+                  source[offset] === "&"
+                    ? declaredReferenceAt(source, offset, entities)
+                    : Option.none();
+                if (Option.isSome(reference)) {
+                  const { name, replacement } = reference.value;
+                  if (open(replacement.length, depth + 1, name)) {
+                    body += expandAttribute(replacement, depth + 1);
+                  }
+
+                  offset = reference.value.end;
+                } else {
+                  body += source[offset];
+                  offset += 1;
+                }
+              }
+              if (offset < source.length) {
+                body += char;
+                offset += 1;
+              }
+            } else {
+              body += char;
+              offset += 1;
+            }
           }
-        } else {
-          const next = source.slice(offset).search(/[<&]/u);
-          const end = next === -1 ? source.length : offset + next;
-          body += source.slice(offset, end);
-          offset = end;
+
+          return offset;
+        };
+
+        const scanContent = (source: string, depth: number): void => {
+          let offset = 0;
+          while (offset < source.length && Option.isNone(opened.refusal)) {
+            const hidden = hiddenEnd(source, offset);
+            if (hidden > offset) {
+              body += source.slice(offset, hidden);
+              offset = hidden;
+            } else if (source[offset] === "<") {
+              offset = scanTag(source, offset, depth);
+            } else if (source[offset] === "&") {
+              const reference = declaredReferenceAt(source, offset, entities);
+              if (Option.isSome(reference)) {
+                const { name, replacement } = reference.value;
+                if (open(replacement.length, depth + 1, name)) {
+                  scanContent(replacement, depth + 1);
+                }
+
+                offset = reference.value.end;
+              } else {
+                body += "&";
+                offset += 1;
+              }
+            } else {
+              const next = source.slice(offset).search(/[<&]/u);
+              const end = next === -1 ? source.length : offset + next;
+              body += source.slice(offset, end);
+              offset = end;
+            }
+          }
+        };
+
+        scanContent(text.slice(bodyStart), 0);
+
+        if (Option.isSome(opened.refusal)) {
+          return Effect.fail(opened.refusal.value);
         }
-      }
-    };
 
-    scanContent(text.slice(bodyStart), 0);
-
-    if (Option.isSome(opened.refusal)) {
-      return Effect.fail(opened.refusal.value);
-    }
-
-    return Effect.succeed(body);
-  });
+        return Effect.succeed(body);
+      });
