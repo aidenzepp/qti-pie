@@ -32,6 +32,22 @@ const metadataHtml = await Effect.runPromise(
  */
 const rendered = (html: string): string => Result.getOrElse(renderText(html), () => "");
 
+/**
+ * Render an HTML string that holds a reference the renderer refuses.
+ *
+ * @param html - The HTML.
+ * @returns The reference it refuses and where it stands, or `undefined` when it renders.
+ */
+const refused = (
+  html: string,
+): { readonly entity: string; readonly offset: number } | undefined => {
+  const result = renderText(html);
+
+  return Result.isFailure(result)
+    ? { entity: result.failure.entity, offset: result.failure.offset }
+    : undefined;
+};
+
 describe("test/spec-cache/render.ts, the line-keeping tag strip", () => {
   it("turns each tag into one space and each run of spaces and tabs into one, and keeps a line with no tag", () => {
     assert.strictEqual(rendered("<p>a</p>\tb  \t c\nplain  line \n"), " a b c\nplain line \n");
@@ -75,6 +91,51 @@ describe("test/spec-cache/render.ts, the line-keeping tag strip", () => {
 
   it("leaves an entity inside a tag to the tag, and an ampersand that starts no reference as it is", () => {
     assert.strictEqual(rendered('<a href="?x=1&nbsp;y">R & D</a>'), " R & D ");
+  });
+});
+
+describe("test/spec-cache/render.ts, the bytes of the recorded Python command", () => {
+  it("[113-1] decodes the references before it collapses blanks, so a reference to a space joins its run", () => {
+    assert.strictEqual(rendered("a &#32; b"), "a b");
+    assert.strictEqual(rendered("a &#x20; b"), "a b");
+    assert.strictEqual(rendered("a&#32;&#32;&#32;b"), "a b");
+    assert.strictEqual(rendered("<i>a</i>&#32;<b>b</b>"), " a b ");
+  });
+
+  it("[113-1] renders a reference to a noncharacter as nothing", () => {
+    assert.strictEqual(rendered("a &#xFFFE; b"), "a b");
+    assert.strictEqual(rendered("a &#x10FFFE; b"), "a b");
+    assert.strictEqual(rendered("a &#65535; b"), "a b");
+    assert.strictEqual(rendered("a&#xFDD0;b&#xFDEF;c"), "abc");
+  });
+
+  it("[113-1] drops each of the 66 noncharacters and keeps the code points beside them", () => {
+    const noncharacters = [
+      ...Array.from({ length: 32 }, (_, index) => 0xfd_d0 + index),
+      ...Array.from({ length: 17 }, (_, plane) => [
+        plane * 0x1_00_00 + 0xff_fe,
+        plane * 0x1_00_00 + 0xff_ff,
+      ]).flat(),
+    ];
+
+    assert.strictEqual(noncharacters.length, 66);
+
+    for (const codePoint of noncharacters) {
+      assert.strictEqual(rendered(`a&#x${codePoint.toString(16)};b`), "ab");
+    }
+
+    for (const codePoint of [0xfd_cf, 0xfd_f0, 0xff_fd, 0xe0_00, 0x1_00_00, 0x10_ff_fd]) {
+      assert.strictEqual(
+        rendered(`a&#x${codePoint.toString(16)};b`),
+        `a${String.fromCodePoint(codePoint)}b`,
+      );
+    }
+  });
+
+  it("fails on a surrogate and on a value past U+10FFFF, where the refusal stands", () => {
+    assert.deepStrictEqual(refused("a&#xD800;b"), { entity: "&#xD800;", offset: 1 });
+    assert.deepStrictEqual(refused("a&#xDFFF;b"), { entity: "&#xDFFF;", offset: 1 });
+    assert.deepStrictEqual(refused("<p>a&#x110000;b</p>"), { entity: "&#x110000;", offset: 4 });
   });
 });
 
