@@ -634,6 +634,16 @@ const weightedSelectors = (sheet: Sheet): readonly string[] =>
     );
 
 /**
+ * The markers of parts the part table carries ahead of the issue that renders and styles them: no
+ * rule of the sheet names one until its issue fills its delimited block.
+ */
+const prewiredSlots: ReadonlySet<string> = new Set([
+  "choice-interaction-mask",
+  "choice-interaction-mask-toggle",
+  "test-navigation-time",
+]);
+
+/**
  * Find the part markers no selector names, at any depth.
  *
  * @param sheet The scanned sheet.
@@ -642,6 +652,7 @@ const weightedSelectors = (sheet: Sheet): readonly string[] =>
 const unstyledMarkers = (sheet: Sheet): readonly string[] =>
   partTable
     .map((row) => row.slot)
+    .filter((slot) => !prewiredSlots.has(slot))
     .filter(
       (slot) =>
         !sheet.rules.some((rule) => holdsAnywhere(rule, (compound) => holdsSlot(compound, slot))),
