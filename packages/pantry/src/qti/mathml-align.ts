@@ -88,7 +88,7 @@ import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
  * between it and the cell stops an alignment group, `open` where one lets it through, and
  * `unjudged` where an `maction` shows another child (MathML 3 §3.5.5.2 and §3.5.5.9).
  */
-export const AlignState = closed("AlignState", ["closed", "open", "unjudged"]);
+const AlignState = closed("AlignState", ["closed", "open", "unjudged"]);
 
 /**
  * The `AlignDirection` roster: the directions a `dir` takes (MathML 3 §3.1.5.1).
@@ -338,19 +338,19 @@ const leafScopes = select(MathAlignScope, (s) =>
 /**
  * The family of a cell's leaves in document order, slot `at` of `MathCell.leaves`.
  */
-export const leafFamily = ordered(on(CellLeaf, "cell", "at"), fin(MathCell, "leaves"));
+const leafFamily = ordered(on(CellLeaf, "cell", "at"), fin(MathCell, "leaves"));
 
 /**
  * The family of a cell's open alignment groups, counted by `MathCell.groups`.
  */
-export const groupFamily = counted(on(MathAlignGroup, "cell"), fin(MathCell, "groups"));
+const groupFamily = counted(on(MathAlignGroup, "cell"), fin(MathCell, "groups"));
 
 /**
  * The fold of a cell's leaves' starts, the greatest through each leaf (`startAfter`) and before it
  * (`startWas`), ending at `MathCell.lastStart`. With `E1_derived`'s `start > startWas`, the slots
  * are in document order, since a pre-order interval starts after every one that came before it.
  */
-export const leafStartFold = fold(
+const leafStartFold = fold(
   leafFamily,
   Monoid.max,
   on(CellLeaf, "cell", "start", "startWas", "startAfter"),

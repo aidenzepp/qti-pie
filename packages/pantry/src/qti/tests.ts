@@ -886,7 +886,7 @@ export const testRelations = {
  * Each document's sites that name a document, counted by `TestDocument.targets`. A site that names
  * none places nothing, and "Include target" alone refuses it (reading 115).
  */
-export const siteFamily = counted(on(SiteTarget, "document"), fin(TestDocument, "targets"));
+const siteFamily = counted(on(SiteTarget, "document"), fin(TestDocument, "targets"));
 
 /**
  * The sites that place their target (`SiteTarget.places`): each section ref, and each include that
@@ -901,7 +901,7 @@ const placingSites = select(SiteTarget, (s) => s.eq(s.places, true));
  * places nothing, and "Include root" alone refuses it. A family's member is a whole relation, which
  * no selection narrows, so the count is a fold over {@link siteFamily}.
  */
-export const sitesFold = fold(
+const sitesFold = fold(
   siteFamily,
   Monoid.count,
   on(placingSites, "document"),
@@ -911,7 +911,7 @@ export const sitesFold = fold(
 /**
  * The sites that name each document, counted by `Document.targetedBy` (spec reading 117).
  */
-export const siteTargetFamily = counted(on(SiteTarget, "target"), fin(Document, "targetedBy"));
+const siteTargetFamily = counted(on(SiteTarget, "target"), fin(Document, "targetedBy"));
 
 /**
  * A document's context: the union of the ancestries of the sites that name it, `Document.context`,
@@ -919,7 +919,7 @@ export const siteTargetFamily = counted(on(SiteTarget, "target"), fin(Document, 
  * an included fragment's content under every placement at once: a ban is a disjointness, and a
  * flag no placement holds is banned under none (spec reading 117).
  */
-export const contextFold = fold(
+const contextFold = fold(
   siteTargetFamily,
   Monoid.or,
   on(SiteTarget, "target", "ancestry"),
@@ -929,42 +929,39 @@ export const contextFold = fold(
 /**
  * Each document's names, counted by `TestDocument.names`.
  */
-export const nameFamily = counted(on(Named, "document"), fin(TestDocument, "names"));
+const nameFamily = counted(on(Named, "document"), fin(TestDocument, "names"));
 
 /**
  * Each document's branch rules that name a target, counted by `TestDocument.rules`.
  */
-export const ruleFamily = counted(on(BranchRule, "document"), fin(TestDocument, "rules"));
+const ruleFamily = counted(on(BranchRule, "document"), fin(TestDocument, "rules"));
 
 /**
  * Each section's parts (C15), counted by `Section.members`: reading 79's count, each part once.
  */
-export const sectionFamily = counted(on(SectionMember, "section"), fin(Section, "members"));
+const sectionFamily = counted(on(SectionMember, "section"), fin(Section, "members"));
 
 /**
  * The placements of every assembly, each assembly's root its own document's instance.
  */
-export const instanceTree = tree(on(Instance, "parent", "at"), fin(Instance, "children"), {
+const instanceTree = tree(on(Instance, "parent", "at"), fin(Instance, "children"), {
   root: "assembly",
 });
 
 /**
  * Each assembled document's placements in every assembly, counted by `TestDocument.instances`.
  */
-export const documentInstanceFamily = counted(
-  on(Instance, "document"),
-  fin(TestDocument, "instances"),
-);
+const documentInstanceFamily = counted(on(Instance, "document"), fin(TestDocument, "instances"));
 
 /**
  * Each instance's names, counted by `Instance.names`.
  */
-export const instanceNameFamily = counted(on(InstanceName, "instance"), fin(Instance, "names"));
+const instanceNameFamily = counted(on(InstanceName, "instance"), fin(Instance, "names"));
 
 /**
  * Each written element's placements in a test's assembly, counted by `AssembledName.placements`.
  */
-export const assembledNameFamily = counted(
+const assembledNameFamily = counted(
   on(InstanceName, "assembly", "node"),
   fin(AssembledName, "placements"),
 );
@@ -972,16 +969,13 @@ export const assembledNameFamily = counted(
 /**
  * Each instance's resolved branch rules, counted by `Instance.rules`.
  */
-export const resolutionFamily = counted(on(BranchResolution, "instance"), fin(Instance, "rules"));
+const resolutionFamily = counted(on(BranchResolution, "instance"), fin(Instance, "rules"));
 
 /**
  * Each target's shuffle, counted by `BranchTarget.shuffles`: one where a shuffle orders its rule's
  * source and target, none where none does.
  */
-export const shuffleFamily = counted(
-  on(BranchShuffle, "instance", "rule"),
-  fin(BranchTarget, "shuffles"),
-);
+const shuffleFamily = counted(on(BranchShuffle, "instance", "rule"), fin(BranchTarget, "shuffles"));
 
 /**
  * The includes the information model reads as Include (spec reading 114): each `xi:include` under
@@ -1207,7 +1201,7 @@ const requiredMembers = select(SectionMember, (m) => m.eq(m.required, true));
  * The required parts' fold (A17): each section's count of its parts whose `required` is true, its
  * `required`, which `Selection_required` bounds by `select`.
  */
-export const requiredFold = fold(
+const requiredFold = fold(
   sectionFamily,
   Monoid.count,
   on(requiredMembers, "section"),

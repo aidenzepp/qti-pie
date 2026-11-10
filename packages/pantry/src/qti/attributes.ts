@@ -340,7 +340,7 @@ export const attributeFamily = ordered(on(Attribute, "node", "at"), fin(Node, "a
  * Each open-class attribute's exact name, counted by `Attribute.openName`: one member for an open
  * class, none for a closed name (`AL4_open_names`).
  */
-export const openNameFamily = ordered(
+const openNameFamily = ordered(
   on(OpenAttributeName, "node", "attribute", "at"),
   fin(Attribute, "openName"),
 );
@@ -348,12 +348,12 @@ export const openNameFamily = ordered(
 /**
  * Each IDREF or IDREFS attribute's tokens in order, counted by `Attribute.idrefs`.
  */
-export const idrefFamily = ordered(on(Idref, "node", "attribute", "at"), fin(Attribute, "idrefs"));
+const idrefFamily = ordered(on(Idref, "node", "attribute", "at"), fin(Attribute, "idrefs"));
 
 /**
  * Each attribute's unexpanded entity references in offset order, counted by `Attribute.entities`.
  */
-export const entityFamily = ordered(
+const entityFamily = ordered(
   on(AttributeEntity, "node", "attribute", "at"),
   fin(Attribute, "entities"),
 );

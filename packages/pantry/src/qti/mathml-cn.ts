@@ -252,12 +252,12 @@ const basedCns = select(MathCn, (c) => c.ne(c.baseLexical, ""));
 /**
  * The family of a `cn`'s parts, counted by `MathCn.parts`.
  */
-export const partFamily = counted(on(CnPartText, "node"), fin(MathCn, "parts"));
+const partFamily = counted(on(CnPartText, "node"), fin(MathCn, "parts"));
 
 /**
  * The family of the parts of a `cn` the digits cannot judge too, counted by `CnCount.parts`.
  */
-export const slotFamily = counted(on(CnSlot, "node"), fin(CnCount, "parts"));
+const slotFamily = counted(on(CnSlot, "node"), fin(CnCount, "parts"));
 
 /**
  * The containments that judge a `cn`'s part count: its `(type, parts)` in {@link CnParts}, and

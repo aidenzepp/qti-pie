@@ -85,7 +85,7 @@ import { cellKinds } from "#pantry/vocab/terms/html.ts";
 /**
  * The kinds of the media elements, whose `source` children carry `src` (reading 124).
  */
-export const mediaKinds = ["audio", "video"] as const;
+const mediaKinds = ["audio", "video"] as const;
 
 /**
  * One element on the way from a table cell an overlay reads up to the table it takes part in,
@@ -183,7 +183,7 @@ export const htmlRelations = { CellHeaders, HeaderToken, TableHeader, TableScope
 /**
  * Each cell's `headers` tokens in order, counted by `CellHeaders.tokens`.
  */
-export const headerTokenFamily = ordered(on(HeaderToken, "node", "at"), fin(CellHeaders, "tokens"));
+const headerTokenFamily = ordered(on(HeaderToken, "node", "at"), fin(CellHeaders, "tokens"));
 
 /**
  * A `Node` row as a row check reads it.
@@ -217,7 +217,7 @@ const carries = (n: NodeRow, name: "kind" | "src" | "srclang" | "srcset") =>
  * "This attribute is required when 'source' is used in 'picture'"): a `source` whose parent is a
  * `picture` carries `srcset`.
  */
-export const pictureSourceSrcset = check("Picture_source_srcset", Node, (n) =>
+const pictureSourceSrcset = check("Picture_source_srcset", Node, (n) =>
   n.or(n.ne(n.kind, "source"), n.ne(n.parentKind, "picture"), carries(n, "srcset")),
 );
 
@@ -226,7 +226,7 @@ export const pictureSourceSrcset = check("Picture_source_srcset", Node, (n) =>
  * characteristic must be present", read in a media element as HTML states it): a `source` whose
  * parent is an `audio` or a `video` carries `src`.
  */
-export const mediaSourceSrc = check("Media_source_src", Node, (n) =>
+const mediaSourceSrc = check("Media_source_src", Node, (n) =>
   n.or(n.ne(n.kind, "source"), n.not(n.in(n.parentKind, mediaKinds)), carries(n, "src")),
 );
 
@@ -234,7 +234,7 @@ export const mediaSourceSrc = check("Media_source_src", Node, (n) =>
  * Reading 125's missing value default (law "Track srclang", rule `track-srclang`): a `track` that
  * writes no `kind` is in the subtitles state, so it carries `srclang`.
  */
-export const defaultTrackSrclang = check("Track_srclang", Node, (n) =>
+const defaultTrackSrclang = check("Track_srclang", Node, (n) =>
   n.or(n.ne(n.kind, "track"), carries(n, "kind"), carries(n, "srclang")),
 );
 

@@ -120,7 +120,7 @@ const tabOrNewline = String.raw`\t\n\r`;
  *
  * @see {@link https://url.spec.whatwg.org/#scheme-state | URL Standard, scheme state}
  */
-export const dataScheme = Compute.pattern<string>(
+const dataScheme = Compute.pattern<string>(
   `^[${leadingStripped}]*[dD][${tabOrNewline}]*[aA][${tabOrNewline}]*[tT][${tabOrNewline}]*[aA][${tabOrNewline}]*:`,
 );
 
@@ -130,7 +130,7 @@ export const dataScheme = Compute.pattern<string>(
  *
  * @see {@link https://www.w3.org/TR/xmlschema-2/#atomic-vs-list | XML Schema 1.0 Part 2, §2.5.1.2 List datatypes}
  */
-export const dataToken = Compute.pattern<string>(
+const dataToken = Compute.pattern<string>(
   `(?:^|[${tabOrNewline} ])[${leadingStripped}]*[dD][aA][tT][aA]:`,
 );
 
@@ -155,7 +155,7 @@ export const nonRelative = Compute.pattern<string>(
  *
  * @see {@link https://nodejs.org/api/path.html#pathextnamepath | Node.js, path.extname}
  */
-export const extensionPattern = Compute.pattern<string>(String.raw`[^/]\.[^./]+$`);
+const extensionPattern = Compute.pattern<string>(String.raw`[^/]\.[^./]+$`);
 
 /**
  * A style that makes the player fetch, or could spell a fetch past this pattern, in any case: CSS's
@@ -167,7 +167,7 @@ export const extensionPattern = Compute.pattern<string>(String.raw`[^/]\.[^./]+$
  * @see {@link https://www.w3.org/TR/css-images-4/#image-set-notation | CSS Images 4, image-set()}
  * @see {@link https://www.w3.org/TR/css-values-4/#urls | CSS Values 4, src()}
  */
-export const styleFetch = Compute.pattern(
+const styleFetch = Compute.pattern(
   String.raw`[uU][rR][lL]\(|@[iI][mM][pP][oO][rR][tT]|[iI][mM][aA][gG][eE]-[sS][eE][tT]\(|[sS][rR][cC]\(|\\`,
 );
 

@@ -108,7 +108,7 @@ export const RpTemplate = closed("RpTemplate", rpTemplates);
  * instance number and its variable, at two dots (reading 88); and `name`, the whole identifier as a
  * name of the assembled test, the one reading a `section-identifier` has (the UP audit's A61).
  */
-export const readingForms = ["unsplit", "split", "numbered", "name"] as const;
+const readingForms = ["unsplit", "split", "numbered", "name"] as const;
 
 /**
  * The `ReadingForm` roster.
@@ -124,7 +124,7 @@ export const ReadingForm = closed("ReadingForm", readingForms);
  * mappings' sources to resolve it against, so it is accepted unchecked (spec reading 110). `link`
  * comes last, so the codes the snapshot holds keep their handles.
  */
-export const readingSources = ["none", "declared", "mapped", "builtIn", "link"] as const;
+const readingSources = ["none", "declared", "mapped", "builtIn", "link"] as const;
 
 /**
  * The `ReadingSource` roster.
@@ -135,7 +135,7 @@ export const ReadingSource = closed("ReadingSource", readingSources);
  * What a test-level reference names, in code order: `variable`, a variable, read in every form; and
  * `section`, a section of the assembled test, by a `section-identifier`.
  */
-export const referenceRoles = ["variable", "section"] as const;
+const referenceRoles = ["variable", "section"] as const;
 
 /**
  * The `ReferenceRole` roster.

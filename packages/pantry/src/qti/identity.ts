@@ -541,25 +541,22 @@ export const PlacedIdref = relation(
 /**
  * Each document's IDs, counted by `Document.ids`.
  */
-export const documentIdFamily = counted(on(DocumentId, "document"), fin(Document, "ids"));
+const documentIdFamily = counted(on(DocumentId, "document"), fin(Document, "ids"));
 
 /**
  * Each document's IDREF targets, counted by `Document.idrefTargets`.
  */
-export const idrefTargetFamily = counted(
-  on(IdrefTarget, "document"),
-  fin(Document, "idrefTargets"),
-);
+const idrefTargetFamily = counted(on(IdrefTarget, "document"), fin(Document, "idrefTargets"));
 
 /**
  * Each instance's IDs, counted by `Instance.ids`, its document's count.
  */
-export const placedIdFamily = counted(on(PlacedId, "instance"), fin(Instance, "ids"));
+const placedIdFamily = counted(on(PlacedId, "instance"), fin(Instance, "ids"));
 
 /**
  * Each assembly's ID bindings, counted by `AssembledId.carriers`.
  */
-export const assembledIdFamily = counted(
+const assembledIdFamily = counted(
   on(PlacedId, "assembly", "id", "owner", "copy"),
   fin(AssembledId, "carriers"),
 );
@@ -567,10 +564,7 @@ export const assembledIdFamily = counted(
 /**
  * Each instance's IDREF targets, counted by `Instance.idrefTargets`, its document's count.
  */
-export const placedIdrefFamily = counted(
-  on(PlacedIdref, "instance"),
-  fin(Instance, "idrefTargets"),
-);
+const placedIdrefFamily = counted(on(PlacedIdref, "instance"), fin(Instance, "idrefTargets"));
 
 /**
  * One `xml:lang` outside every catalog (R9-c), keyed by its element's node: an {@link XmlLang}
@@ -626,12 +620,12 @@ export const AssembledLang = relation.generated(
 /**
  * Each document's `xml:lang` carriers, counted by `Document.langs`.
  */
-export const documentLangFamily = counted(on(XmlLang, "document"), fin(Document, "langs"));
+const documentLangFamily = counted(on(XmlLang, "document"), fin(Document, "langs"));
 
 /**
  * Each item instance's `xml:lang` carriers, counted by `Instance.langs`, its document's count.
  */
-export const placedLangFamily = counted(on(PlacedXmlLang, "instance"), fin(Instance, "langs"));
+const placedLangFamily = counted(on(PlacedXmlLang, "instance"), fin(Instance, "langs"));
 
 /**
  * The placed `xml:lang`s that R26 counts: those of elements outside every catalog, whose scope is
@@ -643,7 +637,7 @@ const bodyPlacedLangs = select(PlacedXmlLang, (p) => p.eq(p.scope, p.document));
  * The placed elements outside every catalog that carry each assembly's forms, counted by
  * `AssembledLang.carriers`.
  */
-export const assembledLangFamily = counted(
+const assembledLangFamily = counted(
   on(PlacedBodyXmlLang, "assembly", "lang"),
   fin(AssembledLang, "carriers"),
 );
@@ -952,7 +946,7 @@ const itemLabels = select(LabelUse, (l) => l.eq(l.rootKind, itemKind));
 /**
  * The IDs that bind each (document, id, owner), counted by `IdBinding.carriers`.
  */
-export const idBindingFamily = counted(
+const idBindingFamily = counted(
   on(DocumentId, "document", "id", "owner"),
   fin(IdBinding, "carriers"),
 );
@@ -960,7 +954,7 @@ export const idBindingFamily = counted(
 /**
  * Each IDREF or IDREFS element's tokens in order, counted by `IdentityText.idrefs`.
  */
-export const textIdrefFamily = ordered(on(TextIdref, "node", "at"), fin(IdentityText, "idrefs"));
+const textIdrefFamily = ordered(on(TextIdref, "node", "at"), fin(IdentityText, "idrefs"));
 
 /**
  * The `xml:lang`s that R26 counts: those of elements outside every catalog, whose scope is their
@@ -973,16 +967,13 @@ const bodyLangs = select(XmlLang, (x) => x.eq(x.scope, x.document));
  * The elements outside every catalog that carry each document's `xml:lang` forms, counted by
  * `DocumentLang.carriers`.
  */
-export const langFamily = counted(
-  on(BodyXmlLang, "document", "lang"),
-  fin(DocumentLang, "carriers"),
-);
+const langFamily = counted(on(BodyXmlLang, "document", "lang"), fin(DocumentLang, "carriers"));
 
 /**
  * The `lom:language` elements that list each category's languages, counted by
  * `ResourceLomLanguageSet.carriers`.
  */
-export const lomLanguageFamily = counted(
+const lomLanguageFamily = counted(
   on(LomLanguage, "general", "tag"),
   fin(ResourceLomLanguageSet, "carriers"),
 );
@@ -990,7 +981,7 @@ export const lomLanguageFamily = counted(
 /**
  * The attributes that hold each fragment's values, counted by `FragmentValue.carriers`.
  */
-export const fragmentValueFamily = counted(
+const fragmentValueFamily = counted(
   on(SsmlAttribute, "fragment", "kind", "value"),
   fin(FragmentValue, "carriers"),
 );

@@ -677,13 +677,13 @@ export const MasteryCeiling = relation(
  * Each record value set's fields, counted by `ValueSet.fields`: a flat row whose group, its
  * `parent`, names its set.
  */
-export const recordFieldFamily = counted(on(RecordField, "parent"), fin(ValueSet, "fields"));
+const recordFieldFamily = counted(on(RecordField, "parent"), fin(ValueSet, "fields"));
 
 /**
  * Each declaration's cardinality, counted by `Declaration.cardinalities`: one row, or none where
  * its `cardinality` is unwritten or spells nothing.
  */
-export const declarationCardinalityFamily = counted(
+const declarationCardinalityFamily = counted(
   on(DeclarationCardinality, "node"),
   fin(Declaration, "cardinalities"),
 );
@@ -692,7 +692,7 @@ export const declarationCardinalityFamily = counted(
  * Each declaration's base type, counted by `Declaration.baseTypes`: one row, or none where its
  * `base-type` is unwritten, a record's, or spells nothing.
  */
-export const declarationBaseTypeFamily = counted(
+const declarationBaseTypeFamily = counted(
   on(DeclarationBaseType, "node"),
   fin(Declaration, "baseTypes"),
 );
@@ -700,18 +700,18 @@ export const declarationBaseTypeFamily = counted(
 /**
  * Each outcome declaration's mastery value, counted by `Declaration.masteries`: one row or none.
  */
-export const masteryValueFamily = counted(on(MasteryValue, "node"), fin(Declaration, "masteries"));
+const masteryValueFamily = counted(on(MasteryValue, "node"), fin(Declaration, "masteries"));
 
 /**
  * Each outcome declaration's normal minimum, written or its version's default, counted by
  * `Declaration.minimums`: one row or none.
  */
-export const normalMinimumFamily = counted(on(NormalMinimum, "node"), fin(Declaration, "minimums"));
+const normalMinimumFamily = counted(on(NormalMinimum, "node"), fin(Declaration, "minimums"));
 
 /**
  * Each outcome declaration's normal maximum, counted by `Declaration.maximums`: one row or none.
  */
-export const normalMaximumFamily = counted(on(NormalMaximum, "node"), fin(Declaration, "maximums"));
+const normalMaximumFamily = counted(on(NormalMaximum, "node"), fin(Declaration, "maximums"));
 
 /**
  * Select the attributes of one name on elements of some kinds: the source of an overlay's copy

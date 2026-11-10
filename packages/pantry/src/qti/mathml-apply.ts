@@ -211,12 +211,12 @@ const headQualifierNodes = select(Node, (n) =>
 /**
  * The family of an application's arguments, counted by `MathApply.arguments`.
  */
-export const argumentFamily = counted(on(MathArgument, "parent"), fin(MathApply, "arguments"));
+const argumentFamily = counted(on(MathArgument, "parent"), fin(MathApply, "arguments"));
 
 /**
  * The family of an application's head qualifiers, counted by `MathApply.owned`.
  */
-export const qualifierFamily = counted(on(MathQualifier, "parent"), fin(MathApply, "owned"));
+const qualifierFamily = counted(on(MathQualifier, "parent"), fin(MathApply, "owned"));
 
 /**
  * An application's head qualifier is a pair the syntax tables list: each {@link MathQualifier}'s

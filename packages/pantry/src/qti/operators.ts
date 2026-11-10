@@ -85,7 +85,7 @@ export const RoundingHolds = closed("RoundingHolds", ["neither", "mode", "figure
  * The tolerance modes under which a `qti-equal` compares within a range, and so carries a
  * `tolerance` (info §5.46.2).
  */
-export const rangeModes = ["absolute", "relative"] as const;
+const rangeModes = ["absolute", "relative"] as const;
 
 /**
  * `xs:double`'s lexical space, pantry's one statement of it: XML Schema 1.0's (Part 2 §3.2.5.1),
@@ -238,10 +238,7 @@ export const operatorRelations = {
 /**
  * Each `tolerance`'s values in order, counted by `Tolerance.tokens`.
  */
-export const toleranceTokenFamily = ordered(
-  on(ToleranceToken, "node", "at"),
-  fin(Tolerance, "tokens"),
-);
+const toleranceTokenFamily = ordered(on(ToleranceToken, "node", "at"), fin(Tolerance, "tokens"));
 
 /**
  * The rounding operators, every one of which has its {@link Rounding} row.
@@ -311,7 +308,7 @@ const leastFigures = { decimalPlaces: 0n, significantFigures: 1n } as const;
  * AL3's, and has no {@link RoundingModeFigures} row to judge. The cast reads only an integer's
  * form, which the guard proves, so its `otherwise` is the least itself, which the bound admits.
  */
-export const roundingFigures = check("Rounding_figures", RoundingModeFigures, (m) =>
+const roundingFigures = check("Rounding_figures", RoundingModeFigures, (m) =>
   m.or(
     m.not(Compute.matches(m.figures, integerForm)),
     m.and(
@@ -345,7 +342,7 @@ export const toleranceRequired = contained(on(rangeModeAttributes, "node"), on(T
  * two positive numbers, t0 and t1 ... If only one value is given it is used for both"): a
  * `tolerance` holds one value or two.
  */
-export const toleranceCount = check("Equal_tolerance", Tolerance, (t) => t.in(t.tokens, [1n, 2n]));
+const toleranceCount = check("Equal_tolerance", Tolerance, (t) => t.in(t.tokens, [1n, 2n]));
 
 /**
  * Reading 121's sign (law "Equal tolerance", rule `P36`; info §5.46.2, "two positive numbers"): a

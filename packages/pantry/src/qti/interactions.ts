@@ -44,9 +44,9 @@
  *   another object in the item, such as an itemVariable or choice"). Across the classes, a key over
  *   the query `ChoiceOrHottext` (`#pantry/qti/queries.ts`) holds it distinct among every choice and
  *   hottext of its document.
- * - {@link Hottext}: every hottext, its nearest interaction's kind, so {@link HottextOwner} is the
- *   hottexts of a hottext interaction; elsewhere a hottext is valid and owned by none (reading 38).
- *   Its identifier is distinct among its document's hottexts (§5.65.1, reading 104), and among its
+ * - {@link Hottext}: every hottext, its nearest interaction's kind, so a hottext interaction's
+ *   hottexts are its choices; elsewhere a hottext is valid and owned by none (reading 38). Its
+ *   identifier is distinct among its document's hottexts (§5.65.1, reading 104), and among its
  *   document's choices by that key.
  * - **choice names**, rules over queries (`#pantry/qti/queries.ts`): the nine choice classes share
  *   one space of identifiers, a name borne by one choice or hottext of a document or its assembly
@@ -201,13 +201,13 @@ export const graphicGapMatch = "qti-graphic-gap-match-interaction" satisfies Kin
  * The `shape` of a default hotspot, the area that holds every point no other area holds, as
  * `ShapeDType` spells it.
  */
-export const defaultArea = "default";
+const defaultArea = "default";
 
 /**
  * A feedback block, the kind whose `Enters` row is the feedback flag `fb` alone, which every
  * feedback element (`qti-feedback-block`, its template form, `qti-feedback-inline`) enters.
  */
-export const feedbackKind = "qti-feedback-block" satisfies Kind;
+const feedbackKind = "qti-feedback-block" satisfies Kind;
 
 /**
  * The interactions whose response cardinality their most count decides, spec reading 92: "If
@@ -238,7 +238,7 @@ export const cardinalityKinds = [
  * gaps" (§5.57). Each gap takes a pair of its own and a single response holds one pair, so a gap
  * match with two or more gaps binds a response of multiple cardinality.
  */
-export const gapMatchKind = "qti-gap-match-interaction" satisfies Kind;
+const gapMatchKind = "qti-gap-match-interaction" satisfies Kind;
 
 /**
  * The interactions of any response type: those neither `BindingFit` nor `RecordBindingFit` names,
@@ -260,17 +260,17 @@ export const boundKinds: readonly Kind[] = ChoiceBound.rows.map(({ kind }) => ki
 /**
  * The attributes of the least counts `ChoiceBound` names, each once.
  */
-export const minNames: readonly Name[] = [...new Set(ChoiceBound.rows.map(({ min }) => min))];
+const minNames: readonly Name[] = [...new Set(ChoiceBound.rows.map(({ min }) => min))];
 
 /**
  * The attributes of the most counts `ChoiceBound` names, each once.
  */
-export const maxNames: readonly Name[] = [...new Set(ChoiceBound.rows.map(({ max }) => max))];
+const maxNames: readonly Name[] = [...new Set(ChoiceBound.rows.map(({ max }) => max))];
 
 /**
  * The kinds whose choices bound both of their counts (reading 18), `ChoiceCount`'s keys.
  */
-export const choiceCountKinds: readonly Kind[] = ChoiceCount.rows.map(({ kind }) => kind);
+const choiceCountKinds: readonly Kind[] = ChoiceCount.rows.map(({ kind }) => kind);
 
 /**
  * The portable custom interaction's template variable kind (§7.38.1), the one element that names a
@@ -612,15 +612,12 @@ export const PlacedHottext = relation(
 /**
  * Each document's binding attributes, counted by `Document.bindings`.
  */
-export const bindingNameFamily = counted(on(BindingName, "document"), fin(Document, "bindings"));
+const bindingNameFamily = counted(on(BindingName, "document"), fin(Document, "bindings"));
 
 /**
  * Each item instance's bindings, counted by `Instance.bindings`, its document's count.
  */
-export const placedBindingFamily = counted(
-  on(PlacedBinding, "instance"),
-  fin(Instance, "bindings"),
-);
+const placedBindingFamily = counted(on(PlacedBinding, "instance"), fin(Instance, "bindings"));
 
 /**
  * A choice, keyed by its node: its {@link nodeRef} tuple and its identifier collapsed. Its nearest
@@ -678,7 +675,7 @@ export const GapInteraction = relation(
  * Each interaction's gaps, counted by `Interaction.gaps`: a flat row whose group, `interaction`,
  * names its owner.
  */
-export const gapFamily = counted(on(GapInteraction, "interaction"), fin(Interaction, "gaps"));
+const gapFamily = counted(on(GapInteraction, "interaction"), fin(Interaction, "gaps"));
 
 /**
  * One form in which a portable custom interaction names its module, keyed by the interaction's node
@@ -700,7 +697,7 @@ export const PciModuleForm = relation("PciModuleForm", { element: pg.boolean, no
  * Each interaction's module forms, counted by `Interaction.moduleForms`: a flat row whose group,
  * `node`, names its owner.
  */
-export const pciModuleFamily = counted(on(PciModuleForm, "node"), fin(Interaction, "moduleForms"));
+const pciModuleFamily = counted(on(PciModuleForm, "node"), fin(Interaction, "moduleForms"));
 
 /**
  * The custom interaction's kind, the deprecated element a 3.0.0 document holds none of ("Custom
@@ -759,34 +756,24 @@ export const Hottext = relation(
 );
 
 /**
- * The hottexts whose nearest interaction is a hottext interaction, its choices (§5.65: "A HotText
- * area is used within the content of an hotTextInteraction to provide the individual choices"):
- * the old `owner-copy` of `HottextOwner`.
- */
-export const HottextOwner = select(Hottext, (h) => h.eq(h.nearestKind, hottextInteraction));
-
-/**
  * Each document's choices, counted by `Document.choices`.
  */
-export const documentChoiceFamily = counted(on(Choice, "document"), fin(Document, "choices"));
+const documentChoiceFamily = counted(on(Choice, "document"), fin(Document, "choices"));
 
 /**
  * Each document's hottexts, counted by `Document.hottexts`.
  */
-export const documentHottextFamily = counted(on(Hottext, "document"), fin(Document, "hottexts"));
+const documentHottextFamily = counted(on(Hottext, "document"), fin(Document, "hottexts"));
 
 /**
  * Each instance's choices, counted by `Instance.choices`, its document's count.
  */
-export const placedChoiceFamily = counted(on(PlacedChoice, "instance"), fin(Instance, "choices"));
+const placedChoiceFamily = counted(on(PlacedChoice, "instance"), fin(Instance, "choices"));
 
 /**
  * Each instance's hottexts, counted by `Instance.hottexts`, its document's count.
  */
-export const placedHottextFamily = counted(
-  on(PlacedHottext, "instance"),
-  fin(Instance, "hottexts"),
-);
+const placedHottextFamily = counted(on(PlacedHottext, "instance"), fin(Instance, "hottexts"));
 
 /**
  * A hotspot choice or associable hotspot, keyed by its node: its {@link nodeRef} tuple, its parent
@@ -914,12 +901,12 @@ export const CountRange = relation(
 /**
  * Each bound's least count, counted by `CountBound.leasts`: one row or none.
  */
-export const leastCountFamily = counted(on(LeastCount, "node"), fin(CountBound, "leasts"));
+const leastCountFamily = counted(on(LeastCount, "node"), fin(CountBound, "leasts"));
 
 /**
  * Each bound's most count, counted by `CountBound.mosts`: one row or none.
  */
-export const mostCountFamily = counted(on(MostCount, "node"), fin(CountBound, "mosts"));
+const mostCountFamily = counted(on(MostCount, "node"), fin(CountBound, "mosts"));
 
 /**
  * A slider interaction's bounds, keyed by its node: its `lower-bound` and `upper-bound`, collapsed.
@@ -947,7 +934,7 @@ export const AriaElement = relation("AriaElement", { node: uuid, values: drawn(n
 /**
  * Each element's ARIA range attributes, counted by `AriaElement.values`.
  */
-export const ariaValueFamily = counted(on(AriaValue, "node"), fin(AriaElement, "values"));
+const ariaValueFamily = counted(on(AriaValue, "node"), fin(AriaElement, "values"));
 
 /**
  * An element that carries both ARIA range attributes, keyed by its node: its `aria-valuemin` and
@@ -1185,7 +1172,7 @@ export const ReferringDocument = relation(
 /**
  * Each section document's feedback references, counted by `ReferringDocument.feedbacks`.
  */
-export const sectionFeedbackNameFamily = counted(
+const sectionFeedbackNameFamily = counted(
   on(SectionFeedbackName, "document"),
   fin(ReferringDocument, "feedbacks"),
 );
@@ -1193,7 +1180,7 @@ export const sectionFeedbackNameFamily = counted(
 /**
  * Each section document's printed variable references, counted by `ReferringDocument.prints`.
  */
-export const sectionPrintedNameFamily = counted(
+const sectionPrintedNameFamily = counted(
   on(SectionPrintedName, "document"),
   fin(ReferringDocument, "prints"),
 );
@@ -1202,7 +1189,7 @@ export const sectionPrintedNameFamily = counted(
  * Each section document's and fragment's template variable references, counted by
  * `ReferringDocument.templates`.
  */
-export const sectionTemplateNameFamily = counted(
+const sectionTemplateNameFamily = counted(
   on(SectionTemplateName, "document"),
   fin(ReferringDocument, "templates"),
 );
@@ -1211,7 +1198,7 @@ export const sectionTemplateNameFamily = counted(
  * Each section document's and fragment's context variable references, counted by
  * `ReferringDocument.contexts`.
  */
-export const sectionContextNameFamily = counted(
+const sectionContextNameFamily = counted(
   on(SectionContextName, "document"),
   fin(ReferringDocument, "contexts"),
 );
@@ -1395,7 +1382,7 @@ export const SectionContextRefDeclaration = relation(
  * Each placement's resolved feedback references, counted by `SectionScope.feedbacks`, which equals
  * its document's count, so each placement resolves every one.
  */
-export const sectionFeedbackFamily = counted(
+const sectionFeedbackFamily = counted(
   on(SectionFeedbackRef, "instance"),
   fin(SectionScope, "feedbacks"),
 );
@@ -1403,7 +1390,7 @@ export const sectionFeedbackFamily = counted(
 /**
  * Each placement's resolved printed variable references, counted by `SectionScope.prints`.
  */
-export const sectionPrintedFamily = counted(
+const sectionPrintedFamily = counted(
   on(SectionPrintedRef, "instance"),
   fin(SectionScope, "prints"),
 );
@@ -1411,7 +1398,7 @@ export const sectionPrintedFamily = counted(
 /**
  * Each placement's resolved template variable references, counted by `SectionScope.templates`.
  */
-export const sectionTemplateFamily = counted(
+const sectionTemplateFamily = counted(
   on(SectionTemplateRef, "instance"),
   fin(SectionScope, "templates"),
 );
@@ -1419,7 +1406,7 @@ export const sectionTemplateFamily = counted(
 /**
  * Each placement's resolved context variable references, counted by `SectionScope.contexts`.
  */
-export const sectionContextFamily = counted(
+const sectionContextFamily = counted(
   on(SectionContextRef, "instance"),
   fin(SectionScope, "contexts"),
 );

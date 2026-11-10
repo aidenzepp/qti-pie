@@ -119,8 +119,7 @@ export const Prefix = str.bytes(prefixBytes, str.regex(prefixPattern));
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-Char | XML 1.0, Char}
  */
-export const charsPattern =
-  "^[\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*$";
+const charsPattern = "^[\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*$";
 
 /**
  * The text type of a node's characters, and of an attribute's lexical form, the record (U1,
@@ -396,10 +395,7 @@ export const universalDomains: readonly (typeof ValueDomain.handles)[number][] =
  * @param governor - The element's governor: the row's own, or its parent's copy.
  * @returns The predicate.
  */
-export const checkedText = (
-  n: NodeRow,
-  governor: NodeRow["governor"] | NodeRow["parentGovernor"],
-) =>
+const checkedText = (n: NodeRow, governor: NodeRow["governor"] | NodeRow["parentGovernor"]) =>
   n.and(
     TextDomain.has(n.version, governor),
     n.not(n.in(TextDomain.at("domain", n.version, governor), universalDomains)),

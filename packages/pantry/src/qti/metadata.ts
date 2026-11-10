@@ -313,10 +313,7 @@ export const LomStringLanguage = relation.generated(
 /**
  * Each string's `language`, counted by {@link LomString}'s `languages`.
  */
-export const lomStringLanguages = counted(
-  on(LomStringLanguage, "node"),
-  fin(LomString, "languages"),
-);
+const lomStringLanguages = counted(on(LomStringLanguage, "node"), fin(LomString, "languages"));
 
 /**
  * A string of a LOM title, keyed by its `lom:string` node: its {@link nodeRef} tuple (its parent the

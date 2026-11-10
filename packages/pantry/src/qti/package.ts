@@ -528,12 +528,12 @@ export const TextReferencePath = relation(
  * The paths a package's files name, counted per (scope, path): each file names its owner by
  * `(package, scope, path)`.
  */
-export const fileHrefFamily = counted(on(File, "package", "scope", "path"), fin(FileHref, "files"));
+const fileHrefFamily = counted(on(File, "package", "scope", "path"), fin(FileHref, "files"));
 
 /**
  * The paths each resource's files name, counted per (resource, scope, path).
  */
-export const resourceFileFamily = counted(
+const resourceFileFamily = counted(
   on(File, "resource", "scope", "path"),
   fin(ResourceFile, "files"),
 );

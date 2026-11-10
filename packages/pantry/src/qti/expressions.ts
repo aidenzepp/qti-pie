@@ -253,15 +253,7 @@ export const Expression = relation(
  * attribute an expression's type follows from and a literal each copy it, so `Expression` carries
  * one superkey UNIQUE for them all.
  */
-export const exprRef = on(
-  Expression,
-  "node",
-  "parent",
-  "kind",
-  "language",
-  "baseType",
-  "cardinality",
-);
+const exprRef = on(Expression, "node", "parent", "kind", "language", "baseType", "cardinality");
 
 /**
  * One operand: an expression whose parent is an expression, keyed by its node (C16).
@@ -295,7 +287,7 @@ export const Operand = relation.generated(
  * Each expression's operands, counted by `Expression.operands`: a flat row whose group key names
  * its operator.
  */
-export const operandFamily = counted(on(Operand, "operator"), fin(Expression, "operands"));
+const operandFamily = counted(on(Operand, "operator"), fin(Expression, "operands"));
 
 /**
  * One rule or processing element, keyed by its node: its `nodeRef` tuple, its parent's kind, and
@@ -496,18 +488,12 @@ export const PlacedVariableRefDeclaration = relation(
 /**
  * Each document's variable references, counted by `Document.variables`.
  */
-export const documentVariableFamily = counted(
-  on(VariableRef, "document"),
-  fin(Document, "variables"),
-);
+const documentVariableFamily = counted(on(VariableRef, "document"), fin(Document, "variables"));
 
 /**
  * Each item instance's variable references, counted by `Instance.variables`, its document's count.
  */
-export const placedVariableFamily = counted(
-  on(PlacedVariableRef, "instance"),
-  fin(Instance, "variables"),
-);
+const placedVariableFamily = counted(on(PlacedVariableRef, "instance"), fin(Instance, "variables"));
 
 /**
  * One attribute an expression's type follows from, keyed by its element's node and its name: a
@@ -720,7 +706,7 @@ export const MappingItemRefType = relation(
  * Each mapping's item ref's type, counted by `MappingItemRef.types`: one row or none, a mapping's
  * under an item ref with no target.
  */
-export const mappingItemRefTypeFamily = counted(
+const mappingItemRefTypeFamily = counted(
   on(MappingItemRefType, "node"),
   fin(MappingItemRef, "types"),
 );
@@ -1458,17 +1444,17 @@ const publishedTemplates = rpTemplates.flatMap((template) =>
  * no bound (a number beyond the instances drawn names one never drawn, which no static rule
  * refuses).
  */
-export const positiveNumberPattern = Compute.pattern("^[0-9]*[1-9][0-9]*$");
+const positiveNumberPattern = Compute.pattern("^[0-9]*[1-9][0-9]*$");
 
 /**
  * A name piece of all digits: an instance number's form.
  */
-export const digitsPattern = Compute.pattern("^[0-9]+$");
+const digitsPattern = Compute.pattern("^[0-9]+$");
 
 /**
  * A segment's piece: no dot.
  */
-export const piecePattern = Compute.pattern("^[^.]*$");
+const piecePattern = Compute.pattern("^[^.]*$");
 
 /**
  * The built-in variables a test's own processing names unsplit, as the installed `BuiltInVariable`
@@ -1792,7 +1778,7 @@ const testSectionIdentifiers = select(SectionIdentifier, (s) => s.ne(s.rootKind,
 /**
  * Each test or section document's references, counted by `ReferenceDocument.references`.
  */
-export const testReferenceFamily = counted(
+const testReferenceFamily = counted(
   on(TestReference, "document"),
   fin(ReferenceDocument, "references"),
 );
@@ -1800,7 +1786,7 @@ export const testReferenceFamily = counted(
 /**
  * Each instance's placed references, counted by `PlacedDocument.references`.
  */
-export const placedReferenceFamily = counted(
+const placedReferenceFamily = counted(
   on(PlacedReference, "instance"),
   fin(PlacedDocument, "references"),
 );
@@ -1808,7 +1794,7 @@ export const placedReferenceFamily = counted(
 /**
  * Each reference's placements in a test's assembly, counted by `AssembledReference.placements`.
  */
-export const placementFamily = counted(
+const placementFamily = counted(
   on(PlacedReference, "assembly", "node", "attribute"),
   fin(AssembledReference, "placements"),
 );
@@ -1816,7 +1802,7 @@ export const placementFamily = counted(
 /**
  * Each reference's name pieces in order, at `AssembledReference.segments`.
  */
-export const segmentFamily = ordered(
+const segmentFamily = ordered(
   on(ReferenceSegment, "assembly", "node", "attribute", "at"),
   fin(AssembledReference, "segments"),
 );
@@ -1824,7 +1810,7 @@ export const segmentFamily = ordered(
 /**
  * Each reference's readings, counted by `AssembledReference.readings`.
  */
-export const readingFamily = counted(
+const readingFamily = counted(
   on(Reading, "assembly", "node", "attribute"),
   fin(AssembledReference, "readings"),
 );

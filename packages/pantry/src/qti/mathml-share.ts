@@ -232,10 +232,7 @@ export const shareResolution = contained(
 /**
  * Each share's placements, counted by `ShareFragment.placements`.
  */
-export const placedShareFamily = counted(
-  on(PlacedShareTarget, "node"),
-  fin(ShareFragment, "placements"),
-);
+const placedShareFamily = counted(on(PlacedShareTarget, "node"), fin(ShareFragment, "placements"));
 
 /**
  * The relations the share law declares, each under its own name, as `#pantry/qti/schema.ts`

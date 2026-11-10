@@ -441,7 +441,7 @@ export const Namespace = relation(
  * Each element's namespace declarations, in source order, counted by `Node.namespaces` (fin.md
  * §5.2): the law the oracle names "Namespace family".
  */
-export const namespaceFamily = ordered(on(Namespace, "node", "at"), fin(Node, "namespaces"));
+const namespaceFamily = ordered(on(Namespace, "node", "at"), fin(Node, "namespaces"));
 
 /**
  * A foreign element's expanded name, keyed by its node (`OpenElementNameRow`): the namespace name,
