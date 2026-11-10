@@ -2,15 +2,26 @@ import { readdirSync } from "node:fs";
 import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
-import { ContentNotImplemented } from "#plate/content/contract.ts";
+import { ContentNotImplemented, defaultView } from "#plate/content/contract.ts";
 import type {
+  ContentCopyKit,
   ContentFeatureId,
   ContentModule,
+  ContentRedactKit,
+  ContentRenderKit,
   ItemContentModule,
   ItemParseContext,
   Placement,
 } from "#plate/content/contract.ts";
-import { attr, doc, el, mathmlNamespace, qtiNamespace, text } from "#plate/document/source.ts";
+import {
+  attr,
+  doc,
+  el,
+  mathmlNamespace,
+  qtiNamespace,
+  ssmlNamespace,
+  text,
+} from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
 import type { ParseContext } from "#plate/interactions/contract.ts";
@@ -76,6 +87,7 @@ interface Declared {
  * What each content element's module declares, by the element's local name.
  */
 const declared = {
+  "*": { feature: [], namespace: ssmlNamespace, normalises: false, placement: "body" },
   math: { feature: ["I-18"], namespace: mathmlNamespace, normalises: true, placement: "body" },
   "qti-assessment-stimulus-ref": {
     feature: ["I-4"],
@@ -126,6 +138,31 @@ const declared = {
     placement: "item",
   },
 } satisfies Readonly<Record<string, Declared>>;
+
+/**
+ * The kit a stub's `redact` is handed here: it never reads it, as it throws first.
+ */
+const redactKit: ContentRedactKit = {
+  nodes: (nodes) => nodes,
+  record: Option.none(),
+  supports: noSupports,
+  view: defaultView,
+  withhold: () => {},
+};
+
+/**
+ * The kit a stub's `copy` is handed here: it never reads it, as it throws first.
+ */
+const copyKit: ContentCopyKit = { nodes: () => [] };
+
+/**
+ * The kit a stub's `render` is handed here: it never reads it, as it throws first.
+ */
+const renderKit: ContentRenderKit = {
+  nodes: () => Result.succeed([]),
+  supports: noSupports,
+  view: defaultView,
+};
 
 /**
  * {@link declared}, looked up by an element's local name.
@@ -204,6 +241,15 @@ const noticeOf = (module: AnyContentModule): string =>
   module.namespace === qtiNamespace ? module.element : `{${module.namespace}}${module.element}`;
 
 /**
+ * Construct an element of a module's own name and namespace, with no attributes and no children.
+ *
+ * @param module The module.
+ * @returns The element.
+ */
+const elementOf = (module: AnyContentModule): SourceElement =>
+  el(module.element, [], [], module.namespace);
+
+/**
  * Construct the parse context the body walk hands a module for one element placed alone in an
  * item body, its notice recording every feature it is asked for.
  *
@@ -238,22 +284,38 @@ const recording = (element: SourceElement): Recording => {
 };
 
 /**
- * Construct an item-placed parse context that records every mark it is asked for.
+ * Construct the item-placed parse context the item root's walk hands a module for one element
+ * placed under the root of an item with an empty body, its mark recording every feature it is asked
+ * for: the path and the reader kit are the walk's own, over that document.
  *
- * @param path The element's path.
+ * @param module The element's module.
  * @returns The context and the features its marks named.
  */
-const markRecording = (path: string): MarkRecording => {
+const markRecording = (module: AnyContentModule): MarkRecording => {
   const marked: string[] = [];
+  const element = elementOf(module);
+  const { context } = parseContextOf(
+    doc(
+      "items/test.xml",
+      el(
+        "qti-assessment-item",
+        [attr("identifier", "item"), attr("title", "Item")],
+        [element, el("qti-item-body", [], [])],
+      ),
+    ),
+    element,
+  );
 
   return {
     context: {
+      catalogReferences: [],
       mark: (feature) => {
         marked.push(feature);
 
         return Result.succeed(Option.none());
       },
-      path,
+      path: context.path,
+      read: context.read,
     },
     marked,
   };
@@ -273,21 +335,12 @@ const notImplementedBy = (step: () => void): Option.Option<string> => {
     : Option.none();
 };
 
-/**
- * Construct an element of a module's own name and namespace, with no attributes and no children.
- *
- * @param module The module.
- * @returns The element.
- */
-const elementOf = (module: AnyContentModule): SourceElement =>
-  el(module.element, [], [], module.namespace);
-
 describe("the content modules", () => {
-  it("are nine, one per element, each declared", () => {
+  it("are ten, one per element, each declared", () => {
     const elements = contentModules.map(({ module }) => module.element);
 
-    assert.strictEqual(contentModules.length, 9);
-    assert.strictEqual(new Set(elements).size, 9);
+    assert.strictEqual(contentModules.length, 10);
+    assert.strictEqual(new Set(elements).size, 10);
     assert.deepStrictEqual(elements.toSorted(), Object.keys(declared).toSorted());
   });
 
@@ -328,14 +381,26 @@ describe("a content module not implemented", () => {
   it("parses an item element as none, its mark recorded once, as the item root's walk records any element it does not read", () => {
     for (const { module } of stubs) {
       if (module.placement === "item") {
-        const { context, marked } = markRecording(`qti-assessment-item/${module.element}`);
+        const { context, marked } = markRecording(module);
 
+        assert.strictEqual(context.path, `qti-assessment-item/${module.element}`, module.element);
         assert.deepStrictEqual(
           module.parse(elementOf(module), context),
           Result.succeed(Option.none()),
           module.element,
         );
         assert.deepStrictEqual(marked, [module.element], module.element);
+      }
+    }
+  });
+
+  it("gives the element as written from normalise, which the walks call before parse", () => {
+    for (const { module } of stubs) {
+      const { normalise } = module;
+      if (normalise !== undefined) {
+        const element = elementOf(module);
+
+        assert.strictEqual(normalise(element), element, module.element);
       }
     }
   });
@@ -355,26 +420,22 @@ describe("a content module not implemented", () => {
           [
             "redact",
             () => {
-              module.redact({});
+              module.redact({}, redactKit);
+            },
+          ],
+          [
+            "copy",
+            () => {
+              module.copy({}, copyKit);
             },
           ],
           [
             "render",
             () => {
-              module.render({}, state, noSupports);
+              module.render({}, state, renderKit);
             },
           ],
         ];
-        const { normalise } = module;
-        if (normalise !== undefined) {
-          steps.push([
-            "normalise",
-            () => {
-              normalise(elementOf(module));
-            },
-          ]);
-        }
-
         for (const [name, step] of steps) {
           assert.deepStrictEqual(
             notImplementedBy(step),
