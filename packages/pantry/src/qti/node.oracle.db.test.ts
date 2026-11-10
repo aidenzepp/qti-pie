@@ -2,6 +2,11 @@
  * `Node`'s laws judged by PostgreSQL (Q5.03), written to run at N1 on the lease (and restated in
  * the network seat's probe P1), never by a hand.
  *
+ * Only what the database alone holds stays here: the tree's natives across rows, the catalog's
+ * foreign keys into `Node` (C12), and the planner's index scans. Node's row CHECKs and content laws
+ * are held on the free tier, by the law oracle, `#pantry/qti/node.oracle.test.ts` and
+ * `#pantry/test/label-tools.oracle.test.ts`.
+ *
  * Every case states a document's `Node` rows as facts, and the one direct writer
  * (`#pantry/test/direct-sql.ts`, README, "Direct SQL access") writes them as one INSERT: the author
  * login, `SET ROLE` to the author role, SERIALIZABLE, each column the host fills a parameter, and
@@ -25,56 +30,30 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Array as Arr, Effect, Formatter, Option, Order } from "effect";
+import { Array as Arr, Effect, Option, Order } from "effect";
 import type { Client, DatabaseError } from "pg";
 import { describe } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
-import { followPairsOf } from "#pantry/grammar/content.ts";
 import {
   AttributeSlot,
-  Banned,
-  ContentModelOf,
   Flag,
-  FollowMember,
-  FollowSetOf,
   grammar,
   nonElementKinds,
-  Position,
   RootOfType,
-  SharedModelOf,
-  SymbolMember,
-  SymbolSetOf,
   TextDomain,
 } from "#pantry/grammar/install.ts";
-import { symbolRowsOf } from "#pantry/test/indexes.ts";
-import { governorOf, ownViewOf } from "#pantry/import/fold.ts";
-import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
+import { governorOf } from "#pantry/import/fold.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
-import { shred, versionOf } from "#pantry/model/shred.ts";
-import type { PackageFile } from "#pantry/package/read.ts";
-import { schemaVersions } from "#pantry/grammar/kinds.ts";
-import { readEntries } from "#pantry/package/read.ts";
-import { Attribute } from "#pantry/qti/attributes.ts";
-import { Document } from "#pantry/qti/chardata.ts";
-import { LabelUse } from "#pantry/qti/identity.ts";
-import {
-  copiedTextKinds,
-  ElementType,
-  Node,
-  universalDomains,
-  vocabularyTermKinds,
-} from "#pantry/qti/node.ts";
+import { shred } from "#pantry/model/shred.ts";
+import { copiedTextKinds, Node, universalDomains, vocabularyTermKinds } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
-  accumulatorOf,
-  assertVerdict,
   authorRole,
   authorViews,
-  constraintDescribed,
   judged,
   loginSession,
   pinned,
@@ -84,17 +63,9 @@ import {
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
-import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
-import { documentBreaches, lawsOf, nodeLawNames } from "#pantry/test/oracle.ts";
-import type { LawName } from "#pantry/test/oracle.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { keysOf } from "#pantry/test/statements.ts";
-
-/**
- * The accepted corpus packages (`verdicts/qti-examples-0a92fbb.tsv`), by their zip's name.
- */
-const acceptedPackages: ReadonlySet<string> = new Set(["sharedMedia", "simple", "svg"]);
 
 /**
  * The QTI 3 ASI namespace.
@@ -105,17 +76,6 @@ const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
  * The MathML namespace.
  */
 const mathml = "http://www.w3.org/1998/Math/MathML";
-
-/**
- * UTF-8's encoding label, as crust's reader reports it and `Document` stores it.
- */
-// oxlint-disable-next-line unicorn/text-encoding-identifier-case -- the label as a document states it
-const utf8Label = "UTF-8";
-
-/**
- * The host law model, the oracle's tables over the grammar.
- */
-const laws = lawsOf(grammar);
 
 /**
  * Write an item in 3.0.1 with one response declaration, a body and what follows it.
@@ -139,116 +99,6 @@ const lawfulItem = itemOf(`<p>Text <b>bold</b></p>`);
 const mathItem = itemOf(
   `<p><m:math xmlns:m="${mathml}"><m:mfrac><m:ci>a</m:ci><m:ci>b</m:ci></m:mfrac></m:math></p>`,
 );
-
-/**
- * XML Schema's instance namespace, which `xsi:type` is in.
- */
-const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
-
-/**
- * XML Schema's namespace, its built-in types'.
- */
-const xsNamespace = "http://www.w3.org/2001/XMLSchema";
-
-/**
- * Write a test in 3.0.1 whose one section holds the given content before its item ref, with a
- * foreign namespace bound to `f` and XML Schema's two to `xsi` and `xs`.
- *
- * @param section - The section's content before its item ref.
- * @returns The test's text.
- */
-const testOf = (section: string): string =>
-  `<qti-assessment-test xmlns="${asi}" xmlns:f="urn:f" xmlns:xsi="${xsiNamespace}" xmlns:xs="${xsNamespace}" identifier="t" title="t"><qti-test-part identifier="p" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="s" title="s" visible="true">${section}<qti-assessment-item-ref identifier="i" href="i.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`;
-
-/**
- * The foreign element laws over `Node`'s rows' cases (C4, C41): each a lawful document, and a
- * corruption of it that breaks the one law, as a second document or as an edit of its one foreign
- * element of a kind, each checked against the host oracle before PostgreSQL judges it. "Strictly
- * held" is over `OpenElementName`, so `chardata.db.test.ts` states its cases.
- */
-const foreignCases: readonly {
-  readonly corrupt:
-    | { readonly xml: string }
-    | {
-        readonly fields: Partial<Pick<FoldedNode<Composed>, "prefix">>;
-        readonly kind: string;
-      };
-  readonly law: LawName;
-  readonly lawful: string;
-  readonly name: string;
-}[] = [
-  {
-    corrupt: {
-      xml: testOf(
-        `<qti-selection select="1"><f:x xsi:type="xs:string">a<f:y/></f:x></qti-selection>`,
-      ),
-    },
-    law: "Foreign simple content",
-    lawful: testOf(`<qti-selection select="1"><f:x xsi:type="xs:string">a</f:x></qti-selection>`),
-    name: "a foreign element governed by xs:string with an element child (C41)",
-  },
-  {
-    corrupt: { fields: { prefix: "p" }, kind: "no-namespace-element" },
-    law: "Foreign element class",
-    lawful: testOf(`<qti-ordering shuffle="true"><foo xmlns=""/><qti-variable/></qti-ordering>`),
-    name: "an element in no namespace in qti-ordering written with a prefix (C4, reading 61)",
-  },
-];
-
-/**
- * The items each breaking one law over its node rows, its retired rule's fixture restated (§2.2:
- * `ordering`, `union-count` and `body-empty` become Follow and Last; the counted and barred laws;
- * an ancestry ban and a need), each checked against the host oracle before PostgreSQL judges it.
- * `beside` names a node law the item also breaks over rows the case does not write: a gap outside
- * a gap match interaction breaks N8's choice clause, every choice in an interaction, its nearest
- * (information model §5.55, reading 38), over its `Choice` row, beside N6's need over its nodes.
- */
-const lawCases: readonly {
-  readonly beside?: readonly LawName[];
-  readonly law: LawName;
-  readonly name: string;
-  readonly xml: string;
-}[] = [
-  {
-    law: "N5 Follow",
-    name: "an outcome declaration after the item body (ordering)",
-    xml: itemOf(
-      `<p>x</p>`,
-      `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`,
-    ),
-  },
-  {
-    law: "N7 Last",
-    name: "a choice interaction without a choice (union-count)",
-    xml: itemOf(`<qti-choice-interaction response-identifier="RESPONSE"/>`),
-  },
-  { law: "N7 Last", name: "an item body of whitespace alone (body-empty)", xml: itemOf(" ") },
-  {
-    law: "N7 Counted",
-    name: "a match interaction with one simple match set",
-    xml: itemOf(
-      `<qti-match-interaction response-identifier="RESPONSE" max-associations="1"><qti-simple-match-set><qti-simple-associable-choice identifier="M" match-max="1">M</qti-simple-associable-choice></qti-simple-match-set></qti-match-interaction>`,
-    ),
-  },
-  {
-    law: "N7 barred by",
-    name: "a colgroup with a span and a col",
-    xml: itemOf(`<table><colgroup span="2"><col/></colgroup><tr><td>x</td></tr></table>`),
-  },
-  {
-    law: "N6 ancestry",
-    name: "a text entry inside a hottext interaction (a ban)",
-    xml: itemOf(
-      `<qti-hottext-interaction response-identifier="RESPONSE"><p>Type <qti-text-entry-interaction response-identifier="RESPONSE"/></p></qti-hottext-interaction>`,
-    ),
-  },
-  {
-    beside: ["N8 nearest"],
-    law: "N6 ancestry",
-    name: "a gap outside a gap match interaction (a need)",
-    xml: itemOf(`<p>A <qti-gap identifier="G"/></p>`),
-  },
-];
 
 /**
  * A constraint of `Node`'s table as the catalog holds it.
@@ -669,45 +519,6 @@ const documentOrderIndexes = (client: Client) =>
   ).pipe(Effect.map((rows) => rows.map(({ name }) => name)));
 
 /**
- * The namespace of the content package's elements, which a manifest's `schemaversion` is in.
- */
-const cpNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
-
-/**
- * Find the schema version a package declares, as the importer finds it: the text of the first
- * `metadata/schemaversion` under its content package `manifest` root.
- *
- * @param files - The package's entries.
- * @returns The version as written, or none when the manifest does not read or declares none.
- */
-const declaredVersionOf = (files: readonly PackageFile[]) =>
-  Effect.gen(function* declaredVersion() {
-    const manifest = files.find(({ kind }) => kind === "manifest");
-    const read =
-      manifest === undefined ? Option.none() : yield* Effect.option(readXml(manifest.bytes));
-
-    return read.pipe(
-      Option.flatMap(({ root }) => {
-        const metadata = root.children.find(
-          (child) => child.kind === "element" && child.local === "metadata",
-        );
-        const version =
-          metadata?.kind === "element"
-            ? metadata.children.find(
-                (child) => child.kind === "element" && child.local === "schemaversion",
-              )
-            : undefined;
-
-        return root.namespace === cpNamespace && version?.kind === "element"
-          ? Option.some(
-              version.children.map((child) => (child.kind === "text" ? child.value : "")).join(""),
-            )
-          : Option.none();
-      }),
-    );
-  });
-
-/**
  * Read a document's text as shred and the host's fold read it, in 3.0.1.
  *
  * @param xml - The document.
@@ -720,128 +531,6 @@ const foldedOf = (xml: string) =>
 
     return yield* Effect.orDie(Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar))));
   });
-
-/**
- * Read a document's text as shred and the host's fold read it, in a schema version, with the tree
- * shred gives, which the overlays' builders read.
- *
- * @param xml - The document.
- * @param version - Its schema version, as its manifest would declare it.
- * @returns Its tree and its folded rows.
- */
-const foldedAt = (xml: string, version: (typeof schemaVersions)[number]) =>
-  Effect.gen(function* folded() {
-    const document = yield* Effect.orDie(readXml(new TextEncoder().encode(xml)));
-    const tree = yield* Effect.orDie(shred(document, version, shredGrammarOf(grammar)));
-
-    return {
-      rows: yield* Effect.orDie(Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar)))),
-      tree,
-    };
-  });
-
-/**
- * State a document's `Attribute` facts: the fold's fields, the slot the fold steps (`attrs` without
- * the slots before it), and the counts of the families an attribute owns whose members these cases
- * write none of, its entity references and its open name, from the document's rows; no witness of
- * these cases holds an IDREF attribute, so each has no token, the count the writer derives, and the
- * empty concatenation.
- *
- * @param rows - The document's folded rows.
- * @returns Each attribute's fact, in the fold's order.
- */
-const attributeFactsOf = (rows: FoldedRows<Composed>): Stated[] =>
-  rows.attributes.map((attribute) => {
-    const after = [...attribute.derived.attrs].map(String);
-    const was = new Set([...attribute.attrsWas].map(String));
-
-    return {
-      fact: {
-        at: attribute.at,
-        attrsAfter: bitsText(AttributeSlot, after),
-        attrsWas: bitsText(AttributeSlot, was),
-        document: attribute.document,
-        entities: BigInt(
-          rows.attributeEntities.filter((row) => row.attribute === attribute.id).length,
-        ),
-        governor: governorOf(attribute.version, attribute.kind, attribute.governs),
-        id: attribute.id,
-        idrefText: "",
-        kind: attribute.kind,
-        lexical: attribute.lexical,
-        name: attribute.name,
-        node: attribute.node,
-        openName: BigInt(rows.openNames.filter((row) => row.attribute === attribute.id).length),
-        prefix: attribute.prefix,
-        slot: bitsText(
-          AttributeSlot,
-          after.filter((slot) => !was.has(slot)),
-        ),
-        version: attribute.version,
-      },
-      relation: Attribute,
-    };
-  });
-
-/**
- * An item whose root may carry a `label`, a `tool-name` and a `tool-version`, and whose body's
- * paragraph may carry a `label`: the scope of Label tools (spec reading 128).
- *
- * @param on - What the item carries.
- * @param on.bodyLabel - A label on the body's paragraph.
- * @param on.rootLabel - The root's own label.
- * @param on.toolName - The root's `tool-name`.
- * @param on.toolVersion - The root's `tool-version`.
- * @returns The item's text.
- */
-const labelledItemOf = (on: {
-  readonly bodyLabel: boolean;
-  readonly rootLabel: boolean;
-  readonly toolName: boolean;
-  readonly toolVersion: boolean;
-}): string =>
-  `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false" adaptive="false"${on.rootLabel ? ' label="root"' : ""}${on.toolName ? ' tool-name="t"' : ""}${on.toolVersion ? ' tool-version="1"' : ""}><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-item-body><p${on.bodyLabel ? ' label="body"' : ""}>Text</p></qti-item-body></qti-assessment-item>`;
-
-/**
- * The node laws a document's rows break, by the host oracle.
- *
- * @param rows - The rows.
- * @returns The laws, once each.
- */
-const nodeBreaches = (rows: FoldedRows<Composed>): readonly string[] => {
-  const node = new Set<string>(nodeLawNames);
-
-  return [...new Set(documentBreaches("case.xml", rows, laws).map(({ law }) => law))].filter(
-    (law) => node.has(law),
-  );
-};
-
-/**
- * Write the `ElementType` fact of one fact's element under a type: its node's tuple, and the
- * governor the type gives it (`governorOf`), so its own `E1_derived` holds.
- *
- * @param rows - The facts.
- * @param at - The element's fact's index in document order.
- * @param type - The type's handle.
- * @returns The fact.
- */
-const typeFactOf = (rows: readonly Stated[], at: number, type: string): Stated => {
-  const node = rows[at]?.fact ?? assert.fail(`no fact at ${String(at)}`);
-  const version = String(node["version"]);
-  const kind = String(node["kind"]);
-
-  return {
-    fact: {
-      document: node["document"] ?? "",
-      governor: governorOf(version, kind, Option.some(type)),
-      kind,
-      node: node["id"] ?? "",
-      type,
-      version,
-    },
-    relation: ElementType,
-  };
-};
 
 /**
  * Assert PostgreSQL refused a case with one of the SQLSTATEs and by a constraint of one of the
@@ -916,62 +605,10 @@ const targetOf = (
   return at;
 };
 
-/**
- * The key of one of the counted or barred folds' hidden accumulators, a case's breach of one.
- *
- * @param end - The fold, by its end on the parent.
- * @param side - The accumulator.
- * @returns The key.
- */
-const childFold = (end: "countedChildren" | "barredChildren", side: "before" | "after") =>
-  accumulatorOf(side, `Node.${end}`, "Node.children");
-
 describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
   layer(NodeServices.layer, { excludeTestServices: true })(
     "Node's laws, judged by PostgreSQL",
     (it) => {
-      it.effect(
-        "accepts every document of the three accepted corpus packages, and a lawful item's rows sent successor before predecessor",
-        () =>
-          // Oracle: the corpus verdicts (`verdicts/qti-examples-0a92fbb.tsv`: sharedMedia, simple and svg
-          // accepted), and fin.md §11's row-order obligation: an INSERT whose rows arrive successor
-          // before predecessor passes the immediate predecessor key, which PostgreSQL checks at the
-          // statement's end. The last axis is checked once the statement is in.
-          // Bound: every XML entry of the three packages.
-          Effect.gen(function* accepted() {
-            const client = yield* loginSession;
-            const lastAxis = namesOf(yield* constraintsOf(client), "last axis");
-            const packages = (yield* materializeCorpus()).filter(({ name }) =>
-              acceptedPackages.has(name),
-            );
-            assert.strictEqual(packages.length, acceptedPackages.size);
-            for (const { dir, name } of packages) {
-              const files = yield* readEntries(dir);
-              const version = yield* Effect.orDie(
-                Effect.fromResult(versionOf(schemaVersions, yield* declaredVersionOf(files))),
-              );
-              for (const file of files.filter(({ path }) => path.endsWith(".xml"))) {
-                const document = yield* Effect.orDie(readXml(file.bytes));
-                const tree = yield* Effect.orDie(shred(document, version, shredGrammarOf(grammar)));
-                const rows = yield* Effect.orDie(
-                  Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar))),
-                );
-                const verdict = yield* judged(client, statedInserts(nodeFactsOf(rows)), lastAxis);
-
-                assert.isTrue(
-                  Option.isNone(verdict),
-                  `${name}/${file.path}: ${Formatter.format(verdict)}`,
-                );
-              }
-            }
-
-            const reversed = nodeFactsOf(yield* foldedOf(lawfulItem)).toReversed();
-
-            assert.isTrue(Option.isNone(yield* judged(client, statedInserts(reversed), lastAxis)));
-          }),
-        leaseTestTimeoutMs,
-      );
-
       it.effect(
         "refuses each tree corruption by one of the tree's natives: a ring, a shared child, a gap, an orphan, a node under another document's root, and trees.md §7's six",
         () =>
@@ -1092,6 +729,9 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
               },
             ];
             const lastAxis = namesOf(constraints, "last axis");
+            const reversed = nodeFactsOf(yield* foldedOf(lawfulItem)).toReversed();
+
+            assert.isTrue(Option.isNone(yield* judged(client, statedInserts(reversed), lastAxis)));
             for (const corruption of corruptions) {
               assertRefused(
                 constraints,
@@ -1100,451 +740,6 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 treeRoles,
                 corruption.name,
               );
-            }
-          }),
-        leaseTestTimeoutMs,
-      );
-
-      it.effect(
-        "refuses each retired content rule's item by its law, and accepts each law's lawful twin",
-        () =>
-          // Oracle: the host law model (`#pantry/test/oracle.ts`'s `documentBreaches`), which finds
-          // exactly the case's law among the node laws, with any law it breaks beside over rows the
-          // case does not write, and none in the lawful items, against PostgreSQL's verdict on the
-          // case's node rows, which names the case's law.
-          // Bound: the seven items of `lawCases` and the two lawful items.
-          Effect.gen(function* content() {
-            const client = yield* loginSession;
-            const constraints = yield* constraintsOf(client);
-            for (const xml of [lawfulItem, mathItem]) {
-              const rows = yield* foldedOf(xml);
-
-              assert.deepStrictEqual(nodeBreaches(rows), []);
-              assert.isTrue(
-                Option.isNone(
-                  yield* judged(
-                    client,
-                    statedInserts(nodeFactsOf(rows)),
-                    namesOf(constraints, "last axis"),
-                  ),
-                ),
-              );
-            }
-
-            for (const { beside = [], law, name, xml } of lawCases) {
-              const rows = yield* foldedOf(xml);
-
-              assert.deepStrictEqual(nodeBreaches(rows), [law, ...beside], name);
-              assertRefused(
-                constraints,
-                yield* judged(client, statedInserts(nodeFactsOf(rows))),
-                ["23514"],
-                new Set([law]),
-                name,
-              );
-            }
-          }),
-        leaseTestTimeoutMs,
-      );
-
-      it.effect(
-        "refuses a shared kind's state outside Symbol or unfollowed, a junk accumulator at each fold's first slot, a wrong after, a wrong nearest, an end that is not its node's characters' and an xsi:type outside XsiType",
-        () =>
-          // Oracle: the specification as a checker: N5's Symbol and Follow (`m:mfrac`'s two `m:ci`,
-          // their positions read from the closed relations), fin.md §4.3's first-slot pins and
-          // combine CHECKs, N8, E1's ends (reading 127) and N12, each an edit of a lawful item's rows that
-          // breaks the one law.
-          // Bound: the two lawful items under each named edit.
-          Effect.gen(function* rowLaws() {
-            const client = yield* loginSession;
-            const constraints = [
-              ...(yield* constraintsOf(client)),
-              ...(yield* constraintsOf(client, "element_type")),
-            ];
-            const lawfulRows = yield* foldedOf(lawfulItem);
-            // Each edit is of a lawful item's facts, every value the writer derives for them pinned,
-            // so it breaks the one law it names.
-            const lawful = pinned(nodeFactsOf(lawfulRows));
-            const math = pinned(nodeFactsOf(yield* foldedOf(mathItem)));
-            const firstCi = targetOf(
-              math,
-              (row) => row["kind"] === "m:ci" && row["at"] === 0n,
-              "first m:ci",
-            );
-            const secondCi = targetOf(
-              math,
-              (row) => row["kind"] === "m:ci" && row["at"] === 1n,
-              "second m:ci",
-            );
-            // The positions N5 reads for the second m:ci, from the closed relations themselves: the
-            // positions Symbol names for m:ci under m:mfrac's shared model (N5 admitted), and those
-            // Follow steps to from its predecessor's state (N5 Follow). Each case below states its
-            // position by them, so the laws it breaks are its premise, checked here, never an
-            // accident of which CHECK PostgreSQL names first.
-            const second = math[secondCi]?.fact ?? {};
-            const sharedModel = SharedModelOf.rows.find(
-              (row) => row.version === second["version"] && row.parent === second["parentKind"],
-            )?.model;
-            const contentModel = ContentModelOf.rows.find(
-              (row) => row.version === second["version"] && row.parent === second["parentKind"],
-            )?.model;
-            const symbolPositions = new Set<string>(
-              symbolRowsOf(SymbolSetOf, SymbolMember)
-                .filter((row) => row.model === sharedModel && row.kind === "m:ci")
-                .map(({ position }) => position),
-            );
-            const followed = new Set<string>(
-              followPairsOf({ followMember: FollowMember, followSetOf: FollowSetOf })
-                .filter((row) => row.model === contentModel && row.from === second["was"])
-                .map(({ to }) => to),
-            );
-            const breaks = (position: string) =>
-              [
-                ...(symbolPositions.has(position) ? [] : ["N5 admitted"]),
-                ...(followed.has(position) ? [] : ["N5 Follow"]),
-              ].toSorted();
-            const firstState = String(math[firstCi]?.fact["state"]);
-            const unnamed = Position.handles.find(
-              (position) =>
-                position !== "0" && !symbolPositions.has(position) && !followed.has(position),
-            );
-            assert.deepStrictEqual(breaks(firstState), ["N5 Follow"], "the first m:ci's position");
-            assert.isDefined(unnamed, "a position neither Symbol nor Follow names for m:ci");
-
-            const firstMember = targetOf(
-              lawful,
-              (row) => row["at"] === 0n && row["start"] !== 0n,
-              "first child",
-            );
-            const lastElement = targetOf(
-              lawful,
-              (row, index) => index > 0 && row["kind"] === "qti-item-body",
-              "item body",
-            );
-            const textLeaf = targetOf(lawful, (row) => row["kind"] === "text", "text node");
-            const cases: readonly {
-              readonly codes: readonly string[];
-              readonly name: string;
-              readonly roles: readonly string[];
-              readonly rows: readonly Stated[];
-            }[] = [
-              {
-                codes: ["23514"],
-                name: "a shared kind at a Symbol position Follow does not step to: the first m:ci's",
-                roles: breaks(firstState),
-                rows: edited(math, secondCi, { state: firstState }),
-              },
-              {
-                // A position Symbol does not name is no position Follow steps to either, so the
-                // edit breaks both laws, and either refusal is the case's.
-                codes: ["23514"],
-                name: "a shared kind at a position Symbol does not name",
-                roles: breaks(unnamed ?? ""),
-                rows: edited(math, secondCi, { state: unnamed ?? "" }),
-              },
-              {
-                codes: ["23514"],
-                name: "a junk elements accumulator at slot 0",
-                roles: ["elements fold"],
-                rows: edited(lawful, firstMember, { elementsWas: 1n }),
-              },
-              {
-                codes: ["23514"],
-                name: "a junk counted accumulator at slot 0",
-                roles: ["counted fold"],
-                rows: edited(
-                  lawful,
-                  firstMember,
-                  {},
-                  {
-                    [childFold("countedChildren", "after")]: 1,
-                    [childFold("countedChildren", "before")]: 1,
-                  },
-                ),
-              },
-              {
-                codes: ["23514"],
-                name: "a junk barred accumulator at slot 0",
-                roles: ["barred fold"],
-                rows: edited(
-                  lawful,
-                  firstMember,
-                  {},
-                  {
-                    [childFold("barredChildren", "after")]: 1,
-                    [childFold("barredChildren", "before")]: 1,
-                  },
-                ),
-              },
-              {
-                codes: ["23514"],
-                name: "a junk string-value accumulator at slot 0",
-                roles: ["string value fold"],
-                rows: edited(lawful, firstMember, { charsAfter: "x", charsWas: "x" }),
-              },
-              {
-                codes: ["23514"],
-                name: "a junk state copy at slot 0",
-                roles: ["was pin", "N5 Follow"],
-                rows: edited(lawful, firstMember, { was: "1" }),
-              },
-              {
-                codes: ["23514"],
-                name: "a wrong after: an element counted twice",
-                roles: ["elements fold"],
-                rows: edited(lawful, lastElement, {
-                  elements: BigInt(lawful[lastElement]?.fact["elements"] ?? 0n) + 1n,
-                }),
-              },
-              {
-                codes: ["23514"],
-                name: "a nearest that is no interaction's",
-                roles: ["N8 nearest"],
-                rows: edited(lawful, textLeaf, { nearest: lawful[textLeaf]?.fact["parent"] ?? "" }),
-              },
-              {
-                codes: ["23514"],
-                name: "a text whose first is not its first character",
-                roles: ["E1 derived"],
-                rows: edited(lawful, textLeaf, { first: "x" }),
-              },
-              {
-                codes: ["23514"],
-                name: "an element with a last character, though it holds none",
-                roles: ["E1 derived"],
-                rows: edited(lawful, lastElement, { last: "x" }),
-              },
-              {
-                codes: ["23514"],
-                name: "an xsi:type outside XsiType",
-                roles: ["xsi type", "other"],
-                rows: [...lawful, typeFactOf(lawful, lastElement, "xs:anyType")],
-              },
-            ];
-            for (const { codes, name, roles, rows } of cases) {
-              assertRefused(
-                constraints,
-                yield* judged(client, statedInserts(rows)),
-                codes,
-                new Set(roles),
-                name,
-              );
-            }
-          }),
-        leaseTestTimeoutMs,
-      );
-
-      it.effect(
-        "refuses a root ancestry its document's context does not state, carried consistently down the tree, by the root's context containment, and accepts the document's own (C10, spec reading 117)",
-        () =>
-          // Oracle: the specification as a checker, spec reading 117 and node.ts's N1: a document
-          // node's ancestry is its document's context, which its `Document` row states through
-          // its document node's fixed target (`#pantry/qti/chardata.ts`), the containment
-          // `Document(node, nodeChildren, context, …) to Node(id, children, ancestry, …)`, set
-          // immediate. N1 pins no ancestry, and a flag carried down
-          // the tree keeps E1 (ancestry is parentAncestry with Enters) and N6 (the flag is one no
-          // kind of the item bans), so the containment is the one law the edit breaks: 23503 on
-          // its key.
-          // Bound: the lawful item with its `Document` row of the empty context, and the same rows
-          // with one flag leaked into the root and carried down the tree.
-          Effect.gen(function* rootContext() {
-            const client = yield* loginSession;
-            const key = yield* constraintDescribed(
-              client,
-              "document",
-              "foreign key Document(node, nodeChildren, context, %) to Node(id, children, ancestry, %)",
-            );
-            const lawfulRows = yield* foldedOf(lawfulItem);
-            const lawful = nodeFactsOf(lawfulRows);
-            const flag = Flag.handles.find(
-              (handle) =>
-                !Banned.rows.some(
-                  (row) =>
-                    row.flag === handle && lawful.some(({ fact }) => fact["kind"] === row.kind),
-                ),
-            );
-            assert.isDefined(flag, "a flag no kind of the item bans");
-
-            const leaked = nodeFactsOf({
-              ...lawfulRows,
-              nodes: lawfulRows.nodes.map((node) => ({
-                ...node,
-                derived: {
-                  ...node.derived,
-                  ancestry: new Set([...node.derived.ancestry, flag ?? ""]),
-                },
-                parentAncestry: new Set([...node.parentAncestry, flag ?? ""]),
-              })),
-            });
-            const root = lawful.find(({ fact }) => fact["start"] === 0n)?.fact ?? {};
-            const document: Stated = {
-              fact: {
-                assembled: false,
-                charset: utf8Label,
-                context: root["ancestry"] ?? "",
-                contextNearest: root["nearest"] ?? "",
-                contextNearestKind: root["nearestKind"] ?? "",
-                documentType: "imsqti_item_xmlv3p0",
-                exportCharset: utf8Label,
-                node: root["id"] ?? "",
-                nodeChildren: root["children"] ?? 0n,
-                package: "00000000-0000-4000-8000-0000000000ff",
-                path: "item.xml",
-                rootKind: "qti-assessment-item",
-                version: root["version"] ?? "",
-              },
-              relation: Document,
-            };
-
-            assertVerdict(
-              yield* judged(client, statedInserts([...lawful, document]), [key]),
-              key,
-              false,
-              "the document's own context",
-              "23503",
-            );
-            assertVerdict(
-              yield* judged(client, statedInserts([...leaked, document]), [key]),
-              key,
-              true,
-              "a leaked root ancestry, carried consistently down the tree",
-              "23503",
-            );
-          }),
-        leaseTestTimeoutMs,
-      );
-
-      it.effect(
-        "refuses a foreign element of simple type holding an element and a prefixed one in no namespace, and accepts each one's lawful twin",
-        () =>
-          // Oracle: the host law model (`#pantry/test/oracle.ts`'s `documentBreaches`), which finds
-          // none of the node laws in each lawful document and exactly the case's law in its
-          // corruption, against PostgreSQL's verdict: XML Schema 1.0 Part 1 §3.3.4 clause 3.1.2
-          // (Foreign simple content), and Namespaces in XML 1.0 §5 and §6.2 (an element in no
-          // namespace has no prefix).
-          // Bound: the two cases of `foreignCases`, a lawful document and one corruption each.
-          Effect.gen(function* foreign() {
-            const client = yield* loginSession;
-            const constraints = yield* constraintsOf(client);
-            for (const { corrupt, law, lawful, name } of foreignCases) {
-              const rows = yield* foldedOf(lawful);
-
-              assert.deepStrictEqual(nodeBreaches(rows), [], name);
-              assert.isTrue(
-                Option.isNone(
-                  yield* judged(
-                    client,
-                    statedInserts(nodeFactsOf(rows)),
-                    namesOf(constraints, "last axis"),
-                  ),
-                ),
-                name,
-              );
-
-              const broken =
-                "xml" in corrupt
-                  ? yield* foldedOf(corrupt.xml)
-                  : {
-                      ...rows,
-                      nodes: rows.nodes.map((node) =>
-                        node.kind === corrupt.kind ? { ...node, ...corrupt.fields } : node,
-                      ),
-                    };
-
-              assert.deepStrictEqual(nodeBreaches(broken), [law], name);
-              assertRefused(
-                constraints,
-                yield* judged(client, statedInserts(nodeFactsOf(broken))),
-                ["23514"],
-                new Set([law]),
-                name,
-              );
-            }
-          }),
-        leaseTestTimeoutMs,
-      );
-
-      it.effect(
-        "refuses a 3.0.1 item root's own label without tool-name and tool-version, by Label tools, and accepts a 3.0.0 one, as the law oracle judges every labelled item of the box (spec reading 128)",
-        () =>
-          // Oracle: the law oracle's Label tools over each folded item (`documentBreaches`), against
-          // QTI 3.0.1's §4.1.3, the item's `label`: "If an item uses labels then values for the
-          // associated toolName and toolVersion attributes must also be provided", where 3.0.0's
-          // §4.1.3 states no such sentence; a body element's label asks for them in both
-          // (§5.16.5). PostgreSQL judges the item's `Node` and `Attribute` rows with the
-          // `LabelUse` rows the import's builder writes (`#pantry/import/overlays/identity.ts`),
-          // by the four foreign keys of Label tools, set immediate: each label in
-          // `labelAttributes` is a use and each use such a label (both ways), and an item's use
-          // finds the root's `tool-name` and `tool-version`. A breach is 23503 on one of them.
-          // Bound: the small scope exhausted, both versions by the root's label, tool-name and
-          // tool-version and the body's label, 32 items; the two named cases among them.
-          Effect.gen(function* labelTools() {
-            const client = yield* loginSession;
-            const keys = [
-              yield* constraintDescribed(
-                client,
-                "label_use",
-                `foreign key LabelUse(document where %"tool-name"%`,
-              ),
-              yield* constraintDescribed(
-                client,
-                "label_use",
-                `foreign key LabelUse(document where %"tool-version"%`,
-              ),
-              yield* constraintDescribed(
-                client,
-                "label_use",
-                "foreign key LabelUse(node) to Attribute(node where %",
-              ),
-              yield* constraintDescribed(
-                client,
-                "attribute",
-                "foreign key Attribute(node where %) to LabelUse(node, document)",
-              ),
-            ];
-            const flags = [false, true] as const;
-            for (const version of ["3.0.0", "3.0.1"] as const) {
-              for (const rootLabel of flags) {
-                for (const toolName of flags) {
-                  for (const toolVersion of flags) {
-                    for (const bodyLabel of flags) {
-                      const on = { bodyLabel, rootLabel, toolName, toolVersion };
-                      const label = `${version} ${JSON.stringify(on)}`;
-                      const { rows, tree } = yield* foldedAt(labelledItemOf(on), version);
-                      const breached = documentBreaches("item.xml", rows, laws).some(
-                        ({ law }) => law === "Label tools",
-                      );
-                      if (rootLabel && !toolName && !toolVersion && !bodyLabel) {
-                        assert.strictEqual(breached, version === "3.0.1", `the oracle: ${label}`);
-                      }
-
-                      const uses = identityRowsOf(ownViewOf(tree, idOf), {
-                        assembled: false,
-                        documentType: "imsqti_item_xmlv3p0",
-                      }).LabelUse.values();
-                      const verdict = yield* judged(
-                        client,
-                        statedInserts([
-                          ...nodeFactsOf(rows),
-                          ...attributeFactsOf(rows),
-                          ...[...uses].map((use): Stated => ({ fact: use, relation: LabelUse })),
-                        ]),
-                        keys,
-                      );
-                      if (breached) {
-                        const refusal = Option.getOrUndefined(verdict);
-                        assert.strictEqual(refusal?.code, "23503", label);
-                        assert.include(keys, refusal?.constraint, label);
-                      } else {
-                        assert.isTrue(
-                          Option.isNone(verdict),
-                          `${label}: ${Formatter.format(verdict)}`,
-                        );
-                      }
-                    }
-                  }
-                }
-              }
             }
           }),
         leaseTestTimeoutMs,
