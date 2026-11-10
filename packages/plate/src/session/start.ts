@@ -1025,6 +1025,7 @@ export const startTest = (
               datestamp,
               duration: 0,
               firstOutcomes: Option.none(),
+              locked: false,
               presented: false,
               record: fresh(accepted.item, `${instance}.${index + 1}`),
               ref: ref.identifier,
@@ -1041,6 +1042,7 @@ export const startTest = (
     const first = Option.map(Arr.head(places), (place) => place.part);
     const session: TestSession = {
       document: test.test.document,
+      expired: [],
       instance,
       items: delivered.map(({ item }) => item),
       kind: "test",
@@ -1165,9 +1167,9 @@ const shuffledBy = (
 /**
  * Derive an item's place, session control, configuration and whether it is closed.
  *
- * An item is closed when the test has closed, when its part has ended, or when its effective
- * attempt limit is above 0 and the record's `numAttempts`, the count of processed attempts, has
- * reached it.
+ * An item is closed when the test has closed, when its part has ended, when a timed scope that
+ * holds it has expired (the item is `locked`), or when its effective attempt limit is above 0 and
+ * the record's `numAttempts`, the count of processed attempts, has reached it.
  *
  * @param index The test, indexed for the session.
  * @param session The session.
@@ -1191,7 +1193,10 @@ const inspect = (
 
     return {
       closed:
-        session.status === "closed" || ended || (limit > 0 && item.record.numAttempts >= limit),
+        session.status === "closed" ||
+        ended ||
+        item.locked ||
+        (limit > 0 && item.record.numAttempts >= limit),
       configuration: configured,
       control,
       place,

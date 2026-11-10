@@ -34,6 +34,7 @@ import { parseHtml } from "#plate/test/round-trip.ts";
  */
 const session: TestSession = {
   document: "tests/t.xml",
+  expired: [],
   instance: "sitting",
   items: [],
   kind: "test",

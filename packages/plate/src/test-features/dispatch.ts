@@ -19,14 +19,17 @@ import type {
   SequencePlace,
   TestFeatureKey,
   TestFeatureModule,
+  TimedScope,
 } from "#plate/test-features/contract.ts";
 import type { TestFeatureTable } from "#plate/test-features/table.ts";
 
 /**
  * What a gate decides for an intent: a feature's refusal, the sequence index a move reaches in a
- * feature's place of the modes' target, or nothing.
+ * feature's place of the modes' target, the timed scope whose time has run out, which the hub
+ * expires in place of the intent, or nothing.
  */
 export type Gated =
+  | { readonly kind: "expire"; readonly scope: TimedScope }
   | { readonly kind: "refused"; readonly refusal: FeatureRefusal }
   | { readonly kind: "target"; readonly sequenceIndex: number };
 
@@ -69,7 +72,8 @@ export const sequencedBy = (
 
 /**
  * Ask each module, in order, what it does with an intent, and give the first answer: a refusal
- * under the module's key, or a move's target.
+ * under the module's key, a move's target, or the expiry of a timed scope, passed through as the
+ * module gave it.
  *
  * @param features The table.
  * @param context The intent, the session, the test, and the time where the hub has one.
