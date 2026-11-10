@@ -218,7 +218,7 @@ const shortCircle = `
   <qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="identifier"/>
   <qti-item-body>
     <qti-hotspot-interaction response-identifier="RESPONSE" max-choices="0">
-      <img src="../images/hotspot-map.svg" alt="Four plots of a garden" width="400" height="300"/>
+      <img src="images/hotspot-map.svg" alt="Four plots of a garden" width="400" height="300"/>
       <qti-hotspot-choice identifier="A" shape="rect" coords="40,40,160,120" hotspot-label="The square plot"/>
       <qti-hotspot-choice identifier="B" shape="ellipse" coords="300,90,50" hotspot-label="The round plot"/>
       <qti-hotspot-choice identifier="C" shape="circle" coords="140,220,40,99" hotspot-label="The oval plot"/>
@@ -236,7 +236,7 @@ const templated = `
   </qti-template-declaration>
   <qti-item-body>
     <qti-hotspot-interaction response-identifier="RESPONSE" max-choices="0">
-      <img src="../images/hotspot-map.svg" alt="Four plots of a garden" width="400" height="300"/>
+      <img src="images/hotspot-map.svg" alt="Four plots of a garden" width="400" height="300"/>
       <qti-hotspot-choice identifier="A" shape="rect" coords="40,40,160,120" hotspot-label="The square plot"/>
       <qti-hotspot-choice identifier="B" shape="circle" coords="300,90,50" hotspot-label="The round plot" template-identifier="SHOWN" show-hide="show"/>
       <qti-hotspot-choice identifier="C" shape="poly" coords="60,260,140,180,220,260" hotspot-label="The triangular plot"/>
@@ -244,21 +244,16 @@ const templated = `
   </qti-item-body>`;
 
 describe("the Hotspot module", () => {
-  it.effect(
-    "[Q-10] open accepts the fixture and its verdict names no unsupported qti-hotspot-interaction",
-    () =>
-      Effect.gen(function* opened() {
-        for (const file of ["hotspot.xml", "hotspot-single.xml"]) {
-          const verdict = yield* open(`m3d/items/${file}`, readFileSync(path.join(fixtures, file)));
+  it.effect("[Q-10] open accepts the fixture and its verdict lists no unsupported part", () =>
+    Effect.gen(function* opened() {
+      for (const file of ["hotspot.xml", "hotspot-single.xml"]) {
+        const verdict = yield* open(`m3d/items/${file}`, readFileSync(path.join(fixtures, file)));
 
-          assert.isTrue(Option.isSome(acceptedItem(verdict)), `${file}: ${verdict.verdict}`);
-          assert.notInclude(
-            unsupportedFeatures(verdict).map((entry) => entry.feature),
-            "qti-hotspot-interaction",
-            file,
-          );
-        }
-      }),
+        assert.isTrue(Option.isSome(acceptedItem(verdict)), `${file}: ${verdict.verdict}`);
+        assert.strictEqual(verdict.verdict, "accepted", file);
+        assert.deepStrictEqual(unsupportedFeatures(verdict), [], file);
+      }
+    }),
   );
 
   it.effect(
@@ -362,7 +357,8 @@ describe("the Hotspot module", () => {
           shapeOf,
         );
         const [rightBottom] = partsIn(single.tree, "outline").map(shapeOf);
-        const rect = { height: "80", width: "120", x: "40", y: "40" };
+        const hit = { "pointer-events": "visiblePainted" };
+        const rect = { ...hit, height: "80", width: "120", x: "40", y: "40" };
 
         assert.deepStrictEqual(leftTop, {
           attrs: { ...rect, "data-shape": "rect" },
@@ -370,15 +366,23 @@ describe("the Hotspot module", () => {
         });
         assert.deepStrictEqual(rightBottom, leftTop);
         assert.deepStrictEqual(round, {
-          attrs: { cx: "300", cy: "90", "data-shape": "circle", r: "50" },
+          attrs: { ...hit, cx: "300", cy: "90", "data-shape": "circle", r: "50" },
           tag: "circle",
         });
         assert.deepStrictEqual(triangle, {
-          attrs: { "data-shape": "poly", points: "60,260 140,180 220,260" },
+          attrs: { ...hit, "data-shape": "poly", points: "60,260 140,180 220,260" },
           tag: "polygon",
         });
         assert.deepStrictEqual(everywhere, {
-          attrs: { "data-shape": "default", height: "100%", width: "100%", x: "0", y: "0" },
+          attrs: {
+            "data-shape": "default",
+            fill: "none",
+            height: "100%",
+            "pointer-events": "none",
+            width: "100%",
+            x: "0",
+            y: "0",
+          },
           tag: "rect",
         });
         for (const outline of partsIn(multiple.tree, "outline")) {
@@ -410,7 +414,13 @@ describe("the Hotspot module", () => {
       );
       assert.strictEqual(nameOf(partsIn(tree, "control")[1] ?? tree, tree), "The round plot");
       assert.deepStrictEqual(shapeOf(partsIn(tree, "outline")[1] ?? tree), {
-        attrs: { cx: "140", cy: "220", "data-shape": "circle", r: "40" },
+        attrs: {
+          cx: "140",
+          cy: "220",
+          "data-shape": "circle",
+          "pointer-events": "visiblePainted",
+          r: "40",
+        },
         tag: "circle",
       });
     }),

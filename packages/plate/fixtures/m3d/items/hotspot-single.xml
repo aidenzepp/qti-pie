@@ -16,7 +16,7 @@
   <qti-item-body>
     <qti-hotspot-interaction response-identifier="RESPONSE" max-choices="1">
       <qti-prompt>Which plot has four straight sides?</qti-prompt>
-      <img src="../images/hotspot-map.svg" alt="Four plots of a garden" width="400" height="300"/>
+      <img src="images/hotspot-map.svg" alt="Four plots of a garden" width="400" height="300"/>
       <qti-hotspot-choice identifier="SQUARE" shape="rect" coords="160,120,40,40" hotspot-label="The square plot"/>
       <qti-hotspot-choice identifier="ROUND" shape="circle" coords="300,90,50"/>
       <qti-hotspot-choice identifier="TRIANGLE" shape="poly" coords="60,260,140,180,220,260" hotspot-label="The triangular plot"/>
