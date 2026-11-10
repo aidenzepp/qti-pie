@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m3e-composite" title="Four parts" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="COLOUR" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>B</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-response-declaration identifier="CITY" cardinality="single" base-type="string">
+    <qti-correct-response>
+      <qti-value>Lisbon</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-response-declaration identifier="TENSE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>PAST</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-response-declaration identifier="NOTE" cardinality="single" base-type="string"/>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-outcome-declaration identifier="MAXSCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>3</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-choice-interaction response-identifier="COLOUR" max-choices="1" min-choices="1">
+      <qti-prompt>Which colour do blue and yellow paint make when they are mixed?</qti-prompt>
+      <qti-simple-choice identifier="A">Orange</qti-simple-choice>
+      <qti-simple-choice identifier="B">Green</qti-simple-choice>
+      <qti-simple-choice identifier="C">Purple</qti-simple-choice>
+    </qti-choice-interaction>
+    <p>The capital of Portugal is <qti-text-entry-interaction response-identifier="CITY" expected-length="10"/>, and last summer we <qti-inline-choice-interaction response-identifier="TENSE">
+        <qti-inline-choice identifier="PRESENT">visit</qti-inline-choice>
+        <qti-inline-choice identifier="PAST">visited</qti-inline-choice>
+        <qti-inline-choice identifier="FUTURE">will visit</qti-inline-choice>
+      </qti-inline-choice-interaction> it.</p>
+    <qti-extended-text-interaction response-identifier="NOTE" expected-lines="3">
+      <qti-prompt>Add a note about the trip, if you like. It is not scored.</qti-prompt>
+    </qti-extended-text-interaction>
+  </qti-item-body>
+  <qti-response-processing>
+    <qti-response-condition>
+      <qti-response-if>
+        <qti-match>
+          <qti-variable identifier="COLOUR"/>
+          <qti-correct identifier="COLOUR"/>
+        </qti-match>
+        <qti-set-outcome-value identifier="SCORE">
+          <qti-sum>
+            <qti-variable identifier="SCORE"/>
+            <qti-base-value base-type="float">1</qti-base-value>
+          </qti-sum>
+        </qti-set-outcome-value>
+      </qti-response-if>
+    </qti-response-condition>
+    <qti-response-condition>
+      <qti-response-if>
+        <qti-match>
+          <qti-variable identifier="CITY"/>
+          <qti-correct identifier="CITY"/>
+        </qti-match>
+        <qti-set-outcome-value identifier="SCORE">
+          <qti-sum>
+            <qti-variable identifier="SCORE"/>
+            <qti-base-value base-type="float">1</qti-base-value>
+          </qti-sum>
+        </qti-set-outcome-value>
+      </qti-response-if>
+    </qti-response-condition>
+    <qti-response-condition>
+      <qti-response-if>
+        <qti-match>
+          <qti-variable identifier="TENSE"/>
+          <qti-correct identifier="TENSE"/>
+        </qti-match>
+        <qti-set-outcome-value identifier="SCORE">
+          <qti-sum>
+            <qti-variable identifier="SCORE"/>
+            <qti-base-value base-type="float">1</qti-base-value>
+          </qti-sum>
+        </qti-set-outcome-value>
+      </qti-response-if>
+    </qti-response-condition>
+  </qti-response-processing>
+</qti-assessment-item>
