@@ -20,6 +20,7 @@ import type { MoveIntent, MoveRefused } from "#plate/session/navigate.ts";
 import type { Intent, TestSession } from "#plate/session/session.ts";
 import { current, readingBase } from "#plate/session/start.ts";
 import type { ItemNotInSession, ItemView } from "#plate/session/start.ts";
+import type { Supports } from "#plate/supports.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 
@@ -65,6 +66,9 @@ const takesMove = (view: ItemView, target: Result.Result<number, MoveRefused>): 
  * @param session The session.
  * @param items The test's items, where the host has them, which the moves' gate is handed; the
  *   list is the same with or without them, since every module decides a move from the session.
+ * @param supports The candidate's supports, which the moves' gate is handed, as `advance` hands
+ *   them: a candidate with additional testing time (A-6) is offered the moves its extended
+ *   `max-time` allows. None for a candidate with none, as `noSupports`.
  * @returns The intents; {@link ItemNotInSession} for an open session whose position is past its
  *   items; {@link UnknownItemRef} when the test holds no item ref an item names, as when the
  *   session belongs to another test.
@@ -73,6 +77,7 @@ export const allowedIntents = (
   test: AcceptedTest,
   session: TestSession,
   items?: ReadonlyMap<string, Accepted>,
+  supports?: Supports,
 ): Result.Result<readonly Intent[], ItemNotInSession | UnknownItemRef> =>
   Result.flatMap(current(test, session, readingBase), (shown) => {
     if (shown.kind === "summary") {
@@ -98,7 +103,7 @@ export const allowedIntents = (
     ];
 
     return Result.map(
-      moveTargets(test, session, testFeatures, Option.none(), items),
+      moveTargets(test, session, testFeatures, Option.none(), items, supports),
       (decide): readonly Intent[] => [
         ...moves.filter((intent) => takesMove(shown, decide(intent))),
         ...submissions,

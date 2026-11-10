@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  identifier="additional-time" title="A timed test for a candidate with additional testing time">
+  <qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual">
+    <qti-time-limits max-time="600"/>
+    <qti-assessment-section identifier="S" title="A timed section" visible="true">
+      <qti-time-limits max-time="300"/>
+      <qti-assessment-item-ref identifier="I1" href="item.xml"/>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="T" title="An untimed section" visible="true">
+      <qti-assessment-item-ref identifier="I2" href="item.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+</qti-assessment-test>

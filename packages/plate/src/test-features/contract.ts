@@ -41,6 +41,7 @@ import type { Expression } from "#plate/model/expression.ts";
 import type { AttributeReaders } from "#plate/model/reader.ts";
 import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
 import type { Intent, TestSession } from "#plate/session/session.ts";
+import type { Supports } from "#plate/supports.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
@@ -204,8 +205,8 @@ export interface SequenceContext {
 /**
  * What the session hands a module's `gate` before an intent is carried out: the intent, the
  * session as it stands, the test, the time of the request where the hub has one (`advance` and
- * `move` have it; `moveTargets`, which decides the moves a session allows now, has none), and the
- * test's items where the hub has them.
+ * `move` have it; `moveTargets`, which decides the moves a session allows now, has none), the
+ * test's items where the hub has them, and the candidate's supports where the host passed them.
  */
 export interface GateContext {
   readonly intent: Intent;
@@ -218,6 +219,14 @@ export interface GateContext {
   readonly items: Option.Option<ReadonlyMap<string, Accepted>>;
   readonly now: Option.Option<Date>;
   readonly session: TestSession;
+  /**
+   * The candidate's supports (`Supports`, read from a PNP by `readPnp`), as the host passed them
+   * to the hub that asked: absent when the host passed none, which a module reads as `noSupports`.
+   * `qti-time-limits` (issue m4-03) reads `additionalTestingTime` here (A-6), so a candidate's
+   * additional time reaches the gate through the one place a session function already hands the
+   * modules its inputs. Only `gate` is handed it, never `enter`.
+   */
+  readonly supports?: Supports | undefined;
   readonly test: Test;
 }
 
@@ -227,7 +236,7 @@ export interface GateContext {
  * transition, and the sequence index of the place. There is no intent: the hub asks the same way
  * whatever brought the session to the place.
  */
-export type EnterContext = Omit<GateContext, "intent"> & {
+export type EnterContext = Omit<GateContext, "intent" | "supports"> & {
   /**
    * The sequence index, counted from 1, of the place the session is about to present.
    */

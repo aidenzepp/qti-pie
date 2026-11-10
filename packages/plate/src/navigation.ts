@@ -28,6 +28,7 @@ import { allowedIntents } from "#plate/session/intents.ts";
 import type { Intent, SessionItem, TestSession } from "#plate/session/session.ts";
 import { current, itemViews, readingBase } from "#plate/session/start.ts";
 import type { ItemNotInSession } from "#plate/session/start.ts";
+import type { Supports } from "#plate/supports.ts";
 import { timeStateOf } from "#plate/test-features/time-limits.ts";
 import type { TimeState } from "#plate/test-features/time-limits.ts";
 import type { AcceptedTest } from "#plate/validate/verdict.ts";
@@ -215,6 +216,9 @@ const closedShown = (test: Test, session: TestSession): Shown => {
  *
  * @param test The test the session was started from.
  * @param session The session.
+ * @param supports The candidate's supports, which the time in force and the intents allowed read:
+ *   a candidate with additional testing time (A-6) sees the extended time left, and is offered the
+ *   moves the extended `max-time` allows. None for a candidate with none, as `noSupports`.
  * @returns The navigation; {@link ItemNotInSession} for an open session whose position is past its
  *   items; {@link UnknownItemRef} when the test holds no item ref an item names, as when the
  *   session belongs to another test.
@@ -224,10 +228,11 @@ const closedShown = (test: Test, session: TestSession): Shown => {
 export const navigationState = (
   test: AcceptedTest,
   session: TestSession,
+  supports?: Supports,
 ): Result.Result<NavigationState, ItemNotInSession | UnknownItemRef> =>
   Result.gen(function* navigate() {
     const shownNow = yield* current(test, session, readingBase);
-    const allowed = yield* allowedIntents(test, session);
+    const allowed = yield* allowedIntents(test, session, undefined, supports);
     const shown: Shown =
       shownNow.kind === "item"
         ? {
@@ -251,7 +256,7 @@ export const navigationState = (
       state: stateOf(item, view.disabled),
     }));
 
-    const time = timeStateOf(test.test, session);
+    const time = timeStateOf(test.test, session, supports);
     const state: NavigationState = {
       allowed,
       count: shown.count,
