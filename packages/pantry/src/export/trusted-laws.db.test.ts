@@ -27,7 +27,7 @@ import type { PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The manifest's path, a document every package holds, which no `cp:file`, site or reference names,
@@ -78,7 +78,6 @@ const cases: readonly {
 describe.skipIf(!hasLease)("export/trusted-laws.db.test.ts, on the lease", () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
-    timeout: authorLayerHookTimeoutMs,
   })("the laws the export trusts, judged by PostgreSQL", (it) => {
     for (const { edit, fault, isLaw, name } of cases) {
       it.effect(
