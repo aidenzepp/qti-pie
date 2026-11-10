@@ -200,14 +200,14 @@ export const MapKeyType = relation(
 
 /**
  * The one XML whitespace character between a point's or a pair's two items, as `BaseTypePattern`
- * reads them. Exported for `src/import/refusal.ts`, which names its pattern law.
+ * reads them. Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const Gap = str.regex("^[\\t\\n\\r ]$");
 
 /**
  * One of the two runs a two-item key splits into: characters holding no XML whitespace, of at most
  * {@link keyTextBytes} UTF-8 bytes, the most the key it is cut from holds, so a parse of it reads a
- * bounded text. Exported for `src/import/refusal.ts`, which names its pattern law.
+ * bounded text. Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const Run = str.bytes(keyTextBytes, str.regex("^[^\\t\\n\\r ]+$"));
 

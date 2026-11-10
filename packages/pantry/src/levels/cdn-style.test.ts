@@ -126,7 +126,7 @@ describe("levels/cdn-style.ts, the laws", () => {
 
 describe("levels/cdn-style.ts, the check", () => {
   it("matches #55's cases with its pattern: each fetching text in any case and a backslash, and no plain colour style", () => {
-    // Oracle: #55's CDN style cases (`git show pr-55-new2:packages/pantry/src/qti/cdn.test.ts`).
+    // Oracle: #55's CDN style cases (`git show b340be09:packages/pantry/src/qti/cdn.test.ts`).
     const pattern = new RegExp(styleFetch, "u");
     const fetching = [
       "background: url(https://elsewhere.example.test/a.png)",

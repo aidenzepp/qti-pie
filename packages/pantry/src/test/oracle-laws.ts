@@ -153,13 +153,6 @@ export const statedInParts = {
 } as const satisfies Readonly<Record<string, readonly string[]>>;
 
 /**
- * The laws an install's policy states beside `Qti`'s, each with why the oracle declares none: none.
- * The single-CDN rules are the `Cdn` level's checks (`singleCdn`, `#pantry/levels/cdn.ts`), a level
- * above `Qti` that the law table does not name, so no law of the table is a policy's.
- */
-export const policyLaws: Readonly<Record<string, string>> = {};
-
-/**
  * The laws the schema states that no host predicate over a package's rows can judge, each with
  * why. None is a rule of the specification a package can break: each is a law over rows the
  * importer writes beside the tree, copied from it, which the host writes none of. Only an importer

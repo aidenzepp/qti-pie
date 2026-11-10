@@ -5,7 +5,7 @@
  * the level over it that names the queries its rules read (`#pantry/qti/queries.ts`).
  *
  * Loading this module builds no schema: {@link qtiBaseOf} builds one where it is called, each call
- * its own, and the caller holds it (`#pantry/qti/own.ts` for this package's own install).
+ * its own, and the caller holds it (`#pantry/qti/schema.ts` `qtiLevels`, built once).
  *
  * No relation is `mutable`: qti-pie writes each package once, every owner inserted with its whole
  * family in one ChangeSet step (the W5 amendment's A). A module joins the composition when it

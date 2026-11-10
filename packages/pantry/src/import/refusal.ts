@@ -154,18 +154,19 @@ export const namedBy = (
  * - An IDREF token's piece, a header's and a tolerance value's, and a reference segment's token, is
  *   its own whitespace or separator and its token concatenated, its concat fold's step: written
  *   texts, none NULL, so the term is never NULL. A piece or a token past its keyText bound is
- *   refused by its own pattern law, named by keyText's row of {@link textLaws}, "Key text bound".
+ *   refused by its own pattern law, named by keyText's row of `textLaws`
+ *   (`#pantry/test/law-namer.ts`), "Key text bound".
  * - An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of a
  *   set keyed by the row's own NOT NULL `baseType` and `cardinality`: ∅ where the diagonal holds no
  *   row (`any`, `unknown`), never NULL, which only a NULL key, an absent `C.at`, reads
  *   (docs/grizzle-findings.md, lane DBT's). A field a closed relation determines is E1 derived.
  * - A selection's `select` casts `selectForm`, which its pattern law, named by SelectForm's row of
- *   {@link textLaws}, holds to the language the cast reads total: a form outside it is refused by
- *   that law as the statement casts it into its column, before PostgreSQL computes `select`.
- * - A statistic's `date` casts `day`, which its pattern law, named by DayForm's row of
- *   {@link textLaws}, holds to the days 0001-01-01 to 9999-12-31 the cast reads total, refused the
- *   same way. Its value is the calendar day `lastUpdated` names, which the value domain states
- *   exists, so it is the value domain's.
+ *   `textLaws`, holds to the language the cast reads total: a form outside it is refused by that
+ *   law as the statement casts it into its column, before PostgreSQL computes `select`.
+ * - A statistic's `date` casts `day`, which its pattern law, named by DayForm's row of `textLaws`,
+ *   holds to the days 0001-01-01 to 9999-12-31 the cast reads total, refused the same way. Its
+ *   value is the calendar day `lastUpdated` names, which the value domain states exists, so it is
+ *   the value domain's.
  * - A document's and an item's assembly's `xml:lang` form's compared `value` is the form collapsed
  *   and case-folded, cast into the form's own key text, a cast the schema proves total: a written
  *   text, never NULL.

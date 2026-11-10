@@ -21,19 +21,7 @@ import {
 } from "@bjornpagen/grizzle/runtime";
 import type { Uuid } from "@bjornpagen/grizzle";
 import type { ApplyError, DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
-import {
-  Array as Arr,
-  Clock,
-  Context,
-  Duration,
-  Effect,
-  Option,
-  pipe,
-  Random,
-  Ref,
-  Schedule,
-  Schema,
-} from "effect";
+import { Clock, Context, Duration, Effect, Option, Random, Ref, Schedule, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { grammar } from "#pantry/grammar/install.ts";
@@ -271,13 +259,7 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
     // named by that level first (`aboveRefusalOf`, over each law as the schema states it); a set
     // with any `Qti` law, or laws of two levels, takes the table's path.
     const { refused } = outcome;
-    const above = aboveRefusalOf(
-      pipe(
-        refused.laws,
-        Arr.map(({ law }) => law),
-      ),
-      outcome.witness,
-    );
+    const above = aboveRefusalOf(refused, outcome.witness);
 
     if (Option.isSome(above)) {
       return yield* above.value;

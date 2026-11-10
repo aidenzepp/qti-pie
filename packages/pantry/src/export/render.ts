@@ -9,9 +9,8 @@
 import { Array as Arr, Effect } from "effect";
 import { addRow, assembleScan, emptyScan } from "#pantry/export/pages.ts";
 import type { Scan, ScanRow } from "#pantry/export/pages.ts";
-import { grammar } from "#pantry/grammar/install.ts";
-import { namesOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
+import { names } from "#pantry/model/names.ts";
 import { unshred } from "#pantry/model/unshred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 
@@ -19,12 +18,6 @@ import type { NodeId } from "#pantry/model/xdm.ts";
  * Every row one document's scan delivered, in any order and from any pages.
  */
 export type DocumentRows = Iterable<ScanRow<Composed>>;
-
-/**
- * The names every document is written under: the composed grammar's, the one `install.ts` loads
- * for the schema, so the export computes no grammar of its own.
- */
-const names = namesOf(grammar);
 
 /**
  * Write a document from the rows its whole scan folded.

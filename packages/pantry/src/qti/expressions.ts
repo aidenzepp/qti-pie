@@ -183,7 +183,7 @@ const integerMathOperatorNames = Compute.pattern(integerMathOperators);
 /**
  * What a reference's lexical form holds around the name it spells: XML whitespace `S`, possibly
  * none, which a collapsing type absorbs, or one brace of a braced reference. Exported for
- * `src/import/refusal.ts`, which names its pattern law.
+ * `src/test/law-namer.ts`, which names its pattern law.
  */
 export const Affix = str.regex("^(?:[\\t\\n\\r ]*|\\{|\\})$");
 
