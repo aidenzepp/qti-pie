@@ -6,11 +6,14 @@ import type { Configuration } from "#plate/configuration.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
-import { move, moveTarget } from "#plate/session/navigate.ts";
+import { move, moveTarget, moveTargets } from "#plate/session/navigate.ts";
 import type { MoveIntent, MoveRefused, MoveRule, MoveStep } from "#plate/session/navigate.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import { current, startTest } from "#plate/session/start.ts";
+import { stub } from "#plate/test-features/contract.ts";
+import { testFeatures } from "#plate/test-features/table.ts";
+import type { TestFeatureTable } from "#plate/test-features/table.ts";
 import type {
   InvalidTime,
   ItemNotInSession,
@@ -635,6 +638,56 @@ describe("move", () => {
         "InvalidTime",
       );
     }),
+  );
+});
+
+/**
+ * The table with a time-limits module whose `gate` answers `expire` for the part to every intent,
+ * in the stub's place.
+ */
+const expiringPart: TestFeatureTable = testFeatures.map((module) =>
+  module.key === "qti-time-limits"
+    ? {
+        ...stub({
+          element: module.element,
+          feature: module.feature,
+          issue: module.issue,
+          key: module.key,
+          namespace: module.namespace,
+        }),
+        gate: () => Option.some({ kind: "expire", scope: { identifier: "part", kind: "part" } }),
+        implemented: true,
+      }
+    : module,
+);
+
+describe("moveTargets under an expiry", () => {
+  it.effect(
+    "decides each move as the part's modes do, neither a target nor a refusal, so advance may carry the expiry out in its place",
+    () =>
+      Effect.gen(function* fallsThrough() {
+        const configuration = yield* configure({});
+        const delivery = yield* builtDelivery(
+          "expiring",
+          onePart("linear", "individual", ["one", "two"]),
+        );
+        const session = started(delivery, configuration);
+        const decideExpiring = Result.getOrElse(
+          moveTargets(delivery.test, session, expiringPart, Option.some(after(1000))),
+          (failure) => assert.fail(failure.message),
+        );
+        const decidePlain = Result.getOrElse(moveTargets(delivery.test, session), (failure) =>
+          assert.fail(failure.message),
+        );
+
+        for (const intent of [next, previous, go(1), go(2), go(7)]) {
+          assert.strictEqual(
+            outcome(decideExpiring(intent)),
+            outcome(decidePlain(intent)),
+            intent.kind,
+          );
+        }
+      }),
   );
 });
 

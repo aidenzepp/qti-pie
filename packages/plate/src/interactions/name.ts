@@ -111,6 +111,10 @@ export const givesText = (nodes: readonly (BodyNode | PayloadNode)[]): boolean =
         // naming reads none of it.
         return false;
       }
+      case "container": {
+        // A module's container holds interactions, which no content holds, and names no Control.
+        return false;
+      }
       default: {
         // Only nodes that lost their type on the way here hold another kind.
         node satisfies never;

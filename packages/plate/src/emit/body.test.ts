@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { emitBody, emitNodes, htmlSubset, writesMalformedHeading } from "#plate/emit/body.ts";
-import type { ReferencingElement, RenderInteraction } from "#plate/emit/body.ts";
+import type { ReferencingElement, RenderContainer, RenderInteraction } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { resolveOverrides, rowFor, scopedId } from "#plate/emit/parts.ts";
@@ -15,6 +15,7 @@ import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { message } from "#plate/messages.ts";
 import type {
   ChoicePayload,
+  ContainerPayload,
   ElementPayload,
   EmitState,
   ExtendedTextPayload,
@@ -1530,6 +1531,78 @@ describe("emitBody, the catalog attachment hook", () => {
       );
 
       assert.deepStrictEqual(emitted, Result.fail(refusal));
+    }),
+  );
+});
+
+/**
+ * The container render a module would give: a `section` naming the module around the children's
+ * output.
+ */
+const wrap: RenderContainer = (node, children) =>
+  Option.some(Result.succeed(h("section", { "data-stage": node.module }, children)));
+
+describe("emitBody on a module's container", () => {
+  /**
+   * A container a module owns around a paragraph and a Text Entry, as a stage holds its
+   * interactions.
+   */
+  const stage: ContainerPayload = {
+    children: [el("p", {}, [txt("inside")]), textEntry],
+    kind: "container",
+    module: "slider",
+  };
+
+  /**
+   * The render function with {@link wrap} as its `containers` hook and {@link stub} for every
+   * interaction.
+   */
+  const wrapping: RenderInteraction = Object.assign(
+    (interaction: InteractionPayload) => stub(interaction),
+    { containers: wrap },
+  );
+
+  it.effect(
+    "emits the children through the walk, then hands their output to the containers hook, which writes the container around them",
+    () =>
+      Effect.gen(function* wrapped() {
+        const state = yield* stateAt(2);
+        const nodes = yield* Effect.fromResult(emitBody(payloadOf([stage]), state, wrapping));
+
+        assert.deepStrictEqual(nodes, [
+          h("section", { "data-stage": "slider" }, [
+            h("p", {}, [text("inside")]),
+            h("span", { "data-response": "RESPONSE" }),
+          ]),
+        ]);
+      }),
+  );
+
+  it.effect("writes nothing for a container when the render function has no containers hook", () =>
+    Effect.gen(function* dropped() {
+      const nodes = yield* emit([stage, el("p", {}, [txt("after")])]);
+
+      assert.deepStrictEqual(nodes, [h("p", {}, [text("after")])]);
+    }),
+  );
+
+  it.effect("[I-8] counts the headings inside a container in the item's heading shift", () =>
+    Effect.gen(function* shifted() {
+      const state = yield* stateAt(2);
+      const nodes = yield* Effect.fromResult(
+        emitBody(
+          payloadOf([
+            { ...stage, children: [el("h3", {}, [txt("Stage")])] },
+            el("h4", {}, [txt("Below")]),
+          ]),
+          state,
+          wrapping,
+        ),
+      );
+
+      // The h3 inside the container is the shallowest heading, so it lands at level 2 and the h4
+      // keeps its distance; read without it, the h4 would land at 2.
+      assert.deepStrictEqual(headingTagsIn(nodes), ["h2", "h3"]);
     }),
   );
 });
