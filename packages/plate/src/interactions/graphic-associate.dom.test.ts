@@ -724,6 +724,11 @@ describe(server.browser, () => {
         assert.lengthOf(lines(page), 2);
         assert.strictEqual(page.hotspot("H3").getAttribute("aria-disabled"), "true");
         assert.isFalse(page.hotspot("H1").hasAttribute("aria-disabled"));
+        assert.strictEqual(
+          getComputedStyle(page.hotspot("H3")).opacity,
+          "1",
+          "an unavailable hotspot is not dimmed, for it holds the lines its pairs draw",
+        );
 
         pair(page, "H2", "H3");
         assert.deepStrictEqual(posted(page), ["H1 H3", "H3 H4"]);

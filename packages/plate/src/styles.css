@@ -1367,6 +1367,21 @@
 }
 
 /*
+ * A hotspot at its limit. The shared look dims the element, which here also holds the lines its
+ * pairs draw in its outline, so it keeps full strength and its area shows it: no veil and a dotted
+ * stroke, which a held or cursor rule below overrides. A line sets its own dash.
+ */
+:where([data-slot="graphic-associate-interaction-hotspot"][aria-disabled="true"]) {
+  opacity: 1;
+}
+
+:where([data-slot="graphic-associate-interaction-hotspot"][aria-disabled="true"])
+  :where([data-slot="graphic-associate-interaction-outline"]) {
+  fill: transparent;
+  stroke-dasharray: 2 4;
+}
+
+/*
  * A held hotspot. The shared held look fills the element, which here is the image's whole box, so
  * the hotspot stays unpainted and its area shows it instead: a heavier stroke over a veil of the
  * primary colour, which forced colours keep as a width.
