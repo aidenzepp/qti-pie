@@ -45,6 +45,8 @@ export default defineConfig({
       // A fixture package's JS modules (a PCI's AMD module, its JSON module resolution file) are
       // data a test loads, not source.
       "packages/plate/fixtures/**",
+      // These files hold plate's README code blocks character for character, so the formatter leaves them alone.
+      "packages/plate/src/hosts/reference-app/readme-*.tsx",
     ],
     jsdoc: { commentLineStrategy: "multiline", lineWrappingStyle: "balance" },
   },
@@ -56,6 +58,8 @@ export default defineConfig({
       ".claude/**",
       "**/migrations/**",
       "packages/plate/fixtures/**",
+      // These files hold plate's README code blocks character for character, so the linter leaves them alone; TypeScript and the tests still run them.
+      "packages/plate/src/hosts/reference-app/readme-*.tsx",
     ],
     jsPlugins: ["./tools/lint-plugin.mjs", "@stylistic/eslint-plugin"],
     // Keep source imports stable when files move: each package maps `#<package>/*` to its `src/` in package.json
