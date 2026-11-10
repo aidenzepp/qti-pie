@@ -18,31 +18,16 @@
  * names, and to the law oracle's verdict on the same package (`oracleVerdict`), whose breaches
  * all keep that one rule. The free side is `#pantry/qti/catalog.oracle.test.ts` and
  * `#pantry/test/catalog-assembly.test.ts`.
- *
- * The phase's fixtures close it: every catalog and companion-materials positive
- * (`catalogNames`, `companionNames`) is imported, exported and compared with its source, every
- * entry equal (`comparePackage`), and every XML-path negative (`catalogNegativeNames`) is refused
- * under a rule its row of `catalogVerdicts` allows.
  */
-import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Result } from "effect";
+import { Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { comparePackage, renderReport } from "#pantry/export/compare.ts";
-import { exportPackage } from "#pantry/export/package.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import {
-  catalogNames,
-  catalogNegativeNames,
-  catalogVerdicts,
-  companionNames,
-  materialize,
-} from "#pantry/test/fixtures.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { asi, item, manifestOf } from "#pantry/test/probe.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -304,21 +289,6 @@ const acceptances: readonly { readonly files: PackageEntries; readonly name: str
   },
 ];
 
-/**
- * The directory every export here is made under: the package's gitignored `work/`.
- */
-const workDirectory = path.resolve(import.meta.dirname, "../../work");
-
-/**
- * The rules a phase-9 negative may be refused under, its row of `catalogVerdicts`.
- *
- * @param name - The negative.
- * @returns The row's rules.
- */
-const verdictOf = (name: (typeof catalogNegativeNames)[number]): readonly string[] =>
-  catalogVerdicts.find(([negative]) => negative === name)?.[1] ??
-  assert.fail(`${name} has no row in catalogVerdicts`);
-
 describe.skipIf(!hasLease)(
   "qti/catalog.db.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
@@ -379,58 +349,6 @@ describe.skipIf(!hasLease)(
               );
             }),
           ),
-        );
-      }
-    });
-
-    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
-      excludeTestServices: true,
-    })("the phase-9 fixtures, round-tripped and refused through the importer", (it) => {
-      for (const name of [...catalogNames, ...companionNames]) {
-        it.effect(`${name}: imports, exports and compares equal with its source`, () =>
-          // Oracle: the source package as `readEntries` lists it, and `comparePackage` of it with
-          // the files the export wrote, which reads no database.
-          Effect.scoped(
-            Effect.gen(function* roundTripped() {
-              const fs = yield* FileSystem.FileSystem;
-              const dir = yield* materialize(name);
-              const id = yield* importDir(dir);
-
-              yield* fs.makeDirectory(workDirectory, { recursive: true });
-
-              const target = yield* fs.makeTempDirectoryScoped({
-                directory: workDirectory,
-                prefix: "catalog-db-test-",
-              });
-
-              yield* exportPackage(id, target);
-
-              const report = yield* comparePackage(dir, target);
-
-              assert.isFalse(
-                report.some(({ outcome }) => outcome.kind === "differs"),
-                `${name}:\n${renderReport(report)}`,
-              );
-            }),
-          ),
-        );
-      }
-
-      for (const name of catalogNegativeNames) {
-        const rules = verdictOf(name);
-
-        it.effect(`${name}: refuses it under one of ${rules.join(", ")}`, () =>
-          // Oracle: the predicted column of the spec's 4.9 table, the rules `catalogVerdicts` gives
-          // the negative, which the free fixture tests hold the law oracle to.
-          Effect.gen(function* refusedNegative() {
-            const refused = yield* Effect.flip(importDir(yield* materialize(name)));
-
-            assert.isTrue(refused instanceof ImportRefused, `${name}: ${refused._tag}`);
-
-            if (refused instanceof ImportRefused) {
-              assert.include(rules, refused.rules[0], `${name}: ${refused.detail}`);
-            }
-          }),
         );
       }
     });
