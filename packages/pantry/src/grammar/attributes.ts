@@ -1246,19 +1246,22 @@ export const readDeclarations = <D extends Declared>(declarations: readonly D[])
 };
 
 /**
- * A declaration whose domain does not compile: the declaring kind, the attribute (empty for a
+ * A declaration whose domain does not compile: the declaring kind, the attribute (none for a
  * kind's text), and why.
  */
 export class UncompiledDomain extends Schema.TaggedError<UncompiledDomain>()("UncompiledDomain", {
   detail: Schema.String,
   kind: Schema.String,
-  name: Schema.String,
+  name: Schema.Option(Schema.String),
 }) {
   /**
    * The declaration, the reason, and the repair.
    */
   override get message(): string {
-    const subject = this.name === "" ? `the text of ${this.kind}` : `${this.kind}@${this.name}`;
+    const subject = Option.match(this.name, {
+      onNone: () => `the text of ${this.kind}`,
+      onSome: (name) => `${this.kind}@${name}`,
+    });
 
     return `The domain of ${subject} does not compile: ${this.detail} Give it a spec reading in the attribute grammar, or extend the domain compiler.`;
   }
@@ -1467,16 +1470,29 @@ const definitionKey = (domain: CompiledDomain): string =>
   );
 
 /**
- * One declaration as the attribute grammar reads its domain: the declaring kind (a named type's
- * owner, for that type's text), the attribute (empty for a text), the declared type and that type's
- * resolved definition.
+ * What a declaration's domain is read from: the declaring kind (a named type's owner, for that
+ * type's text), the declared type and that type's resolved definition.
  */
-export interface DomainDeclaration {
+interface DomainSource {
   readonly domain: Domain;
   readonly kind: string;
-  readonly name: string;
   readonly type: ValueType;
 }
+
+/**
+ * One declaration as the attribute grammar reads its domain: an attribute's, which names the
+ * attribute its spec readings read by, or a text's, which names none and which no reading reads.
+ */
+export type DomainDeclaration = DomainSource | (DomainSource & { readonly name: string });
+
+/**
+ * The attribute a declaration declares: none for a text's.
+ *
+ * @param declared - The declaration.
+ * @returns Its attribute's name.
+ */
+const attributeOf = (declared: DomainDeclaration): Option.Option<string> =>
+  "name" in declared ? Option.some(declared.name) : Option.none();
 
 /**
  * A definition the attribute grammar compiles: a leaf definition with a declaration's spec readings
@@ -1585,7 +1601,10 @@ export const domainReader = (): DomainReader => {
   const byText = new Map<string, Result.Result<KeyedDomain, CompileError>>();
 
   return (declared) => {
-    const { key, readings } = applicableTo(declared.kind, declared.name);
+    const { key, readings } = Option.match(attributeOf(declared), {
+      onNone: () => noReadings,
+      onSome: (name) => applicableTo(declared.kind, name),
+    });
 
     return groups
       .getOrInsertComputed(declared.domain, () => new Map())
@@ -1744,7 +1763,7 @@ const domainOf = (
             new UncompiledDomain({
               detail: cause.message,
               kind: declared.kind,
-              name: declared.name,
+              name: attributeOf(declared),
             }),
           ),
     ),
@@ -1829,17 +1848,13 @@ export const generate = (
       declared,
       read: readDomain(declared),
     }));
-    const textsRead = input.texts.map((text) => {
-      const declared = { ...text, name: "" };
-
-      return { declared, read: readDomain(declared), text };
-    });
+    const textsRead = input.texts.map((text) => ({ declared: text, read: readDomain(text), text }));
     const governedRead = input.governed.map((declared) => ({
       declared,
       read: readDomain(declared),
     }));
     const typeTextsRead = input.typeTexts.map((typeText) => {
-      const declared = { ...typeText, kind: typeText.owner, name: "" };
+      const declared = { ...typeText, kind: typeText.owner };
 
       return { declared, read: readDomain(declared), typeText };
     });

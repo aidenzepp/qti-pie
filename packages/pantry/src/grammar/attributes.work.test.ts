@@ -106,8 +106,8 @@ interface DomainRead {
 
 /**
  * Every declaration of an input as the attribute grammar reads its domain: its attributes, its
- * kinds' texts (no attribute name), its governed attributes, and its named types' texts (the type's
- * owner as the kind).
+ * kinds' texts (no attribute), its governed attributes, and its named types' texts (the type's
+ * owner as the kind, and no attribute).
  *
  * @param input - The generator's input.
  * @returns Each declaration, with the versions it is read in.
@@ -116,9 +116,9 @@ const declarationsOf = (
   input: AttributeGrammarInput,
 ): readonly (DomainDeclaration & { readonly versions: readonly SchemaVersion[] })[] => [
   ...input.declarations,
-  ...input.texts.map((text) => ({ ...text, name: "" })),
+  ...input.texts,
   ...input.governed,
-  ...input.typeTexts.map((typeText) => ({ ...typeText, kind: typeText.owner, name: "" })),
+  ...input.typeTexts.map((typeText) => ({ ...typeText, kind: typeText.owner })),
 ];
 
 /**
@@ -189,7 +189,7 @@ const domainReads = (input: AttributeGrammarInput, grammar: AttributeGrammar): D
     ...input.texts
       .filter((text) => text.versions.includes(version))
       .map((text) => ({
-        declared: { ...text, name: "" },
+        declared: text,
         handle: handleAt(texts, key(version, text.kind)),
         version,
       })),
@@ -203,7 +203,7 @@ const domainReads = (input: AttributeGrammarInput, grammar: AttributeGrammar): D
     ...input.typeTexts
       .filter((typeText) => typeText.versions.includes(version))
       .map((typeText) => ({
-        declared: { ...typeText, kind: typeText.owner, name: "" },
+        declared: { ...typeText, kind: typeText.owner },
         handle: handleAt(typeTexts, key(version, typeText.owner)),
         version,
       })),
@@ -227,7 +227,10 @@ const oracle = (): Oracle => {
   const byText = new Map<string, Result.Result<CompiledDomain, Domains.CompileError>>();
 
   return (declared) => {
-    const read = readDefinitionOf(declared, readingsOf(declared.kind, declared.name));
+    const read = readDefinitionOf(
+      declared,
+      "name" in declared ? readingsOf(declared.kind, declared.name) : [],
+    );
     const text = definitionText(read);
     const compiled = byText.get(text) ?? unwrapped.compile(read.definition, read.whiteSpace);
     byText.set(text, compiled);
@@ -278,7 +281,7 @@ const holdToOracle = (
   const empty = new Set(grammar.emptyDomains);
   for (const { declared, handle, version } of domainReads(input, grammar)) {
     const expected = read(declared).compiled;
-    const where = `${version} ${declared.kind}@${declared.name}`;
+    const where = `${version} ${declared.kind}${"name" in declared ? `@${declared.name}` : " text"}`;
     if (Result.isFailure(expected)) {
       assert.strictEqual(expected.failure._tag, "EmptyDefinition", `${where} compiles`);
       assert.isTrue(empty.has(handle), `${where} names an empty domain`);
