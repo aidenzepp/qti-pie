@@ -10,7 +10,8 @@ import { composed } from "#pantry/grammar/compose.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
 import type { ForeignKind } from "#pantry/grammar/kinds.ts";
 import { assemble } from "#pantry/model/assemble.ts";
-import { foldGrammarOf, namesOf } from "#pantry/model/composed.ts";
+import { foldGrammarOf } from "#pantry/model/composed.ts";
+import { names as documentNames } from "#pantry/model/names.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { toXmlDocument } from "#pantry/model/unshred.ts";
@@ -433,7 +434,7 @@ describe("the model's walks", { timeout: searchTimeout }, () => {
           const rows = flatten(document, idOf);
           const folded = yield* Effect.fromResult(fold(document, idOf, foldGrammarOf(grammar)));
           const assembled = yield* Effect.fromResult(assemble(rows));
-          const tree = toXmlDocument(document, namesOf(grammar));
+          const tree = toXmlDocument(document, documentNames);
 
           assert.strictEqual(rows.nodes.length, extent + (layout === "deep" ? 3 : 4), layout);
           assert.deepStrictEqual(
@@ -442,7 +443,7 @@ describe("the model's walks", { timeout: searchTimeout }, () => {
             layout,
           );
           assert.deepStrictEqual(
-            canonicalize(toXmlDocument(assembled, namesOf(grammar))),
+            canonicalize(toXmlDocument(assembled, documentNames)),
             canonicalize(tree),
             layout,
           );

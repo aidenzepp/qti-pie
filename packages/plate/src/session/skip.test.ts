@@ -2,11 +2,20 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
-import { modules } from "#plate/model/interactions.ts";
+import { containerKinds, modules } from "#plate/model/interactions.ts";
 import { IntentRefused, advance } from "#plate/session/advance.ts";
 import type { AdvanceFailure } from "#plate/session/advance.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import { startTest } from "#plate/session/start.ts";
+import {
+  hasStub,
+  stubBaseType,
+  stubCardinality,
+  stubDeclarations,
+  stubElement,
+  stubKind,
+  stubOrder,
+} from "#plate/test/stub-kind.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
@@ -48,33 +57,69 @@ const itemXml = (identifier: string, declaration: string, body: string): string 
   ].join("");
 
 /**
- * The kind of {@link stubItem}'s one interaction: one whose module is a stub. The item's element
- * is read from that module in the table of modules, so the fixture changes with this one line.
- * Retirement: when this kind lands while the table still holds a stub, this line moves to a kind
- * that is still one, and {@link stubDeclaration} to its base type; when the last stub lands, this
- * constant, {@link stubDeclaration}, {@link stubItem} and the [T-4] stub-notice test are deleted,
- * since no item can then hold an interaction plate shows as a notice.
+ * Write the attributes of a `RESPONSE` declaration for a base type and a cardinality.
+ *
+ * @param declaration The base type and the cardinality to declare.
+ * @param declaration.baseType The declaration's base type.
+ * @param declaration.cardinality The declaration's cardinality.
+ * @returns The attributes, as {@link itemXml} takes them.
  */
-const stubKind = "select-point" as const;
+const declarationOf = ({
+  baseType,
+  cardinality,
+}: {
+  readonly baseType: string;
+  readonly cardinality: string;
+}): string => `cardinality="${cardinality}" base-type="${baseType}"`;
 
 /**
- * The `RESPONSE` declaration of {@link stubItem}: the base type {@link stubKind} binds under QTI
- * 3.0, which no module's contract carries, so it changes beside `stubKind`. Its cardinality is
- * `multiple` because the binding rule checks the element's choice count against the declaration
- * before any module reads it: a `single` declaration needs `max-choices="1"` on the element, where
- * `multiple` binds the bare element, so the fixture carries nothing of the kind but its name.
+ * The children a kind of the stub order needs to be a valid interaction of its element, by kind:
+ * what the [W0-AQ.1] stub-order row puts inside the element, so the row holds on a branch where
+ * the kind is a stub (its module gives the notice and reads no child) and on one where it has
+ * landed (its module reads the children and binds). Hotspot's module, once it lands, gives the
+ * notice for an interaction without an image, and QTI 3.0 gives the interaction an image and at
+ * least one `qti-hotspot-choice`, so its fixture carries an `img` with a `width` and `height` and
+ * one `rect` hotspot, the way the module's own tests build theirs. The other kinds stand bare
+ * while their modules are stubs; each gets its children when its module lands and says what a
+ * valid interaction of it holds.
  */
-const stubDeclaration = 'cardinality="multiple" base-type="point"';
+const stubChildren = {
+  "graphic-associate": "",
+  "graphic-gap-match": "",
+  "graphic-order": "",
+  hotspot: [
+    '<img src="images/map.svg" alt="A map of four plots" width="400" height="300"/>',
+    '<qti-hotspot-choice identifier="A" shape="rect" coords="40,40,160,120"/>',
+  ].join(""),
+  "select-point": "",
+} as const satisfies { readonly [K in (typeof stubOrder)[number]]: string };
+
+/**
+ * The `RESPONSE` declaration of {@link stubItem}: the base type and cardinality
+ * `#plate/test/stub-kind.ts` gives {@link stubKind}, which bind the bare element of that kind.
+ */
+const stubDeclaration = declarationOf({ baseType: stubBaseType, cardinality: stubCardinality });
 
 /**
  * An item whose only response an interaction of {@link stubKind} binds, which plate shows as a
- * notice while its module is a stub: no rendered control can post it.
+ * notice while its module is a stub: no rendered control can post it. The kind is derived in
+ * `#plate/test/stub-kind.ts`, so the fixture changes with the table of modules; while no kind of
+ * the stub order is a bare stub there is no such item to show, and the [T-4] stub-notice test is
+ * skipped.
  */
 const stubItem = itemXml(
   "held",
   stubDeclaration,
-  `<${modules[stubKind].element} response-identifier="RESPONSE"/>`,
+  `<${stubElement} response-identifier="RESPONSE"/>`,
 );
+
+/**
+ * The title of the [T-4] stub-notice test: the reason it is skipped joins it while no kind of the
+ * stub order is a bare stub, a stub whose module declares no container.
+ */
+const stubNoticeTitle = hasStub
+  ? "[T-4] lets next and submit-item pass an item whose only response a stub interaction, shown as a notice, binds"
+  : "[T-4] lets next and submit-item pass an item whose only response a stub interaction, shown as a notice, binds (skipped: no kind of the stub order is a stub that stands bare in an item body)";
 
 /**
  * An item that declares a response no interaction binds: a passage to read.
@@ -232,23 +277,22 @@ const proceeds = (given: Delivery, configuration: Configuration): void => {
 };
 
 describe("the skip test under allow-skipping false", () => {
-  // Deleted with `stubKind` when the last stub lands: its premise, an item whose only response a
-  // notice binds, is gone then.
-  it.effect(
-    "[T-4] lets next and submit-item pass an item whose only response a stub interaction, shown as a notice, binds",
-    () =>
-      Effect.gen(function* stubNotice() {
-        const given = yield* delivery(stubItem);
-        const configuration = yield* configure({});
-        const { item } = heldOf(given);
+  // Skipped, with its reason in the title, while no kind of the stub order is a bare stub
+  // (`hasStub`): its premise, an item whose only response a notice binds, has no item to stand on
+  // then.
+  it.effect.skipIf(!hasStub)(stubNoticeTitle, () =>
+    Effect.gen(function* stubNotice() {
+      const given = yield* delivery(stubItem);
+      const configuration = yield* configure({});
+      const { item } = heldOf(given);
 
-        assert.isTrue(item.responses.has("RESPONSE"));
-        assert.deepStrictEqual(
-          item.unsupported.map(({ shown }) => shown),
-          ["notice"],
-        );
-        proceeds(given, configuration);
-      }),
+      assert.isTrue(item.responses.has("RESPONSE"));
+      assert.deepStrictEqual(
+        item.unsupported.map(({ shown }) => shown),
+        ["notice"],
+      );
+      proceeds(given, configuration);
+    }),
   );
 
   it.effect(
@@ -275,6 +319,65 @@ describe("the skip test under allow-skipping false", () => {
             refusedRule(stepped(given, kind, configuration)),
             "skipping-not-allowed",
           );
+        }
+      }),
+  );
+});
+
+describe("the stub kind the shared pins name", () => {
+  it("[W0-AQ.1] the derived stub kind is select-point while every module is a stub", () => {
+    const stubs = stubOrder.filter(
+      (kind) => !modules[kind].implemented && !containerKinds.has(kind),
+    );
+
+    assert.strictEqual(hasStub, stubs.length > 0);
+    assert.strictEqual(stubKind, stubs[0] ?? stubOrder.at(-1));
+    assert.strictEqual(modules[stubKind].implemented, !hasStub);
+    assert.strictEqual(containerKinds.has(stubKind), false);
+
+    if (stubs.length === stubOrder.length) {
+      assert.isTrue(hasStub);
+      assert.strictEqual(stubKind, stubOrder[0]);
+      // Select Point is named by its element, so that `stub-kind.ts` stays the one file that names
+      // a kind.
+      assert.strictEqual(stubElement, "qti-select-point-interaction");
+      assert.strictEqual(stubElement, modules[stubKind].element);
+      assert.strictEqual(stubBaseType, "point");
+      assert.strictEqual(stubCardinality, "multiple");
+    }
+  });
+
+  it.effect(
+    "[W0-AQ.1] every kind of the stub order opens as a notice item under its declaration while its module is a stub, and binds once it is implemented",
+    () =>
+      Effect.gen(function* stubOrderOpens() {
+        const encoder = new TextEncoder();
+
+        for (const kind of stubOrder) {
+          const { element, implemented } = modules[kind];
+          const opened = yield* open(
+            `items/${kind}.xml`,
+            encoder.encode(
+              itemXml(
+                kind,
+                declarationOf(stubDeclarations[kind]),
+                `<${element} response-identifier="RESPONSE">${stubChildren[kind]}</${element}>`,
+              ),
+            ),
+          );
+          const { item } = Option.getOrElse(acceptedItem(opened), () =>
+            assert.fail(`${kind} is ${opened.verdict}, not an accepted item`),
+          );
+
+          if (implemented) {
+            assert.deepStrictEqual(item.unsupported, []);
+            assert.isTrue(item.responses.has("RESPONSE"));
+          } else {
+            assert.deepStrictEqual(
+              item.unsupported.map(({ shown }) => shown),
+              ["notice"],
+            );
+          }
         }
       }),
   );

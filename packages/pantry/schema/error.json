@@ -13,17 +13,19 @@
       "items": {
         "type": "object",
         "properties": {
-          "identity": { "type": "string" },
+          "installed": { "type": "string" },
           "name": { "type": "string" },
-          "rule": { "type": "string" }
+          "rule": { "type": "string" },
+          "text": { "type": "string" }
         },
-        "required": ["identity"],
+        "required": ["text"],
         "additionalProperties": true
       }
     },
     "message": { "type": "string" },
     "ok": { "type": "boolean", "enum": [false] },
-    "rule": { "type": "string" },
+    "refused_kind": { "type": "string", "enum": ["every", "first", "some"] },
+    "rules": { "type": "array", "items": { "type": "string" } },
     "schema_version": { "type": "number", "enum": [1] },
     "sources": { "type": "array", "items": { "type": "string" } },
     "witness": { "type": "string", "enum": ["key", "row", "unreported"] }

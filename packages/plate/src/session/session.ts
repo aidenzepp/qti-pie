@@ -41,6 +41,14 @@ export interface SessionPart {
  */
 export interface SessionItem {
   /**
+   * Whether the item this item delivers is adaptive (`Item.adaptive`, the root's `adaptive`
+   * true), written from the item when the session starts and never changed. The reads that decide
+   * whether the item is closed and what attempt limit a submission checks hand it to the adaptive
+   * policy (`adaptivePolicy` in `#plate/engine/adaptive.ts`), so they need no items map. A
+   * restored session reads it back from the stored form.
+   */
+  readonly adaptive: boolean;
+  /**
    * The comment the candidate left on the item, as the comment module (`#plate/session/comment.ts`)
    * keeps it after each step; none until a step posts one the module keeps, and none for every
    * item while the module is a stub. A result reports it as the item result's `candidateComment`.

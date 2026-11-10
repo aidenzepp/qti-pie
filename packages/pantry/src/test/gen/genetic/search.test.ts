@@ -50,7 +50,7 @@ describe("reducedOf", () => {
         disagreement,
         genome,
         lineage: ["isolated toward File exists alone"],
-        signature: "oracle-only-law: File exists",
+        signature: { kind: "oracle-only-law", law: "File exists" },
         tries: 4,
       });
       const shown = shownEntries(yield* entriesOf(genome));
@@ -64,7 +64,7 @@ describe("reducedOf", () => {
           genome,
           lineage: ["isolated toward File exists alone"],
           package: shown,
-          signature: "oracle-only-law: File exists",
+          signature: { kind: "oracle-only-law", law: "File exists" },
           tries: 4,
         },
       );

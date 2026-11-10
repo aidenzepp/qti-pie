@@ -40,7 +40,8 @@ import { declarationNameFamily } from "#pantry/qti/interactions.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
-import { judgeOne, shownDisagreement, signatureOf } from "#pantry/test/gen/genetic/judge.ts";
+import { judgeOne, recordsClassOf, shownDisagreement } from "#pantry/test/gen/genetic/judge.ts";
+import type { Signature } from "#pantry/test/gen/genetic/judge.ts";
 import { known } from "#pantry/test/gen/genetic/known.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
@@ -54,7 +55,7 @@ const laws = lawsOf(grammar);
  * The signatures of the disagreements a lane's open fix owns (`#pantry/test/gen/genetic/known.ts`),
  * which the box sets aside.
  */
-const recorded: ReadonlySet<string> = new Set(Object.keys(known));
+const recorded: readonly Signature[] = known.map(({ signature }) => signature);
 
 /**
  * A declaration kind, by the element's name between `qti-` and `-declaration`.
@@ -121,7 +122,7 @@ const conditionOn = (expression: string): string =>
  * includes (`SectionFeedbackRef`); and a test's template default and variable mapping on its item
  * ref (`TemplateDefaultTarget`, `MappingSourceDeclaration`), its outcome processing's prefixed
  * reading of the item's `V` (`Reading`, `ReadingCardinality`), and its own `V` set unsplit
- * (`VariableLookup`).
+ * (`Reading`, `DeclaredReading` of `#pantry/qti/queries.ts`).
  */
 const references: readonly Reference[] = [
   {
@@ -583,7 +584,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                   assert.deepStrictEqual(
                     judged.disagreements
-                      .filter((disagreement) => !recorded.has(signatureOf(disagreement)))
+                      .filter((disagreement) => !recordsClassOf(recorded, disagreement))
                       .map(shownDisagreement),
                     [],
                     `${nameOf(held)}: the oracle ${judged.summary.oracle}; the import ${judged.summary.import}`,

@@ -576,6 +576,7 @@ const sessionItem = (
   sequenceIndex: number,
   presented: boolean,
 ): SessionItem => ({
+  adaptive: false,
   comment: Option.none(),
   datestamp: "2026-11-07T00:00:00.000Z",
   duration: 0,

@@ -55,6 +55,7 @@ const sessionOf = (id: string): TestSession => ({
   instance: id,
   items: [
     {
+      adaptive: false,
       comment: Option.none(),
       datestamp: "2026-11-05T10:00:12.500Z",
       duration: 12.5,

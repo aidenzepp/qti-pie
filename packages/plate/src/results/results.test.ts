@@ -623,6 +623,7 @@ const sessionItem = (
   sequenceIndex: number,
   changes: Partial<SessionItem> = {},
 ): SessionItem => ({
+  adaptive: false,
   comment: Option.none(),
   datestamp: updated,
   duration: 0,
