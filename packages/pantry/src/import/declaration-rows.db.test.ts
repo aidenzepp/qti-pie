@@ -18,7 +18,8 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { layer } from "@effect/vitest";
-import { exhaust } from "@grizzle/testing/explore";
+import { drawn, explore } from "@grizzle/testing/explore";
+import { completeShrink } from "@grizzle/testing/shrink";
 import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
@@ -48,39 +49,43 @@ describe.skipIf(!hasLease)("import/declaration-rows.db.test.ts, on the lease", (
     it.effect(
       "the database refuses every case under a rule the law oracle predicts",
       (ctx) =>
-        // Oracle: a second implementation, the law oracle's verdict over the same entries. Bound: every declaration of the every-relation items
-        // and test, under each state of its cardinality and base type that spells nothing,
-        // exhausted, one import each.
+        // Oracle: a second implementation, the law oracle's verdict over the same entries. Bound:
+        // 32 of the 294 (declaration, untyped state) cases of the every-relation items and test,
+        // drawn from the run's seed, one import each; `src/test/declaration-rows.oracle.test.ts`
+        // exhausts the scope against the same oracle on the host.
         searched(
           ctx,
-          exhaust(
+          explore(
             {
-              box: "every declaration of the every-relation items and test, under each untyped state, imported",
               caseHang: Duration.seconds(120),
+              concurrency: 1,
               coverage: noCoverage,
-              generator: int(0, cases.length - 1),
-              limit: cases.length,
+              draw: drawn(int(0, cases.length - 1)),
+              kept: [],
               literal: (at) => {
-                const drawn = cases[at];
+                const held = cases[at];
 
-                return drawn === undefined
+                return held === undefined
                   ? String(at)
-                  : `${drawn.site.path} ${drawn.site.identifier} ${drawn.state.name}`;
+                  : `${held.site.path} ${held.site.identifier} ${held.state.name}`;
               },
               oracle: { kind: "second-implementation", name: "the law oracle's verdict" },
+              runs: 32,
+              shrink: completeShrink,
+              steerEvery: 16,
               suite: "pantry/declaration-rows-db",
             },
             (at) =>
               Effect.gen(function* declarationRowAgrees() {
-                const drawn = cases[at];
-                if (drawn === undefined) {
+                const held = cases[at];
+                if (held === undefined) {
                   return;
                 }
 
-                const dir = yield* scopedPackage(declarationCase(drawn.site, drawn.state));
+                const dir = yield* scopedPackage(declarationCase(held.site, held.state));
                 yield* importAgreesWithOracle(
                   dir,
-                  `${drawn.site.path} ${drawn.site.identifier} ${drawn.state.name}`,
+                  `${held.site.path} ${held.site.identifier} ${held.state.name}`,
                 );
               }).pipe(Effect.scoped),
           ),

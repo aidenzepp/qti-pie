@@ -16,7 +16,7 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { drawn, exhaust, explore } from "@grizzle/testing/explore";
+import { drawn, explore } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
@@ -86,25 +86,29 @@ describe.skipIf(!hasLease)("test/gen/assembly.ts, on the lease", { timeout: 3_60
     excludeTestServices: true,
   })("each generated package imported and judged by PostgreSQL", (it) => {
     it.effect(
-      "every package of the small box is accepted or refused as reading 87's model says",
+      "every package drawn from the small box is accepted or refused as reading 87's model says",
       (ctx) =>
         // Oracle: a specification, reading 87's bullets over the assembled test (`modelVerdict`),
-        // against PostgreSQL's verdict on the import's one ChangeSet. Bound: the small box's 308
-        // packages.
+        // against PostgreSQL's verdict on the import's one ChangeSet. Bound: 48 of the small box's
+        // 308 packages, drawn from the run's seed; `assembly.test.ts` exhausts the box against the
+        // same model on the host.
         searched(
           ctx,
-          exhaust(
+          explore(
             {
-              box: "11 shapes of at most two parts, three item refs, one nesting and a chain of two documents, with one branch rule of every owner and target",
               caseHang: Duration.seconds(60),
+              concurrency: 1,
               coverage: noCoverage,
-              generator: smallAssembly,
-              limit: 400,
+              draw: drawn(smallAssembly),
+              kept: [],
               literal: assemblyLiteral,
               oracle: {
                 kind: "specification",
                 name: "reading 87's bullets over the assembled test",
               },
+              runs: 48,
+              shrink: completeShrink,
+              steerEvery: 16,
               suite: "pantry/test/gen-assembly-db-box",
             },
             importJudged,

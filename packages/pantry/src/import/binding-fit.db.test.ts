@@ -24,7 +24,8 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { layer } from "@effect/vitest";
-import { exhaust } from "@grizzle/testing/explore";
+import { drawn, explore } from "@grizzle/testing/explore";
+import { completeShrink } from "@grizzle/testing/shrink";
 import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
@@ -53,34 +54,38 @@ describe.skipIf(!hasLease)("import/binding-fit.db.test.ts, on the lease", () => 
     it.effect(
       "the database refuses every binding case under a rule the law oracle predicts, or accepts it where the oracle does",
       (ctx) =>
-        // Oracle: a second implementation, the law oracle's verdict over the same entries. Bound: every site of binding-cases.ts under every
-        // state, exhausted, one import each.
+        // Oracle: a second implementation, the law oracle's verdict over the same entries. Bound:
+        // 24 (site, state) cases of binding-cases.ts, drawn from the run's seed, one import each;
+        // `src/test/binding-fit.oracle.test.ts` judges the scope against the oracle on the host.
         searched(
           ctx,
-          exhaust(
+          explore(
             {
-              box: "every binding site of binding-cases.ts under every state, imported",
               caseHang: Duration.seconds(120),
+              concurrency: 1,
               coverage: noCoverage,
-              generator: int(0, cases.length - 1),
-              limit: cases.length,
+              draw: drawn(int(0, cases.length - 1)),
+              kept: [],
               literal: (at) => {
-                const drawn = cases[at];
+                const held = cases[at];
 
-                return drawn === undefined ? String(at) : `${drawn.site.identifier} ${drawn.state}`;
+                return held === undefined ? String(at) : `${held.site.identifier} ${held.state}`;
               },
               oracle: { kind: "second-implementation", name: "the law oracle's verdict" },
+              runs: 24,
+              shrink: completeShrink,
+              steerEvery: 16,
               suite: "pantry/binding-fit-db",
             },
             (at) =>
               Effect.gen(function* bindingCaseAgrees() {
-                const drawn = cases[at];
-                if (drawn === undefined) {
+                const held = cases[at];
+                if (held === undefined) {
                   return;
                 }
 
-                const label = `${drawn.site.kind} ${drawn.site.attribute} ${drawn.state}`;
-                const dir = yield* scopedPackage(bindingCase(base, drawn.site, drawn.state));
+                const label = `${held.site.kind} ${held.site.attribute} ${held.state}`;
+                const dir = yield* scopedPackage(bindingCase(base, held.site, held.state));
                 yield* importAgreesWithOracle(dir, label);
               }).pipe(Effect.scoped),
           ),
