@@ -67,18 +67,18 @@ type CompareError = PackageReadError | ZipRefusal | PlatformError.PlatformError;
  * @param left - One byte string.
  * @param right - The other.
  * @returns The first index where they differ, the shorter length when one is a prefix of the
- *   other, or `undefined` when they are equal.
+ *   other, or none when they are equal.
  */
-const firstDifference = (left: Uint8Array, right: Uint8Array): number | undefined => {
+const firstDifference = (left: Uint8Array, right: Uint8Array): Option.Option<number> => {
   const shared = Math.min(left.length, right.length);
 
   for (let offset = 0; offset < shared; offset += 1) {
     if (left[offset] !== right[offset]) {
-      return offset;
+      return Option.some(offset);
     }
   }
 
-  return left.length === right.length ? undefined : shared;
+  return left.length === right.length ? Option.none() : Option.some(shared);
 };
 
 /**
@@ -141,21 +141,24 @@ const compareEntry = Effect.fnUntraced(function* compareEntry(
   exported: Uint8Array,
 ): Effect.fn.Return<Outcome> {
   const offset = firstDifference(recorded, exported);
-  if (offset === undefined) {
+  if (Option.isNone(offset)) {
     return { kind: "byte-identical" };
   }
 
-  const left = yield* canonicalOf(recorded);
-  const right = yield* canonicalOf(exported);
-  if (left._tag === "None" || right._tag === "None") {
-    return { at: `byte ${String(offset)}`, kind: "differs" };
+  const forms = Option.all([yield* canonicalOf(recorded), yield* canonicalOf(exported)]);
+  if (Option.isNone(forms)) {
+    return { at: `byte ${String(offset.value)}`, kind: "differs" };
   }
 
-  const canonical = firstDifference(left.value, right.value);
+  const [left, right] = forms.value;
 
-  return canonical === undefined
-    ? { kind: "canonical-equal" }
-    : { at: describeCanonical(left.value, right.value, canonical), kind: "differs" };
+  return Option.match(firstDifference(left, right), {
+    onNone: (): Outcome => ({ kind: "canonical-equal" }),
+    onSome: (canonical): Outcome => ({
+      at: describeCanonical(left, right, canonical),
+      kind: "differs",
+    }),
+  });
 });
 
 /**
