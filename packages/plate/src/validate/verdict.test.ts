@@ -740,7 +740,7 @@ describe("check, E3: attributes only a wildcard admits", () => {
     );
   });
 
-  it("keeps the data-* properties of a qti-portable-custom-interaction, the one element whose specification carries its properties in them, and marks and removes a data-* attribute elsewhere", () => {
+  it("keeps the data-* properties of a qti-portable-custom-interaction, the one element whose specification carries its properties in them, and an author data-* elsewhere by D24", () => {
     const pci = el(
       "qti-portable-custom-interaction",
       [
@@ -754,17 +754,11 @@ describe("check, E3: attributes only a wildcard admits", () => {
     );
     const accepted = acceptedOf(
       verdictOf(item([response("integer", "single"), body([pci])])),
-      "accepted-with-unsupported",
+      "accepted",
     );
     const [node] = accepted.item.body;
 
-    assert.deepStrictEqual(accepted.unsupported, [
-      {
-        feature: "attribute:data-note",
-        path: `${bodyPath}/qti-portable-custom-interaction/qti-interaction-markup/p`,
-        shown: "mark",
-      },
-    ]);
+    assert.deepStrictEqual(accepted.unsupported, []);
     assert.strictEqual(node?.kind, "portable-custom");
     assert.deepStrictEqual(node?.kind === "portable-custom" ? node.properties : [], [
       { name: "maxCount", value: "5" },
@@ -774,7 +768,7 @@ describe("check, E3: attributes only a wildcard admits", () => {
       node?.kind === "portable-custom"
         ? node.markup.map((inner) => (inner.kind === "element" ? namesOf(inner) : inner.kind))
         : [],
-      [[]],
+      [["data-note"]],
     );
   });
 
