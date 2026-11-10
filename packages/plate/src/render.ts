@@ -381,11 +381,12 @@ const stateOf = (
 });
 
 /**
- * The attributes of the item's Live part: an empty polite status region, read whole, which the
- * runtime announces into (plan D1). The Root holds it once, after the body; nothing is written in
- * it on the server.
+ * The attributes of the item's Live part: an empty polite live region, read whole, which the
+ * runtime announces into (plan D1). It carries no `role`: it is an announcer, not a second Status
+ * region a reader lists, so an answered page keeps one Status region (D14). The Root holds it
+ * once, after the body; nothing is written in it on the server.
  */
-const liveRegion = { "aria-atomic": "true", "aria-live": "polite", role: "status" } as const;
+const liveRegion = { "aria-atomic": "true", "aria-live": "polite" } as const;
 
 /**
  * Construct the render function for the four interactions the hubs render inline, dispatching on
