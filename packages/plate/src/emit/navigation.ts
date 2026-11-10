@@ -25,12 +25,14 @@ import type { MessageKey } from "#plate/messages.ts";
 import type { NavigationItem, NavigationItemState, NavigationState } from "#plate/navigation.ts";
 import type { EmitState } from "#plate/payload.ts";
 import type { Intent } from "#plate/session/session.ts";
+import { placesTime, timePart } from "#plate/test-features/time-limits.ts";
 
 /**
  * A part an author places in the navigation Root, in the order they list them: the Previous, Next,
- * Submit and End buttons, and the item list.
+ * Submit and End buttons, the item list, and the Time part, the `timer` region that shows the time
+ * left once issue m3f-01 reads the test's time limits; until then it is hidden and empty.
  */
-export type NavigationPart = "end" | "items" | "next" | "previous" | "submit";
+export type NavigationPart = "end" | "items" | "next" | "previous" | "submit" | "time";
 
 /**
  * What the navigation parts read beside the data: the locale their labels are written in and the
@@ -68,20 +70,22 @@ const navigationPart = (
  * Give the parts a navigation Root holds when the author names none: the parts its part's modes
  * admit, in reading order.
  *
- * Previous and the item list stand only in a nonlinear part, which alone lets the candidate move
- * back or jump; Next and Submit stand in every part; End stands only in a nonlinear, individual
- * part, the one part that `next` never ends and no part submission closes.
+ * The Time part stands first, only while a time is in force (`placesTime`, which the time-limits
+ * module decides); Previous and the item list stand only in a nonlinear part, which alone lets the
+ * candidate move back or jump; Next and Submit stand in every part; End stands only in a
+ * nonlinear, individual part, the one part that `next` never ends and no part submission closes.
  *
- * @param state The navigation, whose modes decide the parts.
- * @returns Previous and the item list (nonlinear), Next, Submit, then End (nonlinear and
- *   individual).
+ * @param state The navigation, whose modes and time decide the parts.
+ * @returns Time (a time in force), Previous and the item list (nonlinear), Next, Submit, then End
+ *   (nonlinear and individual).
  */
 export const defaultOrder = (
-  state: Pick<NavigationState, "navigation" | "submission">,
+  state: Pick<NavigationState, "navigation" | "submission" | "time">,
 ): readonly NavigationPart[] => {
   const nonlinear = state.navigation === "nonlinear";
 
   return [
+    ...(placesTime(state) ? (["time"] as const) : []),
     ...(nonlinear ? (["previous", "items"] as const) : []),
     "next",
     "submit",
@@ -246,6 +250,11 @@ const placedPart = (
       return state.submission === "individual"
         ? button(state, emit, "submit", { kind: "submit-item" }, "submitAnswer")
         : button(state, emit, "submit", { kind: "submit-part" }, "submitPart");
+    }
+    case "time": {
+      const { children, props } = timePart(state.time, emit.locale);
+
+      return navigationPart(emit.parts, "time", props, children);
     }
     default: {
       return part satisfies never;

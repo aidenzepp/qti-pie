@@ -39,6 +39,8 @@ import {
 } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
+import { sequencedBy } from "#plate/test-features/dispatch.ts";
+import { testFeatures } from "#plate/test-features/table.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 import type { NavigationMode, SubmissionMode } from "#plate/vocabulary.ts";
 
@@ -252,7 +254,9 @@ interface Place {
 }
 
 /**
- * List a test's item refs in the order the candidate meets them, each with its part.
+ * List a test's item refs in document order, each with its part: the order the candidate meets
+ * them, until a test-feature module that selects or orders lands, which `startTest` consults
+ * through `sequencedBy` over these places.
  *
  * The test model leaves out or holds inert every feature the session does not deliver, so the
  * walk is the document order of parts, sections and item refs.
@@ -1006,8 +1010,12 @@ export const startTest = (
   Result.gen(function* startSession() {
     const instance = yield* checkedInstance(context.instance);
     const datestamp = yield* datestampOf(context.now, "context.now");
-    const places = placesOf(test.test);
     const seed = context.seed ?? drawSeed();
+    const places = sequencedBy(testFeatures, {
+      places: placesOf(test.test),
+      seed,
+      test: test.test,
+    });
     const delivered = yield* Result.all(
       places.map(({ ref }, index) =>
         Result.map(

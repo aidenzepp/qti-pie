@@ -29,6 +29,7 @@ import {
   templatePrefixes,
   testMarks,
 } from "#plate/vocabulary.ts";
+import { testFeatureKeys } from "#plate/test-features/table.ts";
 import type { ClassOwner } from "#plate/vocabulary.ts";
 
 /**
@@ -722,25 +723,14 @@ describe("M2's closed sets", () => {
     );
   });
 
-  it("keys exactly spec §4.6's marks, adaptive selection and xi:include, each once", () => {
+  it("keys the test-feature table's keys, in its order, then the five marks no element names, each once", () => {
     assertDistinct(testMarks);
     assert.include([...testMarks], "max-attempts:negative");
     assert.notInclude([...testMarks], "resource-type-mismatch");
-    assert.sameMembers(
+    assert.deepStrictEqual(
       [...testMarks],
       [
-        "qti-selection",
-        "qti-adaptive-selection",
-        "qti-ordering",
-        "qti-time-limits",
-        "qti-pre-condition",
-        "qti-branch-rule",
-        "qti-rubric-block",
-        "qti-test-feedback",
-        "qti-assessment-section-ref",
-        "qti-stylesheet",
-        "qti-context-declaration",
-        "xi:include",
+        ...testFeatureKeys,
         'allow-comment="true"',
         "max-attempts:negative",
         "root:qti-assessment-section",
@@ -748,6 +738,7 @@ describe("M2's closed sets", () => {
         "lti-link",
       ],
     );
+    assert.strictEqual(testFeatureKeys.length, 12);
   });
 
   it("align-54 LTI item ref E21: keys lti-link, the mark of an item ref that names an LTI link, which no element names", () => {

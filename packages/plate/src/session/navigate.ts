@@ -20,6 +20,10 @@ import { UnknownItemRef } from "#plate/session/control.ts";
 import type { Intent, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import { ItemNotInSession, present, recordStep } from "#plate/session/start.ts";
 import type { InvalidTime, TestNotDeliverable } from "#plate/session/start.ts";
+import type { FeatureRefusal } from "#plate/test-features/contract.ts";
+import { gatedBy } from "#plate/test-features/dispatch.ts";
+import { testFeatures } from "#plate/test-features/table.ts";
+import type { TestFeatureTable } from "#plate/test-features/table.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 
 /**
@@ -46,9 +50,12 @@ export interface MoveStep extends Step {
  * - `out-of-range`: `go` to a sequence index that names no item of the current part.
  * - `unsubmitted`: `next` from an item with no processed attempt in a linear, individual part, which
  *   must be submitted before the candidate leaves it.
+ * - `feature`: a test-feature module refused the move (`MoveRefused.feature` names which, its own
+ *   rule and the reason), before the part's modes ruled on it.
  */
 export type MoveRule =
   | "end-of-part"
+  | "feature"
   | "linear-back"
   | "linear-jump"
   | "out-of-range"
@@ -79,28 +86,32 @@ export const requestOf = (intent: Intent): string =>
 /**
  * What each {@link MoveRule} says about a refused move from an item, and what to offer instead.
  */
-const reasons: Readonly<Record<Exclude<MoveRule, "test-closed">, (origin: MoveOrigin) => string>> =
-  {
-    "end-of-part": ({ part, sequenceIndex }) =>
-      `item ${sequenceIndex} is the last item of the part ${JSON.stringify(part)}, and a move never leaves its part. End the part to move on.`,
-    "linear-back": ({ part }) =>
-      `the part ${JSON.stringify(part)} is linear, so the candidate never goes back. Offer next instead.`,
-    "linear-jump": ({ part, sequenceIndex }) =>
-      `the part ${JSON.stringify(part)} is linear, so the candidate moves only with next. Offer next, or go to item ${sequenceIndex} to save and stay.`,
-    "out-of-range": ({ first, last, part }) =>
-      `the current part ${JSON.stringify(part)} holds items ${first} to ${last}, and a move never leaves its part. Go to a sequence index from ${first} to ${last}.`,
-    "start-of-part": ({ part, sequenceIndex }) =>
-      `item ${sequenceIndex} is the first item of the part ${JSON.stringify(part)}, and an ended part never reopens. Offer previous only from a later item of the part.`,
-    unsubmitted: ({ part, sequenceIndex }) =>
-      `item ${sequenceIndex} has no processed attempt, and the part ${JSON.stringify(part)} is linear with individual submission, so the item is submitted before the candidate leaves it. Submit the item, then move with next.`,
-  };
+const reasons: Readonly<
+  Record<Exclude<MoveRule, "feature" | "test-closed">, (origin: MoveOrigin) => string>
+> = {
+  "end-of-part": ({ part, sequenceIndex }) =>
+    `item ${sequenceIndex} is the last item of the part ${JSON.stringify(part)}, and a move never leaves its part. End the part to move on.`,
+  "linear-back": ({ part }) =>
+    `the part ${JSON.stringify(part)} is linear, so the candidate never goes back. Offer next instead.`,
+  "linear-jump": ({ part, sequenceIndex }) =>
+    `the part ${JSON.stringify(part)} is linear, so the candidate moves only with next. Offer next, or go to item ${sequenceIndex} to save and stay.`,
+  "out-of-range": ({ first, last, part }) =>
+    `the current part ${JSON.stringify(part)} holds items ${first} to ${last}, and a move never leaves its part. Go to a sequence index from ${first} to ${last}.`,
+  "start-of-part": ({ part, sequenceIndex }) =>
+    `item ${sequenceIndex} is the first item of the part ${JSON.stringify(part)}, and an ended part never reopens. Offer previous only from a later item of the part.`,
+  unsubmitted: ({ part, sequenceIndex }) =>
+    `item ${sequenceIndex} has no processed attempt, and the part ${JSON.stringify(part)} is linear with individual submission, so the item is submitted before the candidate leaves it. Submit the item, then move with next.`,
+};
 
 /**
  * The failure of {@link move} and {@link moveTarget} for a move the test's rules forbid now.
  * `rule` says which rule refuses it, and `from` where the move started, none once the test has
- * closed. A refused move changes nothing, the responses the request carried included.
+ * closed. Under the rule `feature`, `feature` names the test-feature module that refused it, its
+ * own rule and the reason; it is none under every other rule. A refused move changes nothing, the
+ * responses the request carried included.
  */
 export class MoveRefused extends Data.TaggedError("MoveRefused")<{
+  readonly feature: Option.Option<FeatureRefusal>;
   readonly from: Option.Option<MoveOrigin>;
   readonly intent: MoveIntent;
   readonly rule: MoveRule;
@@ -110,9 +121,15 @@ export class MoveRefused extends Data.TaggedError("MoveRefused")<{
    */
   override get message(): string {
     const request = requestOf(this.intent);
-    const { from, rule } = this;
+    const { feature, from, rule } = this;
     if (rule === "test-closed" || Option.isNone(from)) {
       return `The test session is closed, so ${request} has no item to move from. Read what it shows with current, which gives its summary.`;
+    }
+
+    if (rule === "feature" || Option.isSome(feature)) {
+      const refused = Option.getOrUndefined(feature);
+
+      return `The move ${request} from item ${from.value.sequenceIndex} is refused by ${refused?.feature ?? "a test feature"} (${refused?.rule ?? rule}): ${refused?.detail ?? "the feature gave no reason"}`;
     }
 
     return `The move ${request} from item ${from.value.sequenceIndex} is refused (${rule}): ${reasons[rule](from.value)}`;
@@ -278,8 +295,14 @@ const targetOf = (standing: Standing, intent: MoveIntent): Result.Result<number,
  *   Result.map(moveTargets(test, session), (decide) => decide({ kind: "next" }));
  *   // Result.succeed(Result.succeed(2)) from item 1 of a part of three
  *
+ *   Before the part's modes rule on a move, the test-feature modules do, through `gatedBy`: a
+ *   module's refusal is the rule `feature`, and a module's target replaces the modes' (a branch
+ *   rule's). Every stub lets every move through.
+ *
  * @param test The test the session was started from.
  * @param session The session.
+ * @param features The test-feature modules, the table by default.
+ * @param now The time of the move, where the caller has one; none for a read of the moves allowed.
  * @returns The function that decides a move, failing with {@link MoveRefused} when the test's
  *   rules forbid it now and, once the test has closed, for every move; {@link ItemNotInSession} for
  *   an open session whose position is past its items; {@link UnknownItemRef} when the test holds
@@ -288,24 +311,46 @@ const targetOf = (standing: Standing, intent: MoveIntent): Result.Result<number,
 export const moveTargets = (
   test: AcceptedTest,
   session: TestSession,
+  features: TestFeatureTable = testFeatures,
+  now: Option.Option<Date> = Option.none(),
 ): Result.Result<
   (intent: MoveIntent) => Result.Result<number, MoveRefused>,
   ItemNotInSession | UnknownItemRef
 > => {
   if (session.status === "closed") {
     return Result.succeed((intent) =>
-      Result.fail(new MoveRefused({ from: Option.none(), intent, rule: "test-closed" })),
+      Result.fail(
+        new MoveRefused({
+          feature: Option.none(),
+          from: Option.none(),
+          intent,
+          rule: "test-closed",
+        }),
+      ),
     );
   }
 
-  return Result.map(
-    standingOf(test.test, session),
-    (standing) => (intent) =>
-      Result.mapError(
-        targetOf(standing, intent),
-        (rule) => new MoveRefused({ from: Option.some(originOf(standing)), intent, rule }),
-      ),
-  );
+  return Result.map(standingOf(test.test, session), (standing) => (intent) => {
+    const from = Option.some(originOf(standing));
+    const gated = gatedBy(features, { intent, now, session, test: test.test });
+    if (Option.isSome(gated)) {
+      return gated.value.kind === "target"
+        ? Result.succeed(gated.value.sequenceIndex)
+        : Result.fail(
+            new MoveRefused({
+              feature: Option.some(gated.value.refusal),
+              from,
+              intent,
+              rule: "feature",
+            }),
+          );
+    }
+
+    return Result.mapError(
+      targetOf(standing, intent),
+      (rule) => new MoveRefused({ feature: Option.none(), from, intent, rule }),
+    );
+  });
 };
 
 /**
@@ -373,7 +418,8 @@ export const move = (
   EngineFailure | InvalidTime | ItemNotInSession | MoveRefused | TestNotDeliverable | UnknownItemRef
 > =>
   Result.gen(function* moveOne() {
-    const target = yield* moveTarget(test, session, step.intent);
+    const decide = yield* moveTargets(test, session, testFeatures, Option.some(now));
+    const target = yield* decide(step.intent);
     const saved = yield* recordStep(session, step, now);
     const position = yield* Result.fromOption(
       Arr.findFirstIndex(saved.items, (item) => item.sequenceIndex === target),

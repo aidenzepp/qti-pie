@@ -14,6 +14,7 @@
 import { Array as Arr, Option } from "effect";
 import { controlCap } from "#plate/control-cap.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
+import { testFeatureKeys } from "#plate/test-features/table.ts";
 
 /**
  * The eleven QTI base types, as the `base-type` attribute spells them.
@@ -825,33 +826,24 @@ export type AnsweredStatus = (typeof answeredStatuses)[number];
  * The keys of the test features M2 accepts and does not deliver: each is a mark on the
  * verdict at its path, never a notice, and the delivered sequence ignores it.
  *
- * An element feature is keyed by its QTI name. `qti-adaptive-selection` is selection, which M3
- * delivers. `xi:include` is XInclude's `include`, which is never fetched (S-6): a test holding one
- * is left unchecked (E23) and never built, so no accepted test carries this key, which stays as
- * spec §4.6 lists it. `allow-comment="true"` is a session control that
- * asks for a comment box; `max-attempts:negative` is a negative `max-attempts`, delivered as no
- * limit; `root:<name>` is a section or a stimulus given as a document's root, which is not
- * delivered alone; `lti-link` is an item ref that names an LTI link in place of an item (reading
- * 110), which plate does not launch: only a package sees what an item ref names, so `openPackage`
- * marks it and leaves it out of the test it delivers (`withLtiLinks` in `#plate/model/test.ts`).
- * A test's outcome processing, an item reference's `qti-weight`, its
- * `qti-variable-mapping` and its `qti-template-default` are read into the test model, so none of
- * them is a mark here: outcome processing or a template default the engine cannot run is marked by
- * what it cannot run (`buildTest` in `#plate/model/test.ts`).
+ * An element feature is keyed by its QTI name, and has a module under `src/test-features/`: the
+ * element keys are the table's (`testFeatureKeys`), in its order, so a module that lands changes
+ * nothing here, and the keys that name no element follow them. `qti-adaptive-selection` is
+ * selection, which M3 delivers. `xi:include` is XInclude's `include`, which is never fetched (S-6):
+ * a test holding one is left unchecked (E23) and never built, so no accepted test carries this key,
+ * which stays as spec §4.6 lists it. `allow-comment="true"` is a session control that asks for a
+ * comment box; `max-attempts:negative` is a negative `max-attempts`, delivered as no limit;
+ * `root:<name>` is a section or a stimulus given as a document's root, which is not delivered
+ * alone; `lti-link` is an item ref that names an LTI link in place of an item (reading 110), which
+ * plate does not launch: only a package sees what an item ref names, so `openPackage` marks it and
+ * leaves it out of the test it delivers (`withLtiLinks` in `#plate/model/test.ts`). A test's
+ * outcome processing, an item reference's `qti-weight`, its `qti-variable-mapping` and its
+ * `qti-template-default` are read into the test model, so none of them is a mark here: outcome
+ * processing or a template default the engine cannot run is marked by what it cannot run
+ * (`buildTest` in `#plate/model/test.ts`).
  */
 export const testMarks = [
-  "qti-selection",
-  "qti-adaptive-selection",
-  "qti-ordering",
-  "qti-time-limits",
-  "qti-pre-condition",
-  "qti-branch-rule",
-  "qti-rubric-block",
-  "qti-test-feedback",
-  "qti-assessment-section-ref",
-  "qti-stylesheet",
-  "qti-context-declaration",
-  "xi:include",
+  ...testFeatureKeys,
   'allow-comment="true"',
   "max-attempts:negative",
   "root:qti-assessment-section",
