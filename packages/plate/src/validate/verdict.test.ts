@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
+import { anyElement } from "#plate/content/contract.ts";
+import { bodyModules } from "#plate/content/modules.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
 import {
@@ -207,6 +209,15 @@ const matchCorrect = el(
  * @returns Its verdict.
  */
 const verdictOf = (source: SourceDocument): Verdict => check(source, tables, Option.none());
+
+/**
+ * The content module whose `check` still leaves a document holding an island of its namespace
+ * unchecked: the SSML stub, read from the content modules table. A test that needs an unchecked
+ * verdict builds its island in this module's namespace, so no test names a kind that has landed.
+ * The constant moves to the next such stub when SSML lands (issue m4-02), and the tests that use it
+ * need another source of an unchecked verdict once no content module leaves one.
+ */
+const uncheckedStub = bodyModules[anyElement];
 
 /**
  * Read the accepted item of a verdict that must accept an item.
@@ -2378,8 +2389,8 @@ describe("acceptedItem", () => {
   });
 
   it("gives none for an unchecked verdict", () => {
-    const math = el("math", [], [el("mi", [], [text("x")], mathmlNamespace)], mathmlNamespace);
-    const verdict = verdictOf(item([body([el("p", [], [math])])]));
+    const island = el("speak", [], [text("x")], uncheckedStub.namespace);
+    const verdict = verdictOf(item([body([el("p", [], [island])])]));
 
     assert.strictEqual(verdict.verdict, "unchecked");
     assert.deepStrictEqual(acceptedItem(verdict), Option.none());
