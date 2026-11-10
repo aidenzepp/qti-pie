@@ -180,8 +180,9 @@ export const integerOrRefOf = (written: string): IntegerOrRef => integerOrName(w
  * Classify a float attribute's value, such as `qti-random-float`'s `max` or one token of
  * `qti-equal`'s `tolerance`, as the XSD's union of `xs:double` and a variable's name reads it: the
  * double first, so `INF`, `-INF` and `NaN` are literals, and anything else is a reference. A
- * literal beyond the largest finite double names that double, of its sign (reading 56), as
- * `parseLexical` reads a float. The reader and the validator both classify through it.
+ * literal beyond the largest finite double names that double, of its sign, by reading 56 ("an
+ * `xs:double` literal beyond the largest finite double names the largest finite double of its
+ * sign"), as `parseLexical` reads a float. The reader and the validator both classify through it.
  *
  * The double member collapses whitespace and a name holds none, so the outer XML whitespace goes
  * first. A value outside both members never reaches a classifier on a checked item; it is a
@@ -623,7 +624,7 @@ export type TemplateRule =
  * rule can say, such as a `qti-custom-operator`'s. A record has no base type of its own, so it is
  * `{ baseType: "unknown", cardinality: "record" }`. A base type of `any` or `unknown`, and a
  * cardinality of `unknown`, satisfy every operand rule, as the qti package's checker reads them
- * (`packages/pantry/src/processing/check.ts`).
+ * (`silentBases` in `packages/pantry/src/qti/expressions.ts`).
  */
 export interface ExpressionType {
   readonly baseType: BaseType | "any" | "unknown";
@@ -632,8 +633,9 @@ export interface ExpressionType {
 
 /**
  * The attributes of an expression that its result type depends on, as the qti package normalizes
- * them (`packages/pantry/src/processing/types.ts`). The caller fills them in from the expression or
- * the declaration it names, and a rule reads an absent one as unknown:
+ * them (the relation `ExpressionAttribute` in `packages/pantry/src/qti/expressions.ts`). The caller
+ * fills them in from the expression or the declaration it names, and a rule reads an absent one as
+ * unknown:
  *
  * - `baseType` and `cardinality`: the type of the declaration the kind's declaration facet names, or
  *   `qti-base-value`'s or `qti-test-variables`' `base-type`.

@@ -97,6 +97,16 @@ import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
 import { Entry, hrefPaths, NamedHref, Reference, UnreadTypePath } from "#pantry/qti/package.ts";
 
 /**
+ * {@link booleanTruePattern} as a `Compute.matches` pattern.
+ */
+const booleanTrue = Compute.pattern(booleanTruePattern);
+
+/**
+ * {@link namingPattern} as a `Compute.matches` pattern.
+ */
+const naming = Compute.pattern(namingPattern);
+
+/**
  * The test's root kind, the root of an assembly whose names and branch rules resolve.
  */
 export const testKind = "qti-assessment-test" satisfies Kind;
@@ -269,8 +279,9 @@ export const SelectForm = lexical(pg.bigint);
  * A collapsed value: no whitespace at either end, and something between. An NCName holds no
  * whitespace at all, so an identifier's collapsed form is this.
  */
-export const collapsedPattern =
-  "^(?:[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]|[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}][\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}])$";
+export const collapsedPattern = Compute.pattern(
+  "^(?:[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]|[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}][\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}])$",
+);
 
 /**
  * A document of a test or a section, keyed by its document node: its entry, its root kind, and
@@ -1282,11 +1293,7 @@ const attributesOf = (name: Name, kinds: readonly Kind[]) =>
  * domain refuses it alone (spec reading 152, decision 457 (2)).
  */
 const namingIdentifiers = select(Attribute, (a) =>
-  a.and(
-    a.eq(a.name, "identifier"),
-    a.in(a.kind, namedKinds),
-    Compute.matches(a.lexical, namingPattern),
-  ),
+  a.and(a.eq(a.name, "identifier"), a.in(a.kind, namedKinds), Compute.matches(a.lexical, naming)),
 );
 
 /**
@@ -1903,8 +1910,8 @@ export const testLawsByName = {
     ),
     check("E1_derived", TestFlag, (f) =>
       f.or(
-        f.and(f.eq(f.value, true), Compute.matches(f.lexical, booleanTruePattern)),
-        f.and(f.eq(f.value, false), f.not(Compute.matches(f.lexical, booleanTruePattern))),
+        f.and(f.eq(f.value, true), Compute.matches(f.lexical, booleanTrue)),
+        f.and(f.eq(f.value, false), f.not(Compute.matches(f.lexical, booleanTrue))),
       ),
     ),
     check("E1_derived", Named, (n) =>

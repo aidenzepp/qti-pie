@@ -11,7 +11,7 @@
  * package (the W5 amendment's C19), which `db.apply` compiles for its call from the same
  * Description.
  */
-import { login, workload } from "@bjornpagen/grizzle";
+import { login, paged, workload } from "@bjornpagen/grizzle";
 import { Result } from "effect";
 import { documentScan, documentsOf, entriesOf } from "#pantry/export/scan.ts";
 import { unionsOf } from "#pantry/import/overlays/index.ts";
@@ -22,11 +22,15 @@ import { Author } from "#pantry/qti/roles.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
 /**
- * The author application's workload: one document's ordered scan, the documents of a package and
- * a package's record, each compiled once when the login's `DbLayer` is built, its access paths
- * earning their indexes (the W5 amendment's C20).
+ * The author application's workload: one document's ordered scan, which the export pages, the
+ * documents of a package and a package's record, each compiled once when the login's `DbLayer` is
+ * built, its access paths earning their indexes (the W5 amendment's C20).
  */
-export const exportWork = workload(Author, { documentScan, documentsOf, entriesOf });
+export const exportWork = workload(Author, {
+  documentScan: paged(documentScan),
+  documentsOf,
+  entriesOf,
+});
 
 /**
  * A package's inputs with no row: each written relation's empty keyed set, the union of no part,

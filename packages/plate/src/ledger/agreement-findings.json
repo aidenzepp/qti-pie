@@ -1,140 +1,28 @@
 [
   {
-    "file": "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip",
-    "finding": "plate leaves 5 of its 22 items unchecked for their MathML and accepts the test and the other 17 items, 15 of them with unsupported features (templates, feedback, printed variables, and upload, order, match, gap match and select point interactions among them); a package with an unchecked document agrees with no verdict. pantry refuses it unmodeled-vocabulary: an element or attribute in it has no kinds file in pantry's model yet, which marks what pantry does not model, not a QTI rule the package breaks; its verdict file does not name which.",
-    "pantry": {
-      "rule": "unmodeled-vocabulary",
-      "verdict": "refused"
-    },
-    "plate": {
-      "rules": [],
-      "verdict": "unchecked"
-    },
-    "ruling": {
-      "expectedWhile": "pantry does not yet model this vocabulary (its phases 6 to 11)",
-      "group": 1,
-      "source": "rule 564d5592 (operator, 2026-11-06)",
-      "state": {
-        "commit": "69dfc1a",
-        "pantry": {
-          "rule": "unmodeled-vocabulary",
-          "verdict": "refused"
-        },
-        "plate": {
-          "rules": [],
-          "verdict": "unchecked"
-        }
-      }
-    }
-  },
-  {
     "file": "qtiv3-examples/packaging/basicFeedbackTest/basicFeedbackTest.zip",
-    "finding": "plate leaves 1 of its 4 items unchecked for its MathML and accepts the test and the other 3 items, with unsupported features (test, modal, block and inline feedback, an adaptive item, a rubric block and outcome processing among them); a package with an unchecked document agrees with no verdict. pantry refuses it unmodeled-vocabulary: an element or attribute in it has no kinds file in pantry's model yet, which marks what pantry does not model, not a QTI rule the package breaks; its verdict file does not name which.",
+    "finding": "plate leaves 1 of its 4 items unchecked for its MathML and accepts the test and the other 3 items, with unsupported features (test, modal, block and inline feedback, an adaptive item, a rubric block and outcome processing among them); a package with an unchecked document agrees with no verdict. pantry accepts it. The difference is plate's unmodeled vocabulary: plate does not validate MathML yet, so it judges nothing in that item, which marks what plate does not model, not a QTI rule the package breaks.",
     "pantry": {
-      "rule": "unmodeled-vocabulary",
-      "verdict": "refused"
-    },
-    "plate": {
-      "rules": [],
-      "verdict": "unchecked"
-    },
-    "ruling": {
-      "expectedWhile": "pantry does not yet model this vocabulary (its phases 6 to 11)",
-      "group": 1,
-      "source": "rule 564d5592 (operator, 2026-11-06)",
-      "state": {
-        "commit": "69dfc1a",
-        "pantry": {
-          "rule": "unmodeled-vocabulary",
-          "verdict": "refused"
-        },
-        "plate": {
-          "rules": [],
-          "verdict": "unchecked"
-        }
-      }
-    }
-  },
-  {
-    "file": "qtiv3-examples/packaging/pci-simple/pci_simple_example.zip",
-    "finding": "plate accepts its one item, marking its portable custom interaction and its data-toggle and data-tap-message attributes unsupported. pantry refuses it unmodeled-vocabulary: an element or attribute in it has no kinds file in pantry's model yet, which marks what pantry does not model, not a QTI rule the package breaks; its verdict file does not name which.",
-    "pantry": {
-      "rule": "unmodeled-vocabulary",
-      "verdict": "refused"
-    },
-    "plate": {
-      "rules": [],
-      "verdict": "accepted-with-unsupported"
-    },
-    "ruling": {
-      "expectedWhile": "pantry does not yet model this vocabulary (its phases 6 to 11)",
-      "group": 1,
-      "source": "rule 564d5592 (operator, 2026-11-06)",
-      "state": {
-        "commit": "69dfc1a",
-        "pantry": {
-          "rule": "unmodeled-vocabulary",
-          "verdict": "refused"
-        },
-        "plate": {
-          "rules": [],
-          "verdict": "accepted-with-unsupported"
-        }
-      }
-    }
-  },
-  {
-    "file": "qtiv3-examples/packaging/sharedStimulus/sharedStimulus.zip",
-    "finding": "plate leaves 1 of its 3 items unchecked for its SSML and accepts the stimulus and the other 2 items, marking unsupported the stimulus refs, catalog info and an order interaction among others; a package with an unchecked document agrees with no verdict. pantry refuses it unmodeled-vocabulary: an element or attribute in it has no kinds file in pantry's model yet, which marks what pantry does not model, not a QTI rule the package breaks; its verdict file does not name which.",
-    "pantry": {
-      "rule": "unmodeled-vocabulary",
-      "verdict": "refused"
-    },
-    "plate": {
-      "rules": [],
-      "verdict": "unchecked"
-    },
-    "ruling": {
-      "expectedWhile": "pantry does not yet model this vocabulary (its phases 6 to 11)",
-      "group": 1,
-      "source": "rule 564d5592 (operator, 2026-11-06)",
-      "state": {
-        "commit": "69dfc1a",
-        "pantry": {
-          "rule": "unmodeled-vocabulary",
-          "verdict": "refused"
-        },
-        "plate": {
-          "rules": [],
-          "verdict": "unchecked"
-        }
-      }
-    }
-  },
-  {
-    "file": "qtiv3-examples/packaging/usageData/usageData.zip",
-    "finding": "plate accepts it with no document judged: its 3 resources are usage data (qtiusagedata/xml), a type the QTI 3.0.0 CP profile lists and plate neither judges nor delivers in M2, and plate knows no rule that asks a package to hold an item or a test (rule 5b8ee08b). pantry refuses it not-qti3: it reads each usage-data document, whose root is usageData in QTI 2.2's usage-data namespace (imsqti_usagedata_v2p2), not QTI 3's (imsqti_usagedata_v3p0). Recorded as a disagreement, not as a plate rule: plate judges the documents it delivers or reads to deliver, and whether a QTI 3 package may carry QTI 2.2 usage data is an open reading.",
-    "pantry": {
-      "rule": "not-qti3",
-      "verdict": "refused"
-    },
-    "plate": {
-      "rules": [],
+      "rule": "",
       "verdict": "accepted"
     },
+    "plate": {
+      "rules": [],
+      "verdict": "unchecked"
+    },
     "ruling": {
-      "expectedWhile": "plate neither judges nor delivers usage data in M2; the QTI 2.2 namespace question is an open reading",
-      "group": 3,
-      "source": "rule 564d5592 (operator, 2026-11-06)",
+      "expectedWhile": "plate does not validate MathML (M3)",
+      "group": 1,
+      "source": "rule 4325d4c1 (operator, criterion 5), its group 1 widened to either package's unmodeled vocabulary by 057ff1af (overseer, 2026-11-08)",
       "state": {
-        "commit": "69dfc1a",
+        "commit": "083890d8",
         "pantry": {
-          "rule": "not-qti3",
-          "verdict": "refused"
+          "rule": "",
+          "verdict": "accepted"
         },
         "plate": {
           "rules": [],
-          "verdict": "accepted"
+          "verdict": "unchecked"
         }
       }
     }

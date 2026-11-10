@@ -76,6 +76,11 @@ import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 
 /**
+ * {@link namingPattern} as a `Compute.matches` pattern.
+ */
+const naming = Compute.pattern(namingPattern);
+
+/**
  * The nil uuid: the start of a header token's owner-axis copy of its cell's table, which every
  * member's owner replaces.
  */
@@ -282,7 +287,7 @@ const headersAttributes = select(Attribute, (a) =>
  * no {@link DocumentId}, and its value domain refuses it alone (spec reading 156).
  */
 const headerIds = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "th"), a.eq(a.name, "id"), Compute.matches(a.lexical, namingPattern)),
+  a.and(a.eq(a.kind, "th"), a.eq(a.name, "id"), Compute.matches(a.lexical, naming)),
 );
 
 /**

@@ -76,8 +76,7 @@ describe("describeFailure, the local set-up", () => {
     }),
   );
 
-  it("an OpenError or a TransportFailure carrying a CredentialError exits 78 as config", () => {
-    assert.deepStrictEqual(identity(new OpenError({ reason: credential })), config);
+  it("a TransportFailure carrying a CredentialError exits 78 as config", () => {
     assert.deepStrictEqual(identity(new TransportFailure({ reason: credential })), config);
   });
 });

@@ -5625,7 +5625,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "ID"
                 },
                 "use": "required"
               },
@@ -5634,7 +5634,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "IDREF"
                 },
                 "use": "required"
               }
@@ -5678,7 +5678,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "ID"
                 },
                 "use": "required"
               },
@@ -5687,7 +5687,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "IDREF"
                 },
                 "use": "required"
               }
@@ -5933,7 +5933,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "IDREF"
                 },
                 "use": "required"
               }
@@ -5982,7 +5982,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "ID"
                 },
                 "use": "required"
               },
@@ -6092,7 +6092,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "ID"
                 },
                 "use": "required"
               },
@@ -6215,7 +6215,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "IDREF"
                 },
                 "use": "required"
               }
@@ -6274,7 +6274,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "ID"
                 },
                 "use": "required"
               },
@@ -6362,7 +6362,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "ID"
                 },
                 "use": "required"
               },
@@ -12500,7 +12500,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "ID"
                 },
                 "use": "required"
               },
@@ -12509,7 +12509,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "IDREF"
                 },
                 "use": "required"
               }
@@ -12553,7 +12553,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "ID"
                 },
                 "use": "required"
               },
@@ -12562,7 +12562,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "IDREF"
                 },
                 "use": "required"
               }
@@ -12808,7 +12808,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "IDREF"
                 },
                 "use": "required"
               }
@@ -12857,7 +12857,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "ID"
                 },
                 "use": "required"
               },
@@ -12967,7 +12967,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "ID"
                 },
                 "use": "required"
               },
@@ -13091,7 +13091,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "IDREF"
                 },
                 "use": "required"
               }
@@ -13150,7 +13150,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "ID"
                 },
                 "use": "required"
               },
@@ -13238,7 +13238,7 @@
                 "namespace": "",
                 "type": {
                   "kind": "builtin",
-                  "name": "NCName"
+                  "name": "ID"
                 },
                 "use": "required"
               },

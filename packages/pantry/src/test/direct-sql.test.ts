@@ -620,16 +620,19 @@ const drawnTypedTree: Gen<TypedTree> = (source) => {
 
 /**
  * A typed tree's facts, unordered: its nodes, its attributes, and its `Document` row where the
- * type is stated there, the root stating it otherwise.
+ * type is stated there, the root stating it otherwise. A `Document` row's node is a document node,
+ * as its containment into `Node` holds it, so the root is one where the row states the type.
  *
  * @param typed - The typed tree.
  * @returns The facts.
  */
 const typedFacts = ({ attributes, byDocument, tree, type }: TypedTree): readonly Stated[] => [
-  ...handFolded(tree).map(({ fact }): Stated => ({
-    fact: fact.start === 0n && !byDocument ? { ...fact, documentType: type } : fact,
-    relation: Node,
-  })),
+  ...handFolded(byDocument ? { ...tree, kinds: ["document", ...tree.kinds.slice(1)] } : tree).map(
+    ({ fact }): Stated => ({
+      fact: fact.start === 0n && !byDocument ? { ...fact, documentType: type } : fact,
+      relation: Node,
+    }),
+  ),
   ...attributes.flatMap((count, node) =>
     Array.from({ length: count }, (_, at): Stated => ({
       fact: { at: BigInt(at), id: `a${String(node)}.${String(at)}`, node: `n${String(node)}` },

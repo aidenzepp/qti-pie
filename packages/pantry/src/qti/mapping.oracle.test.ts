@@ -62,17 +62,17 @@ const oldDouble = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?
  * Grizzle's `doubleText`, the language `Compute.parseDouble` reads total, which every typed float
  * key must lie inside.
  */
-const parsed = new RegExp(doubleText, "u");
+const parsed = new RegExp(doubleText.source, "u");
 
 /**
  * `integerKeyPattern` as JavaScript's engine reads it.
  */
-const integerKey = new RegExp(integerKeyPattern, "u");
+const integerKey = new RegExp(integerKeyPattern.source, "u");
 
 /**
  * `FloatKey`'s pattern, the float keys that hold a typed value, as JavaScript's engine reads it.
  */
-const floatKey = new RegExp(FloatKey.pattern.source, "u");
+const floatKey = new RegExp(FloatKey.patterns[0].source, "u");
 
 /**
  * The relations this module declares.
@@ -132,7 +132,7 @@ describe("qti/mapping.ts, declared", { timeout: searchTimeout }, () => {
   it("types a float key by xs:double's one lexical pattern, the one a tolerance is read by", () => {
     // Oracle: `#pantry/qti/operators.ts` `doublePattern`, the schema's one statement of
     // `xs:double`'s lexical space, whose language the box below holds to the deleted `xsDouble`.
-    assert.strictEqual(FloatKey.pattern.source, doublePattern);
+    assert.strictEqual(FloatKey.patterns[0].source, doublePattern.source);
   });
 });
 
@@ -283,17 +283,17 @@ const baseTypeForm = (baseType: string): RegExp =>
 /**
  * `exactValuePattern` as JavaScript's engine reads it.
  */
-const exactValue = new RegExp(exactValuePattern, "u");
+const exactValue = new RegExp(exactValuePattern.source, "u");
 
 /**
  * `pointKeyPattern` as JavaScript's engine reads it.
  */
-const pointKey = new RegExp(pointKeyPattern, "u");
+const pointKey = new RegExp(pointKeyPattern.source, "u");
 
 /**
  * `pairKeyPattern` as JavaScript's engine reads it.
  */
-const pairKey = new RegExp(pairKeyPattern, "u");
+const pairKey = new RegExp(pairKeyPattern.source, "u");
 
 /**
  * The characters the two-item box draws texts from: digits and signs a point's integers hold,

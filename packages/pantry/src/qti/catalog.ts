@@ -79,6 +79,11 @@ import { nodeRef } from "#pantry/qti/node.ts";
 import { TestDocument } from "#pantry/qti/tests.ts";
 
 /**
+ * {@link namingPattern} as a `Compute.matches` pattern.
+ */
+const naming = Compute.pattern(namingPattern);
+
+/**
  * A `qti-card`'s `support`, keyed by the card's node: its {@link nodeRef} tuple, with `catalog` its
  * parent, the `support` as written (`lexical`, C18's copy) and that form collapsed (`support`).
  */
@@ -278,7 +283,7 @@ const referenceAttributes = select(Attribute, (a) =>
  * as it has no {@link DocumentId}, and its value domain refuses it alone (spec reading 156).
  */
 const catalogIdAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "qti-catalog"), a.eq(a.name, "id"), Compute.matches(a.lexical, namingPattern)),
+  a.and(a.eq(a.kind, "qti-catalog"), a.eq(a.name, "id"), Compute.matches(a.lexical, naming)),
 );
 
 /**

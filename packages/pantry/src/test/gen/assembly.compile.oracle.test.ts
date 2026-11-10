@@ -24,7 +24,7 @@
  * and the import's write program is also declared in the author login's workload
  * (`#pantry/qti/logins.ts` `importWork`).
  */
-import { DbLayer, login, OpenError, workload } from "@bjornpagen/grizzle";
+import { DbLayer, login, workload } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
@@ -292,16 +292,14 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts, 
     "compiles the write program of every distinct list of inserts among the generated packages as the layer compiles a workload program",
     () =>
       // Oracle: grizzle itself, `DbLayer.make`'s startup compilation: a program that does not
-      // compile is `OpenError` carrying its `CompileError`, at `programs.case<n>`. Every kept
-      // program is new to the snapshot, so a layer whose programs all compile stops at the first
-      // of them it does not record, `WorkloadUngenerated` naming `case<n>`, which it can only name
-      // once every program has compiled.
+      // compile is `OpenError` carrying its `CompileError`, at `programs.case<n>`. The layer
+      // compares its programs with nothing in the snapshot (`grizzle check` does), so a layer whose
+      // programs all compile builds.
       // Bound: every distinct list of inserts among the 368 packages the test above drew.
       Effect.gen(function* compiles() {
         assert.isAbove(programs.length, 0, "no package was drawn");
 
         const exit = yield* compileKept;
-        const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
         const text = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "";
         const marker = text.indexOf("programs.case");
         const at =
@@ -311,9 +309,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts, 
         const drawnCase = at === undefined ? "" : (programs[Number(at)]?.literal ?? "");
 
         assert.isTrue(
-          failure instanceof OpenError &&
-            failure.reason._tag === "WorkloadUngenerated" &&
-            /program author_app\.case[0-9]+ is not in snapshot\.json/u.test(failure.message),
+          Exit.isSuccess(exit),
           `${text}${drawnCase === "" ? "" : `\nthe generated case: ${drawnCase}`}`,
         );
       }),

@@ -13,22 +13,10 @@ import { Qti } from "#pantry/qti/schema.ts";
 import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
 
 /**
- * The committed chain's measured counts (the chain regenerated over the align laws' migration by
- * the N5 Follow and AL5 repairs' migration, GEN-S3, then extended by the test-root braced
- * reference's migration, GEN-S4, which changes one check and moves no count, and by the order
- * interaction's binding migration, GEN-S5, which replaces one closed constant with another and
- * moves no count, and by the genetic repair's migration, GEN-S6, which adds three tables
- * (`ItemRefHref`, `UnreadTypeHref` and `UnreadTypePath`) and a data step, and by genetic repair
- * round 2's migration, GEN-S7, which adds a `lexical` column to three tables, narrows two copies
- * and moves no count (its data step's UPDATEs insert nothing), and by genetic repair round 3's
- * migration, GEN-S8, which moves "Document entry"'s first containment from a `Site` selection to a
- * `Reference` selection (one generated column, foreign key and index off `Site`, one onto
- * `Reference`), adds no data step and moves no count, and by genetic repair round 4's migration,
- * GEN-S9, which adds one table (`PlacedReferenceType`), two containments on
- * `PlacedVariableRefDeclaration` (a generated column, a tag and a foreign key each) and a changed
- * `Reading` check, and adds no data step, on grizzle `1.0.0-beta.1`), as a ratchet: a change that
- * moves one fails here until the count is measured again. A regeneration updates them here, and
- * only here.
+ * The committed chain's measured counts (the chain drafted again as one `_init` at grizzle
+ * `89e94c0`, whose snapshot a grizzle before levels did not write, over the schema GEN-S9 left; the
+ * counts did not move), as a ratchet: a change that moves one fails here until the count is
+ * measured again. A regeneration updates them here, and only here.
  *
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
@@ -68,35 +56,29 @@ describe("the committed migration chain", () => {
       // stored relation, a names constant per roster). A validate file is a law's, so the zero
       // target holds for every migration; a later migration's own `-validate.sql` validates
       // constraints it added to tables that already exist, holds no law, and is the only one
-      // allowed. Likewise the two `INSERT INTO`s are data steps that seed no table: Stage N's
-      // (decision 437), moving the old `UsageValue` rows' `baseType` into `UsageValueBaseType`, and
-      // the genetic repair's (GEN-S6), giving each stored item ref's `ItemRefTarget` its new
-      // `ItemRefHref`.
+      // allowed. A data step is a later migration's, so the chain drafted again holds none.
       // Bound: the committed chain, the `_init` first.
       Effect.gen(function* committedCensus() {
         const fs = yield* FileSystem.FileSystem;
         const entries = (yield* fs.readDirectory(qtiMigrations)).toSorted();
         const held = yield* censusOf(qtiMigrations);
-        const [init, ...later] = entries.slice(0, -1);
+        const folders = entries.filter((entry) => !entry.endsWith(".json"));
+        const [init, ...later] = folders;
         const validateFilesOf = (folder: string) =>
           fs
             .readDirectory(path.join(qtiMigrations, folder))
             .pipe(Effect.map((files) => files.filter((file) => file.endsWith("-validate.sql"))));
         const laterValidateFiles = (yield* Effect.all(later.map(validateFilesOf))).flat();
 
-        assert.isAtLeast(entries.length, 3, entries.join(", "));
-        assert.strictEqual(entries.at(-1), "snapshot.json");
+        assert.isAtLeast(folders.length, 1, entries.join(", "));
+        assert.deepStrictEqual(entries.slice(folders.length), ["manifest.json", "snapshot.json"]);
         assert.match(init ?? "", /^\d{14}_init$/u);
         for (const migration of later) {
           assert.match(migration, /^\d{14}_[a-z0-9-]+$/u);
         }
         assert.deepStrictEqual(yield* validateFilesOf(init ?? ""), [], "the _init holds no law");
         assert.strictEqual(held.laws.validateFiles, laterValidateFiles.length);
-        assert.strictEqual(
-          held.seed.inserts,
-          2,
-          "the two data steps, copying UsageValue.baseType and each ItemRefTarget's ItemRefHref",
-        );
+        assert.strictEqual(held.seed.inserts, 0, "the chain drafted again holds no data step");
         assert.deepStrictEqual(
           {
             constraintTriggers: held.laws.constraintTriggers,

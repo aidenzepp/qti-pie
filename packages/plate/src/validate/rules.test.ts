@@ -7,7 +7,13 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
-import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
+import {
+  cpuMillis,
+  growthFactor,
+  growthLimit,
+  growthRatio,
+  growthRuns,
+} from "#plate/test/growth.ts";
 import { singleOf } from "#plate/model/expression.ts";
 import type { ExpressionType, ReferenceEntry } from "#plate/model/expression.ts";
 import { checkRules, processingRefusals, referenceRefusals } from "#plate/validate/rules.ts";
@@ -673,6 +679,557 @@ const inCustomInteraction = (
     [el("qti-custom-interaction", [attr("response-identifier", "RESPONSE")], content)],
   );
 
+/**
+ * Construct a Text Entry bound to `responseIdentifier` whose `string-identifier` names
+ * `stringIdentifier`.
+ *
+ * @param responseIdentifier Its `response-identifier`.
+ * @param stringIdentifier Its `string-identifier`.
+ * @param local The interaction's local name, a Text Entry unless an Extended Text is given.
+ * @returns The interaction.
+ */
+const capturing = (
+  responseIdentifier: string,
+  stringIdentifier: string,
+  local = "qti-text-entry-interaction",
+): SourceElement =>
+  interaction(local, responseIdentifier, [attr("string-identifier", stringIdentifier)]);
+
+/**
+ * Construct an Associate whose `max-associations` is written as given, over two associable choices.
+ *
+ * @param maxAssociations Its `max-associations`, as written.
+ * @returns The interaction.
+ */
+const associating = (maxAssociations: string): SourceElement =>
+  el(
+    "qti-associate-interaction",
+    [attr("response-identifier", "RESPONSE"), attr("max-associations", maxAssociations)],
+    ["A", "B"].map((identifier) =>
+      el("qti-simple-associable-choice", [attr("identifier", identifier), attr("match-max", "1")]),
+    ),
+  );
+
+/**
+ * Construct a Gap Match bound to `RESPONSE` with one gap text and the given number of gaps in a
+ * paragraph, as the research probe `a92r_gapmatch_single_2gaps` writes it.
+ *
+ * @param gaps How many `qti-gap`s the paragraph holds.
+ * @returns The interaction.
+ */
+const gapMatch = (gaps: number): SourceElement =>
+  el(
+    "qti-gap-match-interaction",
+    [attr("response-identifier", "RESPONSE")],
+    [
+      el("qti-gap-text", [attr("identifier", "W"), attr("match-max", "1")], [text("w")]),
+      el(
+        "p",
+        [],
+        Array.from({ length: gaps }, (_, index) =>
+          el("qti-gap", [attr("identifier", `G${index}`)]),
+        ),
+      ),
+    ],
+  );
+
+/**
+ * Construct an item whose body holds a Portable Custom Interaction bound to its declared
+ * `RESPONSE`, which binds the context variables it names.
+ *
+ * @param declarations The declarations after `RESPONSE`'s.
+ * @param contextVariables The identifier each `qti-context-variable` names.
+ * @returns The item.
+ */
+const portable = (declarations: readonly SourceElement[], contextVariables: readonly string[]) =>
+  item(
+    [response("RESPONSE", "single", "string"), ...declarations],
+    [
+      el(
+        "qti-portable-custom-interaction",
+        [
+          attr("custom-interaction-type-identifier", "urn:example:pci"),
+          attr("module", "pci"),
+          attr("response-identifier", "RESPONSE"),
+        ],
+        [
+          ...contextVariables.map((identifier) =>
+            el("qti-context-variable", [attr("identifier", identifier)]),
+          ),
+          el("qti-interaction-markup", [], [el("div")]),
+        ],
+      ),
+    ],
+  );
+
+/**
+ * Construct an item whose body holds a Portable Custom Interaction bound to its declared
+ * `RESPONSE`, naming its module by the forms given (R10-a, "A PCI names its module by `module`, by
+ * `qti-interaction-modules`, or by both").
+ *
+ * @param forms Whether it carries a `module` attribute and whether it holds a
+ *   `qti-interaction-modules`.
+ * @param forms.module Whether it carries a `module` attribute.
+ * @param forms.modules Whether it holds a `qti-interaction-modules`.
+ * @returns The item.
+ */
+const moduleNamed = (forms: { readonly module: boolean; readonly modules: boolean }) =>
+  item(
+    [response("RESPONSE", "single", "string")],
+    [
+      el(
+        "qti-portable-custom-interaction",
+        [
+          attr("custom-interaction-type-identifier", "urn:example:pci"),
+          ...(forms.module ? [attr("module", "pci")] : []),
+          attr("response-identifier", "RESPONSE"),
+        ],
+        [
+          ...(forms.modules
+            ? [
+                el(
+                  "qti-interaction-modules",
+                  [],
+                  [
+                    el("qti-interaction-module", [
+                      attr("id", "pci"),
+                      attr("primary-path", "modules/pci"),
+                    ]),
+                  ],
+                ),
+              ]
+            : []),
+          el("qti-interaction-markup", [], [el("div")]),
+        ],
+      ),
+    ],
+  );
+
+/**
+ * Construct an interaction bound to a response, with its counts and its children.
+ *
+ * @param local The interaction's local name.
+ * @param responseIdentifier Its `response-identifier`.
+ * @param attributes Its further attributes, its counts among them.
+ * @param children Its children.
+ * @returns The interaction.
+ */
+const counting = (
+  local: string,
+  responseIdentifier: string,
+  attributes: readonly SourceAttribute[],
+  children: readonly SourceElement[] = [],
+): SourceElement =>
+  el(local, [attr("response-identifier", responseIdentifier), ...attributes], children);
+
+/**
+ * Construct a Media interaction bound to `PLAYS` with its counts, over one `audio`.
+ *
+ * @param attributes Its counts.
+ * @returns The interaction.
+ */
+const media = (attributes: readonly SourceAttribute[]): SourceElement =>
+  counting(
+    "qti-media-interaction",
+    "PLAYS",
+    [attr("autostart", "false"), ...attributes],
+    [el("audio", [attr("src", "media/sound.mp3")])],
+  );
+
+/**
+ * Construct an Order over the given number of simple choices, each choice's identifier prefixed by
+ * its response's, so two Orders of one item give none twice (reading 104, E19).
+ *
+ * @param choices How many `qti-simple-choice`s it holds.
+ * @param attributes Its counts.
+ * @param responseIdentifier Its `response-identifier`, `ORDER` unless another is given.
+ * @returns The interaction.
+ */
+const order = (
+  choices: number,
+  attributes: readonly SourceAttribute[],
+  responseIdentifier = "ORDER",
+): SourceElement =>
+  counting(
+    "qti-order-interaction",
+    responseIdentifier,
+    attributes,
+    Array.from({ length: choices }, (_, index) =>
+      el(
+        "qti-simple-choice",
+        [attr("identifier", `${responseIdentifier}-C${index}`)],
+        [text(`c${index}`)],
+      ),
+    ),
+  );
+
+/**
+ * An item whose body holds a Graphic Order of two hotspots over one image, bound to `RESPONSE`.
+ *
+ * @param cardinality The declaration's cardinality.
+ * @param baseType The declaration's base type, none when absent.
+ * @returns The item.
+ */
+const graphicOrderItem = (cardinality: string, baseType?: string) =>
+  item(
+    [response("RESPONSE", cardinality, baseType)],
+    [
+      counting(
+        "qti-graphic-order-interaction",
+        "RESPONSE",
+        [],
+        [
+          el("img", [
+            attr("alt", "A map"),
+            attr("height", "100"),
+            attr("src", "images/map.png"),
+            attr("width", "100"),
+          ]),
+          ...["H1", "H2"].map((identifier) =>
+            el("qti-hotspot-choice", [
+              attr("coords", "10,10,5"),
+              attr("identifier", identifier),
+              attr("shape", "circle"),
+            ]),
+          ),
+        ],
+      ),
+    ],
+  );
+
+/**
+ * Construct a count pair's refusal.
+ *
+ * @param path The path it points at.
+ * @param element The element whose pair it is.
+ * @param least The least count, then its value.
+ * @param most The most count, then its value.
+ * @param reading The reading that settles it.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const pairRefusal = (
+  path: string,
+  element: string,
+  [least, leastValue]: readonly [string, string],
+  [most, mostValue]: readonly [string, string],
+  reading = "76",
+) => ({
+  detail: { check: "count-pair", element, least, leastValue, most, mostValue, reading },
+  path,
+  rule: "count-range" as const,
+});
+
+/**
+ * Construct a pooled choice's `duplicate-identifier` refusal, a gap's included (reading 104 as
+ * amended, E19).
+ *
+ * @param path The repeated `identifier` attribute's path.
+ * @param choiceClass The refused choice's class.
+ * @param identifier The identifier it repeats.
+ * @param otherClass The earlier choice's class, when it differs.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const repeated = (path: string, choiceClass: string, identifier: string, otherClass?: string) => ({
+  detail:
+    otherClass === undefined
+      ? { class: choiceClass, identifier, reading: "104" }
+      : { class: choiceClass, identifier, otherClass, reading: "104" },
+  path,
+  rule: "duplicate-identifier" as const,
+});
+
+/**
+ * Construct a Gap Match bound to `PAIRS` over the given gap texts and gaps.
+ *
+ * @param texts The identifier of each `qti-gap-text`.
+ * @param gaps The identifier of each `qti-gap`, in one paragraph.
+ * @returns The interaction.
+ */
+const gapping = (texts: readonly string[], gaps: readonly string[]): SourceElement =>
+  el(
+    "qti-gap-match-interaction",
+    [attr("response-identifier", "PAIRS")],
+    [
+      ...texts.map((identifier) =>
+        el("qti-gap-text", [attr("identifier", identifier), attr("match-max", "1")], [text("w")]),
+      ),
+      el(
+        "p",
+        [],
+        gaps.map((identifier) => el("qti-gap", [attr("identifier", identifier)])),
+      ),
+    ],
+  );
+
+/**
+ * Give a hand-built item's root further attributes, such as reading 128's tool attributes.
+ *
+ * @param source The item.
+ * @param attributes The attributes its root gains, after its own.
+ * @returns The same item, its root carrying them.
+ */
+const rooted = (source: SourceDocument, attributes: readonly SourceAttribute[]): SourceDocument =>
+  doc(source.location, { ...source.root, attributes: [...source.root.attributes, ...attributes] });
+
+/**
+ * An `audio` whose caption `track` carries a `label`, a kind whose label asks for its tool
+ * (reading 128).
+ */
+const captioned = el(
+  "audio",
+  [attr("src", "media/sound.mp3")],
+  [
+    el("track", [
+      attr("src", "media/en.vtt"),
+      attr("kind", "captions"),
+      attr("srclang", "en"),
+      attr("label", "English"),
+    ]),
+  ],
+);
+
+/**
+ * Construct the `label-tool` refusal at an item root (reading 128, E31a).
+ *
+ * @param attribute The tool attributes the root lacks, space-separated.
+ * @param labelled The path of the first labelled element.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const labelTool = (attribute: string, labelled: string) => ({
+  detail: {
+    attribute,
+    check: "label-tool",
+    element: "qti-assessment-item",
+    labelled,
+    reading: "128",
+  },
+  path: "qti-assessment-item",
+  rule: "missing-attribute" as const,
+});
+
+/**
+ * Construct a `qti-template-block` shown by the template variable `T`, its content body holding
+ * the given children.
+ *
+ * @param children The children of its `qti-content-body`.
+ * @returns The template block.
+ */
+const templateBlock = (children: readonly SourceElement[]): SourceElement =>
+  el(
+    "qti-template-block",
+    [attr("identifier", "SHOWN"), ...shownBy("T")],
+    [el("qti-content-body", [], children)],
+  );
+
+/**
+ * Construct a table of one row: a `th` whose `id` is `H` and a `td` with the given `headers`.
+ *
+ * @param headers The `td`'s `headers`, as written.
+ * @param nested The children of the `td` after its text, such as a nested table.
+ * @returns The table.
+ */
+const headed = (headers: string, nested: readonly SourceElement[] = []): SourceElement =>
+  el(
+    "table",
+    [],
+    [
+      el(
+        "tbody",
+        [],
+        [
+          el(
+            "tr",
+            [],
+            [
+              el("th", [attr("id", "H")], [text("Head")]),
+              el("td", [attr("headers", headers)], [text("Cell"), ...nested]),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
+
+/**
+ * Construct the `headers` refusal of a `td` (reading 126, E29).
+ *
+ * @param path The `td`'s path.
+ * @param value Its `headers`, as written.
+ * @param token The token at fault.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const badHeaders = (path: string, value: string, token: string) => ({
+  detail: {
+    attribute: "headers",
+    check: "headers",
+    element: "td",
+    reading: "126",
+    token,
+    value,
+  },
+  path: `${path}/@headers`,
+  rule: "attribute-type" as const,
+});
+
+/**
+ * Construct a paragraph that holds a `q` between two texts.
+ *
+ * @param before The text before the `q`.
+ * @param inside The `q`'s text.
+ * @param after The text after it.
+ * @returns The paragraph.
+ */
+const quoting = (before: string, inside: string, after: string): SourceElement =>
+  el("p", [], [text(before), el("q", [], [text(inside)]), text(after)]);
+
+/**
+ * Construct a feedback element that shows when an outcome holds `A`.
+ *
+ * @param local The feedback element's local name.
+ * @param outcomeIdentifier Its `outcome-identifier`, as written.
+ * @param children Its children.
+ * @returns The feedback element.
+ */
+const feedback = (
+  local: string,
+  outcomeIdentifier: string,
+  children: readonly SourceChild[] = [text("Well done.")],
+): SourceElement =>
+  el(
+    local,
+    [
+      attr("outcome-identifier", outcomeIdentifier),
+      attr("identifier", "A"),
+      attr("show-hide", "show"),
+    ],
+    children,
+  );
+
+/**
+ * Construct an item that declares the identifier response `RESPONSE`, the float outcome `SCORE`,
+ * the identifier outcome `FEEDBACK` and the identifier template variable `T`, and whose body holds
+ * a feedback block naming an outcome.
+ *
+ * @param outcomeIdentifier The feedback block's `outcome-identifier`, as written.
+ * @returns The item.
+ */
+const feedbackItem = (outcomeIdentifier: string) =>
+  item(
+    [
+      response("RESPONSE", "single", "identifier"),
+      outcome("SCORE"),
+      outcome("FEEDBACK", "identifier"),
+      declaration("qti-template-declaration", "T", "single", "identifier"),
+    ],
+    [feedback("qti-feedback-block", outcomeIdentifier)],
+  );
+
+/**
+ * The refusal of a feedback element whose `outcome-identifier` names no outcome of the item
+ * (reading 77).
+ *
+ * @param element The feedback element's local name.
+ * @param path The `outcome-identifier` attribute's path.
+ * @param identifier The name it gives.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const noOutcome = (element: string, path: string, identifier: string) => ({
+  detail: {
+    attribute: "outcome-identifier",
+    element,
+    expected: "outcome",
+    identifier,
+    reading: "77",
+  },
+  path,
+  rule: "undeclared-variable" as const,
+});
+
+/**
+ * The refusal of a feedback element whose `outcome-identifier` names an outcome that is not a
+ * single or multiple identifier (reading 77).
+ *
+ * @param element The feedback element's local name.
+ * @param path The `outcome-identifier` attribute's path.
+ * @param identifier The outcome it names.
+ * @param type The outcome's base type and cardinality.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const feedbackType = (
+  element: string,
+  path: string,
+  identifier: string,
+  type: { readonly baseType: string; readonly cardinality: string },
+) => ({
+  detail: { ...type, check: "feedback-outcome", element, identifier, reading: "77" },
+  path,
+  rule: "expression-type" as const,
+});
+
+/**
+ * Check an item whose one response declaration maps the keys given.
+ *
+ * @param cardinality The declaration's `cardinality`.
+ * @param baseType The declaration's `base-type`, as written.
+ * @param keys The `map-key` of each entry, as written.
+ * @returns The refusals, reduced.
+ */
+const mapped = (cardinality: string, baseType: string, ...keys: readonly string[]) =>
+  judged(item([response("RESPONSE", cardinality, baseType, [mapping(...keys)])], []));
+
+/**
+ * Check an item whose float outcome `SCORE` carries the attributes given.
+ *
+ * @param attributes The declaration's further attributes, such as `mastery-value`.
+ * @returns The refusals, reduced.
+ */
+const mastered = (attributes: Readonly<Record<string, string>>) =>
+  judged(
+    item(
+      [
+        el("qti-outcome-declaration", [
+          attr("identifier", "SCORE"),
+          attr("cardinality", "single"),
+          attr("base-type", "float"),
+          ...Object.entries(attributes).map(([local, value]) => attr(local, value)),
+        ]),
+      ],
+      [],
+    ),
+  );
+
+/**
+ * The refusal of a `mastery-value` outside a written bound.
+ *
+ * @param value The `mastery-value`, as written.
+ * @param bound `least` for a `normal-minimum`, `greatest` for a `normal-maximum`.
+ * @param written The bound, as written.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const outOfRange = (value: string, bound: "greatest" | "least", written: string) => ({
+  detail: {
+    attribute: "mastery-value",
+    [bound]: written,
+    check: "mastery-range",
+    element: "qti-outcome-declaration",
+    reading: "9",
+    value,
+  },
+  path: "qti-assessment-item/qti-outcome-declaration/@mastery-value",
+  rule: "attribute-type" as const,
+});
+
+/**
+ * Construct a template rule that sets a variable, a correct response or a default to an expression.
+ *
+ * @param local The rule's local name.
+ * @param identifier The variable it names, as written.
+ * @param expression The expression.
+ * @returns The rule.
+ */
+const settingRule = (local: string, identifier: string, expression: SourceElement): SourceElement =>
+  el(local, [attr("identifier", identifier)], [expression]);
+
 describe("checkRules", () => {
   describe("undeclared-response", () => {
     it("[I-1] refuses an interaction naming RESP2 when only RESPONSE is declared", () => {
@@ -753,7 +1310,7 @@ describe("checkRules", () => {
         ),
         [
           {
-            detail: { identifier: "A" },
+            detail: { class: "qti-simple-choice", identifier: "A", reading: "104" },
             path: "qti-assessment-item/qti-item-body/qti-choice-interaction/qti-simple-choice[2]/@identifier",
             rule: "duplicate-identifier",
           },
@@ -771,7 +1328,7 @@ describe("checkRules", () => {
         ),
         [
           {
-            detail: { identifier: "A" },
+            detail: { class: "qti-inline-choice", identifier: "A", reading: "104" },
             path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction/qti-inline-choice[3]/@identifier",
             rule: "duplicate-identifier",
           },
@@ -779,7 +1336,9 @@ describe("checkRules", () => {
       );
     });
 
-    it("[Q-12] accepts the same inline choice identifier in two Inline Choices", () => {
+    it("align-54 choice identifiers E19: refuses the same inline choice identifiers in two Inline Choices, each at the second (reading 104)", () => {
+      const second = "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction[2]";
+
       assert.deepStrictEqual(
         judged(
           item(
@@ -790,11 +1349,15 @@ describe("checkRules", () => {
             [el("p", [], [inlineChoice("RESPONSE"), inlineChoice("RESPONSE2")])],
           ),
         ),
-        [],
+        ["A", "B"].map((identifier, index) => ({
+          detail: { class: "qti-inline-choice", identifier, reading: "104" },
+          path: `${second}/qti-inline-choice[${index + 1}]/@identifier`,
+          rule: "duplicate-identifier",
+        })),
       );
     });
 
-    it("[I-1] accepts distinct declarations, and the same choice identifier in two interactions", () => {
+    it("[I-1] accepts distinct declarations, and distinct choice identifiers across two interactions", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -803,7 +1366,7 @@ describe("checkRules", () => {
               response("RESPONSE2", "multiple", "identifier"),
               outcome("SCORE"),
             ],
-            [choice("RESPONSE", ["A", "B"]), choice("RESPONSE2", ["A", "B"])],
+            [choice("RESPONSE", ["A", "B"]), choice("RESPONSE2", ["C", "D"])],
           ),
         ),
         [],
@@ -934,6 +1497,53 @@ describe("checkRules", () => {
     });
   });
 
+  describe("align-54 bindings by name: a graphic order interaction binds identifier, ordered; an order interaction's binding is not refused", () => {
+    const body = "qti-assessment-item/qti-item-body";
+
+    it("align-54 bindings by name e3bc2c3d: refuses a Graphic Order bound to a single identifier, a multiple identifier, an ordered string or a record, as binding (§5.61, info.txt:29186)", () => {
+      for (const [cardinality, baseType] of [
+        ["single", "identifier"],
+        ["multiple", "identifier"],
+        ["ordered", "string"],
+        ["record", undefined],
+      ] as const) {
+        assert.deepStrictEqual(
+          judged(graphicOrderItem(cardinality, baseType)),
+          [
+            {
+              detail: {
+                baseType: baseType ?? "",
+                cardinality,
+                interaction: "qti-graphic-order-interaction",
+                response: "RESPONSE",
+              },
+              path: `${body}/qti-graphic-order-interaction`,
+              rule: "binding",
+            },
+          ],
+          `${cardinality} ${baseType ?? "(no base type)"}`,
+        );
+      }
+    });
+
+    it("align-54 bindings by name e3bc2c3d: accepts a Graphic Order bound to an ordered identifier (§5.61, info.txt:29186)", () => {
+      assert.deepStrictEqual(judged(graphicOrderItem("ordered", "identifier")), []);
+    });
+
+    it("align-54 bindings by name e3bc2c3d: accepts an Order bound to a single identifier, and one bound to an ordered string, since only non-normative §2.4.1.2 states its binding (the operator's ruling)", () => {
+      for (const [cardinality, baseType] of [
+        ["single", "identifier"],
+        ["ordered", "string"],
+      ] as const) {
+        assert.deepStrictEqual(
+          judged(item([response("RESPONSE", cardinality, baseType)], [order(2, [], "RESPONSE")])),
+          [],
+          `${cardinality} ${baseType}`,
+        );
+      }
+    });
+  });
+
   describe("max-strings (reading 19)", () => {
     it("[I-1] refuses an Extended Text bound to a multiple declaration without max-strings", () => {
       assert.deepStrictEqual(
@@ -963,6 +1573,1447 @@ describe("checkRules", () => {
         ),
         [],
       );
+    });
+  });
+
+  describe("align-54 bindings: a string-identifier, reading 92's bindings and a gap match bound single", () => {
+    const body = "qti-assessment-item/qti-item-body";
+
+    it("align-54 bindings D3a: refuses a Text Entry whose string-identifier names no declaration, as undeclared-response at the attribute (reading 14)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "float")],
+            [el("p", [], [capturing("RESPONSE", "TEXT")])],
+          ),
+        ),
+        [
+          {
+            detail: {
+              attribute: "string-identifier",
+              element: "qti-text-entry-interaction",
+              identifier: "TEXT",
+              reading: "14",
+              response: "TEXT",
+            },
+            path: `${body}/p/qti-text-entry-interaction/@string-identifier`,
+            rule: "undeclared-response",
+          },
+        ],
+      );
+    });
+
+    it("align-54 r11 string response fit D3a: refuses a Text Entry's string-identifier naming a single float, and an Extended Text's naming a multiple float, as binding string-binding (info.txt:48078; reading 14)", () => {
+      // Rewritten under the Mind's ruling 5 (rule bb28660b): the response a `string-identifier`
+      // names is "a second response variable (of base-type string)" (info.txt:48078), so its base
+      // type decides and its cardinality does not. The Extended Text's multiple string, refused
+      // here before, is accepted below.
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "float"),
+              response("NOTES", "single", "float"),
+              response("FLOATS", "multiple", "float"),
+              response("ESSAY", "single", "string"),
+            ],
+            [
+              el("p", [], [capturing("RESPONSE", "NOTES")]),
+              capturing("ESSAY", "FLOATS", "qti-extended-text-interaction"),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              baseType: "float",
+              cardinality: "single",
+              check: "string-binding",
+              interaction: "qti-text-entry-interaction",
+              reading: "14",
+              response: "NOTES",
+            },
+            path: `${body}/p/qti-text-entry-interaction`,
+            rule: "binding",
+          },
+          {
+            detail: {
+              baseType: "float",
+              cardinality: "multiple",
+              check: "string-binding",
+              interaction: "qti-extended-text-interaction",
+              reading: "14",
+              response: "FLOATS",
+            },
+            path: `${body}/qti-extended-text-interaction`,
+            rule: "binding",
+          },
+        ],
+      );
+    });
+
+    it("align-54 r11 string response fit D3a: accepts a Text Entry's string-identifier naming a single, a multiple or an ordered string, since no cardinality is demanded (info.txt:48078; rule 5b8ee08b)", () => {
+      for (const cardinality of ["single", "multiple", "ordered"]) {
+        assert.deepStrictEqual(
+          judged(
+            item(
+              [response("RESPONSE", "single", "float"), response("TEXT", cardinality, "string")],
+              [el("p", [], [capturing("RESPONSE", "TEXT")])],
+            ),
+          ),
+          [],
+          cardinality,
+        );
+      }
+    });
+
+    it("align-54 r11 string response fit D3a: refuses a Text Entry's and an Extended Text's string-identifier naming a record declaration, as binding string-binding with cardinality record (info.txt:48078; reading 14)", () => {
+      // A record holds fields and has no base type (B1c), so it is no "response variable (of
+      // base-type string)" (info.txt:48078), whatever the interaction's own response is.
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "float"),
+              response("NOTES", "record"),
+              response("FIELDS", "record"),
+              response("ESSAY", "record"),
+            ],
+            [
+              el("p", [], [capturing("RESPONSE", "NOTES")]),
+              capturing("ESSAY", "FIELDS", "qti-extended-text-interaction"),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              baseType: "",
+              cardinality: "record",
+              check: "string-binding",
+              interaction: "qti-text-entry-interaction",
+              reading: "14",
+              response: "NOTES",
+            },
+            path: `${body}/p/qti-text-entry-interaction`,
+            rule: "binding",
+          },
+          {
+            detail: {
+              baseType: "",
+              cardinality: "record",
+              check: "string-binding",
+              interaction: "qti-extended-text-interaction",
+              reading: "14",
+              response: "FIELDS",
+            },
+            path: `${body}/qti-extended-text-interaction`,
+            rule: "binding",
+          },
+        ],
+      );
+    });
+
+    it("align-54 bindings D3a: refuses a string-identifier naming its own response-identifier, as binding bound-once at the string-identifier (reading 14)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "string")],
+            [el("p", [], [capturing("RESPONSE", "RESPONSE")])],
+          ),
+        ),
+        [
+          {
+            detail: {
+              attribute: "string-identifier",
+              check: "bound-once",
+              interaction: "qti-text-entry-interaction",
+              reading: "14",
+              response: "RESPONSE",
+            },
+            path: `${body}/p/qti-text-entry-interaction/@string-identifier`,
+            rule: "binding",
+          },
+        ],
+      );
+    });
+
+    it("align-54 bindings D3a: accepts a Text Entry and an Extended Text bound to numbers, each capturing its text in a single string of its own", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "float"),
+              response("TEXT", "single", "string"),
+              response("COUNT", "single", "integer"),
+              response("WRITTEN", "single", "string"),
+            ],
+            [
+              el("p", [], [capturing("RESPONSE", "TEXT")]),
+              capturing("COUNT", "WRITTEN", "qti-extended-text-interaction"),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it('align-54 bindings E11a: refuses a Choice of max-choices="2" and one of max-choices="0" bound single, as binding count-cardinality (reading 92)', () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              response("RESPONSE2", "single", "identifier"),
+            ],
+            [
+              interaction("qti-choice-interaction", "RESPONSE", [attr("max-choices", "2")]),
+              interaction("qti-choice-interaction", "RESPONSE2", [attr("max-choices", "0")]),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              attribute: "max-choices",
+              check: "count-cardinality",
+              count: "2",
+              interaction: "qti-choice-interaction",
+              reading: "92",
+              response: "RESPONSE",
+            },
+            path: `${body}/qti-choice-interaction[1]`,
+            rule: "binding",
+          },
+          {
+            detail: {
+              attribute: "max-choices",
+              check: "count-cardinality",
+              count: "0",
+              interaction: "qti-choice-interaction",
+              reading: "92",
+              response: "RESPONSE2",
+            },
+            path: `${body}/qti-choice-interaction[2]`,
+            rule: "binding",
+          },
+        ],
+      );
+    });
+
+    it('align-54 bindings E11a: refuses an Associate of max-associations="2" bound single, as binding count-cardinality (reading 92)', () => {
+      assert.deepStrictEqual(
+        judged(item([response("RESPONSE", "single", "pair")], [associating("2")])),
+        [
+          {
+            detail: {
+              attribute: "max-associations",
+              check: "count-cardinality",
+              count: "2",
+              interaction: "qti-associate-interaction",
+              reading: "92",
+              response: "RESPONSE",
+            },
+            path: `${body}/qti-associate-interaction`,
+            rule: "binding",
+          },
+        ],
+      );
+    });
+
+    it("align-54 bindings E11a: reads an unwritten count as its XSD default, 1 for a Choice and 0 for a Select Point (reading 92)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier"), response("POINT", "single", "point")],
+            [
+              interaction("qti-choice-interaction", "RESPONSE"),
+              interaction("qti-select-point-interaction", "POINT"),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              attribute: "max-choices",
+              check: "count-cardinality",
+              count: "0",
+              interaction: "qti-select-point-interaction",
+              reading: "92",
+              response: "POINT",
+            },
+            path: `${body}/qti-select-point-interaction`,
+            rule: "binding",
+          },
+        ],
+      );
+    });
+
+    it('align-54 bindings E11a: accepts max-choices="2" and max-associations="2" bound multiple, and max-choices="1" bound single', () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "multiple", "pair"),
+              response("CHOICE", "multiple", "identifier"),
+              response("ONE", "single", "identifier"),
+            ],
+            [
+              associating("2"),
+              interaction("qti-choice-interaction", "CHOICE", [attr("max-choices", "2")]),
+              interaction("qti-choice-interaction", "ONE", [attr("max-choices", "1")]),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 bindings E11a: refuses a response bound by two interactions, as binding bound-once at the second binding, a string-identifier's among them (reading 92)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              response("NUMBER", "single", "integer"),
+              response("TEXT", "single", "string"),
+            ],
+            [
+              choice("RESPONSE"),
+              choice("RESPONSE", ["C", "D"]),
+              el(
+                "p",
+                [],
+                [capturing("NUMBER", "TEXT"), interaction("qti-text-entry-interaction", "TEXT")],
+              ),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              attribute: "response-identifier",
+              check: "bound-once",
+              interaction: "qti-choice-interaction",
+              reading: "92",
+              response: "RESPONSE",
+            },
+            path: `${body}/qti-choice-interaction[2]/@response-identifier`,
+            rule: "binding",
+          },
+          {
+            detail: {
+              attribute: "response-identifier",
+              check: "bound-once",
+              interaction: "qti-text-entry-interaction",
+              reading: "92",
+              response: "TEXT",
+            },
+            path: `${body}/p/qti-text-entry-interaction[2]/@response-identifier`,
+            rule: "binding",
+          },
+        ],
+      );
+    });
+
+    it("align-54 bindings E11a: refuses a PCI's qti-context-variable naming no context variable, as undeclared-variable context-variable (reading 92)", () => {
+      assert.deepStrictEqual(judged(portable([outcome("LOCALE")], ["LOCALE"])), [
+        {
+          detail: {
+            check: "context-variable",
+            element: "qti-context-variable",
+            identifier: "LOCALE",
+            reading: "92",
+          },
+          path: `${body}/qti-portable-custom-interaction/qti-context-variable`,
+          rule: "undeclared-variable",
+        },
+      ]);
+    });
+
+    it("align-54 bindings E11a: accepts a PCI's qti-context-variable naming a declared context variable or the built-in QTI_CONTEXT", () => {
+      assert.deepStrictEqual(
+        judged(
+          portable(
+            [
+              el("qti-context-declaration", [
+                attr("identifier", "LOCALE"),
+                attr("cardinality", "single"),
+                attr("base-type", "string"),
+              ]),
+            ],
+            ["LOCALE", "QTI_CONTEXT"],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 bindings P7: refuses a Gap Match bound single over two gaps, as binding gap-match-single (the operator's ruling)", () => {
+      assert.deepStrictEqual(
+        judged(item([response("RESPONSE", "single", "directedPair")], [gapMatch(2)])),
+        [
+          {
+            detail: {
+              cardinality: "single",
+              check: "gap-match-single",
+              gaps: "2",
+              interaction: "qti-gap-match-interaction",
+              response: "RESPONSE",
+            },
+            path: `${body}/qti-gap-match-interaction`,
+            rule: "binding",
+          },
+        ],
+      );
+    });
+
+    it("align-54 bindings P7: accepts a Gap Match bound single over one gap, and one bound multiple over two", () => {
+      assert.deepStrictEqual(
+        judged(item([response("RESPONSE", "single", "directedPair")], [gapMatch(1)])),
+        [],
+      );
+      assert.deepStrictEqual(
+        judged(item([response("RESPONSE", "multiple", "directedPair")], [gapMatch(2)])),
+        [],
+      );
+    });
+
+    it("align-54 r11 gaps bind multiple P7: refuses a Gap Match bound ordered over two gaps, as binding gap-match-single naming its cardinality (reading 169)", () => {
+      assert.deepStrictEqual(
+        judged(item([response("RESPONSE", "ordered", "directedPair")], [gapMatch(2)])),
+        [
+          {
+            detail: {
+              cardinality: "ordered",
+              check: "gap-match-single",
+              gaps: "2",
+              interaction: "qti-gap-match-interaction",
+              response: "RESPONSE",
+            },
+            path: `${body}/qti-gap-match-interaction`,
+            rule: "binding",
+          },
+        ],
+      );
+    });
+
+    it("align-54 r11 gaps bind multiple P7: refuses a Gap Match bound record over two gaps, as binding gap-match-single naming its cardinality (reading 169)", () => {
+      assert.deepStrictEqual(judged(item([response("RESPONSE", "record")], [gapMatch(2)])), [
+        {
+          detail: {
+            cardinality: "record",
+            check: "gap-match-single",
+            gaps: "2",
+            interaction: "qti-gap-match-interaction",
+            response: "RESPONSE",
+          },
+          path: `${body}/qti-gap-match-interaction`,
+          rule: "binding",
+        },
+      ]);
+    });
+
+    it("align-54 r11 gaps bind multiple P7: accepts a Gap Match over one gap bound single or multiple, and one over two gaps bound multiple (reading 169)", () => {
+      for (const cardinality of ["single", "multiple"]) {
+        assert.deepStrictEqual(
+          judged(item([response("RESPONSE", cardinality, "directedPair")], [gapMatch(1)])),
+          [],
+          cardinality,
+        );
+      }
+      assert.deepStrictEqual(
+        judged(item([response("RESPONSE", "multiple", "directedPair")], [gapMatch(2)])),
+        [],
+      );
+    });
+
+    it("align-54 bindings E39b: does not judge the binding of a declaration with no base-type and a cardinality other than record, which E39a refuses (reading 158)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single"), response("TEXT", "single")],
+            [
+              choice("RESPONSE"),
+              el("p", [], [interaction("qti-inline-choice-interaction", "TEXT")]),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+  });
+
+  describe("align-54 R3 PCI module: a PCI names its module by module, by qti-interaction-modules, or by both", () => {
+    const pci = "qti-assessment-item/qti-item-body/qti-portable-custom-interaction";
+
+    it("align-54 R3 PCI module F6: refuses a PCI with neither a module nor a qti-interaction-modules, as missing-attribute pci-module-source at the PCI (R10-a, info.txt:37583)", () => {
+      assert.deepStrictEqual(judged(moduleNamed({ module: false, modules: false })), [
+        {
+          detail: {
+            attribute: "module",
+            check: "pci-module-source",
+            element: "qti-portable-custom-interaction",
+            source: "info.txt:37583",
+          },
+          path: pci,
+          rule: "missing-attribute",
+        },
+      ]);
+    });
+
+    it("align-54 R3 PCI module F6: accepts a PCI naming its module by a module attribute alone (R10-a)", () => {
+      assert.deepStrictEqual(judged(moduleNamed({ module: true, modules: false })), []);
+    });
+
+    it("align-54 R3 PCI module F6: accepts a PCI naming its module by a qti-interaction-modules alone (R10-a)", () => {
+      assert.deepStrictEqual(judged(moduleNamed({ module: false, modules: true })), []);
+    });
+
+    it("align-54 R3 PCI module F6: accepts a PCI naming its module by both a module attribute and a qti-interaction-modules (R10-a)", () => {
+      assert.deepStrictEqual(judged(moduleNamed({ module: true, modules: true })), []);
+    });
+  });
+
+  describe("align-54 counts: a least count at most its most, five pairs, and an order interaction's counts", () => {
+    const body = "qti-assessment-item/qti-item-body";
+
+    it("align-54 counts E2: refuses each of the five pairs with its least above its most, as count-range count-pair at the most (reading 76)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("CHOICE", "multiple", "identifier"),
+              response("PAIRS", "multiple", "pair"),
+              response("ESSAY", "single", "string"),
+              response("PLAYS", "single", "integer"),
+            ],
+            [
+              counting("qti-choice-interaction", "CHOICE", [
+                attr("max-choices", "2"),
+                attr("min-choices", "3"),
+              ]),
+              counting(
+                "qti-associate-interaction",
+                "PAIRS",
+                [attr("max-associations", "2"), attr("min-associations", "3")],
+                [
+                  el("qti-simple-associable-choice", [
+                    attr("identifier", "A"),
+                    attr("match-max", "1"),
+                    attr("match-min", "2"),
+                  ]),
+                  el("qti-simple-associable-choice", [
+                    attr("identifier", "B"),
+                    attr("match-max", "1"),
+                  ]),
+                ],
+              ),
+              counting("qti-extended-text-interaction", "ESSAY", [
+                attr("max-strings", "2"),
+                attr("min-strings", "3"),
+              ]),
+              media([attr("max-plays", "2"), attr("min-plays", "3")]),
+            ],
+          ),
+        ),
+        [
+          pairRefusal(
+            `${body}/qti-choice-interaction/@max-choices`,
+            "qti-choice-interaction",
+            ["min-choices", "3"],
+            ["max-choices", "2"],
+          ),
+          pairRefusal(
+            `${body}/qti-associate-interaction/@max-associations`,
+            "qti-associate-interaction",
+            ["min-associations", "3"],
+            ["max-associations", "2"],
+          ),
+          pairRefusal(
+            `${body}/qti-associate-interaction/qti-simple-associable-choice[1]/@match-max`,
+            "qti-simple-associable-choice",
+            ["match-min", "2"],
+            ["match-max", "1"],
+          ),
+          pairRefusal(
+            `${body}/qti-extended-text-interaction/@max-strings`,
+            "qti-extended-text-interaction",
+            ["min-strings", "3"],
+            ["max-strings", "2"],
+          ),
+          pairRefusal(
+            `${body}/qti-media-interaction/@max-plays`,
+            "qti-media-interaction",
+            ["min-plays", "3"],
+            ["max-plays", "2"],
+          ),
+        ],
+      );
+    });
+
+    it("align-54 counts E2: reads an unwritten most as its XSD default, refused at the element (reading 76)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("CHOICE", "single", "identifier"), response("PAIRS", "single", "pair")],
+            [
+              counting("qti-choice-interaction", "CHOICE", [attr("min-choices", "2")]),
+              counting("qti-associate-interaction", "PAIRS", [attr("min-associations", "2")]),
+            ],
+          ),
+        ),
+        [
+          pairRefusal(
+            `${body}/qti-choice-interaction`,
+            "qti-choice-interaction",
+            ["min-choices", "2"],
+            ["max-choices", "1"],
+          ),
+          pairRefusal(
+            `${body}/qti-associate-interaction`,
+            "qti-associate-interaction",
+            ["min-associations", "2"],
+            ["max-associations", "1"],
+          ),
+        ],
+      );
+    });
+
+    it("align-54 counts E2: exempts a most of 0, written or the XSD's default, which sets no limit (reading 76)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("CHOICE", "multiple", "identifier"),
+              response("POINTS", "multiple", "point"),
+              response("ESSAY", "single", "string"),
+              response("PLAYS", "single", "integer"),
+            ],
+            [
+              counting("qti-choice-interaction", "CHOICE", [
+                attr("max-choices", "0"),
+                attr("min-choices", "3"),
+              ]),
+              counting("qti-select-point-interaction", "POINTS", [attr("min-choices", "2")]),
+              counting("qti-extended-text-interaction", "ESSAY", [
+                attr("max-strings", "0"),
+                attr("min-strings", "3"),
+              ]),
+              media([attr("min-plays", "5")]),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 counts E2: accepts a least at or below its most", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("CHOICE", "multiple", "identifier"),
+              response("PAIRS", "multiple", "pair"),
+              response("PLAYS", "single", "integer"),
+            ],
+            [
+              counting("qti-choice-interaction", "CHOICE", [
+                attr("max-choices", "2"),
+                attr("min-choices", "2"),
+              ]),
+              counting(
+                "qti-associate-interaction",
+                "PAIRS",
+                [attr("max-associations", "3"), attr("min-associations", "1")],
+                [
+                  el("qti-simple-associable-choice", [
+                    attr("identifier", "A"),
+                    attr("match-max", "1"),
+                    attr("match-min", "1"),
+                  ]),
+                  el("qti-simple-associable-choice", [
+                    attr("identifier", "B"),
+                    attr("match-max", "2"),
+                  ]),
+                ],
+              ),
+              media([attr("max-plays", "2"), attr("min-plays", "1")]),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 counts D4a: refuses an Order's or a Graphic Order's min-choices, and a max-choices beside it, above its number of choices, as count-range choice-count (reading 18)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("ORDER", "ordered", "identifier"),
+              response("HOTSPOTS", "ordered", "identifier"),
+            ],
+            [
+              order(3, [attr("max-choices", "5"), attr("min-choices", "4")]),
+              counting(
+                "qti-graphic-order-interaction",
+                "HOTSPOTS",
+                [attr("min-choices", "3")],
+                [
+                  el("img", [
+                    attr("alt", "A map"),
+                    attr("height", "100"),
+                    attr("src", "images/map.png"),
+                    attr("width", "100"),
+                  ]),
+                  ...["H1", "H2"].map((identifier) =>
+                    el("qti-hotspot-choice", [
+                      attr("coords", "10,10,5"),
+                      attr("identifier", identifier),
+                      attr("shape", "circle"),
+                    ]),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              attribute: "min-choices",
+              check: "choice-count",
+              choices: "3",
+              reading: "18",
+              value: "4",
+            },
+            path: `${body}/qti-order-interaction/@min-choices`,
+            rule: "count-range",
+          },
+          {
+            detail: {
+              attribute: "max-choices",
+              check: "choice-count",
+              choices: "3",
+              reading: "18",
+              value: "5",
+            },
+            path: `${body}/qti-order-interaction/@max-choices`,
+            rule: "count-range",
+          },
+          {
+            detail: {
+              attribute: "min-choices",
+              check: "choice-count",
+              choices: "2",
+              reading: "18",
+              value: "3",
+            },
+            path: `${body}/qti-graphic-order-interaction/@min-choices`,
+            rule: "count-range",
+          },
+        ],
+      );
+    });
+
+    it('align-54 counts D4a: refuses an Order\'s max-choices="0", and one below its min-choices, beside a written min-choices, as count-range count-pair with no 0 exemption (reading 18)', () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("ORDER", "ordered", "identifier"),
+              response("ORDER2", "ordered", "identifier"),
+            ],
+            [
+              order(3, [attr("max-choices", "0"), attr("min-choices", "2")]),
+              order(3, [attr("max-choices", "2"), attr("min-choices", "3")], "ORDER2"),
+            ],
+          ),
+        ),
+        [
+          pairRefusal(
+            `${body}/qti-order-interaction[1]/@max-choices`,
+            "qti-order-interaction",
+            ["min-choices", "2"],
+            ["max-choices", "0"],
+            "18",
+          ),
+          pairRefusal(
+            `${body}/qti-order-interaction[2]/@max-choices`,
+            "qti-order-interaction",
+            ["min-choices", "3"],
+            ["max-choices", "2"],
+            "18",
+          ),
+        ],
+      );
+    });
+
+    it("align-54 counts D4a: reads no max-choices without a min-choices beside it, and accepts counts within the choices (reading 18)", () => {
+      for (const counts of [
+        [attr("max-choices", "9")],
+        [attr("max-choices", "0")],
+        [attr("max-choices", "3"), attr("min-choices", "2")],
+        [attr("max-choices", "3"), attr("min-choices", "3")],
+      ]) {
+        assert.deepStrictEqual(
+          judged(item([response("ORDER", "ordered", "identifier")], [order(3, counts)])),
+          [],
+        );
+      }
+    });
+
+    it("align-54 counts D3a: accepts an Extended Text bound to a multiple float response whose string-identifier names a multiple string, the cardinality of its own response (rule 5b8ee08b)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("NUMBERS", "multiple", "float"), response("TEXTS", "multiple", "string")],
+            [
+              counting("qti-extended-text-interaction", "NUMBERS", [
+                attr("max-strings", "2"),
+                attr("string-identifier", "TEXTS"),
+              ]),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 r11 string response fit D3a: accepts an Extended Text bound single naming a multiple string, and one bound multiple naming a single string, since no cardinality is demanded (info.txt:48078; rule 5b8ee08b)", () => {
+      // Rewritten under the Mind's ruling 5 (rule bb28660b): both were refused string-binding for a
+      // cardinality other than their own response's, which the information model never asks of "a
+      // second response variable (of base-type string)" (info.txt:48078).
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("ESSAY", "single", "float"),
+              response("LINES", "multiple", "string"),
+              response("NUMBERS", "multiple", "float"),
+              response("TEXT", "single", "string"),
+            ],
+            [
+              capturing("ESSAY", "LINES", "qti-extended-text-interaction"),
+              counting("qti-extended-text-interaction", "NUMBERS", [
+                attr("max-strings", "2"),
+                attr("string-identifier", "TEXT"),
+              ]),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+  });
+
+  describe("align-54 choice identifiers: a choice identifier names one choice of the pooled classes and no item variable", () => {
+    const body = "qti-assessment-item/qti-item-body";
+
+    /**
+     * Construct the choice-variable refusal of a simple choice of the body's Choice that names a
+     * variable or a built-in (reading 104, E19).
+     *
+     * @param identifier The identifier the choice gives.
+     * @returns The refusal, as {@link judged} reduces it.
+     */
+    const namesVariable = (identifier: string) => ({
+      detail: {
+        check: "choice-variable",
+        class: "qti-simple-choice",
+        identifier,
+        reading: "104",
+      },
+      path: `${body}/qti-choice-interaction/qti-simple-choice/@identifier`,
+      rule: "duplicate-identifier" as const,
+    });
+
+    const pairs = response("PAIRS", "multiple", "directedPair");
+
+    it("align-54 choice identifiers E19: refuses one identifier on two simple choices of two Choices, at the second (reading 104)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              response("RESPONSE2", "single", "identifier"),
+            ],
+            [choice("RESPONSE", ["A", "B"]), choice("RESPONSE2", ["C", "A"])],
+          ),
+        ),
+        [
+          repeated(
+            `${body}/qti-choice-interaction[2]/qti-simple-choice[2]/@identifier`,
+            "qti-simple-choice",
+            "A",
+          ),
+        ],
+      );
+    });
+
+    it("align-54 choice identifiers E19: refuses a gap text sharing a simple choice's identifier, two classes of one pool", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier"), pairs],
+            [choice("RESPONSE", ["A", "B"]), gapping(["A"], ["G"])],
+          ),
+        ),
+        [
+          repeated(
+            `${body}/qti-gap-match-interaction/qti-gap-text/@identifier`,
+            "qti-gap-text",
+            "A",
+            "qti-simple-choice",
+          ),
+        ],
+      );
+    });
+
+    it("align-54 choice identifiers E19: refuses a hottext sharing an inline choice's identifier", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier"), response("HOT", "single", "identifier")],
+            [
+              el("p", [], [inlineChoice("RESPONSE", ["A", "B"])]),
+              el(
+                "qti-hottext-interaction",
+                [attr("response-identifier", "HOT")],
+                [el("p", [], [el("qti-hottext", [attr("identifier", "B")], [text("b")])])],
+              ),
+            ],
+          ),
+        ),
+        [
+          repeated(
+            `${body}/qti-hottext-interaction/p/qti-hottext/@identifier`,
+            "qti-hottext",
+            "B",
+            "qti-inline-choice",
+          ),
+        ],
+      );
+    });
+
+    it("align-54 choice identifiers E19: refuses an associable hotspot sharing a gap img's identifier", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [pairs],
+            [
+              el(
+                "qti-graphic-gap-match-interaction",
+                [attr("response-identifier", "PAIRS")],
+                [
+                  el("img", [attr("src", "images/map.png"), attr("alt", "A map")]),
+                  el(
+                    "qti-gap-img",
+                    [attr("identifier", "H"), attr("match-max", "1")],
+                    [el("img", [attr("src", "images/pin.png"), attr("alt", "A pin")])],
+                  ),
+                  el("qti-associable-hotspot", [
+                    attr("identifier", "H"),
+                    attr("shape", "circle"),
+                    attr("coords", "10,10,5"),
+                    attr("match-max", "1"),
+                  ]),
+                ],
+              ),
+            ],
+          ),
+        ),
+        [
+          repeated(
+            `${body}/qti-graphic-gap-match-interaction/qti-associable-hotspot/@identifier`,
+            "qti-associable-hotspot",
+            "H",
+            "qti-gap-img",
+          ),
+        ],
+      );
+    });
+
+    it("align-54 choice identifiers E19: refuses a choice named as a response, as choice-variable (reading 104)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item([response("RESPONSE", "single", "identifier")], [choice("RESPONSE", ["RESPONSE"])]),
+        ),
+        [namesVariable("RESPONSE")],
+      );
+    });
+
+    it("align-54 choice identifiers E19: refuses a choice named as an outcome, as choice-variable (reading 104)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier"), outcome("SCORE")],
+            [choice("RESPONSE", ["SCORE"])],
+          ),
+        ),
+        [namesVariable("SCORE")],
+      );
+    });
+
+    it("align-54 choice identifiers E19: refuses a choice named as the built-in numAttempts, as choice-variable (reading 104)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier")],
+            [choice("RESPONSE", ["numAttempts"])],
+          ),
+        ),
+        [namesVariable("numAttempts")],
+      );
+    });
+
+    it("align-54 R3 gap pool F1: refuses a gap sharing a gap text's identifier, at the gap, the second in document order (reading 104 as amended)", () => {
+      assert.deepStrictEqual(judged(item([pairs], [gapping(["G"], ["G"])])), [
+        repeated(
+          `${body}/qti-gap-match-interaction/p/qti-gap/@identifier`,
+          "qti-gap",
+          "G",
+          "qti-gap-text",
+        ),
+      ]);
+    });
+
+    it("align-54 R3 gap pool F1: refuses an inline choice sharing an earlier gap's identifier, at the inline choice, across two interactions (reading 104 as amended)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [pairs, response("RESPONSE", "single", "identifier")],
+            [gapping(["W"], ["A"]), el("p", [], [inlineChoice("RESPONSE", ["A", "B"])])],
+          ),
+        ),
+        [
+          repeated(
+            `${body}/p/qti-inline-choice-interaction/qti-inline-choice[1]/@identifier`,
+            "qti-inline-choice",
+            "A",
+            "qti-gap",
+          ),
+        ],
+      );
+    });
+
+    it("align-54 R3 gap pool F1: refuses a gap named as a declared response, as choice-variable alone (reading 104 as amended)", () => {
+      assert.deepStrictEqual(judged(item([pairs], [gapping(["W"], ["PAIRS"])])), [
+        {
+          detail: {
+            check: "choice-variable",
+            class: "qti-gap",
+            identifier: "PAIRS",
+            reading: "104",
+          },
+          path: `${body}/qti-gap-match-interaction/p/qti-gap/@identifier`,
+          rule: "duplicate-identifier" as const,
+        },
+      ]);
+    });
+
+    it("align-54 choice identifiers E19: refuses two gaps sharing an identifier, at the second (reading 104)", () => {
+      assert.deepStrictEqual(judged(item([pairs], [gapping(["W"], ["G", "G"])])), [
+        repeated(`${body}/qti-gap-match-interaction/p/qti-gap[2]/@identifier`, "qti-gap", "G"),
+      ]);
+    });
+  });
+
+  describe("align-54 body content: a label names its tool, no interaction in a template block, headers, q", () => {
+    const body = "qti-assessment-item/qti-item-body";
+
+    it("align-54 body content E31a: refuses a track's label in an item whose root lacks tool-name, as missing-attribute label-tool at the root (reading 128)", () => {
+      assert.deepStrictEqual(judged(rooted(item([], [captioned]), [attr("tool-version", "1.0")])), [
+        labelTool("tool-name", `${body}/audio/track`),
+      ]);
+    });
+
+    it("align-54 body content E31a: gives one refusal for an item that labels two elements, naming the first and both tools (reading 128)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier")],
+            [
+              el("p", [attr("label", "stem")], [text("Listen.")]),
+              captioned,
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "RESPONSE"), attr("label", "choices")],
+                [el("qti-simple-choice", [attr("identifier", "A")], [text("A")])],
+              ),
+            ],
+          ),
+        ),
+        [labelTool("tool-name tool-version", `${body}/p`)],
+      );
+    });
+
+    it("align-54 body content E31a: accepts a labelled track beside both tools on the root, and a printed variable's label, which asks for none (reading 128)", () => {
+      const tools = [attr("tool-name", "Authoring"), attr("tool-version", "1.0")];
+
+      assert.deepStrictEqual(judged(rooted(item([], [captioned]), tools)), []);
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [
+              el(
+                "p",
+                [],
+                [el("qti-printed-variable", [attr("identifier", "SCORE"), attr("label", "Score")])],
+              ),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    const templated = declaration("qti-template-declaration", "T", "single", "identifier");
+
+    it("align-54 body content E37: refuses an interaction at depth two of a qti-template-block, and one deeper, as misplaced-element (reading 143)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              response("TYPED", "single", "string"),
+              templated,
+            ],
+            [
+              templateBlock([
+                choice("RESPONSE"),
+                el(
+                  "p",
+                  [],
+                  [el("qti-text-entry-interaction", [attr("response-identifier", "TYPED")])],
+                ),
+              ]),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              element: "qti-choice-interaction",
+              reading: "143",
+              requires: "outside a qti-template-block",
+            },
+            path: `${body}/qti-template-block/qti-content-body/qti-choice-interaction`,
+            rule: "misplaced-element",
+          },
+          {
+            detail: {
+              element: "qti-text-entry-interaction",
+              reading: "143",
+              requires: "outside a qti-template-block",
+            },
+            path: `${body}/qti-template-block/qti-content-body/p/qti-text-entry-interaction`,
+            rule: "misplaced-element",
+          },
+        ],
+      );
+    });
+
+    it("align-54 body content E37: accepts an inline interaction in a template inline's span (reading 143)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("TYPED", "single", "string"), templated],
+            [
+              el(
+                "p",
+                [],
+                [
+                  el(
+                    "qti-template-inline",
+                    [attr("identifier", "SHOWN"), ...shownBy("T")],
+                    [
+                      el(
+                        "span",
+                        [],
+                        [el("qti-text-entry-interaction", [attr("response-identifier", "TYPED")])],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    const cell = `${body}/table/tbody/tr/td`;
+
+    it("align-54 body content E29: refuses a headers token naming no th, and one written twice, as attribute-type headers (reading 126)", () => {
+      assert.deepStrictEqual(judged(item([], [headed("H NONE")])), [
+        badHeaders(cell, "H NONE", "NONE"),
+      ]);
+      assert.deepStrictEqual(judged(item([], [headed("H  H")])), [badHeaders(cell, "H  H", "H")]);
+    });
+
+    it("align-54 body content E29: refuses a nested table's cell naming the enclosing table's th, and accepts a cell naming its own (reading 126)", () => {
+      assert.deepStrictEqual(judged(item([], [headed("H", [headed("H")])])), []);
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [],
+            [
+              headed("H", [
+                el(
+                  "table",
+                  [],
+                  [
+                    el(
+                      "tbody",
+                      [],
+                      [el("tr", [], [el("td", [attr("headers", "H")], [text("Inner")])])],
+                    ),
+                  ],
+                ),
+              ]),
+            ],
+          ),
+        ),
+        [badHeaders(`${cell}/table/tbody/tr/td`, "H", "H")],
+      );
+    });
+
+    /**
+     * Construct the `quotation` refusal of the paragraph's `q` (reading 127, E30).
+     *
+     * @param mark The quotation mark.
+     * @param side Where it stands against the `q`.
+     * @returns The refusal, as {@link judged} reduces it.
+     */
+    const quoted = (mark: string, side: string) => ({
+      detail: { check: "quotation", element: "q", mark, reading: "127", side },
+      path: `${body}/p/q`,
+      rule: "text-not-allowed" as const,
+    });
+
+    it("align-54 body content E30: refuses quotation marks around a q, once, at the first side (reading 127)", () => {
+      assert.deepStrictEqual(judged(item([], [quoting("He said “", "x", "”.")])), [
+        quoted("“", "before"),
+      ]);
+      assert.deepStrictEqual(judged(item([], [quoting("He said ", "x", "» then")])), [
+        quoted("»", "after"),
+      ]);
+      assert.deepStrictEqual(judged(item([], [quoting("He said ", '"x', " then")])), [
+        quoted('"', "start"),
+      ]);
+      assert.deepStrictEqual(judged(item([], [quoting("He said ", "x‘", " then")])), [
+        quoted("‘", "end"),
+      ]);
+    });
+
+    it("align-54 body content E30: accepts an apostrophe beside a q, a space between a mark and a q, and a mark inside it (reading 127)", () => {
+      assert.deepStrictEqual(judged(item([], [quoting("the students’", "x", "' then")])), []);
+      assert.deepStrictEqual(judged(item([], [quoting("He said “ ", "a “b” c", " ”")])), []);
+    });
+  });
+
+  describe("align-54 references and declarations: feedback names an outcome; repeated map keys and record fields; the mastery range", () => {
+    const body = "qti-assessment-item/qti-item-body";
+    const declarationPath = "qti-assessment-item/qti-response-declaration";
+    const blockOutcome = `${body}/qti-feedback-block/@outcome-identifier`;
+    const singleFloat = { baseType: "float", cardinality: "single" };
+
+    it("align-54 references and declarations E3a: refuses a feedback block naming a response, a template variable or nothing, as undeclared-variable expecting an outcome (reading 77)", () => {
+      assert.deepStrictEqual(judged(feedbackItem("RESPONSE")), [
+        noOutcome("qti-feedback-block", blockOutcome, "RESPONSE"),
+      ]);
+      assert.deepStrictEqual(judged(feedbackItem("T")), [
+        noOutcome("qti-feedback-block", blockOutcome, "T"),
+      ]);
+      assert.deepStrictEqual(judged(feedbackItem("NOTHING")), [
+        noOutcome("qti-feedback-block", blockOutcome, "NOTHING"),
+      ]);
+    });
+
+    it("align-54 references and declarations E3a: refuses feedback naming the built-in numAttempts, a response, as undeclared-variable expecting an outcome (reading 77)", () => {
+      assert.deepStrictEqual(judged(feedbackItem("numAttempts")), [
+        noOutcome("qti-feedback-block", blockOutcome, "numAttempts"),
+      ]);
+    });
+
+    it("align-54 references and declarations E3a: refuses a feedback block, a feedback inline and a modal feedback naming a float outcome, as expression-type feedback-outcome (reading 77)", () => {
+      assert.deepStrictEqual(judged(feedbackItem("SCORE")), [
+        feedbackType("qti-feedback-block", blockOutcome, "SCORE", singleFloat),
+      ]);
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [el("p", [], [feedback("qti-feedback-inline", "SCORE")])],
+            [
+              feedback("qti-modal-feedback", "SCORE", [
+                el("qti-content-body", [], [el("p", [], [text("Well done.")])]),
+              ]),
+            ],
+          ),
+        ),
+        [
+          feedbackType(
+            "qti-feedback-inline",
+            `${body}/p/qti-feedback-inline/@outcome-identifier`,
+            "SCORE",
+            singleFloat,
+          ),
+          feedbackType(
+            "qti-modal-feedback",
+            "qti-assessment-item/qti-modal-feedback/@outcome-identifier",
+            "SCORE",
+            singleFloat,
+          ),
+        ],
+      );
+    });
+
+    it("align-54 references and declarations E3a: refuses feedback naming an ordered identifier outcome, as expression-type feedback-outcome (reading 77)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [declaration("qti-outcome-declaration", "SEEN", "ordered", "identifier")],
+            [feedback("qti-feedback-block", "SEEN")],
+          ),
+        ),
+        [
+          feedbackType("qti-feedback-block", blockOutcome, "SEEN", {
+            baseType: "identifier",
+            cardinality: "ordered",
+          }),
+        ],
+      );
+    });
+
+    it("align-54 references and declarations E3a: accepts feedback naming a single or multiple identifier outcome, and the built-in completionStatus", () => {
+      assert.deepStrictEqual(judged(feedbackItem("FEEDBACK")), []);
+      assert.deepStrictEqual(judged(feedbackItem("completionStatus")), []);
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [declaration("qti-outcome-declaration", "SEEN", "multiple", "identifier")],
+            [feedback("qti-feedback-block", "SEEN")],
+          ),
+        ),
+        [],
+      );
+    });
+
+    /**
+     * The refusal of a map entry whose key repeats an earlier entry's.
+     *
+     * @param position The repeating entry's position among the mapping's entries.
+     * @param key Its `map-key`, as written.
+     * @param baseType The base type the keys were compared in, empty when compared as written.
+     * @param reading The reading that settles it.
+     * @returns The refusal, as {@link judged} reduces it.
+     */
+    const repeatedKey = (position: number, key: string, baseType: string, reading: string) => ({
+      detail: { baseType, check: "map-key", key, reading },
+      path: `${declarationPath}/qti-mapping/qti-map-entry[${String(position)}]`,
+      rule: "duplicate-identifier" as const,
+    });
+
+    it("align-54 references and declarations B5b: refuses 1 and 01 in an integer mapping, and +1 after them, each at the repeating entry (reading 98)", () => {
+      assert.deepStrictEqual(mapped("single", "integer", "1", "01", "+1"), [
+        repeatedKey(2, "01", "integer", "98"),
+        repeatedKey(3, "+1", "integer", "98"),
+      ]);
+    });
+
+    it("align-54 references and declarations B5b: refuses A B and B A in a pair mapping, and accepts them in a directed pair mapping (reading 98)", () => {
+      assert.deepStrictEqual(mapped("multiple", "pair", "A B", "B A"), [
+        repeatedKey(2, "B A", "pair", "98"),
+      ]);
+      assert.deepStrictEqual(mapped("multiple", "directedPair", "A B", "B A"), []);
+    });
+
+    it("align-54 references and declarations B5b: refuses 1e400 and 2e400, 1e400 and INF, and 0 and -0 in a float mapping, compared by their doubles (reading 154)", () => {
+      assert.deepStrictEqual(mapped("single", "float", "1e400", "2e400"), [
+        repeatedKey(2, "2e400", "float", "154"),
+      ]);
+      assert.deepStrictEqual(mapped("single", "float", "1e400", "INF"), [
+        repeatedKey(2, "INF", "float", "154"),
+      ]);
+      assert.deepStrictEqual(mapped("single", "float", "0", "-0"), [
+        repeatedKey(2, "-0", "float", "154"),
+      ]);
+    });
+
+    it("align-54 references and declarations B5b: refuses a key written twice under a base type that spells nothing, compared as written, and accepts 1 and 01 there (reading 160)", () => {
+      assert.deepStrictEqual(mapped("single", " string ", "a", "a"), [
+        repeatedKey(2, "a", "", "160"),
+      ]);
+      assert.deepStrictEqual(mapped("single", " integer ", "1", "01"), []);
+    });
+
+    it("align-54 references and declarations B5b: accepts York and york in a string mapping, and 1 and 2 in an integer mapping (reading 98)", () => {
+      assert.deepStrictEqual(mapped("single", "string", "York", "york"), []);
+      assert.deepStrictEqual(mapped("single", "integer", "1", "2"), []);
+    });
+
+    const fieldNamed = attr("field-identifier", "n");
+    const integerField = attr("base-type", "integer");
+
+    it("align-54 references and declarations B7: refuses a record value writing a field twice, as duplicate-identifier field at the second (reading 158)", () => {
+      assert.deepStrictEqual(
+        recordDefault([
+          field([fieldNamed, integerField], "5"),
+          field([fieldNamed, integerField], "6"),
+        ]),
+        [
+          {
+            detail: { check: "field", field: "n", reading: "158" },
+            path: `${declarationPath}/qti-default-value/qti-value[2]`,
+            rule: "duplicate-identifier",
+          },
+        ],
+      );
+    });
+
+    it("align-54 references and declarations B7: accepts one field in a record's correct response and again in its default value, each its own record value", () => {
+      const fields = [field([fieldNamed, integerField], "5")];
+
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "record", undefined, [
+                el("qti-correct-response", [], fields),
+                el("qti-default-value", [], fields),
+              ]),
+            ],
+            [],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 references and declarations E42a: refuses a mastery-value below a written normal-minimum and one above a written normal-maximum, as attribute-type mastery-range (reading 9)", () => {
+      assert.deepStrictEqual(mastered({ "mastery-value": "-1", "normal-minimum": "0" }), [
+        outOfRange("-1", "least", "0"),
+      ]);
+      assert.deepStrictEqual(mastered({ "mastery-value": "11", "normal-maximum": "1E1" }), [
+        outOfRange("11", "greatest", "1E1"),
+      ]);
+    });
+
+    it("align-54 references and declarations E42a: accepts a mastery-value within its written bounds or on one, and leaves one with no normal-minimum written to the version's floor (reading 149)", () => {
+      assert.deepStrictEqual(
+        mastered({ "mastery-value": "0.5", "normal-maximum": "1", "normal-minimum": "0" }),
+        [],
+      );
+      assert.deepStrictEqual(
+        mastered({ "mastery-value": "1", "normal-maximum": "1", "normal-minimum": "1" }),
+        [],
+      );
+      assert.deepStrictEqual(mastered({ "mastery-value": "-1" }), []);
     });
   });
 
@@ -1381,7 +3432,7 @@ describe("checkRules", () => {
         ]);
       });
 
-      it("[I-1] a record value names its field: one with no field-identifier is refused missing-attribute at its @field-identifier (pantry's RecordFieldIdentifier)", () => {
+      it("[I-1] a record value names its field: one with no field-identifier is refused missing-attribute at its @field-identifier (pantry's value-cardinality)", () => {
         assert.deepStrictEqual(
           recordDefault([field([named, integer], "5"), field([integer], "6")]),
           [
@@ -1541,30 +3592,14 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9a] accepts a qti-variable of the built-in duration in a time-dependent item and of a declared template variable, and refuses the duration in an item that is not (item-duration)", () => {
+    it("[I-9a] align-54 untimed duration D7: accepts a qti-variable of the built-in duration and of a declared template variable, in a time-dependent item and in one that is not (reading 150)", () => {
       const reading = item(
         [outcome("SCORE"), declaration("qti-template-declaration", "T", "single", "float")],
         [],
         [processing(undefined, [setScore(variable("duration")), setScore(variable("T"))])],
       );
 
-      assert.deepStrictEqual(
-        [judged(timed(reading)), judged(reading)],
-        [
-          [],
-          [
-            {
-              detail: {
-                check: "untimed-duration",
-                element: "qti-variable",
-                identifier: "duration",
-              },
-              path: `${rulePath}[1]/qti-variable`,
-              rule: "undeclared-variable",
-            },
-          ],
-        ],
-      );
+      assert.deepStrictEqual([judged(timed(reading)), judged(reading)], [[], []]);
     });
 
     it("accepts a qti-variable of the built-in QTI_CONTEXT and of a declared context variable", () => {
@@ -1661,7 +3696,7 @@ describe("checkRules", () => {
       });
     });
 
-    describe("the built-in duration, which only a time-dependent item has (item-duration)", () => {
+    describe("the built-in duration, which an item has whether it is time dependent or not (reading 150)", () => {
       /**
        * A `qti-any-n` whose `min` names `duration`, a reference attribute of base type integer,
        * over one boolean operand.
@@ -1671,31 +3706,6 @@ describe("checkRules", () => {
         [attr("min", "duration"), attr("max", "1")],
         [baseValue("boolean", "true")],
       );
-
-      /**
-       * The refusal of a `qti-variable` that reads `duration` in an item that is not time
-       * dependent.
-       */
-      const untimedRead = {
-        detail: { check: "untimed-duration", element: "qti-variable", identifier: "duration" },
-        path: `${rulePath}/qti-variable`,
-        rule: "undeclared-variable" as const,
-      };
-
-      /**
-       * The refusal of {@link anyN}'s `min`, which names `duration`, in an item that is not time
-       * dependent.
-       */
-      const untimedNamed = {
-        detail: {
-          attribute: "min",
-          check: "untimed-duration",
-          element: "qti-any-n",
-          identifier: "duration",
-        },
-        path: `${rulePath}/qti-any-n`,
-        rule: "undeclared-variable" as const,
-      };
 
       /**
        * The refusal of {@link anyN}'s `min`, which names a built-in, no template or outcome variable
@@ -1713,17 +3723,17 @@ describe("checkRules", () => {
         rule: "expression-type" as const,
       };
 
-      it("[I-9a] refuses a qti-variable of duration in an item that is not time dependent (item-duration)", () => {
+      it("[I-9a] align-54 untimed duration D7: accepts a qti-variable of duration in an item that is not time dependent", () => {
         assert.deepStrictEqual(
           judged(settingOutcome([outcome("SCORE")], "SCORE", variable("duration"))),
-          [untimedRead],
+          [],
         );
       });
 
-      it("[I-9a] refuses qti-any-n's min naming duration in an item that is not time dependent, and as no template or outcome variable (item-duration, P24)", () => {
+      it("[I-9a] align-54 untimed duration D7: refuses qti-any-n's min naming duration in an item that is not time dependent only as no template or outcome variable (P24)", () => {
         assert.deepStrictEqual(
           judged(settingOutcome([outcome("PASSED", "boolean")], "PASSED", anyN)),
-          [untimedNamed, builtInNamed],
+          [builtInNamed],
         );
       });
 
@@ -1822,30 +3832,14 @@ describe("checkRules", () => {
       assert.deepStrictEqual(settingScore(variable("numAttempts")), [scoreRefused("integer")]);
     });
 
-    it("[I-9a] accepts setting it from duration, a float in a time-dependent item (reading 29), and refuses no type in an item that is not, only the read (item-duration)", () => {
+    it("[I-9a] align-54 untimed duration D7: accepts setting it from duration, a float in an item time dependent or not (readings 29 and 150)", () => {
       const setting = item(
         [outcome("SCORE")],
         [],
         [processing(undefined, [setScore(variable("duration"))])],
       );
 
-      assert.deepStrictEqual(
-        [judged(timed(setting)), judged(setting)],
-        [
-          [],
-          [
-            {
-              detail: {
-                check: "untimed-duration",
-                element: "qti-variable",
-                identifier: "duration",
-              },
-              path: `${rulePath}/qti-variable`,
-              rule: "undeclared-variable",
-            },
-          ],
-        ],
-      );
+      assert.deepStrictEqual([judged(timed(setting)), judged(setting)], [[], []]);
     });
 
     it("accepts setting the float SCORE from a qti-field-value of QTI_CONTEXT, a single of unknown base type", () => {
@@ -2334,7 +4328,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9a] refuses a lookup that targets the built-in completionStatus, which only a qti-set-outcome-value sets, as undeclared-variable (pantry P9, info.txt:8488)", () => {
+    it("[I-9a] align-54 built-ins by kind E22a: accepts a lookup that targets the built-in completionStatus, as it accepts a qti-set-outcome-value of it: each sets an outcome, which the built-in stands as (reading 111)", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -2343,18 +4337,7 @@ describe("checkRules", () => {
             [processing(undefined, [lookup("completionStatus", baseValue("integer", "1"))])],
           ),
         ),
-        [
-          {
-            detail: {
-              check: "built-in-target",
-              element: "qti-lookup-outcome-value",
-              identifier: "completionStatus",
-              source: "info.txt:8488",
-            },
-            path: "qti-assessment-item/qti-response-processing/qti-lookup-outcome-value",
-            rule: "undeclared-variable",
-          },
-        ],
+        [],
       );
       assert.deepStrictEqual(
         judged(
@@ -2369,6 +4352,164 @@ describe("checkRules", () => {
           ),
         ),
         [],
+      );
+    });
+  });
+
+  describe("align-54 built-ins by kind: a built-in is named as the kind of variable it stands as (reading 111)", () => {
+    const responsePath = "qti-assessment-item/qti-response-processing";
+    const templatePath = "qti-assessment-item/qti-template-processing";
+
+    it("align-54 built-ins by kind E22a: accepts a qti-correct of the built-in responses numAttempts and duration", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("B", "boolean")],
+            [],
+            [
+              processing(undefined, [
+                setOutcome("B", nullOf(variable("numAttempts", "qti-correct"))),
+                setOutcome("B", nullOf(variable("duration", "qti-correct"))),
+              ]),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 built-ins by kind E22a: accepts a template qti-set-default-value of completionStatus and of numAttempts, and a qti-set-correct-response of numAttempts", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [
+              templateProcessing(
+                settingRule(
+                  "qti-set-default-value",
+                  "completionStatus",
+                  baseValue("identifier", "completed"),
+                ),
+                settingRule("qti-set-default-value", "numAttempts", baseValue("integer", "1")),
+                settingRule("qti-set-correct-response", "numAttempts", baseValue("integer", "1")),
+              ),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 built-ins by kind E22a: types a built-in a template rule sets as the built-in, refusing a float default of numAttempts as expression-type with the kind response (P20)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [
+              templateProcessing(
+                settingRule("qti-set-default-value", "numAttempts", baseValue("float", "1.5")),
+              ),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              element: "qti-set-default-value",
+              expressionBaseType: "float",
+              expressionCardinality: "single",
+              identifier: "numAttempts",
+              outcomeBaseType: "integer",
+              outcomeCardinality: "single",
+              targetKind: "response",
+            },
+            path: `${templatePath}/qti-set-default-value`,
+            rule: "expression-type",
+          },
+        ],
+      );
+    });
+
+    it("align-54 built-ins by kind E22a: still refuses a qti-map-response of numAttempts and a qti-map-response-point of duration, as template-requirements: a built-in declares no mapping (P27)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [
+              processing(undefined, [
+                setScore(variable("numAttempts", "qti-map-response")),
+                setScore(mapPoint("duration")),
+              ]),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              child: "qti-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response",
+              identifier: "numAttempts",
+            },
+            path: `${responsePath}/qti-set-outcome-value[1]/qti-map-response`,
+            rule: "template-requirements",
+          },
+          {
+            detail: {
+              baseType: "point",
+              child: "qti-area-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response-point",
+              identifier: "duration",
+            },
+            path: `${responsePath}/qti-set-outcome-value[2]/qti-map-response-point`,
+            rule: "template-requirements",
+          },
+        ],
+      );
+    });
+
+    it("align-54 built-ins by kind E22a: still refuses a qti-set-correct-response of the built-in outcome completionStatus and a qti-set-outcome-value of the built-in response numAttempts, as undeclared-variable", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [
+              templateProcessing(
+                settingRule(
+                  "qti-set-correct-response",
+                  "completionStatus",
+                  baseValue("identifier", "completed"),
+                ),
+              ),
+              processing(undefined, [setOutcome("numAttempts", baseValue("integer", "1"))]),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              element: "qti-set-correct-response",
+              expected: "response",
+              identifier: "completionStatus",
+            },
+            path: `${templatePath}/qti-set-correct-response`,
+            rule: "undeclared-variable",
+          },
+          {
+            detail: {
+              element: "qti-set-outcome-value",
+              expected: "outcome",
+              identifier: "numAttempts",
+            },
+            path: `${responsePath}/qti-set-outcome-value`,
+            rule: "undeclared-variable",
+          },
+        ],
       );
     });
   });
@@ -3046,7 +5187,7 @@ describe("checkRules", () => {
         ),
         [
           {
-            detail: { identifier: "A" },
+            detail: { class: "qti-simple-choice", identifier: "A", reading: "104" },
             path: `${laxDiv}/qti-choice-interaction/qti-simple-choice[2]/@identifier`,
             rule: "duplicate-identifier",
           },
@@ -3759,6 +5900,62 @@ const integerInto = (target: "ALL" | "SUM") => [
   },
 ];
 
+/**
+ * What one refusal reduces to in these tests: its rule, its path and its detail.
+ */
+type Judged = ReturnType<typeof judged>[number];
+
+/**
+ * Check a document whole, as `open` does, and reduce a refusing verdict's refusals as
+ * {@link judged} does. A test's declarations are judged by the test model's builder, which no rule
+ * of `processingRefusals` runs, so only the whole check reaches a test outcome's default value.
+ *
+ * @param source The document.
+ * @returns The refusals, reduced; empty for an accepting verdict.
+ */
+const verdictRefusals = (source: SourceDocument): readonly Judged[] => {
+  const verdict = check(source, tables, Option.none());
+  assert.notStrictEqual(verdict.verdict, "unchecked");
+
+  return verdict.verdict === "refused"
+    ? verdict.refusals.map((refusal) => ({
+        detail: refusal.detail,
+        path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
+        rule: refusal.rule,
+      }))
+    : [];
+};
+
+/**
+ * Construct a {@link ruledTest} that declares a float `SCORE` and an integer outcome
+ * `numAttempts`, which takes the built-in's place (reading 168), and sets `SCORE` to an
+ * expression.
+ *
+ * @param expression The expression.
+ * @returns The test as a source document.
+ */
+const numAttemptsDeclaringTest = (expression: SourceElement): SourceDocument =>
+  ruledTest([outcome("SCORE"), outcome("numAttempts", "integer")], [setScore(expression)]);
+
+/**
+ * The refusal a {@link numAttemptsDeclaringTest} gets for a response read of its outcome
+ * `numAttempts`: `undeclared-variable` expecting a response, with the kind that declares the name.
+ *
+ * @param element The reading expression's local name, the child of the `SCORE` rule.
+ * @returns The refusal, reduced.
+ */
+const declaredNumAttemptsRead = (element: string) => ({
+  detail: {
+    declared: "outcome",
+    declarer: "test",
+    element,
+    expected: "response",
+    identifier: "numAttempts",
+  },
+  path: `${outcomeRulePath("qti-set-outcome-value")}/${element}`,
+  rule: "undeclared-variable",
+});
+
 describe("processingRefusals", () => {
   it("[T-9] judges a template default against the template variable it sets where the caller types it, and judges none it is not given (pantry P20, templateOf)", () => {
     assert.deepStrictEqual(
@@ -3940,6 +6137,205 @@ describe("processingRefusals", () => {
           },
         ],
         [],
+      ],
+    );
+  });
+  it("align-54 R3 declared built-in: refuses a qti-correct of the outcome numAttempts a test declares, which takes the built-in's place, as undeclared-variable expecting a response with declared outcome, and keeps the built-in response numAttempts in a test that declares none (reading 168)", () => {
+    const correct = setScore(variable("numAttempts", "qti-correct"));
+
+    assert.deepStrictEqual(
+      [
+        processed(
+          ruledTest([outcome("SCORE", "integer"), outcome("numAttempts", "integer")], [correct]),
+          unknownTyping,
+        ),
+        processed(ruledTest([outcome("SCORE", "integer")], [correct]), unknownTyping),
+      ],
+      [
+        [
+          {
+            detail: {
+              declared: "outcome",
+              declarer: "test",
+              element: "qti-correct",
+              expected: "response",
+              identifier: "numAttempts",
+            },
+            path: `${outcomeRulePath("qti-set-outcome-value")}/qti-correct`,
+            rule: "undeclared-variable",
+          },
+        ],
+        [],
+      ],
+    );
+  });
+
+  it("align-54 r11 test map response E22a: refuses a test's unprefixed qti-map-response of duration, its qti-map-response-point of duration and its qti-map-response of the numAttempts it does not declare, as template-requirements: a built-in declares no mapping or area mapping (reading 166)", () => {
+    const setPath = outcomeRulePath("qti-set-outcome-value");
+
+    assert.deepStrictEqual(
+      [
+        processed(scoringTest(variable("duration", "qti-map-response")), unknownTyping),
+        processed(scoringTest(mapPoint("duration")), unknownTyping),
+        processed(scoringTest(variable("numAttempts", "qti-map-response")), unknownTyping),
+      ],
+      [
+        [
+          {
+            detail: {
+              child: "qti-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response",
+              identifier: "duration",
+            },
+            path: `${setPath}/qti-map-response`,
+            rule: "template-requirements",
+          },
+        ],
+        [
+          {
+            detail: {
+              baseType: "point",
+              child: "qti-area-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response-point",
+              identifier: "duration",
+            },
+            path: `${setPath}/qti-map-response-point`,
+            rule: "template-requirements",
+          },
+        ],
+        [
+          {
+            detail: {
+              child: "qti-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response",
+              identifier: "numAttempts",
+            },
+            path: `${setPath}/qti-map-response`,
+            rule: "template-requirements",
+          },
+        ],
+      ],
+    );
+  });
+
+  it("align-54 r11 test map response E22a: refuses through check a test whose outcome processing maps duration, maps duration as a point, or maps the numAttempts it does not declare (reading 166)", () => {
+    const mappings = [
+      scoringTest(variable("duration", "qti-map-response")),
+      scoringTest(mapPoint("duration")),
+      scoringTest(variable("numAttempts", "qti-map-response")),
+    ];
+
+    assert.deepStrictEqual(
+      mappings.map((source) => [
+        check(source, tables, Option.none()).verdict,
+        verdictRefusals(source).map((refused) => refused.rule),
+      ]),
+      [
+        ["refused", ["template-requirements"]],
+        ["refused", ["template-requirements"]],
+        ["refused", ["template-requirements"]],
+      ],
+    );
+  });
+
+  it("align-54 r11 test map response E22a: refuses a qti-map-response of duration in a section document's pre-condition under a test that reaches it, and judges none in the section on its own, which holds no built-in (reading 166; reading 5)", () => {
+    const condition = el(
+      "qti-gt",
+      [],
+      [variable("duration", "qti-map-response"), baseValue("float", "1")],
+    );
+    const reaching = scoringTest(baseValue("float", "1"));
+
+    assert.deepStrictEqual(
+      [
+        processed(conditionedSection(condition), unknownTyping, undefined, reaching),
+        processed(conditionedSection(condition), unknownTyping),
+      ],
+      [
+        [
+          {
+            detail: {
+              child: "qti-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response",
+              identifier: "duration",
+            },
+            path: "qti-assessment-section/qti-pre-condition/qti-gt/qti-map-response",
+            rule: "template-requirements",
+          },
+        ],
+        [],
+      ],
+    );
+  });
+
+  it("align-54 r11 test map response E22a: keeps a test that declares the outcome numAttempts to the refusals it gave before, undeclared-variable expecting a response with declared outcome, alone and through check (reading 168)", () => {
+    const mapsOutcome = numAttemptsDeclaringTest(variable("numAttempts", "qti-map-response"));
+    const pointMapsOutcome = numAttemptsDeclaringTest(mapPoint("numAttempts"));
+
+    assert.deepStrictEqual(
+      [
+        processed(mapsOutcome, unknownTyping),
+        processed(pointMapsOutcome, unknownTyping),
+        verdictRefusals(mapsOutcome),
+        verdictRefusals(pointMapsOutcome),
+      ],
+      [
+        [declaredNumAttemptsRead("qti-map-response")],
+        [declaredNumAttemptsRead("qti-map-response-point")],
+        [declaredNumAttemptsRead("qti-map-response")],
+        [declaredNumAttemptsRead("qti-map-response-point")],
+      ],
+    );
+  });
+
+  it("align-54 r11 test map response E22a: leaves an item as it was, its response processing's qti-map-response of duration refused as template-requirements and its template processing's refused as the template read alone (reading 166; P26)", () => {
+    assert.deepStrictEqual(
+      [
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [processing(undefined, [setScore(variable("duration", "qti-map-response"))])],
+          ),
+        ),
+        judged(
+          item(
+            [
+              outcome("SCORE"),
+              declaration("qti-template-declaration", "F", "single", "float"),
+              templateProcessing(setTemplate("F", variable("duration", "qti-map-response"))),
+            ],
+            [],
+          ),
+        ),
+      ],
+      [
+        [
+          {
+            detail: {
+              child: "qti-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response",
+              identifier: "duration",
+            },
+            path: "qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-map-response",
+            rule: "template-requirements",
+          },
+        ],
+        [
+          templateRead(
+            "qti-assessment-item/qti-template-processing/qti-set-template-value/qti-map-response",
+            {
+              element: "qti-map-response",
+              identifier: "duration",
+              variableKind: "built-in",
+            },
+          ),
+        ],
       ],
     );
   });
@@ -4261,32 +6657,6 @@ describe("processingRefusals", () => {
 });
 
 /**
- * What one refusal reduces to in these tests: its rule, its path and its detail.
- */
-type Judged = ReturnType<typeof judged>[number];
-
-/**
- * Check a document whole, as `open` does, and reduce a refusing verdict's refusals as
- * {@link judged} does. A test's declarations are judged by the test model's builder, which no rule
- * of `processingRefusals` runs, so only the whole check reaches a test outcome's default value.
- *
- * @param source The document.
- * @returns The refusals, reduced; empty for an accepting verdict.
- */
-const verdictRefusals = (source: SourceDocument): readonly Judged[] => {
-  const verdict = check(source, tables);
-  assert.notStrictEqual(verdict.verdict, "unchecked");
-
-  return verdict.verdict === "refused"
-    ? verdict.refusals.map((refusal) => ({
-        detail: refusal.detail,
-        path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
-        rule: refusal.rule,
-      }))
-    : [];
-};
-
-/**
  * Construct a rule that sets the boolean outcome `PASSED` to a `qti-base-value` of base type
  * boolean.
  *
@@ -4490,4 +6860,255 @@ describe("reading an identifier", () => {
       }),
     growthTimeoutMs,
   );
+});
+
+/**
+ * The `q`s of the shorter paragraph the quotation growth case reads, before it reads one with
+ * {@link growthFactor} times as many. Each element costs the rules about 2 µs whatever its
+ * neighbours, so a search of the parent's children per `q` outgrows that only past some thousands
+ * of siblings: a search per `q` grew 17 times on 2,000 against 16,000 and 40 times on 16,000
+ * against 128,000, so only the larger pair fails it.
+ */
+const fewerQuotes = 16_000;
+
+/**
+ * The `q`s of the paragraph the hostile-size case reads, about 640 KB as markup: the size the gate
+ * review measured at 6.7 s over a `span` control while each `q` searched its parent's children.
+ */
+const hostileQuotes = 80_000;
+
+/**
+ * Construct an item whose paragraph holds a run of sibling inline elements, each holding `a`, the
+ * next apart from it by a space.
+ *
+ * @param local The siblings' local name: `q`, which E30 reads the neighbours of, or `span`, the
+ *   control, which no rule reads them for.
+ * @param count How many siblings the paragraph holds.
+ * @returns The item.
+ */
+const siblingRun = (local: "q" | "span", count: number) =>
+  item(
+    [],
+    [
+      el(
+        "p",
+        [],
+        Array.from({ length: count * 2 - 1 }, (_, index) =>
+          index % 2 === 0 ? el(local, [], [text("a")]) : text(" "),
+        ),
+      ),
+    ],
+  );
+
+describe("align-54 r11 quotation position: E30 reads a q's neighbours by its position", () => {
+  it("align-54 r11 quotation position E30: refuses a mark beside the q it stands against among same-named siblings, and none beside the others (reading 127)", () => {
+    const body = "qti-assessment-item/qti-item-body/p";
+    const quoted = (at: number, mark: string, side: string) => ({
+      detail: { check: "quotation", element: "q", mark, reading: "127", side },
+      path: `${body}/q[${at}]`,
+      rule: "text-not-allowed" as const,
+    });
+
+    assert.deepStrictEqual(
+      judged(
+        item(
+          [],
+          [
+            el(
+              "p",
+              [],
+              [
+                text("“"),
+                el("q", [], [text("a")]),
+                text(" "),
+                el("q", [], [text("b")]),
+                text("” "),
+                el("q", [], [text("c")]),
+                el("span", [], [text("»")]),
+                el("q", [], [text("d")]),
+              ],
+            ),
+          ],
+        ),
+      ),
+      [quoted(1, "“", "before"), quoted(2, "”", "after")],
+    );
+  });
+
+  it.effect(
+    "align-54 r11 quotation position E30: reads 8 times the sibling qs in under 32 times the time",
+    () =>
+      Effect.gen(function* readsQuotesInLinearTime() {
+        const fewer = siblingRun("q", fewerQuotes);
+        const more = siblingRun("q", fewerQuotes * growthFactor);
+        assert.deepStrictEqual(judged(more), []);
+
+        const growth = yield* growthRatio(
+          () => {
+            checkRules(fewer, tables);
+          },
+          () => {
+            checkRules(more, tables);
+          },
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the qs took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+
+  it.effect(
+    "align-54 r11 quotation position E30: checks 80,000 sibling qs in under twice the time of as many spans",
+    () =>
+      Effect.gen(function* checksHostileQuotes() {
+        const quotes = siblingRun("q", hostileQuotes);
+        const spans = siblingRun("span", hostileQuotes);
+        let refused = -1;
+        const checkQuotes = () => {
+          refused = checkRules(quotes, tables).length;
+        };
+        const checkSpans = () => {
+          checkRules(spans, tables);
+        };
+        let quotesMs = Number.POSITIVE_INFINITY;
+        let spansMs = Number.POSITIVE_INFINITY;
+        for (let run = 0; run < growthRuns; run += 1) {
+          const quotesRun = yield* cpuMillis(checkQuotes);
+          const spansRun = yield* cpuMillis(checkSpans);
+          quotesMs = Math.min(quotesMs, quotesRun);
+          spansMs = Math.min(spansMs, spansRun);
+        }
+
+        assert.strictEqual(refused, 0);
+        assert.isBelow(
+          quotesMs,
+          spansMs * 2,
+          `80,000 qs took ${quotesMs.toFixed(0)} ms and as many spans ${spansMs.toFixed(0)} ms`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+});
+
+describe("align-54 body content: a name that is no NCName gets its value refusal alone", () => {
+  it("align-54 body content E40a: gives a declaration identifier that spells no NCName only its value refusal, and the bindings and reads that name it theirs (reading 152)", () => {
+    const refused = verdictRefusals(
+      item(
+        [
+          response("1a", "single", "identifier"),
+          response("1a", "single", "identifier"),
+          outcome("SCORE"),
+        ],
+        [choice("1a")],
+        [processing(undefined, [setScore(variable("2b"))])],
+      ),
+    );
+
+    assert.deepStrictEqual(
+      refused.map(({ path, rule }) => [rule, path]),
+      [
+        ["attribute-type", "qti-assessment-item/qti-response-declaration[1]/@identifier"],
+        ["attribute-type", "qti-assessment-item/qti-response-declaration[2]/@identifier"],
+        [
+          "attribute-type",
+          "qti-assessment-item/qti-item-body/qti-choice-interaction/@response-identifier",
+        ],
+        [
+          "attribute-type",
+          "qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-variable/@identifier",
+        ],
+      ],
+    );
+  });
+
+  it("align-54 body content E40a: does not judge a value's type under a declaration whose cardinality spells nothing (reading 158)", () => {
+    const counted = el(
+      "qti-outcome-declaration",
+      [attr("identifier", "N"), attr("cardinality", "many"), attr("base-type", "integer")],
+      [values("qti-default-value", "x")],
+    );
+
+    assert.deepStrictEqual(
+      verdictRefusals(item([counted], [])).map(({ path, rule }) => [rule, path]),
+      [["attribute-type", "qti-assessment-item/qti-outcome-declaration/@cardinality"]],
+    );
+  });
+});
+
+/**
+ * The path of the `span` {@link spoken} writes.
+ */
+const spokenSpan = "qti-assessment-item/qti-item-body/p/span";
+
+/**
+ * Construct an item whose paragraph holds a `span` with the given `data-ssml`.
+ *
+ * @param value The `span`'s `data-ssml`, as the XML reader gives it.
+ * @returns The item.
+ */
+const spoken = (value: string): SourceDocument =>
+  item(
+    [],
+    [
+      el(
+        "p",
+        [],
+        [text("Our word is "), el("span", [attr("data-ssml", value)], [text("mRNA")]), text(".")],
+      ),
+    ],
+  );
+
+/**
+ * Construct the `data-ssml` refusal of {@link spoken}'s `span` (the operator's P3).
+ *
+ * @param problem The problem its decoding names.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const badSsml = (problem: string): Judged => ({
+  detail: { attribute: "data-ssml", check: "data-ssml", element: "span", problem },
+  path: `${spokenSpan}/@data-ssml`,
+  rule: "attribute-type",
+});
+
+describe("align-54 Data-SSML: a data-ssml value is Data-SSML JSON (the operator's P3)", () => {
+  it('align-54 Data-SSML P3: refuses data-ssml="hello", which is not JSON, as attribute-type data-ssml with problem json at the attribute', () => {
+    assert.deepStrictEqual(judged(spoken("hello")), [badSsml("json")]);
+  });
+
+  it("align-54 Data-SSML P3: refuses an unknown property, a value of the wrong type and a value outside its list, each as attribute-type data-ssml with its problem", () => {
+    assert.deepStrictEqual(
+      [
+        '{"speak":{"alias":"messenger RNA"}}',
+        '{"sub":{"alias":3}}',
+        '{"say-as":{"interpret-as":"spell-out"}}',
+      ].map((value) => judged(spoken(value))),
+      [[badSsml("name")], [badSsml("type")], [badSsml("value")]],
+    );
+  });
+
+  it("align-54 Data-SSML P3: accepts a data-ssml that is Data-SSML JSON, keeping the span's data-ssml mark", () => {
+    const source = spoken('{"sub":{"alias":"messenger RNA"}}');
+    const verdict = check(source, tables, Option.none());
+
+    assert.deepStrictEqual(judged(source), []);
+    assert.deepStrictEqual(
+      verdict.verdict === "accepted-with-unsupported" && verdict.kind === "item"
+        ? verdict.accepted.unsupported
+        : verdict.verdict,
+      [{ feature: "data-ssml", path: spokenSpan, shown: "mark" }],
+    );
+  });
+
+  it("align-54 Data-SSML P3: does not judge a data-ssml an attribute wildcard admits on a kind that does not declare it (rule 5b8ee08b)", () => {
+    const listed = item(
+      [],
+      [el("ul", [], [el("li", [attr("data-ssml", "hello")], [text("mRNA")])])],
+    );
+
+    assert.deepStrictEqual(judged(listed), []);
+    assert.deepStrictEqual(verdictRefusals(listed), []);
+  });
 });

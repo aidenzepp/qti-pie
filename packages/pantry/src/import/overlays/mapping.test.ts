@@ -570,9 +570,9 @@ describe("import/overlays/mapping.ts, a typed key's parse", { timeout: searchTim
           },
           (key: string, c) =>
             Effect.sync(() => {
-              const integer = new RegExp(integerKeyPattern, "u").test(key);
-              const point = new RegExp(pointKeyPattern, "u").test(key);
-              const pair = new RegExp(pairKeyPattern, "u").test(key);
+              const integer = new RegExp(integerKeyPattern.source, "u").test(key);
+              const point = new RegExp(pointKeyPattern.source, "u").test(key);
+              const pair = new RegExp(pairKeyPattern.source, "u").test(key);
               const split = pairPartsOf(key) !== undefined;
               const situations: readonly [ParseSituation, boolean][] = [
                 ["integer", integer],

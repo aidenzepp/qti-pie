@@ -23,8 +23,8 @@
  * evaluated on the host in SQL's three-valued logic, over the fields the oracle knows of a row
  * ({@link attributeFields}, {@link nodeFields}).
  */
-import type { Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
-import { Array as Arr, Formatter, Option, pipe, Predicate, Result, Schema } from "effect";
+import type { Law, LawSide } from "@bjornpagen/grizzle";
+import { Array as Arr, Option, pipe, Predicate, Result, Schema } from "effect";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
@@ -252,18 +252,8 @@ const StoredTermSchema: Schema.Codec<StoredTerm> = Schema.Struct({
 });
 
 /**
- * A containment source's constant term as grizzle keeps it, `constant(v)`: the value every fact of
- * the side holds there, which meets its target field's (`on` of grizzle's schema API).
- */
-const ConstantTermSchema = Schema.Struct({
-  kind: Schema.Literal("constant"),
-  value: Schema.Union([Schema.String, Schema.BigInt, Schema.Number, Schema.Boolean]),
-});
-
-/**
  * A side of a statement as grizzle keeps it: a selection with the predicate its desc holds, or a
- * whole relation, stored or closed, and its terms, a `pred` one as an object over its field and a
- * containment source's constant as {@link ConstantTermSchema}.
+ * whole relation, stored or closed, and its terms, a `pred` one as an object over its field.
  */
 export const SideSchema = Schema.Struct({
   source: Schema.Union([
@@ -274,7 +264,7 @@ export const SideSchema = Schema.Struct({
     Schema.Struct({ kind: Schema.String, name: Schema.String }),
   ]),
   terms: Schema.NonEmptyArray(
-    Schema.Union([Schema.String, Schema.Struct({ field: Schema.String }), ConstantTermSchema]),
+    Schema.Union([Schema.String, Schema.Struct({ field: Schema.String })]),
   ),
 });
 
@@ -1039,99 +1029,46 @@ const sourceOf = (
  * Read the field a stored term reads: a field's name, or a `pred` term's field.
  *
  * @param term - The term.
- * @returns The field, none for a constant, which reads none.
+ * @returns The field.
  */
-const fieldOf = (term: StoredSide["terms"][number]): Option.Option<string> => {
-  if (Predicate.isString(term)) {
-    return Option.some(term);
-  }
-
-  return "field" in term ? Option.some(term.field) : Option.none();
-};
+const fieldOf = (term: StoredSide["terms"][number]): string =>
+  Predicate.isString(term) ? term : term.field;
 
 /**
- * The defect of a reader of fields met with a constant term, which only a containment's source
- * holds.
- *
- * @param side - The side that holds it.
- * @returns The error, naming the side and the repair.
- */
-const constantHeld = (side: StoredSide): Error =>
-  new Error(
-    `The side over ${sourceOf(side).name} holds a constant term, which this reader pairs as no field. Read a containment's source by its terms, each a field or a constant.`,
-  );
-
-/**
- * Read a stored side's terms, each a field's name, a `pred` term's field among them, of a side that
- * holds no constant: a target's, a fold's or a family's, or a containment source of none.
+ * Read a stored side's terms, each a field's name, a `pred` term's field among them.
  *
  * @param side - The side.
  * @returns The fields, in pairing order.
- * @throws {Error} When the side holds a constant, which only a containment's source may hold and
- *   whose reader pairs its terms by {@link fieldOf}.
  */
-const fieldsOf = (side: StoredSide): readonly string[] =>
-  side.terms.map((term) => Option.getOrThrowWith(fieldOf(term), () => constantHeld(side)));
+const fieldsOf = (side: StoredSide): readonly string[] => side.terms.map(fieldOf);
 
 /**
- * Write a containment's stored source side as a law's source side: each term a field, `pred` of
- * one, or a constant.
+ * Write a stored side as a law's side: each term a field or `pred` of one.
  *
  * @param side - The side.
  * @returns The law side, its selection's conjuncts left out, as an outcome names it.
- */
-const lawSourceSideOf = (side: StoredSide): LawSourceSide => ({
-  relation: sourceOf(side).name,
-  selection: { conjuncts: [] },
-  terms: pipe(
-    side.terms,
-    Arr.map((term): LawSourceSide["terms"][number] => {
-      if (Predicate.isString(term)) {
-        return { field: term, kind: "field" };
-      }
-
-      return "field" in term
-        ? { field: term.field, kind: "pred" }
-        : { kind: "constant", value: term.value };
-    }),
-  ),
-});
-
-/**
- * Write a stored side that holds no constant as a law's side: a target's, a key's, a fold's, or a
- * containment source of none.
- *
- * @param side - The side.
- * @returns The law side, its selection's conjuncts left out, as an outcome names it.
- * @throws {Error} When the side holds a constant, as {@link fieldsOf} does.
  */
 const lawSideOf = (side: StoredSide): LawSide => ({
   relation: sourceOf(side).name,
   selection: { conjuncts: [] },
   terms: pipe(
     side.terms,
-    Arr.map((term): LawSide["terms"][number] => {
-      const field = Option.getOrThrowWith(fieldOf(term), () => constantHeld(side));
-
-      return Predicate.isString(term) ? { field, kind: "field" } : { field, kind: "pred" };
-    }),
+    Arr.map((term): LawSide["terms"][number] =>
+      Predicate.isString(term)
+        ? { field: term, kind: "field" }
+        : { field: term.field, kind: "pred" },
+    ),
   ),
 });
 
 /**
- * Write one term of a law side: a field as its name, `pred` of a field as `pred(field)`, and a
- * containment source's constant as `constant(value)`.
+ * Write one term of a law side: a field as its name, `pred` of a field as `pred(field)`.
  *
  * @param term - The term.
  * @returns Its text.
  */
-const termText = (term: LawSourceSide["terms"][number]): string => {
-  if (term.kind === "constant") {
-    return `constant(${Formatter.format(term.value)})`;
-  }
-
-  return term.kind === "pred" ? `pred(${term.field})` : term.field;
-};
+const termText = (term: LawSide["terms"][number]): string =>
+  term.kind === "pred" ? `pred(${term.field})` : term.field;
 
 /**
  * Write a law side as {@link identityOf} spells it: its relation and its terms, `pred` of a field as
@@ -1140,7 +1077,7 @@ const termText = (term: LawSourceSide["terms"][number]): string => {
  * @param side - The side.
  * @returns Its text.
  */
-const sideText = (side: LawSourceSide): string =>
+const sideText = (side: LawSide): string =>
   `${side.relation}(${side.terms.map(termText).join(", ")})`;
 
 /**
@@ -1303,27 +1240,26 @@ const containedCopies = (
     return [];
   }
 
-  const law = identityOf({ from: lawSourceSideOf(from), kind: "contained", to: lawSideOf(to) });
+  const law = identityOf({ from: lawSideOf(from), kind: "contained", to: lawSideOf(to) });
   const targets = fieldsOf(to);
 
-  // A constant reads no field of the source, so it copies no text into its target's.
-  return from.terms.flatMap((term, at): readonly Drafted[] => {
+  return fieldsOf(from).flatMap((reads, at): readonly Drafted[] => {
     const held = targets[at] ?? "";
 
-    return fieldOf(term).pipe(
-      Option.filter((reads) => holdsKeyText(target, held) && !holdsKeyText(name, reads)),
-      Option.map((reads): Drafted => ({
-        by: "contained",
-        field: `${target}.${held}`,
-        law,
-        reads,
-        source: name,
-        statement,
-        term: source.predicate,
-        test: selectedBy(source.predicate),
-      })),
-      Option.toArray,
-    );
+    return holdsKeyText(target, held) && !holdsKeyText(name, reads)
+      ? [
+          {
+            by: "contained",
+            field: `${target}.${held}`,
+            law,
+            reads,
+            source: name,
+            statement,
+            term: source.predicate,
+            test: selectedBy(source.predicate),
+          },
+        ]
+      : [];
   });
 };
 
@@ -1709,26 +1645,6 @@ export const judgedSideOf = (side: StoredSide): JudgedSide => ({
 });
 
 /**
- * A containment's source side as the host judges it: a {@link JudgedSide} whose terms may also be
- * constants, each its value on every row.
- */
-export interface JudgedSourceSide extends Omit<JudgedSide, "law"> {
-  readonly law: LawSourceSide;
-}
-
-/**
- * Read a containment's stored source side as the host judges it.
- *
- * @param side - The side.
- * @returns Its relation, terms, constants among them, selection, and the fields and unread terms
- *   the selection holds.
- */
-const judgedSourceSideOf = (side: StoredSide): JudgedSourceSide => ({
-  ...selectionOf(side),
-  law: lawSourceSideOf(side),
-});
-
-/**
  * A law the schema states that the host judges over rows: a containment, each half of a `mirrors`
  * one, its source rows' projection among its target rows'; a key, its rows' projection one tuple
  * each; and a check, every row's predicate not false, in SQL's three-valued logic as a CHECK reads
@@ -1737,7 +1653,7 @@ const judgedSourceSideOf = (side: StoredSide): JudgedSourceSide => ({
  */
 export type JudgedLaw =
   | {
-      readonly from: JudgedSourceSide;
+      readonly from: JudgedSide;
       readonly kind: "contained";
       readonly law: Law;
       readonly to: JudgedSide;
@@ -1765,9 +1681,9 @@ const KeyStatementSchema = Schema.Struct({ kind: Schema.Literal("key"), side: Si
  * @returns The law.
  */
 const containedOf = (left: StoredSide, right: StoredSide): JudgedLaw => ({
-  from: judgedSourceSideOf(left),
+  from: judgedSideOf(left),
   kind: "contained",
-  law: { from: lawSourceSideOf(left), kind: "contained", to: lawSideOf(right) },
+  law: { from: lawSideOf(left), kind: "contained", to: lawSideOf(right) },
   to: judgedSideOf(right),
 });
 
@@ -1831,37 +1747,13 @@ export const closedRows = (relation: string): Option.Option<readonly Row[]> =>
   Option.map(factsOf(relation), ({ rows }) => rows);
 
 /**
- * One term of a containment's source side as a row meets its target's field: the field the row
- * holds there, a `pred` term's field among them, or the constant every row holds there.
- */
-export type SourceTerm =
-  | { readonly field: string; readonly kind: "field" }
-  | { readonly kind: "constant"; readonly value: bigint | boolean | number | string };
-
-/**
- * Read one term of a containment's stored source side ({@link SourceTerm}).
- *
- * @param term - The term.
- * @returns The field it reads, or its constant.
- */
-const sourceTermOf = (term: StoredSide["terms"][number]): SourceTerm => {
-  if (Predicate.isString(term)) {
-    return { field: term, kind: "field" };
-  }
-
-  return "field" in term
-    ? { field: term.field, kind: "field" }
-    : { kind: "constant", value: term.value };
-};
-
-/**
  * A containment the schema states, read from the statement grizzle keeps for it: its law, each
- * side's relation, its source's terms and its target's fields, and each side's selection as SQL's
+ * side's relation, its source's fields and its target's, and each side's selection as SQL's
  * `WHERE` reads it.
  */
 export interface Containment {
   readonly from: string;
-  readonly fromTerms: readonly SourceTerm[];
+  readonly fromFields: readonly string[];
   readonly law: Law;
   readonly selected: (row: Readonly<Record<string, Datum>>) => boolean;
   readonly targeted: (row: Readonly<Record<string, Datum>>) => boolean;
@@ -1897,7 +1789,7 @@ export const containmentsIn = (
       return [
         {
           from: left.name,
-          fromTerms: read.left.terms.map(sourceTermOf),
+          fromFields: fieldsOf(read.left),
           law: containedOf(read.left, read.right).law,
           selected: selectedBy(left.predicate),
           targeted: selectedBy(right.predicate),
