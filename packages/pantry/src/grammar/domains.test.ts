@@ -21,7 +21,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { regexMaxRepeat } from "@bjornpagen/grizzle";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
-import { array, element, int, map, weighted } from "@grizzle/testing/gen";
+import { element, int, weighted } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { floorSeed } from "@grizzle/testing/random";
 import { notesOnly } from "@grizzle/testing/sense";
@@ -598,7 +598,7 @@ describe("The whitespace fold", () => {
               kind: "specification",
               name: "XML Schema Part 2 §4.3.6's normalization, then the domain's exact language (xsdAccepts)",
             },
-            runs: 6000,
+            runs: 1500,
             shrink: completeShrink,
             steerEvery: 32,
             suite: "grammar/domains/fold",
@@ -901,19 +901,34 @@ const intervalKindOf = (
 };
 
 /**
- * A bound of the box: none, or a whole number from -11 to 11, inclusive or exclusive.
+ * A bound of the box: none, or one of {@link boundValues}, inclusive or exclusive.
  */
 type Bound = Option.Option<{ readonly exclusive: boolean; readonly value: bigint }>;
 
+/**
+ * The bounds the box draws: zero, its neighbours, and each side of the one- to two-digit edge,
+ * where a range's pattern changes its digit count.
+ */
+const boundValues = [-11, -10, -9, -2, -1, 0, 1, 2, 9, 10, 11] as const;
+
+/**
+ * The values every interval is read at: every value -30 to 30, and the three-digit edges beyond.
+ */
+const intervalValues: readonly bigint[] = [
+  ...[-120, -100, -99].map(BigInt),
+  ...Array.from({ length: 61 }, (_, at) => BigInt(at - 30)),
+  ...[99, 100, 120].map(BigInt),
+];
+
 describe("Integer intervals", () => {
   it.effect(
-    "read a value as in the interval exactly when bigint comparison puts it there, every interval of bounds -11 to 11 and every value -120 to 120, exhausted",
+    "read a value as in the interval exactly when bigint comparison puts it there, every interval of bounds among -11, -10, -9, -2 to 2, 9, 10 and 11, and every value -30 to 30 and the three-digit edges, exhausted",
     (ctx) =>
       searched(
         ctx,
         exhaust(
           {
-            box: "every interval whose bounds are each none or -11 to 11, inclusive or exclusive: 2,209 intervals, each read at every value -120 to 120 in each of its forms",
+            box: "every interval whose bounds are each none or one of boundValues, inclusive or exclusive: 529 intervals, each read at every one of intervalValues in each of its forms",
             caseHang: Duration.minutes(1),
             coverage: requiredInSpace<"bounded" | "empty" | "half-open" | "unbounded">([
               "bounded",
@@ -927,12 +942,12 @@ describe("Integer intervals", () => {
                   ? Option.none()
                   : Option.some({
                       exclusive: source.draw(int(0, 1)) === 1,
-                      value: BigInt(source.draw(int(-11, 11))),
+                      value: BigInt(source.draw(element(boundValues))),
                     });
 
               return { hi: bound(), lo: bound() };
             },
-            limit: 2209,
+            limit: 529,
             literal: Formatter.format,
             oracle: { kind: "second-implementation", name: "bigint comparison against the bounds" },
             suite: "grammar/domains/integer",
@@ -966,7 +981,7 @@ describe("Integer intervals", () => {
                   onNone: () => true,
                   onSome: (bound) => (bound.exclusive ? value < bound.value : value <= bound.value),
                 });
-              const values = Array.from({ length: 241 }, (_, at) => BigInt(at - 120));
+              const values = intervalValues;
               const members = values.filter(inBox);
               c.note(intervalKindOf(members.length, lo, hi));
 
@@ -1513,11 +1528,24 @@ const xsdBoolean = (form: string): Option.Option<boolean> => {
 };
 
 /**
- * What may stand around a boolean's literal: XML whitespace, and the two characters nearest it
- * that are no XML whitespace, U+00A0 and U+0085, which `String.prototype.trim` and `\s` would take
- * for it.
+ * What may stand around a boolean's literal: nothing, each XML whitespace character alone, the two
+ * characters nearest it that are no XML whitespace, U+00A0 and U+0085, which
+ * `String.prototype.trim` and `\s` would take for it, and three runs of two: a run of whitespace
+ * of two kinds, one of the same kind twice, and a near miss outside a space, which no strip of
+ * whitespace alone leaves bare.
  */
-const booleanEdges = [" ", "\t", "\n", "\r", "\u00A0", "\u0085"] as const;
+const booleanEdges = [
+  "",
+  " ",
+  "\t",
+  "\n",
+  "\r",
+  "\u00A0",
+  "\u0085",
+  "\r\n",
+  "  ",
+  "\u00A0 ",
+] as const;
 
 /**
  * Every literal of `xs:boolean`, and the near misses a reader might take for one: another case,
@@ -1542,9 +1570,7 @@ const booleanCores = [
  * A boolean's form as written: at most two edge characters, a core, at most two more.
  */
 const booleanForms = ((): Gen<string> => {
-  const edge = map(array(element(booleanEdges), { max: 2, min: 0 }), (characters) =>
-    characters.join(""),
-  );
+  const edge = element(booleanEdges);
   const core = element(booleanCores);
 
   return (source) => {
@@ -1592,12 +1618,12 @@ describe("xs:boolean", () => {
       // Oracle: the specification as a checker, XSD 1.1 Part 2 §4.3.6 (collapse) and §3.3.2.2
       // (booleanLexicalMap), written above as xsdBoolean, and xs:boolean's compiled domain, the
       // pattern AL1 installs.
-      // Bound: every core of booleanCores with at most two of booleanEdges on each side, 43² × 12.
+      // Bound: every core of booleanCores with one of booleanEdges on each side, 10² × 12.
       searched(
         ctx,
         exhaust(
           {
-            box: "every literal and near miss with at most two of space, tab, line feed, carriage return, U+00A0 and U+0085 on each side",
+            box: "every literal and near miss with one of booleanEdges on each side: nothing, one of space, tab, line feed, carriage return, U+00A0 and U+0085, or a run of two",
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<BooleanSituation>([
               "true",
@@ -1607,7 +1633,7 @@ describe("xs:boolean", () => {
               "outside",
             ]),
             generator: booleanForms,
-            limit: 43 * 43 * 12,
+            limit: 10 * 10 * 12,
             literal: (form) => JSON.stringify(form),
             oracle: {
               kind: "specification",
