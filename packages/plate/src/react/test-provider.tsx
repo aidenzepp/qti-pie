@@ -19,6 +19,7 @@ import type {
   TimerState,
 } from "#plate/react/contract.tsx";
 import type { NavigationState } from "#plate/navigation.ts";
+import { markStub } from "#plate/react/parts.tsx";
 
 /**
  * A piece of the React layer that is still a stub: mounting or calling it fails, naming the issue
@@ -97,15 +98,16 @@ export const fetchTransport = (_url: string): TestTransport => ({
 });
 
 /**
- * Hold a test session reached through a transport, for the hooks below: a stub. Issue m3g-06 fills
- * it.
+ * Hold a test session reached through a transport, for the hooks below: a stub, marked
+ * (`markStub`). Issue m3g-06 fills it.
  *
  * @param props The transport and the children.
  * @returns Nothing: it throws when it mounts.
  * @throws {NotImplemented} When it mounts, naming m3g-06.
  */
-export const TestProvider = (_props: TestProviderProps): ReactNode =>
-  notImplemented("TestProvider");
+export const TestProvider = markStub((_props: TestProviderProps): ReactNode =>
+  notImplemented("TestProvider"),
+);
 
 /**
  * Read the test session `TestProvider` holds: a stub. Issue m3g-06 fills it.

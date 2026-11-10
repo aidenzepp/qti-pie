@@ -32,7 +32,9 @@ export type {
 
 export type { NoticeProps } from "#plate/react/parts.tsx";
 
-export { Item, Notice, useParts, useUpgrade } from "#plate/react/parts.tsx";
+export { Notice, useParts, useUpgrade } from "#plate/react/parts.tsx";
+
+export { Item } from "#plate/react/item.tsx";
 
 export { Associate } from "#plate/react/associate.tsx";
 
