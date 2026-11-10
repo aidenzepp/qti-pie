@@ -1,7 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { emitBody, emitNodes, htmlSubset, writesMalformedHeading } from "#plate/emit/body.ts";
-import type { ReferencingElement, RenderContainer, RenderInteraction } from "#plate/emit/body.ts";
+import type {
+  AttachAnswer,
+  ReferencingElement,
+  RenderContainer,
+  RenderInteraction,
+} from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { resolveOverrides, rowFor, scopedId } from "#plate/emit/parts.ts";
@@ -1399,9 +1404,14 @@ const referencing = (
 ): ElementPayload => ({ ...el(tag, attributes, children), catalog: idref });
 
 /**
+ * The answer that attaches nothing.
+ */
+const unattached: AttachAnswer = { attributes: {}, nodes: [], place: "after-element" };
+
+/**
  * A render function whose attachment hook answers each catalog in `answered` with one `span` that
- * names the catalog and points at the referencing element's id, and nothing for any other
- * catalog, recording every reference it is handed.
+ * names the catalog and points at the referencing element's id, placed right after it, and nothing
+ * for any other catalog, recording every reference it is handed.
  *
  * @param handed The references the hook is handed, in order, filled as the body is emitted.
  * @param answered The catalogs the hook answers with a node.
@@ -1417,13 +1427,50 @@ const attaching = (
 
       return Result.succeed(
         answered.has(reference.idref)
-          ? [h("span", { "data-defines": reference.id }, [text(reference.idref)])]
-          : [],
+          ? {
+              ...unattached,
+              nodes: [h("span", { "data-defines": reference.id }, [text(reference.idref)])],
+            }
+          : unattached,
       );
     },
   });
 
 describe("emitBody, the catalog attachment hook", () => {
+  it.effect(
+    "[W0-AS.2] an element without an authored id gets a minted id only for a non-empty answer: an empty answer leaves it without one, an answer of an attribute alone mints it",
+    () =>
+      Effect.gen(function* mintsForAttributes() {
+        const state = yield* stateAt(2);
+        const answering: RenderInteraction = Object.assign(
+          (interaction: InteractionPayload) => stub(interaction),
+          {
+            attach: (reference: ReferencingElement) =>
+              Result.succeed(
+                reference.idref === "glossary"
+                  ? { ...unattached, attributes: { "aria-details": "x" } }
+                  : unattached,
+              ),
+          },
+        );
+        const nodes = yield* Effect.fromResult(
+          emitBody(
+            payloadOf([
+              referencing("p", "notes", {}, [txt("plain")]),
+              referencing("p", "glossary", {}, [txt("marked")]),
+            ]),
+            state,
+            answering,
+          ),
+        );
+
+        assert.deepStrictEqual(nodes, [
+          h("p", {}, [text("plain")]),
+          h("p", { "aria-details": "x", id: "i1-catalog-glossary-0" }, [text("marked")]),
+        ]);
+      }),
+  );
+
   it.effect(
     "places the hook's nodes right after the element that references the catalog, and hands it the element's scoped id",
     () =>
