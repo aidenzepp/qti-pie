@@ -17,6 +17,7 @@ import {
   renderStatus,
   restore,
   score,
+  solution,
 } from "#plate/index.ts";
 import type {
   Accepted,
@@ -24,7 +25,9 @@ import type {
   Entry,
   Options,
   Redacted,
+  Responses,
   ValidationMessage,
+  Value,
   Verdict,
 } from "#plate/index.ts";
 import { renderNavigation } from "#plate/navigation.ts";
@@ -294,6 +297,19 @@ const instance = "q1";
 const classesOf = (owner: ClassOwner): string => styledClasses[owner].join(" ");
 
 /**
+ * Construct an identifier value of a Choice's or an Inline Choice's response.
+ *
+ * @param cardinality The response's cardinality.
+ * @param held The identifiers it holds, in order.
+ * @returns The value.
+ */
+const identifierValue = (cardinality: Value["cardinality"], ...held: readonly string[]): Value => ({
+  baseType: "identifier",
+  cardinality,
+  values: held.map((value) => ({ baseType: "identifier", value })),
+});
+
+/**
  * Write a QTI 3.0 item in the corpus's `BG007.xml` shape: its response declarations, a `SCORE`
  * outcome, its body and the `match_correct` template.
  *
@@ -319,9 +335,15 @@ const itemBytes = (identifier: string, declarations: string, body: string): Uint
 </qti-assessment-item>`);
 
 /**
- * One hand-written item, the verdict `open` gives it, and what its refused answer posts.
+ * One hand-written item, the verdict `open` gives it, what its refused answer posts, and an answer
+ * a review marks against its solution.
  */
 interface Authored {
+  /**
+   * An answer that misses the item's correct responses, by response identifier, so a review against
+   * the solution marks a wrong answer and the right one it missed; empty when the item has none.
+   */
+  readonly answer: Responses;
   readonly bytes: Uint8Array;
   /**
    * The document's location, which `open` takes.
@@ -342,6 +364,7 @@ interface Authored {
  */
 const authored: readonly Authored[] = [
   {
+    answer: { RESPONSE: identifierValue("single", "ant") },
     bytes: itemBytes(
       "witness-choice-single",
       `<qti-response-declaration base-type="identifier" cardinality="single" identifier="RESPONSE">
@@ -362,6 +385,7 @@ const authored: readonly Authored[] = [
     verdict: "accepted",
   },
   {
+    answer: { RESPONSE: identifierValue("multiple", "spider", "ant") },
     bytes: itemBytes(
       "witness-choice-multiple",
       `<qti-response-declaration base-type="identifier" cardinality="multiple" identifier="RESPONSE">
@@ -388,6 +412,13 @@ const authored: readonly Authored[] = [
     verdict: "accepted",
   },
   {
+    answer: {
+      RESPONSE: {
+        baseType: "integer",
+        cardinality: "single",
+        values: [{ baseType: "integer", value: 6n }],
+      },
+    },
     bytes: itemBytes(
       "witness-text",
       `<qti-response-declaration base-type="integer" cardinality="single" identifier="RESPONSE">
@@ -408,6 +439,7 @@ const authored: readonly Authored[] = [
     verdict: "accepted",
   },
   {
+    answer: { RESPONSE: identifierValue("single", "six") },
     bytes: itemBytes(
       "witness-inline-choice",
       `<qti-response-declaration base-type="identifier" cardinality="single" identifier="RESPONSE">
@@ -433,6 +465,7 @@ const authored: readonly Authored[] = [
     verdict: "accepted",
   },
   {
+    answer: {},
     bytes: itemBytes(
       "witness-order",
       `<qti-response-declaration base-type="identifier" cardinality="ordered" identifier="RESPONSE">
@@ -500,7 +533,8 @@ const refusalsOf = (
 
 /**
  * Open an item and render it as an author would: with no inputs, with every control disabled, in
- * review and in solution, and, when it has one, with its refused answer's messages and posted
+ * review and in solution, in review marked against its solution with the right answers and with
+ * its answer that misses them, and, when it has one, with its refused answer's messages and posted
  * entries.
  *
  * @param item The hand-written item.
@@ -531,11 +565,14 @@ const rendersOf = Effect.fnUntraced(function* rendersOf(
     `${item.location}: the refused answer gives a message for each posted response`,
   );
 
+  const correct = solution(verdict.accepted);
   const states: readonly Options[] = [
     { instance },
     { disabled: true, instance },
     { instance, mode: "review" },
     { instance, mode: "solution" },
+    { instance, mode: "review", solution: correct, values: correct },
+    { instance, mode: "review", solution: correct, values: item.answer },
     ...(messages.length > 0 ? [{ instance, messages, posted: item.posted }] : []),
   ];
   const rendered = yield* Effect.fromResult(
