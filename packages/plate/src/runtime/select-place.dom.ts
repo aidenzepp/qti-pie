@@ -7,9 +7,10 @@
  * End, and places it, or cancels with Escape; a placed token goes back to the source with Delete or
  * Backspace. Every step is announced through the item's live region in the words of
  * {@link announcements}. A target holds at most its capacity of placements. The machine builds no
- * markup and reads no keys itself: an interaction's controller maps its keys through
- * {@link actionFor}, calls the machine, and writes {@link SelectPlaceOptions.onChange}'s placements
- * as hidden inputs (`runtime/wire.dom.ts`). Pointer dragging is not part of it.
+ * markup and reads no keys itself: the driver (`runtime/select-place-driver.dom.ts`) maps an
+ * interaction's keys through {@link actionFor} and its clicks onto the steps, and the interaction's
+ * controller writes {@link SelectPlaceOptions.onChange}'s placements as hidden inputs
+ * (`runtime/wire.dom.ts`). Pointer dragging is not part of it.
  *
  * Its texts are English and local to this module (D7).
  *
@@ -178,6 +179,17 @@ export interface SelectPlace<Token, Target> {
   readonly move: (direction: Direction) => SelectPlaceState<Token, Target>;
 
   /**
+   * Move the cursor to a given target while a token is held, and announce it as `move` announces
+   * the target reached; a target not among the machine's targets, or nothing held, changes nothing
+   * and announces nothing. It is the pointer's step: a click names its target outright, where a key
+   * moves relative to the cursor.
+   *
+   * @param target The target, compared by identity.
+   * @returns The state after the step.
+   */
+  readonly moveTo: (target: Target) => SelectPlaceState<Token, Target>;
+
+  /**
    * Pick a token up from the source, replacing any token held.
    *
    * @param token The token.
@@ -292,6 +304,17 @@ export const createSelectPlace = <Token, Target>(
       const target = targets.at(cursor);
 
       if (target === undefined) {
+        return current;
+      }
+
+      live.announce(announcements.moved(targetLabel(target), cursor + 1, targets.length));
+
+      return become({ ...current, cursor });
+    },
+    moveTo: (target) => {
+      const cursor = targets.indexOf(target);
+
+      if (current.phase !== "holding" || cursor === -1) {
         return current;
       }
 
