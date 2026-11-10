@@ -188,6 +188,7 @@ import {
   processingRefusals,
 } from "#plate/validate/rules.ts";
 import type { CollectedTyper, PrefixedTyper } from "#plate/validate/rules.ts";
+import { judgedInSpan } from "#plate/validate/open.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptMarkedTest, acceptedItem, check } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedStimulus, AcceptedTest, Verdict } from "#plate/validate/verdict.ts";
@@ -1562,8 +1563,8 @@ const readAs = (
 
 /**
  * Read each document the manifest's document resources name, once, as the type {@link readAs}
- * gives it, and judge each one read as a type plate judges, under the version the manifest states.
- * The manifest is never read here (reading 146).
+ * gives it, and judge each one read as a type plate judges, under the version the manifest states,
+ * each judgement under its own `plate.check` span. The manifest is never read here (reading 146).
  *
  * @param manifest The manifest.
  * @param files The package's files, keyed by normal form.
@@ -1587,7 +1588,11 @@ const readDocuments = Effect.fnUntraced(function* readDocuments(
         source,
         type,
         verdict: judgedTypes.has(type)
-          ? Option.some(judge(documentLocation, source, manifest.version))
+          ? Option.some(
+              yield* judgedInSpan(documentLocation, () =>
+                judge(documentLocation, source, manifest.version),
+              ),
+            )
           : Option.none(),
       });
     }
@@ -6568,7 +6573,7 @@ const readPackage = Effect.fnUntraced(function* readPackage(
  * @param files The package's files keyed by their paths from its root, as the host unzipped them.
  * @returns The verdict on the package.
  */
-export const openPackage = Effect.fn("openPackage")(function* openPackage(
+export const openPackage = Effect.fn("plate.openPackage")(function* openPackage(
   location: string,
   files: ReadonlyMap<string, Uint8Array>,
 ): Effect.fn.Return<PackageVerdict> {

@@ -2750,7 +2750,7 @@ const extensionCovered = Effect.fnUntraced(function* extensionCovered(
  *   by namespace then local name, or {@link TableGenerationError} naming the first construct with
  *   no table form, or an extension pattern's rule that names an element the XSD does not declare.
  */
-export const generateTables = Effect.fn("generateTables")(function* generateTables(
+export const generateTables = Effect.fn("plate.generateTables")(function* generateTables(
   xsd: SourceDocument,
 ): Effect.fn.Return<Tables, TableGenerationError> {
   const { context, declarations } = yield* schemaContext(xsd);
@@ -2805,33 +2805,35 @@ export const generateTables = Effect.fn("generateTables")(function* generateTabl
  *   {@link TableGenerationError} naming the first construct with no table form, as
  *   {@link generateTables} would, or a count that is not a non-negative integer.
  */
-export const generateOccurrences = Effect.fn("generateOccurrences")(function* generateOccurrences(
-  xsd: SourceDocument,
-): Effect.fn.Return<Occurrences, TableGenerationError> {
-  const { context, declarations } = yield* schemaContext(xsd);
-  const counting: Counting = { cache: new Map(), context, pending: new Set() };
+export const generateOccurrences = Effect.fn("plate.generateOccurrences")(
+  function* generateOccurrences(
+    xsd: SourceDocument,
+  ): Effect.fn.Return<Occurrences, TableGenerationError> {
+    const { context, declarations } = yield* schemaContext(xsd);
+    const counting: Counting = { cache: new Map(), context, pending: new Set() };
 
-  const elements = new Map<string, Counts>();
-  for (const [name, element] of declarations) {
-    const counts = yield* declarationCounts(counting, element);
-    const seen = elements.get(name);
-    elements.set(name, seen === undefined ? counts : alternativeCounts([seen, counts]));
-  }
-
-  const types = new Map<string, Counts>();
-  for (const name of context.complexTypes.keys()) {
-    types.set(name, yield* typeCounts(counting, { local: name, namespace: context.target }));
-  }
-  for (const name of context.simpleTypes.keys()) {
-    if (types.has(name)) {
-      return yield* failure(
-        "xs:simpleType",
-        `${name} also names a complex type, and simple and complex types share one symbol space`,
-      );
+    const elements = new Map<string, Counts>();
+    for (const [name, element] of declarations) {
+      const counts = yield* declarationCounts(counting, element);
+      const seen = elements.get(name);
+      elements.set(name, seen === undefined ? counts : alternativeCounts([seen, counts]));
     }
 
-    types.set(name, new Map());
-  }
+    const types = new Map<string, Counts>();
+    for (const name of context.complexTypes.keys()) {
+      types.set(name, yield* typeCounts(counting, { local: name, namespace: context.target }));
+    }
+    for (const name of context.simpleTypes.keys()) {
+      if (types.has(name)) {
+        return yield* failure(
+          "xs:simpleType",
+          `${name} also names a complex type, and simple and complex types share one symbol space`,
+        );
+      }
 
-  return { elements: occurrenceRecord(elements), types: occurrenceRecord(types) };
-});
+      types.set(name, new Map());
+    }
+
+    return { elements: occurrenceRecord(elements), types: occurrenceRecord(types) };
+  },
+);
