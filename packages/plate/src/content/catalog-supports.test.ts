@@ -135,10 +135,16 @@ interface Shown {
  * for one candidate: the supports go to both `redact` and `render`.
  *
  * @param supports The supports the host enabled for the candidate.
+ * @param rewrite A rewrite of the item's text, for a row that needs a variant of the item; the
+ *   item as written when absent.
  * @returns The page's HTML and the redacted item's JSON text.
  */
-const shownTo = Effect.fnUntraced(function* shownTo(supports: Supports) {
-  const verdict = yield* open(itemLocation, yield* fixtureBytes("items/catalog-supports.xml"));
+const shownTo = Effect.fnUntraced(function* shownTo(
+  supports: Supports,
+  rewrite: (xml: string) => string = (xml) => xml,
+) {
+  const source = new TextDecoder().decode(yield* fixtureBytes("items/catalog-supports.xml"));
+  const verdict = yield* open(itemLocation, new TextEncoder().encode(rewrite(source)));
   const accepted = Option.getOrElse(acceptedItem(verdict), () =>
     assert.fail(`the fixture is ${verdict.verdict}, not accepted`),
   );
@@ -217,6 +223,94 @@ const prohibiting = (xml: string, features: readonly string[]): string =>
     "</access-for-all-pnp>",
     `<prohibit-set>${features.map((feature) => `<${feature}/>`).join("")}</prohibit-set></access-for-all-pnp>`,
   );
+
+/**
+ * Make a rewrite of the item's text that replaces one text, failing the test when the item holds
+ * none, so a variant row cannot pass on an item it did not change.
+ *
+ * @param from The text the item holds.
+ * @param to The text it is replaced with.
+ * @returns The rewrite, for {@link shownTo}.
+ */
+const replacing =
+  (from: string, to: string) =>
+  (xml: string): string =>
+    xml.includes(from) ? xml.replace(from, to) : assert.fail(`the item holds no ${from}`);
+
+/**
+ * Read the `srclang` of each `track` of a page that carries `default`, in document order.
+ *
+ * @param html The page's HTML.
+ * @returns The `srclang` of every defaulted track, as written.
+ */
+const defaultedTracks = (html: string): readonly (string | true | undefined)[] =>
+  elementsOf(parseHtml(html))
+    .filter((element) => element.tag === "track" && Object.hasOwn(element.attrs, "default"))
+    .map((track) => track.attrs["srclang"]);
+
+/**
+ * Pair each element below nodes, in document order, with the node that follows it among its
+ * siblings, if any.
+ *
+ * @param nodes The nodes.
+ * @returns Every element they hold and its next sibling.
+ */
+const withNext = (nodes: readonly Node[]): readonly (readonly [Element, Option.Option<Node>])[] =>
+  nodes.flatMap((node, index): readonly (readonly [Element, Option.Option<Node>])[] =>
+    node.kind === "element"
+      ? [[node, Option.fromUndefinedOr(nodes[index + 1])], ...withNext(node.children)]
+      : [],
+  );
+
+/**
+ * Find the image of a page by its `src`, with the node that follows it, failing the test when the
+ * page holds none or several.
+ *
+ * @param html The page's HTML.
+ * @param src The image's package-relative `src` as the fixture writes it.
+ * @returns The image and its next sibling.
+ */
+const imageOf = (html: string, src: string): readonly [Element, Option.Option<Node>] => {
+  const found = withNext(parseHtml(html)).filter(
+    ([element]) => element.tag === "img" && element.attrs["src"] === `${assetBase}${src}`,
+  );
+  const [only, ...rest] = found;
+
+  return only !== undefined && rest.length === 0
+    ? only
+    : assert.fail(`expected exactly one image ${src}, found ${found.length}`);
+};
+
+/**
+ * Tell whether a node is an element that stands as alternative text: a `span` marked
+ * `data-slot="alt-text"` and hidden from assistive technology.
+ *
+ * @param node The node, if any.
+ * @returns The element's text when it is one; none otherwise.
+ */
+const altTextOf = (node: Option.Option<Node>): Option.Option<string> =>
+  node.pipe(
+    Option.filter(
+      (next): next is Element =>
+        next.kind === "element" &&
+        next.tag === "span" &&
+        next.attrs["data-slot"] === "alt-text" &&
+        next.attrs["aria-hidden"] === "true",
+    ),
+    Option.map(textOf),
+  );
+
+/**
+ * The two images of the fixture's body that carry an `alt`, by their package-relative `src`, with
+ * the `alt` each carries.
+ */
+const bodyImages: readonly (readonly [src: string, alt: string])[] = [
+  [
+    "images/kelp-forest.png",
+    "Sunlight falls through a dense kelp forest onto a school of small fish",
+  ],
+  ["images/kelp-canopy.png", "The kelp canopy seen from a boat, a dark green mat on the surface"],
+];
 
 describe("PNP-driven catalog content supports", () => {
   it.effect("[A-5] [A-22] [A-28] [A-38] an at-start catalog support shows its card content", () =>
@@ -346,5 +440,171 @@ describe("PNP-driven catalog content supports", () => {
           }
         }
       }),
+  );
+});
+
+describe("PNP-driven captions and alternative text", () => {
+  it.effect("[A-13a] a candidate with captions gets the matching captions track as default", () =>
+    Effect.gen(function* captioned() {
+      const source = yield* pnpText("pnp-catalog.xml");
+      const asking = yield* pnpFromText(source);
+      const { html } = yield* shownTo(asking);
+
+      assert.isTrue(asking.captions, "the PNP asks for captions");
+      assert.deepStrictEqual(
+        defaultedTracks(html),
+        ["en"],
+        "the item is en: its en track is the default, though the fr track comes first",
+      );
+
+      const optional = yield* pnpOf("pnp-catalog-optional.xml");
+      const declined = yield* pnpFromText(prohibiting(source, ["captions"]));
+
+      assert.isFalse(optional.captions, "an option-only preference is off");
+      assert.isFalse(declined.captions, "a prohibited preference reaches no field");
+
+      for (const candidate of [optional, declined, noSupports]) {
+        assert.deepStrictEqual(
+          defaultedTracks((yield* shownTo(candidate)).html),
+          [],
+          "a candidate who does not ask has no default track",
+        );
+      }
+    }),
+  );
+
+  it.effect(
+    "[A-13a] with no track in the item's language the first captions track is the default",
+    () =>
+      Effect.gen(function* firstTrack() {
+        const asking = yield* pnpOf("pnp-catalog.xml");
+        const { html } = yield* shownTo(asking, replacing('xml:lang="en">', 'xml:lang="de">'));
+
+        assert.deepStrictEqual(defaultedTracks(html), ["fr"]);
+      }),
+  );
+
+  it.effect(
+    "[A-13a] the language of a track is compared as a language tag, without regard to case",
+    () =>
+      Effect.gen(function* cased() {
+        const asking = yield* pnpOf("pnp-catalog.xml");
+        const { html } = yield* shownTo(asking, replacing('srclang="en"', 'srclang="EN"'));
+
+        assert.deepStrictEqual(defaultedTracks(html), ["EN"]);
+      }),
+  );
+
+  it.effect(
+    "[A-13a] a track of another kind is never the default, and an author's default stands",
+    () =>
+      Effect.gen(function* kinds() {
+        const asking = yield* pnpOf("pnp-catalog.xml");
+        const subtitled = yield* shownTo(
+          asking,
+          replacing(
+            '<track kind="captions" src="media/kelp-forest.en.vtt"',
+            '<track kind="subtitles" src="media/kelp-forest.en.vtt"',
+          ),
+        );
+        const authored = yield* shownTo(
+          asking,
+          replacing('srclang="fr"/>', 'srclang="fr" default="default"/>'),
+        );
+
+        assert.deepStrictEqual(
+          defaultedTracks(subtitled.html),
+          ["fr"],
+          "the en track is subtitles, so the fr captions track is the only one to default",
+        );
+        assert.deepStrictEqual(
+          defaultedTracks(authored.html),
+          ["fr"],
+          "the author's default on fr stays alone, as two defaults are not valid",
+        );
+      }),
+  );
+
+  it.effect(
+    "[A-7] a candidate with alternative text sees it next to the image, still programmatic",
+    () =>
+      Effect.gen(function* shown() {
+        const source = yield* pnpText("pnp-catalog.xml");
+        const asking = yield* pnpFromText(source);
+        const { html } = yield* shownTo(asking);
+
+        assert.isTrue(asking.alternativeText, "the PNP asks for alternative text");
+
+        for (const [src, alt] of bodyImages) {
+          const [image, next] = imageOf(html, src);
+
+          assert.strictEqual(image.attrs["alt"], alt, `${src} keeps its alt as its name`);
+          assert.deepStrictEqual(
+            altTextOf(next),
+            Option.some(alt),
+            `${src} is followed by its text`,
+          );
+        }
+
+        const optional = yield* pnpOf("pnp-catalog-optional.xml");
+        const declined = yield* pnpFromText(prohibiting(source, ["alternative-text"]));
+
+        assert.isFalse(optional.alternativeText, "an option-only preference is off");
+        assert.isFalse(declined.alternativeText, "a prohibited preference reaches no field");
+
+        for (const candidate of [optional, declined, noSupports]) {
+          const plain = yield* shownTo(candidate);
+
+          for (const [src, alt] of bodyImages) {
+            const [image, next] = imageOf(plain.html, src);
+
+            assert.strictEqual(image.attrs["alt"], alt, `${src} keeps its alt`);
+            assert.isTrue(Option.isNone(altTextOf(next)), `${src}: no visible text for others`);
+          }
+          assert.notInclude(plain.html, 'data-slot="alt-text"');
+        }
+      }),
+  );
+
+  it.effect("[A-7] an image with an empty or blank alt gets no alternative text", () =>
+    Effect.gen(function* blank() {
+      const asking = yield* pnpOf("pnp-catalog.xml");
+      const [canopy, canopyAlt] = bodyImages[1] ?? assert.fail("the fixture has two images");
+
+      for (const written of ["", " "]) {
+        const { html } = yield* shownTo(
+          asking,
+          replacing(`alt="${canopyAlt}"`, `alt="${written}"`),
+        );
+        const [image, next] = imageOf(html, canopy);
+
+        assert.strictEqual(image.attrs["alt"], written, "the alt is as written");
+        assert.isTrue(Option.isNone(altTextOf(next)), `alt="${written}" shows no text`);
+        assert.isTrue(
+          Option.isSome(altTextOf(imageOf(html, "images/kelp-forest.png")[1])),
+          "the other image still does",
+        );
+      }
+    }),
+  );
+
+  it.effect("[A-7] [A-13a] the two supports add only the text after an image and one default", () =>
+    Effect.gen(function* additions() {
+      const source = yield* pnpText("pnp-catalog.xml");
+      const both = yield* shownTo(yield* pnpFromText(source));
+      const neither = yield* shownTo(
+        yield* pnpFromText(prohibiting(source, ["captions", "alternative-text"])),
+      );
+
+      assert.notStrictEqual(both.html, neither.html, "the supports change the page");
+      assert.strictEqual(
+        both.html
+          .replaceAll(/<span [^>]*data-slot="alt-text"[^>]*>[^<]*<\/span>/gu, "")
+          .replace(" default>", ">"),
+        neither.html,
+        "everything else is as it is for a candidate who asks for neither",
+      );
+      assert.strictEqual(both.json, neither.json, "the redacted value does not change");
+    }),
   );
 });
