@@ -218,7 +218,7 @@ type SteppedBody<E extends BodyContentElement> = Pick<
  */
 type SteppedItem<E extends ItemContentElement> = Pick<
   ItemContentModule<E, NodeOf<ItemModules[E]>, PayloadOf<ItemModules[E]>, unknown>,
-  "attach" | "content" | "copy" | "normalise" | "parse" | "redact" | "render"
+  "attach" | "content" | "copy" | "dock" | "normalise" | "parse" | "redact" | "render"
 >;
 
 /**
@@ -572,13 +572,100 @@ export const copyItemContent = (
 };
 
 /**
- * Render the payload nodes of one element an item-placed module read, through its `render`.
+ * Where the render emits an item-placed module's nodes that no body element docks: an
+ * `ItemContentModule.dock`'s `undocked`, `"after-body"` for a module that declares no `dock`.
+ */
+export type UndockedPlace = "after-body" | "before-body";
+
+/**
+ * Give where a module's undocked nodes are emitted.
+ *
+ * @param module The module.
+ * @returns Its `dock.undocked`, `"after-body"` when it declares no `dock`.
+ */
+const placeOf = (module: { readonly dock?: { readonly undocked: UndockedPlace } }): UndockedPlace =>
+  module.dock?.undocked ?? "after-body";
+
+/**
+ * A payload node a body element docks: the node, and its render through its module.
+ */
+export interface DockedNode {
+  /**
+   * The payload node as the payload holds it, by identity, which {@link renderItemContent} skips.
+   */
+  readonly node: unknown;
+  /**
+   * Render the node through its module's `render`.
+   *
+   * @param state The render's emit state.
+   * @param kit The render kit.
+   * @returns The element the module writes, or the refusal of a part swap.
+   */
+  readonly render: (
+    state: EmitState,
+    kit: ContentRenderKit,
+  ) => Result.Result<Element, PartSwapRefused>;
+}
+
+/**
+ * Find the payload node of one element's module that a body element docks by an identifier,
+ * through the module's `dock.key`.
+ *
+ * @template E The element.
+ * @param element The element.
+ * @param content The payload's content.
+ * @param idref The identifier the body element names, its `data-stimulus-idref`.
+ * @returns The first node whose key is the identifier, with its render; none when the module
+ *   declares no `dock` or none of its nodes answers.
+ */
+const dockedIn = <E extends ItemContentElement>(
+  element: E,
+  content: { readonly [X in E]?: readonly PayloadOf<ItemModules[X]>[] },
+  idref: string,
+): Option.Option<DockedNode> => {
+  const module = steppedItem[element];
+  const { dock } = module;
+  if (dock === undefined) {
+    return Option.none();
+  }
+
+  return Option.map(
+    Option.fromUndefinedOr((content[element] ?? []).find((node) => dock.key(node) === idref)),
+    (node) => ({ node, render: (state, kit) => module.render(node, state, kit) }),
+  );
+};
+
+/**
+ * Find the module and node a body element docks by an identifier: the first node, in the modules'
+ * order and each element's in document order, of a module whose `dock.key` gives the identifier.
+ *
+ * @param content The payload's content, absent when it holds none.
+ * @param idref The identifier the body element names, its `data-stimulus-idref`.
+ * @returns The node with its render; none when no module's node answers to the identifier.
+ */
+export const dockedBy = (
+  content: ItemPayloadsHeld | undefined,
+  idref: string,
+): Option.Option<DockedNode> =>
+  content === undefined
+    ? Option.none()
+    : Option.fromUndefinedOr(
+        Object.values(itemModules)
+          .map((module) => dockedIn(module.element, content, idref))
+          .find(Option.isSome),
+      ).pipe(Option.flatten);
+
+/**
+ * Render the payload nodes of one element an item-placed module read, through its `render`: those
+ * at the place asked for and that no body element docked.
  *
  * @template E The element.
  * @param element The element.
  * @param content The payload's content.
  * @param state The render's emit state.
  * @param kit The render kit.
+ * @param docked The nodes body elements docked, by identity, which are not rendered here.
+ * @param place Which modules' nodes to render: those whose undocked nodes go at this place.
  * @returns The elements the module writes, in order, or the first refusal of a part swap.
  */
 const renderElement = <E extends ItemContentElement>(
@@ -586,30 +673,54 @@ const renderElement = <E extends ItemContentElement>(
   content: { readonly [X in E]?: readonly PayloadOf<ItemModules[X]>[] },
   state: EmitState,
   kit: ContentRenderKit,
-): Result.Result<readonly Element[], PartSwapRefused> =>
-  Result.all((content[element] ?? []).map((node) => steppedItem[element].render(node, state, kit)));
+  docked: ReadonlySet<unknown>,
+  place: UndockedPlace,
+): Result.Result<readonly Element[], PartSwapRefused> => {
+  const module = steppedItem[element];
+  if (placeOf(module) !== place) {
+    return Result.succeed([]);
+  }
+
+  return Result.all(
+    (content[element] ?? [])
+      .filter((node) => !docked.has(node))
+      .map((node) => module.render(node, state, kit)),
+  );
+};
+
+/**
+ * No docked node: what a render with no dock hook skips.
+ */
+const nothingDocked: ReadonlySet<unknown> = new Set();
 
 /**
  * Render the content a payload holds of the item-placed modules' elements, each node through its
- * module's render, in the modules' order and each element's in document order: what the item Root
- * holds after the body.
+ * module's render, in the modules' order and each element's in document order: the nodes no body
+ * element docked, of the modules whose undocked nodes go at one place. The render calls it twice,
+ * once per place, so the item Root holds the `"before-body"` nodes before the body and the
+ * `"after-body"` nodes, every module's that declares no `dock`, after it, today's place.
  *
  * @param content The payload's content, absent when it holds none.
  * @param state The render's emit state.
  * @param kit The render kit.
+ * @param docked The nodes body elements docked, by identity, none by default; each is rendered
+ *   inside its element instead.
+ * @param place Which modules' nodes to render, `"after-body"` by default.
  * @returns The elements the modules write, in order, or the first refusal of a part swap.
  */
 export const renderItemContent = (
   content: ItemPayloadsHeld | undefined,
   state: EmitState,
   kit: ContentRenderKit,
+  docked: ReadonlySet<unknown> = nothingDocked,
+  place: UndockedPlace = "after-body",
 ): Result.Result<readonly Element[], PartSwapRefused> =>
   content === undefined
     ? Result.succeed([])
     : Result.map(
         Result.all(
           Object.values(itemModules).map((module) =>
-            renderElement(module.element, content, state, kit),
+            renderElement(module.element, content, state, kit, docked, place),
           ),
         ),
         (rendered) => rendered.flat(),
