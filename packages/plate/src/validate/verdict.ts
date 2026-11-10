@@ -666,6 +666,12 @@ const placeNode = (
       return { lifted: inner.lifted, nodes: [{ ...node, content: inner.nodes }] };
     }
 
+    case "container": {
+      const inner = placeNodes(node.children, drops, placed, inMedia);
+
+      return { lifted: inner.lifted, nodes: [{ ...node, children: inner.nodes }] };
+    }
+
     case "content":
     case "printed-variable":
     case "text":
