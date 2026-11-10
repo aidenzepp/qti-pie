@@ -1,28 +1,31 @@
 /**
- * The scope of a timed expiry: what a test-feature module's `expire` verdict (`GateVerdict` in
- * `#plate/test-features/contract.ts`) names, read against the test and the session. The module
- * names the scope; {@link expiringOf} derives which item refs it holds, which part holds it,
- * whether its expiry processes items and how the session leaves it, so a module never reads the
- * session's structure. `advance` (`#plate/session/advance.ts`) carries the expiry out from that.
- * `qti-time-limits` (issue m3f-01b) is the first module to answer `expire`, implementing reading
- * D19 of `docs/spec-readings.md`.
+ * The scope of a timed expiry or an exit: what a test-feature module's `expire` or `exit` verdict
+ * (`GateVerdict` in `#plate/test-features/contract.ts`, and an `exit` `EnterVerdict`) names, read
+ * against the test and the session. The module names the scope; {@link expiringOf} derives which
+ * item refs it holds, which part holds it, whether its expiry processes items and how the session
+ * leaves it, so a module never reads the session's structure. `advance`
+ * (`#plate/session/advance.ts`) carries the expiry and the exit out from that. `qti-time-limits`
+ * (issue m3f-01b) is the first module to answer `expire`, implementing reading D19 of
+ * `docs/spec-readings.md`; `qti-pre-condition` (issue m5-05) is the first to answer `exit`.
  *
  * This is a browser module: it reads the test and the session and touches no codec, so the
  * expiry's processing, which calls `score`, stays in `advance`.
  *
  * @module
  */
-import { Array as Arr, Data, Option, Result } from "effect";
+import { Data, Option, Result } from "effect";
 import { refIdentifiersIn } from "#plate/model/item-refs.ts";
-import type { Section, SectionChild, Test, TestPart } from "#plate/model/test.ts";
+import type { Test, TestPart } from "#plate/model/test.ts";
 import type { TestSession } from "#plate/session/session.ts";
+import { partHoldingScope } from "#plate/session/start.ts";
 import type { TimedScope } from "#plate/test-features/contract.ts";
 
 /**
- * The failure of {@link expiringOf} for a scope the test does not hold: an item ref, section or
- * part of another identifier than any of the test's, or `test` under another identifier than the
- * test's own. A test-feature module names only scopes of the test it gates, so this is a module
- * defect, returned so the host can report it.
+ * The failure of {@link expiringOf}, which the expiry and the exit derive their scope through, for
+ * a scope the test does not hold: an item ref, section or part of another identifier than any of
+ * the test's, or `test` under another identifier than the test's own. A test-feature module names
+ * only scopes of the test it gates, so this is a module defect, returned so the host can report
+ * it.
  */
 export class UnknownTimedScope extends Data.TaggedError("UnknownTimedScope")<{
   readonly scope: TimedScope;
@@ -32,7 +35,7 @@ export class UnknownTimedScope extends Data.TaggedError("UnknownTimedScope")<{
    * The scope named, the test that lacks it, and what to do.
    */
   override get message(): string {
-    return `A test feature expired the ${this.scope.kind} ${JSON.stringify(this.scope.identifier)}, which the test ${JSON.stringify(this.test)} does not hold, so the expiry cannot be carried out and the session is unchanged. A module names only scopes of the test it gates; report it with the test as a renderer defect.`;
+    return `A test feature left the ${this.scope.kind} ${JSON.stringify(this.scope.identifier)}, which the test ${JSON.stringify(this.test)} does not hold, so the expiry or the exit cannot be carried out and the session is unchanged. A module names only scopes of the test it gates; report it with the test as a renderer defect.`;
   }
 }
 
@@ -81,76 +84,6 @@ export interface Expiring {
    */
   readonly processes: boolean;
 }
-
-/**
- * Find a section by identifier among some section children, nested sections included.
- *
- * @param children The children.
- * @param identifier The section's identifier.
- * @returns The section, none when no section among the children has the identifier.
- */
-const sectionIn = (children: readonly SectionChild[], identifier: string): Option.Option<Section> =>
-  Arr.findFirst(children, (child) => {
-    if (child.kind !== "section") {
-      return Option.none();
-    }
-
-    return child.identifier === identifier
-      ? Option.some(child)
-      : sectionIn(child.children, identifier);
-  });
-
-/**
- * Give the identifiers of the item refs a scope holds within a part, when the part holds the scope.
- *
- * @param part The part.
- * @param scope The scope: an item ref, a section or a part; the test is held by no part.
- * @returns The scope's refs, none when the part does not hold the scope.
- */
-const membersIn = (part: TestPart, scope: TimedScope): Option.Option<ReadonlySet<string>> => {
-  const refs = refIdentifiersIn(part.children);
-  switch (scope.kind) {
-    case "item-ref": {
-      return refs.includes(scope.identifier)
-        ? Option.some(new Set([scope.identifier]))
-        : Option.none();
-    }
-    case "section": {
-      return Option.map(
-        sectionIn(part.children, scope.identifier),
-        (section) => new Set(refIdentifiersIn(section.children)),
-      );
-    }
-    case "part": {
-      return part.identifier === scope.identifier ? Option.some(new Set(refs)) : Option.none();
-    }
-    case "test": {
-      return Option.none();
-    }
-    default: {
-      return scope.kind satisfies never;
-    }
-  }
-};
-
-/**
- * Find the part that holds a scope, with the identifiers of the item refs the scope holds.
- *
- * @param test The test.
- * @param scope The scope: an item ref, a section or a part.
- * @returns The part's index, the part and the scope's refs; none when no part holds the scope.
- */
-const partHolding = (
-  test: Test,
-  scope: TimedScope,
-): Option.Option<{
-  readonly index: number;
-  readonly members: ReadonlySet<string>;
-  readonly part: TestPart;
-}> =>
-  Arr.findFirst(test.parts, (part, index) =>
-    Option.map(membersIn(part, scope), (members) => ({ index, members, part })),
-  );
 
 /**
  * Say how the session leaves an item ref's or a section's scope: an item ref's expiry moves on in a
@@ -203,7 +136,7 @@ export const expiringOf = (
   }
 
   return Result.fromOption(
-    Option.map(partHolding(test, scope), ({ index, members, part }) => ({
+    Option.map(partHoldingScope(test, scope), ({ index, members, part }) => ({
       leaving: scope.kind === "part" ? "end-part" : leavingOf(session, scope, part, members),
       members,
       part: Option.some({ index, part }),

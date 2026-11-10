@@ -5,7 +5,7 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Result } from "effect";
+import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { decode } from "#crust/decode.ts";
 import type { ReaderRefusal } from "#crust/errors.ts";
 import { ascii, bytesOf, declared } from "#crust/test/bytes.ts";
@@ -214,6 +214,24 @@ describe("decode refuses what it cannot decode faithfully", () => {
 
       assert.strictEqual(refusal.rule, "nul");
       assert.include(refusal.detail, "U+0000");
+    }),
+  );
+
+  it.effect("a NUL at the line and column it stands at in the decoded text", () =>
+    Effect.gen(function* positionsNul() {
+      const refusal = yield* refusalOf(declared("UTF-8", ascii("\nx\r\nabcd"), [0x00]));
+
+      assert.strictEqual(refusal.rule, "nul");
+      assert.deepStrictEqual(refusal.position, Option.some({ column: 5, line: 3 }));
+    }),
+  );
+
+  it.effect("a US-ASCII byte at or above 0x80 at the line and column it stands at", () =>
+    Effect.gen(function* positionsHighAscii() {
+      const refusal = yield* refusalOf(declared("US-ASCII", ascii("\nabc"), [0x80]));
+
+      assert.strictEqual(refusal.rule, "decode");
+      assert.deepStrictEqual(refusal.position, Option.some({ column: 4, line: 2 }));
     }),
   );
 

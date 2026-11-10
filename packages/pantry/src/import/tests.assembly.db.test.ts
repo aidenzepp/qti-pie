@@ -20,11 +20,11 @@ import { Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
-import type { Rule } from "#pantry/import/refusal.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
+import type { Rule } from "#pantry/import/rules.ts";
 
 /**
  * Each whole-package case with its verdict: accepted, or the rules its refusal may name.
@@ -51,7 +51,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the test layer's whole-package cases, imported", (it) => {
       for (const [name, verdict] of cases) {
         it.effect(
@@ -69,15 +68,19 @@ describe.skipIf(!hasLease)(
               } else if (outcome.failure instanceof ImportRefused) {
                 const refused = outcome.failure;
 
-                yield* Effect.log(`${name} refused under ${refused.rule}`, refused.detail);
+                yield* Effect.log(`${name} refused under ${refused.rules[0]}`, refused.detail);
 
                 assert.notStrictEqual(
                   verdict,
                   "accepted",
-                  `${name}: refused under ${refused.rule}`,
+                  `${name}: refused under ${refused.rules[0]}`,
                 );
                 if (verdict !== "accepted") {
-                  assert.include(verdict, refused.rule, `${name}: the refusal named another rule`);
+                  assert.include(
+                    verdict,
+                    refused.rules[0],
+                    `${name}: the refusal named another rule`,
+                  );
                 }
               } else {
                 assert.fail(`${name}: failed with ${outcome.failure._tag}`);

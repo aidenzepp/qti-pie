@@ -20,7 +20,7 @@ import type { ContentModel, Occurs, Particle } from "#pantry/vocab/inventory/typ
 import { vocabularies } from "#pantry/vocab/inventory/vocabularies.ts";
 import { nameless, namespaceNameOf } from "#pantry/vocab/namespaces.ts";
 import type { NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
-import { automatonOf } from "#pantry/vocab/sequencing.ts";
+import { automatonOf, breachesOf } from "#pantry/vocab/sequencing.ts";
 import type { Automaton } from "#pantry/vocab/sequencing.ts";
 
 /**
@@ -403,7 +403,7 @@ describe("vocab/sequencing.ts", () => {
             Effect.sync(() => {
               const { particle, row } = Arr.getUnsafe(modelled, index);
               const own = namespaceOf(row.kind);
-              const automaton = automatonOf(particle, namespaceOfKind, namespaceOfKind(row.kind));
+              const automaton = automatonOf(particle);
               const tree = relaxed(particle);
               const letters = alphabetOf(automaton, own);
 
@@ -461,7 +461,7 @@ describe("vocab/sequencing.ts", () => {
             Effect.sync(() => {
               const { particle, row } = Arr.getUnsafe(modelled, index);
               const own = namespaceOf(row.kind);
-              const automaton = automatonOf(particle, namespaceOfKind, namespaceOfKind(row.kind));
+              const automaton = automatonOf(particle);
               const tree = relaxed(particle);
 
               for (const word of edits) {
@@ -485,7 +485,7 @@ describe("vocab/sequencing.ts", () => {
 
   it("is deterministic on every model, as Unique Particle Attribution requires", () => {
     const breaches = modelled.flatMap(({ particle, row }) =>
-      automatonOf(particle, namespaceOfKind, namespaceOfKind(row.kind)).ambiguous.map(
+      breachesOf(automatonOf(particle), namespaceOfKind, namespaceOfKind(row.kind)).map(
         (ambiguity) => `${named(row)} ${Formatter.format(ambiguity)}`,
       ),
     );
@@ -520,13 +520,13 @@ describe("vocab/sequencing.ts", () => {
               const mutant = doubled(particle, place);
 
               if (Option.isSome(mutant)) {
-                const automaton = automatonOf(
-                  mutant.value,
+                const breaches = breachesOf(
+                  automatonOf(mutant.value),
                   namespaceOfKind,
                   namespaceOfKind(row.kind),
                 );
 
-                if (automaton.ambiguous.length === 0) {
+                if (breaches.length === 0) {
                   throw new Error(`${named(row)}: doubling position ${place + 1} went unnoticed`);
                 }
               }
@@ -538,7 +538,7 @@ describe("vocab/sequencing.ts", () => {
 
   it("numbers every element particle and wildcard once, densely, in tree order", () => {
     for (const { particle, row } of modelled) {
-      const automaton = automatonOf(particle, namespaceOfKind, namespaceOfKind(row.kind));
+      const automaton = automatonOf(particle);
       const leaves = leavesOf(particle);
       const counts = new Map<string, number>();
 

@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * The attribute grammar (review U1; fin.md §16, §17): `AttributeGrammar`, `ValueDomain`,
  * `ValueIdentity` and `TextDomain`, generated from the declarations the vocabulary leaves derive
@@ -39,17 +38,12 @@ import {
   closed,
   fin,
   idField,
+  indexed,
   OutsideCodeSpace,
   roster,
   valueField,
 } from "#pantry/grammar/closed.ts";
-import type {
-  Closed,
-  ClosedRelationError,
-  IdField,
-  Roster,
-  ValueField,
-} from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, Indexed, Roster, ValueField } from "#pantry/grammar/closed.ts";
 import {
   compile,
   boundFacets,
@@ -66,7 +60,6 @@ import type {
   Reading,
 } from "#pantry/grammar/domains.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import { noType } from "#pantry/grammar/xsi.ts";
 import { attributeDeclarations, openAttribute } from "#pantry/vocab/inventory/attributes.ts";
 import type { Domain, Facet, ValueType } from "#pantry/vocab/inventory/types.ts";
 
@@ -85,6 +78,11 @@ export const uses = ["optional", "required"] as const satisfies readonly Use[];
  * definition.
  */
 export interface ValueDomain extends CompiledDomain {
+  /**
+   * The definition, as the attribute grammar read it, that the domain was first compiled from:
+   * what the tests read its enumeration by (`enumerationKept`), held, never read, by a load.
+   */
+  readonly definition: Domain;
   readonly handle: string;
 }
 
@@ -93,7 +91,11 @@ export interface ValueDomain extends CompiledDomain {
  * value, whitespace preserved. No declaration governs an open name, so its value is kept as
  * written and no typed value is derived from it.
  */
-export const openDomain: ValueDomain = { ...openCompiled, handle: openAttribute.type.type };
+export const openDomain: ValueDomain = {
+  ...openCompiled,
+  definition: openAttribute.domain,
+  handle: openAttribute.type.type,
+};
 
 /**
  * The `BaseType` roster in code order: the code space of every base-type field, `BindingFit`'s and
@@ -1069,14 +1071,74 @@ const appliesTo = (reading: SpecReading, kind: string, name: string): boolean =>
   Option.match(reading.kinds, { onNone: () => true, onSome: (kinds) => kinds.includes(kind) });
 
 /**
- * The spec readings of one kind's attribute, in the order {@link specReadings} lists them.
+ * The spec readings that apply to one kind's attribute, in the order {@link specReadings} lists
+ * them, with the text of their indices there, which tells two such lists apart.
+ */
+interface Applicable {
+  readonly key: string;
+  readonly readings: readonly SpecReading[];
+}
+
+/**
+ * The readings of an attribute no spec reading reads.
+ */
+const noReadings: Applicable = { key: "", readings: [] };
+
+/**
+ * The spec readings by attribute name, then by kind: for each name some reading reads, the readings
+ * on every kind that declares it (`anyKind`), and for each kind a reading lists, that kind's own,
+ * each list in {@link specReadings} order. Built once from the readings, so a declaration's
+ * readings are two map reads, not a scan of every reading.
+ */
+const readingTable: ReadonlyMap<
+  string,
+  { readonly anyKind: Applicable; readonly byKind: ReadonlyMap<string, Applicable> }
+> = new Map(
+  [...Map.groupBy(specReadings.entries(), ([, reading]) => reading.name)].map(([name, named]) => {
+    const applicable = (kind: string): Applicable => {
+      const applied = named.filter(([, reading]) => appliesTo(reading, kind, name));
+
+      return {
+        key: applied.map(([index]) => index).join(" "),
+        readings: applied.map(([, reading]) => reading),
+      };
+    };
+    const listed = new Set(named.flatMap(([, { kinds }]) => Option.getOrElse(kinds, () => [])));
+
+    return [
+      name,
+      {
+        anyKind: applicable(""),
+        byKind: new Map([...listed].map((kind) => [kind, applicable(kind)])),
+      },
+    ] as const;
+  }),
+);
+
+/**
+ * The spec readings of one kind's attribute, in the order {@link specReadings} lists them
+ * ({@link readingTable}).
+ *
+ * @param kind - The kind.
+ * @param name - The attribute.
+ * @returns The readings that apply, and the text that tells their list apart.
+ */
+const applicableTo = (kind: string, name: string): Applicable => {
+  const named = readingTable.get(name);
+
+  return named === undefined ? noReadings : (named.byKind.get(kind) ?? named.anyKind);
+};
+
+/**
+ * The spec readings of one kind's attribute, in the order {@link specReadings} lists them
+ * ({@link applicableTo}).
  *
  * @param kind - The kind.
  * @param name - The attribute.
  * @returns The readings that apply.
  */
 export const readingsOf = (kind: string, name: string): readonly SpecReading[] =>
-  specReadings.filter((reading) => appliesTo(reading, kind, name));
+  applicableTo(kind, name).readings;
 
 /**
  * A second spelling a spec reading admits beside a declared attribute: the declared name, the
@@ -1212,10 +1274,11 @@ export class UncompiledDomain extends Schema.TaggedError<UncompiledDomain>()("Un
 
 /**
  * The ways a composition's declarations have no attribute grammar: a domain that does not
- * compile, or a relation that has no constant (a kind or name outside its roster, a kind that
- * declares a name twice in a version).
+ * compile, or an attribute name outside `AttributeName`, which an attribute's position is read
+ * from. A kind outside its roster, or a kind that declares a name
+ * twice in a version, is a fault of the rows (`faultOf`), which the tests find and grizzle refuses.
  */
-export type AttributeGrammarError = ClosedRelationError | UncompiledDomain;
+export type AttributeGrammarError = OutsideCodeSpace | UncompiledDomain;
 
 /**
  * The key of `AttributeGrammar`: version, kind, then attribute name, each over its roster.
@@ -1274,7 +1337,7 @@ export interface AttributeGrammar {
    * `AttributeGrammar`: each attribute an element of a kind may carry in a version, with its value
    * domain, its use and its position.
    */
-  readonly admission: Closed<AttributeKey, AttributePayload>;
+  readonly admission: Indexed<AttributeKey, AttributePayload>;
   /**
    * The `ValueDomain` roster's domains, in code order: each at its first use, versions outermost,
    * then the declarations in order, then the texts, then the governed declarations and the type
@@ -1295,12 +1358,12 @@ export interface AttributeGrammar {
    * governor, the XSD-derived admission is the governing type's, and the rules spec readings state
    * follow the element's kind (spec reading 84); an element of no governor reads `admission`.
    */
-  readonly governed: Closed<GovernedKey, AttributePayload>;
+  readonly governed: Indexed<GovernedKey, AttributePayload>;
   /**
    * `Governor`: the governor of each (version, kind, type) where the type governs an element of the
    * kind in place of its declared type, or a simple type governs a foreign element's text.
    */
-  readonly governor: Closed<
+  readonly governor: Indexed<
     readonly [IdField<"version", string>, IdField<"kind", string>, IdField<"governs", string>],
     readonly [IdField<"governor", string>]
   >;
@@ -1321,7 +1384,7 @@ export interface AttributeGrammar {
    * `TextDomain`: the value domain of a simple-content kind's text in a version, the language its
    * one `Text` child is read in.
    */
-  readonly text: Closed<
+  readonly text: Indexed<
     readonly [IdField<"version", string>, IdField<"kind", string>],
     readonly [IdField<"domain", string>]
   >;
@@ -1329,7 +1392,7 @@ export interface AttributeGrammar {
    * `TypeText`: the value domain of the text of each named type with simple content in a version,
    * which an element that type governs holds its text in (spec readings 60 and 84).
    */
-  readonly typeText: Closed<
+  readonly typeText: Indexed<
     readonly [IdField<"version", string>, IdField<"governs", string>],
     readonly [IdField<"domain", string>]
   >;
@@ -1433,10 +1496,12 @@ export interface ReadDefinition {
 }
 
 /**
- * A compiled domain with its definition key ({@link definitionKey}), computed once with it.
+ * A compiled domain with its definition key ({@link definitionKey}), computed once with it, and
+ * the read definition it compiled from.
  */
 export interface KeyedDomain {
   readonly compiled: CompiledDomain;
+  readonly definition: Domain;
   readonly key: string;
 }
 
@@ -1528,14 +1593,11 @@ export const domainReader = (): DomainReader => {
   const byText = new Map<string, Result.Result<KeyedDomain, CompileError>>();
 
   return (declared) => {
-    const applied = specReadings.flatMap((reading, index) =>
-      appliesTo(reading, declared.kind, declared.name) ? [{ index, reading }] : [],
-    );
-    const readings = applied.map(({ reading }) => reading);
+    const { key, readings } = applicableTo(declared.kind, declared.name);
 
     return groups
       .getOrInsertComputed(declared.domain, () => new Map())
-      .getOrInsertComputed(applied.map(({ index }) => index).join(" "), () => {
+      .getOrInsertComputed(key, () => {
         const read = readDefinitionOf(declared, readings);
 
         return {
@@ -1543,6 +1605,7 @@ export const domainReader = (): DomainReader => {
             compile(read.definition, read.whiteSpace).pipe(
               Result.map((domain): KeyedDomain => ({
                 compiled: domain,
+                definition: read.definition,
                 key: definitionKey(domain),
               })),
             ),
@@ -1624,7 +1687,7 @@ const internEmpty = (domains: DomainRoster, name: string): DomainRef => {
  */
 const intern = (
   domains: DomainRoster,
-  { compiled, key }: KeyedDomain,
+  { compiled, definition, key }: KeyedDomain,
   name: string,
 ): ValueDomain => {
   const known = domains.byDefinition.get(key);
@@ -1633,7 +1696,7 @@ const intern = (
   }
 
   const handle = freeHandle(domains, name);
-  const domain = { ...compiled, handle };
+  const domain = { ...compiled, definition, handle };
   domains.byDefinition.set(key, domain);
   domains.handles.add(handle);
   domains.ordered.push(domain);
@@ -1722,26 +1785,27 @@ const positioned = <R extends Admitted>(
   familyOf: (row: R) => string,
   names: Roster<string>,
   relation: string,
-): Result.Result<readonly { readonly position: number; readonly row: R }[], OutsideCodeSpace> =>
-  Result.map(
-    Result.all(
-      rows.map((row, at) =>
-        Option.match(names.codeOf(row.name), {
-          onNone: () =>
-            Result.fail(new OutsideCodeSpace({ field: "name", relation, value: row.name })),
-          onSome: (code) => Result.succeed({ at, code, row }),
-        }),
-      ),
-    ),
-    (coded) =>
-      [...Map.groupBy(coded, ({ row }) => familyOf(row)).values()]
-        .flatMap((family) =>
-          family
-            .toSorted((left, right) => left.code - right.code)
-            .map(({ at, row }, position) => ({ at, position, row })),
-        )
-        .toSorted((left, right) => left.at - right.at),
+): Result.Result<readonly { readonly position: number; readonly row: R }[], OutsideCodeSpace> => {
+  const coded: { readonly at: number; readonly code: number; readonly row: R }[] = [];
+  for (const [at, row] of rows.entries()) {
+    const code = Option.getOrUndefined(names.codeOf(row.name));
+    if (code === undefined) {
+      return Result.fail(new OutsideCodeSpace({ field: "name", relation, value: row.name }));
+    }
+
+    coded.push({ at, code, row });
+  }
+
+  return Result.succeed(
+    [...Map.groupBy(coded, ({ row }) => familyOf(row)).values()]
+      .flatMap((family) =>
+        family
+          .toSorted((left, right) => left.code - right.code)
+          .map(({ at, row }, position) => ({ at, position, row })),
+      )
+      .toSorted((left, right) => left.at - right.at),
   );
+};
 
 /**
  * Generate the attribute grammar of a composition.
@@ -1754,7 +1818,7 @@ const positioned = <R extends Admitted>(
  *   ({@link domainReader}): the composition's own, or one its caller shares among compositions.
  * @returns `AttributeGrammar`, `ValueDomain`, `ValueIdentity`, `TextDomain`, `Governor`,
  *   `GovernedAttribute` and `TypeText`, with the domain and position rosters; or the first
- *   declaration whose domain does not compile, or the first relation that has no constant.
+ *   declaration whose domain does not compile, or the first roster or position that has no code.
  */
 export const generate = (
   input: AttributeGrammarInput,
@@ -1796,14 +1860,13 @@ export const generate = (
     for (const version of input.versions.handles) {
       for (const { declared, read } of declarations) {
         if (declared.versions.includes(version)) {
-          const domain = yield* domainOf(
-            domains,
-            declared,
-            read,
-            `${declared.kind}@${declared.name}`,
-          );
+          const domain = domainOf(domains, declared, read, `${declared.kind}@${declared.name}`);
+          if (Result.isFailure(domain)) {
+            return yield* Result.fail(domain.failure);
+          }
+
           admitted.push({
-            domain,
+            domain: domain.success,
             kind: declared.kind,
             name: declared.name,
             use: declared.use,
@@ -1814,8 +1877,12 @@ export const generate = (
 
       for (const { declared, read, text } of textsRead) {
         if (text.versions.includes(version)) {
-          const domain = yield* domainOf(domains, declared, read, `${text.kind} text`);
-          texts.push({ domain, kind: text.kind, version });
+          const domain = domainOf(domains, declared, read, `${text.kind} text`);
+          if (Result.isFailure(domain)) {
+            return yield* Result.fail(domain.failure);
+          }
+
+          texts.push({ domain: domain.success, kind: text.kind, version });
         }
       }
     }
@@ -1831,14 +1898,13 @@ export const generate = (
     for (const version of input.versions.handles) {
       for (const { declared, read } of governedRead) {
         if (declared.versions.includes(version)) {
-          const domain = yield* domainOf(
-            domains,
-            declared,
-            read,
-            `${declared.governs}@${declared.name}`,
-          );
+          const domain = domainOf(domains, declared, read, `${declared.governs}@${declared.name}`);
+          if (Result.isFailure(domain)) {
+            return yield* Result.fail(domain.failure);
+          }
+
           governed.push({
-            domain,
+            domain: domain.success,
             governor: governorHandle(declared),
             kind: declared.kind,
             name: declared.name,
@@ -1850,13 +1916,17 @@ export const generate = (
 
       for (const { declared, read, typeText } of typeTextsRead) {
         if (typeText.versions.includes(version)) {
-          const domain = yield* domainOf(domains, declared, read, `${typeText.owner} text`);
-          typeTexts.push({ domain, governs: typeText.owner, version });
+          const domain = domainOf(domains, declared, read, `${typeText.owner} text`);
+          if (Result.isFailure(domain)) {
+            return yield* Result.fail(domain.failure);
+          }
+
+          typeTexts.push({ domain: domain.success, governs: typeText.owner, version });
         }
       }
     }
 
-    const domainRoster = yield* roster("ValueDomain", [
+    const domainRoster = roster("ValueDomain", [
       ...domains.ordered.map(({ handle }) => handle),
       ...domains.empty.values(),
     ]);
@@ -1881,32 +1951,32 @@ export const generate = (
       "AttributePosition",
       Math.max(0, ...[...kindRows, ...governorRows].map(({ position: at }) => at + 1)),
     );
-    const use = idField("use", yield* roster("Use", uses));
+    const use = idField("use", roster("Use", uses));
     const position = idField("position", positions);
     const name = idField("name", input.names);
     const governs = idField("governs", input.typeName);
-    const governorRoster = yield* roster("Governor", [
-      ...new Set(input.governors.map(governorHandle)),
-    ]);
+    const governorRoster = roster("Governor", [...new Set(input.governors.map(governorHandle))]);
     const governorField = idField("governor", governorRoster);
-    const admission = yield* closed({
-      key: [version, kind, name],
-      name: "AttributeGrammar",
-      payload: [domain, use, position],
-      rows: kindRows.map(({ position: at, row }) => ({
-        domain: row.domain.handle,
-        kind: row.kind,
-        name: row.name,
-        position: String(at),
-        use: row.use,
-        version: row.version,
-      })),
-    });
-    const valueDomain = yield* closed({
+    const admission = indexed(
+      closed({
+        key: [version, kind, name],
+        name: "AttributeGrammar",
+        payload: [domain, use, position],
+        rows: kindRows.map(({ position: at, row }) => ({
+          domain: row.domain.handle,
+          kind: row.kind,
+          name: row.name,
+          position: String(at),
+          use: row.use,
+          version: row.version,
+        })),
+      }),
+    );
+    const valueDomain = closed({
       key: [domain],
       name: "ValueDomain",
       payload: [
-        idField("primitive", yield* roster("DomainPrimitive", domainPrimitives)),
+        idField("primitive", roster("DomainPrimitive", domainPrimitives)),
         valueField(
           "pattern",
           domains.ordered.map(({ pattern }) => pattern),
@@ -1921,11 +1991,11 @@ export const generate = (
     const bounded = domains.ordered.flatMap((held) =>
       Option.toArray(held.bound).map(({ facet, value }) => ({ domain: held.handle, facet, value })),
     );
-    const doubleBound = yield* closed({
+    const doubleBound = closed({
       key: [domain],
       name: "DoubleBound",
       payload: [
-        idField("facet", yield* roster("BoundFacet", boundFacets)),
+        idField("facet", roster("BoundFacet", boundFacets)),
         valueField(
           "value",
           bounded.map(({ value }) => value),
@@ -1933,58 +2003,66 @@ export const generate = (
       ],
       rows: bounded,
     });
-    const identity = yield* closed({
+    const identity = closed({
       key: [domain],
       name: "ValueIdentity",
-      payload: [idField("identity", yield* roster("Identity", identities))],
+      payload: [idField("identity", roster("Identity", identities))],
       rows: domains.ordered.flatMap((held) =>
         Option.toArray(held.identity).map((value) => ({ domain: held.handle, identity: value })),
       ),
     });
-    const text = yield* closed({
-      key: [version, kind],
-      name: "TextDomain",
-      payload: [domain],
-      rows: texts.map((row) => ({
-        domain: row.domain.handle,
-        kind: row.kind,
-        version: row.version,
-      })),
-    });
-    const governor = yield* closed({
-      key: [version, kind, governs],
-      name: "Governor",
-      payload: [governorField],
-      rows: input.governors.map((held) => ({
-        governor: governorHandle(held),
-        governs: held.governs,
-        kind: held.kind,
-        version: held.version,
-      })),
-    });
-    const governedRelation = yield* closed({
-      key: [version, governorField, name],
-      name: "GovernedAttribute",
-      payload: [domain, use, position],
-      rows: governorRows.map(({ position: at, row }) => ({
-        domain: row.domain.handle,
-        governor: row.governor,
-        name: row.name,
-        position: String(at),
-        use: row.use,
-        version: row.version,
-      })),
-    });
-    const typeText = yield* closed({
-      key: [version, governs],
-      name: "TypeText",
-      payload: [domain],
-      rows: typeTexts.map((row) => ({
-        domain: row.domain.handle,
-        governs: row.governs,
-        version: row.version,
-      })),
-    });
+    const text = indexed(
+      closed({
+        key: [version, kind],
+        name: "TextDomain",
+        payload: [domain],
+        rows: texts.map((row) => ({
+          domain: row.domain.handle,
+          kind: row.kind,
+          version: row.version,
+        })),
+      }),
+    );
+    const governor = indexed(
+      closed({
+        key: [version, kind, governs],
+        name: "Governor",
+        payload: [governorField],
+        rows: input.governors.map((held) => ({
+          governor: governorHandle(held),
+          governs: held.governs,
+          kind: held.kind,
+          version: held.version,
+        })),
+      }),
+    );
+    const governedRelation = indexed(
+      closed({
+        key: [version, governorField, name],
+        name: "GovernedAttribute",
+        payload: [domain, use, position],
+        rows: governorRows.map(({ position: at, row }) => ({
+          domain: row.domain.handle,
+          governor: row.governor,
+          name: row.name,
+          position: String(at),
+          use: row.use,
+          version: row.version,
+        })),
+      }),
+    );
+    const typeText = indexed(
+      closed({
+        key: [version, governs],
+        name: "TypeText",
+        payload: [domain],
+        rows: typeTexts.map((row) => ({
+          domain: row.domain.handle,
+          governs: row.governs,
+          version: row.version,
+        })),
+      }),
+    );
 
     return {
       admission,
@@ -2007,10 +2085,11 @@ export const generate = (
  */
 export interface GoverningKey {
   /**
-   * The element's governing type, `Node.governs`: a `TypeName` handle, `none` where no named type
-   * governs it.
+   * The element's governing type, a `TypeName` handle, where a named type governs it: none for an
+   * element of an anonymous declared type, a foreign element its `xsi:type` gives no type, and a
+   * node that is no element.
    */
-  readonly governs: string;
+  readonly governs: Option.Option<string>;
   readonly kind: string;
   readonly version: SchemaVersion;
 }
@@ -2027,7 +2106,14 @@ export interface GoverningKey {
  *   against (spec reading 50).
  */
 export const governorOf = (grammar: AttributeGrammar, key: GoverningKey): Option.Option<string> =>
-  Option.map(grammar.governor.lookup(key), ({ governor }) => governor);
+  key.governs.pipe(
+    Option.flatMap((governs) =>
+      Option.map(
+        grammar.governor.lookup({ governs, kind: key.kind, version: key.version }),
+        ({ governor }) => governor,
+      ),
+    ),
+  );
 
 /**
  * Find the row of an attribute name an element admits: its governor's, where one governs it, else
@@ -2067,7 +2153,8 @@ export const admissionOf = (
  * @param names - The `AttributeName` roster.
  * @param version - The version.
  * @param kind - The kind.
- * @param governs - The element's governing type, its kind's own rows for one that is no governor.
+ * @param governs - The element's governing type, its kind's own rows for none or one that is no
+ *   governor.
  * @returns The element's admitted attributes, in position order.
  */
 export const admittedOf = (
@@ -2075,7 +2162,7 @@ export const admittedOf = (
   names: Roster<string>,
   version: SchemaVersion,
   kind: string,
-  governs: string = noType,
+  governs: Option.Option<string>,
 ): readonly {
   readonly domain: string;
   readonly name: string;
@@ -2100,7 +2187,8 @@ export const admittedOf = (
  * @param names - The `AttributeName` roster.
  * @param version - The version.
  * @param kind - The kind.
- * @param governs - The element's governing type, its kind's own rows for one that is no governor.
+ * @param governs - The element's governing type, its kind's own rows for none or one that is no
+ *   governor.
  * @returns The required positions.
  */
 export const requiredOf = (
@@ -2108,7 +2196,7 @@ export const requiredOf = (
   names: Roster<string>,
   version: SchemaVersion,
   kind: string,
-  governs: string = noType,
+  governs: Option.Option<string>,
 ): ReadonlySet<number> =>
   new Set(
     admittedOf(grammar, names, version, kind, governs)
@@ -2128,7 +2216,15 @@ export const requiredOf = (
 export const textDomainOf = (grammar: AttributeGrammar, key: GoverningKey): Option.Option<string> =>
   Option.match(governorOf(grammar, key), {
     onNone: () => Option.map(grammar.text.lookup(key), ({ domain }) => domain),
-    onSome: () => Option.map(grammar.typeText.lookup(key), ({ domain }) => domain),
+    onSome: () =>
+      key.governs.pipe(
+        Option.flatMap((governs) =>
+          Option.map(
+            grammar.typeText.lookup({ governs, version: key.version }),
+            ({ domain }) => domain,
+          ),
+        ),
+      ),
   });
 
 /**

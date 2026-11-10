@@ -5,7 +5,7 @@ import { PnpSupportsSchema, SupportsSchema } from "#plate/codec/supports.ts";
 import { readPnp } from "#plate/pnp/read.ts";
 import type { InvalidPnp, PnpSelector } from "#plate/pnp/read.ts";
 import { noSupports } from "#plate/supports.ts";
-import type { PnpSupports, Supports } from "#plate/supports.ts";
+import type { DisplayPreferences, PnpSupports, Supports } from "#plate/supports.ts";
 
 /**
  * The schema's namespace, the guide's two, and none: the four every PNP element may be in.
@@ -126,9 +126,11 @@ const remedy = (refusal: InvalidPnp): string =>
  */
 const supportsOf = (pnp: PnpSupports): Supports => ({
   additionalTestingTime: pnp.additionalTestingTime,
+  alternativeText: pnp.alternativeText,
   answerMasking: pnp.answerMasking,
   braille: pnp.braille,
   breaks: pnp.breaks,
+  captions: pnp.captions,
   catalog: pnp.catalog,
   display: pnp.display,
   keywordTranslationLanguage: pnp.keywordTranslationLanguage,
@@ -169,17 +171,36 @@ describe("readPnp", () => {
           "transcript",
         ]),
       );
-      assert.deepStrictEqual(pnp.display, {
+
+      const display: DisplayPreferences = {
         invertDisplayPolarity: true,
+        invertedColors: Option.some({
+          background: Option.some("#000000"),
+          foreground: Option.some("#ffffff"),
+        }),
         keywordEmphasis: true,
         languageOfInterface: Option.some("de"),
         layoutSingleColumn: true,
         magnification: Option.some(2),
+        text: Option.some({
+          colorTheme: Option.none(),
+          fontNames: ["Plate Sans", "Plate Serif"],
+          fontSize: Option.some({ kind: "points", value: 18 }),
+          genericFontFace: Option.some("sans serif"),
+          letterSpacing: Option.some(1),
+          lineHeight: Option.some(24),
+          lineSpacing: Option.some(1.5),
+          uniformFontSizing: true,
+          wordSpacing: Option.some(2),
+          wordWrapping: true,
+        }),
         textAppearance: Option.some({
           backgroundColor: Option.some("#fffff0"),
           fontColor: Option.some("#101010"),
         }),
-      });
+      };
+
+      assert.deepStrictEqual(pnp.display, display);
       assert.deepStrictEqual(pnp.readAloud, Option.some("computer-read-aloud"));
       assert.isFalse(pnp.suppressTts);
       assert.deepStrictEqual(
@@ -208,6 +229,8 @@ describe("readPnp", () => {
         }),
       );
       assert.isTrue(pnp.breaks);
+      assert.isTrue(pnp.captions);
+      assert.isTrue(pnp.alternativeText);
       assert.isTrue(pnp.features.has("captions"));
       assert.isTrue(pnp.features.has("alternative-text"));
       assert.isTrue(pnp.features.has("item-translation"));
@@ -215,10 +238,6 @@ describe("readPnp", () => {
       assert.deepStrictEqual(pnp.hazards, new Set(["flashing", "motion-simulation"]));
       assert.deepStrictEqual(pnp.ignored, []);
       assert.deepStrictEqual(pnp.inputRequirements, new Set(["full-keyboard-control"]));
-      assert.deepStrictEqual(
-        pnp.invertedColors,
-        Option.some({ background: Option.some("#000000"), foreground: Option.some("#ffffff") }),
-      );
       assert.deepStrictEqual(pnp.languages, new Map([["item-translation", "fr"]]));
       assert.deepStrictEqual(pnp.keywordTranslationLanguage, Option.some("es"));
       assert.deepStrictEqual(pnp.signLanguage, Option.some("ase"));
@@ -237,21 +256,6 @@ describe("readPnp", () => {
           speechRate: 160,
           typingEcho: Option.some("words"),
           volume: 0.8,
-        }),
-      );
-      assert.deepStrictEqual(
-        pnp.text,
-        Option.some({
-          colorTheme: Option.none(),
-          fontNames: ["Plate Sans", "Plate Serif"],
-          fontSize: Option.some({ kind: "points", value: 18 }),
-          genericFontFace: Option.some("sans serif"),
-          letterSpacing: Option.some(1),
-          lineHeight: Option.some(24),
-          lineSpacing: Option.some(1.5),
-          uniformFontSizing: true,
-          wordSpacing: Option.some(2),
-          wordWrapping: true,
         }),
       );
       assert.deepStrictEqual(pnp.toolSettings, {
@@ -331,7 +335,7 @@ describe("readPnp", () => {
       // Rows 1, 10 and 11: color-theme is read, a font-size under 4 is a factor, letter-spacing is
       // pixels.
       assert.deepStrictEqual(
-        guide.text,
+        guide.display.text,
         Option.some({
           colorTheme: Option.some("yellow-blue"),
           fontNames: [],
@@ -380,7 +384,7 @@ describe("readPnp", () => {
       assert.deepStrictEqual(pnp.prohibited, new Set());
       assert.isTrue(Option.isNone(pnp.braille));
       assert.isTrue(Option.isNone(pnp.spoken));
-      assert.isTrue(Option.isNone(pnp.text));
+      assert.isTrue(Option.isNone(pnp.display.text));
       assert.isFalse(pnp.breaks);
       assert.isFalse(pnp.longDescriptionVisible);
     }),
@@ -461,6 +465,99 @@ describe("readPnp", () => {
         assert.isFalse(pnp.answerMasking);
         assert.deepStrictEqual(pnp.readAloud, Option.some("screen-reader"));
         assert.deepStrictEqual(pnp.tools, new Set());
+      }),
+  );
+
+  it.effect(
+    "[W0-SUPPORTS-FIELDS] a profile that assigns captions and alternative-text reads both on",
+    () =>
+      Effect.gen(function* captionsAndAlternativeText() {
+        const pnp = yield* read(profile("<captions/><alternative-text/>"));
+
+        assert.strictEqual(pnp.captions, true);
+        assert.strictEqual(pnp.alternativeText, true);
+        assert.deepStrictEqual(pnp.features, new Set(["captions", "alternative-text"]));
+        assert.deepStrictEqual(pnp.catalog, new Set());
+      }),
+  );
+
+  it.effect("[W0-SUPPORTS-FIELDS] a prohibited captions feature reads off", () =>
+    Effect.gen(function* prohibitedCaptions() {
+      const pnp = yield* read(
+        profile("<captions/><alternative-text/><prohibit-set><captions/></prohibit-set>"),
+      );
+
+      assert.strictEqual(pnp.captions, false);
+      assert.strictEqual(pnp.alternativeText, true);
+      assert.isTrue(pnp.prohibited.has("captions"));
+      assert.isFalse(pnp.features.has("captions"));
+      assert.deepStrictEqual(pnp.features, new Set(["alternative-text"]));
+    }),
+  );
+
+  it.effect(
+    "[W0-SUPPORTS-FIELDS] text-appearance reads its font and spacing preferences into display.text",
+    () =>
+      Effect.gen(function* textPreferences() {
+        const pnp = yield* read(
+          profile(
+            "<text-appearance><background-color>#fffff0</background-color><font-color>#101010</font-color>" +
+              "<font-size>1.5</font-size><font-face><font-name>Atkinson</font-name>" +
+              "<font-name>Plate Serif</font-name></font-face><line-spacing>1.25</line-spacing></text-appearance>",
+          ),
+        );
+
+        assert.deepStrictEqual(
+          pnp.display.text,
+          Option.some({
+            colorTheme: Option.none(),
+            fontNames: ["Atkinson", "Plate Serif"],
+            fontSize: Option.some({ kind: "factor", value: 1.5 }),
+            genericFontFace: Option.none(),
+            letterSpacing: Option.none(),
+            lineHeight: Option.none(),
+            lineSpacing: Option.some(1.25),
+            uniformFontSizing: false,
+            wordSpacing: Option.none(),
+            wordWrapping: false,
+          }),
+        );
+        assert.deepStrictEqual(
+          pnp.display.textAppearance,
+          Option.some({
+            backgroundColor: Option.some("#fffff0"),
+            fontColor: Option.some("#101010"),
+          }),
+        );
+        assert.isFalse("text" in pnp);
+      }),
+  );
+
+  it.effect(
+    "[W0-SUPPORTS-FIELDS] invert-display-polarity reads its two colours into display.invertedColors",
+    () =>
+      Effect.gen(function* polarityColors() {
+        const pnp = yield* read(
+          profile('<invert-display-polarity background="#000000" foreground="#ffffff"/>'),
+        );
+
+        assert.isTrue(pnp.display.invertDisplayPolarity);
+        assert.deepStrictEqual(
+          pnp.display.invertedColors,
+          Option.some({
+            background: Option.some("#000000"),
+            foreground: Option.some("#ffffff"),
+          }),
+        );
+        assert.isFalse("invertedColors" in pnp);
+
+        const bare = yield* read(profile("<invert-display-polarity/>"));
+
+        assert.isTrue(bare.display.invertDisplayPolarity);
+        assert.deepStrictEqual(
+          bare.display.invertedColors,
+          Option.some({ background: Option.none(), foreground: Option.none() }),
+        );
       }),
   );
 
@@ -661,7 +758,7 @@ describe("readPnp", () => {
       const byPerson = yield* read(documents.ubaeRecords, { personSourcedId: "ubae" });
 
       assert.deepStrictEqual(
-        byPerson.text.pipe(Option.map((text) => text.fontNames)),
+        byPerson.display.text.pipe(Option.map((text) => text.fontNames)),
         Option.some(["ubae"]),
       );
       assert.isFalse(byPerson.catalog.has("tactile"));
@@ -712,7 +809,7 @@ describe("readPnp", () => {
           Option.some(new Set(["skip-chemistry-equations", "skip-math-equations"])),
         );
         assert.deepStrictEqual(
-          pnp.text.pipe(Option.map((text) => text.fontNames)),
+          pnp.display.text.pipe(Option.map((text) => text.fontNames)),
           Option.some(["ubae", "skip-chemical-equations"]),
         );
 
@@ -818,7 +915,7 @@ describe("readPnp", () => {
         }),
       );
       assert.deepStrictEqual(
-        pnp.text,
+        pnp.display.text,
         Option.some({
           colorTheme: Option.none(),
           fontNames: [],
@@ -837,7 +934,7 @@ describe("readPnp", () => {
       assert.isFalse(pnp.breaks);
       assert.isTrue(pnp.display.invertDisplayPolarity);
       assert.deepStrictEqual(
-        pnp.invertedColors,
+        pnp.display.invertedColors,
         Option.some({ background: Option.none(), foreground: Option.none() }),
       );
       assert.deepStrictEqual(pnp.toolSettings, {

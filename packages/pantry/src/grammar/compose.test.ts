@@ -3,8 +3,10 @@ import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element as choice, int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Option, Result } from "effect";
+import { Duration, Effect, Formatter, Option, Predicate, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
+import { faultOf, indexed, repeatOf } from "#pantry/grammar/closed.ts";
+import type { Roster } from "#pantry/grammar/closed.ts";
 import { composed, layerAttributeNames, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
 import { foreignKinds, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -21,6 +23,7 @@ import {
 import type { Domain } from "#pantry/vocab/inventory/types.ts";
 import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
 import { asiNamespace } from "#pantry/vocab/namespaces.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -40,6 +43,84 @@ const grammar = Effect.fromResult(composed());
  */
 type Literal<Handle extends string> = string extends Handle ? false : true;
 
+/**
+ * A closed relation as {@link faultOf} reads it.
+ */
+type Relation = Parameters<typeof faultOf>[0];
+
+/**
+ * Whether a value of a grammar is a closed relation: its key, payload and rows, indexed or not.
+ *
+ * @param value - A value the grammar holds.
+ * @returns Whether it is one.
+ */
+const isRelation = (value: unknown): value is Relation =>
+  typeof value === "object" &&
+  value !== null &&
+  "key" in value &&
+  "payload" in value &&
+  "rows" in value;
+
+/**
+ * Whether a value of a grammar is a roster: its handles and their codes.
+ *
+ * @param value - A value the grammar holds.
+ * @returns Whether it is one.
+ */
+const isRoster = (value: unknown): value is Roster<string> =>
+  typeof value === "object" &&
+  value !== null &&
+  "handles" in value &&
+  "codeOf" in value &&
+  "has" in value;
+
+/**
+ * Collect every roster a grammar holds, at any depth of its records, each relation's fields'
+ * among them: a relation's key and payload are lists of fields, which are walked, and its rows and
+ * a roster's handles lists of values, which are not.
+ *
+ * @param value - The grammar, or a value it holds.
+ * @param seen - The records walked already.
+ * @returns The rosters, each once.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A grammar's records hold values of every type, which this walks.
+const rostersIn = (value: unknown, seen = new Set<object>()): readonly Roster<string>[] => {
+  if (!Predicate.isObject(value) || seen.has(value)) {
+    return [];
+  }
+
+  seen.add(value);
+
+  return isRoster(value)
+    ? [value]
+    : Object.entries(value).flatMap(([name, held]: readonly [string, unknown]) =>
+        (name === "key" || name === "payload") && Array.isArray(held)
+          ? held.flatMap((field) => rostersIn(field, seen))
+          : rostersIn(held, seen),
+      );
+};
+
+/**
+ * Collect every closed relation a grammar holds, at any depth of its records: a roster's handles
+ * and a relation's rows are lists, which hold none.
+ *
+ * @param value - The grammar, or a value it holds.
+ * @param seen - The records walked already.
+ * @returns The relations, each once.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A grammar's records hold values of every type, which this walks.
+const relationsIn = (value: unknown, seen = new Set<object>()): readonly Relation[] => {
+  if (!Predicate.isObject(value) || seen.has(value)) {
+    return [];
+  }
+
+  seen.add(value);
+
+  return isRelation(value)
+    ? [value]
+    : Object.values(value).flatMap((held) => relationsIn(held, seen));
+};
+
 describe("the composition", () => {
   it("keeps the vocabularies' handles as literal unions, so the XDM's compile-time contracts hold", () => {
     const kindsAreLiteral: Literal<Kind> = true;
@@ -47,6 +128,79 @@ describe("the composition", () => {
 
     assert.isTrue(kindsAreLiteral && namesAreLiteral);
   });
+
+  it.effect(
+    "states every closed relation's rows within their fields' code spaces, one row per key, the relations grizzle never declares among them",
+    () =>
+      // Oracle: `faultOf`, each row's values against its fields' code spaces and its key against
+      // the rows before it. No load checks a row (`closed.ts`): grizzle refuses both faults in the
+      // relations `install.ts` declares, a closed id outside its roster and a second row of a key
+      // when it declares one and a slot past its owner's count when it packs one, so this test is
+      // where a generator or a facet that states a fault fails, in a relation only the host reads
+      // (`StrictlyHeld`, the include sets) as in any other.
+      Effect.gen(function* faultless() {
+        const relations = relationsIn(yield* grammar);
+        const faults = relations.flatMap((relation) =>
+          Option.toArray(faultOf(relation)).map(({ message }) => message),
+        );
+
+        assert.isAtLeast(relations.length, 45);
+        assert.deepStrictEqual(faults, []);
+      }),
+    testTimeoutMs,
+  );
+
+  it.effect(
+    "admits under each parent at most one element kind of each expanded name, its versions together, so a name resolves under a parent to one kind",
+    () =>
+      // Oracle: XML Schema's Element Declarations Consistent (Part 1, §3.8.6): the element
+      // declarations of one name a content model holds are one declaration, so a parent admits one
+      // kind of each name. `resolve` reads a name's kinds in code order and takes the first its
+      // parent admits in any version (`kinds.ts`, `resolution`), so this test is where a model or a
+      // facet that admits two kinds of one name under one parent fails, in any versions.
+      Effect.gen(function* consistent() {
+        const { content, kinds } = yield* grammar;
+        const members = Map.groupBy(content.admissionIn.rows, ({ map }) => map);
+        const named = new Map<string, Set<string>>();
+        for (const { admission, parent } of content.contentModelOf.rows) {
+          for (const { child } of members.get(admission) ?? []) {
+            for (const { local, namespace } of Option.toArray(
+              kinds.elementName.lookup({ kind: child }),
+            )) {
+              named
+                .getOrInsertComputed(`${parent} {${namespace}}${local}`, () => new Set())
+                .add(child);
+            }
+          }
+        }
+
+        const twice = [...named].flatMap(([at, held]) =>
+          held.size > 1 ? [`${at}: ${[...held].join(" ")}`] : [],
+        );
+
+        assert.isAbove(named.size, 0);
+        assert.deepStrictEqual(twice.slice(0, 20), []);
+      }),
+    testTimeoutMs,
+  );
+
+  it.effect(
+    "lists every roster's handles once each, the rosters grizzle never declares among them",
+    () =>
+      // Oracle: `repeatOf`. No load checks a roster (`closed.ts`): grizzle refuses a repeated handle
+      // in a roster `install.ts` declares, and this test is where a vocabulary that lists a kind,
+      // a name or a handle twice fails, in a roster only the host reads as in any other.
+      Effect.gen(function* distinct() {
+        const rosters = rostersIn(yield* grammar);
+        const repeated = rosters.flatMap((held) =>
+          Option.toArray(repeatOf(held)).map(({ message }) => message),
+        );
+
+        assert.isAtLeast(rosters.length, 20);
+        assert.deepStrictEqual(repeated, []);
+      }),
+    testTimeoutMs,
+  );
 
   it.effect(
     "composes production's list once per process: every composed() returns the first's result, beside a toy list composed at each of its calls, on every sequence of up to three calls",
@@ -227,9 +381,9 @@ describe("the composition", () => {
     assert.deepStrictEqual(
       result.pipe(
         Result.map(
-          ({ admission, kinds }) =>
+          ({ content, kinds }) =>
             new Set(
-              admission.rows
+              admittedOf(content.contentModelOf, content.admissionIn)
                 .filter(
                   ({ child, parent }) =>
                     parent === "e0" && Option.isSome(kinds.isElement.lookup({ kind: child })),
@@ -302,7 +456,7 @@ const pathTo = (
 ): Option.Option<readonly string[]> => {
   const elements = new Set<string>(production.kinds.elementName.rows.map((row) => row.kind));
   const children = new Map<string, string[]>();
-  for (const row of production.admission.rows) {
+  for (const row of admittedOf(production.content.contentModelOf, production.content.admissionIn)) {
     if (row.version === version && elements.has(row.child)) {
       children.set(row.parent, [...(children.get(row.parent) ?? []), row.child]);
     }
@@ -536,6 +690,7 @@ describe("spec reading 109, wild IDs", () => {
       // governor), in both versions.
       Effect.gen(function* wildIds() {
         const { attributes } = yield* Effect.fromResult(composed());
+        const identity = indexed(attributes.identity);
         const hosts = [
           ...Map.groupBy(
             attributes.admission.rows,
@@ -583,9 +738,9 @@ describe("spec reading 109, wild IDs", () => {
                   ({ domain, name }) =>
                     name === "xml:id" &&
                     !uses.has(name) &&
-                    attributes.identity
+                    identity
                       .lookup({ domain })
-                      .pipe(Option.exists(({ identity }) => identity === "ID")),
+                      .pipe(Option.exists(({ identity: kind }) => kind === "ID")),
                 );
 
                 assert.deepStrictEqual(declaresId ? wild.map(({ name }) => name) : [], [], at);

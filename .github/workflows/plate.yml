@@ -2,7 +2,7 @@
 # gate branch (gate/cloud-fanout), run off the laptop: pnpm check, plate's unit
 # suite, and plate's browser suite in Chromium and WebKit. Not run here: the
 # corpus-witness cmp and the drain gate. It runs only on pull requests into
-# those branches; main is unchanged and has no workflow here.
+# those branches; pull requests into main run main.yml, which repeats this job's setup steps.
 name: plate
 
 on:
