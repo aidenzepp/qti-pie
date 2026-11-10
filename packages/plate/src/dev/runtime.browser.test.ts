@@ -13,7 +13,7 @@ import { itemTarget } from "#plate/test/playground-page.ts";
 
 /**
  * The item every case opens: BG007's True/False Choice, a page the playground serves in full whose
- * Choice has no runtime kind, so an upgrade of it attaches nothing.
+ * Choice has no runtime kind, so an upgrade of it attaches one controller: the item Root's.
  */
 const item = "QTI3_BPIG_Examples/items/BG007.xml";
 
@@ -148,7 +148,7 @@ const rootAttribute = (page: Page, name: string) =>
 eachEngine((it) => {
   it.layer(playgroundLayer({ runtime: true }))("the playground with the runtime on", (served) => {
     served.effect(
-      "[m3d-13] in Chromium and WebKit, a page served with the runtime on is upgraded with no policy violation",
+      "[m3d-13] in Chromium and WebKit, a page served with the runtime on is upgraded, counting the item Root's controller, with no policy violation",
       () =>
         withPage({ javaScriptEnabled: true }, (page) =>
           Effect.gen(function* upgraded() {
@@ -162,7 +162,8 @@ eachEngine((it) => {
               page.locator("html[data-runtime-upgraded]").waitFor({ state: "attached" }),
             );
 
-            assert.strictEqual(yield* rootAttribute(page, "data-runtime-upgraded"), "0");
+            // The item Root's controller alone: the Choice has no runtime kind.
+            assert.strictEqual(yield* rootAttribute(page, "data-runtime-upgraded"), "1");
             assert.deepStrictEqual(yield* violationsOf(page), []);
             assert.deepStrictEqual(watched.errors, []);
             assert.deepStrictEqual(
@@ -176,7 +177,7 @@ eachEngine((it) => {
     );
 
     served.effect(
-      "[m3d-13] in Chromium and WebKit, the served runtime upgrades a rendered interaction root and counts it",
+      "[m3d-13] in Chromium and WebKit, the served runtime upgrades a rendered interaction root and counts it with the item Root's controller",
       () =>
         withPage({ javaScriptEnabled: true }, (page) =>
           Effect.gen(function* counted() {
@@ -193,7 +194,8 @@ eachEngine((it) => {
               page.locator("html[data-runtime-upgraded]").waitFor({ state: "attached" }),
             );
 
-            assert.strictEqual(yield* rootAttribute(page, "data-runtime-upgraded"), "1");
+            // The item Root's controller and the Hotspot root's.
+            assert.strictEqual(yield* rootAttribute(page, "data-runtime-upgraded"), "2");
             assert.deepStrictEqual(yield* violationsOf(page), []);
             assert.deepStrictEqual(watched.errors, []);
           }),
