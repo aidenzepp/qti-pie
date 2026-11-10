@@ -511,23 +511,31 @@ describe("ledger/view.ts", () => {
     const tree = ledgerHtml(fixture);
     const lines = ledgerText(fixture).split("\n");
     const limitedAt = lines.indexOf("Limited rows");
-    const [claim] = claims;
-    assert.isDefined(claim);
+    const excluded = new Set(exclusions.map((exclusion) => exclusion.id));
+    const limited = features.flatMap((row) => {
+      const claim = claims.find((candidate) => candidate.id === row.id);
+
+      return claim === undefined || excluded.has(row.id)
+        ? []
+        : [{ id: row.id, line: `${row.id} ${row.name}: ${claim.source}`, source: claim.source }];
+    });
+
+    assert.isAbove(limited.length, 0);
 
     const heading = byTag(tree, "h2").findIndex(
       (candidate) => textOf(candidate) === "Limited rows",
     );
 
     assert.isAtLeast(heading, levels.length);
-    assert.strictEqual(textOf(cellOf(tree, "I-19", "Source")), claim.source);
-    assert.include(
-      byTag(tree, "li").map(textOf),
-      `I-19 QTI Shared Interaction Vocabulary Subset: ${claim.source}`,
-    );
+    for (const row of limited) {
+      assert.strictEqual(textOf(cellOf(tree, row.id, "Source")), row.source, row.id);
+      assert.include(byTag(tree, "li").map(textOf), row.line, row.id);
+    }
     assert.isAtLeast(limitedAt, 0);
-    assert.deepStrictEqual(lines.slice(limitedAt + 1, lines.indexOf("", limitedAt)), [
-      `I-19 QTI Shared Interaction Vocabulary Subset: ${claim.source}`,
-    ]);
+    assert.deepStrictEqual(
+      lines.slice(limitedAt + 1, lines.indexOf("", limitedAt)),
+      limited.map((row) => row.line),
+    );
   });
 
   it("links each proof to its test file and its fixture documents", () => {
