@@ -371,9 +371,10 @@ const bucketOf = (law: Law): string => [law.kind, ...relationsOf(law)].join(" ")
 type LawOf<Kind extends Law["kind"]> = Extract<Law, { readonly kind: Kind }>;
 
 /**
- * A law no statement states, which {@link writtenLaws} writes out: a relation's primary key, a text
- * pattern, or a generated field. Every other law is a statement's, as grizzle's `lawsOf` names it,
- * so no row of the table can name a containment, key, family, tree or fold no statement states.
+ * A law no statement states, which {@link writtenLawsIn} writes out: a relation's primary key, a
+ * text pattern, or a generated field. Every other law is a statement's, as grizzle's `lawsOf` names
+ * it, so no row of the table can name a containment, key, family, tree or fold no statement
+ * states.
  */
 type WrittenLaw = LawOf<"generated" | "pattern" | "primaryKey">;
 
@@ -579,16 +580,25 @@ export const textLaws: ReadonlyMap<TextType, LawName> = new Map<TextType, LawNam
 export const plainTexts: ReadonlySet<TextType> = new Set([anyText]);
 
 /**
- * Every pattern law Qti states, one per text field, each named by its type's row of
+ * Read every pattern law a schema states, one per text field, each named by its type's row of
  * {@link textLaws}. The table is a constant no caller can repair, so a text field whose type has
- * no row fails the module's load, naming the field.
+ * no row throws, naming the field. It is built on first use, not when this module loads, so that
+ * error now fails its first caller rather than the module's load.
+ *
+ * Memoized by the schema's identity (Effect's `Function.memoize`): the first refusal reads the
+ * table once, and loading this module builds no schema.
+ *
+ * @param schema - The schema, `Qti`.
+ * @returns Its pattern laws, with their names.
  */
-const patternLaws = Result.getOrThrowWith(
-  patternLawsOf(qti().relations, textLaws, plainTexts),
-  ({ field, relation }) =>
-    new Error(
-      `${relation}.${field} is typed by a text type no row of textLaws in src/import/refusal.ts names. Export the type from its module, type the field by that one object, and give it a row of textLaws, or of plainTexts if its pattern is a tautology.`,
-    ),
+const patternLawsIn = Fn.memoize((schema: QtiSchema) =>
+  Result.getOrThrowWith(
+    patternLawsOf(schema.relations, textLaws, plainTexts),
+    ({ field, relation }) =>
+      new Error(
+        `${relation}.${field} is typed by a text type no row of textLaws in src/import/refusal.ts names. Export the type from its module, type the field by that one object, and give it a row of textLaws, or of plainTexts if its pattern is a tautology.`,
+      ),
+  ),
 );
 
 /**
@@ -625,10 +635,10 @@ const testKeyNames = {
 } as const satisfies { readonly [Name in keyof typeof testRelations]: LawName };
 
 /**
- * The laws written out row by row, each as its outcome names it, with its name in {@link lawTable}:
- * each text field's pattern law ({@link patternLaws}); each relation's primary key; and the
- * generated fields' laws ({@link WrittenLaw}), in the module order of the plan's §C. A statement's
- * laws are named where it is stated ({@link namedLaws}).
+ * Write out a schema's laws row by row, each as its outcome names it, with its name in
+ * {@link lawTable}: each text field's pattern law ({@link patternLawsIn}); each relation's primary
+ * key; and the generated fields' laws ({@link WrittenLaw}), in the module order of the plan's §C. A
+ * statement's laws are named where it is stated ({@link namedLaws}).
  *
  * - **The text fields' patterns**, one law per field, named by its type's row of {@link textLaws}.
  * - **Each relation's primary key**, under the law its module's rows belong to.
@@ -636,342 +646,350 @@ const testKeyNames = {
  *   law that states its value exists. No term of Qti's reads `C.at`, the one read that can miss, so
  *   no row breaks one. Each row says which law refuses first, or why none needs to, and is stated
  *   so an outcome naming it still has a rule.
+ *
+ * Memoized by the schema's identity (Effect's `Function.memoize`), as {@link patternLawsIn} is,
+ * so loading this module builds no schema.
+ *
+ * @param schema - The schema, `Qti`.
+ * @returns Its written laws, with their names.
  */
-const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
-  ...patternLaws,
-  [primaryKeyOf("Node", "id"), "Node key"],
-  ...(
-    [
-      ["Comment", "comment arm"],
-      ["Pi", "pi arm"],
-      ["Doctype", "doctype arm"],
-      ["Document", "Document"],
-      ["XmlDecl", "Document"],
-      ["EncodingDecl", "Document"],
-      ["SdDecl", "Document"],
-    ] as const
-  ).map(([relation, name]) => [primaryKeyOf(relation, "node"), name] as const),
-  [primaryKeyOf("Namespace", "node", "at"), "Namespace family"],
-  [primaryKeyOf("OpenElementName", "node"), "OpenElementName"],
-  [primaryKeyOf("Attribute", "node", "id"), "AL2 count"],
-  [primaryKeyOf("OpenAttributeName", "node", "attribute", "at"), "AL4 open names"],
-  [primaryKeyOf("Idref", "node", "attribute", "at"), "E1 derived"],
-  [primaryKeyOf("AttributeEntity", "node", "attribute", "at"), "AttributeEntity owner"],
-  [primaryKeyOf("DoubleValue", "node", "attribute", "at"), "Double value"],
-  [primaryKeyOf("TextDoubleValue", "node", "at"), "Double value"],
-  [primaryKeyOf("Package", "id"), "Package key"],
-  [primaryKeyOf("Entry", "package", "at"), "Entry family"],
-  ...(
-    ["ManifestId", "Resource", "ResourceId", "File", "Dependency", "DependencyTarget"] as const
-  ).map((overlay) => [primaryKeyOf(overlay, "node"), "Manifest overlay"] as const),
-  [primaryKeyOf("ManifestIdSpace", "package", "identifier", "kind"), "Manifest overlay"],
-  [primaryKeyOf("ResourceHref", "node"), "Manifest overlay"],
-  [primaryKeyOf("ResourceTyped", "node"), "E1 derived"],
-  [primaryKeyOf("TypedHref", "node"), "E1 derived"],
-  [primaryKeyOf("UnreadTypeHref", "node"), "E1 derived"],
-  [primaryKeyOf("UnreadTypePath", "package", "path"), "E1 derived"],
-  [primaryKeyOf("NamedHref", "package", "path", "type"), "RootOfType"],
-  [primaryKeyOf("FileHref", "package", "scope", "path"), "File listed"],
-  [primaryKeyOf("ResourceFile", "resource", "scope", "path"), "Href listed"],
-  [primaryKeyOf("IdBinding", "document", "id", "owner"), "E1 derived"],
-  [primaryKeyOf("IdrefTarget", "document", "id"), "E1 derived"],
-  [primaryKeyOf("PlacedId", "instance", "node"), "E1 derived"],
-  [primaryKeyOf("AssembledId", "assembly", "id", "owner", "copy"), "E1 derived"],
-  [primaryKeyOf("PlacedIdref", "instance", "id"), "E1 derived"],
-  [primaryKeyOf("IdentityText", "node"), "E1 derived"],
-  [primaryKeyOf("TextIdref", "node", "at"), "E1 derived"],
-  [primaryKeyOf("DocumentId", "node"), "DocumentId key"],
-  [primaryKeyOf("XmlLang", "node"), "E1 derived"],
-  [primaryKeyOf("DocumentLang", "document", "lang"), "E1 derived"],
-  [primaryKeyOf("ShareFragment", "node"), "E1 derived"],
-  [primaryKeyOf("GeneralNamed", "general"), "E1 derived"],
-  [primaryKeyOf("GeneralObject", "general"), "E1 derived"],
-  [primaryKeyOf("DocumentGenerals", "document"), "E1 derived"],
-  [primaryKeyOf("GeneralLang", "general", "lang"), "E1 derived"],
-  [primaryKeyOf("PlacedBodyXmlLang", "instance", "node"), "E1 derived"],
-  [primaryKeyOf("PlacedXmlLang", "instance", "node"), "E1 derived"],
-  [primaryKeyOf("AssembledLang", "assembly", "lang"), "E1 derived"],
-  [primaryKeyOf("PlacedGeneralLang", "general", "lang"), "E1 derived"],
-  [primaryKeyOf("SsmlAttribute", "node", "name"), "E1 derived"],
-  [primaryKeyOf("BodyXmlLang", "node"), "E1 derived"],
-  [primaryKeyOf("CatalogScope", "node"), "E1 derived"],
-  [primaryKeyOf("SsmlScope", "node"), "E1 derived"],
-  [primaryKeyOf("FragmentValue", "fragment", "kind", "value"), "E1 derived"],
-  [primaryKeyOf("LomLanguage", "node"), "E1 derived"],
-  [primaryKeyOf("ResourceLomLanguageSet", "general", "lang"), "E1 derived"],
-  [primaryKeyOf("Quotation", "node"), "E1 derived"],
-  [primaryKeyOf("LabelUse", "node"), "Label tools"],
-  [primaryKeyOf("CardSupport", "node"), "E1 derived"],
-  [primaryKeyOf("DefaultEntry", "node"), "E1 derived"],
-  [primaryKeyOf("CatalogRef", "node"), "E1 derived"],
-  [primaryKeyOf("CatalogId", "node"), "E1 derived"],
-  [primaryKeyOf("CatalogTarget", "document", "id"), "E1 derived"],
-  [primaryKeyOf("PlacedCatalogRef", "instance", "id"), "E1 derived"],
-  [primaryKeyOf("AssembledCatalog", "assembly", "id"), "E1 derived"],
-  [primaryKeyOf("TableScope", "node"), "E1 derived"],
-  [primaryKeyOf("CellHeaders", "node"), "E1 derived"],
-  [primaryKeyOf("HeaderToken", "node", "at"), "E1 derived"],
-  [primaryKeyOf("TableHeader", "node"), "E1 derived"],
-  [primaryKeyOf("Rounding", "node"), "E1 derived"],
-  [primaryKeyOf("RoundingFigures", "node"), "E1 derived"],
-  [primaryKeyOf("RoundingMode", "node"), "E1 derived"],
-  [primaryKeyOf("RoundingModeFigures", "node"), "E1 derived"],
-  [primaryKeyOf("Tolerance", "node"), "E1 derived"],
-  [primaryKeyOf("ToleranceToken", "node", "at"), "E1 derived"],
-  // An IDREF token's piece, a header's and a tolerance value's, is its own whitespace and token
-  // concatenated, its concat fold's step: written texts, none NULL, so the term is never NULL and
-  // no row breaks these. A piece past its keyText bound is refused by the piece's own pattern law,
-  // named by keyText's row, "Key text bound".
-  [generatedOf(Idref, "piece"), "E1 derived"],
-  [generatedOf(TextIdref, "piece"), "E1 derived"],
-  [generatedOf(HeaderToken, "piece"), "E1 derived"],
-  [generatedOf(ToleranceToken, "piece"), "E1 derived"],
-  ...(
-    [
-      "Declaration",
-      "DeclarationCardinality",
-      "DeclarationBaseType",
-      "DeclarationIdentifier",
-      "DeclarationName",
-      "ValueSet",
-      "ValueSetCardinality",
-      "Value",
-      "TypedValue",
-      "ValueBaseType",
-      "FieldValue",
-      "RecordField",
-      "RecordFieldName",
-      "MasteryValue",
-      "NormalMinimum",
-      "NormalMaximum",
-      "MasteryFloor",
-      "MasteryCeiling",
-    ] as const
-  ).map((overlay) => [primaryKeyOf(overlay, "node"), "Declaration overlay"] as const),
-  // An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of
-  // a set keyed by the row's own NOT NULL `baseType` and `cardinality`: ∅ where the diagonal holds
-  // no row (`any`, `unknown`), never NULL, which only a NULL key, an absent `C.at`, reads
-  // (docs/grizzle-findings.md, lane DBT's). So no row breaks either law. A field a closed relation
-  // determines is E1 derived.
-  [generatedOf(Operand, "baseTypeBit"), "E1 derived"],
-  [generatedOf(Operand, "cardinalityBit"), "E1 derived"],
-  ...(
-    [
-      "Mapping",
-      "MappingBaseType",
-      "MappingCardinality",
-      "MapKey",
-      "MapKeyType",
-      "MapKeyInteger",
-      "MapKeyFloat",
-      "AreaMapping",
-      "AreaMappingCardinality",
-      "LookupTable",
-      "LookupTableCardinality",
-    ] as const
-  ).map((overlay) => [primaryKeyOf(overlay, "node"), "Mapping overlay"] as const),
-  ...Object.values(testRelations).map(
-    ({ name, primaryKey }) =>
+const writtenLawsIn = Fn.memoize(
+  (schema: QtiSchema): readonly (readonly [WrittenLaw, LawName])[] => [
+    ...patternLawsIn(schema),
+    [primaryKeyOf("Node", "id"), "Node key"],
+    ...(
       [
-        { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
-        testKeyNames[name],
-      ] as const,
-  ),
-  // `select` casts `selectForm`, which its pattern law, named by SelectForm's row of textLaws,
-  // holds to the language the cast reads total: a form outside it is refused by that law as the
-  // statement casts it into its column, before PostgreSQL computes `select`, so no row breaks this
-  // one.
-  [generatedOf(SectionSelection, "select"), "E1 derived"],
-  ...[
-    AssessmentObject,
-    LomEntry,
-    LomGeneral,
-    LomObject,
-    LomObjectIdentifier,
-    LomObjectTitle,
-    LomRecord,
-    LomResource,
-    LomResourceType,
-    LomResourceTypeSource,
-    LomString,
-    LomStringLanguage,
-    LomTitle,
-    LomTitleString,
-    ObjectIdentifier,
-    ObjectLang,
-    ObjectTitle,
-    ResourceLomGeneral,
-    StatisticDate,
-    UsageBaseType,
-    UsageValue,
-    UsageValueBaseType,
-  ].map(
-    ({ name, primaryKey }) =>
+        ["Comment", "comment arm"],
+        ["Pi", "pi arm"],
+        ["Doctype", "doctype arm"],
+        ["Document", "Document"],
+        ["XmlDecl", "Document"],
+        ["EncodingDecl", "Document"],
+        ["SdDecl", "Document"],
+      ] as const
+    ).map(([relation, name]) => [primaryKeyOf(relation, "node"), name] as const),
+    [primaryKeyOf("Namespace", "node", "at"), "Namespace family"],
+    [primaryKeyOf("OpenElementName", "node"), "OpenElementName"],
+    [primaryKeyOf("Attribute", "node", "id"), "AL2 count"],
+    [primaryKeyOf("OpenAttributeName", "node", "attribute", "at"), "AL4 open names"],
+    [primaryKeyOf("Idref", "node", "attribute", "at"), "E1 derived"],
+    [primaryKeyOf("AttributeEntity", "node", "attribute", "at"), "AttributeEntity owner"],
+    [primaryKeyOf("DoubleValue", "node", "attribute", "at"), "Double value"],
+    [primaryKeyOf("TextDoubleValue", "node", "at"), "Double value"],
+    [primaryKeyOf("Package", "id"), "Package key"],
+    [primaryKeyOf("Entry", "package", "at"), "Entry family"],
+    ...(
+      ["ManifestId", "Resource", "ResourceId", "File", "Dependency", "DependencyTarget"] as const
+    ).map((overlay) => [primaryKeyOf(overlay, "node"), "Manifest overlay"] as const),
+    [primaryKeyOf("ManifestIdSpace", "package", "identifier", "kind"), "Manifest overlay"],
+    [primaryKeyOf("ResourceHref", "node"), "Manifest overlay"],
+    [primaryKeyOf("ResourceTyped", "node"), "E1 derived"],
+    [primaryKeyOf("TypedHref", "node"), "E1 derived"],
+    [primaryKeyOf("UnreadTypeHref", "node"), "E1 derived"],
+    [primaryKeyOf("UnreadTypePath", "package", "path"), "E1 derived"],
+    [primaryKeyOf("NamedHref", "package", "path", "type"), "RootOfType"],
+    [primaryKeyOf("FileHref", "package", "scope", "path"), "File listed"],
+    [primaryKeyOf("ResourceFile", "resource", "scope", "path"), "Href listed"],
+    [primaryKeyOf("IdBinding", "document", "id", "owner"), "E1 derived"],
+    [primaryKeyOf("IdrefTarget", "document", "id"), "E1 derived"],
+    [primaryKeyOf("PlacedId", "instance", "node"), "E1 derived"],
+    [primaryKeyOf("AssembledId", "assembly", "id", "owner", "copy"), "E1 derived"],
+    [primaryKeyOf("PlacedIdref", "instance", "id"), "E1 derived"],
+    [primaryKeyOf("IdentityText", "node"), "E1 derived"],
+    [primaryKeyOf("TextIdref", "node", "at"), "E1 derived"],
+    [primaryKeyOf("DocumentId", "node"), "DocumentId key"],
+    [primaryKeyOf("XmlLang", "node"), "E1 derived"],
+    [primaryKeyOf("DocumentLang", "document", "lang"), "E1 derived"],
+    [primaryKeyOf("ShareFragment", "node"), "E1 derived"],
+    [primaryKeyOf("GeneralNamed", "general"), "E1 derived"],
+    [primaryKeyOf("GeneralObject", "general"), "E1 derived"],
+    [primaryKeyOf("DocumentGenerals", "document"), "E1 derived"],
+    [primaryKeyOf("GeneralLang", "general", "lang"), "E1 derived"],
+    [primaryKeyOf("PlacedBodyXmlLang", "instance", "node"), "E1 derived"],
+    [primaryKeyOf("PlacedXmlLang", "instance", "node"), "E1 derived"],
+    [primaryKeyOf("AssembledLang", "assembly", "lang"), "E1 derived"],
+    [primaryKeyOf("PlacedGeneralLang", "general", "lang"), "E1 derived"],
+    [primaryKeyOf("SsmlAttribute", "node", "name"), "E1 derived"],
+    [primaryKeyOf("BodyXmlLang", "node"), "E1 derived"],
+    [primaryKeyOf("CatalogScope", "node"), "E1 derived"],
+    [primaryKeyOf("SsmlScope", "node"), "E1 derived"],
+    [primaryKeyOf("FragmentValue", "fragment", "kind", "value"), "E1 derived"],
+    [primaryKeyOf("LomLanguage", "node"), "E1 derived"],
+    [primaryKeyOf("ResourceLomLanguageSet", "general", "lang"), "E1 derived"],
+    [primaryKeyOf("Quotation", "node"), "E1 derived"],
+    [primaryKeyOf("LabelUse", "node"), "Label tools"],
+    [primaryKeyOf("CardSupport", "node"), "E1 derived"],
+    [primaryKeyOf("DefaultEntry", "node"), "E1 derived"],
+    [primaryKeyOf("CatalogRef", "node"), "E1 derived"],
+    [primaryKeyOf("CatalogId", "node"), "E1 derived"],
+    [primaryKeyOf("CatalogTarget", "document", "id"), "E1 derived"],
+    [primaryKeyOf("PlacedCatalogRef", "instance", "id"), "E1 derived"],
+    [primaryKeyOf("AssembledCatalog", "assembly", "id"), "E1 derived"],
+    [primaryKeyOf("TableScope", "node"), "E1 derived"],
+    [primaryKeyOf("CellHeaders", "node"), "E1 derived"],
+    [primaryKeyOf("HeaderToken", "node", "at"), "E1 derived"],
+    [primaryKeyOf("TableHeader", "node"), "E1 derived"],
+    [primaryKeyOf("Rounding", "node"), "E1 derived"],
+    [primaryKeyOf("RoundingFigures", "node"), "E1 derived"],
+    [primaryKeyOf("RoundingMode", "node"), "E1 derived"],
+    [primaryKeyOf("RoundingModeFigures", "node"), "E1 derived"],
+    [primaryKeyOf("Tolerance", "node"), "E1 derived"],
+    [primaryKeyOf("ToleranceToken", "node", "at"), "E1 derived"],
+    // An IDREF token's piece, a header's and a tolerance value's, is its own whitespace and token
+    // concatenated, its concat fold's step: written texts, none NULL, so the term is never NULL and
+    // no row breaks these. A piece past its keyText bound is refused by the piece's own pattern law,
+    // named by keyText's row, "Key text bound".
+    [generatedOf(Idref, "piece"), "E1 derived"],
+    [generatedOf(TextIdref, "piece"), "E1 derived"],
+    [generatedOf(HeaderToken, "piece"), "E1 derived"],
+    [generatedOf(ToleranceToken, "piece"), "E1 derived"],
+    ...(
       [
-        { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
-        "E1 derived",
-      ] as const,
-  ),
-  // `date` casts `day`, which its pattern law, named by DayForm's row of textLaws, holds to the
-  // days 0001-01-01 to 9999-12-31 the cast reads total: a day outside it is refused by that law as
-  // the statement casts it into its column, before PostgreSQL computes `date`, so no row breaks
-  // this one. Its value is the calendar day `lastUpdated` names, which the value domain states
-  // exists.
-  [generatedOf(StatisticDate, "date"), "value domain"],
-  ...[
-    AriaElement,
-    AriaRange,
-    AriaValue,
-    Binding,
-    BindingBaseType,
-    BindingCardinality,
-    BindingDeclaration,
-    BindingName,
-    BoundVariable,
-    Choice,
-    ChoiceInteraction,
-    ChoiceVariableName,
-    ContextRef,
-    ContextRefDeclaration,
-    CountBound,
-    CountRange,
-    FeedbackRef,
-    FeedbackRefCardinality,
-    FeedbackRefDeclaration,
-    GapInteraction,
-    Hotspot,
-    Hottext,
-    Interaction,
-    InteractionAttribute,
-    ItemMode,
-    LeastCount,
-    MostCount,
-    PciModuleForm,
-    PlacedBinding,
-    PlacedBindingBaseType,
-    PlacedBindingCardinality,
-    PlacedBindingDeclaration,
-    PlacedChoice,
-    PlacedHottext,
-    PrintedVariableRef,
-    PrintedVariableRefDeclaration,
-    ReferringDocument,
-    SectionContextName,
-    SectionContextRef,
-    SectionContextRefDeclaration,
-    SectionFeedbackName,
-    SectionFeedbackRef,
-    SectionFeedbackRefCardinality,
-    SectionFeedbackRefDeclaration,
-    SectionPrintedName,
-    SectionPrintedRef,
-    SectionPrintedRefDeclaration,
-    SectionScope,
-    SectionTemplateName,
-    SectionTemplateRef,
-    SectionTemplateRefCardinality,
-    SectionTemplateRefDeclaration,
-    Slider,
-    TemplateRef,
-    TemplateRefCardinality,
-    TemplateRefDeclaration,
-  ].map(
-    ({ name, primaryKey }) =>
+        "Declaration",
+        "DeclarationCardinality",
+        "DeclarationBaseType",
+        "DeclarationIdentifier",
+        "DeclarationName",
+        "ValueSet",
+        "ValueSetCardinality",
+        "Value",
+        "TypedValue",
+        "ValueBaseType",
+        "FieldValue",
+        "RecordField",
+        "RecordFieldName",
+        "MasteryValue",
+        "NormalMinimum",
+        "NormalMaximum",
+        "MasteryFloor",
+        "MasteryCeiling",
+      ] as const
+    ).map((overlay) => [primaryKeyOf(overlay, "node"), "Declaration overlay"] as const),
+    // An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of
+    // a set keyed by the row's own NOT NULL `baseType` and `cardinality`: ∅ where the diagonal holds
+    // no row (`any`, `unknown`), never NULL, which only a NULL key, an absent `C.at`, reads
+    // (docs/grizzle-findings.md, lane DBT's). So no row breaks either law. A field a closed relation
+    // determines is E1 derived.
+    [generatedOf(Operand, "baseTypeBit"), "E1 derived"],
+    [generatedOf(Operand, "cardinalityBit"), "E1 derived"],
+    ...(
       [
-        { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
-        "E1 derived",
-      ] as const,
-  ),
-  ...[MapKeyPoint, MapKeyPair, MapKeyDirectedPair, LookupValue, LookupValueType].map(
-    ({ name, primaryKey }) =>
-      [
-        { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
-        "Mapping overlay",
-      ] as const,
-  ),
-  // A typed map key's generated fields read its own split, by concatenation and conditionals, or a
-  // float key's `Compute.parseDouble`, which its key's pattern law, named by FloatKey's row of
-  // textLaws, holds to `xs:double`'s lexical space, inside the `doubleText` the parse reads total.
-  // No term reads a closed relation, so none is NULL and no row breaks these.
-  [generatedOf(MapKeyInteger, "negative"), "E1 derived"],
-  [generatedOf(MapKeyInteger, "value"), "E1 derived"],
-  [generatedOf(MapKeyFloat, "value"), "E1 derived"],
-  [generatedOf(MapKeyPoint, "value"), "E1 derived"],
-  [generatedOf(MapKeyPoint, "xNegative"), "E1 derived"],
-  [generatedOf(MapKeyPoint, "yNegative"), "E1 derived"],
-  [generatedOf(MapKeyPair, "value"), "E1 derived"],
-  [generatedOf(MapKeyDirectedPair, "value"), "E1 derived"],
-  ...[
-    AssembledReference,
-    DeclarationTable,
-    Expression,
-    ExpressionAttribute,
-    HeldType,
-    Literal,
-    LiteralTyped,
-    MappingItemRef,
-    MappingItemRefType,
-    MappingLookup,
-    MappingSourceDeclaration,
-    NameLookup,
-    Operand,
-    PlacedDocument,
-    PlacedReference,
-    PlacedReferenceType,
-    PlacedVariableRef,
-    PlacedVariableRefDeclaration,
-    Processing,
-    ProcessingTemplate,
-    Reading,
-    ReadingCardinality,
-    ReferenceDocument,
-    ReferenceSegment,
-    SectionIdentifier,
-    TemplateDefault,
-    TemplateDefaultCardinality,
-    TemplateDefaultTarget,
-    TestReference,
-    VariableLookup,
-    VariableRef,
-    VariableRefCardinality,
-    VariableRefDeclaration,
-  ].map(
-    ({ name, primaryKey }) =>
-      [
-        { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
-        "E1 derived",
-      ] as const,
-  ),
-  // A segment's token is its separator and its piece concatenated, its concat fold's step: written
-  // texts, none NULL, so no row breaks this. A token past its keyText bound is refused by the
-  // token's own pattern law, named by keyText's row, "Key text bound".
-  [generatedOf(ReferenceSegment, "token"), "E1 derived"],
-  ...[Reference, ReferencePath, TextReference, TextReferencePath].map(
-    ({ name, primaryKey }) =>
-      [
-        { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
-        "Reference overlay",
-      ] as const,
-  ),
-  [primaryKeyOf("MathApply", "node"), "E1 derived"],
-  [primaryKeyOf("MathArgument", "node"), "E1 derived"],
-  [primaryKeyOf("MathQualifier", "node"), "E1 derived"],
-  [primaryKeyOf("CnAttribute", "node", "name"), "E1 derived"],
-  [primaryKeyOf("CnPartText", "node", "part"), "E1 derived"],
-  [primaryKeyOf("CnCount", "node"), "E1 derived"],
-  [primaryKeyOf("CnSlot", "node", "part"), "E1 derived"],
-  [primaryKeyOf("MathCn", "node"), "E1 derived"],
-  [primaryKeyOf("CellLeaf", "cell", "at"), "E1 derived"],
-  [primaryKeyOf("MathAction", "node"), "E1 derived"],
-  [primaryKeyOf("MathAlignGroup", "node"), "E1 derived"],
-  [primaryKeyOf("MathAlignScope", "node"), "E1 derived"],
-  [primaryKeyOf("MathCell", "node"), "E1 derived"],
-  [primaryKeyOf("MathDir", "node"), "E1 derived"],
-  [primaryKeyOf("MathRank", "node"), "E1 derived"],
-  [primaryKeyOf("PlacedMathRank", "instance", "node"), "E1 derived"],
-  [primaryKeyOf("PlacedShareTarget", "instance", "node"), "E1 derived"],
-  [primaryKeyOf("ShareTarget", "node"), "E1 derived"],
-];
+        "Mapping",
+        "MappingBaseType",
+        "MappingCardinality",
+        "MapKey",
+        "MapKeyType",
+        "MapKeyInteger",
+        "MapKeyFloat",
+        "AreaMapping",
+        "AreaMappingCardinality",
+        "LookupTable",
+        "LookupTableCardinality",
+      ] as const
+    ).map((overlay) => [primaryKeyOf(overlay, "node"), "Mapping overlay"] as const),
+    ...Object.values(testRelations).map(
+      ({ name, primaryKey }) =>
+        [
+          { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
+          testKeyNames[name],
+        ] as const,
+    ),
+    // `select` casts `selectForm`, which its pattern law, named by SelectForm's row of textLaws,
+    // holds to the language the cast reads total: a form outside it is refused by that law as the
+    // statement casts it into its column, before PostgreSQL computes `select`, so no row breaks this
+    // one.
+    [generatedOf(SectionSelection, "select"), "E1 derived"],
+    ...[
+      AssessmentObject,
+      LomEntry,
+      LomGeneral,
+      LomObject,
+      LomObjectIdentifier,
+      LomObjectTitle,
+      LomRecord,
+      LomResource,
+      LomResourceType,
+      LomResourceTypeSource,
+      LomString,
+      LomStringLanguage,
+      LomTitle,
+      LomTitleString,
+      ObjectIdentifier,
+      ObjectLang,
+      ObjectTitle,
+      ResourceLomGeneral,
+      StatisticDate,
+      UsageBaseType,
+      UsageValue,
+      UsageValueBaseType,
+    ].map(
+      ({ name, primaryKey }) =>
+        [
+          { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
+          "E1 derived",
+        ] as const,
+    ),
+    // `date` casts `day`, which its pattern law, named by DayForm's row of textLaws, holds to the
+    // days 0001-01-01 to 9999-12-31 the cast reads total: a day outside it is refused by that law as
+    // the statement casts it into its column, before PostgreSQL computes `date`, so no row breaks
+    // this one. Its value is the calendar day `lastUpdated` names, which the value domain states
+    // exists.
+    [generatedOf(StatisticDate, "date"), "value domain"],
+    ...[
+      AriaElement,
+      AriaRange,
+      AriaValue,
+      Binding,
+      BindingBaseType,
+      BindingCardinality,
+      BindingDeclaration,
+      BindingName,
+      BoundVariable,
+      Choice,
+      ChoiceInteraction,
+      ChoiceVariableName,
+      ContextRef,
+      ContextRefDeclaration,
+      CountBound,
+      CountRange,
+      FeedbackRef,
+      FeedbackRefCardinality,
+      FeedbackRefDeclaration,
+      GapInteraction,
+      Hotspot,
+      Hottext,
+      Interaction,
+      InteractionAttribute,
+      ItemMode,
+      LeastCount,
+      MostCount,
+      PciModuleForm,
+      PlacedBinding,
+      PlacedBindingBaseType,
+      PlacedBindingCardinality,
+      PlacedBindingDeclaration,
+      PlacedChoice,
+      PlacedHottext,
+      PrintedVariableRef,
+      PrintedVariableRefDeclaration,
+      ReferringDocument,
+      SectionContextName,
+      SectionContextRef,
+      SectionContextRefDeclaration,
+      SectionFeedbackName,
+      SectionFeedbackRef,
+      SectionFeedbackRefCardinality,
+      SectionFeedbackRefDeclaration,
+      SectionPrintedName,
+      SectionPrintedRef,
+      SectionPrintedRefDeclaration,
+      SectionScope,
+      SectionTemplateName,
+      SectionTemplateRef,
+      SectionTemplateRefCardinality,
+      SectionTemplateRefDeclaration,
+      Slider,
+      TemplateRef,
+      TemplateRefCardinality,
+      TemplateRefDeclaration,
+    ].map(
+      ({ name, primaryKey }) =>
+        [
+          { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
+          "E1 derived",
+        ] as const,
+    ),
+    ...[MapKeyPoint, MapKeyPair, MapKeyDirectedPair, LookupValue, LookupValueType].map(
+      ({ name, primaryKey }) =>
+        [
+          { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
+          "Mapping overlay",
+        ] as const,
+    ),
+    // A typed map key's generated fields read its own split, by concatenation and conditionals, or a
+    // float key's `Compute.parseDouble`, which its key's pattern law, named by FloatKey's row of
+    // textLaws, holds to `xs:double`'s lexical space, inside the `doubleText` the parse reads total.
+    // No term reads a closed relation, so none is NULL and no row breaks these.
+    [generatedOf(MapKeyInteger, "negative"), "E1 derived"],
+    [generatedOf(MapKeyInteger, "value"), "E1 derived"],
+    [generatedOf(MapKeyFloat, "value"), "E1 derived"],
+    [generatedOf(MapKeyPoint, "value"), "E1 derived"],
+    [generatedOf(MapKeyPoint, "xNegative"), "E1 derived"],
+    [generatedOf(MapKeyPoint, "yNegative"), "E1 derived"],
+    [generatedOf(MapKeyPair, "value"), "E1 derived"],
+    [generatedOf(MapKeyDirectedPair, "value"), "E1 derived"],
+    ...[
+      AssembledReference,
+      DeclarationTable,
+      Expression,
+      ExpressionAttribute,
+      HeldType,
+      Literal,
+      LiteralTyped,
+      MappingItemRef,
+      MappingItemRefType,
+      MappingLookup,
+      MappingSourceDeclaration,
+      NameLookup,
+      Operand,
+      PlacedDocument,
+      PlacedReference,
+      PlacedReferenceType,
+      PlacedVariableRef,
+      PlacedVariableRefDeclaration,
+      Processing,
+      ProcessingTemplate,
+      Reading,
+      ReadingCardinality,
+      ReferenceDocument,
+      ReferenceSegment,
+      SectionIdentifier,
+      TemplateDefault,
+      TemplateDefaultCardinality,
+      TemplateDefaultTarget,
+      TestReference,
+      VariableLookup,
+      VariableRef,
+      VariableRefCardinality,
+      VariableRefDeclaration,
+    ].map(
+      ({ name, primaryKey }) =>
+        [
+          { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
+          "E1 derived",
+        ] as const,
+    ),
+    // A segment's token is its separator and its piece concatenated, its concat fold's step: written
+    // texts, none NULL, so no row breaks this. A token past its keyText bound is refused by the
+    // token's own pattern law, named by keyText's row, "Key text bound".
+    [generatedOf(ReferenceSegment, "token"), "E1 derived"],
+    ...[Reference, ReferencePath, TextReference, TextReferencePath].map(
+      ({ name, primaryKey }) =>
+        [
+          { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
+          "Reference overlay",
+        ] as const,
+    ),
+    [primaryKeyOf("MathApply", "node"), "E1 derived"],
+    [primaryKeyOf("MathArgument", "node"), "E1 derived"],
+    [primaryKeyOf("MathQualifier", "node"), "E1 derived"],
+    [primaryKeyOf("CnAttribute", "node", "name"), "E1 derived"],
+    [primaryKeyOf("CnPartText", "node", "part"), "E1 derived"],
+    [primaryKeyOf("CnCount", "node"), "E1 derived"],
+    [primaryKeyOf("CnSlot", "node", "part"), "E1 derived"],
+    [primaryKeyOf("MathCn", "node"), "E1 derived"],
+    [primaryKeyOf("CellLeaf", "cell", "at"), "E1 derived"],
+    [primaryKeyOf("MathAction", "node"), "E1 derived"],
+    [primaryKeyOf("MathAlignGroup", "node"), "E1 derived"],
+    [primaryKeyOf("MathAlignScope", "node"), "E1 derived"],
+    [primaryKeyOf("MathCell", "node"), "E1 derived"],
+    [primaryKeyOf("MathDir", "node"), "E1 derived"],
+    [primaryKeyOf("MathRank", "node"), "E1 derived"],
+    [primaryKeyOf("PlacedMathRank", "instance", "node"), "E1 derived"],
+    [primaryKeyOf("PlacedShareTarget", "instance", "node"), "E1 derived"],
+    [primaryKeyOf("ShareTarget", "node"), "E1 derived"],
+  ],
+);
 
 /**
  * A module's statements by the law each states, the law's name its key: `nodeLawsByName` of
@@ -1040,9 +1058,9 @@ interface Stated {
  * Read the laws a schema states that are no check, each as an `invariant-rejected` outcome names
  * it, with its name in {@link lawTable}: each statement's laws as grizzle's `lawsByStatement` gives
  * them, a mirrors' two containments and an alternatives law's each its statement's, under the name
- * its module groups the statement by ({@link nameOfStatement}); then {@link writtenLaws}' rows, the
- * primary keys, patterns and generated fields no statement states. A check is named by its own name
- * ({@link lawOfCheck}), so its law is left out. A statement no module groups names none of its
+ * its module groups the statement by ({@link nameOfStatement}); then {@link writtenLawsIn}' rows,
+ * the primary keys, patterns and generated fields no statement states. A check is named by its own
+ * name ({@link lawOfCheck}), so its law is left out. A statement no module groups names none of its
  * laws, which the census in `refusal.oracle.test.ts` refuses.
  *
  * `lawsByStatement` compiles the schema's law model, which takes seconds, so this is memoized by
@@ -1064,7 +1082,7 @@ const statedIn = Fn.memoize((schema: QtiSchema): Stated => {
           ),
       }),
     ),
-    ...writtenLaws,
+    ...writtenLawsIn(schema),
   ];
 
   return { buckets: new Map(Object.entries(Arr.groupBy(laws, ([law]) => bucketOf(law)))), laws };
@@ -1548,7 +1566,7 @@ export class UnownedLaws extends Schema.TaggedError<UnownedLaws>()("UnownedLaws"
    * The laws, and the repair.
    */
   override get message(): string {
-    return `No rule owns the laws ${this.laws.join("; ")}. Group the statement of each under the law it states in its module's laws by name (namedLaws in src/import/refusal.ts), or give a primary key or generated field a row of writtenLaws there and a text type a row of textLaws, and run the census in refusal.oracle.test.ts.`;
+    return `No rule owns the laws ${this.laws.join("; ")}. Group the statement of each under the law it states in its module's laws by name (namedLaws in src/import/refusal.ts), or give a primary key or generated field a row of writtenLawsIn there and a text type a row of textLaws, and run the census in refusal.oracle.test.ts.`;
   }
 }
 
