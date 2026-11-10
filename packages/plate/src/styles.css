@@ -1158,15 +1158,26 @@
  * Each Choice, a label laid over the whole image, takes no pointer event itself, and neither does
  * its Outline: only the drawn shape does, by its own presentation attribute, so a click on the
  * area activates the label and toggles its Control, and a click outside every area reaches
- * nothing. The default hotspot's shape, which would otherwise lie over every other, takes none
- * either (its own presentation attribute); the sheet keys on part markers alone, so no rule can
- * lay it under the others.
+ * nothing. Each Choice is a positioned box, so its z-index orders the Choices, which stack by it
+ * and then by document order: every Choice lies at 1, and the default hotspot's Choice, whose
+ * shape fills the whole image, lies at 0 by the next rule. So the areas listed before the default
+ * lie above it and stay clickable where they overlap it, and a click where no other area is
+ * drawn reaches the default's shape (issue m3d-07b, GitHub issue #194).
  */
 :where([data-slot="hotspot-interaction-choice"]) {
   position: absolute;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
   line-height: normal;
+}
+
+/*
+ * The default hotspot's Choice, which the module marks with its shape as data-area, lies under
+ * every other Choice: its shape is a rectangle over the whole image.
+ */
+:where([data-slot="hotspot-interaction-choice"][data-area="default"]) {
+  z-index: 0;
 }
 
 /*
