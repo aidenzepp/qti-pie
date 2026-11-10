@@ -3353,6 +3353,12 @@ const containerParameterValues = holding({
   SET: multipleOf("A", "B"),
 });
 
+/**
+ * The address of the one file the param-variable items name, `applet.html` beside `item.xml`, their
+ * object's `data`, as `configure` reads `assets`, so `render` writes them.
+ */
+const appletAssets = [["applet.html", "https://cdn.example/sha256/applet"]] as const;
+
 describe("redactItem on param-variable parameters", () => {
   it.effect(
     "[I-5] gives a param whose value names a param-variable template variable that variable's value from the record, which render writes: an integer by %i, a float by %G, a point x then y, a pair and a directed pair as their identifiers, a boolean as true or false (R§4.4)",
@@ -3362,7 +3368,7 @@ describe("redactItem on param-variable parameters", () => {
           acceptedItem(check(parameterDocument, tables, Option.none())),
         );
         const expanded = redact(accepted, parameterValues);
-        const configuration = yield* configure({});
+        const configuration = yield* configure({ assets: appletAssets });
         const rendered = yield* Effect.fromResult(render(expanded, configuration, { instance }));
         const written: readonly (readonly [unknown, unknown])[] = elementsOf(
           parseHtml(rendered.html),
@@ -3384,7 +3390,7 @@ describe("redactItem on param-variable parameters", () => {
           acceptedItem(check(containerParameterDocument, tables, Option.none())),
         );
         const expanded = redact(accepted, containerParameterValues);
-        const configuration = yield* configure({});
+        const configuration = yield* configure({ assets: appletAssets });
         const rendered = yield* Effect.fromResult(render(expanded, configuration, { instance }));
         const written: readonly (readonly [unknown, unknown])[] = elementsOf(
           parseHtml(rendered.html),

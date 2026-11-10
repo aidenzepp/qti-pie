@@ -446,7 +446,8 @@ const sittings = Effect.runSync(
           entry.location.endsWith(packageSuffix) &&
           (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported")
         ) {
-          for (const [location, delivered] of verdict.accepted.tests) {
+          for (const [path, delivered] of verdict.accepted.tests) {
+            const location = `${verdict.accepted.location}/${path}`;
             const source = yield* readSource(location, yield* readCorpusFile(location));
             const started = startTest(delivered.test, delivered.items, configuration, {
               instance,
