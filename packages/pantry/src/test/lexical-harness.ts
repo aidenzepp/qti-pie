@@ -796,15 +796,6 @@ export const familiesOf = (domain: ValueDomain, xsd: Option.Option<Domain>): rea
 ];
 
 /**
- * The longest pattern the pattern generator is asked to draw from: a compiled pattern spelling the
- * XML name classes runs to thousands of characters, and drawing from it builds every class it
- * names, so such a domain is probed by its families and enumerations alone. Every other pattern is
- * shorter than 1,200 characters (`xs:date`'s 414, `xs:long`'s 714, `contour.datatype`'s 1,112),
- * and the 22 longer ones spell the name classes or `xsi:schemaLocation`'s list.
- */
-export const drawablePattern = 1200;
-
-/**
  * Bound a pattern's unbounded repetitions outside its classes and escapes, which the pattern
  * generator refuses (every repetition it draws states its bound: `matching`,
  * `@grizzle/testing/pattern`): `*` as `{0,3}`, `+` as `{1,3}` and `{n,}` as `{n,n+3}`. Every
@@ -974,17 +965,21 @@ export const flipped = (value: string): string =>
   value === value.toUpperCase() ? value.toLowerCase() : value.toUpperCase();
 
 /**
- * The samples drawn from each domain's pattern, by handle: drawing from a pattern with a large
- * class takes seconds, and many groups share one domain.
+ * The samples drawn from each domain's pattern, by handle: many groups share one domain, which is
+ * drawn from once.
  */
 const drawnSamples = new Map<string, readonly string[]>();
 
 /**
  * Draw samples of a domain's pattern from a stream seeded by its handle, once per domain, the first
- * of each form ({@link samplesDrawn}), with
- * its unbounded repetitions bounded ({@link boundedPattern}); none for a pattern the generator
- * refuses or one longer than {@link drawablePattern}, and no sample that holds a character XML
- * does not admit.
+ * of each form ({@link samplesDrawn}), with its unbounded repetitions bounded
+ * ({@link boundedPattern}); none for a pattern the generator refuses, and no sample that holds a
+ * character XML does not admit.
+ *
+ * Every pattern is drawn from, however long: the generator keeps a class as its runs of code points
+ * and refuses a pattern while it parses it (`@grizzle/testing/pattern`, since grizzle `4b155e8a`),
+ * so a pattern spelling the XML name classes, thousands of characters long, costs its parse and
+ * its draws, never every code point its classes name.
  *
  * @param domain - The domain.
  * @returns The samples.
@@ -995,28 +990,25 @@ export const drawnOf = (domain: ValueDomain): readonly string[] => {
     return held;
   }
 
-  const drawn =
-    domain.pattern.length > drawablePattern
-      ? []
-      : Result.getOrElse(
-          Result.try(() =>
-            [
-              ...new Map(
-                sample(
-                  matching(new RegExp(boundedPattern(domain.pattern), patternFlags)),
-                  floorSeed(`lexical ${domain.handle}`),
-                  samplesDrawn.drawn,
-                )
-                  .filter((value) => xmlCharacters.test(value))
-                  .toReversed()
-                  .map((value) => [formOf(value), value] as const),
-              ).values(),
-            ]
-              .toReversed()
-              .slice(0, samplesDrawn.kept),
-          ),
-          () => [],
-        );
+  const drawn = Result.getOrElse(
+    Result.try(() =>
+      [
+        ...new Map(
+          sample(
+            matching(new RegExp(boundedPattern(domain.pattern), patternFlags)),
+            floorSeed(`lexical ${domain.handle}`),
+            samplesDrawn.drawn,
+          )
+            .filter((value) => xmlCharacters.test(value))
+            .toReversed()
+            .map((value) => [formOf(value), value] as const),
+        ).values(),
+      ]
+        .toReversed()
+        .slice(0, samplesDrawn.kept),
+    ),
+    () => [],
+  );
   drawnSamples.set(domain.handle, drawn);
 
   return drawn;
