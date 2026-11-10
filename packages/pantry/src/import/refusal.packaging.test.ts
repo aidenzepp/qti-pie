@@ -22,40 +22,28 @@ import type { Rule } from "#pantry/import/rules.ts";
  * `GUID` (`csm-two-guids`) or a second set (`csm-two-sets`) breaks its particle's at-most-once,
  * which the content automaton holds (`N5 Follow`), so its rule is `ordering`.
  *
+ * One fixture per rule stays, 11 of the 26: the other 15 named a rule one of these already
+ * names, and `package.packaging.test.ts` draws every packaging fixture against the law oracle.
+ *
  * The guards' other fixtures break no law the cutover states: the LOM and CSM capacities, which
  * the deleted unsourced caps held, and the guards' departures from the XSD (plan §2.2). The
  * importer accepts them, and Q5.15's packaging test holds that.
  */
 const refused = [
   ["csm-no-guid", ["child-set"]],
-  ["csm-no-labelled-guid", ["child-set"]],
   ["csm-two-guids", ["ordering"]],
-  ["csm-two-sets", ["ordering"]],
   [
     "extmeta-item-href",
     ["href-listed", "lom-identifier", "lom-title", "document-lang", "entry-kind"],
   ],
   ["extmeta-item-root", ["root-type-reverse"]],
-  ["filelom-two-metadata", ["ordering"]],
   ["lti300-as-301", ["attribute-lexical"]],
   ["outcome-title", ["attribute-admission"]],
-  ["usage3-bad-context", ["attribute-lexical"]],
-  ["usage3-bad-month", ["attribute-lexical"]],
-  ["usage3-bad-name", ["attribute-lexical"]],
-  ["usage3-feb-30", ["attribute-lexical"]],
-  ["usage3-no-map-entry", ["child-set"]],
-  ["usage3-no-target", ["ordering"]],
   ["usage3-ordinary-mapping", ["unmodeled-vocabulary"]],
-  ["usage3-two-values", ["ordering"]],
   ["variant-301", ["admission"]],
   ["variant-bad-uri", ["text-copy"]],
-  ["variant-before-file", ["ordering"]],
   ["variant-id-clash", ["document-key"]],
-  ["variant-no-metadata", ["child-set"]],
   ["variant-no-resource", ["idref-target"]],
-  ["variant-tactile", ["text-copy"]],
-  ["variant-two-atinteroperable", ["ordering"]],
-  ["variant-two-complexity", ["ordering"]],
 ] as const satisfies readonly (readonly [FixtureName, readonly Rule[]])[];
 
 describe.skipIf(!hasLease)(
