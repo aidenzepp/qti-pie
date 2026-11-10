@@ -25,6 +25,8 @@ import type {
   ValidationMessage,
   Verdict,
 } from "#plate/index.ts";
+import { isModuleKind } from "#plate/interactions/contract.ts";
+import type { InteractionKind } from "#plate/interactions/contract.ts";
 import { modules } from "#plate/model/interactions.ts";
 import { renderNavigation } from "#plate/navigation.ts";
 import type { NavigationOptions, NavigationState } from "#plate/navigation.ts";
@@ -345,10 +347,15 @@ const itemBytes = (identifier: string, declarations: string, body: string): Uint
 </qti-assessment-item>`);
 
 /**
- * One hand-written item, the verdict `open` gives it, and what its refused answer posts.
+ * One hand-written item, the kinds of the interactions it holds, and what its refused answer posts.
  */
 interface Authored {
   readonly bytes: Uint8Array;
+  /**
+   * The kind of each interaction the body holds, which {@link expectedVerdict} reads the verdict
+   * `open` gives the item from.
+   */
+  readonly kinds: readonly InteractionKind[];
   /**
    * The document's location, which `open` takes.
    */
@@ -357,14 +364,29 @@ interface Authored {
    * The entries a refused answer posts, by response identifier; empty when the item has none.
    */
   readonly posted: Readonly<Record<string, readonly string[]>>;
-  readonly verdict: "accepted" | "accepted-with-unsupported";
 }
+
+/**
+ * Read the verdict `open` gives an authored item from the table of modules: `accepted` while every
+ * interaction it holds is one plate renders, `accepted-with-unsupported` while one is of a kind
+ * whose module is a stub, which its `parse` shows as a notice. A module lands by setting
+ * `implemented: true` and editing nothing shared, so no row writes its verdict: the row names its
+ * kinds, and the table says which of them render today.
+ *
+ * @param item The authored item.
+ * @returns The verdict `open` gives it.
+ */
+const expectedVerdict = (item: Authored): "accepted" | "accepted-with-unsupported" =>
+  item.kinds.some((kind) => isModuleKind(kind) && !modules[kind].implemented)
+    ? "accepted-with-unsupported"
+    : "accepted";
 
 /**
  * The items the witness renders: both Choice cardinalities, prompt shapes and orientations, a Text
  * Entry inside a `p`, an Extended Text with a prompt, an Inline Choice with a Label and one
- * without, and an interaction plate does not render. Each interaction carries every class the
- * stylesheet styles for it, and a body element every body class.
+ * without, and two interactions whose modules are stubs, so the stylesheet's Notice rules keep an
+ * element to match until the last stub lands. Each interaction carries every class the stylesheet
+ * styles for it, and a body element every body class.
  */
 const authored: readonly Authored[] = [
   {
@@ -383,9 +405,9 @@ const authored: readonly Authored[] = [
    <qti-simple-choice identifier="ant">An ant</qti-simple-choice>
   </qti-choice-interaction>`,
     ),
+    kinds: ["choice"],
     location: "witness/choice-single.xml",
     posted: { RESPONSE: ["spider", "ant"] },
-    verdict: "accepted",
   },
   {
     bytes: itemBytes(
@@ -409,9 +431,9 @@ const authored: readonly Authored[] = [
    <qti-simple-choice identifier="ant">An ant</qti-simple-choice>
   </qti-choice-interaction>`,
     ),
+    kinds: ["choice"],
     location: "witness/choice-multiple.xml",
     posted: { RESPONSE: ["spider", "scorpion", "ant"] },
-    verdict: "accepted",
   },
   {
     bytes: itemBytes(
@@ -429,9 +451,9 @@ const authored: readonly Authored[] = [
    <qti-prompt>Describe how a spider spins its web.</qti-prompt>
   </qti-extended-text-interaction>`,
     ),
+    kinds: ["text-entry", "extended-text"],
     location: "witness/text.xml",
     posted: { ESSAY: ["It spins silk.", "It spins again."], RESPONSE: ["eight"] },
-    verdict: "accepted",
   },
   {
     bytes: itemBytes(
@@ -454,9 +476,9 @@ const authored: readonly Authored[] = [
    <qti-inline-choice identifier="green">green</qti-inline-choice>
   </qti-inline-choice-interaction>.</p>`,
     ),
+    kinds: ["inline-choice"],
     location: "witness/inline-choice.xml",
     posted: { RESPONSE: ["ten"] },
-    verdict: "accepted",
   },
   {
     bytes: itemBytes(
@@ -474,9 +496,33 @@ const authored: readonly Authored[] = [
    <qti-simple-choice identifier="spiderling">Spiderling</qti-simple-choice>
   </qti-order-interaction>`,
     ),
+    kinds: ["order"],
     location: "witness/order.xml",
     posted: {},
-    verdict: "accepted-with-unsupported",
+  },
+  {
+    /*
+     * A Select Point, the stub planned to land last: this row keeps a stub witness, and so an item
+     * Notice for the compounds that name one, after Order lands and its row's verdict turns
+     * `accepted`. Its declaration is the one `skip.test.ts`'s stub item binds under, `multiple`
+     * cardinality of `point`, because the binding rule reads the element's `max-choices` (unwritten,
+     * `0`) against the declaration before any module does, so the bare element binds. The correct
+     * response is the one the `match_correct` template requires of every declaration. When Select
+     * Point lands, W0-AQ retires this row with the other stub-kind tests.
+     */
+    bytes: itemBytes(
+      "witness-select-point",
+      `<qti-response-declaration base-type="point" cardinality="multiple" identifier="RESPONSE">
+  <qti-correct-response>
+   <qti-value>120 80</qti-value>
+  </qti-correct-response>
+ </qti-response-declaration>`,
+      `<p>Mark where the spider waits on its web.</p>
+  <${modules["select-point"].element} response-identifier="RESPONSE"/>`,
+    ),
+    kinds: ["select-point"],
+    location: "witness/select-point.xml",
+    posted: {},
   },
 ];
 
@@ -547,7 +593,7 @@ const rendersOf = Effect.fnUntraced(function* rendersOf(
     );
   }
 
-  assert.strictEqual(verdict.verdict, item.verdict, item.location);
+  assert.strictEqual(verdict.verdict, expectedVerdict(item), item.location);
 
   const redacted = redact(verdict.accepted);
   const messages = refusalsOf(verdict.accepted, redacted, item.posted, configuration);
@@ -784,6 +830,17 @@ const buttonsOf = (trees: readonly Node[]): readonly Element[] =>
   elementsOf(trees).filter((element) => element.tag === "button");
 
 describe("styles.css over emitted markup", () => {
+  it("holds an item of each verdict the table of modules gives, a stub's for as long as the table holds a stub", () => {
+    const expected = new Set(authored.map(expectedVerdict));
+
+    assert.isTrue(expected.has("accepted"));
+    assert.strictEqual(
+      expected.has("accepted-with-unsupported"),
+      Object.values(modules).some((module) => !module.implemented),
+      "an item of a stub kind is authored while the table of modules holds a stub",
+    );
+  });
+
   it.effect(
     "[Q-12] every compound of every selector names something the emitted markup holds",
     () =>
