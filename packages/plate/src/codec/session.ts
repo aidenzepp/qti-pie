@@ -24,10 +24,17 @@ import type { NavigationMode } from "#plate/vocabulary.ts";
 const ValuesSchema = Schema.Record(Schema.String, ValueSchema);
 
 /**
- * An item's saved responses by identifier, each a value or, for a record response, a record, as
- * the session's `Responses` holds them.
+ * An item's saved responses by identifier, each a value or, for a record response, a record, as the
+ * session's `Responses` holds them. {@link SavedResponsesJson} is the form {@link encodeSession}
+ * stores under an item's `saved`, and the form an item view carries as its `values`.
  */
-const SavedSchema = Schema.Record(Schema.String, ResponseValueSchema);
+export const SavedResponsesSchema = Schema.Record(Schema.String, ResponseValueSchema);
+
+/**
+ * An item's saved responses in the JSON form {@link SavedResponsesSchema} writes: plain data, which
+ * `JSON.stringify` writes without loss.
+ */
+export type SavedResponsesJson = Schema.Codec.Encoded<typeof SavedResponsesSchema>;
 
 /**
  * The Schema of one item of a test session. `saved`, `firstOutcomes` and `templateDefaults` are
@@ -41,7 +48,7 @@ const SessionItemSchema = Schema.Struct({
   presented: Schema.Boolean,
   record: ItemRecordSchema,
   ref: Schema.String,
-  saved: Schema.OptionFromOptionalKey(SavedSchema),
+  saved: Schema.OptionFromOptionalKey(SavedResponsesSchema),
   sequenceIndex: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   templateDefaults: Schema.OptionFromOptionalKey(ValuesSchema),
 });
