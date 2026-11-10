@@ -87,15 +87,17 @@ export const patternMessage = (
  * for a numeric binding's `number`, whose message {@link malformedMessage} gives itself.
  *
  * A file (`file`) and a second entry (`single-many`) get their own messages on every binding.
- * `identifier` on any binding, `character`, which a browser never posts, and `number` on a
- * `string` binding, which only a {@link Malformed} built by hand carries, get the general
- * `notAccepted`.
+ * `identifier`, `boolean` and `point` on any binding, `character`, which a browser never posts, and
+ * `number` on a `string` binding, which only a {@link Malformed} built by hand carries, get the
+ * general `notAccepted`.
  */
 const refusals = {
+  boolean: "notAccepted",
   character: "notAccepted",
   file: "malformedFile",
   identifier: "notAccepted",
   number: "notAccepted",
+  point: "notAccepted",
   "single-many": "malformedSingleMany",
 } as const satisfies Readonly<Record<Malformed["reason"], MessageKey>>;
 
