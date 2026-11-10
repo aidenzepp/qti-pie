@@ -1000,15 +1000,10 @@ const witnessOf = (refused: ImportRefused): string =>
  *
  * @param breaches - The oracle's breaches.
  * @param host - The host's verdict over the import's rows.
- * @param grammar - The installed grammar's rows an explanation reads.
  * @returns The disagreement, none where the oracle breaks other than one law or the rows break
  *   none.
  */
-const loneRefusal = (
-  breaches: readonly Breach[],
-  host: HostVerdict,
-  grammar: ComposedGrammar,
-): readonly Disagreement[] => {
+const loneRefusal = (breaches: readonly Breach[], host: HostVerdict): readonly Disagreement[] => {
   const [lone, ...others] = [...new Set(breaches.map(({ law }) => law))];
   if (lone === undefined || others.length > 0 || host.brokenLaws.length === 0) {
     return [];
@@ -1027,7 +1022,6 @@ const loneRefusal = (
       laws: [refusedOf(planted), ...host.brokenLaws.map((law) => refusedOf(law))],
     },
     unreported,
-    grammar,
   );
   const importRule = Option.getOrElse(Arr.head(refused.rules), () => "none");
 
@@ -1123,7 +1117,7 @@ export const judgeOne = Effect.fnUntraced(function* judgeOne(
     side.kind === "built" && oracle.kind === "judged"
       ? [
           ...rowDisagreements(oracle.breaches, side.host),
-          ...loneRefusal(oracle.breaches, side.host, bench.grammar),
+          ...loneRefusal(oracle.breaches, side.host),
         ]
       : [];
 

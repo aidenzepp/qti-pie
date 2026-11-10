@@ -1,6 +1,6 @@
 import path from "node:path";
 import { constraintNamesOf } from "@bjornpagen/grizzle";
-import type { AnySchema, Law } from "@bjornpagen/grizzle";
+import type { AnySchema, Law, Witness } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Formatter, Function as Fn, Schema } from "effect";
@@ -16,7 +16,7 @@ import {
 } from "#pantry/cli/output.ts";
 import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
-import type { RefusalLaw, RefusalWitness } from "#pantry/import/refusal.ts";
+import type { RefusalLaw } from "#pantry/import/refusal.ts";
 import { readerOrigin, RefusedKind, WitnessKind } from "#pantry/package/refusal-origin.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
@@ -295,14 +295,12 @@ const refusing = Command.make(
     const { checkNameOf, refusalOf } = yield* Effect.promise(
       () => import("#pantry/import/refusal.ts"),
     );
-    const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
     const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
     const [first, second] = refusedLaws(checkNameOf("AL1 admission"));
 
     return yield* refusalOf(
       { kind: "some", laws: [refusedByConstraint(Qti, first), refusedByStatement(second)] },
       { kind: "unreported" },
-      grammar,
     );
   }),
 ).pipe(Command.withGlobalFlags(outputGlobalFlags));
@@ -415,7 +413,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
         const { checkNameOf, lawNames, refusalOf } = yield* Effect.promise(
           () => import("#pantry/import/refusal.ts"),
         );
-        const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
 
         assert.isAbove(lawNames.length, 0);
         for (const name of lawNames) {
@@ -423,7 +420,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
           const refusal = refusalOf(
             { kind: "every", laws: [refusedByStatement(law)] },
             { kind: "unreported" },
-            grammar,
           );
           const { rule, source } = lawTable[name];
           const { exit, stderr } = yield* captureCli(["--json"], {
@@ -456,15 +452,14 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
 });
 
 /**
- * A witness of each kind a database refusal names its row by: grizzle's key witness, a row the
- * caller holds, and none. A kind `WitnessKind` adds fails to compile here.
+ * A witness of each kind a database refusal names its row by: grizzle's key witness, and none. A
+ * kind `WitnessKind` adds fails to compile here.
  */
 const witnessesByKind = {
   key: { kind: "key", relation: "Attribute", values: { local: "href", node: "n-1" } },
-  row: { kind: "row", relation: "Node", values: { node: "n-2" } },
   unreported: { kind: "unreported" },
 } as const satisfies {
-  readonly [Kind in typeof WitnessKind.Type]: RefusalWitness & { readonly kind: Kind };
+  readonly [Kind in typeof WitnessKind.Type]: Witness & { readonly kind: Kind };
 };
 
 /**
@@ -474,7 +469,6 @@ const witnessesByKind = {
 const helpByOrigin = {
   Reader: "Fix the package as the message says, then import it again.",
   key: "at the row the message names",
-  row: "at the row the message names",
   unreported: "The database names no row for this law, so find what the law describes",
 } as const satisfies Readonly<Record<"Reader" | typeof WitnessKind.Type, string>>;
 
@@ -497,7 +491,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
           () => import("#pantry/import/refusal.ts"),
         );
         const { ImportRefused } = yield* Effect.promise(() => import("#pantry/import/rules.ts"));
-        const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
         const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
         const { rule, source } = lawTable["AL1 admission"];
         const law = {
@@ -535,7 +528,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
                   ? { kind, laws: [refusedByConstraint(Qti, law), refusedByStatement(unownedLaw)] }
                   : { kind, laws: [refusedByConstraint(Qti, law)] },
                 witnessesByKind[witness],
-                grammar,
               ),
             })),
           ),

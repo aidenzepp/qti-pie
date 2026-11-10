@@ -1356,7 +1356,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             const refusal = refusalOf(
               { kind: "every", laws: [refusedOf(judged.law)] },
               { kind: "unreported" },
-              grammar,
             );
 
             assert.deepStrictEqual(refusal.rules, ["entry-used"]);
@@ -1403,7 +1402,6 @@ describe("qti/media.ts, the laws a policy states", () => {
             const refusal = refusalOf(
               { kind: "every", laws: [refusedOf(refused)] },
               { kind: "unreported" },
-              grammar,
             );
 
             assert.deepStrictEqual(

@@ -21,7 +21,6 @@ import {
 import type { Uuid } from "@bjornpagen/grizzle";
 import type { ApplyError, DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
 import { Clock, Context, Duration, Effect, Option, Random, Ref, Schedule, Schema } from "effect";
-import { grammar } from "#pantry/grammar/install.ts";
 import { programOf } from "#pantry/import/program.ts";
 import type { QtiPackage } from "#pantry/import/read.ts";
 import { refusalOf } from "#pantry/import/refusal.ts";
@@ -244,7 +243,7 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
     // explaining the refusal read the committed dictionary and the installed grammar's rows, so
     // that step has a span of its own, which records the laws it named and their rules.
     const { refused } = outcome;
-    const refusal = yield* Effect.sync(() => refusalOf(refused, outcome.witness, grammar)).pipe(
+    const refusal = yield* Effect.sync(() => refusalOf(refused, outcome.witness)).pipe(
       Effect.tap((built) =>
         Effect.annotateCurrentSpan({
           lawsNamed: refused.laws.length,

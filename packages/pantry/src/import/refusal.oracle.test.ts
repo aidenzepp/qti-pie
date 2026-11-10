@@ -37,16 +37,13 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Result, Schema } from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Schema } from "effect";
 import { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
-import { composed } from "#pantry/grammar/compose.ts";
-import { followPairsOf } from "#pantry/grammar/content.ts";
-import { checkNameOf, explain, refusalOf } from "#pantry/import/refusal.ts";
+import { checkNameOf, refusalOf } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
-import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 import { beginsWith, mergedAxes } from "#pantry/test/merged-axes.ts";
 import type { Axis } from "#pantry/test/merged-axes.ts";
 import {
@@ -80,12 +77,6 @@ import { refusedOf } from "#pantry/test/law-names.ts";
  * 74, its slowest test.
  */
 const testTimeoutMs = 120_000;
-
-/**
- * The composed grammar of production, whose rows `install.ts` installs: the constants an
- * explanation reads.
- */
-const grammar = Result.getOrThrow(composed());
 
 /**
  * A scratch schema, in the shapes `node.ts` and `attributes.ts` state, built with grizzle's own
@@ -736,11 +727,7 @@ describe("the merged axes and the laws no row states", () => {
     // Oracle: the outcome itself, read back field by field: its decision, the law's display text
     // with no name or rule, no source, the witness's kind, and no rule.
     const law: Law = { from: sideOf("Nowhere", "x"), kind: "contained", to: sideOf("Node", "id") };
-    const refused = refusalOf(
-      { kind: "every", laws: [refusedOf(law)] },
-      { kind: "unreported" },
-      grammar,
-    );
+    const refused = refusalOf({ kind: "every", laws: [refusedOf(law)] }, { kind: "unreported" });
 
     assert.deepStrictEqual(refused.rules, []);
     assert.deepStrictEqual(refused.origin, {
@@ -785,7 +772,6 @@ describe("the merged axes and the laws no row states", () => {
         const refused = refusalOf(
           { kind: "every", laws: [{ by, id: "", law }] },
           { kind: "unreported" },
-          grammar,
         );
         const [fact] = refused.origin._tag === "Database" ? refused.origin.laws : [];
 
@@ -1303,222 +1289,6 @@ describe("the rules of the laws one native object carries, in the precedence's o
             }),
         ),
       ),
-  );
-});
-
-/**
- * One state of a content model: its version, its kind and the state.
- */
-interface ModelState {
-  readonly parent: string;
-  readonly state: string;
-  readonly version: string;
-}
-
-/**
- * Each family's content model, by `version parent`, read from `ContentModelOf`'s rows directly.
- */
-const modelOf: ReadonlyMap<string, string> = new Map(
-  grammar.content.contentModelOf.rows.map(
-    ({ model, parent, version }) => [`${version} ${parent}`, model] as const,
-  ),
-);
-
-/**
- * Every state of every family whose content model `Follow` or `Last` holds, keyed once each: the
- * model's states, read in each family of it.
- */
-const modelStates: Arr.NonEmptyReadonlyArray<ModelState> = (() => {
-  const states = new Map<string, Set<string>>();
-  const add = (model: string, state: string): void => {
-    states.set(model, (states.get(model) ?? new Set()).add(state));
-  };
-  for (const { from, model } of followPairsOf(grammar.content)) {
-    add(model, from);
-  }
-
-  for (const { model, position } of grammar.content.last.rows) {
-    add(model, position);
-  }
-
-  return nonEmpty(
-    "the content models' states",
-    grammar.content.contentModelOf.rows.flatMap(({ model, parent, version }) =>
-      [...(states.get(model) ?? [])].map((state) => ({ parent, state, version })),
-    ),
-  );
-})();
-
-/**
- * Every content model `Follow` or `Last` holds, with its states in the first family that has it:
- * the exhaustion's space, one case per model. `Follow` and `Last` are keyed by the model, so a
- * model's states and the positions they allow are its every family's, and one family of each model
- * is the small scope (115 models where `ContentModelOf` has 1,288 families); the kinds an
- * explanation lists at each position are read in that family.
- */
-const models: Arr.NonEmptyReadonlyArray<Arr.NonEmptyReadonlyArray<ModelState>> = (() => {
-  const first = new Map<string, Arr.NonEmptyReadonlyArray<ModelState>>();
-  for (const states of Map.groupBy(
-    modelStates,
-    ({ parent, version }) => `${version} ${parent}`,
-  ).values()) {
-    const family = nonEmpty("a model's states", states);
-    const [{ parent, version }] = family;
-    const model = modelOf.get(`${version} ${parent}`) ?? "";
-    if (!first.has(model)) {
-      first.set(model, family);
-    }
-  }
-
-  return nonEmpty("the content models", [...first.values()]);
-})();
-
-/**
- * The positions `Follow` holds after each state of each model, read from its rows directly, keyed
- * `model state`.
- */
-const followed: ReadonlyMap<string, ReadonlySet<string>> = (() => {
-  const next = new Map<string, Set<string>>();
-  for (const { from, model, to } of followPairsOf(grammar.content)) {
-    const at = `${model} ${from}`;
-    next.set(at, new Set([...(next.get(at) ?? []), to]));
-  }
-
-  return next;
-})();
-
-/**
- * The kinds at each position of each family, read from the rows directly, keyed `version parent
- * position`: those `Admission` gives the position, and those the family's shared model
- * (`SharedModelOf`) names there, its symbol sets spelled out (`symbolRowsOf`), each family's read
- * once here so that no case reads a relation.
- */
-const positionKinds: ReadonlyMap<string, ReadonlySet<string>> = (() => {
-  const kinds = new Map<string, Set<string>>();
-  const add = (at: string, kind: string): void => {
-    kinds.set(at, (kinds.get(at) ?? new Set()).add(kind));
-  };
-  for (const { child, parent, position, version } of admittedOf(
-    grammar.content.contentModelOf,
-    grammar.content.admissionIn,
-  )) {
-    add(`${version} ${parent} ${position}`, child);
-  }
-
-  const symbols = Map.groupBy(
-    symbolRowsOf(grammar.content.symbolSetOf, grammar.content.symbolMember),
-    ({ model }) => model,
-  );
-  for (const { model, parent, version } of grammar.content.sharedModelOf.rows) {
-    for (const { kind, position } of symbols.get(model) ?? []) {
-      add(`${version} ${parent} ${position}`, kind);
-    }
-  }
-
-  return kinds;
-})();
-
-/**
- * Read the kinds at a position of a family's model.
- *
- * @param state - The family.
- * @param position - The position.
- * @returns The kinds, as a set.
- */
-const kindsAt = (state: ModelState, position: string): ReadonlySet<string> =>
-  positionKinds.get(`${state.version} ${state.parent} ${position}`) ?? new Set();
-
-describe("the explanation of a content-order refusal", () => {
-  const follow: readonly Law[] = [
-    { kind: "check", name: checkNameOf("N5 Follow"), relation: "Node" },
-  ];
-  const last: readonly Law[] = [{ kind: "check", name: checkNameOf("N7 Last"), relation: "Node" }];
-
-  it.effect(
-    "names exactly the positions Follow allows after every state of every model, for N5's step and N7's end",
-    (ctx) =>
-      searched(
-        ctx,
-        exhaust(
-          {
-            box: `every state of every content model Follow or Last holds, in one family of each (${String(models.length)} models)`,
-            caseHang: Duration.seconds(30),
-            coverage: requiredInSpace<"allows next" | "allows nothing">([
-              "allows next",
-              "allows nothing",
-            ]),
-            generator: element<Arr.NonEmptyReadonlyArray<ModelState>>(models),
-            limit: models.length,
-            literal: ([{ parent, version }]) => `${version} ${parent}`,
-            oracle: { kind: "second-implementation", name: "Follow's rows grouped directly" },
-            suite: "import/refusal/explain-follow",
-          },
-          (states, c) =>
-            Effect.sync(() => {
-              for (const state of states) {
-                const expected = followed.get(
-                  `${modelOf.get(`${state.version} ${state.parent}`) ?? ""} ${state.state}`,
-                );
-                c.note(expected === undefined ? "allows nothing" : "allows next");
-
-                const rows = [
-                  {
-                    laws: follow,
-                    values: {
-                      kind: "x",
-                      parentKind: state.parent,
-                      version: state.version,
-                      was: state.state,
-                    },
-                  },
-                  {
-                    laws: last,
-                    values: { kind: state.parent, lastState: state.state, version: state.version },
-                  },
-                ];
-                for (const { laws, values } of rows) {
-                  const [first, ...rest] = laws;
-                  if (first === undefined) {
-                    assert.fail("no content-order law is stated");
-                  }
-
-                  const at = `${state.version} ${state.parent} ${state.state}`;
-                  const explained = explain(
-                    [refusedOf(first), ...rest.map(refusedOf)],
-                    { kind: "row", relation: "Node", values },
-                    grammar,
-                  );
-                  const next = Option.getOrElse(explained.next, () => []);
-                  const sources = new Set(explained.sources);
-                  const positions = next.map(({ position }) => position);
-
-                  assert.isTrue(Option.isSome(explained.next), at);
-                  assert.strictEqual(
-                    positions.join(" "),
-                    [...(expected ?? [])].toSorted((a, b) => Number(a) - Number(b)).join(" "),
-                    at,
-                  );
-                  for (const { kinds, position, source } of next) {
-                    const sourceText = Option.getOrElse(source, () => "");
-
-                    assert.strictEqual(
-                      kinds.toSorted().join(" "),
-                      [...kindsAt(state, position)].toSorted().join(" "),
-                      `${at} ${position}`,
-                    );
-                    assert.isTrue(sources.has(sourceText), `${at} ${position}: ${sourceText}`);
-                  }
-
-                  assert.isTrue(
-                    sources.has(lawTable[Option.getOrThrow(schemaLawNameOf(first))].source),
-                    at,
-                  );
-                }
-              }
-            }),
-        ),
-      ),
-    testTimeoutMs,
   );
 });
 

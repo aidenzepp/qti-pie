@@ -270,8 +270,7 @@ describe("describeFailure, a refused import", () => {
   // defines its class, loads the composed grammar.
   it("a refusal the database gave says where to look by the kind of its witness", () => {
     // Oracle: the witness kind the refusal's origin carries, read from its field and never from
-    // its detail: a key or a row is named in the message, an unreported witness names
-    // none. Bound: every kind of `WitnessKind`, exhausted; residual none.
+    // its detail: a key is named in the message, an unreported witness names none. Bound: every kind of `WitnessKind`, exhausted; residual none.
     for (const witness of WitnessKind.literals) {
       const { exitCode, help, kind } = describeFailure({
         _tag: "ImportRefused",
@@ -279,7 +278,7 @@ describe("describeFailure, a refused import", () => {
         origin: { _tag: "Database", kind: "every", laws: [refusedLaw], sources: ["AL1"], witness },
         rules: ["attribute-admission"],
       });
-      const named = witness === "key" || witness === "row";
+      const named = witness === "key";
 
       assert.deepStrictEqual({ exitCode, kind }, { exitCode: 1, kind: "import-refused" });
       assert.notStrictEqual(help, kindHelp["import-refused"]);

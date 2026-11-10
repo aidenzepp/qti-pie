@@ -179,8 +179,8 @@ export type LawFact = typeof ErrorLaw.Type;
 /**
  * How a refusal the database gave names the row that broke its laws, as the error object prints
  * it: the refusal's own `WitnessKind` (`#pantry/package/refusal-origin.ts`). `key` (grizzle's key
- * witness) and `row` (a row the caller holds) name one in the message, and `unreported` names
- * none, for a foreign key or a law no row the ChangeSet states breaks as grizzle judges it.
+ * witness) names one in the message, and `unreported` names none, for a foreign key or a law no
+ * row the ChangeSet states breaks as grizzle judges it.
  */
 export const ErrorWitness = WitnessKind;
 
@@ -201,8 +201,7 @@ export const ErrorRefusedKind = RefusedKind;
  *   most specific first, none where the database named only laws the law table does not hold.
  *   `refused_kind`, `laws`, `sources` and `witness` are present only when the database refused it:
  *   how grizzle decided the laws its refusal names, the laws, where each is stated, and whether the
- *   message names the row that broke them (`key` or `row`) or the database named none
- *   (`unreported`).
+ *   message names the row that broke them (`key`) or the database named none (`unreported`).
  * - `failure` is present only for an `internal` failure qti can name, such as an export that cannot
  *   rebuild a stored package: the failure's tag.
  */

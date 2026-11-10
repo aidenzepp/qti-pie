@@ -12,25 +12,22 @@
  * a refusal without loading the importer: its startup graph reaches no `#pantry/import/` module
  * (`src/cli/startup.test.ts`).
  */
-import type { Refused } from "@bjornpagen/grizzle";
+import type { Refused, Witness } from "@bjornpagen/grizzle";
 import { Schema } from "effect";
-import type { RefusalWitness } from "#pantry/import/refusal.ts";
 
 /**
- * The kinds of witness a database refusal names its row by, checked against the kinds of
- * `RefusalWitness` of `#pantry/import/refusal.ts` both ways: a kind it adds or drops fails to
- * compile here.
+ * The kinds of witness a database refusal names its row by, checked against the kinds of grizzle's
+ * `Witness` both ways: a kind it adds or drops fails to compile here.
  */
 const witnessKinds = {
   key: "key",
-  row: "row",
   unreported: "unreported",
-} as const satisfies { readonly [Kind in RefusalWitness["kind"]]: Kind };
+} as const satisfies { readonly [Kind in Witness["kind"]]: Kind };
 
 /**
  * How a database refusal names the row that broke its laws: `key`, grizzle's key witness, the
- * violating row's key fields; `row`, a row the caller holds, with the fields beyond its key;
- * `unreported`, no row, for a foreign key or a law no stated row breaks as grizzle judges it.
+ * violating row's key fields; `unreported`, no row, for a foreign key or a law no stated row
+ * breaks as grizzle judges it.
  */
 export const WitnessKind = Schema.Literals(Object.values(witnessKinds));
 
