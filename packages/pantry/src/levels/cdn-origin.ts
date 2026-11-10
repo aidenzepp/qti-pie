@@ -5,7 +5,11 @@
  * type ({@link governorsOf}), every image candidate of a `srcset` is one address
  * ({@link candidatesPattern}), and so is the text of a `qti-file-href`. A value the player would
  * fetch from another host, a relative one, a `data:` one and one written through an entity
- * reference are all refused: only the origin's own text, written out, starts the value.
+ * reference are all refused: only the origin's own text, written out, starts the value. A fetched
+ * attribute that keeps an entity reference anywhere is refused too: crust keeps one only where its
+ * declaration may sit in the external subset, which it never reads, while a player that reads the
+ * subset expands it, so the kept form may hide an off-origin candidate in a `srcset`'s
+ * descriptors.
  *
  * The rule is stated at the `Cdn` level (`singleCdn`, `#pantry/levels/cdn.ts`), never as a law of
  * `Qti`: three derived relations over `Qti` select the fetched values, each with the text its
@@ -139,7 +143,7 @@ const textGovernors = governorsOf(fetchedTexts);
 /**
  * Select, over a base level, the attributes a player fetches in one address form: each `(node, id)`
  * whose name is one a kind fetches in that form, under a governor of such a kind, with its lexical
- * form as `value`.
+ * form as `value` and its count of kept entity references as `entities`.
  *
  * @param base - The level the query reads, pantry's `Qti`.
  * @param form - The address form.
@@ -147,11 +151,11 @@ const textGovernors = governorsOf(fetchedTexts);
  */
 const fetchedAttributesIn = (base: QtiSchema, form: AddressForm) =>
   query(base).rule((r) => {
-    const { governs, id, kind, lexical, name, node, version } = v(Attribute, "attribute");
+    const { entities, governs, id, kind, lexical, name, node, version } = v(Attribute, "attribute");
     const { governor } = v(GoverningOf, "governing");
 
     return r
-      .match(Attribute, { governs, id, kind, lexical, name, node, version })
+      .match(Attribute, { entities, governs, id, kind, lexical, name, node, version })
       .match(GoverningOf, { governor, governs, kind, version })
       .where(
         r.or(
@@ -162,7 +166,7 @@ const fetchedAttributesIn = (base: QtiSchema, form: AddressForm) =>
             ),
         ),
       )
-      .find({ id, node, value: lexical });
+      .find({ entities, id, node, value: lexical });
   });
 
 /**
@@ -189,9 +193,9 @@ const fetchedTextsOf = (base: QtiSchema) =>
  * judges, by name, and a `CdnOrigin` check over each.
  *
  * - `CdnFetchedAddress`: the fetched attributes read as one address, each held to
- *   {@link addressPattern};
+ *   {@link addressPattern} and to keep no entity reference;
  * - `CdnFetchedCandidates`: the fetched attributes read as a `srcset`, each held to
- *   {@link candidatesPattern};
+ *   {@link candidatesPattern} and to keep no entity reference;
  * - `CdnFetchedText`: the fetched texts, each held to {@link addressPattern}.
  *
  * Each check is a trigger's violation query, and grizzle compiles a match in a query only over a
@@ -216,8 +220,12 @@ export const cdnOriginRule = (base: QtiSchema, origin: string) => {
   return {
     relations: { CdnFetchedAddress, CdnFetchedCandidates, CdnFetchedText },
     statements: [
-      check("CdnOrigin", CdnFetchedAddress, (f) => Compute.matches(f.value, address)),
-      check("CdnOrigin", CdnFetchedCandidates, (f) => Compute.matches(f.value, candidates)),
+      check("CdnOrigin", CdnFetchedAddress, (f) =>
+        f.and(f.eq(f.entities, 0n), Compute.matches(f.value, address)),
+      ),
+      check("CdnOrigin", CdnFetchedCandidates, (f) =>
+        f.and(f.eq(f.entities, 0n), Compute.matches(f.value, candidates)),
+      ),
       check("CdnOrigin", CdnFetchedText, (f) => Compute.matches(f.value, address)),
     ] as const,
   };

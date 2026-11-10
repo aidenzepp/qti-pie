@@ -12,6 +12,10 @@
  *   srcset parser, written from the HTML Standard, and the URL Standard's leading strip; and every
  *   address a pattern admits against the URL Standard's own parser (Node's `URL`), which must
  *   resolve it on the origin.
+ * - **Its two bypasses** (decision 488): an entity reference crust keeps unexpanded, which a player
+ *   reading the external subset expands, is refused in a fetched attribute however the rest of its
+ *   value reads; and every governing type the base model admits on a fetched kind is one the rule
+ *   selects, so no `xsi:type` takes a fetched value out of it.
  */
 import { spawn } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -26,9 +30,16 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter } from "effect";
+import { GoverningOf, XsiType } from "#pantry/grammar/install.ts";
 import { singleCdn } from "#pantry/levels/cdn.ts";
-import { addressPattern, candidatesPattern } from "#pantry/levels/cdn-origin.ts";
+import {
+  addressPattern,
+  candidatesPattern,
+  cdnOriginRule,
+  governorsOf,
+} from "#pantry/levels/cdn-origin.ts";
 import { qti } from "#pantry/qti/schema.ts";
+import { fetchedAttributes, fetchedTexts } from "#pantry/vocab/fetched.ts";
 
 /**
  * The origins every case is judged under: one plain, and one with a port and a hyphen, so a
@@ -444,4 +455,81 @@ describe("levels/cdn-origin.ts, the patterns", () => {
         ),
       ),
   );
+});
+
+/**
+ * A fetched kind's value under each governing type, one per fetched attribute and fetched text,
+ * with the governors the rule selects it under.
+ */
+const fetchedUnderGovernors = [
+  ...fetchedAttributes.map(({ form, kind, name }) => ({
+    governors: governorsOf(
+      fetchedAttributes
+        .filter((row) => row.form === form && row.name === name)
+        .map((row) => row.kind),
+    ),
+    kind,
+    what: `${kind}'s ${name}`,
+  })),
+  ...fetchedTexts.map((kind) => ({
+    governors: governorsOf(fetchedTexts),
+    kind,
+    what: `${kind}'s text`,
+  })),
+];
+
+describe("levels/cdn-origin.ts, the bypasses", () => {
+  it("refuses an entity reference kept in a fetched attribute, which a srcset's pattern admits while its expansion is off the origin", () => {
+    // Oracle: XML 1.0 section 4.4 (a validating player includes the replacement text of an entity
+    // the external subset declares, which crust never reads and keeps as `&name;`), and HTML's
+    // srcset parser as `candidateUrls` writes it. Decision 488, claim 1. Evidence without a
+    // database: the pattern admits the kept form, so the rule must judge each row's count of kept
+    // references, which each relation of fetched attributes then carries for its check.
+    const kept = `${origin}a.png 1x&far;`;
+    const expanded = kept.replace("&far;", ", https://elsewhere.example.test/b.png 2x");
+    const { relations } = cdnOriginRule(qti(), origin);
+
+    assert.isTrue(patternOf(origin, "candidates").test(kept), `the pattern refuses ${kept}`);
+    assert.isFalse(
+      candidateUrls(expanded).every((url) => url.startsWith(origin)),
+      `${expanded} holds no candidate off the origin`,
+    );
+    for (const relation of [relations.CdnFetchedAddress, relations.CdnFetchedCandidates]) {
+      assert.include(
+        Object.keys(relation.heading),
+        "entities",
+        `${relation.name} judges no count of kept entity references`,
+      );
+    }
+  });
+
+  it("selects each fetched value under every governing type the base model admits on its kind, so no xsi:type takes one out of the rule", () => {
+    // Oracle: Qti's "XsiType derived" containment holds every element that is not foreign to an
+    // `XsiType` row of its kind, and `GoverningOf` gives each row its governor; an xsi:type naming
+    // any other type is refused before the rule judges anything. Decision 488, claim 2.
+    const admitted = fetchedUnderGovernors.flatMap(({ governors, kind, what }) =>
+      XsiType.rows
+        .filter((row) => row.kind === kind)
+        .map(({ type, version }) => ({
+          selected: GoverningOf.rows.some(
+            (row) =>
+              row.version === version &&
+              row.kind === kind &&
+              row.governs === type &&
+              governors.includes(row.governor),
+          ),
+          shown: `${what} under ${type} in ${version}`,
+        })),
+    );
+
+    assert.deepStrictEqual(
+      fetchedUnderGovernors.filter(({ kind }) => !XsiType.rows.some((row) => row.kind === kind)),
+      [],
+      "a fetched kind no governing type admits",
+    );
+    assert.deepStrictEqual(
+      admitted.filter(({ selected }) => !selected).map(({ shown }) => shown),
+      [],
+    );
+  });
 });
