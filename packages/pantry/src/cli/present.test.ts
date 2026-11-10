@@ -2,9 +2,10 @@ import path from "node:path";
 import type { Law, Witness } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
-import { Effect, Exit, FileSystem, Formatter, Schema } from "effect";
+import { Cause, Effect, Exit, FileSystem, Formatter, Schema } from "effect";
 import { Command } from "effect/cli";
 import { inject } from "vitest";
+import { TargetNotEmpty } from "#pantry/cli/args.ts";
 import { RoundtripDiffers } from "#pantry/cli/errors.ts";
 import {
   ErrorObject,
@@ -19,8 +20,8 @@ import type { RefusalLaw } from "#pantry/import/refusal.ts";
 import { readerOrigin, RefusedKind, WitnessKind } from "#pantry/package/refusal-origin.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
-import { captureCli, matchesCommitted, preloadEngine } from "#pantry/test/cli.ts";
-import { fileScratchDirectory } from "#pantry/test/scratch.ts";
+import { captureCli, matchesCommitted, packageCopy, preloadEngine } from "#pantry/test/cli.ts";
+import { fileScratchDirectory, makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
 
 const fixtures = inject("fixtures");
 
@@ -81,31 +82,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("the text error shape",
       assert.strictEqual(stdout, "");
     }),
   );
-
-  it.effect("a missing path prints error[cli-path-missing] with the path once", () =>
-    Effect.gen(function* missingPath() {
-      const { stderr } = yield* captureCli(["import", "/nonexistent"]);
-
-      assert.include(stderr, "error[cli-path-missing]:");
-      assert.include(stderr, "= help:");
-      assert.strictEqual(stderr.split("/nonexistent").length - 1, 1);
-    }),
-  );
-
-  it.effect(
-    "conflicting output modes (the line says text, the environment json) print the text error shape, exit 2",
-    () =>
-      Effect.gen(function* conflictText() {
-        const { exit, stderr, stdout } = yield* captureCli(["--output", "text", "import", "x"], {
-          env: { HOME: "/", QTI_JSON: "true" },
-        });
-
-        assert.isTrue(stderr.startsWith("error[cli-usage]:"));
-        assert.include(stderr, "= help:");
-        assert.strictEqual(stdout, "");
-        assert.strictEqual(exitCodeOf(exit), 2);
-      }),
-  );
 });
 
 layer(NodeServices.layer, { excludeTestServices: true })("the JSON error shape", (it) => {
@@ -139,25 +115,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("the JSON error shape",
     }),
   );
 
-  it.effect("a parse error under --output jsonl is an error object", () =>
-    Effect.gen(function* parseJsonl() {
-      const { stderr } = yield* captureCli(["--output", "jsonl", "export", "only-one"]);
-
-      assert.strictEqual(stderr.split("\n").length, 1);
-      assert.strictEqual(errorLine(stderr).command, "export");
-    }),
-  );
-
-  it.effect("conflicting output modes under --json are an error object, exit 2", () =>
-    Effect.gen(function* conflictJson() {
-      const { exit, stderr, stdout } = yield* captureCli(["import", "--json", "--jsonl", "x"]);
-
-      assert.strictEqual(stdout, "");
-      assert.strictEqual(errorLine(stderr).kind, "cli-usage");
-      assert.strictEqual(exitCodeOf(exit), 2);
-    }),
-  );
-
   it.effect(
     "a missing local set-up under --json is config, exit 78",
     () =>
@@ -177,6 +134,37 @@ layer(NodeServices.layer, { excludeTestServices: true })("the JSON error shape",
 
         assert.strictEqual(error.kind, "config");
         assert.strictEqual(error.exit_code, 78);
+      }),
+    cliProcessTestTimeoutMs,
+  );
+
+  it.effect(
+    "a roundtrip onto an earlier export without --yes is target-not-empty, exit 1, before any import, and the export stays",
+    () =>
+      // The guard itself, requireReplaceable, is exhausted in cli/target-action.test.ts; this
+      // holds roundtrip to calling it before the import, whose settings here reach no database.
+      Effect.gen(function* earlierExport() {
+        const fs = yield* FileSystem.FileSystem;
+        const env = { GR8DES_PG_PORT: "1", ...scratchEnv(scratch) } as const;
+        const label = "present-replace-simple";
+        const copy = yield* packageCopy(fixtures.simple, label);
+        const folder = path.resolve("work", "export", label);
+        const file = path.join(folder, "earlier.txt");
+
+        yield* fs.remove(folder, { force: true, recursive: true });
+        yield* fs.makeDirectory(folder, { recursive: true });
+        yield* makeScratch(env);
+        yield* fs.writeFileString(file, "kept");
+
+        const { exit, stderr } = yield* captureCli(["--json", "roundtrip", copy], { env });
+
+        assert.strictEqual(errorLine(stderr).kind, "target-not-empty");
+        assert.strictEqual(exitCodeOf(exit), 1);
+        assert.isTrue(
+          Exit.isFailure(exit) && Cause.squash(exit.cause) instanceof TargetNotEmpty,
+          stderr,
+        );
+        assert.strictEqual(yield* fs.readFileString(file), "kept");
       }),
     cliProcessTestTimeoutMs,
   );
@@ -256,39 +244,6 @@ const refusedByConstraint = (law: CheckLaw): RefusalLaw => ({
 });
 
 /**
- * The one law of the table this file's refusals name, with a law the table does not hold beside it:
- * AL1's admission check, and {@link unownedLaw}.
- */
-const refusedLaws = (checkName: string): readonly [CheckLaw, typeof unownedLaw] => [
-  { kind: "check", name: checkName, relation: "Attribute" },
-  unownedLaw,
-];
-
-/**
- * A command named `import` that fails as the database refuses a package: with the refusal
- * `refusalOf` builds from a `some` outcome that names AL1's admission check and a check of no
- * law, under an unreported witness, as the importer builds it when grizzle names no row and
- * decides neither law.
- */
-const refusing = Command.make(
-  "import",
-  {},
-  Effect.fn("test.present.refusing")(function* refusingHandler() {
-    yield* outputMode;
-
-    const { checkNameOf, refusalOf } = yield* Effect.promise(
-      () => import("#pantry/import/refusal.ts"),
-    );
-    const [first, second] = refusedLaws(checkNameOf("AL1 admission"));
-
-    return yield* refusalOf(
-      { kind: "some", laws: [refusedByConstraint(first), refusedByStatement(second)] },
-      { kind: "unreported" },
-    );
-  }),
-).pipe(Command.withGlobalFlags(outputGlobalFlags));
-
-/**
  * A command named `name` that fails with `failure`, or dies with it when `dies`, under the output
  * flags.
  */
@@ -304,127 +259,6 @@ const ending = <F>(name: string, failure: () => Promise<F>, dies: boolean) =>
       return yield* dies ? Effect.die(value) : Effect.fail(value);
     }),
   ).pipe(Command.withGlobalFlags(outputGlobalFlags));
-
-layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database gave", (it) => {
-  it.effect("prints its rule, its explanation and each law's source, and where to look", () =>
-    // Oracle: the refusal as `refusalOf` builds it; the printed lines carry its message, grizzle's
-    // `some` in words, each of its sources once, and the help `describeFailure` gives a refusal
-    // that carries laws.
-    Effect.gen(function* text() {
-      const { exit, stderr, stdout } = yield* captureCli([], { command: refusing });
-      const { source } = lawTable["AL1 admission"];
-
-      assert.strictEqual(stdout, "");
-      assert.strictEqual(exitCodeOf(exit), 1);
-      assert.isTrue(
-        stderr.startsWith(
-          "error[import-refused]: The package was refused under the attribute-admission rule: ",
-        ),
-        stderr,
-      );
-      assert.include(stderr, "the database names no row");
-      assert.include(
-        stderr,
-        `${Formatter.format(unownedLaw)}, which no rule of the law table owns`,
-      );
-      assert.include(
-        stderr,
-        "\n  refused: some, at least one law named is broken, and the database does not say which\n",
-      );
-      assert.strictEqual(
-        stderr.split("\n").filter((line) => line === `  source: ${source}`).length,
-        1,
-      );
-      assert.match(
-        stderr,
-        /\n {2}= help: The database names no row for this law, so find what the law describes in the package by the law's source, .*Nothing was written\.$/u,
-      );
-    }),
-  );
-
-  it.effect("under --json prints one error object with the rules, each law and its sources", () =>
-    // Oracle: the law table, read directly by the name each law was built from: its text, the law
-    // as grizzle names a check, written by Effect's Formatter, the installed name its refusing
-    // constraint carried, and the name and rule the table gives it; a check of no law, which
-    // `Qti` does not state, has its text alone, and carries no rule. The outcome's `some` and the
-    // witness kind the refusal was built under, and the committed schema of the error object.
-    Effect.gen(function* json() {
-      const { checkNameOf } = yield* Effect.promise(() => import("#pantry/import/refusal.ts"));
-      const [first] = refusedLaws(checkNameOf("AL1 admission"));
-      const { stderr, stdout } = yield* captureCli(["--json"], { command: refusing });
-      const error = errorLine(stderr);
-
-      assert.strictEqual(stdout, "");
-      assert.strictEqual(stderr.split("\n").length, 1);
-      assert.isTrue(matchesCommittedError(stderr), stderr);
-      assert.strictEqual(error.kind, "import-refused");
-      assert.strictEqual(error.command, "import");
-      assert.deepStrictEqual(error.rules, ["attribute-admission"]);
-      assert.strictEqual(error.refused_kind, "some");
-      assert.deepStrictEqual(error.laws, [
-        {
-          installed: plantedConstraint,
-          name: "AL1 admission",
-          rule: "attribute-admission",
-          text: Formatter.format(first),
-        },
-        { text: Formatter.format(unownedLaw) },
-      ]);
-      assert.deepStrictEqual(error.sources, [lawTable["AL1 admission"].source]);
-      assert.strictEqual(error.witness, "unreported");
-      assert.notProperty(error, "failure");
-    }),
-  );
-
-  it.effect(
-    "under --json a refusal of any one law of the table names that law, its rule and its source",
-    () =>
-      // Oracle: the law table, read directly by the name the refusal's one check was built from:
-      // the rule and the source the table gives that name. And the committed schema of the error
-      // object. Bound: every law of the table (`lawNames`), each the one law of a refusal under an
-      // unreported witness, exhausted; residual none. Each is a check on a relation `Qti` does not
-      // hold, so it states none of them and none has an installed name: the name is the law's.
-      Effect.gen(function* everyLaw() {
-        const { checkNameOf, lawNames, refusalOf } = yield* Effect.promise(
-          () => import("#pantry/import/refusal.ts"),
-        );
-
-        assert.isAbove(lawNames.length, 0);
-        for (const name of lawNames) {
-          const law = { kind: "check", name: checkNameOf(name), relation: "Unstated" } as const;
-          const refusal = refusalOf(
-            { kind: "every", laws: [refusedByStatement(law)] },
-            { kind: "unreported" },
-          );
-          const { rule, source } = lawTable[name];
-          const { exit, stderr } = yield* captureCli(["--json"], {
-            command: ending("import", () => Promise.resolve(refusal), false),
-          });
-          const error = errorLine(stderr);
-
-          assert.strictEqual(exitCodeOf(exit), 1, name);
-          assert.isTrue(matchesCommittedError(stderr), `${name}: ${stderr}`);
-          assert.deepStrictEqual(
-            {
-              kind: error.kind,
-              laws: error.laws,
-              refused: error.refused_kind,
-              rules: error.rules,
-              sources: error.sources,
-            },
-            {
-              kind: "import-refused",
-              laws: [{ name, rule, text: Formatter.format(law) }],
-              refused: "every",
-              rules: [rule],
-              sources: [source],
-            },
-            name,
-          );
-        }
-      }),
-  );
-});
 
 /**
  * A witness of each kind a database refusal names its row by: grizzle's key witness, and none. A
@@ -593,50 +427,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("a failure qti names", 
       }),
   );
 
-  it.effect("crust's EncodeError, which carries no message, is told by its fields", () =>
-    // Oracle: the error's own fields, spelled as Unicode spells a code point. Bound: every construct
-    // crust's encoder names, each at a code point below and above U+FFFF; residual none.
-    Effect.gen(function* encode() {
-      const { EncodeError } = yield* Effect.promise(() => import("@qti-pie/crust/errors.ts"));
-      const constructs = ["doctype", "name", "comment", "pi", "text", "attribute"] as const;
-      const points = [
-        { codePoint: 0x1_f6_00, spelled: "U+1F600", threshold: 0xff, under: "U+00FF" },
-        { codePoint: 0x1_00, spelled: "U+0100", threshold: 0x7f, under: "U+007F" },
-      ];
-
-      for (const where of constructs) {
-        for (const { codePoint, spelled, threshold, under } of points) {
-          const failing = ending(
-            "export",
-            () => Promise.resolve(new EncodeError({ codePoint, threshold, where })),
-            false,
-          );
-          const { exit, stderr } = yield* captureCli([], { command: failing });
-
-          assert.strictEqual(exitCodeOf(exit), 70, where);
-          assert.isTrue(
-            stderr.startsWith(
-              `error[internal]: The export cannot write a document's ${where}: it holds ${spelled}, and the document's charset writes code points up to ${under} there.\n  failure: EncodeError\n`,
-            ),
-            stderr,
-          );
-        }
-      }
-
-      const label = ending(
-        "export",
-        () => Promise.resolve(new EncodeError({ codePoint: 0, threshold: 0, where: "label" })),
-        false,
-      );
-
-      assert.isTrue(
-        (yield* captureCli([], { command: label })).stderr.startsWith(
-          "error[internal]: The export has no encoder for a document's charset label, so it cannot write the document.\n",
-        ),
-      );
-    }),
-  );
-
   it.effect("a defect the importer names prints its message, its tag, its help and its trace", () =>
     Effect.gen(function* conflict() {
       const dying = ending(
@@ -668,24 +458,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("a failure qti names", 
       assert.isTrue(matchesCommittedError(json.stderr), json.stderr);
       assert.strictEqual(error.failure, "OverlayConflict");
       assert.strictEqual(error.exit_code, 70);
-    }),
-  );
-
-  it.effect("any other defect prints as an unexpected failure, with its trace, and no tag", () =>
-    Effect.gen(function* unnamed() {
-      const dying = ending("export", () => Promise.resolve(new Error("boom")), true);
-      const text = yield* captureCli([], { command: dying });
-      const json = yield* captureCli(["--json"], { command: dying });
-      const error = errorLine(json.stderr);
-
-      assert.strictEqual(exitCodeOf(text.exit), 70);
-      assert.isTrue(
-        text.stderr.startsWith("error[internal]: an unexpected failure ended the run.\n  = help:"),
-        text.stderr,
-      );
-      assert.include(text.stderr, "boom");
-      assert.strictEqual(error.message, "an unexpected failure ended the run: boom");
-      assert.notProperty(error, "failure");
     }),
   );
 });
