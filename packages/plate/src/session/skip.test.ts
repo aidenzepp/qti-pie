@@ -5,7 +5,8 @@ import type { Configuration } from "#plate/configuration.ts";
 import { modules } from "#plate/model/interactions.ts";
 import { IntentRefused, advance } from "#plate/session/advance.ts";
 import type { AdvanceFailure } from "#plate/session/advance.ts";
-import type { TestSession } from "#plate/session/session.ts";
+import type { Value } from "#plate/model/values.ts";
+import type { Responses, Step, TestSession } from "#plate/session/session.ts";
 import { startTest } from "#plate/session/start.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
@@ -32,6 +33,22 @@ const startedAt = new Date("2026-11-06T10:00:00.000Z");
 const steppedAt = new Date("2026-11-06T10:00:05.000Z");
 
 /**
+ * Write the text of a hand-built item that holds response declarations and a body.
+ *
+ * @param identifier The item's identifier.
+ * @param declarations The item's `qti-response-declaration` elements, written out.
+ * @param body The item body's content.
+ * @returns The item's text.
+ */
+const declaredXml = (identifier: string, declarations: string, body: string): string =>
+  [
+    `<qti-assessment-item xmlns="${namespace}" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    declarations,
+    `<qti-item-body>${body}</qti-item-body>`,
+    "</qti-assessment-item>",
+  ].join("");
+
+/**
  * Write the text of a hand-built item that declares `RESPONSE` and holds a body.
  *
  * @param identifier The item's identifier.
@@ -40,12 +57,7 @@ const steppedAt = new Date("2026-11-06T10:00:05.000Z");
  * @returns The item's text.
  */
 const itemXml = (identifier: string, declaration: string, body: string): string =>
-  [
-    `<qti-assessment-item xmlns="${namespace}" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
-    `<qti-response-declaration identifier="RESPONSE" ${declaration}/>`,
-    `<qti-item-body>${body}</qti-item-body>`,
-    "</qti-assessment-item>",
-  ].join("");
+  declaredXml(identifier, `<qti-response-declaration identifier="RESPONSE" ${declaration}/>`, body);
 
 /**
  * The kind of {@link stubItem}'s one interaction: one whose module is a stub. The item's element
@@ -102,6 +114,74 @@ const choiceItem = (identifier: string): string =>
       "</qti-choice-interaction>",
     ].join(""),
   );
+
+/**
+ * The `HINT` declaration of an item with an End Attempt: the single boolean the interaction binds.
+ */
+const hintDeclaration =
+  '<qti-response-declaration identifier="HINT" cardinality="single" base-type="boolean"/>';
+
+/**
+ * The paragraph that holds an End Attempt bound to `HINT`.
+ */
+const hintParagraph =
+  '<p><qti-end-attempt-interaction response-identifier="HINT" title="Hint"/></p>';
+
+/**
+ * An item with a Choice bound to `RESPONSE`, which the page can post, and an End Attempt bound to
+ * `HINT`.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const hintItem = (identifier: string): string =>
+  declaredXml(
+    identifier,
+    [
+      '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>',
+      hintDeclaration,
+    ].join(""),
+    [
+      '<qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">',
+      '<qti-simple-choice identifier="A">Choice A</qti-simple-choice>',
+      '<qti-simple-choice identifier="B">Choice B</qti-simple-choice>',
+      "</qti-choice-interaction>",
+      hintParagraph,
+    ].join(""),
+  );
+
+/**
+ * An item whose only interaction is an End Attempt bound to `HINT`, the one response it declares.
+ */
+const hintOnlyItem = declaredXml("held", hintDeclaration, hintParagraph);
+
+/**
+ * The value of an End Attempt's response when the candidate ended the attempt through its button.
+ */
+const pressed: Value = {
+  baseType: "boolean",
+  cardinality: "single",
+  values: [{ baseType: "boolean", value: true }],
+};
+
+/**
+ * The value an End Attempt's response takes when the attempt ended another way, which the form
+ * sets for a post that carries no entry for the button.
+ */
+const unpressed: Value = {
+  baseType: "boolean",
+  cardinality: "single",
+  values: [{ baseType: "boolean", value: false }],
+};
+
+/**
+ * The value of a Choice's response when the candidate chose `A`.
+ */
+const chosen: Value = {
+  baseType: "identifier",
+  cardinality: "single",
+  values: [{ baseType: "identifier", value: "A" }],
+};
 
 /**
  * The text of a test of one linear, individual part under `allow-skipping="false"`, whose section
@@ -165,6 +245,31 @@ const heldOf = (given: Delivery): Accepted =>
   given.items.get("held") ?? assert.fail("the delivery holds no item for held");
 
 /**
+ * Take one step on a session of a delivery just started.
+ *
+ * @param given The test and its items.
+ * @param step The request.
+ * @param configuration The host's configuration.
+ * @returns What `advance` gave.
+ */
+const taken = (
+  given: Delivery,
+  step: Step,
+  configuration: Configuration,
+): Result.Result<TestSession, AdvanceFailure> =>
+  advance(
+    given.test,
+    given.items,
+    Result.getOrElse(
+      startTest(given.test, given.items, configuration, { instance, now: startedAt }),
+      (failure) => assert.fail(`startTest refused: ${failure.message}`),
+    ),
+    step,
+    configuration,
+    { now: steppedAt },
+  );
+
+/**
  * Take one step of an intent that posts no response, on a session of a delivery just started.
  *
  * @param given The test and its items.
@@ -176,18 +281,24 @@ const stepped = (
   given: Delivery,
   kind: "next" | "submit-item",
   configuration: Configuration,
+): Result.Result<TestSession, AdvanceFailure> => taken(given, { intent: { kind } }, configuration);
+
+/**
+ * Take one step of an intent that posts responses, on a session of a delivery just started.
+ *
+ * @param given The test and its items.
+ * @param kind The intent.
+ * @param responses The responses the step posts, by identifier.
+ * @param configuration The host's configuration.
+ * @returns What `advance` gave.
+ */
+const steppedWith = (
+  given: Delivery,
+  kind: "next" | "submit-item",
+  responses: Responses,
+  configuration: Configuration,
 ): Result.Result<TestSession, AdvanceFailure> =>
-  advance(
-    given.test,
-    given.items,
-    Result.getOrElse(
-      startTest(given.test, given.items, configuration, { instance, now: startedAt }),
-      (failure) => assert.fail(`startTest refused: ${failure.message}`),
-    ),
-    { intent: { kind } },
-    configuration,
-    { now: steppedAt },
-  );
+  taken(given, { intent: { kind }, responses }, configuration);
 
 /**
  * Require `advance` to accept a step.
@@ -277,5 +388,65 @@ describe("the skip test under allow-skipping false", () => {
           );
         }
       }),
+  );
+
+  it.effect(
+    "[Q-4] [T-4] under allow-skipping false, a submission whose only non-NULL response is an End Attempt's false is a skip",
+    () =>
+      Effect.gen(function* endAttemptFalse() {
+        const given = yield* delivery(hintItem("held"));
+        const configuration = yield* configure({});
+
+        assert.sameMembers([...heldOf(given).item.responses.keys()], ["HINT", "RESPONSE"]);
+        for (const kind of ["submit-item", "next"] as const) {
+          assert.strictEqual(
+            refusedRule(steppedWith(given, kind, { HINT: unpressed }, configuration)),
+            "skipping-not-allowed",
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-4] [T-4] pressing the End Attempt alone does not answer the item: HINT true with the Choice NULL is still a skip",
+    () =>
+      Effect.gen(function* endAttemptTrue() {
+        const given = yield* delivery(hintItem("held"));
+        const configuration = yield* configure({});
+
+        for (const kind of ["submit-item", "next"] as const) {
+          assert.strictEqual(
+            refusedRule(steppedWith(given, kind, { HINT: pressed }, configuration)),
+            "skipping-not-allowed",
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-4] [T-4] an answered Choice beside an End Attempt submits, whatever HINT holds",
+    () =>
+      Effect.gen(function* answeredBesideEndAttempt() {
+        const given = yield* delivery(hintItem("held"));
+        const configuration = yield* configure({});
+
+        for (const hint of [unpressed, pressed]) {
+          const submitted = accepted(
+            steppedWith(given, "submit-item", { HINT: hint, RESPONSE: chosen }, configuration),
+          );
+
+          assert.strictEqual(submitted.items[0]?.record.numAttempts, 1);
+        }
+      }),
+  );
+
+  it.effect("[Q-4] [T-4] an item whose only interaction is an End Attempt is never skipped", () =>
+    Effect.gen(function* onlyEndAttempt() {
+      const given = yield* delivery(hintOnlyItem);
+      const configuration = yield* configure({});
+
+      assert.sameMembers([...heldOf(given).item.responses.keys()], ["HINT"]);
+      proceeds(given, configuration);
+    }),
   );
 });

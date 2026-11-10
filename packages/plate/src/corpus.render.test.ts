@@ -491,18 +491,28 @@ const r1Problems = (rendering: Rendering, where: string, root: Element): readonl
 
 /**
  * Place a state's root in the page the plain-HTML host serves (`itemPage` and `pageResponse` in
- * `src/hosts/html.ts`): an `html` carrying the configuration's locale as `lang`, its `body` and
- * `main`, and in them the host's `form method="post" autocomplete="off"` around the rendered root
- * and the host's own submit button. The `submit-order` check reads a submit button against the
- * form that holds it, so an item that renders one, an End Attempt's, is judged in the form a host
- * serves; `lang` sits where the host writes it, on the `html` the check reads as the tree's root.
+ * `src/hosts/html.ts`).
+ *
+ * `checkTree` judges a page and the sweep's items are rendered into one, so the wrapper may add
+ * `html`, `body`, `main` and the host's form: `form method="post" autocomplete="off"` around the
+ * rendered root and then the host's own submit button, the element children in the order
+ * `itemPage` writes them at this checkout. The `submit-order` check reads a submit button against
+ * the form that holds it, so an item that renders one, an End Attempt's, is judged in the form a
+ * host serves.
+ *
+ * The wrapper may not give the page a `lang` of its own: `html` carries the root's own `lang`,
+ * copied, and none when the root carries none. `checkTree`'s `lang` rule reads the tree's root,
+ * which here is `html`, and the emitter writes `payload.lang` on the rendered root, so a render
+ * that drops it fails the rule as it does when the root is checked alone; the configuration's
+ * locale, which the host writes, would hand the rule a value the render never gave.
  *
  * @param root The state's root element.
- * @param locale The locale the state rendered in, which the host writes as the page's `lang`.
  * @returns The page's root, `html`.
  */
-const hosted = (root: Element, locale: Configuration["locale"]): Element =>
-  h("html", { lang: locale }, [
+const hosted = (root: Element): Element => {
+  const lang = attribute(root, "lang");
+
+  return h("html", lang === undefined ? {} : { lang }, [
     h("body", {}, [
       h("main", {}, [
         h("form", { autocomplete: "off", method: "post" }, [
@@ -512,17 +522,18 @@ const hosted = (root: Element, locale: Configuration["locale"]): Element =>
       ]),
     ]),
   ]);
+};
 
 /**
  * Check one state with `checkTree` at base level 2, in the page a host serves ({@link hosted}).
  *
- * @param rendering The render, which gives the locale the host writes as the page's `lang`.
+ * @param rendering The render, which the sweep hands every check and this one does not read.
  * @param where The member and state, which every problem names.
  * @param root The state's root element.
  * @returns The violations, as one problem, or none.
  */
-const treeProblems = (rendering: Rendering, where: string, root: Element): readonly string[] => {
-  const violations = checkTree(hosted(root, rendering.locale), { baseLevel: 2 });
+const treeProblems = (_rendering: Rendering, where: string, root: Element): readonly string[] => {
+  const violations = checkTree(hosted(root), { baseLevel: 2 });
 
   return violations.length === 0
     ? []
@@ -727,6 +738,41 @@ describe("the verdict and render sweep over the corpus", { tags: ["corpus"] }, (
         const renderings = renderingsOf(yield* openCorpus, yield* configure({}));
 
         assert.deepStrictEqual(statesProblems(renderings, treeProblems), []);
+      }),
+    sweepTimeoutMs,
+  );
+
+  it.effect(
+    "[I-7] [I-8] the hosted page carries the root's lang, so a root without lang fails checkTree's lang rule",
+    () =>
+      Effect.gen(function* hostedLang() {
+        const rendering =
+          renderingsOf(yield* openCorpus, yield* configure({}))[0] ??
+          assert.fail("the corpus renders no item");
+        const state =
+          Result.getOrElse(rendering.states, (failure) =>
+            assert.fail(`${placeOf(rendering)} failed: ${failure._tag}: ${failure.message}`),
+          )[0] ?? assert.fail(`${placeOf(rendering)} rendered no state`);
+        const root = Option.getOrElse(rootOf(state.html), () =>
+          assert.fail(`${placeOf(rendering)}: the HTML is not exactly one element`),
+        );
+        const lang = attribute(root, "lang");
+        const stripped: Element = {
+          ...root,
+          attrs: Object.fromEntries(Object.entries(root.attrs).filter(([name]) => name !== "lang")),
+        };
+        const relabelled: Element = { ...root, attrs: { ...root.attrs, lang: "fr-CA" } };
+
+        assert.isTrue(lang !== undefined && lang !== "", "the rendered root carries a lang");
+        assert.deepStrictEqual(treeProblems(rendering, "probe", root), []);
+
+        const problems = treeProblems(rendering, "probe", stripped);
+
+        assert.strictEqual(problems.length, 1);
+        assert.include(problems[0], '"check":"lang"');
+        assert.strictEqual(attribute(hosted(root), "lang"), lang);
+        assert.strictEqual(attribute(hosted(relabelled), "lang"), "fr-CA");
+        assert.isFalse(Object.hasOwn(hosted(stripped).attrs, "lang"));
       }),
     sweepTimeoutMs,
   );
