@@ -13,12 +13,14 @@ import { readersOf } from "#plate/model/reader.ts";
 import { buildTest } from "#plate/model/test.ts";
 import type { Test } from "#plate/model/test.ts";
 import type { EmitState } from "#plate/payload.ts";
+import { advance } from "#plate/session/advance.ts";
 import { moveTargets } from "#plate/session/navigate.ts";
 import { startTest } from "#plate/session/start.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import { noSupports } from "#plate/supports.ts";
 import { TestFeatureNotImplemented, stub, testFeatureKeys } from "#plate/test-features/contract.ts";
 import type {
+  EnterContext,
   FeatureOwner,
   SequencePlace,
   TestContentRenderKit,
@@ -28,7 +30,13 @@ import type {
   TestFeatureNodes,
   TestParseContext,
 } from "#plate/test-features/contract.ts";
-import { deliveredBy, featureAt, gatedBy, sequencedBy } from "#plate/test-features/dispatch.ts";
+import {
+  deliveredBy,
+  enteredBy,
+  featureAt,
+  gatedBy,
+  sequencedBy,
+} from "#plate/test-features/dispatch.ts";
 import { rubricBlockModule } from "#plate/test-features/rubric-block.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
 import type { AnyTestFeature, TestFeatureTable } from "#plate/test-features/table.ts";
@@ -172,6 +180,7 @@ const recording = (source: SourceDocument): MarkRecording => {
 
   return {
     context: {
+      expression: () => Result.succeed(Option.none()),
       mark: (feature) => {
         marked.push(feature);
 
@@ -451,7 +460,7 @@ const startedSession = Effect.gen(function* startSession() {
     (failure) => assert.fail(`startTest refused: ${failure.message}`),
   );
 
-  return { session, test };
+  return { items, session, test };
 });
 
 describe("the test-feature modules", () => {
@@ -520,7 +529,7 @@ describe("a test-feature module not implemented", () => {
         { kind: "end-part" },
       ] as const) {
         assert.deepStrictEqual(
-          gatedBy(stubbed, { intent, now: Option.none(), session, test }),
+          gatedBy(stubbed, { intent, items: Option.none(), now: Option.none(), session, test }),
           Option.none(),
           intent.kind,
         );
@@ -542,6 +551,7 @@ describe("a test-feature module not implemented", () => {
         assert.deepStrictEqual(
           gatedBy(expiring, {
             intent: { kind: "submit-item" },
+            items: Option.none(),
             now: Option.none(),
             session,
             test: test.test,
@@ -551,12 +561,33 @@ describe("a test-feature module not implemented", () => {
         assert.deepStrictEqual(
           gatedBy(expiring, {
             intent: { kind: "next" },
+            items: Option.none(),
             now: Option.none(),
             session,
             test: test.test,
           }),
           Option.none(),
         );
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] lets every place be entered: its enter answers none, as enteredBy does over the stubs",
+    () =>
+      Effect.gen(function* enters() {
+        const { items, session, test } = yield* startedSession;
+        const context: EnterContext = {
+          items: Option.some(items),
+          now: Option.none(),
+          sequenceIndex: 2,
+          session,
+          test: test.test,
+        };
+        for (const module of stubs) {
+          assert.deepStrictEqual(module.enter(context), Option.none(), module.key);
+        }
+
+        assert.deepStrictEqual(enteredBy(stubbed, context), Option.none());
       }),
   );
 
@@ -675,6 +706,47 @@ describe("a test-feature module that has landed", () => {
         }
 
         assert.deepStrictEqual(decide({ kind: "go", sequenceIndex: 2 }), Result.succeed(2));
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] reaches the gate with the items: advance hands its gate the items it was given, and moveTargets alone hands none",
+    () =>
+      Effect.gen(function* gateItems() {
+        const { items, session, test } = yield* startedSession;
+        const configuration = yield* configure({});
+        const seen: Option.Option<ReadonlyMap<string, Accepted>>[] = [];
+        const recordingGate: TestFeatureTable = stubbed.map((module) =>
+          module.key === "qti-time-limits"
+            ? {
+                ...landedTimeLimits,
+                gate: (context) => {
+                  seen.push(context.items);
+
+                  return Option.none();
+                },
+              }
+            : module,
+        );
+        const decide = yield* Effect.fromResult(moveTargets(test, session, recordingGate));
+        decide({ kind: "next" });
+        yield* Effect.fromResult(
+          advance(test, items, session, { intent: { kind: "next" } }, configuration, {
+            features: recordingGate,
+            now: new Date(1000),
+          }),
+        );
+
+        const [alone, ...withinAdvance] = seen;
+
+        assert.deepStrictEqual(alone, Option.none());
+        assert.isNotEmpty(withinAdvance);
+        for (const held of withinAdvance) {
+          assert.deepStrictEqual(
+            held.pipe(Option.map((map) => [...map.keys()])),
+            Option.some(["i1", "i2"]),
+          );
+        }
       }),
   );
 

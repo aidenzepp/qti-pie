@@ -32,6 +32,7 @@ import { Data } from "effect";
 import type { Option, Result, Schema } from "effect";
 import type { SchemaKit } from "#plate/codec/redacted.ts";
 import type { SourceElement } from "#plate/document/source.ts";
+import type { AttachAnswer, ReferencingElement } from "#plate/emit/body.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import type { ParseContext, ReaderKit } from "#plate/interactions/contract.ts";
@@ -42,6 +43,8 @@ import type { CatalogSupport, Supports } from "#plate/supports.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import type { UncheckedReason } from "#plate/validate/verdict.ts";
 import type { OutcomeView } from "#plate/vocabulary.ts";
+
+export type { AttachAnswer } from "#plate/emit/body.ts";
 
 /**
  * A feature of the QTI 3.0 conformance list, Appendix A, by its identifier: `I-0` to `I-20` are the
@@ -339,6 +342,29 @@ export interface ItemContentModule<
   P = never,
   J = never,
 > extends ContentModuleBase<E, N, P, J> {
+  /**
+   * Attach beside a body element that references a catalog: the emitter hands each referencing
+   * element, once emitted, to the hub `attachedBy` in `#plate/content/modules.ts`, which asks every
+   * item-placed module that declares this and whose nodes the payload holds, in table order, and
+   * folds the answers: attributes merged in order (a later module's value wins), nodes
+   * concatenated, `place` `after-block` when any answer says so. The emitter then merges the
+   * attributes onto the element (its own win, `id` stays the authored or minted one) and places
+   * the nodes right after the element or after its nearest enclosing element at a flow position
+   * ({@link AttachAnswer}). The catalog module is the one that fills it: issue m3e-08 adds the base
+   * half, `#plate/content/catalog-info.ts` presenting the active cards' landed presenters for the
+   * reference and keeping in the listing the cards no presenter claims. Absent for a module that
+   * attaches nothing.
+   *
+   * @param reference The referencing element: the catalog's idref and the element's id.
+   * @param state The emit state.
+   * @param kit The render kit, whose `nodes` emits a card's content.
+   * @returns The answer, empty to attach nothing, or the refusal of a part swap.
+   */
+  readonly attach?: (
+    reference: ReferencingElement,
+    state: EmitState,
+    kit: ContentRenderKit,
+  ) => Result.Result<AttachAnswer, PartSwapRefused>;
   /**
    * Read the element into its model node, or none once it has recorded the element's mark.
    */
