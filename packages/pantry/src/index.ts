@@ -15,6 +15,11 @@
  * field is internal. A `BaseType` handle is typed as a plain `string`, so
  * `PublishedRow<"BaseType">` does not narrow its `id` to the roster's handles.
  *
+ * Runtime: the programs that read or write the database run on the author login. An app provides
+ * the login's `DbLayer<AuthorRole>` and, beside it, `ServedAuthorLogin`: the login served from its
+ * committed served file (grizzle's `served`), which that layer is built over and whose author role
+ * each program opens its `Db` on. It is the one thing an app provides beside its layer.
+ *
  * Programs: `importPackage` stores a package and `previewPackage` reads it without a database, each
  * succeeding with a verdict (`ImportVerdict`, `PreviewVerdict`) that carries a `Refusal` when the
  * package is refused, so a refusal is a value and never an error. `exportPackage` gives a stored

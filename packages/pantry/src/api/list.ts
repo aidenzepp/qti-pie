@@ -31,12 +31,12 @@ export type PackageListing = Pick<Fact<typeof Package>, "id" | "name">;
 
 /**
  * One document of a package as the document listing gives it: its node, which is the document's id,
- * its package, its entry path, the manifest resource type that names it and its root element's
- * kind, each a published field of `Document`.
+ * its package, its entry path, its type in the package (`manifest` for the manifest, else the type
+ * of the resource that lists it) and its root element's kind, each a published field of `Document`.
  */
 export type DocumentListing = Pick<
   Fact<typeof Document>,
-  "node" | "package" | "path" | "resourceType" | "rootKind"
+  "node" | "package" | "path" | "documentType" | "rootKind"
 >;
 
 /**

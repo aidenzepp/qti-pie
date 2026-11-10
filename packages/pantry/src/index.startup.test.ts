@@ -12,7 +12,7 @@ import { Effect, FileSystem, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 import { cliProcessTestTimeoutMs } from "#pantry/test/settings.ts";
-import { staticImports } from "#pantry/test/static-imports.ts";
+import { valueImports } from "#pantry/test/module-imports.ts";
 
 /**
  * The `src` folder, where `#pantry/<x>` resolves to `src/<x>`.
@@ -57,7 +57,8 @@ const awaitsAtLoad = (source: string): boolean =>
   topLevelAwait.test(source.replaceAll(/\/\*[\s\S]*?\*\//gu, "").replaceAll(/^\s*\/\/.*$/gmu, ""));
 
 /**
- * List every module the entry reaches through static `#pantry/` imports.
+ * List every module the entry reaches through the `#pantry/` imports that bring a value in when it
+ * loads (`#pantry/test/module-imports.ts` `valueImports`).
  *
  * @param entry - The absolute path of the module to start from.
  * @param read - Reads a module's text.
@@ -74,7 +75,7 @@ const staticGraph = (
     const file = pending.pop() ?? entry;
 
     if (!graph.has(file)) {
-      const specifiers = staticImports(read(file)).map(({ specifier }) => specifier);
+      const specifiers = valueImports(read(file)).map(({ specifier }) => specifier);
 
       graph.set(file, specifiers);
       pending.push(
