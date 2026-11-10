@@ -1281,6 +1281,14 @@ const choiceNotice = "template-identifier";
 const parameterNotice = "param";
 
 /**
+ * What {@link printBody}'s walk reads of an item: its body, the nodes its content modules read, the
+ * template declarations that decide which `param` is a `param-variable` parameter, and the
+ * unsupported features that list its notices. Naming no more than that lets the walk run over body
+ * nodes that belong to no item ({@link printNodes}).
+ */
+type Printable = Pick<Item, "body" | "content" | "templates" | "unsupported">;
+
+/**
  * What a walk of {@link printBody} writes in place of a printed variable and of a `param-variable`
  * parameter the values cover: `"text"` writes the text each prints or passes, through
  * `formatPrinted`, as {@link redactItem} gives the page, at most `budget` characters of it in all;
@@ -1295,6 +1303,18 @@ type Writing = { readonly budget: number; readonly kind: "text" } | { readonly k
  * The walk that writes no text.
  */
 const structureOnly: Writing = { kind: "structure" };
+
+/**
+ * The walk that writes each printed text within the output budget a caller holds it to.
+ *
+ * @param limits The output budget, clamped to 1 to 536,870,888; none for the configuration's
+ *   default, 16,777,216.
+ * @returns The walk.
+ */
+const textWithin = (limits?: Pick<Configuration, "outputBudget">): Writing => ({
+  budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget),
+  kind: "text",
+});
 
 /**
  * The text of one printed variable or `param-variable` parameter, not yet formatted: given the most
@@ -1632,7 +1652,10 @@ const shownBy = (
  * @returns The declaration; none for an element other than `param`, and for a `param` whose
  *   `value` names no template variable or one not declared `param-variable`.
  */
-const parameterOf = (item: Item, node: BodyElement): Option.Option<TemplateDeclaration> =>
+const parameterOf = (
+  item: Pick<Item, "templates">,
+  node: BodyElement,
+): Option.Option<TemplateDeclaration> =>
   node.tag === "param"
     ? Arr.findFirst(node.attributes, (attribute) => attribute.name === "value").pipe(
         Option.flatMap(({ value }) => Option.fromUndefinedOr(item.templates.get(value))),
@@ -1682,7 +1705,7 @@ interface Expanded {
  *   some {@link Expanded} for a parameter the values expand; some none for one they withhold.
  */
 const expandedParameter = (
-  item: Item,
+  item: Printable,
   printing: Option.Option<RedactRecord>,
   node: BodyElement,
 ): Option.Option<Option.Option<Expanded>> =>
@@ -1783,7 +1806,7 @@ const expandedParameter = (
  *   the page sees that passed its bound, none under `"structure"`.
  */
 const printBody = (
-  item: Item,
+  item: Printable,
   printing: Option.Option<RedactRecord>,
   writing: Writing,
   supports: Supports,
@@ -2161,6 +2184,44 @@ const printBody = (
 };
 
 /**
+ * Show body nodes that belong to no item from the values given: the walk {@link redactItem} shows an
+ * item's body by, over these nodes alone, so a test's rubric or feedback prints its variables as an
+ * item's body does.
+ *
+ * A printed variable the record covers becomes a text node of what it prints, or nothing for NULL;
+ * one it does not cover, and every one when there is no record, stays its notice,
+ * `qti-printed-variable`. A template block or inline and a `param-variable` parameter are decided
+ * as for an item with no template declarations: the record's template values show or withhold a
+ * block or inline, and a `param` is never a `param-variable` parameter, so it keeps its `value`.
+ * The printed text is held to `limits.outputBudget` and to `formatPrinted`'s bound as for an item,
+ * the first text past either printing nothing; the nodes carry no `unprinted`, so a caller that
+ * must fail on a text left blank holds its own limit.
+ *
+ * It shares {@link printBody}'s walk with {@link redactItem}, which it leaves unchanged: the nodes
+ * are walked as an item's body with no unsupported features, no content nodes and no template
+ * declarations, and the item's notices and bindings are none of its output.
+ *
+ * @param nodes The body nodes.
+ * @param record The values the nodes are shown by, none to withhold every printed variable and
+ *   template block and inline.
+ * @param limits The output budget the printed text is held to, clamped to 1 to 536,870,888; none
+ *   for the configuration's default, 16,777,216.
+ * @returns The nodes, each printed variable its text or its notice.
+ */
+export const printNodes = (
+  nodes: readonly BodyNode[],
+  record: Option.Option<RedactRecord>,
+  limits?: Pick<Configuration, "outputBudget">,
+): readonly BodyNode[] =>
+  printBody(
+    { body: nodes, templates: new Map(), unsupported: [] },
+    record,
+    textWithin(limits),
+    noSupports,
+    defaultView,
+  ).body;
+
+/**
  * Give the response bindings a redaction lists: each response the item declares but the
  * hidden-only ones, those of a base type in document order, then the record responses in document
  * order. The item keeps the two kinds in two maps, so their order across the two is not kept.
@@ -2272,7 +2333,7 @@ export const redactItem = (
   const { body, content, hiddenOnly, notices, unprinted } = printBody(
     item,
     printingOf(item, record),
-    { budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget), kind: "text" },
+    textWithin(limits),
     supports,
     view,
   );
@@ -2660,3 +2721,36 @@ export const payload = (redacted: Redacted, view: View): Payload => {
     title: redacted.title,
   };
 };
+
+/**
+ * Copy body nodes that belong to no item into payload nodes, as {@link payload} copies an item's
+ * body, for the content a test shows beside its items: the nodes carry no response to restore and
+ * no message to show, so the copy is the item body's with no values, no names, no posted strings,
+ * no host facts and no messages.
+ *
+ * It is the item copy's own walk, `copyNodes`, which stays private: a printed variable or a
+ * template block left in the nodes becomes its notice, as it does in a body {@link redactItem} did
+ * not print ({@link printNodes} prints them first). An interaction among the nodes copies as it
+ * does in an item with no values; a caller that admits none refuses it where it emits.
+ *
+ * @param nodes The body nodes.
+ * @param instance The instance key that scopes the ids the nodes' elements carry.
+ * @returns The payload nodes, in order.
+ */
+export const copyBodyNodes = (
+  nodes: readonly BodyNode[],
+  instance: string,
+): readonly PayloadNode[] =>
+  copyNodes(nodes, {
+    autofocus: Option.none(),
+    editable: false,
+    host: {},
+    ids: new Set(authoredIdsIn(nodes)),
+    instance,
+    messages: [],
+    names: new Map(),
+    posted: Option.none(),
+    seed: Option.none(),
+    unnamed: new Map(),
+    values: new Map(),
+  });

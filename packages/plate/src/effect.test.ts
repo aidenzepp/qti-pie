@@ -56,6 +56,7 @@ const mirrors = [
   "render",
   "renderNavigation",
   "renderStatus",
+  "renderTestContent",
   "restore",
   "results",
   "score",
