@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { emitBody, emitNodes, htmlSubset } from "#plate/emit/body.ts";
+import { emitBody, emitNodes, htmlSubset, writesMalformedHeading } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -813,6 +813,72 @@ describe("emitBody", () => {
             .map(({ attrs }) => attrs["data-slot"]),
           [rowFor("inline-choice-interaction", "control").slot],
         );
+      }),
+  );
+});
+
+describe("writesMalformedHeading", () => {
+  /**
+   * A body whose one heading, an `h2`, stands below a `div` the second line keeps.
+   */
+  const kept: readonly PayloadNode[] = [el("div", {}, [el("h2", {}, [txt("Part")])])];
+
+  /**
+   * The heading levels the emitter agreement walks: integers, fractions and the infinities, on
+   * both sides of 1 and 6, and NaN.
+   */
+  const levels = [
+    Number.NEGATIVE_INFINITY,
+    -1,
+    0,
+    1,
+    1.5,
+    5.5,
+    6,
+    6.5,
+    7,
+    Number.POSITIVE_INFINITY,
+    Number.NaN,
+  ];
+
+  it("[heading level refused] is true at 5.5 for a heading below a kept element, in a Prompt and in a choice's content", () => {
+    const bodies: readonly (readonly PayloadNode[])[] = [
+      kept,
+      [{ ...choice, prompt: Option.some([el("h2", {}, [txt("Ask")])]) }],
+      [{ ...choice, choices: [{ content: [el("h3", {}, [txt("Red")])], identifier: "A" }] }],
+    ];
+
+    for (const body of bodies) {
+      assert.isTrue(writesMalformedHeading(body, 5.5));
+    }
+  });
+
+  it("[heading level refused] is false at 5.5 for a body with no heading and for one whose only heading is below a dropped element", () => {
+    assert.isFalse(writesMalformedHeading([el("p", {}, [txt("Text")])], 5.5));
+    assert.isFalse(
+      writesMalformedHeading([el("script", {}, [el("h1", {}, [txt("Dropped")])])], 5.5),
+    );
+  });
+
+  it("[heading level refused] is false at 0, 1, 7, 9, 6.5 and Infinity for a heading below a kept element", () => {
+    for (const level of [0, 1, 7, 9, 6.5, Number.POSITIVE_INFINITY]) {
+      assert.isFalse(writesMalformedHeading(kept, level), String(level));
+    }
+  });
+
+  it.effect(
+    "[heading level refused] is true exactly where the body emitted at that level fails toHtml with MalformedTagName",
+    () =>
+      Effect.gen(function* agrees() {
+        for (const level of levels) {
+          const nodes = yield* emit(kept, level);
+          const malformed = Option.exists(
+            Result.getFailure(toHtml(rootOf(nodes))),
+            (failure) => failure.reason._tag === "MalformedTagName",
+          );
+
+          assert.strictEqual(writesMalformedHeading(kept, level), malformed, String(level));
+        }
       }),
   );
 });

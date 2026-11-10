@@ -332,17 +332,6 @@ describe("rowFor", () => {
     assert.strictEqual(rowFor("item", "statusHeading", { headingLevel: 3 }).element, "h3");
   });
 
-  it("throws HeadingLevelDefect, carrying the level, for a StatusHeading level above 6", () => {
-    const thrown = Result.getFailure(
-      Result.try(() => rowFor("item", "statusHeading", { headingLevel: 7 })),
-    );
-    assert.isTrue(Option.isSome(thrown));
-
-    const defect = Option.getOrThrow(thrown);
-    assert.propertyVal(defect, "_tag", "HeadingLevelDefect");
-    assert.propertyVal(defect, "level", 7);
-  });
-
   it("makes the Choice Prompt a legend first in its fieldset under the legend markup", () => {
     const prompt = rowFor("choice-interaction", "prompt", { promptMarkup: "legend" });
     const root = rowFor("choice-interaction", "root", { promptMarkup: "legend" });
