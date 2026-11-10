@@ -17,6 +17,7 @@ import {
   attributeName,
   attributeOf,
   childrenNamed,
+  collapseXmlSpace,
   coordsOf,
   countAttribute,
   doubleAttribute,
@@ -1617,9 +1618,7 @@ const outcomeReporting = (
 
     return {
       interpretation: valueOf(declaration, "interpretation"),
-      longInterpretation: Option.map(valueOf(declaration, "long-interpretation"), (written) =>
-        trimXmlSpace(written).replaceAll(xmlWhitespaceRun, " "),
-      ),
+      longInterpretation: Option.map(valueOf(declaration, "long-interpretation"), collapseXmlSpace),
       masteryValue,
       normalMaximum,
       normalMinimum,

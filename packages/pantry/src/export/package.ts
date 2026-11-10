@@ -8,31 +8,23 @@
  * (`#pantry/model/assemble.ts`) and written by `unshred` in its export charset; every other entry
  * is written as the bytes the import read. No tree is walked and no query recurses.
  */
-import { Db } from "@bjornpagen/grizzle";
-import type { CursorError, DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
-import { Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Db } from "@bjornpagen/grizzle/runtime";
+import type { CursorError, Uuid } from "@bjornpagen/grizzle";
+import type { DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
+import { Array as Arr, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import type { PlatformError } from "effect";
+import { AuthorLogin } from "#pantry/db/served.ts";
 import { compareRecord } from "#pantry/export/compare.ts";
 import type { Report } from "#pantry/export/compare.ts";
-import { addRow, assembleScan, emptyScan, scannedRows } from "#pantry/export/pages.ts";
+import { addRow, emptyScan, scannedRows } from "#pantry/export/pages.ts";
 import type { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
-import { grammar } from "#pantry/grammar/install.ts";
+import { scanXml } from "#pantry/export/render.ts";
 import type { AssembleError } from "#pantry/model/assemble.ts";
-import { namesOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { unshred } from "#pantry/model/unshred.ts";
 import { writeZip } from "#pantry/package/zip.ts";
 import type { ZipEntry } from "#pantry/package/zip.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
-import { Package } from "#pantry/qti/package.ts";
-import type { Author } from "#pantry/qti/roles.ts";
+import type { AuthorRole } from "#pantry/qti/roles.ts";
 import type { EncodeError } from "@qti-pie/crust/errors.ts";
-
-/**
- * The names every document is written under: the composed grammar's, the one `install.ts` loads
- * for the schema, so the export computes no grammar of its own.
- */
-const names = namesOf(grammar);
 
 /**
  * The rows each page of a document's scan asks for.
@@ -46,7 +38,6 @@ const pageSize = 1000;
 /**
  * An export of a package id that no imported package has.
  */
-// oxlint-disable-next-line unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown.
 export class PackageNotFound extends Schema.TaggedError<PackageNotFound>()("PackageNotFound", {
   packageId: Schema.String,
 }) {
@@ -78,9 +69,9 @@ type EntriesError =
  *
  * Each document of the package is scanned in pages of `size` rows, assembled, and written by
  * `unshred` in its export charset; a document that cannot be written in that charset fails here,
- * and nothing falls back to another. Every other entry is the record's bytes. A document whose
- * path the record lacks, which `Entry`'s laws refuse, is written after the record's entries, so a
- * comparison reports it rather than losing it.
+ * and nothing falls back to another. Every other entry is the record's bytes. Every document's
+ * path is an entry's, as the law "Document entry" holds (`#pantry/qti/package.ts`), so a document
+ * whose path the record lacks is a defect: the export dies naming it, before any scan.
  *
  * The documents, the record and each page are separate reads, each in a snapshot of its own. They
  * agree because a package is written once, in one transaction, and never changed: no relation of
@@ -97,16 +88,29 @@ type EntriesError =
 export const exportEntries = Effect.fn("export.exportEntries")(function* exportEntries(
   packageId: Uuid,
   size: number = pageSize,
-): Effect.fn.Return<readonly ZipEntry[], EntriesError, DbLayer<typeof Author>> {
+): Effect.fn.Return<readonly ZipEntry[], EntriesError, AuthorLogin | DbLayer<AuthorRole>> {
   yield* Effect.annotateCurrentSpan({ packageId, pageSize: size });
 
-  const db = yield* Db.open(AuthorApp.roles.author, {});
-  if (Option.isNone(yield* db.get(Package, { id: packageId }))) {
+  const login = yield* AuthorLogin;
+  const db = yield* Db.open(login.roles.author, {});
+  if (Option.isNone(yield* db.workload.packageOf.get({ id: packageId }))) {
     return yield* new PackageNotFound({ packageId });
   }
 
   const documents = yield* (yield* db.workload.documentsOf.execute({ package: packageId })).collect;
   const record = yield* (yield* db.workload.entriesOf.execute({ package: packageId })).collect;
+  const recorded = new Set(record.map(({ path }) => path));
+  const unrecorded = Arr.findFirst(documents, ({ path }) => !recorded.has(path));
+  if (Option.isSome(unrecorded)) {
+    const { node, path } = unrecorded.value;
+
+    return yield* Effect.die(
+      new Error(
+        `Document ${node} of package ${packageId} stands at ${path}, but the package records no entry at that path, and the law "Document entry" (src/qti/package.ts) holds every document's path as an entry's. The database holds a row its laws refuse: check that it runs this checkout's migrations.`,
+      ),
+    );
+  }
+
   const rendered = new Map<string, Uint8Array>();
   for (const { node, path } of documents) {
     const scan = yield* Stream.runFold(
@@ -114,19 +118,13 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
       emptyScan<Composed>,
       addRow,
     ).pipe(Effect.withSpan("export.scanDocument", { attributes: { document: node, path } }));
-    const document = yield* Effect.fromResult(assembleScan(node, scan));
-
-    rendered.set(path, yield* unshred(document, names));
+    rendered.set(path, yield* scanXml(node, scan));
   }
 
-  const recorded = new Set(record.map(({ path }) => path));
-  const entries: readonly ZipEntry[] = [
-    ...record.map(({ content, path }) => ({
-      bytes: rendered.get(path) ?? content,
-      path,
-    })),
-    ...[...rendered].flatMap(([path, bytes]) => (recorded.has(path) ? [] : [{ bytes, path }])),
-  ];
+  const entries: readonly ZipEntry[] = record.map(({ content, path }) => ({
+    bytes: rendered.get(path) ?? content,
+    path,
+  }));
   yield* Effect.annotateCurrentSpan({ documents: documents.length, entries: entries.length });
 
   return entries;
@@ -148,8 +146,9 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
 export const compareExported = Effect.fn("export.compareExported")(function* compareExported(
   packageId: Uuid,
   exported: readonly ZipEntry[],
-): Effect.fn.Return<Report, OpenError | ReadError, DbLayer<typeof Author>> {
-  const db = yield* Db.open(AuthorApp.roles.author, {});
+): Effect.fn.Return<Report, OpenError | ReadError, AuthorLogin | DbLayer<AuthorRole>> {
+  const login = yield* AuthorLogin;
+  const db = yield* Db.open(login.roles.author, {});
   const record = yield* (yield* db.workload.entriesOf.execute({ package: packageId })).collect;
 
   return yield* compareRecord(
@@ -168,7 +167,7 @@ export const compareExported = Effect.fn("export.compareExported")(function* com
  */
 export const compareWithRecord = Effect.fn("export.compareWithRecord")(function* compareWithRecord(
   packageId: Uuid,
-): Effect.fn.Return<Report, EntriesError, DbLayer<typeof Author>> {
+): Effect.fn.Return<Report, EntriesError, AuthorLogin | DbLayer<AuthorRole>> {
   return yield* compareExported(packageId, yield* exportEntries(packageId));
 });
 
@@ -191,7 +190,7 @@ export const exportPackage = Effect.fn("export.exportPackage")(function* exportP
 ): Effect.fn.Return<
   readonly ZipEntry[],
   EntriesError | PlatformError.PlatformError,
-  DbLayer<typeof Author> | FileSystem.FileSystem | Path.Path
+  AuthorLogin | DbLayer<AuthorRole> | FileSystem.FileSystem | Path.Path
 > {
   yield* Effect.annotateCurrentSpan({ packageId, target });
 

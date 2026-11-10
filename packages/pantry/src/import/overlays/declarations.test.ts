@@ -620,7 +620,7 @@ const elementOf = (
     lexical === undefined ? [] : [{ lexical, name: closedName(handle), references: [] }],
   ),
   children,
-  governs: "none",
+  governs: Option.none(),
   kind,
   namespaces: [],
   prefix: "",
