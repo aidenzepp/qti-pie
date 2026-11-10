@@ -1495,6 +1495,36 @@
   opacity: 0.5;
 }
 
+/*
+ * With script, a hotspot is a control (the runtime marks each with aria-pressed). Its box is the
+ * image's, so the shared held-token surface, which would paint the whole image, is cleared, and
+ * the hold is shown on its drawn area instead, by a stronger veil and the widest stroke, which
+ * forced colours keep. What takes the pointer is that drawn area: the runtime sets the SVG
+ * pointer-events attribute on the shape, and the list and the boxes stay out of the way.
+ */
+:where([data-slot="graphic-order-interaction-hotspot"][aria-pressed]) {
+  background-color: transparent;
+}
+
+:where([data-slot="graphic-order-interaction-hotspot"][aria-pressed="true"])
+  :where([data-slot="graphic-order-interaction-outline"]) {
+  fill: color-mix(in oklab, var(--primary, oklch(0.205 0 0)) 35%, transparent);
+  stroke-width: 6px;
+}
+
+/*
+ * Focus on a hotspot rings the image, as the shared rule does, since its box is the image's; its
+ * own area takes the wide dashed stroke too, so the ring is read as this hotspot's. The outline
+ * width and offset restate the focus ring every :focus-visible rule of the sheet declares.
+ */
+:where([data-slot="graphic-order-interaction-hotspot"]:focus-visible)
+  :where([data-slot="graphic-order-interaction-outline"]) {
+  outline-width: 3px;
+  outline-offset: 0;
+  stroke-dasharray: 10 6;
+  stroke-width: 6px;
+}
+
 /* end graphic-order-interaction */
 
 /* begin position-object-interaction (issue ei-12) */
