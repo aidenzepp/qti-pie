@@ -224,19 +224,31 @@ const valuesOf = (
 ];
 
 /**
- * Every case: a site, a value, and whether the site's references take the value too.
+ * Every case: the base, once, then each site with each value {@link valuesOf} gives but its own, and
+ * whether the site's references take the value too. A site's own value writes the base itself, so
+ * the base is judged once, as the first site's own.
  */
-const cases = sites.flatMap((site) => [
-  ...valuesOf(site.id.value).map((held) => ({ ...held, edited: [site.id], site })),
-  ...(site.references.length === 0
-    ? []
-    : nonNames.map((value) => ({
-        edited: [site.id, ...site.references],
-        site,
-        situation: "a non-NCName its references name" as const,
-        value,
-      }))),
-]);
+const cases = [
+  ...sites.slice(0, 1).map((site) => ({
+    edited: [site.id],
+    site,
+    situation: "its own value" as const,
+    value: site.id.value,
+  })),
+  ...sites.flatMap((site) => [
+    ...valuesOf(site.id.value).flatMap((held) =>
+      held.situation === "its own value" ? [] : [{ ...held, edited: [site.id], site }],
+    ),
+    ...(site.references.length === 0
+      ? []
+      : nonNames.map((value) => ({
+          edited: [site.id, ...site.references],
+          site,
+          situation: "a non-NCName its references name" as const,
+          value,
+        }))),
+  ]),
+];
 
 /**
  * The law that refuses a reference whose token names no ID: a cell's `headers` token that names no

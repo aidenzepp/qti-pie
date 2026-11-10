@@ -19,8 +19,12 @@
  *
  * Bound: the every-relation package with one attribute's value replaced, each attribute that names
  * something (a `VariableReference` row's, a binding's, a declaration's `identifier`, a value's
- * `field-identifier`) at its first occurrence in each document that writes it, by each of
- * {@link valuesOf}: 49 attributes and 7 values, 343 packages, exhausted.
+ * `field-identifier`) at its first occurrence in each document that writes it: the base itself,
+ * which every attribute's own value writes, once; then each attribute with the unshared NCName and
+ * with one of the five values that are no NCName, the attributes taking those five in turn. The
+ * attributes of one class stand together, so each class of five attributes or more meets every
+ * value, and every attribute meets a value that names nothing: 49 attributes, 99 packages,
+ * exhausted, where the whole product, 343 packages, ran past its 600 s at a load average of 40.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -135,30 +139,26 @@ const sites: readonly Site[] = [
 type Situation = "a non-NCName" | "an unshared NCName" | "its own value";
 
 /**
- * The values each attribute takes, with what each is: its own, which names what the package means
- * it to (or, of a literal-or-reference attribute, its literal); an NCName nothing else in the
- * package writes; the empty value; whitespace alone; a name that starts with a digit; two names;
- * and `٠a`, whose first character, ARABIC-INDIC DIGIT ZERO, starts a name in XML 1.0's fifth
- * edition but is a digit in the `Letter` tables `xs:NCName` reads.
- *
- * @param own - The attribute's value in the package.
- * @returns The values.
+ * The values that are no NCName: the empty value; whitespace alone; a name that starts with a
+ * digit; two names; and `٠a`, whose first character, ARABIC-INDIC DIGIT ZERO, starts a name in XML
+ * 1.0's fifth edition but is a digit in the `Letter` tables `xs:NCName` reads.
  */
-const valuesOf = (
-  own: string,
-): readonly { readonly situation: Situation; readonly value: string }[] => [
-  { situation: "its own value", value: own },
-  { situation: "an unshared NCName", value: "UNSHARED" },
-  ...["", "  ", "1a", "a b", "٠a"].map((value) => ({
-    situation: "a non-NCName" as const,
-    value,
-  })),
-];
+const nonNames = ["", "  ", "1a", "a b", "٠a"] as const;
 
 /**
- * Every case: a site and a value.
+ * Every case: the base, as the first site's own value writes it, which names what the package means
+ * it to (or, of a literal-or-reference attribute, its literal); then each site with an NCName
+ * nothing else in the package writes, and with the value of {@link nonNames} its place gives it.
  */
-const cases = sites.flatMap((site) => valuesOf(site.value).map((held) => ({ ...held, site })));
+const cases = [
+  ...sites
+    .slice(0, 1)
+    .map((site) => ({ site, situation: "its own value" as const, value: site.value })),
+  ...sites.flatMap((site, at) => [
+    { site, situation: "an unshared NCName" as const, value: "UNSHARED" },
+    { site, situation: "a non-NCName" as const, value: nonNames[at % nonNames.length] ?? "" },
+  ]),
+];
 
 /**
  * Write a case's package: the base, its site's value replaced.

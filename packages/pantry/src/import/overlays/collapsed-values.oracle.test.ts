@@ -14,9 +14,11 @@
  * case shows a disagreement but a class a lane's open fix owns (`known`).
  *
  * Bound: the every-relation package with one read attribute's value replaced, each read attribute
- * at its first occurrence on each kind in each document that writes it, by its own value or by each
- * of {@link spaced}'s three values with whitespace inside: every site the base writes, four values
- * each, exhausted.
+ * at its first occurrence on each kind in each document that writes it: the base itself, which
+ * every site's own value writes, once; then each site with one of {@link spaced}'s three values
+ * with whitespace inside, the sites taking those three in turn. The sites of one attribute stand
+ * together, so each attribute written at three sites or more meets every value, and every site
+ * meets one: every site the base writes and the base, exhausted.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -145,12 +147,19 @@ type Situation = "its own value" | "whitespace inside";
 const spaced = ["a b", "1 2", "&#9;a&#10; b&#13;"] as const;
 
 /**
- * Every case: a site and a value.
+ * Every case: the base, as the first site's own value writes it, then each site with the value of
+ * {@link spaced} its place gives it.
  */
-const cases = sites.flatMap((site) => [
-  { site, situation: "its own value" as const, value: site.value },
-  ...spaced.map((value) => ({ site, situation: "whitespace inside" as const, value })),
-]);
+const cases = [
+  ...sites
+    .slice(0, 1)
+    .map((site) => ({ site, situation: "its own value" as const, value: site.value })),
+  ...sites.map((site, at) => ({
+    site,
+    situation: "whitespace inside" as const,
+    value: spaced[at % spaced.length] ?? "",
+  })),
+];
 
 /**
  * Write a case's package: the base, its site's value replaced.

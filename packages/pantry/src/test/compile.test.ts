@@ -1,95 +1,27 @@
 /**
- * Witnesses that every statement of the `Qti` schema and every login's program compiles, with no
- * database. It runs grizzle's own check, which runs `compileSchema` over the schema and compiles
- * every program of every login, and reads what it prints. A statement grizzle refuses ("does not
- * compile") fails here, in the free suite, instead of waiting for a regenerate or a leased run.
+ * Witnesses that every statement of the `Qti` schema and every program of its login compile, with
+ * no database and no child process: grizzle's `compileServed` builds the schema the login is over
+ * and compiles each of the login's workloads under the committed snapshot, the one compile `grizzle
+ * generate` runs for a login, as the database tests' probes do (`#pantry/test/served-members.ts`).
+ * A statement or a program grizzle refuses fails here as the `ServedRefusal` naming it, in the free
+ * suite, instead of waiting for a regenerate or a leased run.
  *
- * Its bound is the one schema, every login and every program. Drift between the schema and the
- * committed migrations ("an ungenerated change", "is not the one snapshot.json records", a served
- * file generate did not write) is no compile failure and passes: the integration checks' own
- * `grizzle check` refuses it (AGENTS.md, Workflow, Integration).
- *
- * It spawns `grizzle check` because the check is the whole compile: `compileSchema` over the schema
- * and every login's served compile, which `grizzle generate` commits. `@bjornpagen/grizzle/compile`
- * exports only one login's served compile under a given snapshot (`compileServed`, a test's probe,
- * `#pantry/test/served-members.ts`), which checks no schema.
+ * Its bound is the one schema, its one login (`AuthorApp`, the login `grizzle.config.ts` names) and
+ * every program of it. Whether the committed served file is the one generate writes is `grizzle
+ * check`'s, which the integration checks run (AGENTS.md, Workflow, Integration).
  */
-import { spawn } from "node:child_process";
-import path from "node:path";
+import { compileServed } from "@bjornpagen/grizzle/compile";
 import { assert, it } from "@effect/vitest";
-import { Effect } from "effect";
-import { Qti } from "#pantry/qti/own.ts";
+import { Effect, Exit } from "effect";
+import snapshot from "#migrations/qti/snapshot.json" with { type: "json" };
+import { AuthorApp } from "#pantry/qti/own-login.ts";
 
-/**
- * The package directory, where `grizzle.config.ts` lives and where grizzle is run from.
- */
-const packageDirectory = path.resolve(import.meta.dirname, "..", "..");
+it.effect("every statement and every program of Qti's login compiles", () =>
+  Effect.gen(function* compiles() {
+    // Oracle: grizzle's own compile of the login, the one `grizzle generate` runs.
+    // Bound: the one schema, its login and every program; residual none.
+    const exit = yield* Effect.exit(compileServed(AuthorApp, snapshot, AuthorApp.workload));
 
-/**
- * How long the check may take. Measured wall time of `pnpm exec grizzle check`: 8.2 s at load 11,
- * 14.7 s at load 47 (refused at the schema), 22.1 s at load 50 (a full compile to drift).
- * Measured 2026-11-07: 33.9 s at a load average of 68 to 116; the same day, 48.3 s while the load
- * rose from 35 to 123. At nice 19, as lanes run the free suite beside the database tier, the check
- * gets a fraction of a core: Measured 2026-11-09: 475.1 s at a load average of 47.6 to 82.9, the
- * check alone at nice 19 (the same day 337 s alone, and the test 255.4 s at 38 to 47), so the
- * constant is over twice the slowest. A measurement at nice 19 whose least load is 60 or more for
- * the whole run is owed.
- */
-const checkTimeoutMs = 1_000_000;
-
-/**
- * Run `pnpm exec grizzle check grizzle.config.ts` in the package directory and collect how it
- * ended. grizzle prints its findings on standard error, so both streams are read together.
- *
- * @returns The exit code, and everything the process wrote.
- */
-const grizzleCheck = Effect.callback<
-  { readonly code: number | null; readonly output: string },
-  Error
->((resume) => {
-  const child = spawn("pnpm", ["exec", "grizzle", "check", "grizzle.config.ts"], {
-    cwd: packageDirectory,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const chunks: Buffer[] = [];
-
-  child.stdout.on("data", (chunk: Buffer) => {
-    chunks.push(chunk);
-  });
-  child.stderr.on("data", (chunk: Buffer) => {
-    chunks.push(chunk);
-  });
-  child.on("error", (error) => {
-    resume(Effect.fail(error));
-  });
-  child.on("close", (code) => {
-    resume(Effect.succeed({ code, output: Buffer.concat(chunks).toString("utf-8") }));
-  });
-
-  return Effect.sync(() => {
-    child.kill();
-  });
-});
-
-it.effect(
-  "grizzle check reaches the end of compilation: no statement or program of Qti does not compile",
-  () =>
-    Effect.gen(function* compiles() {
-      const { code, output } = yield* grizzleCheck;
-      const lines = output.split("\n");
-
-      // Oracle: grizzle's `compileSchema` and program compilation, as `grizzle check` runs them.
-      // Bound: the one schema, every login and every program; residual none.
-      assert.isTrue(code === 0 || code === 1, `grizzle check exited ${String(code)}:\n${output}`);
-      // grizzle check names each schema by its declared name, the top level's (`QtiQueries`).
-      assert.isTrue(
-        lines.some((line) => line.startsWith(`${Qti.name}: `)),
-        `grizzle check printed no ${Qti.name} line:\n${output}`,
-      );
-      assert.deepStrictEqual(
-        lines.filter((line) => line.includes("does not compile")),
-        [],
-      );
-    }),
-  checkTimeoutMs,
+    assert.isTrue(Exit.isSuccess(exit), Exit.isFailure(exit) ? String(exit.cause) : "");
+  }),
 );
