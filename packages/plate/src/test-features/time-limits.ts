@@ -36,6 +36,7 @@ import type { ItemRef, Section, SectionChild, Test, TestPart } from "#plate/mode
 import { elapsedSeconds } from "#plate/session/elapsed.ts";
 import type { SessionItem, TestSession } from "#plate/session/session.ts";
 import type { AdditionalTestingTime } from "#plate/supports.ts";
+import { TestFeatureNotImplemented } from "#plate/test-features/contract.ts";
 import type {
   GateContext,
   GateVerdict,
@@ -491,7 +492,8 @@ const timeAt = (session: TestSession, now: Option.Option<Date>): Date =>
  * place. Otherwise it refuses, under the rule `min-time`, the intents that would leave a scope
  * whose `min-time` still holds the candidate while no `max-time` in force has run out. It places
  * nothing, orders nothing and lets every place be entered: a scope whose time has run out answers
- * the next intent through `gate`.
+ * the next intent through `gate`. It presents nothing at any place, so its `render` is never
+ * reached and throws.
  */
 export const timeLimitsModule: TestFeatureModule<"qti-time-limits", TimeLimitsNode> = {
   deliver: (context) => context.test,
@@ -538,6 +540,10 @@ export const timeLimitsModule: TestFeatureModule<"qti-time-limits", TimeLimitsNo
 
       return Option.some({ allowLateSubmission, maxTime, minTime, path });
     }),
+  present: () => [],
+  render: () => {
+    throw new TestFeatureNotImplemented({ feature: "qti-time-limits", issue: "m3f-01" });
+  },
   sequence: (context) => context.places,
 };
 

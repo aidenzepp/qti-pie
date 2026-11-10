@@ -27,6 +27,7 @@ import { qtiNamespace } from "#plate/document/source.ts";
 import { drawBelow, drawStream } from "#plate/engine/random.ts";
 import type { Draw } from "#plate/engine/random.ts";
 import type { ItemRef, Section, SectionChild, Test } from "#plate/model/test.ts";
+import { TestFeatureNotImplemented } from "#plate/test-features/contract.ts";
 import type { SequencePlace, TestFeatureModule } from "#plate/test-features/contract.ts";
 import type { OrderingNode } from "#plate/test-features/ordering.ts";
 
@@ -297,7 +298,8 @@ const arranged = (walk: Walk, section: Section): readonly Block[] => {
  * instance, so every instance is a session item of its own. A test holding neither element gives
  * its places back as they came. A `qti-selection` that writes no `select`, which the validator
  * refuses before a test is built, is marked as the stub marked it and read as no selection. Its
- * `gate` and `deliver` have no effect, and its `enter` lets every place be entered.
+ * `gate` and `deliver` have no effect, and its `enter` lets every place be entered. It presents
+ * nothing at any place, so its `render` is never reached and throws.
  */
 export const selectionModule: TestFeatureModule<"qti-selection", SelectionNode> = {
   deliver: (context) => context.test,
@@ -319,6 +321,10 @@ export const selectionModule: TestFeatureModule<"qti-selection", SelectionNode> 
 
       return Option.some({ path: context.path, select: select.value, withReplacement });
     }),
+  present: () => [],
+  render: () => {
+    throw new TestFeatureNotImplemented({ feature: "qti-selection", issue: "m3f-02" });
+  },
   sequence: (context) => {
     const sections = sectionsByPath(context.test);
     const selections = nodesBySection(sections, context.test.features?.["qti-selection"]);
