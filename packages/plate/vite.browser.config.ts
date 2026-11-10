@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite-plus";
 import { playwright } from "vite-plus/test/browser-playwright";
 
@@ -25,6 +26,7 @@ const { prewarm: _prewarm, ...provider } = playwright();
  * the cap or above, and while an engine is not installed, so no engine starts and no test runs.
  */
 export default defineConfig({
+  plugins: [tailwindcss()],
   test: {
     fileParallelism: false,
     globalSetup: ["src/test/browser-setup.ts"],
