@@ -1927,6 +1927,7 @@ describe("the public surface", () => {
         "MalformedAttributeName",
         "MalformedTagName",
         "MarkupRefused",
+        "NotRedacted",
         "OutcomeMismatchError",
         "OutputTooLarge",
         "PartSwapRefused",

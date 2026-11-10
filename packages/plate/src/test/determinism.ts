@@ -65,7 +65,12 @@ import type { ItemRef, Test } from "#plate/model/test.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
 import { redactItem } from "#plate/payload.ts";
 import { render } from "#plate/render.ts";
-import type { InvalidHeadingLevel, InvalidInstance, OutputTooLarge } from "#plate/render.ts";
+import type {
+  InvalidHeadingLevel,
+  InvalidInstance,
+  NotRedacted,
+  OutputTooLarge,
+} from "#plate/render.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 
 /**
@@ -634,6 +639,7 @@ export const observe = (
   | InvalidHeadingLevel
   | InvalidInstance
   | MarkupRefused
+  | NotRedacted
   | OutputTooLarge
   | PartSwapRefused
   | UnknownPart

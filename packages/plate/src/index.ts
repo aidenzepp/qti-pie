@@ -16,10 +16,10 @@
  *
  * Nothing else under `src/` is reachable from outside the package. The tests' seams
  * (`acceptForTest`, `acceptTestForTest`, `acceptSectionForTest`, `acceptStimulusForTest` and
- * `acceptPackageForTest`) and the redacted item's brand constructor (`brandRedacted`) are never
- * exported here, so only `check` makes an `Accepted` and the other accepted roots, only
- * `openPackage` makes an `AcceptedPackage`, and only `redact` and `decodeRedacted` make a
- * `Redacted`.
+ * `acceptPackageForTest`) and the redacted item's brand constructor (`brandRedacted`) and the
+ * predicate that reads its mark are never exported here, so only `check` makes an `Accepted` and
+ * the other accepted roots, only `openPackage` makes an `AcceptedPackage`, and only `redact` and
+ * `decodeRedacted` make a `Redacted`, which `render` checks at run time too (`NotRedacted`).
  *
  * @module
  */
@@ -137,6 +137,7 @@ export type { Options, Rendered } from "#plate/render.ts";
 export {
   InvalidHeadingLevel,
   InvalidInstance,
+  NotRedacted,
   OutputTooLarge,
   redact,
   render,

@@ -23,8 +23,16 @@ import type {
 import type { RedactRecord } from "#plate/model/record.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
-import { InvalidInstance, OutputTooLarge, redact, render, renderStatus } from "#plate/render.ts";
+import {
+  InvalidInstance,
+  NotRedacted,
+  OutputTooLarge,
+  redact,
+  render,
+  renderStatus,
+} from "#plate/render.ts";
 import type { InvalidHeadingLevel, Options, Rendered } from "#plate/render.ts";
+import { decodeRedacted, encodeRedacted } from "#plate/codec/redacted.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import { solution } from "#plate/solution.ts";
@@ -2069,6 +2077,157 @@ describe("render and renderStatus, the heading level", () => {
         assert.deepStrictEqual(
           headingFailure(render(headed, configuration, { instance })),
           Option.some({ _tag: "InvalidHeadingLevel" as const, level: 1.5 }),
+        );
+      }),
+  );
+});
+
+/**
+ * {@link item} with only a paragraph of text, so its redacted form holds no bigint (an
+ * interaction's counts are bigints, which `JSON.stringify` refuses) and survives a JSON round trip.
+ */
+const plain = redact(
+  acceptForTest({
+    ...item,
+    body: [
+      {
+        attributes: [],
+        children: [words("Paris is the capital of France.")],
+        kind: "element",
+        path: "qti-assessment-item/qti-item-body/p",
+        tag: "p",
+      },
+    ],
+    identifier: "plain",
+  }),
+);
+
+/**
+ * Copy a redacted item through JSON text, as a host that stores it and reads it back without the
+ * codec would, and cast the copy back to `Redacted`, which its type then admits.
+ *
+ * @param value The redacted item, which must hold no bigint.
+ * @returns The copy.
+ */
+const throughJson = (value: Redacted): Redacted => {
+  // oxlint-disable-next-line unicorn/prefer-structured-clone -- The copy goes through JSON text, the form a host stores, which a structured clone would not.
+  const handedBack: unknown = JSON.parse(JSON.stringify(value));
+
+  // SAFETY: none holds, on purpose: this cast is the misuse under test. A JSON copy cast to Redacted type-checks, and only render's run-time mark refuses it, so no test renders it past that check.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The SAFETY note above: the cast is the misuse the test proves render refuses.
+  return handedBack as Redacted;
+};
+
+/**
+ * Give the failure of a render: `NotRedacted` for a {@link NotRedacted}, or another failure's tag.
+ *
+ * @param result The result of a render.
+ * @returns `NotRedacted` when the failure is a `NotRedacted`, the failure's tag when it is another
+ *   failure, and none on success.
+ */
+const markFailure = (
+  result: Result.Result<Rendered, { readonly _tag: string }>,
+): Option.Option<string> =>
+  Option.map(failureOf(result), (failure) =>
+    failure instanceof NotRedacted ? "NotRedacted" : failure._tag,
+  );
+
+describe("render, the redaction mark", () => {
+  it.effect(
+    "[redaction mark refused] render fails NotRedacted for a spread copy of redact's value, and for its JSON round trip cast to Redacted",
+    () =>
+      Effect.gen(function* refusesCopies() {
+        const configuration = yield* defaults;
+
+        assert.deepStrictEqual(
+          markFailure(render({ ...redacted }, configuration, { instance })),
+          Option.some("NotRedacted"),
+        );
+        assert.deepStrictEqual(
+          markFailure(render(throughJson(plain), configuration, { instance })),
+          Option.some("NotRedacted"),
+        );
+      }),
+  );
+
+  it.effect(
+    "[redaction mark refused] render renders redact's value, and decodeRedacted's value of its encoded JSON to the same HTML",
+    () =>
+      Effect.gen(function* rendersProduced() {
+        const configuration = yield* defaults;
+        const decoded = yield* Effect.fromResult(
+          Result.flatMap(encodeRedacted(redacted), decodeRedacted),
+        );
+        const fromRedact = yield* Effect.fromResult(render(redacted, configuration, { instance }));
+        const fromDecode = yield* Effect.fromResult(render(decoded, configuration, { instance }));
+
+        assert.strictEqual(fromDecode.html, fromRedact.html);
+        assert.isTrue(Result.isSuccess(render(plain, configuration, { instance })));
+      }),
+  );
+
+  it.effect(
+    "[redaction mark refused] a copy of an item past the budget fails NotRedacted, not OutputTooLarge, where redact's value fails OutputTooLarge",
+    () =>
+      Effect.gen(function* beforeBudget() {
+        const tight = yield* configure({ outputBudget: 10_000 });
+        const slotted = redact(
+          acceptForTest({ ...sprawling, body: [slotsOfS(4500)], identifier: "slotted" }),
+          {
+            outcomes: {},
+            templates: { S: one({ baseType: "string", value: "y".repeat(100) }) },
+          },
+          tight,
+        );
+        const short = yield* configure({ outputBudget: 1 });
+
+        assert.deepStrictEqual(
+          markFailure(render(slotted, tight, { instance })),
+          Option.some("OutputTooLarge"),
+        );
+        assert.deepStrictEqual(
+          markFailure(render({ ...slotted }, tight, { instance })),
+          Option.some("NotRedacted"),
+        );
+        assert.deepStrictEqual(
+          markFailure(render(redacted, short, { instance })),
+          Option.some("OutputTooLarge"),
+        );
+        assert.deepStrictEqual(
+          markFailure(render({ ...redacted }, short, { instance })),
+          Option.some("NotRedacted"),
+        );
+      }),
+  );
+
+  it.effect(
+    "[redaction mark refused] a copy fails NotRedacted before an unknown part, a bad instance token or a heading level at 1.5 would fail",
+    () =>
+      Effect.gen(function* beforeEverything() {
+        const configuration = yield* configuredAt(1.5);
+
+        assert.deepStrictEqual(
+          markFailure(render(headed, configuration, { instance })),
+          Option.some("InvalidHeadingLevel"),
+        );
+        assert.deepStrictEqual(
+          markFailure(render({ ...headed }, configuration, { instance })),
+          Option.some("NotRedacted"),
+        );
+        assert.deepStrictEqual(
+          markFailure(render({ ...headed }, configuration, { instance: "bad id" })),
+          Option.some("NotRedacted"),
+        );
+        assert.deepStrictEqual(
+          markFailure(
+            render({ ...headed }, configuration, {
+              instance,
+              parts: {
+                "choice-interaction": { knob: (props, children) => h("span", props, children) },
+              },
+            }),
+          ),
+          Option.some("NotRedacted"),
         );
       }),
   );

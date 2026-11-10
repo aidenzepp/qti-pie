@@ -22,6 +22,7 @@ import type {
   InvalidInstance,
   InvalidRecord,
   MarkupRefused,
+  NotRedacted,
   Options,
   OutputTooLarge,
   PartSwapRefused,
@@ -170,6 +171,7 @@ export const threeStates = (
   | InvalidHeadingLevel
   | InvalidInstance
   | MarkupRefused
+  | NotRedacted
   | OutputTooLarge
   | PartSwapRefused
   | UnknownPart

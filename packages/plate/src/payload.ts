@@ -493,28 +493,62 @@ export interface RedactedFields {
 /**
  * An item with every part the page may not know removed: the only item {@link payload} takes.
  *
- * The brand exists only in the type, so a full {@link Item}, or any object built by hand, does not
- * type-check where a `Redacted` is expected. {@link redactItem} makes one from an item, and the
- * codec's `decodeRedacted` from its checked JSON form, each through {@link brandRedacted}; the value
- * either returns holds exactly the fields of {@link RedactedFields}.
+ * The brand is checked twice. In the type, a full {@link Item}, or any object built by hand, does
+ * not type-check where a `Redacted` is expected. At run time, {@link isRedacted} is true only for
+ * the very object a producer marked, which `render` asks first, since a copy (a spread, a JSON
+ * round trip) or a cast type-checks. {@link redactItem} makes one from an item, and the codec's
+ * `decodeRedacted` from its checked JSON form, each through {@link brandRedacted}; the value either
+ * returns holds exactly the fields of {@link RedactedFields}.
  */
 export type Redacted = Brand.Branded<RedactedFields, "Redacted">;
 
 /**
- * Brand redacted fields as a {@link Redacted}: a cast, so that no run-time import of effect's
- * `Brand` reaches the browser (the OD-6 ruling, rule `e2bd87f2`).
+ * The objects {@link brandRedacted} returned: the run-time half of the `Redacted` brand.
+ *
+ * A `WeakSet` rather than a field or a symbol on the item: it holds the mark outside the object, so
+ * no copy, spread or JSON round trip carries it, the item's fields stay exactly
+ * {@link RedactedFields} (the codec writes and the page reads no extra one), and a marked item a
+ * host drops is still collected. It is module-private, so only {@link brandRedacted} adds to it.
+ */
+const marked = new WeakSet<object>();
+
+/**
+ * Brand redacted fields as a {@link Redacted}: a cast in the type, so that no run-time import of
+ * effect's `Brand` reaches the browser (the OD-6 ruling, rule `e2bd87f2`), and a mark at run time,
+ * which {@link isRedacted} reads.
  *
  * Only {@link redactItem}'s allowlisted copy and the codec's `decodeRedacted`, after its Schema has
  * checked every field, call it; `src/index.ts` does not export it. Any other caller would make a
  * `Redacted` the allowlist never saw.
  *
  * @param fields The fields the allowlist copied, or the codec checked.
- * @returns The same object, typed as a `Redacted`.
+ * @returns The same object, marked and typed as a `Redacted`.
  */
-export const brandRedacted = (fields: RedactedFields): Redacted =>
-  // SAFETY: `fields` comes from redactItem's allowlisted copy or decodeRedacted's checked decode, the only two callers; the brand is type-only, so the cast adds no run-time field.
+export const brandRedacted = (fields: RedactedFields): Redacted => {
+  marked.add(fields);
+
+  // SAFETY: `fields` comes from redactItem's allowlisted copy or decodeRedacted's checked decode, the only two callers, and is now marked; the brand is type-only, so the cast adds no run-time field.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The SAFETY note above: the brand exists only in the type, and these two callers are the allowlist's only ways in.
-  fields as Redacted;
+  return fields as Redacted;
+};
+
+/**
+ * Whether a value is an object {@link brandRedacted} marked: one that `redactItem` or the codec's
+ * `decodeRedacted` returned, not a copy of one, an object built by hand, or a cast.
+ *
+ * `render` asks it before it reads anything else of its item. It reads only the mark, never a
+ * field, so it is true for the producer's object even after a caller mutates it (the item is
+ * readonly in the type), and false for any copy, however exact. `src/index.ts` does not export it.
+ *
+ * @example
+ *   isRedacted(redactItem(item)); // true
+ *   isRedacted({ ...redactItem(item) }); // false
+ *
+ * @param value Anything.
+ * @returns Whether `value` is a marked `Redacted`.
+ */
+export const isRedacted = (value: unknown): value is Redacted =>
+  typeof value === "object" && value !== null && marked.has(value);
 
 /**
  * What one payload build knows about the whole item while it copies one node.
