@@ -384,8 +384,9 @@ const expectedVerdict = (item: Authored): "accepted" | "accepted-with-unsupporte
 /**
  * The items the witness renders: both Choice cardinalities, prompt shapes and orientations, a Text
  * Entry inside a `p`, an Extended Text with a prompt, an Inline Choice with a Label and one
- * without, and an interaction whose module is a stub. Each interaction carries every class the
- * stylesheet styles for it, and a body element every body class.
+ * without, and two interactions whose modules are stubs, so the stylesheet's Notice rules keep an
+ * element to match until the last stub lands. Each interaction carries every class the stylesheet
+ * styles for it, and a body element every body class.
  */
 const authored: readonly Authored[] = [
   {
@@ -497,6 +498,30 @@ const authored: readonly Authored[] = [
     ),
     kinds: ["order"],
     location: "witness/order.xml",
+    posted: {},
+  },
+  {
+    /*
+     * A Select Point, the stub planned to land last: this row keeps a stub witness, and so an item
+     * Notice for the compounds that name one, after Order lands and its row's verdict turns
+     * `accepted`. Its declaration is the one `skip.test.ts`'s stub item binds under, `multiple`
+     * cardinality of `point`, because the binding rule reads the element's `max-choices` (unwritten,
+     * `0`) against the declaration before any module does, so the bare element binds. The correct
+     * response is the one the `match_correct` template requires of every declaration. When Select
+     * Point lands, W0-AQ retires this row with the other stub-kind tests.
+     */
+    bytes: itemBytes(
+      "witness-select-point",
+      `<qti-response-declaration base-type="point" cardinality="multiple" identifier="RESPONSE">
+  <qti-correct-response>
+   <qti-value>120 80</qti-value>
+  </qti-correct-response>
+ </qti-response-declaration>`,
+      `<p>Mark where the spider waits on its web.</p>
+  <${modules["select-point"].element} response-identifier="RESPONSE"/>`,
+    ),
+    kinds: ["select-point"],
+    location: "witness/select-point.xml",
     posted: {},
   },
 ];
