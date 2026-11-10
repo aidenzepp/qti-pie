@@ -1,8 +1,8 @@
 /**
  * The mutations of the law oracle's laws over embedded languages, content models and references
- * (§1.5, §1.6): SSML's attribute counts, lexicons and marks, a foreign element's simple content, a
- * fragment's context, the default hotspots, an href's form, a family's last slot and a namespace
- * name, each drawn to break exactly its law in the every-relation package
+ * (§1.5, §1.6): SSML's attribute counts, lexicons and marks, a `data-ssml`'s JSON, a foreign
+ * element's simple content, a fragment's context, the default hotspots, an href's form, a family's
+ * last slot and a namespace name, each drawn to break exactly its law in the every-relation package
  * (`src/test/complete.oracle.test.ts`).
  *
  * Each edits the package text the codec reads without refusing it, at a site drawn where the base
@@ -37,6 +37,12 @@ const templated = "items/item2.xml";
  */
 const speak =
   '<ssml:speak version="1.1" xml:lang="en"><ssml:mark name="start"/>Read this aloud.</ssml:speak>';
+
+/**
+ * The every-relation item's paragraph whose closed `data-ssml` holds one `say-as` member with its
+ * required `interpret-as`.
+ */
+const dataSsml = `<p data-ssml='{"say-as":{"interpret-as":"date"}}'>On 2026-11-09.</p>`;
 
 /**
  * The item's foreign element, which no type governs.
@@ -96,6 +102,18 @@ export const contentEdits = {
       '<ssml:meta name="a" http-equiv="b" content="c"/><ssml:mark name="start"/>',
     ),
     speak.replace('<ssml:mark name="start"/>', '<ssml:meta content="c"/><ssml:mark name="start"/>'),
+  ]),
+  // Data SSML (reading 177, Data-SSML 1.0 §3.4): the paragraph's data-ssml given a member the
+  // schema does not list, a property its member does not list, an enumerated value outside its
+  // list, a normalized value holding a tab, a member without the property it requires, or text that
+  // is no JSON object, which has no DataSsml row.
+  "Data SSML": passageAt(item, dataSsml, [
+    dataSsml.replace(`{"say-as":{"interpret-as":"date"}}`, `{"brk":{}}`),
+    dataSsml.replace(`"date"}`, `"date","format":"mdy"}`),
+    dataSsml.replace(`"date"`, `"currency"`),
+    dataSsml.replace(`{"say-as":{"interpret-as":"date"}}`, `{"break":{"time":"1\\u0009s"}}`),
+    dataSsml.replace(`{"interpret-as":"date"}`, "{}"),
+    dataSsml.replace(`{"say-as":{"interpret-as":"date"}}`, "not json"),
   ]),
   // Foreign simple content (reading 60): the foreign element given a simple type of XML Schema's
   // own and an element child.

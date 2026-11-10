@@ -33,19 +33,20 @@ import {
   referencePiecesOf,
   referenceRowsOf,
   rowsOf,
+  typedHrefsOf,
 } from "#pantry/import/overlays/package.ts";
 import type {
-  CensusEntry,
   DocumentIds,
   ManifestIds,
   PackageRows,
   ReferenceCensus,
   ReferenceRows,
+  WhiteSpace,
 } from "#pantry/import/overlays/package.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
-import { closedName, documentFamily } from "#pantry/model/xdm.ts";
+import { closedName, documentFamily, flatten } from "#pantry/model/xdm.ts";
 import type {
   ClosedName,
   NodeId,
@@ -57,9 +58,10 @@ import { readPackage } from "#pantry/package/read.ts";
 import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import type { FixtureName, NamedPackage } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
-import { hrefParamsPattern, hrefPathPattern, manifestPath } from "#pantry/qti/package.ts";
+import { hrefParamsPattern, hrefPathPattern, srcsetCandidatePattern } from "#pantry/qti/package.ts";
 import { comparedPath, oracleValueOf, resolve, resolveAttribute } from "#pantry/test/resolution.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * The file system and processes the fixtures' materializer and `readPackage` need.
@@ -74,9 +76,21 @@ const TestLayer = NodeChildProcessSpawner.layer.pipe(
 const ids: ManifestIds = { idOf, package: "00000000-0000-4000-8000-0000000000aa" };
 
 /**
- * One overlay row as the walk expects it: its relation and its fields.
+ * One overlay row as the walk expects it: its relation and its fields, and the rows of the two
+ * queries over them no relation stores, the typed hrefs (`typedHrefsOf`) and the unread-type hrefs
+ * ({@link unreadTypeHrefsOf}), each by the resource's node.
  */
-type Expected = { readonly [Relation in keyof PackageRows]: Map<string, object> };
+type Expected = {
+  readonly [Relation in keyof PackageRows | "TypedHref" | "UnreadTypeHref"]: Map<string, object>;
+};
+
+/**
+ * The lexical forms of a resource's `type` that spell a `ResourceType` handle, each as written
+ * (`ResourceTypeLexical`).
+ */
+const spelledTypes: ReadonlySet<string> = new Set(
+  ResourceTypeLexical.rows.map(({ lexical }) => lexical),
+);
 
 /**
  * The text of a projection's key: its heading's values as a JSON array.
@@ -103,9 +117,8 @@ const manifestHrefOf = (href: string, bases: readonly string[]) => {
 
 /**
  * Expect a resource's `href` rows: its `ResourceHref`, resolved by the oracle; where its type
- * spells a handle, its `TypedHref` and the `NamedHref` of its compared path and type; and where its
- * type is written and spells none, its `UnreadTypeHref` and the `UnreadTypePath` of its compared
- * path.
+ * spells a handle, its typed href, of its compared path and type; and where its type is written and
+ * spells none, its unread-type href, of its compared path.
  *
  * @param expected - The walk's rows so far.
  * @param resource - The resource's href, node, package, type and its lexical form, and the bases
@@ -115,7 +128,7 @@ const manifestHrefOf = (href: string, bases: readonly string[]) => {
  * @param resource.node - Its node.
  * @param resource.pkg - Its package.
  * @param resource.type - The handle its type spells, none where it spells none.
- * @param resource.typeLexical - Its type as written.
+ * @param resource.typeLexical - Its type as written, none where unwritten.
  */
 const expectHref = (
   expected: Expected,
@@ -125,20 +138,18 @@ const expectHref = (
     readonly node: NodeId;
     readonly pkg: string;
     readonly type: Option.Option<string>;
-    readonly typeLexical: string;
+    readonly typeLexical: string | undefined;
   },
 ): void => {
   const { bases, href, node, pkg, type, typeLexical } = resource;
   const { path: at, scope } = manifestHrefOf(href, bases);
-  expected.ResourceHref.set(node, { href, node, package: pkg, path: at, scope, typeLexical });
+  expected.ResourceHref.set(node, { href, node, package: pkg, path: at, scope });
   for (const code of Option.toArray(type)) {
     expected.TypedHref.set(node, { node, package: pkg, path: at, scope, type: code });
-    expected.NamedHref.set(heading([pkg, at, code]), { package: pkg, path: at, type: code });
   }
 
-  if (Option.isNone(type) && typeLexical !== "") {
-    expected.UnreadTypeHref.set(node, { node, package: pkg, path: at, typeLexical });
-    expected.UnreadTypePath.set(heading([pkg, at]), { package: pkg, path: at });
+  if (Option.isNone(type) && typeLexical !== undefined && typeLexical !== "") {
+    expected.UnreadTypeHref.set(node, { node, package: pkg, path: at });
   }
 };
 
@@ -147,28 +158,33 @@ const expectHref = (
  * its href's rows where it writes one ({@link expectHref}).
  *
  * @param expected - The walk's rows so far.
- * @param resource - The resource's row, its href if written, the bases in scope and the spelled
- *   types.
+ * @param resource - The resource's row, its href and its type if written, the bases in scope and
+ *   the spelled types.
  * @param resource.bases - The `xml:base` values in scope, its own last.
  * @param resource.href - Its href, none where unwritten.
  * @param resource.row - Its `Resource` row.
  * @param resource.spelled - The lexical forms a handle spells.
+ * @param resource.typeLexical - Its type as written, none where unwritten.
  */
 const expectResource = (
   expected: Expected,
   resource: {
     readonly bases: readonly string[];
     readonly href: string | undefined;
-    readonly row: { readonly node: NodeId; readonly package: string; readonly typeLexical: string };
+    readonly row: { readonly node: NodeId; readonly package: string };
     readonly spelled: ReadonlySet<string>;
+    readonly typeLexical: string | undefined;
   },
 ): void => {
-  const { bases, href, row, spelled } = resource;
-  const { node, package: pkg, typeLexical } = row;
-  const type = spelled.has(typeLexical) ? Option.some(typeLexical) : Option.none();
+  const { bases, href, row, spelled, typeLexical } = resource;
+  const { node, package: pkg } = row;
+  const type =
+    typeLexical !== undefined && spelled.has(typeLexical)
+      ? Option.some(typeLexical)
+      : Option.none();
   expected.Resource.set(node, row);
   for (const code of Option.toArray(type)) {
-    expected.ResourceTyped.set(node, { node, package: pkg, type: code, typeLexical });
+    expected.ResourceTyped.set(node, { node, package: pkg, type: code, typeLexical: code });
   }
 
   if (href !== undefined) {
@@ -194,7 +210,6 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     FileHref: new Map(),
     ManifestId: new Map(),
     ManifestIdSpace: new Map(),
-    NamedHref: new Map(),
     Resource: new Map(),
     ResourceFile: new Map(),
     ResourceHref: new Map(),
@@ -202,11 +217,9 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     ResourceTyped: new Map(),
     TypedHref: new Map(),
     UnreadTypeHref: new Map(),
-    UnreadTypePath: new Map(),
   };
   const document = ids.idOf(0);
   const interactions = new Set<string>(interactionKinds);
-  const spelled = new Set<string>(ResourceTypeLexical.rows.map(({ lexical }) => lexical));
   let next = 1;
   const named: { readonly identifier: string; readonly node: NodeId }[] = [];
   const dependencies: { readonly node: NodeId; readonly ref: string; readonly resource: NodeId }[] =
@@ -257,14 +270,15 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     }
 
     if (kind === "cp:resource") {
-      const row = {
-        ...tuple,
-        package: pkg,
-        parent: parent.id,
-        typeLexical: valueOf("type") ?? "",
-      };
+      const row = { ...tuple, package: pkg, parent: parent.id };
 
-      expectResource(expected, { bases, href: valueOf("href"), row, spelled });
+      expectResource(expected, {
+        bases,
+        href: valueOf("href"),
+        row,
+        spelled: spelledTypes,
+        typeLexical: valueOf("type"),
+      });
       if (identifier !== undefined && identifierLexical !== undefined) {
         named.push({ identifier, node: id });
         expected.ResourceId.set(id, {
@@ -353,13 +367,11 @@ const relationNames = [
   "FileHref",
   "ManifestId",
   "ManifestIdSpace",
-  "NamedHref",
   "Resource",
   "ResourceFile",
   "ResourceHref",
   "ResourceId",
-  "UnreadTypeHref",
-  "UnreadTypePath",
+  "ResourceTyped",
 ] as const satisfies readonly (keyof PackageRows)[];
 
 /**
@@ -372,13 +384,65 @@ const sortedEntries = (map: ReadonlyMap<string, object>): readonly (readonly [st
   [...map].toSorted(([left], [right]) => left.localeCompare(right));
 
 /**
- * Compare the builder's keyed sets with the walk's: every relation's keys and rows alike.
+ * A row of the query `UnreadTypeHref`: a resource's node, its package and its href's path.
+ */
+interface UnreadTypeHrefRow {
+  readonly node: string;
+  readonly package: string;
+  readonly path: string;
+}
+
+/**
+ * The rows of the query `UnreadTypeHref` (`#pantry/qti/queries.ts`) over a manifest, restated on
+ * the host: each resource's `ResourceHref` beside its `type` attribute as the tree's rows hold it,
+ * where that form is nonempty and spells no `ResourceType` handle ({@link spelledTypes}), as its
+ * node, package and path, by the node. Only the database evaluates the query, which "Item ref
+ * target" reads by (package, path); this reads the rows the query reads, the builder's and the
+ * tree's, so a builder that loses an unread-type resource's href fails here.
  *
- * @param rows - The builder's rows.
+ * @param doc - The manifest's tree.
+ * @param rows - The builder's rows of it.
+ * @returns The query's rows, by the resource's node.
+ */
+const unreadTypeHrefsOf = (
+  doc: XdmDocument<Composed>,
+  rows: Pick<PackageRows, "ResourceHref">,
+): ReadonlyMap<string, UnreadTypeHrefRow> => {
+  const flat = flatten(doc, ids.idOf);
+  const resources = new Set<string>(
+    flat.nodes.flatMap(({ id, kind }) => (kind === "cp:resource" ? [id] : [])),
+  );
+  const types = new Map<string, string>(
+    flat.attributes.flatMap(({ lexical, name, node }) =>
+      name === "type" && resources.has(node) ? [[node, lexical] as const] : [],
+    ),
+  );
+
+  return new Map(
+    [...rows.ResourceHref.values()].flatMap(({ node, package: pkg, path }) =>
+      Option.toArray(Option.fromUndefinedOr(types.get(node)))
+        .filter((lexical) => lexical !== "" && !spelledTypes.has(lexical))
+        .map(() => [node, { node, package: pkg, path }] as const),
+    ),
+  );
+};
+
+/**
+ * Compare the builder's keyed sets with the walk's: every relation's keys and rows alike, and the
+ * rows of the queries over them the host reads or restates, the typed hrefs (`typedHrefsOf`) and
+ * the unread-type hrefs ({@link unreadTypeHrefsOf}), by the resource's node.
+ *
+ * @param doc - The manifest's tree.
+ * @param rows - The builder's rows of it.
  * @param expected - The walk's.
  * @param label - The case, for a failure's message.
  */
-const assertRows = (rows: PackageRows, expected: Expected, label: string): void => {
+const assertRows = (
+  doc: XdmDocument<Composed>,
+  rows: PackageRows,
+  expected: Expected,
+  label: string,
+): void => {
   for (const relation of relationNames) {
     assert.deepStrictEqual(
       sortedEntries(rows[relation]),
@@ -386,6 +450,17 @@ const assertRows = (rows: PackageRows, expected: Expected, label: string): void 
       `${label} ${relation}`,
     );
   }
+
+  assert.deepStrictEqual(
+    sortedEntries(new Map(typedHrefsOf(rows).map((typed) => [typed.node, typed] as const))),
+    sortedEntries(expected.TypedHref),
+    `${label} TypedHref`,
+  );
+  assert.deepStrictEqual(
+    sortedEntries(unreadTypeHrefsOf(doc, rows)),
+    sortedEntries(expected.UnreadTypeHref),
+    `${label} UnreadTypeHref`,
+  );
 };
 
 /**
@@ -557,7 +632,7 @@ const elementOf = (
     references: [],
   })),
   children,
-  governs: "none",
+  governs: Option.none(),
   kind,
   namespaces: [],
   prefix: "",
@@ -678,36 +753,37 @@ const declaredVersion = (manifest: XmlDocument): Option.Option<string> =>
 
 /**
  * Build a manifest of resources, each its own identifier, its href listed as its one file and the
- * type it writes, if any, and read the rows the builder writes for unread types.
+ * type it writes, if any, and read the unread-type hrefs of the builder's rows
+ * ({@link unreadTypeHrefsOf}).
  *
  * @param resources - Each resource's href and type, none where it writes no type.
- * @returns The (path, type as written) of each `UnreadTypeHref`, the path of each `UnreadTypePath`
- *   and of each `TypedHref`.
+ * @returns The path of each unread-type href, in document order; the paths those name, once each,
+ *   the one package's (package, path) pairs "Item ref target" reads; and the path of each typed
+ *   href.
  */
 const unreadOf = (
   resources: readonly { readonly href: string; readonly type: string | undefined }[],
 ) => {
-  const rows = rowsOf(
-    treeOf({
-      manifestBase: undefined,
-      manifestIdentifier: "m",
-      resources: resources.map(({ href, type }) => ({
-        base: undefined,
-        dependencies: [],
-        files: [href],
-        href,
-        identifier: "own",
-        type,
-      })),
-      resourcesBase: undefined,
-    }),
-    ids,
-  );
+  const doc = treeOf({
+    manifestBase: undefined,
+    manifestIdentifier: "m",
+    resources: resources.map(({ href, type }) => ({
+      base: undefined,
+      dependencies: [],
+      files: [href],
+      href,
+      identifier: "own",
+      type,
+    })),
+    resourcesBase: undefined,
+  });
+  const rows = rowsOf(doc, ids);
+  const unread = [...unreadTypeHrefsOf(doc, rows).values()];
 
   return {
-    hrefs: [...rows.UnreadTypeHref.values()].map(({ path, typeLexical }) => [path, typeLexical]),
-    paths: [...rows.UnreadTypePath.values()].map(({ path }) => path),
-    typed: [...rows.TypedHref.values()].map(({ path }) => path),
+    hrefs: unread.map(({ path }) => path),
+    paths: [...new Set(unread.map(({ path }) => path))],
+    typed: typedHrefsOf(rows).map(({ path }) => path),
   };
 };
 
@@ -793,7 +869,7 @@ describe("import/overlays/package.ts", () => {
             const doc = treeOf(input);
             const rows = rowsOf(doc, ids);
 
-            assertRows(rows, walk(doc), "generated");
+            assertRows(doc, rows, walk(doc), "generated");
             for (const [at, { type }] of namedDocuments(rows)
               .values()
               .map((named) => [named.path, named] as const)) {
@@ -804,25 +880,24 @@ describe("import/overlays/package.ts", () => {
     ),
   );
 
-  it("writes an UnreadTypeHref and an UnreadTypePath for a resource whose written type spells no handle, and none for a typed or untyped one", () => {
+  it("gives the query UnreadTypeHref a row for a resource whose written type spells no handle, and none for a typed or untyped one", () => {
     // Oracle: R-O6's manifest (the genetic repair's gr-5a): its first resource's type carries a
     // trailing space, so it spells no handle; the test resource's spells one. A `bogus` type is
-    // unread too; a resource that writes no type has neither row, and AL3 refuses it alone.
+    // unread too; a resource that writes no type has no row, and AL3 refuses it alone. The query
+    // (`#pantry/qti/queries.ts`) is restated over the rows it reads, the builder's `ResourceHref`
+    // and the tree's `type` attribute ({@link unreadTypeHrefsOf}); two unread resources of one
+    // path are two rows of one (package, path), the pair "Item ref target" reads.
     assert.deepStrictEqual(
       unreadOf([
         { href: "item.xml", type: "resourceextmetadata/xml " },
         { href: "test.xml", type: "imsqti_test_xmlv3p0" },
       ]),
-      {
-        hrefs: [["item.xml", "resourceextmetadata/xml "]],
-        paths: ["item.xml"],
-        typed: ["test.xml"],
-      },
+      { hrefs: ["item.xml"], paths: ["item.xml"], typed: ["test.xml"] },
       "R-O6",
     );
     assert.deepStrictEqual(
       unreadOf([{ href: "item.xml", type: "bogus" }]),
-      { hrefs: [["item.xml", "bogus"]], paths: ["item.xml"], typed: [] },
+      { hrefs: ["item.xml"], paths: ["item.xml"], typed: [] },
       "bogus",
     );
     assert.deepStrictEqual(
@@ -834,9 +909,9 @@ describe("import/overlays/package.ts", () => {
       unreadOf([
         { href: "item.xml", type: "bogus" },
         { href: "item.xml", type: "bogus" },
-      ]).paths,
-      ["item.xml"],
-      "two unread resources of one path, one UnreadTypePath",
+      ]),
+      { hrefs: ["item.xml", "item.xml"], paths: ["item.xml"], typed: [] },
+      "two unread resources of one path, one (package, path)",
     );
   });
 
@@ -896,7 +971,7 @@ layer(TestLayer, { excludeTestServices: true })("import/overlays/package.ts, fix
 
           shredded += 1;
           const rows = rowsOf(tree.value, ids);
-          assertRows(rows, walk(tree.value), name);
+          assertRows(tree.value, rows, walk(tree.value), name);
           assert.isNotEmpty(rows.ManifestId, name);
         }
 
@@ -966,11 +1041,11 @@ type SplitSituation = "fragment" | "lead" | "plain" | "query" | "trail";
  */
 const census: ReferenceCensus = (_version, kind, name) =>
   Option.fromUndefinedOr(
-    new Map<string, CensusEntry>([
-      ["a href", { form: "uri", whiteSpace: "collapse" }],
-      ["img src", { form: "uri", whiteSpace: "collapse" }],
-      ["source srcset", { form: "srcset", whiteSpace: "replace" }],
-      ["video poster", { form: "uri", whiteSpace: "replace" }],
+    new Map<string, WhiteSpace>([
+      ["a href", "collapse"],
+      ["img src", "collapse"],
+      ["source srcset", "replace"],
+      ["video poster", "replace"],
     ]).get(`${kind} ${name}`),
   );
 
@@ -1081,8 +1156,10 @@ const referenceTreeOf = (input: ReferenceCase): XdmDocument<Composed> => ({
 /**
  * The reference rows a generated document implies, by a second reading: its nodes numbered in
  * document order (the document node 0, its root 1, then each whitespace node and element in turn),
- * each census attribute split by RFC 3986's Appendix B, and each value resolved by the law
- * oracle's own resolver with the root's and the element's `xml:base`, outermost first.
+ * each census attribute split by RFC 3986's Appendix B, and each value, a `srcset`'s too, resolved
+ * as one href by the law oracle's own resolver with the root's and the element's `xml:base`,
+ * outermost first. A `srcset` of several candidates or with a descriptor is "Href form"'s to refuse
+ * by its pattern over the lexical form, never the resolution's.
  *
  * @param input - The document.
  * @param documentIds - The ids its rows are written under.
@@ -1095,13 +1172,11 @@ const expectedReferences = (input: ReferenceCase, documentIds: DocumentIds) => {
   for (const [at, { base, carrier, value }] of input.elements.entries()) {
     const [kind, name] = carrier;
     const node = documentIds.idOf(3 + 2 * at);
-    for (const entry of Option.toArray(census("3.0.1", kind, name))) {
-      const resolution = resolveAttribute({
+    for (const whiteSpace of Option.toArray(census("3.0.1", kind, name))) {
+      const resolution = resolve({
         bases: [input.base, base].flatMap((written) => (written === undefined ? [] : [written])),
         document: documentIds.path,
-        lexical: value,
-        srcset: entry.form === "srcset",
-        whiteSpace: entry.whiteSpace,
+        value: oracleValueOf(value, whiteSpace),
       });
       references.set(JSON.stringify([node, name]), {
         document,
@@ -1129,8 +1204,9 @@ const expectedReferences = (input: ReferenceCase, documentIds: DocumentIds) => {
 };
 
 /**
- * A situation the reference rows' search must reach: each scope, each kind of value, and an
- * `xml:base` in scope of a resolved reference.
+ * A situation the reference rows' search must reach: each scope, each kind of value, an `xml:base`
+ * in scope of a resolved reference, and a `srcset` "Href form"'s pattern refuses that resolves as
+ * one href in the package, which no limit of the resolver turns unresolved.
  */
 type ReferenceSituation =
   | "base beside a reference"
@@ -1142,7 +1218,13 @@ type ReferenceSituation =
   | "resolved"
   | "same document"
   | "srcset"
+  | "srcset of candidates resolved"
   | "unresolved";
+
+/**
+ * `srcsetCandidatePattern` as the database reads it, ECMAScript under `u`.
+ */
+const oneCandidate = new RegExp(srcsetCandidatePattern.source, "u");
 
 /**
  * Name the situations one generated document reaches.
@@ -1167,6 +1249,13 @@ const referenceSituationsOf = (
     ["padded", references.some(({ lead, trail }) => lead !== "" || trail !== "")],
     ["params", references.some(({ params }) => params !== "")],
     ["srcset", references.some(({ name }) => name === "srcset")],
+    [
+      "srcset of candidates resolved",
+      references.some(
+        ({ lexical, name, scope }) =>
+          name === "srcset" && scope === "entry" && !oneCandidate.test(lexical),
+      ),
+    ],
     ["not in the census", input.elements.some(({ carrier: [kind] }) => kind === "div")],
   ];
 
@@ -1194,16 +1283,16 @@ const declaredWhiteSpace = (version: string, kind: string, name: string) => {
 };
 
 describe("import/overlays/package.ts, hrefs and references", () => {
-  it("reads the grammar's census as ReferenceAttribute's rows hold it, each with its type's whitespace class, and no form for an attribute outside it", () => {
+  it("reads the grammar's census as ReferenceAttribute's rows hold it, each with its type's whitespace class, and none for an attribute outside it", () => {
     // Oracle: the closed relation's own rows (`ReferenceAttribute`, spec reading 103), which the
     // database's copy into Reference selects by, against the builder's lookup; and the attribute
     // inventory's declarations, read by a second walk, for each one's whitespace class.
     // Bound: every row of ReferenceAttribute, and three attributes outside it.
     assert.isNotEmpty(ReferenceAttribute.rows);
-    for (const { form, kind, name, version } of ReferenceAttribute.rows) {
+    for (const { kind, name, version } of ReferenceAttribute.rows) {
       assert.deepStrictEqual(
         referenceCensus(version, kind, name),
-        Option.some({ form, whiteSpace: declaredWhiteSpace(version, kind, name) }),
+        Option.some(declaredWhiteSpace(version, kind, name)),
         `${version} ${kind} ${name}`,
       );
     }
@@ -1271,7 +1360,7 @@ describe("import/overlays/package.ts, hrefs and references", () => {
                 { params: expected.params, path: expected.target },
                 JSON.stringify(core),
               );
-              assert.match(pieces.target, new RegExp(hrefPathPattern, "u"));
+              assert.match(pieces.target, new RegExp(hrefPathPattern.source, "u"));
               assert.match(pieces.params, new RegExp(hrefParamsPattern, "su"));
               assert.strictEqual(
                 `${pieces.lead}${pieces.target}${pieces.params}${pieces.trail}`,
@@ -1307,6 +1396,7 @@ describe("import/overlays/package.ts, hrefs and references", () => {
                 "padded",
                 "params",
                 "srcset",
+                "srcset of candidates resolved",
                 "not in the census",
               ],
               { cases: 300, sense: notesOnly },

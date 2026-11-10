@@ -18,8 +18,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Formatter } from "effect";
 import { NodeKind } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { manifestPath } from "#pantry/qti/package.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * The content packaging namespace of QTI 3.0's profile.
@@ -85,7 +85,6 @@ const overlaysOf = (entries: ReadonlyMap<string, Uint8Array>) =>
         File: inputs.File.size,
         FileHref: inputs.FileHref.size,
         ManifestId: inputs.ManifestId.size,
-        NamedHref: inputs.NamedHref.size,
         Resource: inputs.Resource.size,
         ResourceFile: inputs.ResourceFile.size,
         ResourceHref: inputs.ResourceHref.size,
@@ -102,7 +101,6 @@ const baseCounts = {
   File: 1,
   FileHref: 1,
   ManifestId: 1,
-  NamedHref: 1,
   Resource: 1,
   ResourceFile: 1,
   ResourceHref: 1,
