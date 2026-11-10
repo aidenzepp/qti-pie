@@ -184,6 +184,12 @@ export interface AttributePayload {
  */
 export interface ElementPayload {
   readonly attributes: readonly AttributePayload[];
+  /**
+   * The `data-catalog-idref` the element carries, as the model kept it (`BodyElement.catalog`):
+   * the key the emitter hands `RenderInteraction.attach` for the element. Absent when the element
+   * references no catalog.
+   */
+  readonly catalog?: string;
   readonly children: readonly PayloadNode[];
   readonly kind: "element";
   readonly tag: string;
@@ -1301,12 +1307,14 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
 
   switch (node.kind) {
     case "element": {
-      return {
+      const element: ElementPayload = {
         attributes: node.attributes.map(({ name, value }) => ({ name, value })),
         children: copyNodes(node.children, build),
         kind: "element",
         tag: node.tag,
       };
+
+      return node.catalog === undefined ? element : { ...element, catalog: node.catalog };
     }
     case "text": {
       return { kind: "text", text: node.text };

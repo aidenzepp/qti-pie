@@ -25,7 +25,7 @@ import { contentNodes, renderContent, renderItemContent } from "#plate/content/m
 import type { ContentPayload } from "#plate/content/modules.ts";
 import type { Element } from "#plate/emit/node.ts";
 import { emitBody, emitNodes, writesMalformedHeading } from "#plate/emit/body.ts";
-import type { RenderInteraction } from "#plate/emit/body.ts";
+import type { AttachCatalog, RenderInteraction } from "#plate/emit/body.ts";
 import { emitItem, emitStatus, itemPart } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
@@ -463,12 +463,23 @@ const contentKitOf = (
 });
 
 /**
+ * The default answer to `RenderInteraction.attach`: no catalog presenter attaches anything, so an
+ * element that references a catalog renders as any other, with no minted id and no following
+ * nodes. The catalog module's answer, which presents the active cards of the catalog for the
+ * supports the host enabled, replaces it.
+ *
+ * @returns No nodes.
+ */
+const attachNothing: AttachCatalog = () => Result.succeed([]);
+
+/**
  * Construct the render function each interaction of a body is handed to, dispatching on its kind,
  * with its `modules`, which hands an interaction a module parses to its module's render, its
  * `moduleContent`, which gives that interaction's content through its module, its `content`,
  * which hands a body-placed content element's node to its module's render with the content kit,
- * and its `contentNodes`, which gives that node's content, so the emitter reads all four without
- * importing a module.
+ * its `contentNodes`, which gives that node's content, so the emitter reads all four without
+ * importing a module, and its `attach`, which answers an element's catalog reference with nothing
+ * ({@link attachNothing}).
  *
  * @param built The render's payload.
  * @param state The render's emit state.
@@ -476,6 +487,7 @@ const contentKitOf = (
  */
 const interactionRenderer = (built: Payload, state: EmitState): RenderInteraction => {
   const renderer: RenderInteraction = Object.assign(shippedRenderer(built, state), {
+    attach: attachNothing,
     content: (node: ContentPayload) =>
       renderContent(node, state, contentKitOf(built, state, renderer)),
     contentNodes,
