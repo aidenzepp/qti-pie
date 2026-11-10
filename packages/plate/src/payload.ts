@@ -61,6 +61,7 @@ import type { RedactRecord } from "#plate/model/record.ts";
 import { format, isRecordValue, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, ResponseValue, Single, Value } from "#plate/model/values.ts";
 import { clampOutputBudget, defaultOutputBudget } from "#plate/output-budget.ts";
+import type { Supports } from "#plate/supports.ts";
 
 /**
  * A message response validation gives one response, in the locale's text or the author's.
@@ -128,13 +129,20 @@ export interface View {
 
 /**
  * What the emitter needs beyond the payload: the locale, the base heading level, the base
- * package-relative URLs resolve against, and the resolved part overrides.
+ * package-relative URLs resolve against, the resolved part overrides, and the supports the host
+ * enabled.
  */
 export interface EmitState {
   readonly assetBase: string;
   readonly headingLevel: number;
   readonly locale: Locale;
   readonly parts: Resolved;
+  /**
+   * The supports the host enabled, which a content module's `render` is handed; `render` always
+   * sets it, and a state built by hand without it reads as `noSupports`. Nothing reads it yet:
+   * every content module is a stub.
+   */
+  readonly supports?: Supports;
 }
 
 /**
@@ -2061,12 +2069,15 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
  *   blocks, inlines and choices; none to show the item as it reads with no record.
  * @param limits The output budget its printed text is held to, clamped to 1 to 536,870,888, such
  *   as the configuration `render` takes; none for the configuration's default, 16,777,216.
+ * @param _supports The supports the host enabled, `noSupports` when absent, which will decide what
+ *   catalog content the copy holds; every content module is a stub, so it changes nothing yet.
  * @returns The redacted item.
  */
 export const redactItem = (
   item: Item,
   record?: RedactRecord,
   limits?: Pick<Configuration, "outputBudget">,
+  _supports?: Supports,
 ): Redacted => {
   const { body, hiddenOnly, notices, unprinted } = printBody(item, printingOf(item, record), {
     budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget),

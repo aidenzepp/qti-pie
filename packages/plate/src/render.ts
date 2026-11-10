@@ -43,6 +43,8 @@ import type {
   View,
 } from "#plate/payload.ts";
 import { drawInstance } from "#plate/seed.ts";
+import { noSupports } from "#plate/supports.ts";
+import type { Supports } from "#plate/supports.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
@@ -60,7 +62,9 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * Control takes `autofocus`. `disabled` disables every control. `mode` is the state the item is
  * shown in, `answering` when absent, which the Root's `data-mode` names: `review` and `solution`
  * mark every interaction not editable, and `solution` shows the correct responses only when the
- * author passes them as `values`.
+ * author passes them as `values`. `supports` are the accessibility supports the host enabled for
+ * the candidate, `noSupports` when absent; every content module is a stub, so they change nothing
+ * yet.
  */
 export interface Options {
   readonly assetBase?: string;
@@ -71,7 +75,18 @@ export interface Options {
   readonly names?: Readonly<Record<string, string>>;
   readonly parts?: PartOverrides;
   readonly posted?: Readonly<Record<string, readonly string[]>>;
+  readonly supports?: Supports;
   readonly values?: Readonly<Record<string, ResponseValue>>;
+}
+
+/**
+ * The author's further inputs to one {@link redact}, each optional: `supports`, the accessibility
+ * supports the host enabled for the candidate, `noSupports` when absent, which will decide what
+ * catalog content the redacted item holds; every content module is a stub, so they change nothing
+ * yet.
+ */
+export interface RedactOptions {
+  readonly supports?: Supports;
 }
 
 /**
@@ -297,13 +312,15 @@ const checkedInstance = (
  * @param limits The output budget its printed text is held to, clamped to 1 to 536,870,888: the
  *   configuration passed to `render`, or `{ outputBudget }`; none for the configuration's default,
  *   16,777,216.
+ * @param options The author's further inputs, none by default.
  * @returns The redacted item, the one input {@link render} takes.
  */
 export const redact = (
   document: Accepted,
   record?: RedactRecord,
   limits?: Pick<Configuration, "outputBudget">,
-): Redacted => redactItem(document.item, record, limits);
+  options: RedactOptions = {},
+): Redacted => redactItem(document.item, record, limits, options.supports ?? noSupports);
 
 /**
  * Give a record keyed by response identifier as the map a view holds.
@@ -345,13 +362,20 @@ const viewOf = (instance: string, configuration: Configuration, options: Options
  *   base.
  * @param parts The resolved part overrides.
  * @param assetBase The author's asset base, which overrides the configuration's.
+ * @param supports The supports the host enabled, `noSupports` when absent.
  * @returns The emit state.
  */
-const stateOf = (configuration: Configuration, parts: Resolved, assetBase?: string): EmitState => ({
+const stateOf = (
+  configuration: Configuration,
+  parts: Resolved,
+  assetBase?: string,
+  supports: Supports = noSupports,
+): EmitState => ({
   assetBase: assetBase ?? configuration.assetBase,
   headingLevel: configuration.headingLevel,
   locale: configuration.locale,
   parts,
+  supports,
 });
 
 /**
@@ -478,7 +502,7 @@ export const render = (
     const instance = yield* options.instance === undefined
       ? Result.succeed(drawInstance())
       : checkedInstance(options.instance, "options.instance");
-    const state = stateOf(configuration, parts, options.assetBase);
+    const state = stateOf(configuration, parts, options.assetBase, options.supports);
     const built = payload(item, viewOf(instance, configuration, options));
     const body = yield* emitBody(built, state, interactionRenderer(built, state));
     const live = yield* itemPart(state.parts, "live", liveRegion, []);
