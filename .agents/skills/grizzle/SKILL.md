@@ -400,7 +400,7 @@ A direct SQL writer, psql included, meets these refusals of its own, among the o
 
 | Refusal | Fix |
 | --- | --- |
-| 25000: a write to a grizzle table requires SERIALIZABLE | write at SERIALIZABLE: BEGIN ISOLATION LEVEL SERIALIZABLE; |
+| 25000: a write to a grizzle table requires SERIALIZABLE | write at SERIALIZABLE: BEGIN ISOLATION LEVEL SERIALIZABLE; (a table whose every writer is certified READ COMMITTED has no guard) |
 | 42501: permission denied, or a new row violating a row-security policy | SET ROLE to a role whose world holds the relation and the row |
 | 40001 or 40P01: a serialization failure or a deadlock | run the transaction again |
 
@@ -425,7 +425,10 @@ The command line's own refusals, by stage:
   `Db` transactions in flight; from then until the migration's last file commits, no `Db` call runs and no `Db` opens,
   so plan migrations as downtime.
 - Every transaction runs at SERIALIZABLE, a direct SQL writer's included. grizzle sets it as the database's default,
-  so psql sessions get it without asking, and a write below it on any grizzle table is refused with 25000.
+  so psql sessions get it without asking, and a write below it on a grizzle table is refused with 25000 by the table's
+  guard trigger. A table some role writes, every writer of which is certified READ COMMITTED and holds only INSERT and
+  SELECT on it, has no guard: a direct writer there meets its role's grants and the table's constraints alone. A
+  migration that changes whether a table qualifies drops or creates its guard.
 - Set `max_pred_locks_per_transaction = 2048` on the server (a server-start setting): under load PostgreSQL may
   report 53200, out of shared memory, with a HINT to raise it, and that failure is not retryable. Keep transactions
   short everywhere on the cluster: a committed write's locks are held until every older transaction ends, in any
@@ -622,6 +625,24 @@ The command line's own refusals, by stage:
   `writableNamesOf`, `lawsOf`, `lawIdsOf` and `lawsByStatement` take a schema, and a role passed to one is a type
   error; `query`, `ChangeSet.empty` and `workload` take either. A role's `write` names each entry once: a name listed
   twice is a type error, and `RoleRefused` (`writeTwice`) for a JavaScript caller.
+- A role that only inserts lists its entries as `insert` in place of `write`: it holds INSERT and SELECT on them and
+  no UPDATE or DELETE, so a direct writer's UPDATE or DELETE through it is 42501, and a ChangeSet of it that deletes,
+  puts, or adds a member under a mutable owner (which updates the owner's count) is `OutsideRole` (`insert`) when it
+  compiles. Stating both is `RoleRefused` (`writeAndInsert`).
+- A role's writes run READ COMMITTED only where `grizzle generate` certifies it from the statements its ChangeSets
+  send, against every other writer (README's READ COMMITTED writes); every other role runs SERIALIZABLE, and reads are
+  always SERIALIZABLE READ ONLY. generate prints each role's level, a SERIALIZABLE one with the count of each condition
+  it fails: `members` (no ChangeSet), `privileges` (it states `write`, or some role updates or deletes what it writes),
+  `laws` (a rule over a query over what it writes), `absence` (a read of the absence or a count of what it writes),
+  `snapshot` and `pivot` (other calls' rows read across statements, as anything but whole immutable groups keyed by
+  values the call states once, or by a foreign key check of a row that can change), `writers` (a SERIALIZABLE role
+  writing what it writes, or writing what it reads while reading other calls' rows itself), and `facts` (an object
+  the certifier cannot name). Clear one by changing the schema or the workload, never by a flag: there is none. A role
+  that inserts rows referencing content another role maintains publishes the keys it references: every writer of
+  that content states `insert` on it, an insert-only published relation holds the keys with a foreign key into the
+  content, a `publisher` role that inserts nothing else writes it, and the referencing role's foreign keys point at
+  the published relation. `compileServed` of other programs than the committed workload serves every role
+  SERIALIZABLE.
 - A role's `write` lists a query entry only when the entry is writable (README's Writing through a role); otherwise
   `role(...)` is refused as `RoleRefused`, its rule `writeUnwritable` naming the `entry` and the `why`. An entry over a
   family's owner writes the owner as a write of its table does: grizzle draws the owner's counts and ends, so no row
@@ -636,7 +657,8 @@ The command line's own refusals, by stage:
   the login is the boundary, so give each trust domain its own. A world role holds no privilege on a sequence: an
   identity default needs none, and a writer inserting explicit serial values (`OVERRIDING SYSTEM VALUE`) calls the
   field's advance function, `SELECT <schema>.<advance function>(<largest value inserted>)`, `<schema>` being
-  `schemaNameOf(schema)`, in the same transaction.
+  `schemaNameOf(schema)`, in the same transaction. A `pg.uuidv7` field has no sequence: leave it out for its
+  `uuidv7()` default, or write a uuid as it is.
 - Every installed object is named from what it is. Declared names are snake_case: the schema, tables, derived
   relations, rosters, contracts, columns, row checks and a role's views keep their converted names, a contract's CHECK
   is `check`, and a login's or role's role and a role's schema join the schema's name and their own (roleNameOf,
