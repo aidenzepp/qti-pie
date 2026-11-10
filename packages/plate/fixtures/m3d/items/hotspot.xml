@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="hotspot" title="Two garden plots" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>B</qti-value>
+      <qti-value>D</qti-value>
+    </qti-correct-response>
+    <qti-mapping default-value="0">
+      <qti-map-entry map-key="B" mapped-value="1"/>
+      <qti-map-entry map-key="D" mapped-value="1"/>
+    </qti-mapping>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-hotspot-interaction response-identifier="RESPONSE" max-choices="2" min-choices="1"
+      data-max-selections-message="Pick at most two plots."
+      data-min-selections-message="Pick at least one plot.">
+      <qti-prompt>Which two plots are watered by the dashed hose?</qti-prompt>
+      <img src="../images/hotspot-map.svg" alt="Four plots of a garden" width="400" height="300"/>
+      <qti-hotspot-choice identifier="A" shape="rect" coords="40,40,160,120" hotspot-label="The square plot"/>
+      <qti-hotspot-choice identifier="B" shape="circle" coords="300,90,50" hotspot-label="The round plot"/>
+      <qti-hotspot-choice identifier="C" shape="poly" coords="60,260,140,180,220,260" hotspot-label="The triangular plot"/>
+      <qti-hotspot-choice identifier="D" shape="default" coords="0,0,400,300" hotspot-label="Elsewhere in the garden"/>
+    </qti-hotspot-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/map_response.xml"/>
+</qti-assessment-item>

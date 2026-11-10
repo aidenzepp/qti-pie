@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="hotspot-single" title="One garden plot" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>SQUARE</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-hotspot-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-prompt>Which plot has four straight sides?</qti-prompt>
+      <img src="../images/hotspot-map.svg" alt="Four plots of a garden" width="400" height="300"/>
+      <qti-hotspot-choice identifier="SQUARE" shape="rect" coords="160,120,40,40" hotspot-label="The square plot"/>
+      <qti-hotspot-choice identifier="ROUND" shape="circle" coords="300,90,50"/>
+      <qti-hotspot-choice identifier="TRIANGLE" shape="poly" coords="60,260,140,180,220,260" hotspot-label="The triangular plot"/>
+    </qti-hotspot-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+</qti-assessment-item>

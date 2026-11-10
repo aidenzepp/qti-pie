@@ -1035,6 +1035,114 @@
 /* end graphic-gap-match-interaction */
 
 /* begin hotspot-interaction (issue m3d-07) */
+
+/*
+ * The Hotspot Image part: the box the hotspots lie over, shrink-wrapped to the author's image, so
+ * every Choice laid over it, at its full extent, spans exactly the image. No part carries an
+ * inline style (rule 723e580c), so nothing here positions by coordinates: each Outline is an svg
+ * over the whole box whose shape is drawn in the image's own coordinate space.
+ */
+:where([data-slot="hotspot-interaction-image"]) {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+}
+
+:where([data-slot="hotspot-interaction-image"] > img),
+:where([data-slot="hotspot-interaction-image"] > picture > img),
+:where([data-slot="hotspot-interaction-image"] > object) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/*
+ * Each Choice, a label laid over the whole image, takes no pointer event itself: only its drawn
+ * shape does, so a click on the area activates the label and toggles its Control, and a click
+ * outside every area reaches nothing. The default hotspot, last in document order, lies under the
+ * others, so an area listed before it hides it where they overlap.
+ */
+:where([data-slot="hotspot-interaction-choice"]) {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  line-height: normal;
+}
+
+:where([data-slot="hotspot-interaction-choice"][data-shape="default"]) {
+  z-index: 0;
+}
+
+:where([data-slot="hotspot-interaction-outline"]) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+:where([data-slot="hotspot-interaction-outline"] > *) {
+  pointer-events: auto;
+  cursor: pointer;
+  fill: color-mix(in oklab, var(--primary, oklch(0.205 0 0)) 12%, transparent);
+  stroke: var(--primary, oklch(0.205 0 0));
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+
+/*
+ * The Hotspot Control, hidden from sight only, as the Choice Control is: it stays focusable,
+ * named and in the form, so never display: none or visibility: hidden. Its states show on the
+ * shape beside it.
+ */
+:where([data-slot="hotspot-interaction-control"]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The Label text, the hotspot's alternative text, read but not shown, as an img's alt. */
+:where([data-slot="hotspot-interaction-label"]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A selected hotspot's shape. */
+:where(
+  [data-slot="hotspot-interaction-control"]:checked ~ [data-slot="hotspot-interaction-outline"] > *
+) {
+  fill: color-mix(in oklab, var(--primary, oklch(0.205 0 0)) 45%, transparent);
+  stroke-width: 3px;
+}
+
+/* Focus on a hotspot, by its Control: shadcn's ring, drawn as the shape's stroke. */
+:where(
+  [data-slot="hotspot-interaction-control"]:focus-visible
+    ~ [data-slot="hotspot-interaction-outline"]
+    > *
+) {
+  stroke: var(--ring, oklch(0.708 0 0));
+  stroke-width: 4px;
+}
+
+/* A hotspot whose Control is disabled takes no pointer and dims. */
+:where(
+  [data-slot="hotspot-interaction-control"]:disabled ~ [data-slot="hotspot-interaction-outline"] > *
+) {
+  pointer-events: none;
+  cursor: default;
+  opacity: 0.6;
+}
+
 /* end hotspot-interaction */
 
 /* begin hottext-interaction (issue m3d-09) */
