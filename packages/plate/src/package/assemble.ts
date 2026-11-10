@@ -18,20 +18,33 @@
  *
  * The module is pure: it reads what the package's judging resolved, which section document each
  * section ref places and which item each item ref names, and builds plain data. A document is
- * plain immutable data, so the assembly copies and never mutates a judged one. It refuses nothing:
- * a cycle (`inclusion-cycle`, reading 85), a remote section ref (`package-path-outside`, reading
- * 170) and the assembly limit are the judging's, and refuse the package before it is delivered. A
- * section ref whose document the walk finds on its own chain, or that places no document given, is
- * kept as written and places nothing, so a loop can never run the copy without end. The assembled
- * document is the one document no reader read, so the copy holds it to two limits of the delivery,
- * {@link assemblyDepthLimit} and {@link assemblyInstanceLimit}, and gives none past either: the
- * test is then delivered unassembled, as a test opened alone is.
+ * plain immutable data, so the assembly copies and never mutates a judged one. It refuses no
+ * package itself: a cycle (`inclusion-cycle`, reading 85), a remote section ref
+ * (`package-path-outside`, reading 170) and the judging's assembly limit are the judging's, and
+ * refuse the package before it is delivered. A section ref whose document the walk finds on its
+ * own chain, or that places no document given, is kept as written and places nothing, so a loop
+ * can never run the copy without end. The assembled document is the one document no reader read,
+ * so the copy holds it to three limits of the delivery, {@link assemblyDepthLimit},
+ * {@link assemblyInstanceLimit} and {@link assemblyElementLimit}, and gives the limit it passed in
+ * place of a document; the package refuses the test `assembly-limit` then, and delivers it
+ * assembled or not at all, never as a test opened alone is, with its section refs marked (S-9,
+ * P-2; issue m3f-03b).
+ *
+ * Each item ref a placed document writes names its item from the document that writes it, and the
+ * delivered test names it from the test document alone, so the copy writes the ref's `href` over
+ * again as the path of the item the judging resolved, relative to the test document (issue
+ * m3f-03b).
  *
  * @module
  */
-import { Option } from "effect";
+import { Result } from "effect";
 import { walk } from "#plate/document/source.ts";
-import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
+import type {
+  SourceAttribute,
+  SourceChild,
+  SourceDocument,
+  SourceElement,
+} from "#plate/document/source.ts";
 import type { LtiLink } from "#plate/model/test.ts";
 
 /**
@@ -79,6 +92,12 @@ export interface AssemblyInput {
    */
   readonly sectionRefs: readonly PlacedSection[];
   readonly test: SourceDocument;
+  /**
+   * The test document's path from the package's root, whose directory each placed item ref's
+   * rewritten `href` is relative to ({@link AssembledTest.document}). The test's location is the
+   * package's location, a `/` and this path.
+   */
+  readonly testPath: string;
 }
 
 /**
@@ -96,9 +115,19 @@ export interface AssembledTest {
   /**
    * The assembled document, at the test document's location: a copy of the test document in which
    * each section ref that places a document is replaced by a copy of that document's root, each
-   * placement its own copy.
+   * placement its own copy. The test document's own item refs keep their `href` as written; each
+   * item ref a placed document writes has its `href` written over as the path of the item the
+   * judging resolved for it, relative to the test document ({@link ResolvedItem.path}): one `..`
+   * for each folder of {@link AssemblyInput.testPath}, then the item's path with each segment
+   * percent-encoded, so the one rule a session has, to resolve an item ref against the test's
+   * location and decode each segment, names the package's item (S-9; issue m3f-03b).
    */
   readonly document: SourceDocument;
+  /**
+   * How many elements the assembled document holds, the test document's own and every placed
+   * document's copy counted, within {@link assemblyElementLimit}.
+   */
+  readonly elements: number;
   /**
    * The path of the item each item ref of the assembled document names, keyed by the item ref's
    * identifier, in the assembled document's order, the first of an identifier kept: a section
@@ -129,9 +158,9 @@ export interface AssembledTest {
  * elements with the call stack and is bounded by that limit, since no document the reader read
  * nests deeper; an assembled document is the one document no reader read, and a chain of placed
  * section documents nests as deep as the chain is long, within the assembly limit of 2,048
- * placements. A test whose assembled document nests deeper is delivered as its own document, its
- * section refs marked and nothing placed, as a test opened alone is: a stated limit of the
- * delivery, no rule of QTI, which an iterative test model would lift (S-9; issue m3f-03).
+ * placements. A test whose assembled document nests deeper is refused `assembly-limit` with
+ * `check: "delivery-depth"`, and never delivered unassembled: a stated limit of the delivery, no
+ * rule of QTI, which an iterative test model would lift (S-9; issue m3f-03, issue m3f-03b).
  */
 export const assemblyDepthLimit = 256;
 
@@ -143,11 +172,49 @@ export const assemblyDepthLimit = 256;
  * chain of forty section documents each placing the next twice is judged within its limit while
  * its assembled document, which writes every instance, would hold 2^40 placements and more items
  * than any session could meet. The copy stops at the first instance past this count, so refusing
- * to assemble costs what reaching the count does, and the test is delivered as its own document,
- * its section refs marked and nothing placed, as a test opened alone is: a stated limit of the
- * delivery, no rule of QTI (S-9, P-2; issue m3f-03).
+ * to assemble costs what reaching the count does, and the test is refused `assembly-limit` with
+ * `check: "delivery-instances"`, never delivered unassembled: a stated limit of the delivery, no
+ * rule of QTI (S-9, P-2; issue m3f-03, issue m3f-03b).
  */
 export const assemblyInstanceLimit = 2048;
+
+/**
+ * The most elements the copy of one test may open, 262,144, the test document's own and every
+ * placed document's counted once for each placement, and still be delivered assembled. The two
+ * limits above bound the shape of the assembled document and neither its size: a few placed
+ * documents of many elements each, under both, are copied whole once for each placement, and the
+ * test model, the session and every test-feature module then hold each copy in memory. The count
+ * sits above every package the judging admits within its own assembly limit (2,048 placements, 4
+ * MiB of section documents placed, `assemblyPlacementLimit` and `assemblyByteLimit` in
+ * `#plate/package/open.ts`) whose documents hold what a test holds, and below what exhausts memory.
+ * The copy stops at the first element past it, so refusing costs what reaching the count does, and
+ * the test is refused `assembly-limit` with `check: "delivery-size"`: a stated limit of the
+ * delivery, no rule of QTI (S-9, P-2; issue m3f-03b, GitHub issue #186).
+ */
+export const assemblyElementLimit = 262_144;
+
+/**
+ * Which limit of the delivery an assembly passed: the assembled document nests deeper than
+ * {@link assemblyDepthLimit} (`depth`), holds more placements than {@link assemblyInstanceLimit}
+ * (`instances`), or holds more elements than {@link assemblyElementLimit} (`size`). The package
+ * refuses the test `assembly-limit` with `check` `delivery-depth`, `delivery-instances` or
+ * `delivery-size` respectively (S-9, P-2; issue m3f-03b).
+ */
+export type AssemblyLimit = "depth" | "instances" | "size";
+
+/**
+ * The limit an assembly passed, what it allows and the count at which the copy stopped: the least
+ * count past the limit, since the copy checks every element it opens (S-9, P-2; issue m3f-03b).
+ */
+export interface PassedLimit {
+  /**
+   * What the limit allows: the value of {@link assemblyDepthLimit}, {@link assemblyInstanceLimit}
+   * or {@link assemblyElementLimit}.
+   */
+  readonly allowed: number;
+  readonly limit: AssemblyLimit;
+  readonly reached: number;
+}
 
 /**
  * One open element of the copy: the element being copied, which document's placement it lies in,
@@ -170,6 +237,46 @@ interface Frame {
 }
 
 /**
+ * Write the `href` of a placed item ref's copy: the item's path from the package's root, made
+ * relative to the directory of the test document, one `..` for each folder of the test's path and
+ * then the item's segments, each percent-encoded.
+ *
+ * A session resolves an item ref's `href` against the test document's location by RFC 3986 section
+ * 5.2 and decodes each path segment once (`namedDocument` in `#plate/session/start.ts`), so the
+ * encoding is the one that gives the file's own name back: `two part.xml` is `two%20part.xml`, and
+ * a `%` is `%25`. `encodeURIComponent` also encodes a `:`, which in the first segment of a
+ * relative reference would read as a scheme. A segment holding a lone surrogate is made
+ * well-formed first, since `encodeURIComponent` refuses one.
+ *
+ * @param testPath The test document's path from the package's root.
+ * @param itemPath The item's path from the package's root, as the judging resolved it.
+ * @returns The `href` that names the item from the test document.
+ */
+const hrefFrom = (testPath: string, itemPath: string): string =>
+  [
+    ...Array.from({ length: testPath.split("/").length - 1 }, () => ".."),
+    ...itemPath.split("/").map((segment) => encodeURIComponent(segment.toWellFormed())),
+  ].join("/");
+
+/**
+ * Write over the `href` of an item ref's attributes, leaving every other attribute as it is. The
+ * new `href` is whole text, so it names no entity reference.
+ *
+ * @param attributes The item ref's attributes.
+ * @param href The `href` to write.
+ * @returns The attributes with their `href` replaced.
+ */
+const withHref = (
+  attributes: readonly SourceAttribute[],
+  href: string,
+): readonly SourceAttribute[] =>
+  attributes.map((attribute) =>
+    attribute.local === "href" && attribute.namespace === ""
+      ? { ...attribute, references: [], value: href }
+      : attribute,
+  );
+
+/**
  * Assemble a test from its package's section documents: copy the test document, replacing each
  * section ref that places a document by a copy of that document's root, depth first in document
  * order, and through each placed document's own section refs in turn, as the qti package's
@@ -180,21 +287,29 @@ interface Frame {
  * The copy keeps the elements still open in a list of its own rather than on the call stack, so no
  * depth of nested placements overflows it. A section ref whose document is on the chain of
  * documents from the test down to the ref, which the judging refuses `inclusion-cycle`, or whose
- * document is not among the package's, is kept as written and places nothing. The copy stops, and
- * gives none, at the first element that would nest deeper than {@link assemblyDepthLimit} or the
- * first placement past {@link assemblyInstanceLimit}: the test is then delivered unassembled.
+ * document is not among the package's, is kept as written and places nothing. Each item ref a
+ * placed document writes is copied with its `href` written over as the path of the item the
+ * judging resolved for it, relative to the test document ({@link hrefFrom}); the test document's
+ * own item refs are copied as they are.
  *
- * @param input The test's document, the package's documents, and the section refs and item refs
- *   the judging resolved.
+ * The copy counts every element it opens, and stops at the first that passes a limit of the
+ * delivery: nesting deeper than {@link assemblyDepthLimit}, more placements than
+ * {@link assemblyInstanceLimit}, or more elements than {@link assemblyElementLimit}, checked in
+ * that order, and gives the limit it passed in place of a document, so the package refuses the
+ * test and never delivers one unassembled (S-9, P-2; issue m3f-03b, GitHub issue #186).
+ *
+ * @param input The test's document and its path in the package, the package's documents, and the
+ *   section refs and item refs the judging resolved.
  * @returns The assembled document with its item refs' items, its LTI links and the test document's
- *   paths in it; none when the assembled document would pass a limit of the delivery.
+ *   paths in it; or the limit of the delivery the assembled document would pass.
  */
 export const assembleTest = ({
   documents,
   itemRefs,
   sectionRefs,
   test,
-}: AssemblyInput): Option.Option<AssembledTest> => {
+  testPath,
+}: AssemblyInput): Result.Result<AssembledTest, PassedLimit> => {
   const placing = new Map(sectionRefs.map(({ element, path }) => [element, path] as const));
   const naming = new Map(itemRefs.map((itemRef) => [itemRef.element, itemRef] as const));
   // Each copied element of the test document's own, by the original.
@@ -203,6 +318,7 @@ export const assembleTest = ({
   const named = new Map<SourceElement, ResolvedItem>();
   const onChain = new Set<string>();
   let instances = 0;
+  let elements = 0;
   /**
    * Open the copy of an element, or of the root of the document a section ref places.
    *
@@ -211,6 +327,8 @@ export const assembleTest = ({
    * @returns The frame to push.
    */
   const opened = (element: SourceElement, own: boolean): Frame => {
+    elements += 1;
+
     const placed = placing.get(element);
     const document = placed === undefined ? undefined : documents.get(placed);
     if (placed !== undefined && document !== undefined && !onChain.has(placed)) {
@@ -228,8 +346,20 @@ export const assembleTest = ({
   let depth = 1;
   for (let frame = frames.at(-1); frame !== undefined; frame = frames.at(-1)) {
     depth = Math.max(depth, frames.length);
-    if (depth > assemblyDepthLimit || instances > assemblyInstanceLimit) {
-      return Option.none();
+    if (depth > assemblyDepthLimit) {
+      return Result.fail({ allowed: assemblyDepthLimit, limit: "depth", reached: depth });
+    }
+
+    if (instances > assemblyInstanceLimit) {
+      return Result.fail({
+        allowed: assemblyInstanceLimit,
+        limit: "instances",
+        reached: instances,
+      });
+    }
+
+    if (elements > assemblyElementLimit) {
+      return Result.fail({ allowed: assemblyElementLimit, limit: "size", reached: elements });
     }
 
     const child = frame.element.children[frame.next];
@@ -237,7 +367,15 @@ export const assembleTest = ({
     if (child === undefined) {
       frames.pop();
 
-      const copy: SourceElement = { ...frame.element, children: frame.copied };
+      const itemRef = naming.get(frame.element);
+      const copy: SourceElement = {
+        ...frame.element,
+        attributes:
+          itemRef === undefined || frame.own
+            ? frame.element.attributes
+            : withHref(frame.element.attributes, hrefFrom(testPath, itemRef.path)),
+        children: frame.copied,
+      };
       if (frame.placed !== undefined) {
         onChain.delete(frame.placed);
       }
@@ -246,7 +384,6 @@ export const assembleTest = ({
         copies.set(frame.element, copy);
       }
 
-      const itemRef = naming.get(frame.element);
       if (itemRef !== undefined) {
         named.set(copy, itemRef);
       }
@@ -293,5 +430,5 @@ export const assembleTest = ({
     }
   }
 
-  return Option.some({ depth, document, items, links, paths });
+  return Result.succeed({ depth, document, elements, items, links, paths });
 };
