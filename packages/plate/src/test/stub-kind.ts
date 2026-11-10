@@ -76,7 +76,7 @@ export const stubOrder = [
  */
 export const stubDeclarations = {
   "graphic-associate": { baseType: "pair", cardinality: "single" },
-  "graphic-gap-match": { baseType: "directedPair", cardinality: "single" },
+  "graphic-gap-match": { baseType: "directedPair", cardinality: "multiple" },
   "graphic-order": { baseType: "identifier", cardinality: "ordered" },
   hotspot: { baseType: "identifier", cardinality: "single" },
   "select-point": { baseType: "point", cardinality: "multiple" },
