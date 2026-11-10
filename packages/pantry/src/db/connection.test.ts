@@ -20,6 +20,7 @@ import { assert, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
+import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import {
   Clock,
@@ -268,6 +269,29 @@ interface Settings {
 }
 
 /**
+ * The settings that meet in a case: the database name meets the CA folder and the secrets folder,
+ * since a login's password file lies under the name's folder; the port meets the CA folder, since
+ * a refused port is refused before the CA is read; and the host meets nothing, each setting read
+ * apart from the others. So each case varies one of them over those it meets, the others unset,
+ * the small box in which every interaction the connections have occurs.
+ */
+const settingsAxes = ["database", "port", "host"] as const;
+
+/**
+ * Draw a case: one axis of {@link settingsAxes}, and every variant of that axis's settings.
+ */
+const settingsOf: Gen<Settings> = (source) => {
+  const axis = source.draw(element(settingsAxes));
+  const database = axis === "database" ? source.draw(element(databases)) : databases[0];
+  const port = axis === "port" ? source.draw(element(ports)) : ports[0];
+  const host = axis === "host" ? source.draw(element(hosts)) : hosts[0];
+  const state = axis === "host" ? states[0] : source.draw(element(states));
+  const secrets = axis === "database" ? source.draw(element(secretFolders)) : secretFolders[0];
+
+  return { database, host, port, secrets, state };
+};
+
+/**
  * What a case reaches: both connections built, a setting refused, or the CA missing.
  */
 type Reached = "built" | "malformed" | "no CA";
@@ -487,6 +511,17 @@ const lingeringScripts = [
 ] as const;
 
 /**
+ * The live clock's cases: each lingering command once, the one that ends on SIGTERM at a login's
+ * first attempt and the one that ignores it at the build of the runtime's login connection. One
+ * run of the command is bounded and killed the same way wherever it runs; when each connection runs
+ * it, and the bound each states, are the fake-clock cases' above.
+ */
+const lingeringCases = [
+  { script: lingeringScripts[0], side: "login" },
+  { script: lingeringScripts[1], side: "primed login" },
+] as const;
+
+/**
  * Read a connection's first attempt: its connect timeout and the password the attempt reads.
  *
  * @param connection - The connection.
@@ -570,7 +605,7 @@ const groupAlive = (group: number) =>
 
 layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (it) => {
   it.effect(
-    "build both connections exactly as scripts/db.sh resolves the settings, refuse what it refuses before reading a file, and name a missing CA: every host, port, database, CA folder and secrets folder variant, exhausted",
+    "build both connections exactly as scripts/db.sh resolves the settings, refuse what it refuses before reading a file, and name a missing CA: every variant of each setting over the settings it meets, exhausted",
     (ctx) =>
       Effect.gen(function* everySetting() {
         const scratch = yield* scratchFolders;
@@ -579,17 +614,11 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
           ctx,
           exhaust(
             {
-              box: "every combination of 4 host, 10 port and 9 database variants, 3 CA folders and 2 secrets folders",
+              box: "the 9 database variants under 3 CA folders and 2 secrets folders, the 10 port variants under 3 CA folders, and the 4 host variants, each other setting unset",
               caseHang: Duration.seconds(10),
               coverage: requiredInSpace<Reached>(["built", "malformed", "no CA"]),
-              generator: (source): Settings => ({
-                database: source.draw(element(databases)),
-                host: source.draw(element(hosts)),
-                port: source.draw(element(ports)),
-                secrets: source.draw(element(secretFolders)),
-                state: source.draw(element(states)),
-              }),
-              limit: 2160,
+              generator: settingsOf,
+              limit: 88,
               literal: Formatter.format,
               oracle: { kind: "specification", name: "scripts/db.sh's GR8DES_PG_* block" },
               suite: "db/connection/settings",
@@ -1192,7 +1221,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
   "db/connection.ts, a password command's bound on the live clock",
   (it) => {
     it.effect(
-      "stop a password command its bound outlives, killing its process group, SIGKILL after a second where it ignores SIGTERM, and refuse the run with PasswordCommandTimedOut: the first attempt of the migration identity's connection and of a login's, and the build of the runtime's login connection, each command, exhausted",
+      "stop a password command its bound outlives, killing its process group, SIGKILL after a second where it ignores SIGTERM, and refuse the run with PasswordCommandTimedOut: each command, at an attempt and at a build",
       (ctx) =>
         Effect.gen(function* lingeringCommands() {
           const fs = yield* FileSystem.FileSystem;
@@ -1206,17 +1235,14 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             ctx,
             exhaust(
               {
-                box: "a command that ends on SIGTERM and one that ignores it, for the migration identity, the login and the runtime's login, under a 1-second bound",
+                box: "a command that ends on SIGTERM at a login's first attempt, and one that ignores it at the build of the runtime's login connection, under a 1-second bound",
                 caseHang: Duration.seconds(20),
                 coverage: requiredInSpace<(typeof lingeringScripts)[number]["variant"]>([
                   "ends on SIGTERM",
                   "ignores SIGTERM",
                 ]),
-                generator: (source) => ({
-                  script: source.draw(element(lingeringScripts)),
-                  side: source.draw(element(commandSides)),
-                }),
-                limit: lingeringScripts.length * commandSides.length,
+                generator: (source) => source.draw(element(lingeringCases)),
+                limit: lingeringCases.length,
                 literal: Formatter.format,
                 oracle: {
                   kind: "specification",
@@ -1227,7 +1253,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               ({ script, side }, c) =>
                 Effect.gen(function* oneCase() {
                   const command = `${scratch.secrets}/${script.file}`;
-                  const role = side === "migration" ? "grizzle_dev" : loginRole;
+                  const role = loginRole;
                   const provider = ConfigProvider.layer(
                     ConfigProvider.fromUnknown({
                       GR8DES_PG_PASSWORD_COMMAND: command,
