@@ -20,6 +20,10 @@
 import { Array as Arr, Option } from "effect";
 import type { Brand } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
+import { defaultView } from "#plate/content/contract.ts";
+import type { ContentCopyKit, ContentRedactKit } from "#plate/content/contract.ts";
+import { contentSteps, copyItemContent, redactItemContent } from "#plate/content/modules.ts";
+import type { ContentPayload, ItemNodesHeld, ItemPayloadsHeld } from "#plate/content/modules.ts";
 import { controlCap, exceedsControlCap } from "#plate/control-cap.ts";
 import { scopedId } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
@@ -64,7 +68,9 @@ import type { RedactRecord } from "#plate/model/record.ts";
 import { format, isRecordValue, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, ResponseValue, Single, Value } from "#plate/model/values.ts";
 import { clampOutputBudget, defaultOutputBudget } from "#plate/output-budget.ts";
+import { noSupports } from "#plate/supports.ts";
 import type { Supports } from "#plate/supports.ts";
+import type { OutcomeView } from "#plate/vocabulary.ts";
 
 /**
  * A message response validation gives one response, in the locale's text or the author's.
@@ -141,11 +147,16 @@ export interface EmitState {
   readonly locale: Locale;
   readonly parts: Resolved;
   /**
-   * The supports the host enabled, which a content module's `render` is handed; `render` always
-   * sets it, and a state built by hand without it reads as `noSupports`. Nothing reads it yet:
-   * every content module is a stub.
+   * The supports the host enabled, which a content module's `render` is handed through its kit;
+   * `render` always sets it, and a state built by hand without it reads as `noSupports`.
    */
   readonly supports?: Supports;
+  /**
+   * The view the item is shown to, which a content module's `render` is handed through its kit;
+   * `render` always sets it, and a state built by hand without it reads as the candidate's
+   * (`defaultView`).
+   */
+  readonly view?: OutcomeView;
 }
 
 /**
@@ -449,9 +460,12 @@ export type InteractionPayload =
   | TextEntryPayload;
 
 /**
- * A node of the payload's body.
+ * A node of the payload's body: an element, a text, an interaction, a notice, or the payload node
+ * of a body-placed content element (`ContentPayload` in `#plate/content/modules.ts`, one member per
+ * content module, each as its module's `copy` gives it).
  */
 export type PayloadNode =
+  | ContentPayload
   | ElementPayload
   | InteractionPayload
   | ModulePayload
@@ -467,6 +481,12 @@ export type PayloadNode =
  */
 export interface Payload {
   readonly body: readonly PayloadNode[];
+  /**
+   * The payload nodes of the elements the item-placed content modules read, by element, each the
+   * module's `copy` of a node the redaction kept ({@link redactItem}); absent when none was kept.
+   * The emitter writes them after the body.
+   */
+  readonly content?: ItemPayloadsHeld;
   readonly finished: boolean;
   /**
    * The item instance key, which scopes every id and entry name.
@@ -503,6 +523,11 @@ export type ResponseBinding =
  */
 export interface RedactedFields {
   readonly body: readonly BodyNode[];
+  /**
+   * The nodes of the elements the item-placed content modules read that the redaction kept, by
+   * element, each decided by its module's `redact`; absent when none was kept.
+   */
+  readonly content?: ItemNodesHeld;
   /**
    * The document's location as the host named it.
    */
@@ -657,6 +682,7 @@ const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
       case "template-inline": {
         return authoredIdsIn(node.content);
       }
+      case "content":
       case "printed-variable":
       case "text":
       case "unsupported": {
@@ -1247,6 +1273,15 @@ const redactKit = (interaction: Interaction, build: Build): RedactKit => ({
 });
 
 /**
+ * Give the kit a content module's `copy` reads its node's content through: the copy of body nodes
+ * into payload nodes.
+ *
+ * @param build The build.
+ * @returns The kit.
+ */
+const copyKit = (build: Build): ContentCopyKit => ({ nodes: (nodes) => copyNodes(nodes, build) });
+
+/**
  * Copy one body node into its payload node.
  *
  * A printed variable becomes its notice. {@link redactItem} leaves none in a redacted body, so the
@@ -1275,6 +1310,9 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
     }
     case "text": {
       return { kind: "text", text: node.text };
+    }
+    case "content": {
+      return contentSteps(node).copy(copyKit(build));
     }
     case "unsupported": {
       return { feature: node.feature, kind: "notice" };
@@ -1310,6 +1348,11 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
  */
 interface RedactedBody {
   readonly body: readonly BodyNode[];
+  /**
+   * The nodes the item-placed content modules read that their `redact` kept, by element; none
+   * when nothing is kept.
+   */
+  readonly content: Option.Option<ItemNodesHeld>;
   /**
    * The responses some interaction binds that no interaction of `body` binds, in the order the
    * walk first meets them: {@link hiddenOnlyResponses}' set.
@@ -1684,6 +1727,8 @@ const printBody = (
   item: Item,
   printing: Option.Option<RedactRecord>,
   writing: Writing,
+  supports: Supports,
+  view: OutcomeView,
 ): RedactedBody => {
   const listed = item.unsupported.filter((entry) => entry.shown === "notice");
   const listedAt = new Map<string, number[]>();
@@ -1801,6 +1846,26 @@ const printBody = (
   };
 
   /**
+   * Give the kit a content module's `redact` decides by: the walk over the nodes it keeps, as the
+   * page sees them, the walk over the nodes it withholds, as content the page does not see, the
+   * record, the supports and the view.
+   *
+   * @param seen Whether the page sees the module's node.
+   * @returns The kit.
+   */
+  const contentKit = (seen: boolean): ContentRedactKit => ({
+    // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and the kit are mutually recursive, as a content node holds body nodes; the kit's walks run only after both are defined.
+    nodes: (nodes) => nodesOf(nodes, seen),
+    record: printing,
+    supports,
+    view,
+    withhold: (nodes) => {
+      // oxlint-disable-next-line eslint/no-use-before-define -- As above: the walk runs only after `nodesOf` is defined.
+      nodesOf(nodes, false);
+    },
+  });
+
+  /**
    * Show body nodes from the values, walking content the page does not see as well, so its notices
    * are reached and its responses bound.
    *
@@ -1863,6 +1928,13 @@ const printBody = (
           reach(node.path, (entry) => entry.feature === node.feature, seen);
 
           return [node];
+        }
+        case "content": {
+          reach(node.path, () => true, seen);
+
+          const kept = contentSteps(node).redact(contentKit(seen));
+
+          return Option.isSome(kept) ? [kept.value] : [];
         }
         case "printed-variable": {
           return Option.match(
@@ -1983,6 +2055,7 @@ const printBody = (
         : [];
     });
   const body = nodesOf(item.body, true);
+  const content = redactItemContent(item.content, contentKit(true));
 
   /**
    * Decide whether a listed notice is named: it was not reached where the page does not see it,
@@ -2020,7 +2093,7 @@ const printBody = (
 
   const hiddenOnly = new Set([...unseenBound].filter((response) => !shownBound.has(response)));
 
-  return { body, hiddenOnly, notices, unprinted };
+  return { body, content, hiddenOnly, notices, unprinted };
 };
 
 /**
@@ -2119,23 +2192,30 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
  *   blocks, inlines and choices; none to show the item as it reads with no record.
  * @param limits The output budget its printed text is held to, clamped to 1 to 536,870,888, such
  *   as the configuration `render` takes; none for the configuration's default, 16,777,216.
- * @param _supports The supports the host enabled, `noSupports` when absent, which will decide what
- *   catalog content the copy holds; every content module is a stub, so it changes nothing yet.
+ * @param supports The supports the host enabled, `noSupports` when absent, which each content
+ *   module's `redact` decides by: what catalog content the copy holds, among the rest.
+ * @param view The view the item is shown to, the candidate's when absent, which each content
+ *   module's `redact` decides by: which rubric blocks the copy holds, among the rest.
  * @returns The redacted item.
  */
 export const redactItem = (
   item: Item,
   record?: RedactRecord,
   limits?: Pick<Configuration, "outputBudget">,
-  _supports?: Supports,
+  supports: Supports = noSupports,
+  view: OutcomeView = defaultView,
 ): Redacted => {
-  const { body, hiddenOnly, notices, unprinted } = printBody(item, printingOf(item, record), {
-    budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget),
-    kind: "text",
-  });
+  const { body, content, hiddenOnly, notices, unprinted } = printBody(
+    item,
+    printingOf(item, record),
+    { budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget), kind: "text" },
+    supports,
+    view,
+  );
 
   return brandRedacted({
     body,
+    ...Option.match(content, { onNone: () => ({}), onSome: (kept) => ({ content: kept }) }),
     document: item.document,
     identifier: item.identifier,
     lang: item.lang,
@@ -2180,7 +2260,9 @@ export interface RedactedStructure {
  * `redactItem`'s, and its cost does not follow the length of what the item prints.
  *
  * It is for plate's own callers that read only what the page shows, such as `checkResponses`,
- * `results` and a session's skip rule; `src/index.ts` does not export it.
+ * `results` and a session's skip rule; `src/index.ts` does not export it. It reads the item as the
+ * candidate sees it with no support enabled, as {@link hiddenOnlyResponses} does: no content
+ * module binds a response, so the supports and the view change none of what it reads.
  *
  * @example
  *   interactionsIn(redactStructure(item, record).body);
@@ -2192,7 +2274,13 @@ export interface RedactedStructure {
  * @returns The item's structure as the page is shown it, with no printed text.
  */
 export const redactStructure = (item: Item, record?: RedactRecord): RedactedStructure => {
-  const { body, hiddenOnly, notices } = printBody(item, printingOf(item, record), structureOnly);
+  const { body, hiddenOnly, notices } = printBody(
+    item,
+    printingOf(item, record),
+    structureOnly,
+    noSupports,
+    defaultView,
+  );
 
   return { body, hiddenOnly, notices, responses: bindingsShown(item, hiddenOnly) };
 };
@@ -2220,7 +2308,7 @@ export const redactStructure = (item: Item, record?: RedactRecord): RedactedStru
  * @returns The responses, in the order the walk first meets them.
  */
 export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): ReadonlySet<string> =>
-  printBody(item, printingOf(item, record), structureOnly).hiddenOnly;
+  printBody(item, printingOf(item, record), structureOnly, noSupports, defaultView).hiddenOnly;
 
 /**
  * How one response travels through a host's form: its identifier, its binding, and the options
@@ -2392,6 +2480,10 @@ export const payload = (redacted: Redacted, view: View): Payload => {
 
   return {
     body: copyNodes(redacted.body, build),
+    ...Option.match(copyItemContent(redacted.content, copyKit(build)), {
+      onNone: () => ({}),
+      onSome: (content) => ({ content }),
+    }),
     finished: view.finished,
     instance: view.instance,
     lang: Option.getOrElse(redacted.lang, () => view.locale),

@@ -190,6 +190,7 @@ const interactionsOf = (nodes: readonly BodyNode[]): readonly Bound[] =>
       case "text-entry": {
         return [node];
       }
+      case "content":
       case "printed-variable":
       case "template-block":
       case "template-inline":

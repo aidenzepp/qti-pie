@@ -272,6 +272,7 @@ const withheldOf = (item: Item, values: Option.Option<RedactRecord>): readonly s
         case "extended-text": {
           return walk(Option.getOrElse(node.prompt, () => []));
         }
+        case "content":
         case "text":
         case "text-entry":
         case "unsupported": {
@@ -521,6 +522,7 @@ const inlineChoicesOf = (nodes: readonly BodyNode[]): readonly InlineChoiceInter
       case "inline-choice": {
         return [node];
       }
+      case "content":
       case "choice":
       case "extended-text":
       case "printed-variable":
