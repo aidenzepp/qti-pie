@@ -17,6 +17,7 @@ import type { RenderMode } from "#plate/payload.ts";
 import { redact, render } from "#plate/render.ts";
 import { upgrade } from "#plate/runtime.dom.ts";
 import type { Upgraded } from "#plate/runtime/contract.dom.ts";
+import { nextControlKey, tabTo } from "#plate/test/tab.dom.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -412,13 +413,14 @@ describe(server.browser, () => {
               assert.isTrue(order.every((control) => paragraph.contains(control)));
 
               const visited: string[] = [];
+              const key = yield* Effect.promise(() => nextControlKey(userEvent));
 
               for (
                 let tabs = 0;
                 tabs < order.length + 2 && visited.length < order.length;
                 tabs += 1
               ) {
-                yield* Effect.promise(() => userEvent.tab());
+                yield* Effect.promise(() => userEvent.keyboard(key));
 
                 const active = document.activeElement;
 
@@ -450,7 +452,7 @@ describe(server.browser, () => {
 
           yield* withItem(xml, {}, (item) =>
             Effect.gen(function* drive() {
-              yield* Effect.promise(() => userEvent.tab());
+              yield* Effect.promise(() => tabTo(item.anchor, userEvent));
 
               const focused: EventTarget[] = [];
               const record = (event: FocusEvent) => {
