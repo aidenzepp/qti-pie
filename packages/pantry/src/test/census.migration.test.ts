@@ -18,7 +18,8 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  * package read, which move none of them, and after the merge of upstream's genetic repair round 4,
  * whose placed reference type is a query, `PlacedReferenceType`: its rule, "Condition type", reads
  * four tables, so four constraint triggers more, and its placed map responses' two containments
- * move no count), as a ratchet: a change that moves one fails here until the count is measured
+ * move no count; measured again after `Entry`'s generated `digest`, whose column and text domain
+ * move none), as a ratchet: a change that moves one fails here until the count is measured
  * again. A regeneration updates them here, and only here.
  *
  * - `tables`: one per stored relation;

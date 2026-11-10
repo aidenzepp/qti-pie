@@ -45,7 +45,7 @@ import { htmlLawsByName, htmlRelations } from "#pantry/qti/html.ts";
 import { identityLawsByName } from "#pantry/qti/identity.ts";
 import { mathmlLawsByName, mathmlRelations } from "#pantry/qti/mathml.ts";
 import { operatorLawsByName, operatorRelations } from "#pantry/qti/operators.ts";
-import { HrefParams, packageLawsByName } from "#pantry/qti/package.ts";
+import { HrefParams, packageLawsByName, Sha256Hex } from "#pantry/qti/package.ts";
 import { quotationLawsByName, quotationRelations } from "#pantry/qti/quotation.ts";
 import { SelectForm, testLawsByName } from "#pantry/qti/tests.ts";
 import type { testRelations } from "#pantry/qti/tests.ts";
@@ -142,6 +142,8 @@ export const namedBy = (
  * - A document's and an item's assembly's `xml:lang` form's compared `value` is the form collapsed
  *   and case-folded, cast into the form's own key text, a cast the schema proves total: a written
  *   text, never NULL.
+ * - An entry's `digest` is the SHA-256 of its `content`, `Compute.sha256`, defined on every bytes
+ *   value: never NULL, so it is named by the law of its relation's rows, "Entry family".
  */
 export const generatedNames: readonly (readonly [string, LawName])[] = [
   ...namedBy(
@@ -163,6 +165,7 @@ export const generatedNames: readonly (readonly [string, LawName])[] = [
     "MapKeyItems.ordered",
     "MapKeyItems.unordered",
   ),
+  ...namedBy("Entry family", "Entry.digest"),
 ];
 
 /**
@@ -505,6 +508,10 @@ export const textLaws: ReadonlyMap<RegexText<string>, LawName> = new Map<
   // value domain's, with its rule, so one cause names one rule (the orchestrator's ruling of
   // 2026-11-06).
   [DayForm, "value domain"],
+  // An entry's `digest` is PostgreSQL's SHA-256 of its stored bytes, which `Compute.sha256` writes
+  // in this very language, so no row breaks it; it is named by the law of the record it is a
+  // field of, its relation's rows'.
+  [Sha256Hex, "Entry family"],
 ]);
 
 /**

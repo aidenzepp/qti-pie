@@ -64,6 +64,7 @@ import {
   counted,
   drawn,
   fin,
+  generated,
   key,
   natural,
   on,
@@ -108,18 +109,33 @@ export const Package = relation("Package", { entries: drawn(natural), id: uuid, 
 ]);
 
 /**
+ * A SHA-256 digest as text: 64 lowercase hex digits, the language `Compute.sha256` writes, so a
+ * digest it computes needs no guard to be one.
+ */
+export const Sha256Hex = str.regex("^[0-9a-f]{64}$");
+
+/**
  * One entry of a package, the record (plan §1.6, fin.md P7): its path and its bytes, at its slot in
  * the listing, which the family draws from its place in the nesting.
  *
- * `content` is the entry's bytes as read, a grizzle `bytes` field: PostgreSQL's bytea, written in
- * binary and read back whole, at most grizzle's `bytesMaxLength` bytes, PostgreSQL's longest bytea,
- * past which grizzle refuses a value before any SQL. No law reads it. Whether it is the manifest is
- * a function of `path`, and its byte length one of `content`, so neither is stored (review R19).
+ * - **the host's:** `path`, and `content`, the entry's bytes as read, a grizzle `bytes` field:
+ *   PostgreSQL's bytea, written in binary and read back whole, at most grizzle's `bytesMaxLength`
+ *   bytes, PostgreSQL's longest bytea, past which grizzle refuses a value before any SQL;
+ * - **drawn:** `at`;
+ * - **generated:** `digest`, the SHA-256 of `content` ({@link Sha256Hex}), which PostgreSQL computes
+ *   from the bytes it stores (`Compute.sha256`), so no writer sends one and none is wrong. A
+ *   content-addressed store names the entry's bytes by it, and a read takes it without `content`,
+ *   so it carries no bytes.
+ *
+ * No law reads `content` but its digest. Whether the entry is the manifest is a function of `path`,
+ * and its byte length one of `content`; no reader needs either without the field it is a function
+ * of, so neither is stored (review R19).
  */
-export const Entry = relation(
+export const Entry = relation.generated(
   "Entry",
   { at: drawn(natural), content: bytes, package: uuid, path: EntryPath },
   ["package", "at"],
+  (e) => ({ digest: generated(Sha256Hex, Compute.sha256(e.content)) }),
 );
 
 /**
