@@ -238,6 +238,23 @@ const replacing =
     xml.includes(from) ? xml.replace(from, to) : assert.fail(`the item holds no ${from}`);
 
 /**
+ * Find the item Root of a page, failing the test when the page holds none or several.
+ *
+ * @param html The page's HTML.
+ * @returns The element marked `data-slot="item"`.
+ */
+const rootOf = (html: string): Element => {
+  const found = elementsOf(parseHtml(html)).filter(
+    (element) => element.attrs["data-slot"] === "item",
+  );
+  const [only, ...rest] = found;
+
+  return only !== undefined && rest.length === 0
+    ? only
+    : assert.fail(`expected exactly one item Root, found ${found.length}`);
+};
+
+/**
  * Read the `srclang` of each `track` of a page that carries `default`, in document order.
  *
  * @param html The page's HTML.
@@ -311,6 +328,11 @@ const bodyImages: readonly (readonly [src: string, alt: string])[] = [
   ],
   ["images/kelp-canopy.png", "The kelp canopy seen from a boat, a dark green mat on the surface"],
 ];
+
+/**
+ * The text of the fixture's keyword-emphasis element, which nothing else in the item says.
+ */
+const emphasised = "cold and rich in nutrients";
 
 describe("PNP-driven catalog content supports", () => {
   it.effect("[A-5] [A-22] [A-28] [A-38] an at-start catalog support shows its card content", () =>
@@ -443,7 +465,68 @@ describe("PNP-driven catalog content supports", () => {
   );
 });
 
-describe("PNP-driven captions and alternative text", () => {
+describe("PNP-driven keyword emphasis, captions and alternative text", () => {
+  const emphasis = "data-keyword-emphasis";
+
+  it.effect("[A-23] keyword emphasis marks the item for candidates who ask", () =>
+    Effect.gen(function* marked() {
+      const source = yield* pnpText("pnp-catalog.xml");
+      const asking = yield* pnpFromText(source);
+      const { html } = yield* shownTo(asking);
+
+      assert.isTrue(asking.display.keywordEmphasis, "the PNP asks for keyword emphasis");
+      assert.isTrue(
+        Object.hasOwn(rootOf(html).attrs, emphasis),
+        "the item Root carries the marker",
+      );
+      assert.strictEqual(
+        elementsOf(parseHtml(html)).filter((element) => Object.hasOwn(element.attrs, emphasis))
+          .length,
+        1,
+        "only the Root carries it",
+      );
+
+      const optional = yield* pnpOf("pnp-catalog-optional.xml");
+      const declined = yield* pnpFromText(prohibiting(source, ["keyword-emphasis"]));
+
+      assert.isFalse(optional.display.keywordEmphasis, "an option-only preference is off");
+      assert.isFalse(declined.display.keywordEmphasis, "a prohibited preference reaches no field");
+
+      for (const candidate of [optional, declined, noSupports]) {
+        const plain = yield* shownTo(candidate);
+
+        assert.isFalse(
+          Object.hasOwn(rootOf(plain.html).attrs, emphasis),
+          "a candidate who does not ask has no marker",
+        );
+      }
+    }),
+  );
+
+  it.effect("[A-23] without the preference qti-keyword-emphasis renders plain", () =>
+    Effect.gen(function* plain() {
+      const source = yield* pnpText("pnp-catalog.xml");
+      const asking = yield* shownTo(yield* pnpFromText(source));
+      const declined = yield* shownTo(
+        yield* pnpFromText(prohibiting(source, ["keyword-emphasis"])),
+      );
+
+      for (const { html } of [asking, declined, yield* shownTo(noSupports)]) {
+        const spans = elementsOf(parseHtml(html)).filter(
+          (element) => element.tag === "span" && element.attrs["class"] === "qti-keyword-emphasis",
+        );
+
+        assert.deepStrictEqual(spans.map(textOf), [emphasised], "the span keeps its class");
+      }
+
+      assert.strictEqual(
+        asking.html.replace(` ${emphasis}`, ""),
+        declined.html,
+        "the marker on the Root is the only difference the preference makes",
+      );
+    }),
+  );
+
   it.effect("[A-13a] a candidate with captions gets the matching captions track as default", () =>
     Effect.gen(function* captioned() {
       const source = yield* pnpText("pnp-catalog.xml");

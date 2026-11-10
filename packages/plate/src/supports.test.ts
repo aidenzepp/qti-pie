@@ -333,12 +333,12 @@ describe("the supports option", () => {
           render(plain, configuration, { instance: "q1", supports: noSupports }),
         );
 
-        // The three data attributes are the Root hook's (issue m3e-09b); nothing else differs.
+        // The Root hook's data attributes are all that differs: three of issue m3e-09b, and the
+        // bare keyword-emphasis marker of issue m5-11.
         assert.strictEqual(
-          withSupports.html.replaceAll(
-            / data-(?:magnification|font-color|background-color)="[^"]*"/gu,
-            "",
-          ),
+          withSupports.html
+            .replaceAll(/ data-(?:magnification|font-color|background-color)="[^"]*"/gu, "")
+            .replace(" data-keyword-emphasis", ""),
           without.html,
         );
         assert.strictEqual(withNone.html, without.html);

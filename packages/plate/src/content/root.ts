@@ -1,9 +1,10 @@
 /**
- * The item Root's attribute hook (A-30a magnification, A-42a text and background colours): the
- * item chrome asks it for the attributes the supports add to the Root, and it answers with up to
- * three data attributes, `data-magnification`, `data-font-color` and `data-background-color`, and
- * never a `style`. With no such preference it answers with none, and the Root is exactly what the
- * chrome writes (issue m3e-09, moved to data attributes by issue m3e-09b, #349, which closes #222).
+ * The item Root's attribute hook (A-30a magnification, A-42a text and background colours, A-23
+ * keyword emphasis): the item chrome asks it for the attributes the supports add to the Root, and
+ * it answers with up to four data attributes, `data-magnification`, `data-font-color`,
+ * `data-background-color` and `data-keyword-emphasis`, and never a `style`. With no such preference
+ * it answers with none, and the Root is exactly what the chrome writes (issue m3e-09, moved to data
+ * attributes by issue m3e-09b, #349, which closes #222; `data-keyword-emphasis` is issue m5-11's).
  *
  * The Root carries no `style` because plate's own pages serve `style-src 'self'`, as does any
  * hardened host, and that policy drops an inline `style` attribute, and the preference with it.
@@ -27,6 +28,13 @@
  *   `backgroundColor`, each written only when it is `#` followed by exactly 3, 4, 6 or 8
  *   hexadecimal digits, in either case, and as the host gave it; any other value is not written. A
  *   host's `Supports` value reaches the HTML only through this checked path.
+ * - **Keyword emphasis (A-23)** is the bare attribute `data-keyword-emphasis`, written exactly when
+ *   `supports.display.keywordEmphasis` is true (issue m5-11). It carries no value to check. It
+ *   marks the Root for a rule on text of the class `qti-keyword-emphasis`; plate's own sheet gives
+ *   that rule no declaration yet, its `keyword-emphasis` block being empty until the class joins
+ *   the styled-class inventory, so a host that wants the emphasis styles
+ *   `[data-slot="item"][data-keyword-emphasis] .qti-keyword-emphasis` itself. Without the attribute
+ *   the class renders plain, as emphasis meant for everyone is written with `strong` or `em`.
  *
  * **The host-sheet contract.** plate applies neither colour: its sheet cannot read an arbitrary
  * attribute value, and its tests refuse a custom property. The host that passed the supports
@@ -49,6 +57,7 @@
  */
 import { Array as Arr, Option } from "effect";
 import type { RootHook } from "#plate/content/contract.ts";
+import { when } from "#plate/emit/node.ts";
 import type { Attributes } from "#plate/emit/node.ts";
 import { noSupports } from "#plate/supports.ts";
 import type { DisplayPreferences } from "#plate/supports.ts";
@@ -130,7 +139,7 @@ const written = (name: string, value: Option.Option<string>): Attributes =>
 
 /**
  * Write the Root's attributes for a candidate's display preferences: the magnification step, the
- * font colour and the background colour, in that order.
+ * font colour, the background colour and the keyword emphasis, in that order.
  *
  * @param display The display preferences of the supports.
  * @returns The data attributes that apply, an empty record when no preference applies.
@@ -148,16 +157,18 @@ const attributesOf = (display: DisplayPreferences): Attributes => ({
     "data-background-color",
     display.textAppearance.pipe(Option.flatMap(({ backgroundColor }) => hexOf(backgroundColor))),
   ),
+  ...when(display.keywordEmphasis, { "data-keyword-emphasis": true }),
 });
 
 /**
  * The Root hook: magnification (A-30a) as `data-magnification` on a bounded step scale
  * ({@link magnificationSteps}) that plate's sheet applies, and the text and background colours
  * (A-42a) as `data-font-color` and `data-background-color` for the host's own sheet by contract
- * (D25, issue m3e-09b, #349).
+ * (D25, issue m3e-09b, #349), and keyword emphasis (A-23) as the bare `data-keyword-emphasis` that
+ * marks the Root for a rule on `qti-keyword-emphasis` text (issue m5-11).
  *
  * It reads `state.supports.display` alone, an absent `supports` reading as none, and writes at most
- * those three attributes: no `style` on any element, no class, and no attribute the chrome writes.
+ * those four attributes: no `style` on any element, no class, and no attribute the chrome writes.
  * The step is the nearest of the eight to the factor's percentage (a tie to the larger, none at or
  * below 1 or when not finite, `400` above 400), and a colour is written only when it is a hex
  * colour (`#` and exactly 3, 4, 6 or 8 hexadecimal digits). plate applies the step in its sheet and
@@ -170,14 +181,14 @@ const attributesOf = (display: DisplayPreferences): Attributes => ({
  */
 export const rootHook: RootHook = {
   /**
-   * The Root's data attributes for the supports' magnification factor and text and background
-   * colours (A-30a, A-42a), none when no preference applies. The chrome writes its own attributes
-   * after these, so the three names here are the only ones this hook gives and the chrome's are
-   * never replaced.
+   * The Root's data attributes for the supports' magnification factor, text and background
+   * colours and keyword emphasis (A-30a, A-42a, A-23), none when no preference applies. The chrome
+   * writes its own attributes after these, so the four names here are the only ones this hook gives
+   * and the chrome's are never replaced.
    */
   attributes: (state) => attributesOf((state.supports ?? noSupports).display),
   /**
-   * True: the hook gives the Root's data attributes for A-30a and A-42a.
+   * True: the hook gives the Root's data attributes for A-30a, A-42a and A-23.
    */
   implemented: true,
 };
