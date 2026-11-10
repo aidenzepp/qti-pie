@@ -56,7 +56,8 @@ const instance = "witness";
 const quoteItem = "QTI3_BPIG_Examples/items/QTI3-inline-choice.xml";
 
 /**
- * A Choice, an Inline Choice, a Text Entry and a Gap Match, which shows as a notice. Its Inline
+ * A Choice, an Inline Choice, a Text Entry and a Gap Match, whose script-free render holds no
+ * focusable control (its runtime gives the input), so it adds no stop to the tab order. Its Inline
  * Choice, bound to `RESPONSE2`, is shuffled: its first choice, `P2`, is fixed, and the correct one
  * is Marion, `A2`, last in the document.
  */
