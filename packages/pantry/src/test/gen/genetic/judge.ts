@@ -217,8 +217,8 @@ const lomTitled = (resource: Element): boolean =>
  * Name the stated limit a package falls under: the first of these, in this order, that holds.
  *
  * 1. `a record file whose root is a cp:manifest`: the oracle raises "RootOfType" at a document whose
- *    root is a `cp:manifest` and which the package manifest lists as `resourcemetadata/xml`
- *    (decision 449);
+ *    root is a `cp:manifest` and which the package manifest lists as `resourcemetadata/xml`, by an
+ *    href that names it in normal form (decision 449);
  * 2. `a forbidden ancestor`: the oracle raises "N5 admitted" (decision 452's kin);
  * 3. `an inclusion cycle`: the oracle raises "Inclusion cycle" (decision 451's kin);
  * 4. `xml:base on a cp:resource`: the package manifest writes `xml:base` on a `cp:resource` (reading
@@ -257,7 +257,7 @@ export const limitOf = (breaches: readonly Breach[], genome: Genome): Option.Opt
       resources.some(
         (resource) =>
           attributeValue(resource, "type") === "resourcemetadata/xml" &&
-          resolvedPath(manifestPath, attributeValue(resource, "href") ?? "") === path,
+          resolvedPath(manifestPath, normalHref(attributeValue(resource, "href") ?? "")) === path,
       )
     );
   };
