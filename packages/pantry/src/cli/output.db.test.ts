@@ -120,32 +120,37 @@ describe.skipIf(!hasLease)(
           }),
       );
 
-      it.effect("--output jsonl roundtrip prints one object per entry, then the summary", () =>
-        Effect.gen(function* roundtripJsonl() {
-          const copy = yield* packageCopy(fixtures.simple, "copy-output-jsonl-simple");
-          const { exit, stderr, stdout } = yield* captureCli([
-            "--output",
-            "jsonl",
-            "roundtrip",
-            "--yes",
-            copy,
-          ]);
+      it.effect(
+        "--output jsonl roundtrip prints one object per entry, then the summary, and its debug log to stderr alone",
+        () =>
+          Effect.gen(function* roundtripJsonl() {
+            const copy = yield* packageCopy(fixtures.simple, "copy-output-jsonl-simple");
+            const { exit, stderr, stdout } = yield* captureCli([
+              "--log-level",
+              "debug",
+              "--output",
+              "jsonl",
+              "roundtrip",
+              "--yes",
+              copy,
+            ]);
 
-          assert.isTrue(Exit.isSuccess(exit), stderr);
+            assert.isTrue(Exit.isSuccess(exit), stderr);
 
-          const lines = stdout.split("\n");
-          const summary = Schema.decodeUnknownSync(summaryEnvelope)(lines.at(-1));
-          const report = yield* recordReport(summary.data.package_id);
+            const lines = stdout.split("\n");
+            const summary = Schema.decodeUnknownSync(summaryEnvelope)(lines.at(-1));
+            const report = yield* recordReport(summary.data.package_id);
 
-          assert.strictEqual(lines.length, report.length + 1);
-          assert.deepStrictEqual(
-            lines.slice(0, -1).map((line) => Schema.decodeUnknownSync(entryLine)(line)),
-            [...report],
-          );
-          assert.isTrue(summary.ok);
-          assert.strictEqual(summary.data.differing, 0);
-          assert.notProperty(summary.data, "entries");
-        }),
+            assert.strictEqual(lines.length, report.length + 1);
+            assert.deepStrictEqual(
+              lines.slice(0, -1).map((line) => Schema.decodeUnknownSync(entryLine)(line)),
+              [...report],
+            );
+            assert.isTrue(summary.ok);
+            assert.strictEqual(summary.data.differing, 0);
+            assert.notProperty(summary.data, "entries");
+            assert.match(stderr, /DEBUG/u);
+          }),
       );
     });
   },
