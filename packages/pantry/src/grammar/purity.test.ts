@@ -1,7 +1,7 @@
 import { globSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
-import { Predicate } from "effect";
+import { moduleImports } from "#pantry/test/module-imports.ts";
 
 /**
  * The `src` folder, where `#pantry/<x>` resolves to `src/<x>`.
@@ -10,9 +10,8 @@ const sourceRoot = path.resolve(import.meta.dirname, "..");
 
 /**
  * The pure layers, relative to `src`: vocabulary data, the generators and the XDM model. Each is a
- * function of its inputs, so none reaches grizzle or the modules that talk to the database. The one
- * exception is a stage-wide shared file: `install.ts` reads the committed snapshot's codes through
- * `db/codes.ts` and `db/snapshot.ts`, so its rosters are declared in the order grizzle accepts.
+ * function of its inputs, so none reaches grizzle or the modules that talk to the database, and
+ * none reads a snapshot: `install.ts` declares each roster in its generator's order.
  */
 const pureLayers = "{vocab,grammar,model}/**/*.ts";
 
@@ -23,13 +22,6 @@ const pureLayers = "{vocab,grammar,model}/**/*.ts";
 const install = "grammar/install.ts";
 
 /**
- * The modules under `db/` that `install.ts` alone may import: the reader of the committed
- * snapshot's roster codes and the snapshot's path and error it names. Neither reaches the login or
- * the connection.
- */
-const committedCodes: readonly string[] = ["#pantry/db/codes.ts", "#pantry/db/snapshot.ts"];
-
-/**
  * The modules outside `src/test/` that import its helpers today: none since the processing
  * fixtures' materializer moved to `src/test/processing-fixtures.ts` (Q5.10). The list only shrinks:
  * a module that starts importing them fails the test until the list says so.
@@ -37,28 +29,15 @@ const committedCodes: readonly string[] = ["#pantry/db/codes.ts", "#pantry/db/sn
 const pending: readonly string[] = [];
 
 /**
- * Collect every module specifier a TypeScript module names: its imports and re-exports, type-only
- * ones included, its bare imports, and its dynamic `import(…)` calls and `import("…")` types.
- *
- * Comments are dropped and string literals kept whole first, so a commented-out import counts for
- * nothing, and a `/*` inside a string hides no code after it.
+ * Collect every module specifier a TypeScript module names, through the one reader of a module's
+ * imports (`#pantry/test/module-imports.ts`): its imports and re-exports, type-only ones included,
+ * its bare imports, and its dynamic `import(…)` calls and `import("…")` types.
  *
  * @param source - The text of a TypeScript module.
  * @returns The specifiers, in source order.
  */
-const specifiers = (source: string): readonly string[] => {
-  const code = source.replaceAll(
-    /(?<literal>"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\*[\s\S]*?\*\/|\/\/[^\n]*/gu,
-    (_text, literal: string | undefined) => literal ?? "",
-  );
-  const statements = code.matchAll(
-    /^[ \t]*(?:import|export)\b(?!\s*\()[^;]*?\bfrom\s*["'](?<from>[^"']+)["']|^[ \t]*import\s*["'](?<bare>[^"']+)["']|\bimport\s*\(\s*["'](?<dynamic>[^"']+)["']/gmu,
-  );
-
-  return [...statements].flatMap(({ groups }) =>
-    Object.values(groups ?? {}).filter(Predicate.isString),
-  );
-};
+const specifiers = (source: string): readonly string[] =>
+  moduleImports(source).map(({ specifier }) => specifier);
 
 /**
  * List the modules a pattern matches under `src`, tests excluded.
@@ -101,11 +80,19 @@ const oracleModule = "#pantry/test/oracle.ts";
  * @returns The specifiers, in source order.
  */
 const valueSpecifiers = (source: string): readonly string[] =>
-  specifiers(source.replaceAll(/^[ \t]*(?:import|export)\s+type\b[^;]*;/gmu, ""));
+  moduleImports(source).flatMap(({ form, specifier }) => (form === "type" ? [] : [specifier]));
 
 /**
- * The modules the law oracle is made of: {@link oracleModule} and every module of `src/test/` it
- * reaches through a static or dynamic import, relative to `src`.
+ * The prefix of the modules the law oracle is made of when it reaches them: the test support,
+ * which holds the host's reading of grizzle's predicates (`#pantry/test/predicates.ts`) that the
+ * oracle's key copies and the tests' host judge share, and which states no law and reads no schema
+ * of its own, so a statement read it gained would be the oracle's.
+ */
+const oraclePrefix = "#pantry/test/";
+
+/**
+ * The modules the law oracle is made of: {@link oracleModule} and every module under
+ * {@link oraclePrefix} it reaches through a static or dynamic import, relative to `src`.
  *
  * @param read - Reads a module's text by its path relative to `src`.
  * @returns The modules, sorted.
@@ -117,7 +104,7 @@ const oracleModules = (read: (file: string) => string): readonly string[] => {
     const file = (unread.pop() ?? oracleModule).slice("#pantry/".length);
     if (!seen.has(file)) {
       seen.add(file);
-      unread.push(...specifiers(read(file)).filter((next) => next.startsWith("#pantry/test/")));
+      unread.push(...specifiers(read(file)).filter((next) => next.startsWith(oraclePrefix)));
     }
   }
 
@@ -179,7 +166,7 @@ const oracleDataModules: ReadonlySet<string> = new Set([
  *   owed an oracle-side derivation.
  */
 const oracleStatementReads: readonly string[] = [
-  "test/key-copies.ts: #pantry/qti/schema.ts",
+  "test/key-copies.ts: #pantry/qti/own.ts",
   "test/oracle.ts: #pantry/vocab/open.ts",
 ];
 
@@ -224,45 +211,6 @@ const statementReads = (read: (file: string) => string): readonly string[] =>
 const mayReachOracle = (file: string): boolean =>
   file.endsWith(".test.ts") ? /\.oracle(?:\.db)?\.test\.ts$/u.test(file) : file.startsWith("test/");
 
-describe("specifiers", () => {
-  it("counts imports of every form, type-only and dynamic ones included", () => {
-    const found = specifiers(
-      [
-        'import {\n  a,\n  b,\n} from "#pantry/a.ts";',
-        'import type { C } from "#pantry/c.ts";',
-        'export { d } from "#pantry/d.ts";',
-        'export * from "#pantry/e.ts";',
-        'import "#pantry/f.ts";',
-        'const g = await import("#pantry/g.ts");',
-        'type H = import("#pantry/h.ts").H;',
-      ].join("\n"),
-    );
-
-    assert.deepStrictEqual(found, [
-      "#pantry/a.ts",
-      "#pantry/c.ts",
-      "#pantry/d.ts",
-      "#pantry/e.ts",
-      "#pantry/f.ts",
-      "#pantry/g.ts",
-      "#pantry/h.ts",
-    ]);
-  });
-
-  it("does not count an import inside a comment, nor lose one after a string", () => {
-    const found = specifiers(
-      [
-        '/* import { a } from "#pantry/a.ts"; */',
-        '// import "#pantry/b.ts";',
-        'const glob = "src/**/*.ts";',
-        'export { c } from "#pantry/c.ts";',
-      ].join("\n"),
-    );
-
-    assert.deepStrictEqual(found, ["#pantry/c.ts"]);
-  });
-});
-
 describe("the pure layers", () => {
   it("import grizzle only in install.ts", () => {
     const files = modules(pureLayers).filter((file) => file !== install);
@@ -276,14 +224,8 @@ describe("the pure layers", () => {
     assert.deepStrictEqual(offences(modules(pureLayers), forbidden), []);
   });
 
-  it("import nothing under db/, but install.ts's read of the committed snapshot's codes", () => {
-    const files = modules(pureLayers).filter((file) => file !== install);
-    const installOffences = offences([install], ["#pantry/db/"]).filter(
-      (offence) => !committedCodes.some((specifier) => offence.endsWith(`: ${specifier}`)),
-    );
-
-    assert.deepStrictEqual(offences(files, ["#pantry/db/"]), []);
-    assert.deepStrictEqual(installOffences, []);
+  it("import nothing under db/, so loading them reads no snapshot", () => {
+    assert.deepStrictEqual(offences(modules(pureLayers), ["#pantry/db/"]), []);
   });
 });
 
@@ -316,12 +258,20 @@ describe("the test helpers", () => {
   });
 
   it("find a law of the oracle that reads a schema statement, and no type import or data module", () => {
-    // Oracle: the rule above on a planted module graph. Live: the oracle's own module and a law
-    // module it reaches, each reading a schema statement, one of them by a dynamic import. Stale: a
-    // type-only import of a schema module, a read of the data module, and of the law catalog. Wild:
-    // a module the oracle does not reach, which reads a statement and is no part of it.
+    // Oracle: the rule above on a planted module graph. Live: the oracle's own module, a law module
+    // it reaches and the host predicates it reaches, each reading a schema statement, one of them by
+    // a dynamic import. Stale: a type-only import of a schema module and of grizzle, a read of the
+    // data module, and of the law catalog. Wild: a module the oracle does not reach, which reads a
+    // statement and is no part of it.
     const planted = new Map([
       ["test/elsewhere.ts", 'import { Qti } from "#pantry/qti/schema.ts";'],
+      [
+        "test/predicates.ts",
+        [
+          'import type { LawSide } from "@bjornpagen/grizzle";',
+          'import { Qti } from "#pantry/qti/schema.ts";',
+        ].join("\n"),
+      ],
       [
         "test/oracle-laws.ts",
         [
@@ -336,6 +286,7 @@ describe("the test helpers", () => {
         "test/oracle.ts",
         [
           'import { addedLaws } from "#pantry/test/oracle-laws.ts";',
+          'import { datumText } from "#pantry/test/predicates.ts";',
           'import { Node } from "#pantry/qti/node.ts";',
           'import { select } from "@bjornpagen/grizzle";',
         ].join("\n"),
@@ -349,6 +300,7 @@ describe("the test helpers", () => {
         "test/oracle-laws.ts: #pantry/vocab/data-ssml.ts",
         "test/oracle.ts: #pantry/qti/node.ts",
         "test/oracle.ts: @bjornpagen/grizzle",
+        "test/predicates.ts: #pantry/qti/schema.ts",
       ],
     );
   });

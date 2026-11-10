@@ -4,8 +4,8 @@ import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Predicate, Schema } from "effect";
-import { committedRosters, inCommittedOrder } from "#pantry/db/codes.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
+import { vocabularies } from "#pantry/grammar/compose.ts";
 import {
   cnForms,
   cnPatternOf,
@@ -13,9 +13,10 @@ import {
   mathHeadOperators,
   mathHeadQualifiers,
 } from "#pantry/grammar/expression.ts";
+import { includeAlternativesOf } from "#pantry/grammar/include.ts";
 import * as install from "#pantry/grammar/install.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
-import { noType } from "#pantry/grammar/xsi.ts";
+import { admittedOf, includeRowsOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 
 /**
  * The composed grammar, the generators' rows every declaration is compared with.
@@ -37,7 +38,7 @@ const caseHang = Duration.minutes(1);
 /**
  * A field's value in a closed relation's rows: a handle or a text, or a natural.
  */
-const ValueSchema = Schema.Union([Schema.String, Schema.BigInt]);
+const ValueSchema = Schema.Union([Schema.String, Schema.BigInt, Schema.Boolean]);
 
 /**
  * A field's value in a closed relation's rows.
@@ -198,14 +199,14 @@ const governed: ReadonlyMap<string, { readonly governs: string; readonly kind: s
  * generator's rows: each the second implementation of its declaration.
  */
 const comparisons: readonly Comparison[] = [
-  {
-    expected: () => grammar.admission.rows,
-    name: "ChildGrammar",
-  },
   { expected: () => grammar.content.strictlyHeld.rows, name: "StrictlyHeld" },
   // The content grammar is keyed by automaton where it is generated, so each relation is its
   // generator's rows one to one, and nothing regroups families into models here.
+  // Each family's admission map's rows are held to rule 0 by the admission test below.
   { expected: () => grammar.content.contentModelOf.rows, name: "ContentModelOf" },
+  { expected: () => grammar.content.admissionIn.rows, name: "AdmissionIn" },
+  { expected: () => grammar.content.symbolSetOf.rows, name: "SymbolSetOf" },
+  { expected: () => grammar.content.symbolMember.rows, name: "SymbolMember" },
   {
     expected: () =>
       grammar.content.modelPositions.rows.map(({ model, positions }) => ({
@@ -214,22 +215,29 @@ const comparisons: readonly Comparison[] = [
       })),
     name: "ModelPositions",
   },
-  { expected: () => grammar.content.follow.rows, name: "Follow" },
-  { expected: () => grammar.content.last.rows, name: "Last" },
-  { expected: () => grammar.content.sharedModelOf.rows, name: "SharedModelOf" },
   {
-    expected: () =>
-      grammar.content.sharedModelPositions.rows.map(({ model, positions }) => ({
-        model,
-        positions: BigInt(positions),
-      })),
-    name: "SharedPositions",
+    // `Last` is no relation of its own: each of its (model, state) rows is the `ends` of that
+    // state's `FollowSetOf` row, and no other state's, so the installed `ends` are exactly the
+    // generator's `Last`.
+    expected: () => {
+      const ending = new Set(
+        grammar.content.last.rows.map(({ model, position }) => `${model} ${position}`),
+      );
+
+      return grammar.content.followSetOf.rows.map((row) => ({
+        ...row,
+        ends: ending.has(`${row.model} ${row.from}`),
+      }));
+    },
+    name: "FollowSetOf",
   },
-  { expected: () => grammar.content.symbol.rows, name: "Symbol" },
+  { expected: () => grammar.content.followMember.rows, name: "FollowMember" },
+  { expected: () => grammar.content.sharedModelOf.rows, name: "SharedModelOf" },
   { expected: () => grammar.ancestry.enters.rows, name: "Enters" },
   { expected: () => grammar.ancestry.banned.rows, name: "Banned" },
   { expected: () => grammar.ancestry.needs.rows, name: "Needs" },
   { expected: () => grammar.xsi.xsiType.rows, name: "XsiType" },
+  { expected: () => grammar.xsi.anonymousType.rows, name: "AnonymousType" },
   { expected: () => grammar.attributes.valueDomain.rows, name: "ValueDomainOf" },
   {
     expected: () =>
@@ -266,8 +274,8 @@ const comparisons: readonly Comparison[] = [
         kind,
         version,
       })),
-      ...grammar.kinds.versions.handles.flatMap((version) => [
-        ...Object.values(foreignKinds).flatMap((kind) =>
+      ...grammar.kinds.versions.handles.flatMap((version) =>
+        Object.values(foreignKinds).flatMap((kind) =>
           grammar.xsi.typeName.handles.map((governs) => ({
             governor: Option.match(grammar.attributes.governor.lookup({ governs, kind, version }), {
               onNone: () => kind,
@@ -278,15 +286,13 @@ const comparisons: readonly Comparison[] = [
             version,
           })),
         ),
-        ...["document", "text", "ws", "comment", "pi", "entityRef", "doctype"].map((kind) => ({
-          governor: kind,
-          governs: noType,
-          kind,
-          version,
-        })),
-      ]),
+      ),
     ],
     name: "GoverningOf",
+  },
+  {
+    expected: () => grammar.kinds.nodeKind.handles.map((kind) => ({ governor: kind, kind })),
+    name: "KindGovernor",
   },
   {
     expected: () =>
@@ -339,7 +345,6 @@ const comparisons: readonly Comparison[] = [
   { expected: () => grammar.recordBindingFit.rows, name: "RecordBindingFit" },
   { expected: () => grammar.mappableBaseType.rows, name: "MappableBaseType" },
   { expected: () => grammar.package.rootOfType.rows, name: "RootOfType" },
-  { expected: () => grammar.include.includeRoot.rows, name: "IncludeRoot" },
   { expected: () => grammar.include.includeParentKind.rows, name: "IncludeParentKind" },
   { expected: () => grammar.references.declares.rows, name: "Declares" },
   { expected: () => grammar.references.builtIn.rows, name: "BuiltInVariable" },
@@ -446,11 +451,6 @@ const attributeModels: ReadonlyMap<string, string> = new Map(
 const attributeGrammar = groupedBy("AttributeGrammar", "model", ["slot", "name", "domain", "use"]);
 
 /**
- * Each model's `AttributeSlotOf` rows as (name, slot).
- */
-const attributeSlotOf = groupedBy("AttributeSlotOf", "model", ["name", "slot"]);
-
-/**
  * Each model's `Required` slots.
  */
 const required = groupedBy("Required", "model", ["slot"]);
@@ -473,6 +473,16 @@ const ownAttributes = Map.groupBy(
   ],
   ({ governor, version }) => `${version} ${governor}`,
 );
+
+/**
+ * Each attribute row's (model, name, slot), its slot as AL1 and AL2 read it by name.
+ *
+ * @param rows - The rows.
+ * @returns Each row's model, name and slot.
+ */
+const slotsOf = (
+  rows: readonly { readonly model: string; readonly name: string; readonly slot: string }[],
+) => rows.map(({ model, name, slot }) => ({ model, name, slot }));
 
 describe("the installed relations", () => {
   it.effect(
@@ -553,11 +563,6 @@ describe("the installed relations", () => {
                 at,
               );
               assert.deepStrictEqual(
-                attributeSlotOf.get(model) ?? noRows,
-                new Set(own.map(({ name, position }) => tupleText([name, position]))),
-                at,
-              );
-              assert.deepStrictEqual(
                 required.get(model) ?? noRows,
                 new Set(
                   own
@@ -600,6 +605,146 @@ describe("the installed relations", () => {
     searchTimeout,
   );
 
+  it("state Admission, ChildGrammar once, as each family's admission map, each distinct map once and held by a family, and read each (version, parent, child) at its position through its family's map", () => {
+    // Oracle: rule 0, identical facts are one fact, over the content grammar's maps, which
+    // install.ts states one to one (the rows law above): a map minted twice, a map no family holds,
+    // or a child held twice in a map is a fact stated twice or one stated of nothing. And
+    // `Admission.lookup`, the host's reading of the maps that N5's `AdmissionIn` at the family's
+    // map restates, against the maps spelled out (`admittedOf`): every (version, parent, child)
+    // they state, at its position.
+    const { admissionIn, admissionMaps, contentModelOf } = grammar.content;
+    const members = Map.groupBy(admissionIn.rows, ({ map }) => map);
+    const spelled = admissionMaps.handles.map((map) =>
+      (members.get(map) ?? []).map(({ child, position }) => `${child}:${position}`).join(" "),
+    );
+    const held = new Set(contentModelOf.rows.map(({ admission }) => admission));
+    const admitted = admittedOf(contentModelOf, admissionIn);
+
+    keyedSet("AdmissionIn", ["map", "child"], admissionIn.rows);
+    assert.strictEqual(
+      new Set(spelled).size,
+      spelled.length,
+      "two admission maps hold one set of children",
+    );
+    assert.deepStrictEqual(
+      admissionMaps.handles.filter((map) => !held.has(map)),
+      [],
+      "admission maps no family holds",
+    );
+    assert.deepStrictEqual(
+      admitted.filter(
+        (row) =>
+          !Option.contains(
+            Option.map(grammar.admission.lookup(row), ({ position }) => position),
+            row.position,
+          ),
+      ),
+      [],
+    );
+    assert.isBelow(admissionIn.rows.length, admitted.length);
+  });
+
+  it("state each shared model's kinds' positions as symbol sets, each distinct set of positions once, held by the pairs it names and by no other", () => {
+    // Oracle: rule 0, identical facts are one fact. The content grammar numbers each distinct set
+    // of positions a shared model names a kind at once (`SymbolSetOf`, `SymbolMember`), and
+    // install.ts states them one to one (the rows law above), so N5's
+    // `SymbolMember.row(SymbolSetOf.at("set", m, k))` reads exactly the positions of the pair. A
+    // set minted twice, a set no pair holds, or a position held twice in a set is a fact stated
+    // twice or one stated of nothing.
+    const { symbolMember, symbolSetOf, symbolSets } = grammar.content;
+    const members = Map.groupBy(symbolMember.rows, ({ set }) => set);
+    const spelled = symbolSets.handles.map((set) =>
+      (members.get(set) ?? []).map(({ position }) => position).join(" "),
+    );
+    const held = new Set(symbolSetOf.rows.map(({ set }) => set));
+
+    keyedSet("SymbolMember", ["set", "position"], symbolMember.rows);
+    keyedSet("SymbolSetOf", ["model", "kind"], symbolSetOf.rows);
+    assert.strictEqual(
+      new Set(spelled).size,
+      spelled.length,
+      "two symbol sets hold one set of positions",
+    );
+    assert.isFalse(spelled.includes(""), "a symbol set holds no position");
+    assert.deepStrictEqual(
+      symbolSets.handles.filter((set) => !held.has(set)),
+      [],
+      "symbol sets no (model, kind) holds",
+    );
+    assert.isBelow(symbolMember.rows.length, symbolRowsOf(symbolSetOf, symbolMember).length);
+  });
+
+  it("state each (version, include parent)'s include alternatives as its include set and each set's kinds, in the grammar and as installed: every (version, parent, kind), and no other", () => {
+    // Oracle: the include alternatives of the vocabularies' models (`includeAlternativesOf`), the
+    // (version, include parent, kind) rows an include stands for, against the include grammar's
+    // `IncludeSetOf` and `IncludeMember` and the installed ones, each spelled out
+    // (`includeRowsOf`). "Include root" and `placesAt` read the kinds as the set's members, so they
+    // read the alternatives exactly when these sets do.
+    const key = ["version", "parent", "kind"];
+    const alternatives = keyedSet(
+      "the include alternatives",
+      key,
+      includeAlternativesOf(vocabularies.flatMap((entry) => entry.models)).map(
+        ({ kind, parent, version }) => ({ kind, parent, version }),
+      ),
+    );
+
+    assert.deepStrictEqual(
+      keyedSet(
+        "the grammar's include sets",
+        key,
+        includeRowsOf(grammar.include.includeSetOf, grammar.include.includeMember),
+      ),
+      alternatives,
+    );
+    assert.deepStrictEqual(
+      keyedSet("the include sets", key, includeRowsOf(install.IncludeSetOf, install.IncludeMember)),
+      alternatives,
+    );
+    assert.isBelow(install.IncludeMember.rows.length, alternatives.size);
+  });
+
+  it("state AttributeSlotOf and AttributeGrammar once, keyed (model, name): each name at its slot with its domain and use, and each (model, slot) one attribute's", () => {
+    // Oracle: install.ts's attribute rows of each model's first (version, governor), spelled as
+    // the two relations this one restates: AttributeSlotOf (model, name) → slot and
+    // AttributeGrammar (model, slot) → (name, domain, use). The laws read `at("slot", m, name)`,
+    // `at("domain", m, name)` and `row(m)` where they read AttributeSlotOf's slot and names and
+    // AttributeGrammar's domain at that slot, so the two agree exactly when the rows keyed by
+    // (model, name) are the first and keyed by (model, slot) the second. `keyedSet` refuses a
+    // repeated key, so the second also holds (model, slot) to one attribute, the key `Required` and
+    // `CountedSlot` state slots by.
+    const modelOf = new Map(
+      install.AttributeModelOf.rows.map(({ governor, model, version }) => [
+        `${version} ${governor}`,
+        model,
+      ]),
+    );
+    const firstFamily = new Map<string, string>();
+    for (const { governor, model, version } of install.AttributeModelOf.rows) {
+      firstFamily.getOrInsert(model, `${version} ${governor}`);
+    }
+    const restated = install.attributeRows.flatMap(
+      ({ domain, governor, name, position, use, version }) => {
+        const at = `${version} ${governor}`;
+        const model = modelOf.get(at);
+
+        return model !== undefined && firstFamily.get(model) === at
+          ? [{ domain, model, name, slot: position, use }]
+          : [];
+      },
+    );
+    const merged = install.AttributeGrammar.rows;
+
+    assert.deepStrictEqual(
+      keyedSet("AttributeGrammar by name", ["model", "name"], slotsOf(merged)),
+      keyedSet("AttributeSlotOf", ["model", "name"], slotsOf(restated)),
+    );
+    assert.deepStrictEqual(
+      keyedSet("AttributeGrammar by slot", ["model", "slot"], merged),
+      keyedSet("AttributeGrammar keyed by slot", ["model", "slot"], restated),
+    );
+  });
+
   it("make ContentModelOf total, CountedOf and BarredOf exactly today's Counted but its caps and ChildBarredBy, SharedModelOf exactly the shared families, and Capped exactly Counted's caps", () => {
     const keys = new Set(families.map(({ parent, version }) => `${version} ${parent}`));
     const relation = relationNamed("ContentModelOf");
@@ -610,11 +755,11 @@ describe("the installed relations", () => {
 
     // A family whose kinds each name one position has no SharedModelOf row (README, "Closed
     // relations": a law reads its absence through `SharedModelOf.has`), so the relation holds the
-    // shared families alone. Oracle: Admission's own rows, where an element kind at position 0 is
-    // one several positions name.
+    // shared families alone. Oracle: the admission maps spelled out, where an element kind at
+    // position 0 is one several positions name.
     const nonElements: ReadonlySet<string> = new Set(install.nonElementKinds);
     const sharedFamilies = new Set(
-      grammar.admission.rows
+      admittedOf(grammar.content.contentModelOf, grammar.content.admissionIn)
         .filter(({ child, position }) => position === "0" && !nonElements.has(child))
         .map(({ parent, version }) => tupleText([version, parent])),
     );
@@ -728,64 +873,32 @@ describe("the MathML relations", () => {
   });
 });
 
-/**
- * A roster's handles as the install declares them: the committed snapshot's live handles in code
- * order, then the handles new since it, in the grammar's order.
- *
- * @param name - The roster's name.
- * @param handles - The handles as the grammar computes them.
- * @returns The handles, ordered.
- */
-const ordered = (name: string, handles: readonly string[]): readonly string[] =>
-  Arr.isReadonlyArrayNonEmpty(handles)
-    ? inCommittedOrder(committedRosters.get(name) ?? [], handles)
-    : handles;
-
 describe("the rosters", () => {
-  it("hold every generator's handles in the committed codes' order, new handles last, the null objects where the rulings place them", () => {
-    assert.deepStrictEqual(
-      handlesOf("NodeKind"),
-      ordered("NodeKind", grammar.kinds.nodeKind.handles),
-    );
-    assert.deepStrictEqual(
-      handlesOf("AttributeName"),
-      ordered("AttributeName", grammar.kinds.attributeName.handles),
-    );
-    assert.deepStrictEqual(
-      handlesOf("TypeName"),
-      ordered("TypeName", grammar.xsi.typeName.handles),
-    );
-    assert.deepStrictEqual(
-      handlesOf("SchemaVersion"),
-      ordered("SchemaVersion", grammar.kinds.versions.handles),
-    );
-    assert.deepStrictEqual(handlesOf("BaseType"), ordered("BaseType", grammar.baseTypes.handles));
-    assert.deepStrictEqual(
-      handlesOf("Cardinality"),
-      ordered("Cardinality", [...grammar.typedCardinalities.handles, "record"]),
-    );
-    assert.deepStrictEqual(
-      handlesOf("ResourceType"),
-      ordered("ResourceType", ["none", ...grammar.package.resourceType.handles]),
-    );
+  it("hold every generator's handles in the generator's order, the null objects where the rulings place them", () => {
+    assert.deepStrictEqual(handlesOf("NodeKind"), grammar.kinds.nodeKind.handles);
+    assert.deepStrictEqual(handlesOf("AttributeName"), grammar.kinds.attributeName.handles);
+    assert.deepStrictEqual(handlesOf("TypeName"), grammar.xsi.typeName.handles);
+    assert.notInclude(handlesOf("TypeName"), "none");
+    assert.deepStrictEqual(handlesOf("SchemaVersion"), grammar.kinds.versions.handles);
+    assert.deepStrictEqual(handlesOf("BaseType"), grammar.baseTypes.handles);
+    assert.deepStrictEqual(handlesOf("Cardinality"), [
+      ...grammar.typedCardinalities.handles,
+      "record",
+    ]);
+    assert.deepStrictEqual(handlesOf("ResourceType"), grammar.package.resourceType.handles);
+    assert.notInclude(handlesOf("ResourceType"), "none");
     assert.deepStrictEqual(handlesOf("Position"), grammar.content.positions.handles);
     assert.deepStrictEqual(handlesOf("AttributeSlot"), grammar.attributes.positions.handles);
-    assert.deepStrictEqual(
-      handlesOf("Governor"),
-      ordered("Governor", [...grammar.kinds.nodeKind.handles, ...governed.keys()]),
-    );
+    assert.deepStrictEqual(handlesOf("Governor"), [
+      ...grammar.kinds.nodeKind.handles,
+      ...governed.keys(),
+    ]);
     assert.deepStrictEqual(
       handlesOf("Identity"),
-      ordered("Identity", grammar.attributes.identity.payload[0].roster.handles),
+      grammar.attributes.identity.payload[0].roster.handles,
     );
-    assert.deepStrictEqual(
-      handlesOf("ContentModel"),
-      ordered("ContentModel", grammar.content.models.handles),
-    );
-    assert.deepStrictEqual(
-      handlesOf("SharedModel"),
-      ordered("SharedModel", grammar.content.sharedModels.handles),
-    );
+    assert.deepStrictEqual(handlesOf("ContentModel"), grammar.content.models.handles);
+    assert.deepStrictEqual(handlesOf("SharedModel"), grammar.content.sharedModels.handles);
     assert.notInclude(handlesOf("SharedModel"), "none");
     // Spec reading 118's include model is a model of its own, and names the ignored elements'
     // wildcards at two positions.

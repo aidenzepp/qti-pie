@@ -231,11 +231,11 @@ export interface XdmClosedElement<V extends XdmVocabulary> {
   /**
    * The element's governing type (XML Schema 1.0 Part 1, §3.3.4 clause 4), a `TypeName` handle of
    * `#pantry/grammar/xsi.ts`: the type its `xsi:type` names, resolved against its in-scope
-   * namespaces, or its declared type without one, `none` for an anonymous declared type. It is a
+   * namespaces, or its declared type without one, none for an anonymous declared type. It is a
    * property of the element, as its kind is, and stands beside the `xsi:type` lexical form as the
    * kind stands beside the element's name: the codec writes it, the law reads it.
    */
-  readonly governs: string;
+  readonly governs: Option.Option<string>;
   readonly kind: ElementKind<V>;
   readonly namespaces: readonly XdmNamespace[];
   /**
@@ -275,12 +275,12 @@ export interface XdmForeignElement<V extends XdmVocabulary> {
   /**
    * The element's governing type, a `TypeName` handle of `#pantry/grammar/xsi.ts`: the type its
    * `xsi:type` names, where that resolves to a type its document's schema set holds or a built-in,
-   * and `none` otherwise. No declaration assesses a foreign element, so its `xsi:type` alone gives
-   * it a type, against which XML Schema then assesses it (XML Schema 1.0 Part 1, §3.3.4,
+   * and none otherwise. No declaration assesses a foreign element, so its `xsi:type` alone gives it
+   * a type, against which XML Schema then assesses it (XML Schema 1.0 Part 1, §3.3.4,
    * Schema-Validity Assessment (Element), clause 1.2; spec reading 60): a simple type's text is
    * checked, a complex one's is reading 50's limit.
    */
-  readonly governs: string;
+  readonly governs: Option.Option<string>;
   readonly name: ExpandedName;
   readonly namespaces: readonly XdmNamespace[];
   /**
@@ -480,12 +480,6 @@ export const documentFamily = <V extends XdmVocabulary>(
 ];
 
 /**
- * The `TypeName` handle `none`: the governing type of a node that is no element, and of an element
- * no named type governs.
- */
-export const none = "none";
-
-/**
  * A node id: the language of a uuid's hyphenated spelling, which is the type of
  * `crypto.randomUUID()` and of grizzle's `Uuid`, so an id of either kind is a node id.
  */
@@ -517,9 +511,9 @@ export interface NodeRow<V extends XdmVocabulary> {
   readonly end: bigint;
   /**
    * The element's governing type ({@link XdmClosedElement}'s or {@link XdmForeignElement}'s), and
-   * {@link none} for a node that is no element, which no named type governs.
+   * none for a node that is no element, which no named type governs.
    */
-  readonly governs: string;
+  readonly governs: Option.Option<string>;
   readonly id: NodeId;
   readonly kind: XdmKind<V>;
   readonly parent: NodeId;
@@ -806,7 +800,7 @@ export const flatten = <V extends XdmVocabulary>(
   const sentinel: Types.Mutable<NodeRow<V>> = {
     at: 0n,
     end: 1n,
-    governs: none,
+    governs: Option.none(),
     id: self,
     kind: document._tag,
     parent: self,
@@ -853,7 +847,7 @@ export const flatten = <V extends XdmVocabulary>(
     const row = {
       at: BigInt(next.at),
       end: BigInt(start + 1),
-      governs: none,
+      governs: Option.none<string>(),
       id,
       parent,
       start: BigInt(start),
