@@ -348,14 +348,10 @@ const doubled = (particle: Particle, place: number): Option.Option<Particle> => 
 };
 
 /**
- * Every (model, leaf) of the IR: the box the UPA mutant check exhausts.
+ * How many models of the IR each run's UPA mutant check draws, every leaf of each doubled: a fresh
+ * draw each run (TEST_SEED replays it), so the runs between them reach every model.
  */
-const doubledCase: Gen<{ readonly index: number; readonly place: number }> = (source) => {
-  const index = source.draw(int(0, modelled.length - 1));
-  const leaves = leavesOf(Arr.getUnsafe(modelled, index).particle).length;
-
-  return { index, place: leaves === 0 ? 0 : source.draw(int(0, leaves - 1)) };
-};
+const doubledModels = 10;
 
 /**
  * A model and words for it: each valid word that holds one of its targets, repeated up to three
@@ -496,38 +492,44 @@ describe("vocab/sequencing.ts", () => {
   });
 
   it.effect(
-    "finds the breach in every model with an element particle doubled in a choice",
+    `finds the breach in ${doubledModels} models a run, each with every element particle doubled in a choice`,
     (ctx) =>
       searched(
         ctx,
-        exhaust(
+        explore(
           {
-            box: "every (model, leaf that may occur) of the IR's element and mixed models",
             caseHang,
+            concurrency: 1,
             coverage: noCoverage,
-            generator: doubledCase,
-            limit: 40_000,
+            draw: drawn(int(0, modelled.length - 1)),
+            kept: [],
             literal: Formatter.format,
             oracle: {
               kind: "specification",
               name: "Unique Particle Attribution (XML Schema 1.0 Part 1 §3.8.6): an element particle in a choice with itself is ambiguous, by construction",
             },
+            runs: doubledModels,
+            shrink: completeShrink,
+            steerEvery: 16,
             suite: "vocab/sequencing-upa-mutants",
           },
-          ({ index, place }) =>
+          (index) =>
             Effect.sync(() => {
               const { particle, row } = Arr.getUnsafe(modelled, index);
-              const mutant = doubled(particle, place);
 
-              if (Option.isSome(mutant)) {
-                const breaches = breachesOf(
-                  automatonOf(mutant.value),
-                  namespaceOfKind,
-                  namespaceOfKind(row.kind),
-                );
+              for (const place of leavesOf(particle).keys()) {
+                const mutant = doubled(particle, place);
 
-                if (breaches.length === 0) {
-                  throw new Error(`${named(row)}: doubling position ${place + 1} went unnoticed`);
+                if (Option.isSome(mutant)) {
+                  const breaches = breachesOf(
+                    automatonOf(mutant.value),
+                    namespaceOfKind,
+                    namespaceOfKind(row.kind),
+                  );
+
+                  if (breaches.length === 0) {
+                    throw new Error(`${named(row)}: doubling position ${place + 1} went unnoticed`);
+                  }
                 }
               }
             }),
