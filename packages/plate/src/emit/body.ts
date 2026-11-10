@@ -10,7 +10,10 @@
  * becomes text, an interaction goes to its render function, an interaction a module parses to its
  * module's (`RenderInteraction.modules`), and each notice `check` handed in
  * becomes the Notice part, a `span` at a phrasing position and a `div` where the parent takes flow
- * content.
+ * content. An element that references a catalog (`ElementPayload.catalog`) is handed, once
+ * emitted, to the render function's attachment hook (`RenderInteraction.attach`), whose nodes
+ * follow it as its next siblings; the hook answers nothing while no catalog support is active, and
+ * the element then renders as any other.
  *
  * The emitter value-imports no interaction module and nothing that reaches one, neither
  * `#plate/model/interactions.ts` nor `#plate/emit/item.ts` (which reaches them through the
@@ -36,7 +39,14 @@
 import { Data, Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
-import { authoredId, authoredIdrefs, headings, positionUnder, rowFor } from "#plate/emit/parts.ts";
+import {
+  authoredId,
+  authoredIdrefs,
+  headings,
+  positionUnder,
+  rowFor,
+  scopedId,
+} from "#plate/emit/parts.ts";
 import type { Position, Resolved } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
@@ -104,6 +114,41 @@ export type OwnedElements = (
 ) => Option.Option<Result.Result<readonly Node[], PartSwapRefused>>;
 
 /**
+ * A body element that references a catalog, as the emitter hands it to {@link AttachCatalog}: the
+ * catalog it names and the id a presenter's nodes can point at.
+ */
+export interface ReferencingElement {
+  /**
+   * The element's id as emitted: its authored `id` scoped by the item instance
+   * ({@link authoredId}), or, for an element without one, the id the emitter mints
+   * (`<instance>-catalog-<idref>-<n>` through {@link scopedId}, `n` counting from 0 the id-less
+   * elements of the walk that reference the same catalog). A minted id is written on the element
+   * only when the hook answers at least one node, so a presenter's nodes can point at the element
+   * and an empty answer changes no HTML.
+   */
+  readonly id: string;
+  /**
+   * The catalog the element references: its `data-catalog-idref` as the author wrote it
+   * (`ElementPayload.catalog`), the `id` of a `qti-catalog` of the item's document, never a source
+   * path.
+   */
+  readonly idref: string;
+}
+
+/**
+ * Attach a catalog presenter's nodes beside a body element that references a catalog: the catalog
+ * module's answer, which presents the active cards of the catalog for the supports the host
+ * enabled.
+ *
+ * @param reference The referencing element: the catalog's idref and the element's id.
+ * @returns The nodes to place right after the element, empty to attach nothing, or the refusal of
+ *   a part swap.
+ */
+export type AttachCatalog = (
+  reference: ReferencingElement,
+) => Result.Result<readonly Node[], PartSwapRefused>;
+
+/**
  * Render one interaction of the body: the interaction module's render function, with the payload
  * and the state already applied.
  */
@@ -115,6 +160,16 @@ export interface RenderInteraction {
    * @returns The interaction's Root, or the refusal of a part swap.
    */
   (interaction: InteractionPayload): Result.Result<Element, PartSwapRefused>;
+  /**
+   * Attach a catalog presenter's nodes to an element that references a catalog
+   * ({@link AttachCatalog}). The walk calls it once for each body element it emits whose payload
+   * carries a `catalog` idref, after the element and its subtree are emitted, with the idref and
+   * the element's id ({@link ReferencingElement}), and places the nodes it answers right after
+   * the element, as its following siblings. An empty answer attaches nothing and leaves the
+   * element as emitted, with no minted id: the default `render` sets, so the HTML is unchanged
+   * while no catalog support is active. A render function without it attaches nothing either.
+   */
+  readonly attach?: AttachCatalog;
   /**
    * Render an interaction a module parses ({@link ModulePayload}) through its module, as `render`'s
    * renderer does; {@link nestedInteraction}'s refuses one as it refuses any interaction. A render
@@ -551,6 +606,13 @@ interface Walk {
   readonly headingOffset: number;
   readonly instance: string;
   readonly locale: Locale;
+  /**
+   * How many id-less elements referencing each catalog the walk has handed `attach` so far, by
+   * idref, which numbers the ids {@link mintedId} writes. One map per walk, shared with every
+   * element below; a nested walk ({@link emitNodes} for a Prompt or a choice's content) counts on
+   * its own.
+   */
+  readonly minted: Map<string, number>;
   readonly parts: Resolved;
   /**
    * Whether no node below may stand at a flow position: a `p` is open above, whose content a `div`
@@ -833,15 +895,90 @@ const elementOf = (
   );
 
 /**
+ * Mint the id of an element that references a catalog and carries no `id` of its own, so a
+ * presenter's nodes can point at it: `<instance>-catalog-<idref>-<n>`, where `n` counts from 0
+ * the id-less elements of the walk that reference the same catalog, so two of them never share an
+ * id.
+ *
+ * @param walk What the walk carries: the instance and the count so far.
+ * @param idref The catalog the element references.
+ * @returns The minted id.
+ */
+const mintedId = (walk: Walk, idref: string): string => {
+  const count = walk.minted.get(idref) ?? 0;
+  walk.minted.set(idref, count + 1);
+
+  return scopedId(walk.instance, "catalog", idref, count);
+};
+
+/**
+ * Place a catalog presenter's nodes after an emitted element that references a catalog, through
+ * the render function's `attach`.
+ *
+ * The element's own emitted id is handed when it has one; otherwise an id is minted
+ * ({@link mintedId}) and written on the element only when the hook answers at least one node, so
+ * an empty answer leaves the element exactly as emitted.
+ *
+ * @param element The element as emitted.
+ * @param idref The catalog it references.
+ * @param walk What the walk carries.
+ * @returns The element followed by the attached nodes, or the first refusal of a part swap.
+ */
+const attached = (
+  element: Element,
+  idref: string,
+  walk: Walk,
+): Result.Result<readonly Node[], PartSwapRefused> =>
+  Option.match(Option.fromUndefinedOr(walk.renderInteraction.attach), {
+    onNone: () => Result.succeed([element]),
+    onSome: (attach) => {
+      const authored = Option.filter(
+        Option.fromUndefinedOr(element.attrs["id"]),
+        (value): value is string => value !== true,
+      );
+      const id = Option.getOrElse(authored, () => mintedId(walk, idref));
+
+      return Result.map(attach({ id, idref }), (nodes) =>
+        nodes.length === 0 || Option.isSome(authored)
+          ? [element, ...nodes]
+          : [h(element.tag, { ...element.attrs, id }, element.children), ...nodes],
+      );
+    },
+  });
+
+/**
+ * Emit an authored HTML element the second line admits, with the nodes a catalog presenter
+ * attaches after it when the element references a catalog.
+ *
+ * @param element The element's payload.
+ * @param declared The attributes the XSD declares on the element, from {@link htmlSubset}.
+ * @param walk What the walk carries.
+ * @returns The element, followed by the attached nodes when it references a catalog
+ *   ({@link attached}), or the first refusal of a part swap.
+ */
+const admittedElement = (
+  element: ElementPayload,
+  declared: ReadonlySet<string>,
+  walk: Walk,
+): Result.Result<readonly Node[], PartSwapRefused> =>
+  Result.flatMap(elementOf(element, declared, walk), (emitted) =>
+    Option.match(Option.fromUndefinedOr(element.catalog), {
+      onNone: () => Result.succeed([emitted]),
+      onSome: (idref) => attached(emitted, idref, walk),
+    }),
+  );
+
+/**
  * Emit one body node.
  *
  * @param node The payload node.
  * @param walk What the walk carries.
  * @returns The node as it renders, a module's payload node through `renderInteraction.modules`, an
- *   element outside {@link htmlSubset} through `renderInteraction.owned`; none when the second line
- *   drops it (an element outside {@link htmlSubset} no `owned` renders, a node of no kind the
- *   payload defines, or a module's payload node for a render function without `modules`); or the
- *   refusal of a part swap.
+ *   element outside {@link htmlSubset} through `renderInteraction.owned`, an element that
+ *   references a catalog followed by what `renderInteraction.attach` gives it
+ *   ({@link admittedElement}); none when the second line drops it (an element outside
+ *   {@link htmlSubset} no `owned` renders, a node of no kind the payload defines, or a module's
+ *   payload node for a render function without `modules`); or the refusal of a part swap.
  */
 const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], PartSwapRefused> => {
   if (isModulePayload(node)) {
@@ -861,7 +998,7 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
             ),
             () => Result.succeed([]),
           ),
-        onSome: (declared) => Result.map(elementOf(node, declared, walk), (element) => [element]),
+        onSome: (declared) => admittedElement(node, declared, walk),
       });
     }
     case "text": {
@@ -1105,6 +1242,7 @@ const walkOf = (
   ),
   instance: payload.instance,
   locale: state.locale,
+  minted: new Map(),
   parts: state.parts,
   phrasingOnly: position === "phrasing",
   position,

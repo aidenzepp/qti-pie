@@ -1796,3 +1796,60 @@ describe("the public surface", () => {
     }),
   );
 });
+
+/**
+ * An item whose paragraph references the catalog `glossary`, with an authored id, beside a
+ * paragraph that references none.
+ */
+const glossedItem = itemOf(
+  "glossed",
+  Option.none(),
+  [
+    {
+      attributes: [{ name: "id", value: "term" }],
+      catalog: "glossary",
+      children: [words("tern")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p[1]",
+      tag: "p",
+    },
+    {
+      attributes: [],
+      children: [words("No catalog.")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p[2]",
+      tag: "p",
+    },
+  ],
+  [],
+);
+
+describe("the codec and catalog references", () => {
+  it.effect(
+    'the JSON holds an element\'s catalog idref under "catalog", no "catalog" key for an element without one and no "path", and round-trips to the redacted item with every path "", which renders the same HTML',
+    () =>
+      Effect.gen(function* roundTripsCatalog() {
+        const redacted = redact(acceptForTest(glossedItem));
+        const json = Result.getOrThrow(encodeRedacted(redacted));
+        const wire = JSON.stringify(json);
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+        const handedOver: unknown = JSON.parse(wire);
+        const decoded = Result.getOrThrow(decodeRedacted(handedOver));
+        const configuration = yield* defaults;
+
+        assert.include(wire, '"catalog":"glossary"');
+        assert.strictEqual(wire.split('"catalog"').length, 2);
+        assert.notInclude(wire, '"path"');
+        assert.deepStrictEqual(decoded, pathless(redacted));
+        assert.strictEqual(
+          decoded.body[0]?.kind === "element" ? decoded.body[0].catalog : decoded.body[0],
+          "glossary",
+        );
+        assert.isFalse(Object.hasOwn(decoded.body[1] ?? {}, "catalog"));
+        assert.strictEqual(
+          Result.getOrThrow(render(decoded, configuration, { instance })).html,
+          Result.getOrThrow(render(redacted, configuration, { instance })).html,
+        );
+      }),
+  );
+});

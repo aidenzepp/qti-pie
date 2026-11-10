@@ -2502,3 +2502,38 @@ describe("render, a record value", () => {
       }),
   );
 });
+
+describe("render, an element that references a catalog", () => {
+  it.effect(
+    "renders the same HTML as the element without the reference, before and after the JSON codec: the default attachment answers nothing",
+    () =>
+      Effect.gen(function* attachesNothingByDefault() {
+        const configuration = yield* defaults;
+        const glossed: BodyNode = {
+          attributes: [],
+          catalog: "glossary",
+          children: [words("tern")],
+          kind: "element",
+          path: "qti-assessment-item/qti-item-body/p[0]",
+          tag: "p",
+        };
+        const { catalog: _catalog, ...unreferencing } = glossed;
+        const referencing = redact(acceptForTest({ ...item, body: [glossed, ...item.body] }));
+        const control = redact(acceptForTest({ ...item, body: [unreferencing, ...item.body] }));
+        const decoded = Result.getOrThrow(
+          decodeRedacted(Result.getOrThrow(encodeRedacted(referencing))),
+        );
+        const expected = Result.getOrThrow(render(control, configuration, { instance })).html;
+
+        assert.strictEqual(
+          Result.getOrThrow(render(referencing, configuration, { instance })).html,
+          expected,
+        );
+        assert.strictEqual(
+          Result.getOrThrow(render(decoded, configuration, { instance })).html,
+          expected,
+        );
+        assert.notInclude(expected, "glossary");
+      }),
+  );
+});
