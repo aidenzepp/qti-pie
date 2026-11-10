@@ -46,8 +46,9 @@ import { positionObjectModule } from "#plate/interactions/position-object.ts";
 import { selectPointModule } from "#plate/interactions/select-point.ts";
 import { sliderModule } from "#plate/interactions/slider.ts";
 import { uploadModule } from "#plate/interactions/upload.ts";
+import { moduleKindList } from "#plate/interactions/contract.ts";
 import type { ModuleInteraction, ModuleKind } from "#plate/interactions/contract.ts";
-import { isInteraction, regionsOf } from "#plate/model/interactions.ts";
+import { containerKinds, isInteraction, regionsOf } from "#plate/model/interactions.ts";
 import type { Modules, Region } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
@@ -216,6 +217,17 @@ interface ContentJsonOf<E extends keyof BodyModules> {
 type ContentJson = { readonly [E in keyof BodyModules]: ContentJsonOf<E> }[keyof BodyModules];
 
 /**
+ * The container an interaction module owns, in the JSON form: the kind of the module and its
+ * children, with no path ({@link NoPath}). The form admits only a kind whose module declares a
+ * container ({@link ContainerModule}).
+ */
+interface ContainerJson {
+  readonly children: readonly BodyNodeJson[];
+  readonly kind: "container";
+  readonly module: ModuleKind;
+}
+
+/**
  * A node of the body in the JSON form: the encoded side of {@link BodyNodeSchema}, written out
  * because the body is recursive and its suspended reference needs a declared type.
  */
@@ -223,6 +235,7 @@ type BodyNodeJson =
   | BodyElementJson
   | BodyTextJson
   | ChoiceInteractionJson
+  | ContainerJson
   | ContentJson
   | InlineChoiceInteractionJson
   // oxlint-disable-next-line typescript/no-redundant-type-constituents -- `ModuleJson` is never while every module is a stub; a module that lands adds its JSON form through it, with no line here.
@@ -474,6 +487,21 @@ const unimplementedContent = (stub: { readonly element: string }): Schema.Codec<
 };
 
 /**
+ * The kind a container's `module` may name: one whose module declares a container element
+ * (`containerKinds` in `#plate/model/interactions.ts`). A container naming any other kind is
+ * refused, as a stub's interaction is ({@link unimplemented}): the body walk gives an element no
+ * module declares the notice, so the model holds no such container and `redact` writes none. Its
+ * type is every `ModuleKind`, as the model's container node declares it.
+ */
+const ContainerModule = Schema.Literals(moduleKindList).check(
+  Schema.makeFilter((kind) =>
+    containerKinds.has(kind)
+      ? undefined
+      : `a redacted body holds no container of the ${kind} module: the module declares no container element, so plate reads any such element as its notice and redact never writes one`,
+  ),
+);
+
+/**
  * The member of {@link BodyNodeSchema} for one body-placed content module's element: the element,
  * the kind `content`, the node through the module's `payloadSchema`, and no path ({@link NoPath}).
  *
@@ -553,8 +581,9 @@ const kit: SchemaKit = {
  * The Schema of one body node, a union over every kind of `BodyNode`, every field included; its
  * type is {@link BodyNode} and its encoded form {@link BodyNodeJson}, which holds no path
  * ({@link NoPath}), no printed variable ({@link NoPrintedVariable}), no template block or inline
- * ({@link NoTemplateContent}), no interaction a stub module parses ({@link unimplemented}) and no
- * node of a content element whose module is a stub ({@link unimplementedContent}). An interaction
+ * ({@link NoTemplateContent}), no interaction a stub module parses ({@link unimplemented}), no
+ * container of a module that declares none ({@link ContainerModule}) and no node of a content
+ * element whose module is a stub ({@link unimplementedContent}). An interaction
  * a module parses is its module's `payloadSchema`, handed {@link kit}, and a content element's
  * node its module's, in its member ({@link contentMember}).
  */
@@ -617,6 +646,12 @@ const BodyNodeSchema = Schema.Union([
   Schema.Struct({
     feature: Schema.String,
     kind: Schema.Literal("unsupported"),
+    path: NoPath,
+  }),
+  Schema.Struct({
+    children: BodyNodes,
+    kind: Schema.Literal("container"),
+    module: ContainerModule,
     path: NoPath,
   }),
   NoPrintedVariable,
@@ -914,6 +949,11 @@ const misplacedInteraction = (body: readonly BodyNode[]): Option.Option<string> 
       case "template-inline": {
         // The Schema refuses either kind first; a body that held one would hold its content here.
         enqueue(node.content, within);
+        break;
+      }
+      case "container": {
+        // A module's container holds its interactions where the body does: `within` is unchanged.
+        enqueue(node.children, within);
         break;
       }
       case "content":

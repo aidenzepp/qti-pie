@@ -181,6 +181,7 @@ const interactionsOf = (nodes: readonly BodyNode[]): readonly Bound[] =>
     }
 
     switch (node.kind) {
+      case "container":
       case "element": {
         return interactionsOf(node.children);
       }

@@ -334,6 +334,9 @@ const outline = (nodes: readonly BodyNode[]): readonly unknown[] =>
       case "template-inline": {
         return { [`${node.kind}:${node.identifier}@${node.path}`]: outline(node.content) };
       }
+      case "container": {
+        return { [`container:${node.module}@${node.path}`]: outline(node.children) };
+      }
       case "content":
       case "choice":
       case "extended-text":

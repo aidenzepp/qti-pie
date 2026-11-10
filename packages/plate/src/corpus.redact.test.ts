@@ -965,9 +965,11 @@ const nodeFits = (written: BodyNode, shown: BodyNode, showing: Showing): boolean
   }
 
   switch (written.kind) {
+    case "container":
     case "element": {
       return (
-        shown.kind === "element" &&
+        (shown.kind === "element" || shown.kind === "container") &&
+        shown.kind === written.kind &&
         isDeepStrictEqual({ ...written, children: shown.children }, shown) &&
         fits(slotsOf(written.children, showing), shown.children, showing)
       );
@@ -1113,6 +1115,9 @@ const noticeStep = (
     }
     case "extended-text": {
       return { ...quietStep, runs: [[Option.getOrElse(node.prompt, () => []), true]] };
+    }
+    case "container": {
+      return { ...quietStep, runs: [[node.children, true]] };
     }
     case "content":
     case "text":
@@ -1269,6 +1274,9 @@ const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
       case "template-inline": {
         return { ...node, content: withoutPaths(node.content), path: "" };
       }
+      case "container": {
+        return { ...node, children: withoutPaths(node.children), path: "" };
+      }
       case "content":
       case "printed-variable":
       case "text-entry":
@@ -1371,6 +1379,7 @@ const templatePartsOf = (nodes: readonly BodyNode[]): readonly TemplatePart[] =>
     }
 
     switch (node.kind) {
+      case "container":
       case "element": {
         return templatePartsOf(node.children);
       }
