@@ -28,6 +28,14 @@ You are a cloud agent on a fresh Ubuntu VM with this repository and one GitHub i
 
 Run every command from the repository root.
 
+Begin every run with the committed install, then put Node 26 first on `PATH`:
+
+```sh
+bash .cursor/install.sh && export PATH=/usr/local/node26/bin:$PATH && hash -r && node -v
+```
+
+The install is idempotent. It sets up Node 26.13.0, pnpm 12.16.1, the workspace, Playwright's Chromium and WebKit, and the caches, and takes seconds when the build already holds them. The `export` is needed because the agent shell keeps an older Node first on `PATH`. `node -v` must print a version that starts with `v26`. In the cloud, the three tests tagged `conformance-text` skip, and no other test does.
+
 Install once: `pnpm install --frozen-lockfile`. It must not change `pnpm-lock.yaml`.
 
 Check before you finish: `pnpm check`. It runs four things, and each failure looks different.
