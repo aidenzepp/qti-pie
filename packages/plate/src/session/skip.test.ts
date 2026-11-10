@@ -73,6 +73,28 @@ const declarationOf = ({
 }): string => `cardinality="${cardinality}" base-type="${baseType}"`;
 
 /**
+ * The children a kind of the stub order needs to be a valid interaction of its element, by kind:
+ * what the [W0-AQ.1] stub-order row puts inside the element, so the row holds on a branch where
+ * the kind is a stub (its module gives the notice and reads no child) and on one where it has
+ * landed (its module reads the children and binds). Hotspot's module, once it lands, gives the
+ * notice for an interaction without an image, and QTI 3.0 gives the interaction an image and at
+ * least one `qti-hotspot-choice`, so its fixture carries an `img` with a `width` and `height` and
+ * one `rect` hotspot, the way the module's own tests build theirs. The other kinds stand bare
+ * while their modules are stubs; each gets its children when its module lands and says what a
+ * valid interaction of it holds.
+ */
+const stubChildren = {
+  "graphic-associate": "",
+  "graphic-gap-match": "",
+  "graphic-order": "",
+  hotspot: [
+    '<img src="images/map.svg" alt="A map of four plots" width="400" height="300"/>',
+    '<qti-hotspot-choice identifier="A" shape="rect" coords="40,40,160,120"/>',
+  ].join(""),
+  "select-point": "",
+} as const satisfies { readonly [K in (typeof stubOrder)[number]]: string };
+
+/**
  * The `RESPONSE` declaration of {@link stubItem}: the base type and cardinality
  * `#plate/test/stub-kind.ts` gives {@link stubKind}, which bind the bare element of that kind.
  */
@@ -339,7 +361,7 @@ describe("the stub kind the shared pins name", () => {
               itemXml(
                 kind,
                 declarationOf(stubDeclarations[kind]),
-                `<${element} response-identifier="RESPONSE"/>`,
+                `<${element} response-identifier="RESPONSE">${stubChildren[kind]}</${element}>`,
               ),
             ),
           );

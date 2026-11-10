@@ -22,8 +22,13 @@ import { Option } from "effect";
  * - `resource`: fetched as passive media (`src`, `poster`). Package paths, `http` and `https`.
  * - `embed`: a nested document (`object@data`). Package paths only.
  * - `srcset`: a list of image candidates, each a `resource`.
+ * - `package`: a location the host loads as a script or a configuration, which the page never fetches
+ *   itself (a PCI's module locations). A value with no scheme, rebased against the asset base as a
+ *   `resource` is, or an `https` URL; `http` and every other scheme is dropped with
+ *   {@link schemeFeature}, since the page serving a module over `https` cannot load it over
+ *   `http`.
  */
-export type UrlContext = "embed" | "link" | "resource" | "srcset";
+export type UrlContext = "embed" | "link" | "package" | "resource" | "srcset";
 
 /**
  * One URL-bearing attribute the QTI 3 XSD declares on an item body element, by local name.
@@ -37,7 +42,12 @@ export interface UrlAttribute {
 /**
  * Every URL attribute of an item body: the XSD's `xs:anyURI` and `URLDType` attributes on body
  * elements, and `object@data`, which the XSD types as `xs:string`. `param@value` is not here:
- * `param` feeds plugins, and no browser plate supports runs any.
+ * `param` feeds plugins, and no browser plate supports runs any. The four `package` rows are a
+ * PCI's module locations, inside the interaction's own `qti-interaction-modules`: the
+ * configuration files, `primary-configuration` and `secondary-configuration`, and each module's
+ * `primary-path` and `fallback-path`, which the AMD loader extends with `.js`. The body emitter
+ * writes no element of theirs, so it meets none of them; `check` classifies them, so the host that
+ * serves a module reads a location already kept or dropped.
  *
  * `check` and the body emitter read this table; nothing else lists URL attributes.
  *
@@ -51,6 +61,10 @@ export const urlAttributes: readonly UrlAttribute[] = [
   { attribute: "src", context: "resource", element: "img" },
   { attribute: "data", context: "embed", element: "object" },
   { attribute: "cite", context: "link", element: "q" },
+  { attribute: "fallback-path", context: "package", element: "qti-interaction-module" },
+  { attribute: "primary-path", context: "package", element: "qti-interaction-module" },
+  { attribute: "primary-configuration", context: "package", element: "qti-interaction-modules" },
+  { attribute: "secondary-configuration", context: "package", element: "qti-interaction-modules" },
   { attribute: "src", context: "resource", element: "source" },
   { attribute: "srcset", context: "srcset", element: "source" },
   { attribute: "src", context: "resource", element: "track" },
@@ -569,11 +583,12 @@ const classifySrcset = (value: string): DroppedUrl | SrcsetUrl => {
  *
  * The value is resolved against a sentinel directory standing for the item's own directory. It is
  * kept when it is a package path (it stays inside that directory), an absolute `http` or `https`
- * URL where the context admits remote URLs, or a same-document fragment in the link context.
- * Everything else is dropped with its feature key: {@link schemeFeature} for any other scheme
- * (`javascript:`, `data:`, `mailto:`, `tel:`), {@link outsidePackageFeature} for `/x`, `../x`,
- * `//host` and `\\host`, and {@link invalidUrlFeature} for a value the parser refuses and for a
- * blank one (empty, or only spaces and control characters).
+ * URL where the context admits remote URLs (`https` alone in the package context), or a
+ * same-document fragment in the link context. Everything else is dropped with its feature key:
+ * {@link schemeFeature} for any other scheme (`javascript:`, `data:`, `mailto:`, `tel:`, and
+ * `http:` in the package context), {@link outsidePackageFeature} for `/x`, `../x`, `//host` and
+ * `\\host`, and {@link invalidUrlFeature} for a value the parser refuses and for a blank one
+ * (empty, or only spaces and control characters).
  *
  * Classifying a kept value's {@link formatUrl} form gives the same classification.
  *
@@ -593,6 +608,16 @@ export const classifyUrl = (context: UrlContext, value: string): ClassifiedUrl =
         onNone: () => classifyFetched(value, true),
         onSome: (fragment): FragmentUrl => ({ fragment, kind: "fragment" }),
       });
+    }
+
+    case "package": {
+      const url = classifyFetched(value, true);
+
+      // A remote URL's href is its parsed form, so its scheme is lower case: `http:` names the one
+      // remote scheme the fetched rule keeps and this context does not.
+      return url.kind === "remote" && url.href.startsWith("http:")
+        ? dropped(schemeFeature("http"))
+        : url;
     }
 
     case "resource": {
