@@ -280,9 +280,17 @@ describe(server.browser, () => {
 
             const upgraded = item.begin();
 
-            assert.deepStrictEqual(upgraded.controllers, [{ kind: "hottext", root: item.root }]);
+            // The interaction roots alone: the item Root's controller is the registry's, not Hot Text's.
+            assert.deepStrictEqual(
+              upgraded.controllers.filter((entry) => "kind" in entry),
+              [{ kind: "hottext", root: item.root }],
+            );
             assert.isUndefined(item.root.dataset["runtime"]);
-            assert.strictEqual(item.container.querySelectorAll("[data-runtime]").length, 0);
+            // The one stub mark in the item is the item Root's, which its stub controller leaves.
+            assert.deepStrictEqual(
+              [...item.container.querySelectorAll("[data-runtime]")],
+              [need(item.container, '[data-slot="item"]')],
+            );
 
             upgraded.teardown();
             assert.isUndefined(item.root.dataset["runtime"]);
@@ -391,13 +399,14 @@ describe(server.browser, () => {
           yield* withItem(xml, {}, (item) =>
             Effect.gen(function* drive() {
               const paragraph = need(item.root, "p");
-              const markup = item.container.innerHTML;
+              // The Hot Text root's own markup: the item Root around it takes the registry's stub mark.
+              const markup = item.root.outerHTML;
               const sentence = paragraph.textContent;
               const order = item.controls();
 
               item.begin();
 
-              assert.strictEqual(item.container.innerHTML, markup);
+              assert.strictEqual(item.root.outerHTML, markup);
               assert.strictEqual(paragraph.textContent, sentence);
               assert.isTrue(item.controls().every((control, index) => control === order[index]));
               assert.isTrue(order.every((control) => paragraph.contains(control)));
