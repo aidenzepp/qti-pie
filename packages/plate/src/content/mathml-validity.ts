@@ -50,6 +50,24 @@
  * The body path drops a bad URL with a notice and keeps the element; the refusal here is the
  * stricter handling, the only one a module that does not render can give.
  *
+ * Each element admits exactly the attributes MathML 3 gives it (issue m3e-05c,
+ * `aidenzepp/qti-pie#348`, closing the review finding `aidenzepp/qti-pie#224`): the attribute
+ * groups of that element in the XSD QTI imports (the RelaxNG agrees name for name) together with
+ * the seven §2.1.6 and §4.2.3.2 share across every element, deprecated names included. A name
+ * outside that list is refused at section `A.2`, the Recommendation's schema appendix, with the
+ * `attribute` named; `style` keeps its own refusal at §2.1.6. The tree holds each name as the HTML
+ * parser reads it, lowercased with `definitionURL` the one camel-case name, so `STYLE`, `Href` and
+ * `onClick` are `style` (refused), `href` (a URL, classified) and `onclick` (in no element's list,
+ * refused) before the rules see them, and the name checked is the name rendered. The render's
+ * event-handler filter and the serialiser's refusal stay as the second and third guard.
+ *
+ * Stated limit: the tree keeps attributes in no namespace only, so `xlink:href` (which MathML 3
+ * deprecates for `href`, §2.1.6), `xml:lang` and an attribute of any other namespace, a `src`,
+ * `href`, `altimg`, `definitionURL` or `cdbase` of another namespace among them, are dropped by
+ * the tree, never rendered and neither refused nor classified; §2.1.6 says attributes from other
+ * namespaces "are ignored by default", and a refusal would need the source element, which these
+ * checks never see.
+ *
  * Not checked, as the reading records them as limits: `indenttarget` as a reference, the cells a
  * `rowspan` or `columnspan` covers, a space inside an `mpadded` length, `mglyph`'s `src` and `alt`
  * as required, and every rule that turns on what an expression means (a `sum`'s or `product`'s
@@ -561,6 +579,303 @@ const urlAttributes: ReadonlyMap<string, UrlContext> = new Map([
   ["href", "link"],
   ["src", "resource"],
 ]);
+
+/**
+ * The no-namespace attributes MathML 3 admits on every element: `id`, `xref`, `class`, `style`,
+ * `href` and the deprecated `other` (§2.1.6, "Attributes Shared by all MathML Elements"), and
+ * `cdbase`, which inherits down the tree (§4.2.3.2).
+ */
+const commonAttributes: readonly string[] = [
+  "cdbase",
+  "class",
+  "href",
+  "id",
+  "other",
+  "style",
+  "xref",
+];
+
+/**
+ * Split a list of names written with white space between them.
+ *
+ * @param list The names.
+ * @returns Each name, none for an empty list.
+ */
+const words = (list: string): readonly string[] => list.match(/\S+/gu) ?? [];
+
+/**
+ * A group of elements and the attributes MathML 3 gives each of them beyond
+ * {@link commonAttributes}.
+ */
+interface AttributeRow {
+  readonly attributes: readonly string[];
+  readonly elements: readonly string[];
+}
+
+/**
+ * The attributes of each MathML 3 element beyond the common ones, one row per group of elements
+ * that carry the same, as the attribute groups of `mathml3-common.xsd`, `mathml3-presentation.xsd`,
+ * `mathml3-content.xsd` and `mathml3-strict-content.xsd` expand for each `xs:element`; the
+ * RelaxNG, which the reading "MathML validity is the MathML 3 Recommendation" holds normative,
+ * agrees with them name for name. Deprecated names the Recommendation still lists are admitted.
+ * The names are MathML's own spellings, `definitionURL` the one in camel case, which the tree
+ * holds (`readName` in `#plate/content/mathml.ts`).
+ */
+const attributeRows: readonly AttributeRow[] = [
+  {
+    attributes: words("definitionURL encoding"),
+    elements: words(`
+      abs and approx arccos arccosh arccot arccoth arccsc arccsch arcsec arcsech arcsin arcsinh
+      arctan arctanh arg card cartesianproduct cbytes ceiling codomain complexes compose conjugate
+      cos cosh cot coth cs csc csch curl determinant diff divergence divide domain emptyset eq
+      equivalent eulergamma exists exp exponentiale factorial factorof false floor forall gcd geq
+      grad gt ident image imaginary imaginaryi implies in infinity int integers intersect inverse
+      lambda laplacian lcm leq limit ln log lt matrix matrixrow max mean median min minus mode
+      moment naturalnumbers neq not notanumber notin notprsubset notsubset or otherwise
+      outerproduct partialdiff pi piece piecewise plus power primes product prsubset quotient
+      rationals real reals rem root scalarproduct sdev sec sech selector setdiff sin sinh subset
+      sum tan tanh times transpose true union variance vector vectorproduct xor
+    `),
+  },
+  {
+    attributes: [],
+    elements: words(`
+      apply bind bvar cerror condition degree domainofapplication fn logbase lowlimit momentabout
+      reln sep uplimit
+    `),
+  },
+  {
+    attributes: words("mathbackground mathcolor"),
+    elements: words("merror mphantom mprescripts mroot msqrt none"),
+  },
+  {
+    attributes: words(`
+      background color dir fontfamily fontsize fontstyle fontweight mathbackground mathcolor
+      mathsize mathvariant
+    `),
+    elements: words("mi mn mtext"),
+  },
+  {
+    attributes: words("definitionURL encoding type"),
+    elements: words("ci set tendsto"),
+  },
+  {
+    attributes: words("cd definitionURL encoding name src"),
+    elements: words("annotation annotation-xml"),
+  },
+  {
+    attributes: words("columnalign groupalign mathbackground mathcolor rowalign"),
+    elements: words("mlabeledtr mtr"),
+  },
+  {
+    attributes: words("mathbackground mathcolor subscriptshift superscriptshift"),
+    elements: words("mmultiscripts msubsup"),
+  },
+  {
+    attributes: words(`
+      accent accentunder align alignmentscope altimg altimg-height altimg-valign altimg-width
+      alttext bevelled cdgroup charalign charspacing close columnalign columnlines columnspacing
+      columnspan columnwidth crossout decimalpoint denomalign depth dir display displaystyle edge
+      equalcolumns equalrows fence form frame framespacing groupalign height indentalign
+      indentalignfirst indentalignlast indentshift indentshiftfirst indentshiftlast indenttarget
+      infixlinebreakstyle largeop leftoverhang length linebreak linebreakmultchar linebreakstyle
+      lineleading linethickness location longdivstyle lquote lspace macros mathbackground
+      mathcolor mathsize mathvariant maxsize maxwidth minlabelspacing minsize mode movablelimits
+      mslinethickness notation numalign open overflow position rightoverhang rowalign rowlines
+      rowspacing rowspan rquote rspace scriptlevel scriptminsize scriptsizemultiplier selection
+      separator separators shift side stackalign stretchy subscriptshift superscriptshift
+      symmetric valign width
+    `),
+    elements: words("math"),
+  },
+  {
+    attributes: words(`
+      accent accentunder align alignmentscope background bevelled charalign charspacing close
+      color columnalign columnlines columnspacing columnspan columnwidth crossout decimalpoint
+      denomalign depth dir displaystyle edge equalcolumns equalrows fence fontfamily fontsize
+      fontstyle fontweight form frame framespacing groupalign height indentalign indentalignfirst
+      indentalignlast indentshift indentshiftfirst indentshiftlast indenttarget
+      infixlinebreakstyle largeop leftoverhang length linebreak linebreakmultchar linebreakstyle
+      lineleading linethickness location longdivstyle lquote lspace mathbackground mathcolor
+      mathsize mathvariant maxsize mediummathspace minlabelspacing minsize movablelimits
+      mslinethickness notation numalign open position rightoverhang rowalign rowlines rowspacing
+      rowspan rquote rspace scriptlevel scriptminsize scriptsizemultiplier selection separator
+      separators shift side stackalign stretchy subscriptshift superscriptshift symmetric
+      thickmathspace thinmathspace valign verythickmathspace verythinmathspace
+      veryverythickmathspace veryverythinmathspace width
+    `),
+    elements: words("mstyle"),
+  },
+  {
+    attributes: words("accent accentunder align mathbackground mathcolor"),
+    elements: words("munderover"),
+  },
+  {
+    attributes: words("accent align mathbackground mathcolor"),
+    elements: words("mover"),
+  },
+  {
+    attributes: words(`
+      accent background color dir fence fontfamily fontsize fontstyle fontweight form
+      indentalign indentalignfirst indentalignlast indentshift indentshiftfirst indentshiftlast
+      indenttarget largeop linebreak linebreakmultchar linebreakstyle lineleading lspace
+      mathbackground mathcolor mathsize mathvariant maxsize minsize movablelimits rspace
+      separator stretchy symmetric
+    `),
+    elements: words("mo"),
+  },
+  {
+    attributes: words("accentunder align mathbackground mathcolor"),
+    elements: words("munder"),
+  },
+  {
+    attributes: words("actiontype mathbackground mathcolor selection"),
+    elements: words("maction"),
+  },
+  {
+    attributes: words(`
+      align alignmentscope columnalign columnlines columnspacing columnwidth displaystyle
+      equalcolumns equalrows frame framespacing groupalign mathbackground mathcolor
+      minlabelspacing rowalign rowlines rowspacing side width
+    `),
+    elements: words("mtable"),
+  },
+  {
+    attributes: words("align charalign charspacing mathbackground mathcolor stackalign"),
+    elements: words("mstack"),
+  },
+  {
+    attributes: words(`
+      alt background color fontfamily fontsize fontstyle fontweight height index mathbackground
+      mathcolor mathsize mathvariant src valign width
+    `),
+    elements: words("mglyph"),
+  },
+  {
+    attributes: words(`
+      background color depth dir fontfamily fontsize fontstyle fontweight height indentalign
+      indentalignfirst indentalignlast indentshift indentshiftfirst indentshiftlast indenttarget
+      linebreak mathbackground mathcolor mathsize mathvariant width
+    `),
+    elements: words("mspace"),
+  },
+  {
+    attributes: words(`
+      background color dir fontfamily fontsize fontstyle fontweight lquote mathbackground
+      mathcolor mathsize mathvariant rquote
+    `),
+    elements: words("ms"),
+  },
+  {
+    attributes: words("base definitionURL encoding type"),
+    elements: words("cn"),
+  },
+  {
+    attributes: words("bevelled denomalign linethickness mathbackground mathcolor numalign"),
+    elements: words("mfrac"),
+  },
+  {
+    attributes: words("cd definitionURL encoding name"),
+    elements: words("semantics"),
+  },
+  {
+    attributes: words("cd definitionURL encoding type"),
+    elements: words("csymbol"),
+  },
+  {
+    attributes: words("close mathbackground mathcolor open separators"),
+    elements: words("mfenced"),
+  },
+  {
+    attributes: words("closure definitionURL encoding"),
+    elements: words("interval"),
+  },
+  {
+    attributes: words(
+      "columnalign columnspan groupalign mathbackground mathcolor rowalign rowspan",
+    ),
+    elements: words("mtd"),
+  },
+  {
+    attributes: words("crossout location mathbackground mathcolor"),
+    elements: words("mscarry"),
+  },
+  {
+    attributes: words("crossout location mathbackground mathcolor position scriptsizemultiplier"),
+    elements: words("mscarries"),
+  },
+  {
+    attributes: words("definitionURL encoding nargs occurrence scope type"),
+    elements: words("declare"),
+  },
+  {
+    attributes: words("definitionURL encoding order"),
+    elements: words("list"),
+  },
+  {
+    attributes: words("depth height lspace mathbackground mathcolor voffset width"),
+    elements: words("mpadded"),
+  },
+  {
+    attributes: words("dir mathbackground mathcolor"),
+    elements: words("mrow"),
+  },
+  {
+    attributes: words("edge mathbackground mathcolor"),
+    elements: words("malignmark"),
+  },
+  {
+    attributes: words("groupalign mathbackground mathcolor"),
+    elements: words("maligngroup"),
+  },
+  {
+    attributes: words(`
+      leftoverhang length mathbackground mathcolor mslinethickness position rightoverhang
+    `),
+    elements: words("msline"),
+  },
+  {
+    attributes: words("longdivstyle mathbackground mathcolor position shift"),
+    elements: words("mlongdiv"),
+  },
+  {
+    attributes: words("mathbackground mathcolor notation"),
+    elements: words("menclose"),
+  },
+  {
+    attributes: words("mathbackground mathcolor position shift"),
+    elements: words("msgroup"),
+  },
+  {
+    attributes: words("mathbackground mathcolor position"),
+    elements: words("msrow"),
+  },
+  {
+    attributes: words("mathbackground mathcolor subscriptshift"),
+    elements: words("msub"),
+  },
+  {
+    attributes: words("mathbackground mathcolor superscriptshift"),
+    elements: words("msup"),
+  },
+  {
+    attributes: words("src"),
+    elements: words("share"),
+  },
+];
+
+/**
+ * The attributes each MathML element admits, by local name: its row of {@link attributeRows} and
+ * {@link commonAttributes}. Its keys are the elements of {@link mathmlElements}, so an element the
+ * walk lets through has a list, and `annotation-xml` has its own.
+ */
+const elementAttributes: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  attributeRows.flatMap(({ attributes, elements }) => {
+    const admitted: ReadonlySet<string> = new Set([...commonAttributes, ...attributes]);
+
+    return elements.map((element): readonly [string, ReadonlySet<string>] => [element, admitted]);
+  }),
+);
 
 /**
  * The elements the group of §3.5.5.2 passes through on its way to its cell, besides an `mrow` or
@@ -1088,8 +1403,12 @@ const checkCn = (node: Element, position: number): Option.Option<MathDefect> => 
 };
 
 /**
- * Check an element's attributes: `style` (refused as the body path refuses it), a URL the body
- * path's scheme filter would drop, a notation-typed value outside §2.1.5.1, and `cn`'s `base`.
+ * Check an element's attributes, each in document order: a name the element's list of
+ * {@link elementAttributes} does not hold (Appendix A.2), `style` (refused as the body path refuses
+ * it), a URL the body path's scheme filter would drop, a notation-typed value outside §2.1.5.1,
+ * and `cn`'s `base`. The tree holds each name as the HTML parser reads it, so the names compared
+ * are the ones the page will carry, and an event handler, which no element's list holds, is
+ * refused here before the render's guard sees it.
  *
  * @param node The element.
  * @param position Its position.
@@ -1097,8 +1416,13 @@ const checkCn = (node: Element, position: number): Option.Option<MathDefect> => 
  */
 const checkAttributes = (node: ElementChild, position: number): Option.Option<MathDefect> => {
   const local = localOf(node);
+  const admitted = elementAttributes.get(local);
 
   for (const { name, value } of node.attributes) {
+    if (admitted?.has(name) !== true) {
+      return Option.some(defect("A.2", local, position, name));
+    }
+
     if (name === "style") {
       return Option.some(defect("2.1.6", local, position, name));
     }

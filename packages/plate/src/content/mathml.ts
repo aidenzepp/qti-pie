@@ -23,6 +23,9 @@
  *   and `cd` naming a definition). The ids a `share` or an `xref` may name are the island's own.
  *   Every other content model of the MathML XSD (a child count, an attribute's enumeration) is not
  *   walked, as the structural validator leaves MathML unwalked.
+ * - It keeps attributes in no namespace only, each under the name the HTML parser reads it by:
+ *   `xlink:href`, `xml:lang` and any attribute of another namespace are dropped, neither refused
+ *   nor rendered (MathML 3 deprecates `xlink:href` for `href`, section 2.1.6; issue m3e-05c).
  * - It adds no `aria-label` from `alttext`, which is kept as written: an ARIA label on MathML
  *   overrides the braille a screen reader generates from the formula (the proposed reading filed
  *   with issue m3e-05).
@@ -63,8 +66,10 @@ import type { Refusal } from "#plate/validate/refusal.ts";
 const element = "math";
 
 /**
- * An attribute of a MathML element as written: one in no namespace, by its local name. Namespace
- * declarations and attributes of other namespaces are not part of the tree.
+ * An attribute of a MathML element: one in no namespace, by its local name as the HTML parser reads
+ * it on the rendered element ({@link readName}), so the name the validity rules check is the name
+ * the render writes. Namespace declarations and attributes of other namespaces are not part of the
+ * tree.
  */
 export interface MathAttribute {
   readonly name: string;
@@ -269,14 +274,31 @@ const normaliseElement = (source: SourceElement): SourceElement => {
 };
 
 /**
- * Read the attributes of a source element the tree keeps: those in no namespace, as written.
+ * Read an attribute's name as the HTML parser reads it on the rendered element: its ASCII capitals
+ * lowercased, and `definitionurl`, the one name MathML 3 writes in camel case, adjusted back to
+ * `definitionURL`. XML names are case-sensitive and HTML's are not, so a name the validity rules
+ * match against MathML 3's spellings has to be the name the page will read.
+ *
+ * @param local The attribute's local name as written.
+ * @returns The name the tree holds.
+ * @see https://html.spec.whatwg.org/multipage/parsing.html#adjust-mathml-attributes
+ */
+const readName = (local: string): string => {
+  const lowered = local.replaceAll(/[A-Z]/gu, (letter) => letter.toLowerCase());
+
+  return lowered === "definitionurl" ? "definitionURL" : lowered;
+};
+
+/**
+ * Read the attributes of a source element the tree keeps: those in no namespace, each under the
+ * name the HTML parser reads ({@link readName}), with its value as written.
  *
  * @param attributes The element's attributes.
  * @returns The attributes kept, in document order.
  */
 const attributesOf = (attributes: readonly SourceAttribute[]): readonly MathAttribute[] =>
   attributes.flatMap((attribute) =>
-    attribute.namespace === "" ? [{ name: attribute.local, value: attribute.value }] : [],
+    attribute.namespace === "" ? [{ name: readName(attribute.local), value: attribute.value }] : [],
   );
 
 /**
