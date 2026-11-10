@@ -18,11 +18,11 @@ import { Effect, Layer, Schema } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import type { Rule } from "#pantry/import/refusal.ts";
 import { authorRole, judgedCase, loginSession } from "#pantry/test/direct-sql.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { restoredNames } from "#pantry/test/fixtures.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import type { Rule } from "#pantry/import/rules.ts";
 
 /**
  * A restored-check fixture's name.
@@ -69,7 +69,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the restored-check fixtures through the importer", (it) => {
       for (const [name, rule] of refused) {
         it.effect(`refuses ${name} naming ${rule}`, () =>
@@ -79,9 +78,9 @@ describe.skipIf(!hasLease)(
             assert.strictEqual(failure._tag, "ImportRefused", `${name}: refused by another error`);
 
             if (failure._tag === "ImportRefused") {
-              yield* Effect.log(`${name} refused under ${failure.rule}`, failure.detail);
+              yield* Effect.log(`${name} refused under ${failure.rules[0]}`, failure.detail);
 
-              assert.strictEqual(failure.rule, rule, `${name}: the refusal named another rule`);
+              assert.strictEqual(failure.rules[0], rule, `${name}: the refusal named another rule`);
             }
           }),
         );

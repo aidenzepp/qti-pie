@@ -89,6 +89,8 @@ export {
 
 export { PartSwapRefused } from "#plate/emit/swap.ts";
 
+export type { AdaptivePolicy } from "#plate/engine/adaptive.ts";
+
 export type { EngineFailure } from "#plate/engine/evaluate.ts";
 
 export {
@@ -117,6 +119,7 @@ export {
   isPosted,
   Malformed,
   partition,
+  postedStrings,
 } from "#plate/form/encoding.ts";
 
 export { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
