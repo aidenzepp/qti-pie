@@ -66,14 +66,6 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: its 32-case exhaust ran 61.2 s at a load average of 31 to 46 in FIX-ASM's run of 2026-11-07, beside two other suites, and 135.9 s in lane ASM's run under the swarm, whose load was not recorded; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
-    "pantry/src/test/record-declarations.oracle.test.ts",
-    "measurement owed: its 96-case exhaust ran 3.7 s in FIX-B12's run of 2026-11-07, which recorded no load average; its 600_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
-    "pantry/src/test/unwritten-declaration-attributes.oracle.test.ts",
-    "measurement owed: its 78-case exhaust ran 12.7 s at a load average of 45 to 53 in FIX-UNWRITTEN's run of 2026-11-07, beside five other suites; its 600_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
     "pantry/src/import/overlays/manifest-identifiers.oracle.test.ts",
     "measurement owed: its 320-case exhaust ran 20.8 s, and 16.1 s at a load average of 32 to 39, in FB-WRITE's runs of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
@@ -88,10 +80,6 @@ const exempt: ReadonlyMap<string, string> = new Map([
   [
     "pantry/src/import/overlays/expressions.absence.oracle.test.ts",
     "measurement owed: its 18-package box ran under FB-EXPR's run of 2026-11-07, whose load average was below 60, and its 9-package box, once FIX-A1 struck the timing cases, 3.9 s at a load average of 34 to 40 beside four other suites; its 600_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
-    "pantry/src/test/normal-minimum-default.oracle.test.ts",
-    "measurement owed: its 32-case exhaust ran 2.9 s at a load average of 34 to 45 in FIX-NORMALMIN's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
     "pantry/src/import/overlays/reference-names.oracle.test.ts",
@@ -120,10 +108,6 @@ const exempt: ReadonlyMap<string, string> = new Map([
   [
     "pantry/src/import/overlays/collapsed-values.oracle.test.ts",
     "measurement owed: FIX-ATOMIC's 160-package guard (9a9074d4) ran in a run of 2026-11-07 that recorded no load average; its 600_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
-    "pantry/src/test/census.migration.test.ts",
-    "LANES.md: no lane touches census.migration.test.ts, so its timeout is named when its owner edits it",
   ],
   [
     "pantry/src/import/overlays/referenced-cardinality.oracle.test.ts",

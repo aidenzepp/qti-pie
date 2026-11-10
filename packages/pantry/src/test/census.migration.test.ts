@@ -139,6 +139,5 @@ describe("the committed migration", () => {
         );
         assert.strictEqual(held.functions.live, held.domains.bits, "a live set per bits domain");
       }).pipe(Effect.provide(NodeServices.layer)),
-    { timeout: 300_000 },
   );
 });

@@ -520,7 +520,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               ),
           ),
         ),
-      600_000,
     );
   },
 );
