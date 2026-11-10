@@ -31,7 +31,7 @@ import { renderChoice } from "#plate/interactions/choice.ts";
 import { renderExtendedText } from "#plate/interactions/extended-text.ts";
 import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { renderTextEntry } from "#plate/interactions/text-entry.ts";
-import { renderModule } from "#plate/model/interactions.ts";
+import { moduleContent, renderModule } from "#plate/model/interactions.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
 import type { ResponseValue } from "#plate/model/values.ts";
 import { isRedacted, payload, redactItem } from "#plate/payload.ts";
@@ -419,7 +419,9 @@ const shippedRenderer =
 
 /**
  * Construct the render function each interaction of a body is handed to, dispatching on its kind,
- * with its `modules`, which hands an interaction a module parses to its module's render.
+ * with its `modules`, which hands an interaction a module parses to its module's render, and its
+ * `moduleContent`, which gives that interaction's content through its module, so the emitter
+ * reads both without importing a module.
  *
  * @param built The render's payload.
  * @param state The render's emit state.
@@ -427,6 +429,7 @@ const shippedRenderer =
  */
 const interactionRenderer = (built: Payload, state: EmitState): RenderInteraction =>
   Object.assign(shippedRenderer(built, state), {
+    moduleContent,
     modules: (interaction: ModulePayload) => renderModule(interaction, built, state),
   });
 
@@ -520,11 +523,12 @@ export const render = (
       : checkedInstance(options.instance, "options.instance");
     const state = stateOf(configuration, parts, options.assetBase, options.supports);
     const built = payload(item, viewOf(instance, configuration, options));
-    const body = yield* emitBody(built, state, interactionRenderer(built, state));
+    const renderer = interactionRenderer(built, state);
+    const body = yield* emitBody(built, state, renderer);
     const live = yield* itemPart(state.parts, "live", liveRegion, []);
     const root = yield* emitItem(built, state, [...body, live]);
 
-    if (writesMalformedHeading(built.body, configuration.headingLevel)) {
+    if (writesMalformedHeading(built.body, configuration.headingLevel, renderer)) {
       return yield* Result.fail(new InvalidHeadingLevel({ level: configuration.headingLevel }));
     }
 
