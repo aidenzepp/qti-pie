@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0p1_imscpv1p2_v1p0.xsd"
+  identifier="m3f-context">
+  <metadata>
+    <schema>QTI Package</schema>
+    <schemaversion>3.0.1</schemaversion>
+  </metadata>
+  <organizations/>
+  <resources>
+    <resource identifier="context-test" type="imsqti_test_xmlv3p0" href="tests/context.xml">
+      <file href="tests/context.xml"/>
+      <dependency identifierref="context-item"/>
+    </resource>
+    <resource identifier="context-item" type="imsqti_item_xmlv3p0" href="items/context.xml">
+      <file href="items/context.xml"/>
+    </resource>
+  </resources>
+</manifest>

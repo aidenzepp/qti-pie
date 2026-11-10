@@ -109,6 +109,7 @@ import { containerFor } from "#plate/model/interactions.ts";
 import type { ModuleModel } from "#plate/model/interactions.ts";
 import { readersOf } from "#plate/model/reader.ts";
 import { translate } from "#plate/model/regex.ts";
+import { qtiContextName } from "#plate/model/record.ts";
 import { templateRules } from "#plate/model/template.ts";
 import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type {
@@ -389,6 +390,22 @@ export interface TemplateDeclaration {
    * for an object parameter's value that matches its identifier.
    */
   readonly paramVariable: boolean;
+}
+
+/**
+ * A `qti-context-declaration` of a modelled base type and cardinality: a context variable, which no
+ * processing sets and which template, response and outcome processing may read (the information
+ * model's ContextDeclaration). The engine holds it at its default for the whole session, as no
+ * host supplies the value of a declared context variable.
+ */
+export interface ContextDeclaration {
+  readonly baseType: ModelledBaseType;
+  readonly cardinality: Value["cardinality"];
+  /**
+   * The `qti-default-value`, when the declaration has one.
+   */
+  readonly defaultValue: Option.Option<Value>;
+  readonly identifier: string;
 }
 
 /**
@@ -871,6 +888,13 @@ export interface Item {
    * that is still a stub reads none, so an item built by hand may leave it out.
    */
   readonly content?: ItemNodesHeld;
+  /**
+   * The context declarations of a modelled type, keyed by identifier, each held at its default
+   * ({@link contextValues}). Absent when the item makes none, as `records` is, so an item built by
+   * hand may leave it out. A context declaration of base type `file` or cardinality `record` is
+   * not here, and stays marked `qti-context-declaration`.
+   */
+  readonly contexts?: ReadonlyMap<string, ContextDeclaration>;
   /**
    * The document's location as the host named it.
    */
@@ -1889,6 +1913,32 @@ const templateDeclaration = (
     const defaultValue = yield* optionalValue(build, declaration, "qti-default-value", read.value);
 
     return Option.some({ ...read.value, defaultValue, mathVariable, paramVariable });
+  });
+
+/**
+ * Read a `qti-context-declaration`, an item's or a test's, through {@link declared} and
+ * {@link optionalValue} as an outcome declaration is read: the item and the test model both read
+ * one through this, so the two read them alike.
+ *
+ * @param build The build.
+ * @param declaration The declaration.
+ * @returns The model, none when its base type is absent or not modelled or its cardinality is
+ *   `record`; or a refusal when `identifier` or `cardinality` is missing or its default value is
+ *   outside its type.
+ */
+export const contextDeclaration = (
+  build: ModelWalk,
+  declaration: SourceElement,
+): Result.Result<Option.Option<ContextDeclaration>, Refusal> =>
+  Result.gen(function* readContextDeclaration() {
+    const read = yield* declared(build, declaration);
+    if (Option.isNone(read)) {
+      return Option.none();
+    }
+
+    const defaultValue = yield* optionalValue(build, declaration, "qti-default-value", read.value);
+
+    return Option.some({ ...read.value, defaultValue });
   });
 
 /**
@@ -3514,6 +3564,18 @@ const namesHeldRecord = (operand: Expression, heldRecords: ReadonlySet<string>):
   heldRecords.has(operand.identifier);
 
 /**
+ * The context variables the engine holds while an item's processing runs: the built-in record
+ * `QTI_CONTEXT`, unless a declaration of the item names a variable by that name, which then wins as
+ * every declared variable does; and the context variables the model holds ({@link
+ * Item.contexts}),
+ * each at its default.
+ */
+interface HeldContexts {
+  readonly builtIn: boolean;
+  readonly declared: ReadonlySet<string>;
+}
+
+/**
  * Give each identifier a rule tree names that the engine does not hold, once, in the order the tree
  * first names it: a response processing's tree of {@link Rule} or a template processing's tree of
  * {@link TemplateRule}.
@@ -3534,7 +3596,9 @@ const namesHeldRecord = (operand: Expression, heldRecords: ReadonlySet<string>):
  *   correct response the engine reads (`evaluateCorrect` in
  *   `#plate/engine/expressions/references.ts`), though it holds no mapping of it; that of a kind
  *   that expects any variable, such as `qti-variable`, among the responses, the outcomes, the
- *   template variables and the built-in variables.
+ *   template variables and the built-in variables, and, for `qti-variable` alone, among the context
+ *   variables the model holds ({@link HeldContexts}), which the engine holds at their defaults but
+ *   whose default a `qti-default` does not read.
  * - The reference facet: each variable an attribute names (`referencesOf`), before the operands, in
  *   the facet's order. A checked reference names one the engine holds as `qti-variable` does. An
  *   unchecked one, a `qti-equal`'s `tolerance` token, is judged only when a declaration or a
@@ -3543,7 +3607,9 @@ const namesHeldRecord = (operand: Expression, heldRecords: ReadonlySet<string>):
  *   operator. A record response the engine holds is held as an operand of `qti-field-value`,
  *   `qti-is-null` or `qti-match`, the three kinds that read a record whole, named by a
  *   `qti-variable`, a `qti-default` or a `qti-correct` ({@link namesHeldRecord}); anywhere else it
- *   is a name the engine holds no value of.
+ *   is a name the engine holds no value of. The built-in record `QTI_CONTEXT`, where no declaration
+ *   names it, is held as such an operand when a `qti-variable` names it, in template and response
+ *   processing alike, since the engine sets it before any processing runs.
  *
  * Each setting rule's target is judged as the engine finds it: `qti-set-outcome-value` and
  * `qti-lookup-outcome-value` set an outcome, or the built-in `completionStatus` where the engine
@@ -3557,13 +3623,14 @@ const namesHeldRecord = (operand: Expression, heldRecords: ReadonlySet<string>):
  * no base type), a template variable beside template processing that does not run, the built-in
  * variable `duration`, read or set, which the engine holds no value for, and the built-in
  * `completionStatus` where a declaration names it. Reading 29 makes an item's `duration` a single
- * float, so it is a valid name in an item's rules. In template processing it also finds
- * `QTI_CONTEXT` and each variable a `qti-context-declaration` declares: template processing may
- * read them (`info.txt:22601`, and a reference to `QTI_CONTEXT` "must succeed",
- * `info.txt:8454-8456`), and the engine holds no context variable. An identifier nothing declares
- * is refused before the model is built when inline rules name it; the walk finds it too. One a
- * built-in template names, such as `MAXSCORE` or `FEEDBACK` in a `CC2_*` template, is not in the
- * document, so nothing refuses it: the walk finds it, and the processing is marked.
+ * float, so it is a valid name in an item's rules. Template and response processing may read
+ * `QTI_CONTEXT` and each variable a `qti-context-declaration` declares (`info.txt:22601`, and a
+ * reference to `QTI_CONTEXT` "must succeed", `info.txt:8454-8456`): the walk finds `QTI_CONTEXT`
+ * read other than whole, a context variable of a type the model does not hold, and a context
+ * variable read other than by `qti-variable`, which the engine holds no value of. An identifier
+ * nothing declares is refused before the model is built when inline rules name it; the walk finds
+ * it too. One a built-in template names, such as `MAXSCORE` or `FEEDBACK` in a `CC2_*` template, is
+ * not in the document, so nothing refuses it: the walk finds it, and the processing is marked.
  *
  * @param tree The rule tree.
  * @param responses The responses the model holds.
@@ -3575,6 +3642,7 @@ const namesHeldRecord = (operand: Expression, heldRecords: ReadonlySet<string>):
  *   gives no response value.
  * @param builtIns The built-in variables the engine holds for this item ({@link heldBuiltIns}).
  * @param names The names of the variables the item holds ({@link declaredNames}).
+ * @param contexts The context variables the engine holds while the tree runs.
  * @returns The identifiers the engine does not hold, empty when it can run the tree.
  */
 const unheldIdentifiers = (
@@ -3585,6 +3653,7 @@ const unheldIdentifiers = (
   heldRecords: ReadonlySet<string>,
   builtIns: ReadonlySet<string>,
   names: ReadonlySet<string>,
+  contexts: HeldContexts,
 ): readonly string[] => {
   const unheld = new Set<string>();
 
@@ -3626,7 +3695,8 @@ const unheldIdentifiers = (
         kindRule.declaration.expected === "response"
           ? responses.has(operand.identifier) ||
             (operand.kind === "correct" && isBuiltIn("response", operand.identifier))
-          : isHeld(operand.identifier);
+          : isHeld(operand.identifier) ||
+            (operand.kind === "variable" && contexts.declared.has(operand.identifier));
       if (!held) {
         unheld.add(operand.identifier);
       }
@@ -3640,7 +3710,9 @@ const unheldIdentifiers = (
 
     const readsRecords = recordReaders.has(operand.kind);
     for (const each of operand.operands) {
-      if (!(readsRecords && namesHeldRecord(each, heldRecords))) {
+      const namesQtiContext =
+        contexts.builtIn && each.kind === "variable" && each.identifier === qtiContextName;
+      if (!(readsRecords && (namesHeldRecord(each, heldRecords) || namesQtiContext))) {
         read(each);
       }
     }
@@ -4121,6 +4193,7 @@ const markAt = (build: Build, at: number, path: string, features: readonly strin
  * @param heldTemplates The template variables the engine holds a value of: the model's, or none
  *   beside template processing that does not run.
  * @param records The record responses the model holds.
+ * @param contexts The context variables the engine holds ({@link HeldContexts}).
  * @returns The tree, or none when it names an identifier the engine does not hold, is a built-in
  *   template that needs a declaration the item does not provide, or reads an area mapping with a
  *   `%` coordinate.
@@ -4132,6 +4205,7 @@ const runnable = (
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
   heldTemplates: ReadonlyMap<string, TemplateDeclaration>,
   records: ReadonlyMap<string, RecordDeclaration>,
+  contexts: HeldContexts,
 ): Option.Option<readonly Rule[]> => {
   const builtIns = heldBuiltIns(build.document.root);
   const features = [
@@ -4143,6 +4217,7 @@ const runnable = (
       new Set(records.keys()),
       builtIns,
       build.names,
+      contexts,
     ).map((identifier) => `variable:${identifier}`),
     ...unmetNeeds(
       read.tree,
@@ -4277,6 +4352,7 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
     const responses = new Map<string, ResponseDeclaration>();
     const outcomes = new Map<string, OutcomeDeclaration>();
     const templateDeclarations = new Map<string, TemplateDeclaration>();
+    const contexts = new Map<string, ContextDeclaration>();
     const unheld = new Map<string, UnheldDeclaration>();
     const holdUnheld = (
       declaration: SourceElement,
@@ -4289,6 +4365,21 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
       });
     const body: BodyNode[] = [];
     const content: ItemContentBuild = {};
+    // A context declaration the model does not hold, of base type `file` or cardinality `record`,
+    // is an item part and keeps its `qti-context-declaration` mark.
+    const readOtherPart = (part: SourceElement): Result.Result<void, Refusal> =>
+      Result.gen(function* readOther() {
+        const read =
+          part.local === "qti-context-declaration"
+            ? yield* contextDeclaration(build, part)
+            : Option.none<ContextDeclaration>();
+        if (Option.isSome(read)) {
+          markUnreadWithin(build, part);
+          contexts.set(read.value.identifier, read.value);
+        } else {
+          collectItemPart(content, yield* itemPart(build, part));
+        }
+      });
     let processing: Option.Option<ReadProcessing> = Option.none();
     let templateRead: Option.Option<ReadTemplateProcessing> = Option.none();
 
@@ -4368,15 +4459,20 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
         );
       } else {
         markElement(build, part, false);
-        collectItemPart(content, yield* itemPart(build, part));
+        yield* readOtherPart(part);
       }
     }
 
+    const heldContexts: HeldContexts = {
+      builtIn: !declaredIdentifiers(root).has(qtiContextName),
+      declared: new Set(contexts.keys()),
+    };
     // The names template processing reads or sets that the engine does not hold while it runs. The
     // engine gives it no response or outcome value (`#plate/engine/template.ts`), but P26 refuses
     // every read of one, and of every built-in but `QTI_CONTEXT`, so on a checked item these are
-    // `QTI_CONTEXT`, a context variable, a template variable, response or outcome the model does
-    // not hold, and the built-in `duration` a rule sets the default or correct response of.
+    // `QTI_CONTEXT` read other than whole, a context variable the model does not hold, a template
+    // variable, response or outcome the model does not hold, and the built-in `duration` a rule
+    // sets the default or correct response of.
     const templateMarks = Option.match(templateRead, {
       onNone: () => [],
       onSome: (read) =>
@@ -4388,6 +4484,7 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
           new Set(),
           heldBuiltIns(root),
           build.names,
+          heldContexts,
         ).map((name) => `variable:${name}`),
     });
     const templateProcessing = templateRead.pipe(
@@ -4408,6 +4505,7 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
           outcomes,
           stalled ? new Map() : templateDeclarations,
           records,
+          heldContexts,
         ),
       ),
     );
@@ -4437,8 +4535,9 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
     // when it makes no declaration it holds no value of, and `content` when the item-placed content
     // modules read no node, as a model built by hand leaves them out.
     const withRecords: Item = records.size === 0 ? built : { ...built, records };
+    const withContexts: Item = contexts.size === 0 ? withRecords : { ...withRecords, contexts };
 
-    return withItemContent(unheld.size === 0 ? withRecords : { ...withRecords, unheld }, content);
+    return withItemContent(unheld.size === 0 ? withContexts : { ...withContexts, unheld }, content);
   });
 
 /**

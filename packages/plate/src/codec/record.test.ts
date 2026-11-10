@@ -121,6 +121,21 @@ describe("decodeRecord", () => {
     }),
   );
 
+  it.effect(
+    "[I-15] round-trips the host's qtiContext through encodeRecord and JSON, a field it omits staying absent, and stores no qtiContext key for a record without one",
+    () =>
+      Effect.gen(function* contextRoundTrips() {
+        const record: ItemRecord = {
+          ...fresh(bg007Item, "i1"),
+          qtiContext: { candidateIdentifier: "cand-7", testIdentifier: "spring-mock" },
+        };
+        const bare = yield* Effect.fromResult(encodeRecord(fresh(bg007Item, "i1")));
+
+        assert.deepStrictEqual(yield* Effect.fromResult(throughHost(record)), record);
+        assert.isFalse(Object.hasOwn(bare, "qtiContext"));
+      }),
+  );
+
   it.effect("round-trips integers beyond 2^53 exactly, stored as their decimal digits", () =>
     Effect.gen(function* integersExact() {
       const record: ItemRecord = {

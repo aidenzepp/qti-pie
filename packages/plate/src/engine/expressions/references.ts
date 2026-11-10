@@ -656,7 +656,8 @@ const evaluateMapResponsePoint: Evaluator<"map-response-point"> = (expression, s
  *
  * @param read The prefixed name, read through its item ref.
  * @returns The response, outcome or template declaration; none for an item-session built-in, for
- *   a record response and for a declaration of a type the value model does not hold.
+ *   a record response, for a context variable, whose default `openPackage` marks a read of, and
+ *   for a declaration of a type the value model does not hold.
  */
 const prefixedDeclaration = (
   read: PrefixedName,
@@ -674,6 +675,7 @@ const prefixedDeclaration = (
       return declarations.templates.get(identifier);
     }
     case "built-in":
+    case "context":
     case "record":
     case "unheld": {
       return undefined;

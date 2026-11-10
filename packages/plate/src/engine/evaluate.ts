@@ -73,6 +73,12 @@ export type { EngineFailure } from "#plate/engine/failures.ts";
  */
 export interface Variables {
   /**
+   * The value of each context variable the holder declares of a modelled type, by identifier, at
+   * its default (`contextValues` in `#plate/model/item.ts`): no processing sets one. Absent where
+   * the run holds none, and a `qti-variable` of one is then the record's gap.
+   */
+  readonly contexts?: Readonly<Record<string, Value>>;
+  /**
    * The correct responses template processing set with `qti-set-correct-response`, by the
    * response's identifier, a built-in response's among them (reading 111). A `qti-correct` reads a
    * response's value here before its declaration's correct response; with none, or with no value
@@ -97,6 +103,14 @@ export interface Variables {
    */
   readonly numAttempts?: bigint;
   readonly outcomes: Readonly<Record<string, Value>>;
+  /**
+   * The value of the built-in context variable `QTI_CONTEXT`, a record, as the host's context gives
+   * it (`qtiContextRecord` in `#plate/model/item.ts`), the NULL record when the host gave none.
+   * `qti-field-value`, `qti-is-null` and `qti-match` read it whole, as they read a record
+   * response's record, and a value read of it fails. Absent where the run holds none, and a read
+   * of it is then the record's gap.
+   */
+  readonly qtiContext?: RecordValue;
   /**
    * The value of each record response, by identifier, beside `responses`, which hold the values of
    * the other cardinalities: the session record's `records`. Absent where the run holds no record

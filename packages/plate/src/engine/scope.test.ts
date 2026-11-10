@@ -415,6 +415,43 @@ describe("itemVariable", () => {
     });
   });
 
+  it("[I-15] a test's processing reads an item's context variable through its item ref at its declared default, and at NULL of its type when it declares none", () => {
+    const withContexts: ScopeItem = {
+      ...item1,
+      contexts: new Map([
+        [
+          "ROOM",
+          {
+            baseType: "integer",
+            cardinality: "single",
+            defaultValue: Option.some(integerValue(12n)),
+            identifier: "ROOM",
+          },
+        ],
+        [
+          "CENTRE",
+          {
+            baseType: "string",
+            cardinality: "multiple",
+            defaultValue: Option.none(),
+            identifier: "CENTRE",
+          },
+        ],
+      ]),
+    };
+
+    assert.deepStrictEqual(heldValue(itemVariable(withContexts, "ROOM")), integerValue(12n));
+    assert.deepStrictEqual(heldValue(itemVariable(withContexts, "CENTRE")), {
+      baseType: "string",
+      cardinality: "multiple",
+      values: [],
+    });
+    assert.deepStrictEqual(
+      Option.map(itemName(withContexts, "ROOM"), ({ kind }) => kind),
+      Option.some("context"),
+    );
+  });
+
   it("[T-9] test scope lookup: a declared response or outcome the record holds no value of is the record's gap", () => {
     const response3 = failureOf(itemVariable(item3, "RESPONSE"));
     const outcome3 = failureOf(itemVariable(item3, "NOTA"));

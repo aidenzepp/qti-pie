@@ -51,8 +51,18 @@ import type { Branch, Expression, KindRule, Rule } from "#plate/model/expression
 import { kindRules, readExpression } from "#plate/model/expressions/read.ts";
 import { testRules } from "#plate/model/expressions/test.ts";
 import type { ExpressionReading } from "#plate/model/expressions/read.ts";
-import { outcomeDeclaration, parseContextOf, pathsOf } from "#plate/model/item.ts";
-import type { OutcomeDeclaration, ParseContextOf, UnsupportedFeature } from "#plate/model/item.ts";
+import {
+  contextDeclaration,
+  outcomeDeclaration,
+  parseContextOf,
+  pathsOf,
+} from "#plate/model/item.ts";
+import type {
+  ContextDeclaration,
+  OutcomeDeclaration,
+  ParseContextOf,
+  UnsupportedFeature,
+} from "#plate/model/item.ts";
 import { occurrenceOf } from "#plate/model/item-refs.ts";
 import { readersOf } from "#plate/model/reader.ts";
 import { integerLexical, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
@@ -214,6 +224,14 @@ export type TestFeatures = TestFeatureNodes<AnyTestFeature>;
  * LTI link ({@link withLtiLinks}).
  */
 export interface Test {
+  /**
+   * The test's context declarations of a modelled type, keyed by identifier, which its outcome
+   * processing and its template defaults read at their defaults (`contextValues` in
+   * `#plate/model/record.ts`). Read only while the Context Declarations module has landed in the
+   * table `buildTest` takes. Absent when the test makes none, so a test built by hand may leave it
+   * out.
+   */
+  readonly contexts?: ReadonlyMap<string, ContextDeclaration>;
   /**
    * Every identifier the test's outcome and context declarations declare, those the model does not
    * hold included, so a test-level read never splits a dotted one into an item ref and a variable.
@@ -856,6 +874,7 @@ const readFeature = (
 
   return Result.map(
     module.parse(element, {
+      contextDeclaration: (declaration) => contextDeclaration(build, declaration),
       expression: (child) => readExpression(reading(into.marks), child),
       mark: (feature) => {
         into.marks.push({ feature, path, shown: "mark" });
@@ -1014,6 +1033,12 @@ const processingBuiltIns: readonly string[] = [
  */
 interface ProcessingNames {
   /**
+   * The context variables the model holds (`Test.contexts`), which the engine holds at their
+   * defaults, so a `qti-variable` of one reads its value; their default is no declaration a
+   * `qti-default` reads.
+   */
+  readonly contexts: ReadonlySet<string>;
+  /**
    * Every identifier the test's outcome and context declarations declare whole.
    */
   readonly declared: ReadonlySet<string>;
@@ -1130,11 +1155,13 @@ const structureOf = (root: SourceElement): Structure => {
  *
  * @param root The test's root.
  * @param outcomes The outcomes the model holds.
+ * @param contexts The context variables the model holds.
  * @returns The names.
  */
 const processingNamesOf = (
   root: SourceElement,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  contexts: ReadonlyMap<string, ContextDeclaration>,
 ): ProcessingNames => {
   const declared = new Set(
     [
@@ -1148,6 +1175,7 @@ const processingNamesOf = (
   const { identifiers, referencesSection, repeatable } = structureOf(root);
 
   return {
+    contexts: new Set(contexts.keys()),
     declared,
     named: new Set([...declared, ...processingBuiltIns]),
     outcomes,
@@ -1337,7 +1365,8 @@ const addUnheldReads = (operand: Expression, names: ProcessingNames, unheld: Set
     const held =
       kindRule.declaration.expected === "response"
         ? !names.declared.has(identifier) && identifier.includes(".") && isHeld(names, identifier)
-        : isHeld(names, identifier);
+        : isHeld(names, identifier) ||
+          (operand.kind === "variable" && names.contexts.has(identifier));
     if (!held) {
       unheld.add(identifier);
     }
@@ -1871,7 +1900,17 @@ export const buildTest = (
       }
     }
 
-    const names = processingNamesOf(root, outcomes);
+    const contexts = new Map<string, ContextDeclaration>();
+    if (features.some((module) => module.key === "qti-context-declaration" && module.implemented)) {
+      for (const declaration of childrenNamed(root, "qti-context-declaration")) {
+        const read = yield* contextDeclaration(build, declaration);
+        if (Option.isSome(read)) {
+          contexts.set(read.value.identifier, read.value);
+        }
+      }
+    }
+
+    const names = processingNamesOf(root, outcomes, contexts);
     const placed = new Map<SourceElement, readonly MarkedFeature[]>();
     const readDefault: DefaultReader = (element) =>
       Result.gen(function* readPlacedDefault() {
@@ -1910,8 +1949,9 @@ export const buildTest = (
       title,
       unsupported: walked.marks,
     };
+    const withContexts: Test = contexts.size === 0 ? test : { ...test, contexts };
 
-    return Option.isSome(held) ? { ...test, features: held.value } : test;
+    return Option.isSome(held) ? { ...withContexts, features: held.value } : withContexts;
   });
 
 /**

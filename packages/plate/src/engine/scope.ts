@@ -24,7 +24,7 @@ import type { Declarations } from "#plate/engine/evaluate.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
 import { integerValue } from "#plate/engine/numbers.ts";
 import { occurrenceOf } from "#plate/model/item-refs.ts";
-import type { RecordDeclaration } from "#plate/model/item.ts";
+import type { ContextDeclaration, RecordDeclaration } from "#plate/model/item.ts";
 import type { ScopeRecord } from "#plate/model/record.ts";
 import { nullRecord } from "#plate/model/values.ts";
 import type { ModelledBaseType, RecordValue, Value } from "#plate/model/values.ts";
@@ -48,6 +48,12 @@ export interface ScopeItem {
    * The item ref's `category` identifiers.
    */
   readonly categories: readonly string[];
+  /**
+   * The item's context declarations of modelled types (`Item.contexts`), by identifier; absent, as
+   * in a scope built by hand, when the item makes none. No processing sets a context variable, so
+   * a read of one through the item ref gives its declared default, else NULL of its type.
+   */
+  readonly contexts?: ReadonlyMap<string, ContextDeclaration>;
   /**
    * The item's response, outcome and template declarations of modelled types, as its item model
    * holds them.
@@ -160,9 +166,10 @@ export interface ItemFilters {
  * What a test-level read of an item variable gives: `held`, a value of a type the value model
  * holds, NULL included; `record`, the record a record response holds, the NULL record included;
  * or `unheld`, NULL of a declared type the value model does not hold, base type `file` or a record
- * outcome or template variable. A context variable read through an item ref is not read:
- * `openPackage` marks the processing that reads it (repair9-9), and in documents opened apart the
- * read fails {@link UnknownIdentifierError}.
+ * outcome or template variable. A context variable of a modelled type read through an item ref is
+ * `held` at its declared default, else NULL; one of another type is not read: `openPackage` marks
+ * the processing that reads it (repair9-9), and in documents opened apart the read fails
+ * {@link UnknownIdentifierError}.
  */
 export type Reading =
   | { readonly kind: "held"; readonly value: Value }
@@ -204,22 +211,22 @@ export const attemptsStarted = (presented: boolean, processed: number, limit: nu
  * A prefix also reaches an item's `QTI_CONTEXT` (reading 106, "a prefixed reference reaches every
  * built-in variable its item ref's item holds, `QTI_CONTEXT` among them"), as the qti package's
  * `BuiltInVariable` holds it under an item's root (`packages/pantry/src/grammar/install.ts`), but
- * the engine holds none: `openPackage` marks the processing that reads one through its item ref,
- * as it marks a read of a declared context variable, so on a checked package the engine never
- * reads it, and in documents opened apart the read fails {@link UnknownIdentifierError}.
+ * the scope holds none: `openPackage` marks the processing that reads one through its item ref, so
+ * on a checked package the engine never reads it, and in documents opened apart the read fails
+ * {@link UnknownIdentifierError}.
  */
 type ItemBuiltIn = "completionStatus" | "duration" | "numAttempts";
 
 /**
  * What a name read through an item ref names in its item, with the variable's type: one of its
- * declared variables of a modelled type, by the item's own identifier; one of its record responses
- * ({@link ScopeItem.records}); one of a type the value model does not hold; or an item-session
- * built-in.
+ * declared variables of a modelled type, by the item's own identifier, a context variable
+ * ({@link ScopeItem.contexts}) among them; one of its record responses ({@link ScopeItem.records});
+ * one of a type the value model does not hold; or an item-session built-in.
  */
 export type ItemName =
   | {
       readonly identifier: string;
-      readonly kind: "outcome" | "record" | "response" | "template";
+      readonly kind: "context" | "outcome" | "record" | "response" | "template";
       readonly type: DeclaredType;
     }
   | { readonly identifier: string; readonly kind: "unheld"; readonly type: DeclaredType }
@@ -328,7 +335,7 @@ const recordType: DeclaredType = { baseType: "file", cardinality: "record" };
  * Find the declaration an item makes of a variable, of a modelled type or not.
  *
  * Declaration identifiers are unique together, so the order responses, outcomes, template
- * variables, record responses, unheld never decides between two.
+ * variables, context variables, record responses, unheld never decides between two.
  *
  * @param item The item.
  * @param identifier The variable's identifier in the item.
@@ -337,7 +344,7 @@ const recordType: DeclaredType = { baseType: "file", cardinality: "record" };
 const declarationOf = (item: ScopeItem, identifier: string): Option.Option<ItemName> => {
   const { outcomes, responses, templates } = item.declarations;
   const declared = (
-    kind: "outcome" | "response" | "template",
+    kind: "context" | "outcome" | "response" | "template",
     declaration: DeclaredType | undefined,
   ): Option.Option<ItemName> =>
     Option.map(Option.fromUndefinedOr(declaration), (type) => ({
@@ -350,6 +357,7 @@ const declarationOf = (item: ScopeItem, identifier: string): Option.Option<ItemN
     declared("response", responses.get(identifier)),
     declared("outcome", outcomes.get(identifier)),
     declared("template", templates.get(identifier)),
+    declared("context", item.contexts?.get(identifier)),
     Option.map(Option.fromUndefinedOr(item.records?.get(identifier)), (): ItemName => ({
       identifier,
       kind: "record",
@@ -400,9 +408,8 @@ const held = (value: Value): Reading => ({ kind: "held", value });
 /**
  * Give NULL of a declared type: a record outcome or template variable reads the `unheld` NULL, as
  * does a variable of base type `file` (G-R4, pending: a record outcome or template variable read
- * through an item ref reads NULL). A context variable read through an item ref is not read:
- * `openPackage` marks the processing that reads it (repair9-9), and in documents opened apart the
- * read fails {@link UnknownIdentifierError}.
+ * through an item ref reads NULL), and so does a context variable of a modelled type that declares
+ * no default.
  *
  * @param type The type.
  * @returns The `held` NULL of a type the value model holds, else the `unheld` NULL.
@@ -435,10 +442,13 @@ const absentReading = (named: ItemName): Reading =>
  * - A template variable reads the record's value; with none, because the item has not been presented
  *   or its template processing does not run, it reads NULL of its declared type (G-R3, pending: an
  *   item variable with no value reads NULL; Admission A3).
+ * - A context variable reads its declared default, else NULL of its declared type: no processing sets
+ *   one, so the record holds no value of it.
  * - A variable of base type `file`, and a record outcome or template variable, reads NULL of its
  *   declared type, which the record never holds (G-R3, pending; G-R4, pending). A context variable
- *   read through an item ref is not read: `openPackage` marks the processing that reads it
- *   (repair9-9), and in documents opened apart the read fails {@link UnknownIdentifierError}.
+ *   of another type is not in the scope: `openPackage` marks the processing that reads it through
+ *   an item ref (repair9-9), and in documents opened apart the read fails
+ *   {@link UnknownIdentifierError}.
  * - The built-in `numAttempts` reads the started attempt count ({@link ScopeItem.numAttempts}), a
  *   single integer, and `completionStatus` the record's outcome of that name. The engine holds no
  *   item's `duration`, and the test model marks a processing that reads it, so it is the record's
@@ -481,6 +491,17 @@ const readingOf = (
         kind: "record",
         value: Option.getOrElse(ownValue(record.records, named.identifier), () => nullRecord),
       });
+    }
+    case "context": {
+      return Result.succeed(
+        Option.match(
+          Option.flatMap(
+            Option.fromUndefinedOr(item.contexts?.get(named.identifier)),
+            (context) => context.defaultValue,
+          ),
+          { onNone: () => nullReading(named.type), onSome: held },
+        ),
+      );
     }
     case "unheld": {
       return Result.succeed(nullReading(named.type));

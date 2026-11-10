@@ -439,6 +439,14 @@ const contextDeclaration: SourceElement = el(
 );
 
 /**
+ * The context variable `CTX` of cardinality `record`, whose value the engine does not hold.
+ */
+const recordContextDeclaration: SourceElement = el("qti-context-declaration", [
+  attr("cardinality", "record"),
+  attr("identifier", "CTX"),
+]);
+
+/**
  * Construct an item whose template processing is one rule, and whose inline response processing
  * sets `SCORE` to 1, or, with a condition given, to 1 when that condition is true.
  *
@@ -477,10 +485,12 @@ const templatingItem = (
  * The seven shapes of template processing `check` accepts whose first attempt reads or sets a
  * name the engine does not hold while template processing runs (review `079e8c44` P1-1), each with
  * its declarations, its one rule, the name it marks and the declarations' own marks: a read of
- * `QTI_CONTEXT`; a read of a context variable through `qti-variable`, then through `qti-default`;
- * a read of a template variable of cardinality `record`; a set of one of base type `file`; a
+ * `QTI_CONTEXT` through `qti-default`; a read of a context variable of cardinality `record`
+ * through `qti-variable`, and of one the model holds through `qti-default`; a read of a template
+ * variable of cardinality `record`; a set of one of base type `file`; a
  * `qti-set-correct-response` of a `file` response; and a `qti-set-default-value` of a `file`
- * outcome.
+ * outcome. `QTI_CONTEXT` read whole and a held context variable read through `qti-variable` run
+ * (issue m3f-08).
  */
 const unheldTemplating: readonly {
   readonly declarations: readonly SourceElement[];
@@ -491,17 +501,21 @@ const unheldTemplating: readonly {
   {
     declarations: [scoreDeclaration, templateDeclaration("B", "single", "boolean")],
     marks: [],
-    rule: templateSetting("qti-set-template-value", "B", isNullOf(variableElement("QTI_CONTEXT"))),
+    rule: templateSetting(
+      "qti-set-template-value",
+      "B",
+      isNullOf(el("qti-default", [attr("identifier", "QTI_CONTEXT")])),
+    ),
     unheld: "QTI_CONTEXT",
   },
   {
     declarations: [
-      contextDeclaration,
+      recordContextDeclaration,
       scoreDeclaration,
-      templateDeclaration("T", "single", "integer"),
+      templateDeclaration("B", "single", "boolean"),
     ],
     marks: [{ feature: "qti-context-declaration", path: `${root}/qti-context-declaration` }],
-    rule: templateSetting("qti-set-template-value", "T", variableElement("CTX")),
+    rule: templateSetting("qti-set-template-value", "B", isNullOf(variableElement("CTX"))),
     unheld: "CTX",
   },
   {
@@ -510,7 +524,7 @@ const unheldTemplating: readonly {
       scoreDeclaration,
       templateDeclaration("T", "single", "integer"),
     ],
-    marks: [{ feature: "qti-context-declaration", path: `${root}/qti-context-declaration` }],
+    marks: [],
     rule: templateSetting(
       "qti-set-template-value",
       "T",
@@ -5060,7 +5074,11 @@ describe("buildItem", () => {
     const verdict = check(
       templatingItem(
         [scoreDeclaration, templateDeclaration("B", "single", "boolean")],
-        templateSetting("qti-set-template-value", "B", isNullOf(variableElement("QTI_CONTEXT"))),
+        templateSetting(
+          "qti-set-template-value",
+          "B",
+          isNullOf(el("qti-default", [attr("identifier", "QTI_CONTEXT")])),
+        ),
         variableElement("B"),
       ),
       tables,
@@ -5074,6 +5092,71 @@ describe("buildItem", () => {
       { feature: "variable:QTI_CONTEXT", path: `${root}/qti-template-processing`, shown: "mark" },
       { feature: "variable:B", path: `${root}/qti-response-processing`, shown: "mark" },
     ]);
+  });
+
+  it("[I-15] holds a context declaration of a modelled type in Item.contexts with its default, unmarked, and keeps template processing that reads it and QTI_CONTEXT's fields", () => {
+    const verdict = check(
+      templatingItem(
+        [
+          contextDeclaration,
+          scoreDeclaration,
+          templateDeclaration("T", "single", "integer"),
+          templateDeclaration("B", "single", "boolean"),
+        ],
+        el(
+          "qti-template-condition",
+          [],
+          [
+            el(
+              "qti-template-if",
+              [],
+              [
+                isNullOf(variableElement("QTI_CONTEXT")),
+                templateSetting("qti-set-template-value", "T", variableElement("CTX")),
+                templateSetting(
+                  "qti-set-template-value",
+                  "B",
+                  isNullOf(
+                    el(
+                      "qti-field-value",
+                      [attr("field-identifier", "testIdentifier")],
+                      [variableElement("QTI_CONTEXT")],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      tables,
+      Option.none(),
+    );
+    const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+      assert.fail(`the item is ${verdict.verdict}, not accepted.`),
+    );
+
+    assert.strictEqual(verdict.verdict, "accepted");
+    assert.deepStrictEqual(accepted.unsupported, []);
+    assert.isTrue(Option.isSome(accepted.item.templateProcessing));
+    assert.deepStrictEqual(
+      accepted.item.contexts,
+      new Map([
+        [
+          "CTX",
+          {
+            baseType: "integer",
+            cardinality: "single",
+            defaultValue: Option.some({
+              baseType: "integer",
+              cardinality: "single",
+              values: [{ baseType: "integer", value: 4n }],
+            }),
+            identifier: "CTX",
+          },
+        ],
+      ]),
+    );
   });
 
   it("[I-5] keeps template processing that reads and sets only template variables the model holds, and response processing, with no mark", () => {

@@ -38,6 +38,7 @@ import type { Result } from "effect";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { ReaderKit } from "#plate/interactions/contract.ts";
 import type { Expression } from "#plate/model/expression.ts";
+import type { ContextDeclaration } from "#plate/model/item.ts";
 import type { AttributeReaders } from "#plate/model/reader.ts";
 import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
 import type { Intent, TestSession } from "#plate/session/session.ts";
@@ -116,6 +117,18 @@ export type FeatureOwner =
  * readers, the expression readers or the body walk.
  */
 export interface TestParseContext {
+  /**
+   * Read a `qti-context-declaration` as the item model reads an item's (`contextDeclaration` in
+   * `#plate/model/item.ts`): its identifier, base type, cardinality and typed default. The Context
+   * Declarations module (issue m3f-08) is its caller.
+   *
+   * @param element The declaration.
+   * @returns The declaration; none when its base type is absent or not modelled or its
+   *   cardinality is `record`; or the refusal `value-type` at a default outside its type.
+   */
+  readonly contextDeclaration: (
+    element: SourceElement,
+  ) => Result.Result<Option.Option<ContextDeclaration>, Refusal>;
   /**
    * Read an expression element as the test's outcome processing reads its own, over the test's
    * reading (`readExpression` in `#plate/model/expressions/read.ts` under the `ExpressionReading`

@@ -394,7 +394,7 @@ describe("templateRules", () => {
   );
 
   it.effect(
-    "[I-5] leaves a read of QTI_CONTEXT through qti-field-value marked variable:QTI_CONTEXT, never record-set, in template and in response processing",
+    "[I-5] holds a read of QTI_CONTEXT through qti-field-value, never record-set, in template and in response processing, both of which run (issue m3f-08)",
     () =>
       Effect.gen(function* marksContextField() {
         const built = yield* Effect.fromResult(
@@ -414,17 +414,10 @@ describe("templateRules", () => {
         );
 
         assert.deepStrictEqual(
-          [built.templateProcessing, built.processing],
-          [Option.none(), Option.none()],
+          [Option.isSome(built.templateProcessing), Option.isSome(built.processing)],
+          [true, true],
         );
-        assert.deepStrictEqual(built.unsupported, [
-          { feature: "variable:QTI_CONTEXT", path: processing, shown: "mark" },
-          {
-            feature: "variable:QTI_CONTEXT",
-            path: "qti-assessment-item/qti-response-processing",
-            shown: "mark",
-          },
-        ]);
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 

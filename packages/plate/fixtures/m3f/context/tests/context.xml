@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  identifier="context-test" title="Context declarations">
+  <qti-context-declaration identifier="CENTRE" cardinality="single" base-type="string">
+    <qti-default-value>
+      <qti-value>harbour</qti-value>
+    </qti-default-value>
+  </qti-context-declaration>
+  <qti-outcome-declaration identifier="VENUE" cardinality="single" base-type="string"/>
+  <qti-outcome-declaration identifier="ROOMS" cardinality="single" base-type="integer"/>
+  <qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">
+    <qti-assessment-section identifier="section" title="Section" visible="true">
+      <qti-assessment-item-ref identifier="first" href="../items/context.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+  <qti-outcome-processing>
+    <qti-set-outcome-value identifier="VENUE">
+      <qti-variable identifier="CENTRE"/>
+    </qti-set-outcome-value>
+    <qti-set-outcome-value identifier="ROOMS">
+      <qti-variable identifier="first.ROOM"/>
+    </qti-set-outcome-value>
+  </qti-outcome-processing>
+</qti-assessment-test>

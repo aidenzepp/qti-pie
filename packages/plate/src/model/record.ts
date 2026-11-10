@@ -8,9 +8,9 @@
  * @module
  */
 import { Option } from "effect";
-import type { Item, OutcomeDeclaration } from "#plate/model/item.ts";
+import type { ContextDeclaration, Item, OutcomeDeclaration } from "#plate/model/item.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { RecordValue, Value } from "#plate/model/values.ts";
+import type { RecordField, RecordValue, Value } from "#plate/model/values.ts";
 
 /**
  * One item's session as the renderer holds it, each value of base type integer an exact `bigint`.
@@ -49,6 +49,12 @@ export interface ItemRecord {
   readonly notices: readonly string[];
   readonly numAttempts: number;
   readonly outcomes: { readonly [identifier: string]: Value };
+  /**
+   * The context the host gave when it started the item or the test the item sits in, from which
+   * every processing of the item reads `QTI_CONTEXT` ({@link qtiContextRecord}). Absent when the
+   * host gave none, and `QTI_CONTEXT` is then the NULL record.
+   */
+  readonly qtiContext?: QtiContext;
   readonly records: { readonly [identifier: string]: RecordValue };
   readonly responses: { readonly [identifier: string]: Value };
   readonly seed: string;
@@ -106,6 +112,100 @@ export const startingValue = (outcome: OutcomeDeclaration): Value =>
       ? { baseType: "float", cardinality: "single", values: [{ baseType: "float", value: 0 }] }
       : nullOf(outcome.baseType, outcome.cardinality);
   });
+
+/**
+ * The values a host supplies for the built-in context variable `QTI_CONTEXT` when it starts a test
+ * (`startTest`) or an item (`begin`): who sits it, which test, and where. Each is optional, since a
+ * host may know none of them, and a field the host omits, or gives as the empty string, is NULL in
+ * `QTI_CONTEXT` ({@link qtiContextRecord}).
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#DataCharacteristic_ContextDeclaration
+ */
+export interface QtiContext {
+  /**
+   * The candidate's identifier, `QTI_CONTEXT.candidateIdentifier`.
+   */
+  readonly candidateIdentifier?: string;
+  /**
+   * The delivery environment's identifier, `QTI_CONTEXT.environmentIdentifier`.
+   */
+  readonly environmentIdentifier?: string;
+  /**
+   * The test's identifier as the host names it, `QTI_CONTEXT.testIdentifier`.
+   */
+  readonly testIdentifier?: string;
+}
+
+/**
+ * The identifier of the built-in context variable, a record a delivery engine sets before any
+ * template, response or outcome processing runs, and which every item and test holds.
+ */
+export const qtiContextName = "QTI_CONTEXT";
+
+/**
+ * The three fields of `QTI_CONTEXT`, each a single string, in the order the record writes them.
+ */
+const qtiContextFields = [
+  "candidateIdentifier",
+  "environmentIdentifier",
+  "testIdentifier",
+] as const;
+
+/**
+ * Give the value of `QTI_CONTEXT` for a host's context: a record with one string field for each
+ * field the host gave as a non-empty string. A field the host omits is NULL, and a NULL field is no
+ * field of a record, so a host that gives no context, or none of the three, makes `QTI_CONTEXT`
+ * the NULL record, and a read of any of its fields gives NULL rather than failing.
+ *
+ * @example
+ *   qtiContextRecord({ candidateIdentifier: "c1" });
+ *   // a record whose one field `candidateIdentifier` is the single string "c1"
+ *
+ * @param context The host's context, none when the host gave none.
+ * @returns The record.
+ */
+export const qtiContextRecord = (context: QtiContext | undefined): RecordValue => ({
+  cardinality: "record",
+  fields: qtiContextFields.flatMap((identifier): readonly RecordField[] => {
+    const given = context?.[identifier];
+
+    return given === undefined || given === ""
+      ? []
+      : [{ identifier, value: { baseType: "string", value: given } }];
+  }),
+});
+
+/**
+ * Give a record that keeps the host's context, or the record unchanged when the host gave none, so
+ * a record begun without one encodes as it did before `qtiContext` existed.
+ *
+ * @param record The record.
+ * @param context The host's context, none when it gave none.
+ * @returns The record, holding `qtiContext` exactly when a context is given.
+ */
+export const withQtiContext = (record: ItemRecord, context: QtiContext | undefined): ItemRecord =>
+  context === undefined ? record : { ...record, qtiContext: context };
+
+/**
+ * Give the value of each context variable an item or a test declares of a modelled type: its
+ * declared default, else NULL of its base type and cardinality. No processing sets a context
+ * variable and no host supplies one, so these are its values throughout a session.
+ *
+ * @param contexts The context declarations (`Item.contexts` or `Test.contexts`), none when the
+ *   holder declares none.
+ * @returns Each value, keyed by the variable's identifier.
+ */
+export const contextValues = (
+  contexts: ReadonlyMap<string, ContextDeclaration> | undefined,
+): Readonly<Record<string, Value>> =>
+  Object.fromEntries(
+    Array.from(contexts ?? [], ([identifier, declaration]) => [
+      identifier,
+      Option.getOrElse(declaration.defaultValue, () =>
+        nullOf(declaration.baseType, declaration.cardinality),
+      ),
+    ]),
+  );
 
 /**
  * The identifier of the built-in outcome variable `completionStatus`, a single identifier the
