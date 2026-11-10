@@ -1008,6 +1008,19 @@
 }
 
 /* begin answer-masking (issue m4-05) */
+
+/*
+ * Focus on a Choice row, by anything in it that shows focus: a masked choice's toggle, which the
+ * Control rule above cannot reach while the mask is closed, takes the same ring. The toggle is a
+ * native summary, so the browser keeps its disclosure marker and draws its own focus ring as well.
+ */
+:where([data-slot="choice-interaction-choice"]:has(:focus-visible)) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
+
 /* end answer-masking */
 
 /* begin item-live (unit W0-B) */
