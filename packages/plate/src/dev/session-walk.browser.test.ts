@@ -175,6 +175,17 @@ const firstSubmit = (page: Page): Locator =>
   page.locator('form[method="post"] button[type="submit"]').first();
 
 /**
+ * Locate the session form's visible Save, the button a candidate sees and clicks. The form's
+ * first submit button is the playground's hidden default, which carries the same intent but is
+ * not rendered, so a click goes through the role query, which excludes it.
+ *
+ * @param page The page, on a session page.
+ * @returns The locator.
+ */
+const visibleSave = (page: Page): Locator =>
+  page.getByRole("button", { exact: true, name: "Save" });
+
+/**
  * Tick the first Choice Control of the current item with the mouse, through the clipped Control
  * itself, and read its value.
  *
@@ -284,7 +295,7 @@ eachEngine((it) => {
 
             const entry = yield* textEntry(page);
             yield* Effect.promise(() => entry.fill(typed));
-            yield* post(page, () => firstSubmit(page).click());
+            yield* post(page, () => visibleSave(page).click());
 
             assert.deepStrictEqual(yield* shownIn(page), {
               position: 2,

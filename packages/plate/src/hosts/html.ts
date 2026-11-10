@@ -3,7 +3,15 @@
  * author with no framework composes it (rule `a9d04969` point 5).
  *
  * The page links plate's sheet and holds the host's own `form method="post"` and submit button
- * around `render(redact(…))`. A post is decoded, checked with `checkResponses` and scored with
+ * around `render(redact(…))`. The form begins with a hidden default submit, `button type="submit"
+ * hidden`, before the rendered item, and ends with the visible Submit after it: HTML's default
+ * button is the form's first submit button in tree order, the one implicit submission (Enter in a
+ * text field) fires at, and an item can hold a submit button of its own, an End Attempt's Control,
+ * named for its response; with the hidden default first, Enter is the item's ordinary submission
+ * and an End Attempt ends the attempt only when the candidate activates it. The hidden default
+ * carries no `name`, so it posts no entry, and `hidden` alone hides it: it is not rendered, not
+ * focusable and not in the accessibility tree, so the tab order and what a screen reader hears
+ * are the visible Submit's alone. A post is decoded, checked with `checkResponses` and scored with
  * `score`, and the page comes back with the Status part above the form. The host is stateless: it
  * keeps no record, so each post is scored as a first attempt, and it sets no attempt limit.
  *
@@ -256,10 +264,11 @@ export const itemHost = (accepted: Accepted, configuration: Configuration): Html
 
   /**
    * Construct the page around the item: the Status part when a post gave one, then the host's
-   * form around the rendered item and the host's submit button. The form carries
-   * `autocomplete="off"`, which HTML does not allow on a Choice's radio or checkbox, so the
-   * browser restores none of their checked states; the Text Entry and Extended Text Controls say
-   * `off` on their own.
+   * form, which holds the hidden default submit, the rendered item and the host's visible submit
+   * button, in that order, so the host's own button is the form's default button whatever submit
+   * button the item holds. The form carries `autocomplete="off"`, which HTML does not allow on a
+   * Choice's radio or checkbox, so the browser restores none of their checked states; the Text
+   * Entry and Extended Text Controls say `off` on their own.
    *
    * @param options What `render` shows: the posted values, or a refused post's strings and
    *   messages.
@@ -282,6 +291,7 @@ export const itemHost = (accepted: Accepted, configuration: Configuration): Html
       main: [
         ...(shown === undefined ? [] : [shown.success.html]),
         '<form method="post" autocomplete="off">',
+        '<button type="submit" hidden>Submit</button>',
         rendered.success.html,
         '<button type="submit">Submit</button>',
         "</form>",
