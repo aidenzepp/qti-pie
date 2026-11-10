@@ -1,6 +1,8 @@
 /**
- * Host folds: every field of the document layer the host writes, computed from a document and the
- * grammar's closed relations (plan §1.3 and §1.5, fin.md §4.3, §4.5a and §16).
+ * The law oracle's folds: every field of the document layer the host writes, computed from a
+ * document and the grammar's closed relations (plan §1.3 and §1.5, fin.md §4.3, §4.5a and §16), a
+ * second implementation beside the importer's one fold (`#pantry/import/fold.ts`), which the
+ * oracle's tests compare it with. Production calls only {@link endsOf} here.
  *
  * A node's fields come from three places, each a containment of `Node` into itself:
  *
