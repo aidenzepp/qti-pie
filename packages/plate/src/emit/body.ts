@@ -8,10 +8,11 @@
  * from it and capped at `h6` ({@link headingOffsetOf}). A `tr` the author placed directly in a
  * `table` gains the `tbody` the HTML parser would insert, so the tree survives a parse. Text
  * becomes text, an interaction goes to its render function, an interaction a module parses to its
- * module's (`RenderInteraction.modules`), and each notice `check` handed in
- * becomes the Notice part, a `span` at a phrasing position and a `div` where the parent takes flow
- * content. An element that references a catalog (`ElementPayload.catalog`) is handed, once
- * emitted, to the render function's attachment hook (`RenderInteraction.attach`), whose nodes
+ * module's (`RenderInteraction.modules`), a module's container to its module's container render
+ * with its children already emitted (`RenderInteraction.containers`), and each notice `check`
+ * handed in becomes the Notice part, a `span` at a phrasing position and a `div` where the parent
+ * takes flow content. An element that references a catalog (`ElementPayload.catalog`) is handed,
+ * once emitted, to the render function's attachment hook (`RenderInteraction.attach`), whose nodes
  * follow it as its next siblings; the hook answers nothing while no catalog support is active, and
  * the element then renders as any other.
  *
@@ -59,6 +60,7 @@ import type { ModuleKind } from "#plate/interactions/contract.ts";
 import type { KeptUrl, UrlContext } from "#plate/model/url.ts";
 import type {
   AttributePayload,
+  ContainerPayload,
   ElementPayload,
   EmitState,
   InteractionPayload,
@@ -77,6 +79,22 @@ import type {
  * @returns The interaction's Root, or the refusal of a part swap.
  */
 export type RenderModule = (interaction: ModulePayload) => Result.Result<Element, PartSwapRefused>;
+
+/**
+ * Render the container an interaction module owns ({@link ContainerPayload}) through its module's
+ * container render, with the payload and the state already applied: the walk emits the container's
+ * children first and hands their output in, so the module writes its own element around them.
+ *
+ * @param node The container's payload node.
+ * @param children The children as the walk emitted them, in document order.
+ * @returns The container's element, or the refusal of a part swap; none when the node names a
+ *   kind whose module declares no container, which the walk then drops as it drops a node of no
+ *   kind the payload defines.
+ */
+export type RenderContainer = (
+  node: ContainerPayload,
+  children: readonly Node[],
+) => Option.Option<Result.Result<Element, PartSwapRefused>>;
 
 /**
  * Give the payload nodes an interaction a module parses writes as content: its module's `content`.
@@ -196,6 +214,13 @@ export interface RenderInteraction {
    * ({@link headingLevelsIn}). A render function without it reads no content for one.
    */
   readonly contentNodes?: ContentNodes;
+  /**
+   * Render the container an interaction module owns ({@link RenderContainer}) through its module,
+   * as `render`'s renderer does, with its children already emitted. A render function without it
+   * writes nothing for one, as the walk writes nothing for a node of no kind the payload defines:
+   * only a payload built by hand reaches it so.
+   */
+  readonly containers?: RenderContainer;
   readonly moduleContent?: ModuleContent;
   /**
    * Render the elements a module owns among the content it emits ({@link OwnedElements}): set by
@@ -969,16 +994,43 @@ const admittedElement = (
   );
 
 /**
+ * Emit a module's container: its children first, through the walk, then the container around their
+ * output through `renderInteraction.containers`.
+ *
+ * @param node The container's payload node.
+ * @param walk What the walk carries.
+ * @returns The container as its module renders it; none when the render function has no
+ *   `containers`, or the module of the node's kind declares no container; or the refusal of a part
+ *   swap.
+ */
+const containerOf = (
+  node: ContainerPayload,
+  walk: Walk,
+): Result.Result<readonly Node[], PartSwapRefused> =>
+  Result.flatMap(nodesOf(node.children, walk), (children) =>
+    Option.match(
+      Option.fromUndefinedOr(walk.renderInteraction.containers).pipe(
+        Option.flatMap((renderContainer) => renderContainer(node, children)),
+      ),
+      {
+        onNone: () => Result.succeed([]),
+        onSome: (rendered) => rendered.pipe(Result.map((root) => [root])),
+      },
+    ),
+  );
+
+/**
  * Emit one body node.
  *
  * @param node The payload node.
  * @param walk What the walk carries.
- * @returns The node as it renders, a module's payload node through `renderInteraction.modules`, an
- *   element outside {@link htmlSubset} through `renderInteraction.owned`, an element that
- *   references a catalog followed by what `renderInteraction.attach` gives it
- *   ({@link admittedElement}); none when the second line drops it (an element outside
- *   {@link htmlSubset} no `owned` renders, a node of no kind the payload defines, or a module's
- *   payload node for a render function without `modules`); or the refusal of a part swap.
+ * @returns The node as it renders, a module's payload node through `renderInteraction.modules`, a
+ *   module's container through `renderInteraction.containers` ({@link containerOf}), an element
+ *   outside {@link htmlSubset} through `renderInteraction.owned`, an element that references a
+ *   catalog followed by what `renderInteraction.attach` gives it ({@link admittedElement}); none
+ *   when the second line drops it (an element outside {@link htmlSubset} no `owned` renders, a
+ *   node of no kind the payload defines, or a module's payload node or container for a render
+ *   function without `modules` or `containers`); or the refusal of a part swap.
  */
 const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], PartSwapRefused> => {
   if (isModulePayload(node)) {
@@ -1006,6 +1058,9 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
     }
     case "notice": {
       return Result.map(noticeOf(node, walk), (notice) => [notice]);
+    }
+    case "container": {
+      return containerOf(node, walk);
     }
     case "content": {
       return Option.match(Option.fromUndefinedOr(walk.renderInteraction.content), {
@@ -1084,6 +1139,9 @@ const headingLevelsIn = (
           content,
           contentNodes,
         );
+      }
+      case "container": {
+        return headingLevelsIn(node.children, content, contentNodes);
       }
       case "content": {
         return headingLevelsIn(contentNodes(node), content, contentNodes);
