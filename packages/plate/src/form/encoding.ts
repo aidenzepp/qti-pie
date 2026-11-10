@@ -7,7 +7,8 @@
  * {@link parseLexical}'s, with the allowances a posted form needs: a number is trimmed, and a
  * string's line breaks are a textarea's. A record posts the text it was typed as, and its other
  * fields are read from that text. A point posts its two coordinates as two entries, `<name>.x` and
- * `<name>.y` ({@link pointEntryNames}), and is read back from the pair at each position. A
+ * `<name>.y` ({@link pointEntryNames}), and is read back from the pair at each position;
+ * {@link postedStrings} reads the same two names back as the strings a refused post restores. A
  * response whose interaction module reads its own posted text travels under a
  * {@link ModuleBinding}: one entry, written and read by the module's `ModuleEntry`
  * (`#plate/interactions/contract.ts`), as a Portable Custom Interaction posts Appendix C JSON.
@@ -345,6 +346,51 @@ export const pointEntryNames = (name: string): readonly [x: string, y: string] =
   `${name}.x`,
   `${name}.y`,
 ];
+
+/**
+ * Name the entries a binding posts under: the two {@link pointEntryNames} of a `point` value
+ * binding, and the binding's own name for every other binding.
+ *
+ * @param binding The response's binding.
+ * @returns The entry names the binding's response is posted under.
+ */
+const entryNamesOf = (binding: Binding): readonly string[] =>
+  binding.cardinality !== "record" && isPoint(binding.baseType)
+    ? pointEntryNames(binding.name)
+    : [binding.name];
+
+/**
+ * Give the strings a post carries for one binding, in posted order: the entries named by either of
+ * a `point` value binding's {@link pointEntryNames}, and the entries named `binding.name` for every
+ * other binding. A `Blob` entry is a file, not a string, so it is dropped and never shown again as
+ * text. A host builds the `posted` option of `render` with this, over the entries of the item
+ * instance ({@link partition}'s `own`), so a refused post's controls show what the candidate
+ * typed, whichever base type the response has.
+ *
+ * A point's strings come in the order they were posted, so a form that posts its inputs in
+ * document order, x then y for each value, gives x, y, x, y and so on; the coordinates are not
+ * paired here, which {@link decode} does by position.
+ *
+ * @example
+ *   postedStrings(
+ *     [
+ *       ["i.R.x", "12"],
+ *       ["i.R.y", "7"],
+ *     ],
+ *     { baseType: "point", cardinality: "single", name: "i.R" },
+ *   ); // ["12", "7"]
+ *
+ * @param entries The posted entries, in order.
+ * @param binding The response's binding.
+ * @returns The strings posted under the binding's entry names, in posted order.
+ */
+export const postedStrings = (entries: readonly Entry[], binding: Binding): readonly string[] => {
+  const names = entryNamesOf(binding);
+
+  return entries.flatMap(([name, value]) =>
+    value instanceof Blob || !names.includes(name) ? [] : [value],
+  );
+};
 
 /**
  * Give the text a record was typed as: its `stringValue` field, which {@link encode} posts for the
@@ -814,9 +860,7 @@ const readBinding = (
  * @returns Whether an entry is named for the binding.
  */
 const postedFor = (entries: readonly Entry[], binding: ValueBinding): boolean => {
-  const names: readonly string[] = isPoint(binding.baseType)
-    ? pointEntryNames(binding.name)
-    : [binding.name];
+  const names = entryNamesOf(binding);
 
   return entries.some(([name]) => names.includes(name));
 };
