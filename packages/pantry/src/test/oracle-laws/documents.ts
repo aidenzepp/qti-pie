@@ -25,6 +25,7 @@ import {
   collapsed,
   elementsOf,
   field,
+  resolvedAt,
   typedOr,
   typedValueOf,
   valueOf,
@@ -604,6 +605,26 @@ const statedLanguage = (form: Option.Option<string>): Option.Option<string> =>
   );
 
 /**
+ * Name the entry a resource's `href` resolves to, by the resolution every package law reads a
+ * resource's document through (readings 102 and 103, `ResourceOf.resolved` in
+ * `#pantry/test/oracle.ts`): the value collapsed and resolved against the manifest's path and the
+ * `xml:base` values in scope, its dot segments removed and its percent-escapes decoded, its query
+ * and fragment aside. An `href` outside the package, or one the resolver reads under a limit,
+ * names no entry.
+ *
+ * @param manifest - The manifest.
+ * @param resource - The `cp:resource`.
+ * @returns The entry's path, none where the resource writes no `href` or its `href` resolves to no
+ *   entry.
+ */
+const entryPathOf = (manifest: View, resource: Row): Option.Option<string> =>
+  Option.flatMap(valueOf(manifest, resource.id, "href"), (lexical) => {
+    const { path, resolution } = resolvedAt(manifest, resource.id, lexical);
+
+    return resolution.scope === "entry" ? Option.some(path) : Option.none();
+  });
+
+/**
  * Judge `lom-title` over a package (QTI 3.0 Metadata §2.7.1.2): every record of an item's or a
  * test's resource, a `lom:lom` of the resource's own `cp:metadata` (spec reading 62; a `cp:file`'s
  * record describes the file: "The scope of Metadata is the parent container class only", IMS
@@ -614,9 +635,11 @@ const statedLanguage = (form: Option.Option<string>): Option.Option<string> =>
  * states none where it writes none, where the value is empty (XML 1.0 §2.12), and where AL1
  * refuses the attribute, outside its value domain or on a root that does not admit it, so that no
  * value is read (spec reading 151): the title is then judged without a language. The object is the
- * document the resource's href names where its root is an item or a test ({@link objectRoots}),
- * whatever the resource's type; a document of another root is no object, and a record with a
- * title breaks the law; so does one whose object writes no `title`, which no string matches.
+ * document at the entry the resource's href resolves to ({@link entryPathOf}), so
+ * `./items/item.xml`, `items/it%65m.xml` and `items/item.xml` name one document however the href
+ * is spelled, and whatever the resource's type, where that document's root is an item or a test
+ * ({@link objectRoots}); a document of another root is no object, and a record with a title breaks
+ * the law; so does one whose object writes no `title`, which no string matches.
  *
  * @param input - The package.
  * @returns The breaches, each at the record.
@@ -630,10 +653,8 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
     }
 
     const type = Option.getOrElse(typedValueOf(manifest, resource.id, "type"), () => "");
-    const href = valueOf(manifest, resource.id, "href");
-    const document = input.documents.find((listed) =>
-      Option.exists(href, (written) => listed.path === written.replace(/[?#].*$/su, "")),
-    );
+    const entry = entryPathOf(manifest, resource);
+    const document = input.documents.find((listed) => Option.contains(entry, listed.path));
     const root = document === undefined ? undefined : Option.getOrUndefined(document.rows.root);
     if (!lomNamedTypes.has(type) || document === undefined || root === undefined) {
       return [];

@@ -1319,31 +1319,6 @@ export const known: readonly Known[] = [
         '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
-        "items/item.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-declaration identifier="SCORE"/><qti-outcome-declaration identifier="SCORE"/></qti-assessment-item>',
-      ],
-      [
-        "test.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="items/item.xml"><qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>',
-      ],
-    ],
-    fix: "issue #69 (decision 467): an identifier an item declares first as a response and then as an outcome is checked under Variable mapping source by its first declaration in the import and by any of its declarations in the law oracle; Declaration key refuses it on both sides; closed by both sides reading the same declaration of a duplicated name (#69)",
-    owner: "decision 467",
-    signature: {
-      kind: "import-only-law",
-      law: { kind: "check", name: "Variable_mapping_source", relation: "MappingSourceDeclaration" },
-    },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
-      ],
-      [
         "test.xml",
         "xml",
         '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="items/item.xml"><qti-variable-mapping source-identifier="-1" target-identifier="ITEMSCORE"/></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>',
@@ -1570,6 +1545,31 @@ export const fixed: readonly Known[] = [
     fix: "issue #67 (decision 467), closed by 74db65bd: the import writes a SectionSelection row whatever its select holds, and SelectForm's pattern law refuses a form that names no integer, so a non-integer select past the key-text bound is keyed and bounded on the import's side as the law oracle bounds SectionSelection.selectLexical; the inclusion cycle is incidental, and value domain refuses it on both sides",
     owner: "decision 467",
     signature: { kind: "oracle-only-law", law: "Key text bound", limit: "an inclusion cycle" },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+      ],
+      [
+        "items/item.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-declaration identifier="SCORE"/><qti-outcome-declaration identifier="SCORE"/></qti-assessment-item>',
+      ],
+      [
+        "test.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="items/item.xml"><qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>',
+      ],
+    ],
+    fix: "issue #69 (decision 467), closed by efc2ae30: an identifier an item declares first as a response and then as an outcome is checked under Variable mapping source by its first declaration in the import, and the law oracle now judges that first declaration too, where it passed a name any declaration of which was an outcome; Declaration key refuses the repeated name on both sides, so no verdict moved",
+    owner: "decision 467",
+    signature: {
+      kind: "import-only-law",
+      law: { kind: "check", name: "Variable_mapping_source", relation: "MappingSourceDeclaration" },
+    },
   },
   {
     files: [
