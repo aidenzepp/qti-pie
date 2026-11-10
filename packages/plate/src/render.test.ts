@@ -23,6 +23,7 @@ import type {
 import type { RedactRecord } from "#plate/model/record.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
+import type { HostFacts } from "#plate/pci/host.ts";
 import {
   InvalidInstance,
   NotRedacted,
@@ -641,6 +642,44 @@ describe("render", () => {
         assert.notInclude(rendered.html, marker);
       }
     }),
+  );
+
+  it.effect(
+    "[W0-AZ] takes a host's facts as a render input, which change nothing of the shipped kinds and reach none of the HTML",
+    () =>
+      Effect.gen(function* hostFacts() {
+        const configuration = yield* defaults;
+        const host: HostFacts = {
+          pci: {
+            loader: "/pci/loader.js",
+            modules: new Map([
+              [
+                "RESPONSE",
+                [
+                  {
+                    fallback: Option.none(),
+                    id: "counter",
+                    primary: Option.some("modules/counter.js"),
+                    waitSeconds: { fallback: 0, primary: 30 },
+                  },
+                ],
+              ],
+            ]),
+          },
+        };
+        const without = yield* Effect.fromResult(render(redacted, configuration, { instance }));
+        const withHost = yield* Effect.fromResult(
+          render(redacted, configuration, { host, instance }),
+        );
+        const empty = yield* Effect.fromResult(
+          render(redacted, configuration, { host: {}, instance }),
+        );
+
+        assert.strictEqual(withHost.html, without.html);
+        assert.strictEqual(empty.html, without.html);
+        assert.notInclude(withHost.html, "/pci/loader.js");
+        assert.notInclude(withHost.html, "modules/counter.js");
+      }),
   );
 
   it.effect("[Q-2] fails UnknownPart for an override of a part the table lacks", () =>

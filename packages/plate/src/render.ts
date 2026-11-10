@@ -50,6 +50,7 @@ import type {
   ValidationMessage,
   View,
 } from "#plate/payload.ts";
+import type { HostFacts } from "#plate/pci/host.ts";
 import { drawInstance } from "#plate/seed.ts";
 import { noSupports } from "#plate/supports.ts";
 import type { Supports } from "#plate/supports.ts";
@@ -75,11 +76,16 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * the candidate, `noSupports` when absent, and `view` the view the item is shown to, one of QTI's
  * six, the candidate's when absent: each content module's render decides by both what it shows of
  * what {@link redact} kept under the same two, so a render passes the supports and the view its
- * redaction took.
+ * redaction took. `host` is what the host knows and plate does not (`HostFacts` in
+ * `#plate/pci/host.ts`), the empty record when absent: each interaction module reads its own
+ * member through its `redact` kit and writes what its controller needs onto its own Root, and the
+ * shipped kinds read none, so for an item of those alone the HTML is the same with or without it.
+ * It is a render input, never item data: nothing of it reaches the redacted item or its JSON.
  */
 export interface Options {
   readonly assetBase?: string;
   readonly disabled?: boolean;
+  readonly host?: HostFacts;
   readonly instance?: string;
   readonly messages?: readonly ValidationMessage[];
   readonly mode?: RenderMode;
@@ -359,11 +365,13 @@ const mapOf = <A>(record: Readonly<Record<string, A>> = {}): ReadonlyMap<string,
  * @param configuration The configuration, which gives the locale and the seed.
  * @param options The author's options.
  * @returns The view `payload` reads, its mode `answering` when the author names none, holding the
- *   configuration's `seed` when it has one.
+ *   configuration's `seed` when it has one and the author's host facts, the empty record when the
+ *   author passed none.
  */
 const viewOf = (instance: string, configuration: Configuration, options: Options): View => {
   const view: View = {
     finished: options.disabled ?? false,
+    host: options.host ?? {},
     instance,
     locale: configuration.locale,
     messages: options.messages ?? [],
