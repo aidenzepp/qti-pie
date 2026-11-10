@@ -177,11 +177,11 @@ const isNullVariable = (identifier: string): SourceElement =>
 /**
  * The four shapes of template processing `check` accepts whose first attempt reads or sets a
  * name the engine does not hold while template processing runs (review `079e8c44` P1-1), each
- * beside {@link answered} and {@link scored}: a read of `QTI_CONTEXT`; a read of a context
- * variable through `qti-variable`, then through `qti-default`; and a read of a template variable
- * of cardinality `record`. `check` marks each, so its template processing does not run. A set of a
- * `file` declaration was a shape here until `[W0-AY]` held the file type; those are
- * {@link fileTemplating}.
+ * beside {@link answered} and {@link scored}: a read of `QTI_CONTEXT` through `qti-default`; a
+ * read of a context variable of cardinality `record` through `qti-variable`, and of one the model
+ * holds through `qti-default`; and a read of a template variable of cardinality `record`. `check`
+ * marks each, so its template processing does not run. A set of a `file` declaration was a shape
+ * here until `[W0-AY]` held the file type; those are {@link fileTemplating}.
  */
 const unheldTemplating: readonly Accepted[] = [
   accepted(
@@ -189,17 +189,21 @@ const unheldTemplating: readonly Accepted[] = [
     answered,
     scored,
     declaration("qti-template-declaration", "B", "boolean"),
-    processingOf(setFrom("qti-set-template-value", "B", isNullVariable("QTI_CONTEXT"))),
+    processingOf(
+      setFrom(
+        "qti-set-template-value",
+        "B",
+        el("qti-is-null", [], [el("qti-default", [attr("identifier", "QTI_CONTEXT")])]),
+      ),
+    ),
   ),
   accepted(
     "reads-context-variable",
-    contextVariable,
+    el("qti-context-declaration", [attr("cardinality", "record"), attr("identifier", "CTX")]),
     answered,
     scored,
-    declaration("qti-template-declaration", "T", "integer"),
-    processingOf(
-      setFrom("qti-set-template-value", "T", el("qti-variable", [attr("identifier", "CTX")])),
-    ),
+    declaration("qti-template-declaration", "B", "boolean"),
+    processingOf(setFrom("qti-set-template-value", "B", isNullVariable("CTX"))),
   ),
   accepted(
     "reads-context-default",
@@ -384,6 +388,63 @@ describe("begin", () => {
             label,
           );
         }
+      }),
+  );
+
+  it.effect(
+    "[I-15] begin resolves QTI_CONTEXT from the host's qtiContext before template processing and keeps it on the stored record, and stores none without it",
+    () =>
+      Effect.gen(function* keepsHostContext() {
+        const reading = accepted(
+          "reads-host-context",
+          contextVariable,
+          answered,
+          scored,
+          declaration("qti-template-declaration", "CANDIDATE", "string"),
+          declaration("qti-template-declaration", "SEAT", "integer"),
+          el(
+            "qti-template-processing",
+            [],
+            [
+              setFrom(
+                "qti-set-template-value",
+                "CANDIDATE",
+                el(
+                  "qti-field-value",
+                  [attr("field-identifier", "candidateIdentifier")],
+                  [el("qti-variable", [attr("identifier", "QTI_CONTEXT")])],
+                ),
+              ),
+              setFrom(
+                "qti-set-template-value",
+                "SEAT",
+                el("qti-variable", [attr("identifier", "CTX")]),
+              ),
+            ],
+          ),
+        );
+        const qtiContext = { candidateIdentifier: "cand-7" };
+        const given = yield* Effect.fromResult(
+          begin(reading, { instance, qtiContext, seed: "42" }),
+        );
+        const record = yield* Effect.fromResult(decodeRecord(given));
+        const { record: bare } = yield* begun(reading, "42");
+
+        assert.deepStrictEqual(reading.unsupported, []);
+        assert.deepStrictEqual(record.qtiContext, qtiContext);
+        assert.deepStrictEqual(record.templates, {
+          CANDIDATE: {
+            baseType: "string",
+            cardinality: "single",
+            values: [{ baseType: "string", value: "cand-7" }],
+          },
+          SEAT: integer(4n),
+        });
+        assert.isFalse(Object.hasOwn(bare, "qtiContext"));
+        assert.deepStrictEqual(bare.templates, {
+          CANDIDATE: { baseType: "string", cardinality: "single", values: [] },
+          SEAT: integer(4n),
+        });
       }),
   );
 

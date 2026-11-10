@@ -25,8 +25,8 @@ import { defaultLabel, drawStream } from "#plate/engine/random.ts";
 import { checkTemplateDefaults, evaluateTemplateDefaults } from "#plate/engine/template.ts";
 import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
-import { fresh, startingValue } from "#plate/model/record.ts";
-import type { ItemRecord } from "#plate/model/record.ts";
+import { fresh, startingValue, withQtiContext } from "#plate/model/record.ts";
+import type { ItemRecord, QtiContext } from "#plate/model/record.ts";
 import { itemRefsIn, refIdentifiersIn } from "#plate/model/item-refs.ts";
 import type { ItemRef, Section, SectionChild, Test, TestPart } from "#plate/model/test.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -911,11 +911,12 @@ const presented = (
   seed: string,
   templateDefaults: Readonly<Record<string, Value>>,
 ): SessionItem => {
-  const started = firstAttempt(accepted.item, {
-    instance: item.record.instance,
-    seed,
-    templateDefaults,
-  });
+  const start = { instance: item.record.instance, seed, templateDefaults };
+  const { qtiContext } = item.record;
+  const started = firstAttempt(
+    accepted.item,
+    qtiContext === undefined ? start : { ...start, qtiContext },
+  );
   if (Result.isFailure(started)) {
     throw new FirstAttemptDefect({ failure: started.failure, item: accepted.item.identifier });
   }
@@ -1237,6 +1238,12 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * @param context.instance The host's name for this sitting, which scopes every item's ids: a token
  *   `checkInstance` passes, such as a lowercase UUID.
  * @param context.now When the session starts.
+ * @param context.qtiContext The host's values of the built-in `QTI_CONTEXT`: the candidate's, the
+ *   test's and the environment's identifiers, each optional. Every item's record keeps them from
+ *   the start, so `QTI_CONTEXT` is resolved from them before the item's template processing runs
+ *   at its first presentation and again for each of its response processings, a field the host
+ *   omits reading NULL. With none, every record is as it was before the entry existed and
+ *   `QTI_CONTEXT` is the NULL record.
  * @param context.seed The processing seed, which keys every value the session's processing draws,
  *   used as given; with none, `startTest` draws one. Server data: keep it from the page.
  * @returns The session; {@link TestNotDeliverable} when the items have no entry for an item ref
@@ -1262,6 +1269,7 @@ export const startTest = (
     readonly features?: TestFeatureTable;
     readonly instance: string;
     readonly now: Date;
+    readonly qtiContext?: QtiContext;
     readonly seed?: string;
   },
 ): Result.Result<
@@ -1290,7 +1298,10 @@ export const startTest = (
               firstOutcomes: Option.none(),
               locked: false,
               presented: false,
-              record: fresh(accepted.item, `${instance}.${index + 1}`),
+              record: withQtiContext(
+                fresh(accepted.item, `${instance}.${index + 1}`),
+                context.qtiContext,
+              ),
               ref: ref.identifier,
               saved: Option.none(),
               sequenceIndex: index + 1,

@@ -184,7 +184,7 @@ import { kindRules } from "#plate/model/expressions/read.ts";
 import { itemRefsIn, occurrenceOf } from "#plate/model/item-refs.ts";
 import { buildTest, withLtiLinks, withUnheldReads } from "#plate/model/test.ts";
 import type { LtiLink, Test, UnheldRead } from "#plate/model/test.ts";
-import { isLanguageTag, isNcName, trimXmlSpace } from "#plate/model/values.ts";
+import { isLanguageTag, isModelled, isNcName, trimXmlSpace } from "#plate/model/values.ts";
 import { assembleTest } from "#plate/package/assemble.ts";
 import type { PassedLimit } from "#plate/package/assemble.ts";
 import { includeTargets, performIncludes } from "#plate/package/include.ts";
@@ -618,6 +618,12 @@ const referenceElements: ReadonlySet<string> = new Set([
   "qti-map-response-point",
   "qti-variable",
 ]);
+
+/**
+ * The expression of {@link referenceElements} that reads a variable's value alone, the one read of
+ * an item's context variable through its item ref the engine holds ({@link heldContextRead}).
+ */
+const variableElements: ReadonlySet<string> = new Set(["qti-variable"]);
 
 /**
  * The outcome rules of a test, a set and a lookup of an outcome's value, by local name in QTI's
@@ -4603,31 +4609,56 @@ const repeatsIn = (
 };
 
 /**
+ * Report whether the engine holds a read of a context variable through an item ref: a
+ * `qti-variable` of one its item declares, of a modelled base type and a cardinality other than
+ * `record`, as the item model holds it (`Item.contexts` in `#plate/model/item.ts`), which the test
+ * scope reads at its declared default, else NULL. The built-in `QTI_CONTEXT`, which names no
+ * declaration, is not held through an item ref, and neither is a `qti-default` of a context
+ * variable, which the scope gives no default of.
+ *
+ * @param variable What the read's one counting reading names, a context variable.
+ * @param element The element that reads it.
+ * @returns Whether the engine holds the read.
+ */
+const heldContextRead = (variable: ReadVariable, element: SourceElement): boolean => {
+  const { baseType, cardinality } = variable.type;
+
+  return (
+    Option.isSome(variable.declaration) &&
+    isQti(element, variableElements) &&
+    isModelled(baseType) &&
+    cardinality !== "record" &&
+    cardinality !== "unknown"
+  );
+};
+
+/**
  * Give each read through an item ref in a test document's processing of a variable the engine holds
  * no value of: an expression whose `identifier` a test may prefix ({@link referenceElements}) that
  * lies in the test's `qti-outcome-processing` or in a `qti-template-default` of one of its item
- * refs, whose `identifier` is a name the predicate takes. The test model, built from the document
- * alone, holds such a read and would run it; the engine holds no value of it: the item marks a
- * declared context variable, the engine holds no item's `QTI_CONTEXT`, and a session delivers no
- * LTI link. A `qti-correct`, a `qti-map-response` or a `qti-map-response-point` is found as a
- * `qti-variable` or a `qti-default` is, since a name read through an LTI link is accepted whatever
- * reads it (reading 166, "a name read through an LTI link (reading 110)" is accepted), and the
- * processing or the template default would run it on nothing; the test model leaves a template
- * default out for each of the five (`withUnheldReads` in `#plate/model/test.ts`). A context
- * variable meets none of those three on a checked package: each reads a response alone
+ * refs, whose `identifier` and element the predicate takes. The test model, built from the document
+ * alone, holds such a read and would run it; the engine holds no value of it: the scope holds a
+ * declared context variable of a modelled type for a `qti-variable` alone, and no default of one,
+ * the item marks one of another type, the engine holds no item's `QTI_CONTEXT`, and a session
+ * delivers no LTI link. A `qti-correct`, a `qti-map-response` or a `qti-map-response-point` is
+ * found as a `qti-variable` or a `qti-default` is, since a name read through an LTI link is
+ * accepted whatever reads it (reading 166, "a name read through an LTI link (reading 110)" is
+ * accepted), and the processing or the template default would run it on nothing; the test model
+ * leaves a template default out for each of the five (`withUnheldReads` in `#plate/model/test.ts`).
+ * A context variable meets none of those three on a checked package: each reads a response alone
  * ({@link judgeReference}).
  *
  * @param source The test's source.
  * @param visits The visits of its elements, in document order.
- * @param isUnheld Whether a name reads, through an item ref, a variable the engine holds no value
- *   of.
+ * @param isUnheld Whether a name, read by the element that writes it, reads, through an item ref,
+ *   a variable the engine holds no value of.
  * @returns The reads, in document order, each with the item ref and the path of the processing
  *   element it lies in.
  */
 const unheldReadsIn = (
   source: SourceDocument,
   visits: readonly Visit[],
-  isUnheld: (name: string) => boolean,
+  isUnheld: (name: string, element: SourceElement) => boolean,
 ): readonly UnheldRead[] => {
   const places = new Map<SourceElement, (name: string) => UnheldRead>();
   const reads: UnheldRead[] = [];
@@ -4649,7 +4680,7 @@ const unheldReadsIn = (
       places.set(element, inherited);
 
       const read = Option.getOrUndefined(Option.map(identifierOf(element), inherited));
-      if (read !== undefined && isQti(element, referenceElements) && isUnheld(read.name)) {
+      if (read !== undefined && isQti(element, referenceElements) && isUnheld(read.name, element)) {
         reads.push(read);
       }
     }
@@ -6085,7 +6116,9 @@ const judgeTest = (
    * a variable the engine holds no value of: the test does not hold it whole, and its one counting
    * reading reads a context variable, one its item declares in a `qti-context-declaration` or the
    * built-in `QTI_CONTEXT` (reading 106), or reads through an item ref that names an LTI link,
-   * whose variables no session holds.
+   * whose variables no session holds. A `qti-variable` of a context variable its item declares of
+   * a modelled type is held: the scope reads it at its declared default, else NULL
+   * (`ScopeItem.contexts` in `#plate/engine/scope.ts`; issue m3f-08).
    *
    * A read through a prefix a section document writes is held, not marked: every section document
    * the reach holds is one the test places, and the package delivers the test assembled from them
@@ -6096,9 +6129,10 @@ const judgeTest = (
    * model (`referencesSection` in `#plate/model/test.ts`).
    *
    * @param name The name.
+   * @param element The element that reads it.
    * @returns Whether it does.
    */
-  const isUnheld = (name: string): boolean => {
+  const isUnheld = (name: string, element: SourceElement): boolean => {
     if (whole.has(name)) {
       return false;
     }
@@ -6109,7 +6143,8 @@ const judgeTest = (
       return (
         only !== undefined &&
         others.length === 0 &&
-        (only.variable.kind === "context" || itemRefs.get(only.prefix)?.link === true)
+        ((only.variable.kind === "context" && !heldContextRead(only.variable, element)) ||
+          itemRefs.get(only.prefix)?.link === true)
       );
     }).includes(true);
   };

@@ -28,8 +28,14 @@ import { checkTemplateDefaults, runTemplates } from "#plate/engine/template.ts";
 import type { TemplateValues } from "#plate/engine/template.ts";
 import { countsAttempt } from "#plate/model/interactions.ts";
 import type { Item } from "#plate/model/item.ts";
-import { fresh, unrunTemplateProcessing } from "#plate/model/record.ts";
-import type { ItemRecord } from "#plate/model/record.ts";
+import {
+  contextValues,
+  fresh,
+  qtiContextRecord,
+  unrunTemplateProcessing,
+  withQtiContext,
+} from "#plate/model/record.ts";
+import type { ItemRecord, QtiContext } from "#plate/model/record.ts";
 import { nullOf, nullRecord } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
@@ -121,10 +127,12 @@ export const runAttempt = (
 ): Result.Result<ItemRecord, EngineFailure> => {
   const numAttempts = countsAttempt(item, responses) ? record.numAttempts + 1 : record.numAttempts;
   const before: Variables = {
+    contexts: contextValues(item.contexts),
     correct: record.correct,
     defaults: record.defaults,
     numAttempts: BigInt(numAttempts),
     outcomes: adaptivePolicy.startingOutcomes(item, record),
+    qtiContext: qtiContextRecord(record.qtiContext),
     records: record.records,
     responses: { ...record.responses, ...responses },
     templates: record.templates,
@@ -170,11 +178,12 @@ export const runAttempt = (
  *     no override; an item that declares none holds three empty maps.
  *   - Where it has a `qti-template-processing` the item model marks, because it holds an element the
  *     engine does not run or names a variable the engine does not hold while it runs (such as
- *     `QTI_CONTEXT`, a context variable, or a template variable, response or outcome of a type plate
- *     does not model, read or set), no override, and no template value but the defaults the test
- *     gives, since nothing else computed them. Each response and outcome begins at its declared
- *     default, and `check`'s verdict tells the host, `accepted-with-unsupported` with each mark
- *     (`variable:<identifier>` at `qti-template-processing` for a name the engine does not hold).
+ *     `QTI_CONTEXT` read other than whole, the default of a context variable, or a template variable,
+ *     response, outcome or context variable of a type plate does not model, read or set), no
+ *     override, and no template value but the defaults the test gives, since nothing else computed
+ *     them. Each response and outcome begins at its declared default, and `check`'s verdict tells the
+ *     host, `accepted-with-unsupported` with each mark (`variable:<identifier>` at
+ *     `qti-template-processing` for a name the engine does not hold).
  * - `responses`: each at its default, the one template processing set, else the declared one, else
  *   NULL of its type, before any response is given.
  * - `records`: each record response at its declared default, else the NULL record, before any
@@ -195,6 +204,10 @@ export const runAttempt = (
  *   variables, by template identifier, as `evaluateTemplateDefaults` in
  *   `#plate/engine/template.ts` gives them; none by default. Each is checked where it is applied
  *   (`checkTemplateDefaults`), in every one of the three cases.
+ * @param start.qtiContext The host's context, from which `QTI_CONTEXT` is resolved before template
+ *   processing runs (`qtiContextRecord` in `#plate/model/record.ts`); the record keeps it as
+ *   `qtiContext`, so every later attempt reads the same `QTI_CONTEXT`. None by default: the record
+ *   then holds no `qtiContext`, and `QTI_CONTEXT` is the NULL record.
  * @returns The record, or the first failure, an {@link EngineFailure}: a test's default names no
  *   template variable of the item (an {@link UnknownIdentifierError}, holder `item`) or is a value
  *   of another type (an {@link OutcomeMismatchError}); or template processing's own: an expression
@@ -211,12 +224,14 @@ export const firstAttempt = (
   item: Item,
   start: {
     readonly instance: string;
+    readonly qtiContext?: QtiContext;
     readonly seed: string;
     readonly templateDefaults?: Readonly<Record<string, Value>>;
   },
 ): Result.Result<ItemRecord, EngineFailure> => {
   const draw = drawStream(start.seed, templateLabel(start.instance, item.identifier));
   const given = start.templateDefaults ?? {};
+  const qtiContext = qtiContextRecord(start.qtiContext);
   const set: Result.Result<TemplateValues, EngineFailure> = Option.match(item.templateProcessing, {
     onNone: () =>
       unrunTemplateProcessing(item)
@@ -225,13 +240,13 @@ export const firstAttempt = (
             defaults: {},
             templates,
           }))
-        : runTemplates(item, [], draw, given),
-    onSome: (rules) => runTemplates(item, rules, draw, given),
+        : runTemplates(item, [], draw, given, qtiContext),
+    onSome: (rules) => runTemplates(item, rules, draw, given, qtiContext),
   });
 
   return set.pipe(
     Result.map((values): ItemRecord => ({
-      ...fresh(item, start.instance),
+      ...withQtiContext(fresh(item, start.instance), start.qtiContext),
       correct: values.correct,
       defaults: values.defaults,
       outcomes: outcomeStart(item, values.defaults),

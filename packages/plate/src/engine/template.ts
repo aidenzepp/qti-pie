@@ -39,9 +39,10 @@ import type {
   ResponseDeclaration,
   TemplateDeclaration,
 } from "#plate/model/item.ts";
+import { contextValues } from "#plate/model/record.ts";
 import type { TemplateDefault, Test } from "#plate/model/test.ts";
-import { isNull, nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import { isNull, nullOf, nullRecord } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 
 /**
  * What template processing leaves, each map by identifier: the value of every template variable,
@@ -91,9 +92,17 @@ const setMaps = {
  * the run's restarts are spent.
  */
 interface Pass {
+  /**
+   * The item's context variables at their defaults (`contextValues` in `#plate/model/record.ts`).
+   */
+  readonly contexts: Readonly<Record<string, Value>>;
   readonly declared: TemplateValues;
   readonly draw: Draw;
   readonly item: Item;
+  /**
+   * The value of `QTI_CONTEXT`, which the host's context gave before the run started.
+   */
+  readonly qtiContext: RecordValue;
   /**
    * Whether the budget's restarts are all taken, so a failing constraint applies the declared state
    * and processing continues after it instead of restarting.
@@ -137,8 +146,10 @@ const declaredState = (item: Item, given: Readonly<Record<string, Value>>): Temp
 
 /**
  * Give the value of an expression of template processing: through the evaluator, with the run's
- * stream and the template values the rules have left, and no response or outcome value, because
- * template processing "may only refer to the values of the template variables" (`info.txt:65111`).
+ * stream, the template values the rules have left, the item's context variables and
+ * `QTI_CONTEXT`, which the engine sets before any processing runs, and no response or outcome
+ * value, because template processing "may only refer to the values of the template variables"
+ * (`info.txt:65111`) beside the context variables it may read (`info.txt:22601`).
  *
  * So a `qti-variable` of a response or an outcome is the record's gap, and a `qti-equal` whose
  * `tolerance` names an outcome is NULL; the validator refuses the first (P26), and the second
@@ -157,7 +168,13 @@ const evaluateIn = (
   evaluateExpression(
     expression,
     pass.item,
-    { outcomes: {}, responses: {}, templates: values.templates },
+    {
+      contexts: pass.contexts,
+      outcomes: {},
+      qtiContext: pass.qtiContext,
+      responses: {},
+      templates: values.templates,
+    },
     pass.draw,
   );
 
@@ -364,7 +381,7 @@ const noTemplates: ReadonlyMap<string, TemplateDeclaration> = new Map();
  */
 export const evaluateTemplateDefaults = (
   defaults: readonly TemplateDefault[],
-  test: Pick<Test, "outcomes">,
+  test: Pick<Test, "contexts" | "outcomes">,
   outcomes: Readonly<Record<string, Value>>,
   scope: TestScope,
   draw: Draw,
@@ -374,7 +391,12 @@ export const evaluateTemplateDefaults = (
     responses: noResponses,
     templates: noTemplates,
   };
-  const variables: Variables = { outcomes, responses: {}, test: scope };
+  const variables: Variables = {
+    contexts: contextValues(test.contexts),
+    outcomes,
+    responses: {},
+    test: scope,
+  };
 
   return Result.gen(function* evaluateEachTemplateDefault() {
     const evaluated: (readonly [string, Value])[] = [];
@@ -522,6 +544,8 @@ const runSequence = (
  *   template label (`templateLabel` in `#plate/engine/random.ts`).
  * @param templateDefaults The defaults the test's item ref gives the item's template variables, by
  *   template identifier ({@link evaluateTemplateDefaults}); none by default.
+ * @param qtiContext The value of `QTI_CONTEXT` the host's context gives (`qtiContextRecord` in
+ *   `#plate/model/record.ts`); the NULL record by default, when the host gave none.
  * @returns The template values and the correct responses and defaults set; or the first failure,
  *   after which no rule runs: an {@link UnknownIdentifierError} when a test's default names no
  *   template variable of the item (holder `item`), an expression reads a variable template
@@ -536,18 +560,16 @@ export const runTemplates = (
   rules: readonly TemplateRule[],
   draw: Draw,
   templateDefaults: Readonly<Record<string, Value>> = {},
+  qtiContext: RecordValue = nullRecord,
 ): Result.Result<TemplateValues, EngineFailure> =>
   Result.gen(function* runFromDeclaredState() {
     const declared = declaredState(item, yield* checkTemplateDefaults(item, templateDefaults));
+    const run = { contexts: contextValues(item.contexts), declared, draw, item, qtiContext };
     let restarts = 0;
-    let step = yield* runSequence(rules, { declared, draw, item, spent: false }, declared);
+    let step = yield* runSequence(rules, { ...run, spent: false }, declared);
     while (step.kind === "restart") {
       restarts += 1;
-      step = yield* runSequence(
-        rules,
-        { declared, draw, item, spent: restarts === restartBudget },
-        declared,
-      );
+      step = yield* runSequence(rules, { ...run, spent: restarts === restartBudget }, declared);
     }
 
     return step.values;

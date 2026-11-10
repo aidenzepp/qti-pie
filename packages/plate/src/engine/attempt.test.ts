@@ -534,12 +534,13 @@ const readsTemplate = itemDocument(
 
 /**
  * An item that declares {@link threeByDefault} under a template processing the engine does not
- * run: it sets `T` from a field of `QTI_CONTEXT`, the built-in context variable the engine holds
- * no value of, which the item model marks.
+ * run: it sets `T` from a field of `R`, a template variable of cardinality `record` the engine
+ * holds no value of, which the item model marks.
  */
 const marksTemplates = itemDocument(
   trueFalse,
   threeByDefault,
+  el("qti-template-declaration", [attr("cardinality", "record"), attr("identifier", "R")]),
   el(
     "qti-template-processing",
     [],
@@ -550,7 +551,7 @@ const marksTemplates = itemDocument(
         el(
           "qti-field-value",
           [attr("field-identifier", "f")],
-          [el("qti-variable", [attr("identifier", "QTI_CONTEXT")])],
+          [el("qti-variable", [attr("identifier", "R")])],
         ),
       ),
     ],
@@ -741,6 +742,72 @@ const accumulates = itemDocument(
 );
 
 describe("runAttempt", () => {
+  it.effect(
+    "[I-15] response processing reads QTI_CONTEXT from the record's qtiContext and a context variable at its default, and reads NULL for a field the record's qtiContext omits",
+    () =>
+      Effect.gen(function* readsContext() {
+        const item = yield* Effect.fromResult(
+          buildItem(
+            itemDocument(
+              el(
+                "qti-context-declaration",
+                [
+                  attr("base-type", "integer"),
+                  attr("cardinality", "single"),
+                  attr("identifier", "ROOM"),
+                ],
+                [holding("qti-default-value", "12")],
+              ),
+              trueFalse,
+              declaration("qti-outcome-declaration", "SITTING", "string"),
+              declaration("qti-outcome-declaration", "SEAT", "integer"),
+              el(
+                "qti-response-processing",
+                [],
+                [
+                  el(
+                    "qti-set-outcome-value",
+                    [attr("identifier", "SITTING")],
+                    [
+                      el(
+                        "qti-field-value",
+                        [attr("field-identifier", "testIdentifier")],
+                        [el("qti-variable", [attr("identifier", "QTI_CONTEXT")])],
+                      ),
+                    ],
+                  ),
+                  el(
+                    "qti-set-outcome-value",
+                    [attr("identifier", "SEAT")],
+                    [el("qti-variable", [attr("identifier", "ROOM")])],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        const given = { ...fresh(item, instance), qtiContext: { testIdentifier: "spring-mock" } };
+        const omitted = { ...fresh(item, instance), qtiContext: { candidateIdentifier: "cand-7" } };
+
+        const read = yield* Effect.fromResult(
+          runAttempt(item, given, { RESPONSE: identifierValue("true") }),
+        );
+        const unread = yield* Effect.fromResult(
+          runAttempt(item, omitted, { RESPONSE: identifierValue("true") }),
+        );
+
+        assert.isTrue(Option.isSome(item.processing));
+        assert.deepStrictEqual(
+          [read.outcomes["SITTING"], read.outcomes["SEAT"], read.qtiContext],
+          [stringValue("spring-mock"), integerValue(12n), given.qtiContext],
+        );
+        assert.deepStrictEqual(
+          [unread.outcomes["SITTING"], unread.outcomes["SEAT"]],
+          [nullOf("string", "single"), integerValue(12n)],
+        );
+      }),
+  );
+
   it.effect(
     "[W0-BD] a policy that keeps the outcomes lets a second attempt read the first's, and the stub resets them",
     () =>

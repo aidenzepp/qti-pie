@@ -216,23 +216,25 @@ const templatedXml = (identifier: string): string =>
   ].join("");
 
 /**
- * Write the text of a hand-built item whose template processing reads `QTI_CONTEXT`, which the
- * engine does not hold while template processing runs, so `check` marks it and it does not run:
- * one Choice over `A`, `B` and `C` bound to the single identifier `RESPONSE`, which declares the
- * default `B`, and the single boolean template variable `UNHELD`, which the one rule sets to
- * whether `QTI_CONTEXT` is NULL. No choice shares a variable's identifier (reading 104, E19).
+ * Write the text of a hand-built item whose template processing reads `R`, a template variable of
+ * cardinality `record`, which the engine does not hold while template processing runs, so `check`
+ * marks it and it does not run: one Choice over `A`, `B` and `C` bound to the single identifier
+ * `RESPONSE`, which declares the default `B`, and the single boolean template variable `UNHELD`,
+ * which the one rule sets to whether `R` is NULL. No choice shares a variable's identifier
+ * (reading 104, E19).
  *
  * @param identifier The item's identifier.
  * @returns The item's text.
  */
-const contextReadingXml = (identifier: string): string =>
+const unheldReadingXml = (identifier: string): string =>
   [
     `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
     '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
     "<qti-default-value><qti-value>B</qti-value></qti-default-value></qti-response-declaration>",
+    '<qti-template-declaration identifier="R" cardinality="record"/>',
     '<qti-template-declaration identifier="UNHELD" cardinality="single" base-type="boolean"/>',
     '<qti-template-processing><qti-set-template-value identifier="UNHELD">',
-    '<qti-is-null><qti-variable identifier="QTI_CONTEXT"/></qti-is-null>',
+    '<qti-is-null><qti-variable identifier="R"/></qti-is-null>',
     "</qti-set-template-value></qti-template-processing>",
     '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" shuffle="false">',
     ...["A", "B", "C"].map(
@@ -1440,6 +1442,47 @@ describe("a templated item in a session", () => {
   );
 
   it.effect(
+    "[I-15] keeps the host's qtiContext on every item's record from the start, presented or not, through a later presentation, and on none when the host gives none",
+    () =>
+      Effect.gen(function* keepsHostContext() {
+        const delivery = yield* templatedDelivery();
+        const configuration = yield* configure({ seed: "7" });
+        const qtiContext = { environmentIdentifier: "lab-2", testIdentifier: "spring-mock" };
+        const session = Result.getOrElse(
+          startTest(delivery.test, delivery.items, configuration, {
+            instance,
+            now: startedAt,
+            qtiContext,
+            seed: "11",
+          }),
+          (failure) => assert.fail(`startTest refused: ${failure.message}`),
+        );
+        const presented = Result.getOrElse(
+          present(delivery.test.test, delivery.items, session, 2, after(1000)),
+          (failure) => assert.fail(failure.message),
+        );
+        const bare = started(delivery, configuration, "11");
+
+        assert.deepStrictEqual(
+          session.items.map((item) => [item.presented, item.record.qtiContext]),
+          [
+            [true, qtiContext],
+            [false, qtiContext],
+          ],
+        );
+        assert.deepStrictEqual(presented.items[1]?.record.qtiContext, qtiContext);
+        assert.deepStrictEqual(
+          presented.items[1]?.record.templates,
+          startedRecord(delivery, "second", { instance: `${instance}.2`, seed: "11" }).templates,
+        );
+        assert.deepStrictEqual(
+          bare.items.map((item) => Object.hasOwn(item.record, "qtiContext")),
+          [false, false],
+        );
+      }),
+  );
+
+  it.effect(
     "[I-5] gives two sessions started with two processing seeds under one configuration seed two template values",
     () =>
       Effect.gen(function* seedsDiffer() {
@@ -1530,10 +1573,10 @@ describe("a templated item in a session", () => {
   );
 
   it.effect(
-    "[I-5] starts a test whose item's template processing reads QTI_CONTEXT, marked, and presents that item with a record that holds no template value",
+    "[I-5] starts a test whose item's template processing reads a record template variable, marked, and presents that item with a record that holds no template value",
     () =>
       Effect.gen(function* startsMarked() {
-        const delivery = yield* builtDelivery("marked", [["first", contextReadingXml("first")]]);
+        const delivery = yield* builtDelivery("marked", [["first", unheldReadingXml("first")]]);
         const configuration = yield* configure({ seed: "11" });
         const returned = Result.getOrElse(
           Result.try(() =>
@@ -3151,7 +3194,7 @@ const choiceA: Value = {
 
 describe("a package whose test reads an item's context variable", () => {
   it.effect(
-    "[T-9] context read through an item ref: a package whose test sets ALL from I1.CTX, which I1 declares in a qti-context-declaration, starts, and submitItem succeeds with outcomeRuns 0 and ALL at its declared default 1",
+    "[T-9] context read through an item ref: a package whose test sets ALL from I1.CTX, which I1 declares in a qti-context-declaration, starts, and submitItem runs its outcome processing once, ALL reading CTX's default 4 (issue m3f-08)",
     () =>
       Effect.gen(function* contextInProcessing() {
         const delivery = yield* unheldPackage({
@@ -3176,13 +3219,13 @@ describe("a package whose test reads an item's context variable", () => {
 
         assert.deepStrictEqual(
           [submitted.outcomeRuns, submitted.outcomes["ALL"]],
-          [0, integer(1n)],
+          [1, integer(4n)],
         );
       }),
   );
 
   it.effect(
-    "[T-9] context read through an item ref: a package whose nonlinear part gives item ref second's T the template default first.CTX starts, applies none, and presents second with T at its declared default 3",
+    "[T-9] context read through an item ref: a package whose nonlinear part gives item ref second's T the template default first.CTX starts, applies it, and presents second with T at CTX's default 4 (issue m3f-08)",
     () =>
       Effect.gen(function* contextInDefault() {
         const delivery = packagedDelivery(
@@ -3194,8 +3237,8 @@ describe("a package whose test reads an item's context variable", () => {
         const session = started(delivery, yield* configure({}), "context");
         const templates = templatesAt(presentedAt(delivery, session, 2, after(1000)), 2);
 
-        assert.deepStrictEqual(session.items[1]?.templateDefaults, Option.none());
-        assert.deepStrictEqual([templates["T"], templates["DOUBLED"]], [integer(3n), integer(6n)]);
+        assert.deepStrictEqual(session.items[1]?.templateDefaults, Option.some({ T: integer(4n) }));
+        assert.deepStrictEqual([templates["T"], templates["DOUBLED"]], [integer(4n), integer(8n)]);
       }),
   );
 });

@@ -33,7 +33,7 @@ import type {
   StringOrRef,
 } from "#plate/model/expression.ts";
 import type { RecordDeclaration } from "#plate/model/item.ts";
-import { completionStatus, completionStatusType } from "#plate/model/record.ts";
+import { completionStatus, completionStatusType, qtiContextName } from "#plate/model/record.ts";
 import { nullOf, nullRecord } from "#plate/model/values.ts";
 import type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 
@@ -249,8 +249,22 @@ const directValue = (variables: Variables, identifier: string): Option.Option<Va
     own(variables.responses, identifier),
     own(variables.outcomes, identifier),
     own(variables.templates, identifier),
+    own(variables.contexts, identifier),
     builtInValue(variables, identifier),
   ]);
+
+/**
+ * Give the record of the built-in context variable `QTI_CONTEXT` when an identifier names it and
+ * the run holds it (`Variables.qtiContext`). A declared variable of that name wins, as every
+ * declared variable wins over a built-in, so the callers read this only after the run's own
+ * values.
+ *
+ * @param variables The variables of the run.
+ * @param identifier The identifier.
+ * @returns The record, none for any other identifier or when the run holds none.
+ */
+const builtInRecord = (variables: Variables, identifier: string): Option.Option<RecordValue> =>
+  identifier === qtiContextName ? Option.fromUndefinedOr(variables.qtiContext) : Option.none();
 
 /**
  * Give what a `qti-variable` reads: the response, the outcome or the template variable of that
@@ -290,6 +304,10 @@ export const variableRead = (
   const direct = directValue(variables, identifier);
   if (Option.isSome(direct)) {
     return Result.succeed({ item: Option.none(), value: direct.value });
+  }
+
+  if (Option.isSome(builtInRecord(variables, identifier))) {
+    return Result.fail(new RecordOperandError({ identifier }));
   }
 
   return variables.test === undefined
@@ -395,8 +413,10 @@ const recordOf = (operand: Expression, scope: Scope): Option.Option<RecordValue>
     return Option.orElse(own(variables.records, identifier), () =>
       Option.isSome(directValue(variables, identifier))
         ? Option.none()
-        : Option.flatMap(prefixedOf(variables, identifier), ({ reading }) =>
-            reading.kind === "record" ? Option.some(reading.value) : Option.none(),
+        : Option.orElse(builtInRecord(variables, identifier), () =>
+            Option.flatMap(prefixedOf(variables, identifier), ({ reading }) =>
+              reading.kind === "record" ? Option.some(reading.value) : Option.none(),
+            ),
           ),
     );
   }

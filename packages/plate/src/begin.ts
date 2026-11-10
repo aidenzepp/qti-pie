@@ -11,6 +11,7 @@ import { encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord, StoredRecord } from "#plate/codec/record.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
+import type { QtiContext } from "#plate/model/record.ts";
 import { drawSeed } from "#plate/seed.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
@@ -45,27 +46,41 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * @param start.instance The host's name for this use of the item, which scopes its ids.
  * @param start.seed The host's seed, which keys every value template processing draws, used as
  *   given; with none, `begin` draws one.
+ * @param start.qtiContext The host's values of the built-in `QTI_CONTEXT`: the candidate's, the
+ *   test's and the environment's identifiers, each optional. `QTI_CONTEXT` is resolved from them
+ *   before template processing runs, a field the host omits reading NULL, and the record keeps
+ *   them, so `score` resolves the same `QTI_CONTEXT` for response processing. With none, the record
+ *   is as it was before the entry existed and `QTI_CONTEXT` is the NULL record.
  * @returns The record of the first attempt, in the form the host stores, or {@link InvalidRecord}
- *   at stage `encode`, a renderer defect, or an {@link EngineFailure} from template processing.
- *   The engine's failure cannot occur on a checked item: the validator refuses, or the item model
- *   marks, every cause on an accepted item (a read of a variable template processing holds no
- *   value of, a rule setting a variable the item does not declare in the kind the rule sets, a
- *   value of another type), so a host writes no handling for it. A built-in named as the kind it
- *   stands as is no such cause (E22a, reading 111): a `qti-set-correct-response` of `numAttempts`
- *   and a `qti-set-default-value` of `completionStatus` or `numAttempts` run, and the record holds
- *   the built-in's correct response or default they set. An item whose template processing
- *   the model marks, because it holds an element the engine does not run or names a variable the
- *   engine does not hold (such as `QTI_CONTEXT`, a context variable or a template variable of a
- *   type plate does not model), does not run it: its record begins with each response and outcome
- *   at its declared default and no template value, correct response or default, and `check`'s
- *   verdict tells the host, `accepted-with-unsupported` with each mark (`variable:<identifier>` at
+ *   at stage `encode`, a renderer defect, or an {@link EngineFailure} from template processing. The
+ *   engine's failure cannot occur on a checked item: the validator refuses, or the item model
+ *   marks, every cause on an accepted item (a read of a variable template processing holds no value
+ *   of, a rule setting a variable the item does not declare in the kind the rule sets, a value of
+ *   another type), so a host writes no handling for it. A built-in named as the kind it stands as
+ *   is no such cause (E22a, reading 111): a `qti-set-correct-response` of `numAttempts` and a
+ *   `qti-set-default-value` of `completionStatus` or `numAttempts` run, and the record holds the
+ *   built-in's correct response or default they set. An item whose template processing the model
+ *   marks, because it holds an element the engine does not run or names a variable the engine does
+ *   not hold (such as `QTI_CONTEXT` read other than whole by `qti-field-value`, `qti-is-null` or
+ *   `qti-match`, the default of a context variable, or a template or context variable of a type
+ *   plate does not model), does not run it: its record begins with each response and outcome at its
+ *   declared default and no template value, correct response or default, and `check`'s verdict
+ *   tells the host, `accepted-with-unsupported` with each mark (`variable:<identifier>` at
  *   `qti-template-processing` for a name the engine does not hold).
  */
 export const begin = (
   document: Accepted,
-  start: { readonly instance: string; readonly seed?: string },
-): Result.Result<StoredRecord, EngineFailure | InvalidRecord> =>
-  Result.flatMap(
-    firstAttempt(document.item, { instance: start.instance, seed: start.seed ?? drawSeed() }),
+  start: {
+    readonly instance: string;
+    readonly qtiContext?: QtiContext;
+    readonly seed?: string;
+  },
+): Result.Result<StoredRecord, EngineFailure | InvalidRecord> => {
+  const first = { instance: start.instance, seed: start.seed ?? drawSeed() };
+  const { qtiContext } = start;
+
+  return Result.flatMap(
+    firstAttempt(document.item, qtiContext === undefined ? first : { ...first, qtiContext }),
     encodeRecord,
   );
+};

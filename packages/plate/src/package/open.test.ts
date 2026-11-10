@@ -1282,6 +1282,19 @@ const openContextReading = (expression: string, defaults = "", selection = "") =
   );
 
 /**
+ * Write item ref `second`'s two template defaults in the context read cases: `T` set from an
+ * expression given, and `U` set to 2.5.
+ *
+ * @param expression The text of the expression `T`'s default reads.
+ * @returns The defaults' text.
+ */
+const defaultsReading = (expression: string): string =>
+  [
+    `<qti-template-default template-identifier="T">${expression}</qti-template-default>`,
+    '<qti-template-default template-identifier="U"><qti-base-value base-type="float">2.5</qti-base-value></qti-template-default>',
+  ].join("");
+
+/**
  * The path of the outcome processing of a test `readingTestXml` writes.
  */
 const processingPath = "qti-assessment-test/qti-outcome-processing";
@@ -7585,30 +7598,55 @@ describe("package/open.ts", () => {
 
   describe("openPackage, a test that reads an item's context variable", () => {
     it.effect(
-      "[T-9] context read through an item ref: a test whose outcome processing reads first.CTX, first.1.CTX under a selection with replacement, or the qti-default of first.CTX, which item I1 declares in a qti-context-declaration, is delivered with its processing marked, variable:<name> at the processing",
+      "[T-9] context read through an item ref: a test whose outcome processing reads first.CTX, or first.1.CTX under a selection with replacement, which item I1 declares in a qti-context-declaration, is accepted with its processing running, and one that reads the qti-default of first.CTX is delivered with its processing marked, variable:first.CTX at the processing (issue m3f-08)",
       () =>
         Effect.gen(function* contextInProcessing() {
-          for (const [name, expression, selection] of [
-            ["first.CTX", variableXml("first.CTX"), ""],
-            ["first.1.CTX", variableXml("first.1.CTX"), replacingSelection],
-            ["first.CTX", '<qti-default identifier="first.CTX"/>', ""],
+          for (const [expression, selection] of [
+            [variableXml("first.CTX"), ""],
+            [variableXml("first.1.CTX"), replacingSelection],
           ] as const) {
             const verdict = yield* openContextReading(expression, "", selection);
             const { delivered } = deliveredAndAlone(verdict);
 
-            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", expression);
-            assert.deepStrictEqual(
-              delivered.test.outcomeProcessing,
-              { kind: "marked" },
-              expression,
-            );
-            assert.deepStrictEqual(
-              variableMarks(delivered),
-              [[`variable:${name}`, processingPath]],
-              expression,
-            );
-            assert.deepStrictEqual(delivered.unsupported, delivered.test.unsupported, expression);
+            assert.strictEqual(verdict.verdict, "accepted", expression);
+            assert.strictEqual(delivered.test.outcomeProcessing.kind, "runs", expression);
+            assert.deepStrictEqual(variableMarks(delivered), [], expression);
           }
+
+          const expression = '<qti-default identifier="first.CTX"/>';
+          const verdict = yield* openContextReading(expression);
+          const { delivered } = deliveredAndAlone(verdict);
+
+          assert.strictEqual(verdict.verdict, "accepted-with-unsupported", expression);
+          assert.deepStrictEqual(delivered.test.outcomeProcessing, { kind: "marked" }, expression);
+          assert.deepStrictEqual(
+            variableMarks(delivered),
+            [["variable:first.CTX", processingPath]],
+            expression,
+          );
+          assert.deepStrictEqual(delivered.unsupported, delivered.test.unsupported, expression);
+        }),
+    );
+
+    it.effect(
+      "[I-15] a package whose item declares a context variable of a modelled type delivers that item accepted, with no mark, holding the variable at its default",
+      () =>
+        Effect.gen(function* contextItemAccepted() {
+          const verdict = yield* openContextReading(variableXml("first.SCORE"));
+          const item = Option.getOrUndefined(resourceOf(verdict, "I1").verdict);
+
+          assert.strictEqual(verdict.verdict, "accepted");
+          assert.strictEqual(item?.verdict, "accepted");
+          assert.deepStrictEqual(
+            item?.kind === "item" && item.verdict === "accepted"
+              ? item.accepted.item.contexts?.get("CTX")?.defaultValue
+              : undefined,
+            Option.some({
+              baseType: "float",
+              cardinality: "single",
+              values: [{ baseType: "float", value: 4.5 }],
+            }),
+          );
         }),
     );
 
@@ -7629,29 +7667,42 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] context read through an item ref: item ref second's template default of T that reads first.CTX is left out, marked at the default, while its default of U and the processing, which reads first.SCORE, run",
+      "[T-9] context read through an item ref: item ref second's template default of T that reads first.CTX is kept beside its default of U, and one that reads the qti-default of first.CTX is left out, marked at the default, while the processing, which reads first.SCORE, runs (issue m3f-08)",
       () =>
         Effect.gen(function* contextInDefault() {
-          const verdict = yield* openContextReading(
-            variableXml("first.SCORE"),
-            [
-              `<qti-template-default template-identifier="T">${variableXml("first.CTX")}</qti-template-default>`,
-              '<qti-template-default template-identifier="U"><qti-base-value base-type="float">2.5</qti-base-value></qti-template-default>',
-            ].join(""),
+          const held = deliveredAndAlone(
+            yield* openContextReading(
+              variableXml("first.SCORE"),
+              defaultsReading(variableXml("first.CTX")),
+            ),
           );
-          const { alone, delivered } = deliveredAndAlone(verdict);
+          const unheld = deliveredAndAlone(
+            yield* openContextReading(
+              variableXml("first.SCORE"),
+              defaultsReading('<qti-default identifier="first.CTX"/>'),
+            ),
+          );
 
           assert.deepStrictEqual(
-            [defaultsOfSecond(delivered), defaultsOfSecond(alone)],
+            [defaultsOfSecond(held.delivered), defaultsOfSecond(held.alone)],
+            [
+              ["T", "U"],
+              ["T", "U"],
+            ],
+          );
+          assert.deepStrictEqual(variableMarks(held.delivered), []);
+          assert.deepStrictEqual(
+            [defaultsOfSecond(unheld.delivered), defaultsOfSecond(unheld.alone)],
             [["U"], ["T", "U"]],
           );
-          assert.deepStrictEqual(variableMarks(delivered), [
+          assert.deepStrictEqual(variableMarks(unheld.delivered), [
             [
               "variable:first.CTX",
               "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref[2]/qti-template-default[1]",
             ],
           ]);
-          assert.strictEqual(delivered.test.outcomeProcessing.kind, "runs");
+          assert.strictEqual(held.delivered.test.outcomeProcessing.kind, "runs");
+          assert.strictEqual(unheld.delivered.test.outcomeProcessing.kind, "runs");
         }),
     );
 

@@ -29,6 +29,18 @@ import type { ItemRecord } from "#plate/model/record.ts";
 export const storedVersion = 7;
 
 /**
+ * The host's context of a record (`ItemRecord.qtiContext`): the three optional strings of
+ * `QTI_CONTEXT`. Its key is optional, so a record started without a context is written as it was
+ * before the field existed, under the same version, and an old record reads as one without a
+ * context.
+ */
+const QtiContextSchema = Schema.Struct({
+  candidateIdentifier: Schema.optionalKey(Schema.String),
+  environmentIdentifier: Schema.optionalKey(Schema.String),
+  testIdentifier: Schema.optionalKey(Schema.String),
+});
+
+/**
  * The fields of one item's session, as {@link ItemRecord} has them.
  */
 const recordFields = {
@@ -42,6 +54,7 @@ const recordFields = {
   notices: Schema.Array(Schema.String),
   numAttempts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   outcomes: Schema.Record(Schema.String, ValueSchema),
+  qtiContext: Schema.optionalKey(QtiContextSchema),
   records: Schema.Record(Schema.String, RecordValueSchema),
   responses: Schema.Record(Schema.String, ValueSchema),
   seed: Schema.String,

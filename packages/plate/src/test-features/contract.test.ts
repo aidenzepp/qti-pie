@@ -182,6 +182,7 @@ const recording = (source: SourceDocument): MarkRecording => {
 
   return {
     context: {
+      contextDeclaration: () => Result.succeed(Option.none()),
       expression: () => Result.succeed(Option.none()),
       mark: (feature) => {
         marked.push(feature);

@@ -30,7 +30,7 @@ import type {
   TemplateDeclaration,
   UnheldDeclaration,
 } from "#plate/model/item.ts";
-import { startingValue } from "#plate/model/record.ts";
+import { contextValues, startingValue } from "#plate/model/record.ts";
 import type { ItemRef, SectionChild, Test } from "#plate/model/test.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { SessionItem, TestSession } from "#plate/session/session.ts";
@@ -80,7 +80,7 @@ const startingOutcomes = (test: Pick<Test, "outcomes">): Readonly<Record<string,
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Root_OutcomeProcessing
  */
 export const runOutcomes = (
-  test: Pick<Test, "outcomeProcessing" | "outcomes">,
+  test: Pick<Test, "contexts" | "outcomeProcessing" | "outcomes">,
   scope: TestScope,
   draw: Draw,
 ): Result.Result<Readonly<Record<string, Value>>, EngineFailure> => {
@@ -100,7 +100,12 @@ export const runOutcomes = (
       };
 
       return Result.map(
-        runRules(processing.rules, holder, { outcomes, responses: {}, test: scope }, draw),
+        runRules(
+          processing.rules,
+          holder,
+          { contexts: contextValues(test.contexts), outcomes, responses: {}, test: scope },
+          draw,
+        ),
         (variables) => variables.outcomes,
       );
     }
@@ -116,7 +121,7 @@ export const runOutcomes = (
  * passes as it is.
  */
 interface DeliveredItem {
-  readonly item: Declarations & Pick<Item, "records" | "unheld">;
+  readonly item: Declarations & Pick<Item, "contexts" | "records" | "unheld">;
 }
 
 /**
@@ -232,7 +237,7 @@ const entryOf = (
   const { record } = sessionItem;
   const unheld = item.unheld ?? noUnheld;
 
-  return {
+  const entry: ScopeItem = {
     categories: category,
     declarations: { outcomes: item.outcomes, responses: item.responses, templates: item.templates },
     mappings,
@@ -260,6 +265,8 @@ const entryOf = (
     ),
     weights,
   };
+
+  return item.contexts === undefined ? entry : { ...entry, contexts: item.contexts };
 };
 
 /**
