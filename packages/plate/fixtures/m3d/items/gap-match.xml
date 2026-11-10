@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m3d-gap-match" title="Garden words" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="directedPair">
+    <qti-correct-response>
+      <qti-value>A G1</qti-value>
+      <qti-value>B G2</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-gap-match-interaction response-identifier="RESPONSE" max-associations="2">
+      <qti-prompt>Finish the sentence with two of the words.</qti-prompt>
+      <qti-gap-text identifier="A" match-max="1">tulips</qti-gap-text>
+      <qti-gap-text identifier="B" match-max="2">bloom</qti-gap-text>
+      <qti-gap-text identifier="C" match-max="2">wilt</qti-gap-text>
+      <p>In the garden the <qti-gap identifier="G1"/> are planted early and they <qti-gap identifier="G2"/> in spring.</p>
+    </qti-gap-match-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+</qti-assessment-item>

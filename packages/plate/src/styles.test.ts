@@ -4,6 +4,7 @@ import { assert, describe, it, layer } from "@effect/vitest";
 import { Context, Effect, Layer, Option, Record as Rec } from "effect";
 import { partForSlot, partTable, rowFor } from "#plate/emit/parts.ts";
 import { browserSupport } from "#plate/ledger/browser-support.ts";
+import { modules } from "#plate/model/interactions.ts";
 import { checkFloor, readWebFeatures } from "#plate/test/baseline.ts";
 import type { FloorViolation, WebFeatures } from "#plate/test/baseline.ts";
 import { compounds, compoundsDeep, scanSheet, uses, varReferences } from "#plate/test/css.ts";
@@ -38,6 +39,28 @@ const marker = {
  * The text Controls: Text Entry's `input` and Extended Text's `textarea`.
  */
 const textControls: readonly string[] = [marker.textEntryControl, marker.extendedTextControl];
+
+/**
+ * The owners of the interaction modules, read from the table of modules, whose parts a rule may
+ * name by marker: loading the table gives `partForSlot` each module's parts, so a module that
+ * lands, and the block it adds to the stylesheet, change no line here.
+ */
+const moduleOwners: ReadonlySet<string> = new Set(
+  Object.values(modules).map((module) => module.owner),
+);
+
+/**
+ * Tell whether a marker names a part of the part table or of an interaction module.
+ *
+ * @param slot A `data-slot` value.
+ * @returns Whether `partForSlot` finds the part and its owner is the table's or a module's.
+ */
+const isPartMarker = (slot: string): boolean =>
+  Option.exists(
+    partForSlot(slot),
+    ({ interaction }) =>
+      moduleOwners.has(interaction) || partTable.some((row) => row.interaction === interaction),
+  );
 
 /**
  * The navigation parts' markers, every row of the `test-navigation` component.
@@ -448,7 +471,8 @@ const strayReferences = (sheet: Sheet): readonly string[] =>
     .map((reference) => `${reference.name}, ${Option.getOrElse(reference.fallback, () => "")}`);
 
 /**
- * Find the names a selector may not use, at any depth: a marker no part carries, an attribute
+ * Find the names a selector may not use, at any depth: a marker no part carries (of the part table
+ * or of an interaction module, {@link isPartMarker}), an attribute
  * outside {@link attributeNames}, a type outside the four, a class that is not a `qti-*` vocabulary
  * class (so never `dark`), and `:root`.
  *
@@ -462,8 +486,7 @@ const strayNames = (sheet: Sheet): readonly string[] =>
     .flatMap((compound) => [
       ...compound.attributes.flatMap((test) => [
         ...(attributeNames.has(test.name) ? [] : [`attribute ${test.name}`]),
-        ...(test.name === "data-slot" &&
-        !Option.exists(test.value, (slot) => Option.isSome(partForSlot(slot)))
+        ...(test.name === "data-slot" && !Option.exists(test.value, isPartMarker)
           ? [`marker ${Option.getOrElse(test.value, () => "")}`]
           : []),
       ]),
