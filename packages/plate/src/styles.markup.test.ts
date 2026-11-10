@@ -777,7 +777,7 @@ const authored: readonly Authored[] = [
       "witness-rubric",
       contentDeclarations,
       `<p>Name the animal that spins this web.</p>
-  <qti-rubric-block view="candidate">
+  <qti-rubric-block use="instructions" view="candidate">
    <qti-content-body>
     <p>Answer with one word.</p>
    </qti-content-body>
@@ -1103,10 +1103,11 @@ const magnifying: Supports = {
 
 /**
  * Render {@link choiceItem} in every state with a magnification on, as a host does for a candidate
- * who has one: the support-driven witness of the Root's `data-magnification` marker (issues m3e-09b
- * and m5-12), which the Root hook writes under `supports.display.magnification` once it lands; the
- * hook is a stub until then, and the Root is the one the chrome writes. The redaction takes the
- * same supports as the render, as the render contract asks.
+ * who has one: the support-driven witness of the magnification the Root hook writes under
+ * `supports.display.magnification`. The hook issue m3e-09 landed writes it as the Root's inline
+ * `style` (`font-size`); issue m3e-09b (ruling D25) moves it to the `data-magnification` marker the
+ * part table merges and the sheet keys on, and moves the row's read with it. The redaction takes
+ * the same supports as the render, as the render contract asks.
  *
  * @param configuration The configuration.
  * @returns The renders' trees.
@@ -1409,9 +1410,9 @@ describe("styles.css over emitted markup", () => {
       assert.isNotEmpty(roots);
       for (const root of roots) {
         assert.strictEqual(
-          Option.isSome(attribute(root, "data-magnification")),
+          Option.exists(attribute(root, "style"), (style) => style.includes("font-size: 150%")),
           rootHook.implemented,
-          "the Root carries data-magnification as the Root hook is implemented",
+          "the Root carries the magnification as font-size in its style as the Root hook is implemented",
         );
       }
     }),
