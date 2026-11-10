@@ -1852,6 +1852,51 @@ describe("buildItem", () => {
   );
 
   it.effect(
+    "[D22] keeps data-ssml and data-qti-suppress-tts on body elements as written, with no mark",
+    () =>
+      Effect.gen(function* keepsSpeechAttributes() {
+        const ssml = '{"say-as":{"interpret-as":"characters"}}';
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "p",
+                  [attr("data-ssml", ssml)],
+                  [
+                    text("Read "),
+                    el("span", [attr("data-qti-suppress-tts", "true")], [text("QTI")]),
+                  ],
+                ),
+              ],
+              declarations: [],
+            }),
+          ),
+        );
+
+        assert.deepStrictEqual(built.body, [
+          {
+            attributes: [{ name: "data-ssml", value: ssml }],
+            children: [
+              { kind: "text", text: "Read " },
+              {
+                attributes: [{ name: "data-qti-suppress-tts", value: "true" }],
+                children: [{ kind: "text", text: "QTI" }],
+                kind: "element",
+                path: `${body}/p/span`,
+                tag: "span",
+              },
+            ],
+            kind: "element",
+            path: `${body}/p`,
+            tag: "p",
+          },
+        ]);
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
     "[I-1] refuses an area map entry's shape or coords outside its type as attribute-type",
     () =>
       Effect.gen(function* refusesAreaEntry() {
