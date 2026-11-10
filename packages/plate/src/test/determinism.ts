@@ -41,6 +41,7 @@
 import { Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import type { UnknownPart } from "#plate/emit/parts.ts";
+import type { MarkupRefused } from "#plate/emit/serialise.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
@@ -629,7 +630,7 @@ export const observe = (
   record: ItemRecord,
 ): Result.Result<
   Observed,
-  EngineFailure | InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart
+  EngineFailure | InvalidInstance | MarkupRefused | OutputTooLarge | PartSwapRefused | UnknownPart
 > =>
   Result.gen(function* observeFixture() {
     const rendered = yield* render(redactItem(determinismItem, record), determinismConfiguration, {
