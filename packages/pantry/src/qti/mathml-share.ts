@@ -71,7 +71,8 @@ import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
 import { AssembledId, IdBinding, ShareFragment } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
-import { Instance, TestDocument, testKind } from "#pantry/qti/tests.ts";
+import { Instance, TestDocument } from "#pantry/qti/tests.ts";
+import { testKind } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * One MathML element a share can dominate or be dominated through, keyed by its node.

@@ -1,9 +1,17 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
+import { configure } from "#plate/configuration.ts";
+import { attr, doc, el, text } from "#plate/document/source.ts";
+import type { SourceDocument } from "#plate/document/source.ts";
+import { partTable } from "#plate/emit/parts.ts";
 import { expressionKinds } from "#plate/model/expression.ts";
 import { packageTables } from "#plate/package/tables.ts";
+import { redact, render } from "#plate/render.ts";
+import type { Options } from "#plate/render.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
+import { parseHtml } from "#plate/test/round-trip.ts";
 import { tables } from "#plate/validate/tables.ts";
+import { acceptedItem, check } from "#plate/validate/verdict.ts";
 import {
   answeredStatuses,
   // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
@@ -13,11 +21,15 @@ import {
   cardinalities,
   cpVersions,
   interactionNames,
+  isAuthorData,
+  isReservedData,
   ltiLinkTypes,
   manifestNamespace,
   messageAttributes,
   navigationModes,
   renders,
+  reservedDataNames,
+  reservedDataPrefix,
   resourceRoots,
   resourceTypes,
   sessionControlDefaults,
@@ -31,6 +43,7 @@ import {
 } from "#plate/vocabulary.ts";
 import { testFeatureKeys } from "#plate/test-features/table.ts";
 import type { ClassOwner } from "#plate/vocabulary.ts";
+import type { Node } from "#plate/emit/node.ts";
 
 /**
  * Assert that a list holds each of its members once.
@@ -152,7 +165,7 @@ describe("the closed value sets", () => {
     assertDistinct(areaShapes);
   });
 
-  it("holds exactly the members spec §4.5 names, each once", () => {
+  it("[W0-AY] holds exactly the members spec §4.5 names, each once", () => {
     const lists: readonly (readonly [string, readonly string[], readonly string[]])[] = [
       [
         "interactionNames",
@@ -247,7 +260,6 @@ describe("the closed value sets", () => {
         [
           "string-identifier",
           'adaptive="true"',
-          'base-type="file"',
           'cardinality="record"',
           'base-type=""',
           "xml:base",
@@ -400,7 +412,7 @@ describe("the closed value sets", () => {
     }
   });
 
-  it("[I-1] puts the record mark on outcome and template declarations, never on a record response declaration, which the item model holds", () => {
+  it("[I-1] [W0-AY] puts the record mark on outcome and template declarations, never on a record response declaration, which the item model holds, and no mark on a base type, every one of which the value model holds", () => {
     assert.deepStrictEqual(
       renders.marks.find((mark) => mark.feature === 'cardinality="record"'),
       {
@@ -409,11 +421,15 @@ describe("the closed value sets", () => {
         when: { kind: "attribute-value", name: "cardinality", value: "record" },
       },
     );
-    // The control: a file declaration is marked whatever its kind.
-    assert.include(
-      renders.marks.find((mark) => mark.feature === 'base-type="file"')?.on ?? [],
-      "qti-response-declaration",
-    );
+    // A `file` declaration was the control, marked whatever its kind; `[W0-AY]` holds a file by its
+    // name, size and type, so no base type in the list is a mark now.
+    for (const baseType of baseTypes) {
+      assert.notInclude(
+        renders.marks.map((mark) => mark.feature),
+        `base-type="${baseType}"`,
+        baseType,
+      );
+    }
   });
 
   it("has every engine name in elements", () => {
@@ -755,4 +771,176 @@ describe("M2's closed sets", () => {
       assert.notInclude([...marks], read);
     }
   });
+});
+
+/**
+ * The `data-*` attribute names of the rendered tree, each once.
+ *
+ * @param nodes The nodes to walk.
+ * @returns The names, in first-seen order.
+ */
+const dataNamesIn = (nodes: readonly Node[]): readonly string[] => {
+  const seen = new Set<string>();
+  const visit = (node: Node): void => {
+    if (node.kind !== "element") {
+      return;
+    }
+
+    for (const name of Object.keys(node.attrs)) {
+      if (name.startsWith("data-")) {
+        seen.add(name);
+      }
+    }
+    for (const child of node.children) {
+      visit(child);
+    }
+  };
+  for (const node of nodes) {
+    visit(node);
+  }
+
+  return [...seen];
+};
+
+/**
+ * An item holding a Choice and a Text Entry, each bound to its own response, so a render writes
+ * the Root's state and every part of two interactions.
+ *
+ * @returns The document.
+ */
+const twoInteractionItem = (): SourceDocument =>
+  doc(
+    "item.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "item-1"), attr("time-dependent", "false"), attr("title", "Reserved")],
+      [
+        el("qti-response-declaration", [
+          attr("base-type", "identifier"),
+          attr("cardinality", "single"),
+          attr("identifier", "RESPONSE"),
+        ]),
+        el("qti-response-declaration", [
+          attr("base-type", "string"),
+          attr("cardinality", "single"),
+          attr("identifier", "ENTRY"),
+        ]),
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "qti-choice-interaction",
+              [attr("response-identifier", "RESPONSE")],
+              [
+                el("qti-simple-choice", [attr("identifier", "A")], [text("Yes")]),
+                el("qti-simple-choice", [attr("identifier", "B")], [text("No")]),
+              ],
+            ),
+            el(
+              "p",
+              [],
+              [
+                text("Name: "),
+                el("qti-text-entry-interaction", [attr("response-identifier", "ENTRY")]),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+describe("the reserved data-* names", () => {
+  it("[W0-AU] the reserved table holds the four fixed names, refuses by the data-qti- prefix, and holds every data-* name the part table merges or emits", () => {
+    for (const name of ["data-slot", "data-area", "data-position", "data-empty", "data-mode"]) {
+      assert.isTrue(isReservedData(name), name);
+      assert.isTrue(reservedDataNames.has(name), name);
+    }
+
+    assert.strictEqual(reservedDataPrefix, "data-qti-");
+    for (const name of ["data-qti-anything", "data-qti-", "data-qti-suppress-tts"]) {
+      assert.isTrue(isReservedData(name), name);
+    }
+
+    const merged = partTable.flatMap((row) =>
+      row.merged.filter((name) => name.startsWith("data-")),
+    );
+    assert.isAbove(merged.length, 0);
+    for (const name of merged) {
+      assert.isTrue(isReservedData(name), name);
+      assert.isTrue(reservedDataNames.has(name), name);
+    }
+
+    assert.isFalse(isReservedData("data-author-note"));
+    assert.isFalse(reservedDataNames.has("data-author-note"));
+  });
+
+  it("[W0-AU] the table holds each name the Root and the runtime write beyond a part row's merged list", () => {
+    for (const name of ["data-disabled", "data-mode", "data-runtime"]) {
+      assert.isTrue(isReservedData(name), name);
+    }
+  });
+
+  it("[W0-AU] a reserved name is matched as HTML matches it, in any ASCII case", () => {
+    for (const name of ["data-SLOT", "data-Mode", "DATA-AREA", "data-QTI-custom"]) {
+      assert.isTrue(isReservedData(name), name);
+    }
+
+    assert.isFalse(isReservedData("data-slots"));
+    assert.isFalse(isReservedData("data-qt"));
+    assert.isFalse(isReservedData("slot"));
+  });
+
+  it("[W0-AU] an author data-* name is the reading's form and not reserved", () => {
+    for (const name of ["data-author-note", "data-x", "data-a.b-c", "data-_", "data-9"]) {
+      assert.isTrue(isAuthorData(name), name);
+    }
+
+    for (const name of [
+      "data-",
+      "data-A",
+      "data-é",
+      "data-x y",
+      "data-x=y",
+      "data-slot",
+      "data-qti-custom",
+      "data-mode",
+      "note",
+      "xml:data-x",
+    ]) {
+      assert.isFalse(isAuthorData(name), name);
+    }
+  });
+
+  it.effect(
+    "[W0-AU] every data-* name a rendered item writes, in every mode, is in the reserved table",
+    () =>
+      Effect.gen(function* renderedNames() {
+        const verdict = check(twoInteractionItem(), tables, Option.none());
+        const accepted = acceptedItem(verdict);
+        const configuration = yield* configure({});
+        const redacted = redact(
+          Option.getOrThrowWith(accepted, () => new Error("The item is not accepted.")),
+        );
+        const runs: readonly Options[] = [
+          { instance: "r1" },
+          { instance: "r1", mode: "review" },
+          { instance: "r1", mode: "solution" },
+          { disabled: true, instance: "r1" },
+        ];
+        const written = new Set(
+          runs.flatMap((options) =>
+            dataNamesIn(
+              parseHtml(Result.getOrThrow(render(redacted, configuration, options)).html),
+            ),
+          ),
+        );
+
+        assert.includeMembers([...written], ["data-slot", "data-mode"]);
+        for (const name of written) {
+          assert.isTrue(isReservedData(name), name);
+        }
+      }),
+  );
 });
