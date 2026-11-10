@@ -24,6 +24,7 @@ import type {
 import type { RedactRecord } from "#plate/model/record.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
+import type { HostFacts } from "#plate/pci/host.ts";
 import {
   InvalidInstance,
   NotRedacted,
@@ -642,6 +643,44 @@ describe("render", () => {
         assert.notInclude(rendered.html, marker);
       }
     }),
+  );
+
+  it.effect(
+    "[W0-AZ] takes a host's facts as a render input, which change nothing of the shipped kinds and reach none of the HTML",
+    () =>
+      Effect.gen(function* hostFacts() {
+        const configuration = yield* defaults;
+        const host: HostFacts = {
+          pci: {
+            loader: "/pci/loader.js",
+            modules: new Map([
+              [
+                "RESPONSE",
+                [
+                  {
+                    fallback: Option.none(),
+                    id: "counter",
+                    primary: Option.some("modules/counter.js"),
+                    waitSeconds: { fallback: 0, primary: 30 },
+                  },
+                ],
+              ],
+            ]),
+          },
+        };
+        const without = yield* Effect.fromResult(render(redacted, configuration, { instance }));
+        const withHost = yield* Effect.fromResult(
+          render(redacted, configuration, { host, instance }),
+        );
+        const empty = yield* Effect.fromResult(
+          render(redacted, configuration, { host: {}, instance }),
+        );
+
+        assert.strictEqual(withHost.html, without.html);
+        assert.strictEqual(empty.html, without.html);
+        assert.notInclude(withHost.html, "/pci/loader.js");
+        assert.notInclude(withHost.html, "modules/counter.js");
+      }),
   );
 
   it.effect("[Q-2] fails UnknownPart for an override of a part the table lacks", () =>
@@ -2542,6 +2581,33 @@ describe("render, an element that references a catalog", () => {
           expected,
         );
         assert.notInclude(expected, "glossary");
+      }),
+  );
+
+  it.effect(
+    "[W0-AS.2] no module with attach gives the empty answer and the HTML of today: no minted id and no following sibling",
+    () =>
+      Effect.gen(function* emptyAnswerWithoutModules() {
+        const configuration = yield* defaults;
+        const glossed: BodyNode = {
+          attributes: [],
+          catalog: "glossary",
+          children: [words("tern")],
+          kind: "element",
+          path: "qti-assessment-item/qti-item-body/p[0]",
+          tag: "p",
+        };
+        const { catalog: _catalog, ...unreferencing } = glossed;
+        const referencing = redact(acceptForTest({ ...item, body: [glossed, ...item.body] }));
+        const control = redact(acceptForTest({ ...item, body: [unreferencing, ...item.body] }));
+        const rendered = Result.getOrThrow(render(referencing, configuration, { instance })).html;
+
+        assert.strictEqual(
+          rendered,
+          Result.getOrThrow(render(control, configuration, { instance })).html,
+        );
+        assert.include(rendered, "<p>tern</p>");
+        assert.notInclude(rendered, `${instance}-catalog-`);
       }),
   );
 });

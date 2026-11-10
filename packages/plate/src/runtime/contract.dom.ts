@@ -87,11 +87,13 @@ export interface Controller<K extends RuntimeKind = RuntimeKind> {
 }
 
 /**
- * The slots of the content modules that have a browser runtime: the content whose behaviour its
- * native element cannot give alone, such as a modal feedback's dialog returning focus. A slot is
- * the `data-slot` value of the content's root, which the module's render writes.
+ * The slots of the content roots that have a browser runtime: the content whose behaviour its
+ * native element cannot give alone. A slot is the `data-slot` value of the content's root, which
+ * the module's render writes. `item` is the item chrome's own Root, which every rendered item has:
+ * the one place a page-wide display preference reaches an item. `modal-feedback` is a modal
+ * feedback's dialog, which takes and returns focus.
  */
-export const contentRuntimeSlots = ["modal-feedback"] as const;
+export const contentRuntimeSlots = ["item", "modal-feedback"] as const;
 
 /**
  * A content slot that has a runtime, as {@link contentRuntimeSlots} lists it.

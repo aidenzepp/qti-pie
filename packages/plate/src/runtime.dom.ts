@@ -10,6 +10,7 @@
  * @module
  */
 import { controller as modalFeedback } from "#plate/content/modal-feedback.dom.ts";
+import { controller as itemRoot } from "#plate/content/root.dom.ts";
 import { controller as associate } from "#plate/interactions/associate.dom.ts";
 import { controller as drawing } from "#plate/interactions/drawing.dom.ts";
 import { controller as gapMatch } from "#plate/interactions/gap-match.dom.ts";
@@ -33,8 +34,6 @@ import type {
 } from "#plate/runtime/contract.dom.ts";
 
 export type {
-  ContentController,
-  ContentSlot,
   Controller,
   LiveRegion,
   Registry,
@@ -48,12 +47,12 @@ export type {
  * The controllers the runtime attaches, by kind and by content slot: closed, so a host cannot add
  * one, and complete, one controller for every runtime kind, each from its own module
  * `interactions/<kind>.dom.ts`, and one for every content slot, each from its own module
- * `content/<slot>.dom.ts`, so an interaction's or a content module's issue fills its module and
+ * `content/<name>.dom.ts`, so an interaction's or a content module's issue fills its module and
  * never this table.
  */
 const registry = {
   associate,
-  content: { "modal-feedback": modalFeedback },
+  content: { item: itemRoot, "modal-feedback": modalFeedback },
   drawing,
   "gap-match": gapMatch,
   "graphic-associate": graphicAssociate,
@@ -72,9 +71,10 @@ const registry = {
 };
 
 /**
- * Upgrade every rendered interaction and content module under a node: attach its kind's controller
- * to each interaction root that has one, and its slot's controller to each content root that has
- * one, that is not already upgraded, without building markup or moving focus.
+ * Upgrade every rendered interaction and content root under a node: attach its kind's controller to
+ * each interaction root that has one, and its slot's controller to each content root that has one,
+ * that is not already upgraded, without building markup or moving focus. An item's Root is a
+ * content root, upgraded once.
  *
  * @example
  *   const upgraded = upgrade(); // every item in the document

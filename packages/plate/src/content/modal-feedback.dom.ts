@@ -13,7 +13,6 @@ import type { ContentController } from "#plate/runtime/contract.dom.ts";
  * server rendered, found by its `data-slot="modal-feedback"`. Issue m5-01, the first content module
  * with a controller, fills it.
  */
-// oxlint-disable-next-line typescript/no-unnecessary-type-arguments -- `ContentSlot` has one member today, so the slot is the parameter's default; naming it keeps the stub typed to its own slot when a second slot lands.
 export const controller: ContentController<"modal-feedback"> = {
   implemented: false,
   slot: "modal-feedback",

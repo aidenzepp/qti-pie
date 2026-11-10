@@ -6,6 +6,7 @@ import type { Configuration } from "#plate/configuration.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
+import { allowedIntents } from "#plate/session/intents.ts";
 import { move, moveTarget, moveTargets } from "#plate/session/navigate.ts";
 import type { MoveIntent, MoveRefused, MoveRule, MoveStep } from "#plate/session/navigate.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
@@ -661,6 +662,26 @@ const expiringPart: TestFeatureTable = testFeatures.map((module) =>
     : module,
 );
 
+/**
+ * The table with a time-limits module whose `gate` answers `exit` from the part to every intent,
+ * in the stub's place.
+ */
+const exitingPart: TestFeatureTable = testFeatures.map((module) =>
+  module.key === "qti-time-limits"
+    ? {
+        ...stub({
+          element: module.element,
+          feature: module.feature,
+          issue: module.issue,
+          key: module.key,
+          namespace: module.namespace,
+        }),
+        gate: () => Option.some({ kind: "exit", scope: { identifier: "part", kind: "part" } }),
+        implemented: true,
+      }
+    : module,
+);
+
 describe("moveTargets under an expiry", () => {
   it.effect(
     "decides each move as the part's modes do, neither a target nor a refusal, so advance may carry the expiry out in its place",
@@ -687,6 +708,88 @@ describe("moveTargets under an expiry", () => {
             intent.kind,
           );
         }
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] decides each move as the part's modes do under an exit verdict too: exit is allowed as expire is, and advance carries it out",
+    () =>
+      Effect.gen(function* exitFallsThrough() {
+        const configuration = yield* configure({});
+        const delivery = yield* builtDelivery(
+          "exiting",
+          onePart("linear", "individual", ["one", "two"]),
+        );
+        const session = started(delivery, configuration);
+        const decideExiting = Result.getOrElse(
+          moveTargets(delivery.test, session, exitingPart, Option.some(after(1000))),
+          (failure) => assert.fail(failure.message),
+        );
+        const decidePlain = Result.getOrElse(moveTargets(delivery.test, session), (failure) =>
+          assert.fail(failure.message),
+        );
+
+        for (const intent of [next, previous, go(1), go(2), go(7)]) {
+          assert.strictEqual(
+            outcome(decideExiting(intent)),
+            outcome(decidePlain(intent)),
+            intent.kind,
+          );
+        }
+      }),
+  );
+});
+
+describe("the items a gate sees", () => {
+  it.effect(
+    "[W0-BE] moveTargets hands the gate none without items and some with them, and allowedIntents answers the same either way",
+    () =>
+      Effect.gen(function* itemsSeen() {
+        const configuration = yield* configure({});
+        const delivery = yield* builtDelivery(
+          "items",
+          onePart("nonlinear", "individual", ["one", "two"]),
+        );
+        const session = started(delivery, configuration);
+        const seen: Option.Option<ReadonlyMap<string, Accepted>>[] = [];
+        const recording: TestFeatureTable = testFeatures.map((module) =>
+          module.key === "qti-time-limits"
+            ? {
+                ...stub({
+                  element: module.element,
+                  feature: module.feature,
+                  issue: module.issue,
+                  key: module.key,
+                  namespace: module.namespace,
+                }),
+                gate: (context) => {
+                  seen.push(context.items);
+
+                  return Option.none();
+                },
+                implemented: true,
+              }
+            : module,
+        );
+        const without = Result.getOrElse(
+          moveTargets(delivery.test, session, recording, Option.none()),
+          (failure) => assert.fail(failure.message),
+        );
+        const withItems = Result.getOrElse(
+          moveTargets(delivery.test, session, recording, Option.none(), delivery.items),
+          (failure) => assert.fail(failure.message),
+        );
+
+        without(next);
+        withItems(next);
+        assert.deepStrictEqual(
+          seen.map((items) => items.pipe(Option.map((held) => [...held.keys()]))),
+          [Option.none(), Option.some(["one", "two"])],
+        );
+        assert.deepStrictEqual(
+          allowedIntents(delivery.test, session, delivery.items),
+          allowedIntents(delivery.test, session),
+        );
       }),
   );
 });
