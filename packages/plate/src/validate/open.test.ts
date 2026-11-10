@@ -424,13 +424,10 @@ const booleanPlacements: readonly BooleanPlacement[] = [
     attribute: "adaptive",
     document: (written) => booleanItem(`adaptive="${written}" time-dependent="false"`, "<p>x</p>"),
     element: "qti-assessment-item",
-    expected: (value) => ({
-      marks: value ? ['adaptive="true"'] : [],
-      refusals: [],
-      verdict: value ? "accepted-with-unsupported" : "accepted",
-    }),
+    expected: () => ({ marks: [], refusals: [], verdict: "accepted" }),
     read: judged,
-    title: "adaptive on an item marks adaptive when true and is accepted unmarked when false",
+    title:
+      "adaptive on an item is accepted unmarked when true, now the adaptive policy is filled, and when false",
   },
   {
     attribute: "shuffle",

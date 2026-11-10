@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Option, Result } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { adaptivePolicy } from "#plate/engine/adaptive.ts";
+import { acceptedItem, open, score } from "#plate/index.ts";
+import type { Accepted, Responses, StoredRecord } from "#plate/index.ts";
 import { buildItem } from "#plate/model/item.ts";
 import { completionStatus, completionValue, fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
@@ -113,39 +116,37 @@ const attempted = (record: ItemRecord, numAttempts: number, status: string): Ite
   },
 });
 
-describe("adaptivePolicy, the stub", () => {
-  it("[W0-BD] is a stub: implemented is false", () => {
-    assert.isFalse(adaptivePolicy.implemented);
+describe("adaptivePolicy, filled", () => {
+  it("[W0-BD] is filled: implemented is true", () => {
+    assert.isTrue(adaptivePolicy.implemented);
   });
 
-  it.effect("[W0-BD] the stub's answers equal today's: closed and limit", () =>
-    Effect.gen(function* closedAndLimit() {
-      const item = yield* Effect.fromResult(buildItem(policyItem));
-      const start = fresh(item, "q1");
-      const records = [
-        attempted(start, 0, "not_attempted"),
-        attempted(start, 1, "unknown"),
-        attempted(start, 2, "completed"),
-        attempted(start, 3, "incomplete"),
-      ];
+  it.effect(
+    "[W0-BD] closed and limit: a non-adaptive item keeps today's answers, an adaptive item closes only at completed and has no limit",
+    () =>
+      Effect.gen(function* closedAndLimit() {
+        const item = yield* Effect.fromResult(buildItem(policyItem));
+        const start = fresh(item, "q1");
+        const statuses = ["not_attempted", "unknown", "completed", "incomplete"];
 
-      for (const record of records) {
-        for (const limit of [0, 1, 2, 3]) {
-          for (const adaptive of [false, true]) {
-            assert.strictEqual(
-              adaptivePolicy.closed(adaptive, record, limit),
-              limit > 0 && record.numAttempts >= limit,
-              `closed(${String(adaptive)}, ${String(record.numAttempts)} attempts, ${String(limit)})`,
-            );
-            assert.strictEqual(
-              adaptivePolicy.limit(adaptive, limit),
-              limit,
-              `limit(${String(adaptive)}, ${String(limit)})`,
-            );
+        for (const [numAttempts, status] of statuses.entries()) {
+          const record = attempted(start, numAttempts, status);
+          for (const limit of [0, 1, 2, 3]) {
+            for (const adaptive of [false, true]) {
+              assert.strictEqual(
+                adaptivePolicy.closed(adaptive, record, limit),
+                adaptive ? status === "completed" : limit > 0 && numAttempts >= limit,
+                `closed(${String(adaptive)}, ${String(record.numAttempts)} attempts, ${String(limit)})`,
+              );
+              assert.strictEqual(
+                adaptivePolicy.limit(adaptive, limit),
+                adaptive ? 0 : limit,
+                `limit(${String(adaptive)}, ${String(limit)})`,
+              );
+            }
           }
         }
-      }
-    }),
+      }),
   );
 
   it.effect(
@@ -178,6 +179,166 @@ describe("adaptivePolicy, the stub", () => {
             TOTAL: floatValue(0),
             [completionStatus]: completionValue("unknown"),
           },
+        );
+      }),
+  );
+});
+
+/**
+ * Read an item fixture of `fixtures/m5/items` as text.
+ *
+ * @param name The fixture's file name.
+ * @returns The text.
+ */
+const itemText = (name: string): string =>
+  readFileSync(new URL(`../../fixtures/m5/items/${name}`, import.meta.url), "utf-8");
+
+/**
+ * Open an item's text through the public `open`, failing the test unless it is accepted.
+ *
+ * @param name The document path the item is opened at.
+ * @param source The item's text.
+ * @returns The accepted item.
+ */
+const opened = Effect.fnUntraced(function* opened(name: string, source: string) {
+  const verdict = yield* open(name, new TextEncoder().encode(source));
+
+  return Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`${name} is ${verdict.verdict}`),
+  );
+});
+
+/**
+ * The responses of an attempt that types a word into the Text Entry bound to `RESPONSE`.
+ *
+ * @param word The word.
+ * @returns The responses.
+ */
+const typed = (word: string): Responses => ({
+  RESPONSE: {
+    baseType: "string",
+    cardinality: "single",
+    values: [{ baseType: "string", value: word }],
+  },
+});
+
+/**
+ * Score attempts of an item one after another, each over the record the last returned, failing the
+ * test when `score` refuses one.
+ *
+ * @param document The accepted item.
+ * @param words The word each attempt types, in order.
+ * @returns The record after each attempt.
+ */
+const attempts = (document: Accepted, words: readonly string[]): readonly StoredRecord[] => {
+  const records: StoredRecord[] = [];
+  for (const word of words) {
+    records.push(
+      Result.getOrElse(score(document, typed(word), records.at(-1)), (failure) =>
+        assert.fail(`score refused ${word}: ${failure.message}`),
+      ),
+    );
+  }
+
+  return records;
+};
+
+/**
+ * Read a single outcome's one value from a stored record, as text.
+ *
+ * @param record The stored record.
+ * @param identifier The outcome.
+ * @returns The value as text, or none when the record holds no value.
+ */
+const outcomeText = (record: StoredRecord, identifier: string): string | undefined => {
+  const value = record.outcomes[identifier]?.values[0];
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return value.baseType === "identifier" ||
+    value.baseType === "integer" ||
+    value.baseType === "float"
+    ? String(value.value)
+    : assert.fail(`${identifier} holds a ${value.baseType}, not an identifier or a number`);
+};
+
+describe("adaptive items through open and score", () => {
+  it.effect('[adaptive] an adaptive item opens without the adaptive="true" mark', () =>
+    Effect.gen(function* unmarked() {
+      const verdict = yield* open(
+        "items/adaptive.xml",
+        new TextEncoder().encode(itemText("adaptive.xml")),
+      );
+
+      assert.strictEqual(verdict.verdict, "accepted");
+
+      const document = Option.getOrElse(acceptedItem(verdict), () =>
+        assert.fail(`adaptive.xml is ${verdict.verdict}`),
+      );
+      assert.isTrue(document.item.adaptive);
+      assert.notInclude(
+        document.item.unsupported.map((feature) => feature.feature),
+        'adaptive="true"',
+      );
+    }),
+  );
+
+  it.effect("[adaptive] outcomes accumulate across attempts: TRIES counts each attempt", () =>
+    Effect.gen(function* accumulates() {
+      const document = yield* opened("items/adaptive.xml", itemText("adaptive.xml"));
+      const records = attempts(document, ["Venus", "Mars", "Earth"]);
+
+      assert.deepStrictEqual(
+        records.map((record) => outcomeText(record, "TRIES")),
+        ["1", "2", "3"],
+      );
+      assert.deepStrictEqual(
+        records.map((record) => record.numAttempts),
+        [1, 2, 3],
+      );
+    }),
+  );
+
+  it.effect("[adaptive] a non-adaptive copy of the item still resets its outcomes", () =>
+    Effect.gen(function* resets() {
+      const document = yield* opened(
+        "items/adaptive-off.xml",
+        itemText("adaptive.xml").replace('adaptive="true"', 'adaptive="false"'),
+      );
+      const records = attempts(document, ["Venus", "Mars", "Earth"]);
+
+      assert.isFalse(document.item.adaptive);
+      assert.deepStrictEqual(
+        records.map((record) => outcomeText(record, "TRIES")),
+        ["1", "1", "1"],
+      );
+    }),
+  );
+
+  it.effect(
+    "[adaptive] completionStatus is unknown at the first attempt, incomplete after a wrong one, completed after the right one",
+    () =>
+      Effect.gen(function* completion() {
+        const never = yield* opened(
+          "items/adaptive-never-complete.xml",
+          itemText("adaptive-never-complete.xml"),
+        );
+        const planet = yield* opened("items/adaptive.xml", itemText("adaptive.xml"));
+        const [untouched] = attempts(never, ["once"]);
+        const tried = attempts(planet, ["Venus", "Mercury"]);
+
+        assert.strictEqual(
+          untouched === undefined ? undefined : outcomeText(untouched, completionStatus),
+          "unknown",
+        );
+        assert.deepStrictEqual(
+          tried.map((record) => outcomeText(record, completionStatus)),
+          ["incomplete", "completed"],
+        );
+        assert.deepStrictEqual(
+          tried.map((record) => outcomeText(record, "SCORE")),
+          ["0", "1"],
         );
       }),
   );
