@@ -10,6 +10,21 @@ These entries list the surface of M1 and M2, what M3 adds to it, and each change
 reads the specification. plate is not published, and both of its entry points are unstable until
 M3.
 
+### The full-Effect phase (FE)
+
+- `render`, `renderStatus` and `renderNavigation` return, never throw, `MarkupRefused` for host
+  markup in the `parts` option that the serialiser cannot write. Its `reason` is one of seven
+  classes, which `MarkupRefusal` unions: `VoidElementChildren`, `MalformedTagName`,
+  `MalformedAttributeName`, `RawTextChildren`, `EscapableRawTextElementChild`, `PlaintextElement`
+  and `EventHandlerAttribute`. `render` and `renderStatus` also return, never throw,
+  `InvalidHeadingLevel` for a `headingLevel` that `configure` would not make: `renderStatus` for a
+  level that is not an integer from 1 to 6, and `render`, on an item that writes a heading, for a
+  level that, capped at 6, is not an integer (`NaN`, `-Infinity` or a fraction below 6). Every
+  other level renders as before: a fraction above 6 and `Infinity` as `h6`. `src/index.ts` exports
+  `MarkupRefused`, `InvalidHeadingLevel`, the seven reason classes and `MarkupRefusal`. One order
+  of failures changes: `render` with such a level and an `outputBudget` that ends before the item's
+  first heading returns `InvalidHeadingLevel` where it returned `OutputTooLarge`.
+
 ### How plate reads the shared readings after pantry's cutover, 2026-11-09 (align-54)
 
 - plate now reads QTI 3.0 as [`docs/spec-readings.md`](../../docs/spec-readings.md) reads it after

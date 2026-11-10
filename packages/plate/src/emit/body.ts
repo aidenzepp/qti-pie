@@ -407,15 +407,28 @@ interface Walk {
 }
 
 /**
- * Give the tag an authored element renders as: a heading shifted by the offset and capped at `h6`;
- * any other tag unchanged.
+ * Give the level an authored heading renders at: its level shifted by the offset and capped at 6.
+ *
+ * {@link tagFor} writes this level and {@link writesMalformedHeading} judges it, so the tag the
+ * emitter writes and the check `render` makes before writing it cannot disagree.
+ *
+ * @param level The authored heading's level, 1 to 6.
+ * @param headingOffset The amount added to a heading's level, from {@link headingOffsetOf}.
+ * @returns The level to write, an integer for every heading level `configure` gives.
+ */
+const shiftedLevel = (level: number, headingOffset: number): number =>
+  Math.min(6, level + headingOffset);
+
+/**
+ * Give the tag an authored element renders as: a heading shifted by the offset and capped at `h6`
+ * ({@link shiftedLevel}); any other tag unchanged.
  *
  * @param tag The authored local name.
  * @param headingOffset The amount added to a heading's level, from {@link headingOffsetOf}.
  * @returns The tag to emit.
  */
 const tagFor = (tag: string, headingOffset: number): string =>
-  headings.has(tag) ? `h${Math.min(6, Number(tag.slice(1)) + headingOffset)}` : tag;
+  headings.has(tag) ? `h${shiftedLevel(Number(tag.slice(1)), headingOffset)}` : tag;
 
 /**
  * Scope a kept same-document reference as the id it names, so `#q1` still finds the authored
@@ -799,6 +812,38 @@ const shallowestLevelOf = (body: readonly PayloadNode[]): number => {
  */
 const headingOffsetOf = (body: readonly PayloadNode[], headingLevel: number): number =>
   headingLevel - shallowestLevelOf(body);
+
+/**
+ * Tell whether a body writes a heading whose tag names no heading level, because its level, shifted
+ * to the configured heading level and capped at 6 as {@link tagFor} computes it, is not an
+ * integer.
+ *
+ * `render` asks it before it writes an item (`InvalidHeadingLevel` in `#plate/render.ts`), so a
+ * hand-built configuration's heading level of `NaN`, `-Infinity` or a fraction below 6 is refused
+ * where the emitter would write a tag such as `h5.5`. It reads the headings
+ * {@link headingLevelsIn} gives (the body's, a Prompt's, a choice's content and an Inline Choice's
+ * Label, never one below an element the second line drops) and applies {@link shiftedLevel}, the
+ * function `tagFor` writes with, rather than a second expression for the rule, so the two cannot
+ * disagree. So a level above 6 and `Infinity` are not refused, since they cap at `h6`, and a body
+ * with no heading is never refused. At its corners it follows `tagFor`, not a test of the capped
+ * heading level alone: where floating-point rounding makes the shifted level an integer (a heading
+ * level of `1e-17` writes `h0`, as 0 does) it is false, and so it is for an integer level at or
+ * below -10^21, whose tag `h-1e+21` the serialiser then refuses as a `MalformedTagName`.
+ *
+ * @param body The payload's body, which holds every heading the emitter writes for the item.
+ * @param headingLevel The configured heading level, as the emit state holds it.
+ * @returns Whether a heading the body writes would get a level that is not an integer.
+ */
+export const writesMalformedHeading = (
+  body: readonly PayloadNode[],
+  headingLevel: number,
+): boolean => {
+  const headingOffset = headingOffsetOf(body, headingLevel);
+
+  return headingLevelsIn(body).some(
+    (level) => !Number.isInteger(shiftedLevel(level, headingOffset)),
+  );
+};
 
 /**
  * Start a walk over nodes that stand at a position.

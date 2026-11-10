@@ -618,6 +618,18 @@ describe("README.md", () => {
     );
   });
 
+  it("[heading level refused] names MarkupRefused and InvalidHeadingLevel in the paragraph of Functions that describes render's parts option", () => {
+    assert.isTrue(
+      paragraphsOf("## Functions").some(
+        (paragraph) =>
+          paragraph.includes("`parts` option") &&
+          paragraph.includes("`MarkupRefused`") &&
+          paragraph.includes("`InvalidHeadingLevel`"),
+      ),
+      "a paragraph of Functions names MarkupRefused and InvalidHeadingLevel beside render's parts option",
+    );
+  });
+
   it("names postings where Start and the Functions table say how a post is decoded", () => {
     const rows = sectionOf("## Functions")
       .split("\n")

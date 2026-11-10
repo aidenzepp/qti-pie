@@ -131,8 +131,13 @@ request. [Navigation](#navigation) moves the session on.
 its value, or a `Result` when it can fail. `redact`, `checkResponses` and `solution` take the
 item's record as an optional last argument, and `redact` takes the output budget after it.
 `render`'s `parts` option swaps a part for the host's
-own markup, built with `h`, and its `mode` option shows an item in `review` or `solution`. A host
-that builds its own Status part reads the fields `StatusInput` documents.
+own markup, built with `h`, and its `mode` option shows an item in `review` or `solution`. Markup
+a replacement holds that the serialiser cannot write is `MarkupRefused`, returned by `render`,
+`renderStatus` and `renderNavigation`, never thrown. A `headingLevel` that `configure` would not
+make is `InvalidHeadingLevel` where no heading can be written at it: from `renderStatus` outside 1
+to 6, and from `render` when the item writes a heading and the level, capped at 6 as headings are,
+is not an integer. A host that builds its own Status part reads the fields `StatusInput`
+documents.
 [`src/index.ts`](src/index.ts) lists every export, and the TSDoc on each name is its reference.
 
 ## Navigation

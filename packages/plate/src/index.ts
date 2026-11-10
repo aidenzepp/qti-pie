@@ -134,7 +134,14 @@ export { postings } from "#plate/payload.ts";
 
 export type { Options, Rendered } from "#plate/render.ts";
 
-export { InvalidInstance, OutputTooLarge, redact, render, renderStatus } from "#plate/render.ts";
+export {
+  InvalidHeadingLevel,
+  InvalidInstance,
+  OutputTooLarge,
+  redact,
+  render,
+  renderStatus,
+} from "#plate/render.ts";
 
 export { checkResponses } from "#plate/responses.ts";
 

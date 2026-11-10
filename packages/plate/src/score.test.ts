@@ -1913,6 +1913,7 @@ describe("the public surface", () => {
         "EventHandlerAttribute",
         "IntentRefused",
         "InvalidConfiguration",
+        "InvalidHeadingLevel",
         "InvalidInstance",
         "InvalidRecord",
         "InvalidRedacted",

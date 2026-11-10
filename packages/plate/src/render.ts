@@ -16,7 +16,7 @@
  */
 import { Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { emitBody } from "#plate/emit/body.ts";
+import { emitBody, writesMalformedHeading } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { emitItem, emitStatus } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
@@ -131,6 +131,29 @@ export class InvalidInstance extends Data.TaggedError("InvalidInstance")<{
    */
   override get message(): string {
     return `The instance token ${JSON.stringify(this.token)} in ${this.source} ${breaches[this.requirement](this.token)}. ${instanceRemedies[this.source]}.`;
+  }
+}
+
+/**
+ * A configured heading level at which plate cannot write a heading: a developer error, returned
+ * through a `Result`, never thrown.
+ *
+ * `configure` gives only an integer from 2 to 6, so only a `Configuration` built by hand, which
+ * skips `configure`, reaches it. {@link renderStatus} writes its heading at the level itself, so it
+ * refuses a level that is not an integer from 1 to 6. {@link render} shifts the item's headings to
+ * the level, capped at `h6` (`writesMalformedHeading` in `#plate/emit/body.ts`), so it refuses a
+ * level only for an item that writes a heading, and only where the capped level is not an integer:
+ * `NaN`, `-Infinity` or a fraction below 6. Every other level renders, capped at `h6`. `level` is
+ * the configuration's `headingLevel`.
+ */
+export class InvalidHeadingLevel extends Data.TaggedError("InvalidHeadingLevel")<{
+  readonly level: number;
+}> {
+  /**
+   * The level, and how to build a configuration that holds a valid one.
+   */
+  override get message(): string {
+    return `The configuration's headingLevel ${String(this.level)} is not a level a heading can be written at. Build the configuration with configure, which takes an integer from 2 to 6.`;
   }
 }
 
@@ -359,6 +382,12 @@ const interactionRenderer =
  * exactly `outputBudget` characters is returned, and one more fails {@link OutputTooLarge} with
  * none of the page built or returned.
  *
+ * An item that writes a heading at a level that, capped at 6, is not an integer (only a
+ * `Configuration` built by hand, with a `headingLevel` of `NaN`, `-Infinity` or a fraction below
+ * 6, gives one) fails {@link InvalidHeadingLevel} once the Root is built and before any HTML is
+ * written: after an unknown part, an instance token or a part swap would fail, and before refused
+ * markup or the output budget would.
+ *
  * @example
  *   const rendered = render(redact(accepted, undefined, configuration), configuration, {
  *     instance: "q1",
@@ -372,6 +401,7 @@ const interactionRenderer =
  * @returns The Root's HTML and the instance token it used, or {@link UnknownPart} for an override
  *   the part table lacks, {@link InvalidInstance} for an instance token that breaks a requirement,
  *   {@link PartSwapRefused} for a replacement that breaks the swap invariant,
+ *   {@link InvalidHeadingLevel} for a heading level no heading of the item can be written at,
  *   {@link MarkupRefused} for a replacement holding markup the serialiser cannot write, or
  *   {@link OutputTooLarge} for an item with a text past its bound, or HTML that would pass the
  *   configuration's `outputBudget`.
@@ -382,7 +412,12 @@ export const render = (
   options: Options = {},
 ): Result.Result<
   Rendered,
-  InvalidInstance | MarkupRefused | OutputTooLarge | PartSwapRefused | UnknownPart
+  | InvalidHeadingLevel
+  | InvalidInstance
+  | MarkupRefused
+  | OutputTooLarge
+  | PartSwapRefused
+  | UnknownPart
 > =>
   Result.gen(function* renderItem() {
     if (Option.isSome(item.unprinted)) {
@@ -405,6 +440,11 @@ export const render = (
     const built = payload(item, viewOf(instance, configuration, options));
     const body = yield* emitBody(built, state, interactionRenderer(built, state));
     const root = yield* emitItem(built, state, body);
+
+    if (writesMalformedHeading(built.body, configuration.headingLevel)) {
+      return yield* Result.fail(new InvalidHeadingLevel({ level: configuration.headingLevel }));
+    }
+
     const html = yield* Result.fromOption(
       yield* toHtmlWithin(root, configuration.outputBudget),
       () =>
@@ -421,9 +461,11 @@ export const render = (
 /**
  * Render the Status part: the status region, its heading and what it shows, as HTML.
  *
- * It checks `input.instance`, which must be the token the item was rendered with, then emits the
- * region through the same part overrides `render` takes. It places the region nowhere and moves
- * no focus.
+ * It checks `input.instance`, which must be the token the item was rendered with, then the part
+ * overrides, then the configuration's heading level, at which it writes the region's heading: an
+ * integer from 1 to 6, or {@link InvalidHeadingLevel}, which only a `Configuration` built by hand
+ * gives. It then emits the region through the same part overrides `render` takes. It places the
+ * region nowhere and moves no focus.
  *
  * @example
  *   renderStatus({ heading: "scored", instance: "q1", score: "1" }, configuration);
@@ -434,18 +476,31 @@ export const render = (
  * @param options The part overrides, none by default.
  * @returns The region's HTML and `input.instance`, or {@link InvalidInstance} for an
  *   `input.instance` that breaks a requirement, {@link UnknownPart} for an override the part table
- *   lacks, {@link PartSwapRefused} for a replacement that breaks the swap invariant, or
+ *   lacks, {@link InvalidHeadingLevel} for a heading level that is not an integer from 1 to 6,
+ *   {@link PartSwapRefused} for a replacement that breaks the swap invariant, or
  *   {@link MarkupRefused} for a replacement holding markup the serialiser cannot write.
  */
 export const renderStatus = (
   input: StatusInput,
   configuration: Configuration,
   options: Pick<Options, "parts"> = {},
-): Result.Result<Rendered, InvalidInstance | MarkupRefused | PartSwapRefused | UnknownPart> =>
+): Result.Result<
+  Rendered,
+  InvalidHeadingLevel | InvalidInstance | MarkupRefused | PartSwapRefused | UnknownPart
+> =>
   Result.gen(function* renderStatusRegion() {
     yield* checkedInstance(input.instance, "input.instance");
 
     const parts = yield* resolveOverrides(options.parts);
+    // Plain JavaScript can hand over a configuration with no headingLevel, which the Status
+    // heading reads as 1, as rowFor does.
+    const configured: number | undefined = configuration.headingLevel;
+    const headingLevel = configured ?? 1;
+
+    if (!Number.isInteger(headingLevel) || headingLevel < 1 || headingLevel > 6) {
+      return yield* Result.fail(new InvalidHeadingLevel({ level: headingLevel }));
+    }
+
     const region = yield* emitStatus(input, stateOf(configuration, parts));
 
     return { html: yield* toHtml(region), instance: input.instance };

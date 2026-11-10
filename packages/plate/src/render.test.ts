@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Predicate, Result } from "effect";
+import { Effect, Option, Predicate, Result, Struct } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
@@ -24,7 +24,7 @@ import type { RedactRecord } from "#plate/model/record.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
 import { InvalidInstance, OutputTooLarge, redact, render, renderStatus } from "#plate/render.ts";
-import type { Options, Rendered } from "#plate/render.ts";
+import type { InvalidHeadingLevel, Options, Rendered } from "#plate/render.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import { solution } from "#plate/solution.ts";
@@ -1843,6 +1843,234 @@ describe("renderStatus", () => {
         Option.some("UnknownPart"),
       );
     }),
+  );
+});
+
+/**
+ * {@link item} with an `h2` before the rest of its body, so `render` writes one heading, shifted
+ * to the configured heading level.
+ */
+const headed = redact(
+  acceptForTest({
+    ...item,
+    body: [
+      {
+        attributes: [],
+        children: [words("Capitals")],
+        kind: "element",
+        path: "qti-assessment-item/qti-item-body/h2",
+        tag: "h2",
+      },
+      ...item.body,
+    ],
+  }),
+);
+
+/**
+ * Give the failure of a render or a Status render: an {@link InvalidHeadingLevel}'s tag and level,
+ * or another failure's tag.
+ *
+ * @param result The result of `render` or `renderStatus`.
+ * @returns The tag and the level when the failure is an `InvalidHeadingLevel`, the failure's tag
+ *   when it is another failure, and none on success.
+ */
+const headingFailure = (
+  result: Result.Result<Rendered, Result.Result.Failure<ReturnType<typeof render>>>,
+): Option.Option<string | { readonly _tag: InvalidHeadingLevel["_tag"]; readonly level: number }> =>
+  Option.map(failureOf(result), (failure) =>
+    failure._tag === "InvalidHeadingLevel"
+      ? { _tag: failure._tag, level: failure.level }
+      : failure._tag,
+  );
+
+/**
+ * Give the heading tags a render writes, in document order.
+ *
+ * @param rendered The render.
+ * @returns The tag of every `h0` to `h9` its HTML parses to.
+ */
+const headingTagsOf = (rendered: Rendered): readonly string[] =>
+  elementsIn(rendered)
+    .map(({ tag }) => tag)
+    .filter((tag) => /^h\d$/u.test(tag));
+
+/**
+ * Give the default configuration at a heading level `configure` may not give.
+ *
+ * @param headingLevel The heading level.
+ * @returns The configuration, built by hand.
+ */
+const configuredAt = (headingLevel: number): Effect.Effect<Configuration, unknown> =>
+  defaults.pipe(Effect.map((configuration) => ({ ...configuration, headingLevel })));
+
+describe("render and renderStatus, the heading level", () => {
+  /**
+   * A scored Status input for {@link instance}.
+   */
+  const scored: StatusInput = { heading: "scored", instance, score: "1" };
+
+  it.effect(
+    "[heading level refused] renderStatus fails InvalidHeadingLevel, naming the level, at 0, 7, 1.5 and NaN",
+    () =>
+      Effect.gen(function* statusRefused() {
+        for (const level of [0, 7, 1.5, Number.NaN]) {
+          assert.deepStrictEqual(
+            headingFailure(renderStatus(scored, yield* configuredAt(level))),
+            Option.some({ _tag: "InvalidHeadingLevel" as const, level }),
+            String(level),
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "[heading level refused] render fails InvalidHeadingLevel, naming the level, for an item with a heading at 1.5, NaN, 5.5 and -Infinity",
+    () =>
+      Effect.gen(function* renderRefused() {
+        for (const level of [1.5, Number.NaN, 5.5, Number.NEGATIVE_INFINITY]) {
+          assert.deepStrictEqual(
+            headingFailure(render(headed, yield* configuredAt(level), { instance })),
+            Option.some({ _tag: "InvalidHeadingLevel" as const, level }),
+            String(level),
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "[heading level refused] renders h1 at 1 and h6 at 6, from render and from renderStatus, as before",
+    () =>
+      Effect.gen(function* bounds() {
+        for (const [level, tag] of [
+          [1, "h1"],
+          [6, "h6"],
+        ] as const) {
+          const configuration = yield* configuredAt(level);
+          const rendered = yield* Effect.fromResult(render(headed, configuration, { instance }));
+          const status = yield* Effect.fromResult(renderStatus(scored, configuration));
+
+          assert.deepStrictEqual(headingTagsOf(rendered), [tag]);
+          assert.deepStrictEqual(headingTagsOf(status), [tag]);
+        }
+      }),
+  );
+
+  it.effect(
+    "[heading level refused] render writes h6 for an item with a heading at 7, 6.5 and Infinity, and h0 at 0, as before",
+    () =>
+      Effect.gen(function* capped() {
+        for (const [level, tag] of [
+          [7, "h6"],
+          [6.5, "h6"],
+          [Number.POSITIVE_INFINITY, "h6"],
+          [0, "h0"],
+        ] as const) {
+          const rendered = yield* Effect.fromResult(
+            render(headed, yield* configuredAt(level), { instance }),
+          );
+
+          assert.deepStrictEqual(headingTagsOf(rendered), [tag], String(level));
+        }
+      }),
+  );
+
+  it.effect("[heading level refused] render writes an item with no heading at 1.5, as before", () =>
+    Effect.gen(function* noHeading() {
+      const rendered = yield* Effect.fromResult(
+        render(redacted, yield* configuredAt(1.5), { instance }),
+      );
+
+      assert.deepStrictEqual(headingTagsOf(rendered), []);
+    }),
+  );
+
+  it.effect(
+    "[heading level refused] renderStatus writes h1 for a hand-built configuration whose headingLevel is missing, undefined or null, as before",
+    () =>
+      Effect.gen(function* unset() {
+        const configuration = yield* defaults;
+        const configurations = [
+          // @ts-expect-error -- plain JavaScript can pass a configuration with no headingLevel.
+          renderStatus(scored, Struct.omit(configuration, ["headingLevel"])),
+          // @ts-expect-error -- plain JavaScript can pass a headingLevel of undefined.
+          renderStatus(scored, { ...configuration, headingLevel: undefined }),
+          // @ts-expect-error -- plain JavaScript can pass a headingLevel of null.
+          renderStatus(scored, { ...configuration, headingLevel: null }),
+        ];
+
+        for (const result of configurations) {
+          assert.deepStrictEqual(headingTagsOf(yield* Effect.fromResult(result)), ["h1"]);
+        }
+      }),
+  );
+
+  it.effect(
+    "[heading level refused] renderStatus at 9 still fails InvalidInstance for a bad instance and UnknownPart for an unknown part first",
+    () =>
+      Effect.gen(function* statusOrder() {
+        const configuration = yield* configuredAt(9);
+
+        assert.deepStrictEqual(
+          headingFailure(renderStatus({ ...scored, instance: "bad id" }, configuration)),
+          Option.some("InvalidInstance"),
+        );
+        assert.deepStrictEqual(
+          headingFailure(
+            renderStatus(scored, configuration, {
+              parts: { item: { form: (props, children) => h("form", props, children) } },
+            }),
+          ),
+          Option.some("UnknownPart"),
+        );
+      }),
+  );
+
+  it.effect(
+    "[heading level refused] render of an item with a heading at 1.5 still fails UnknownPart, InvalidInstance and PartSwapRefused first",
+    () =>
+      Effect.gen(function* renderOrder() {
+        const configuration = yield* configuredAt(1.5);
+
+        assert.deepStrictEqual(
+          headingFailure(
+            render(headed, configuration, {
+              instance,
+              parts: {
+                "choice-interaction": { knob: (props, children) => h("span", props, children) },
+              },
+            }),
+          ),
+          Option.some("UnknownPart"),
+        );
+        assert.deepStrictEqual(
+          headingFailure(render(headed, configuration, { instance: "bad id" })),
+          Option.some("InvalidInstance"),
+        );
+        assert.deepStrictEqual(
+          headingFailure(
+            render(headed, configuration, {
+              instance,
+              parts: {
+                "choice-interaction": { control: (props, children) => h("div", props, children) },
+              },
+            }),
+          ),
+          Option.some("PartSwapRefused"),
+        );
+      }),
+  );
+
+  it.effect(
+    "[heading level refused] render of an item with a heading at 1.5 fails InvalidHeadingLevel, not OutputTooLarge, under a budget that ends before its first heading",
+    () =>
+      Effect.gen(function* beforeBudget() {
+        const configuration = { ...(yield* configuredAt(1.5)), outputBudget: 10 };
+
+        assert.deepStrictEqual(
+          headingFailure(render(headed, configuration, { instance })),
+          Option.some({ _tag: "InvalidHeadingLevel" as const, level: 1.5 }),
+        );
+      }),
   );
 });
 
