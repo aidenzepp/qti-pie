@@ -1,7 +1,7 @@
 /**
- * Generated packages against reading 87 and grizzle's write compiler (R87): every package the
- * assembly generator (`#pantry/test/gen/assembly.ts`) draws, exhausted in a small box and sampled
- * by a swarm beyond it, is judged two ways.
+ * Generated packages against reading 87 (R87): every package the assembly generator
+ * (`#pantry/test/gen/assembly.ts`) draws, exhausted in a small box and sampled by a swarm beyond
+ * it, is judged two ways.
  *
  * - **Reading 87's verdict.** The generator's model of reading 87 (`modelVerdict`, its bullets over
  *   the assembled test) predicts accepted or refused, and the import's rows must give the same
@@ -15,7 +15,7 @@
  *   (`#pantry/test/oracle-laws/tests.ts`), as `Branch_target` and `Branch_forward` judge its
  *   resolution, so the model and the oracle each answer for the rows.
  *
- * The same packages' write programs are compiled in `assembly.compile.oracle.test.ts`.
+ * `assembly.read.oracle.test.ts` holds `readProgram` to the law oracle over the same packages.
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -331,7 +331,7 @@ const rowsRules = (
 
 /**
  * Judge one generated package: reading 87's model against its import rows under the laws, the law
- * oracle within reading 87's rules, and its write program kept for the compile.
+ * oracle within reading 87's rules.
  *
  * @param assembly - The package.
  * @param c - The search's case.
