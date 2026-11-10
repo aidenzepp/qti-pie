@@ -17,7 +17,10 @@
  * stylesheet, its own sheet and the host CSS of the theme its theme box last accepted, which it
  * keeps with a dark flag in memory until it restarts. Every page links the three sheets, carries
  * `class="dark"` on `html` while the flag is on, and ends with the theme box, the playground's own
- * form beside the item's. It reads the corpus through `readCorpusFile` and the ledger from
+ * form beside the item's. With the `runtime` setting on, which it is not by default, it also serves
+ * plate's browser runtime to its pages (`#plate/dev/runtime-assets.ts`) and every page loads it
+ * under a policy that admits `script-src 'self'` and nothing more; with it off, no page has a
+ * script. It reads the corpus through `readCorpusFile` and the ledger from
  * `PLATE_LEDGER_DIR`, and opens no port: `scripts/serve.ts` is the listener.
  *
  * The item form's action names the Status region as its fragment, so the page after a submit opens
@@ -45,10 +48,11 @@ import {
   page,
   pageHeaders,
   pageHtml,
+  runtimePageHeaders,
   servedFilePath,
   slot,
 } from "#plate/dev/frame.ts";
-import type { Appearance, Page } from "#plate/dev/frame.ts";
+import type { Appearance, Chrome, Page } from "#plate/dev/frame.ts";
 import { groupVerdicts, keptOnSuccess, Verdicts } from "#plate/dev/listing.ts";
 import type { OpenFailure, VerdictCache, VerdictGroup } from "#plate/dev/listing.ts";
 import {
@@ -63,6 +67,13 @@ import type { PackageCache, PackagesFailure } from "#plate/dev/packages.ts";
 import { entriesOf, postOf, valuesOf } from "#plate/dev/post.ts";
 import { reviewPath, routeReview } from "#plate/dev/review-page.ts";
 import type { ReviewPlayground } from "#plate/dev/review-page.ts";
+import {
+  bootModule,
+  runtimeBundle,
+  runtimeScriptType,
+  runtimeUrl,
+} from "#plate/dev/runtime-assets.ts";
+import type { RuntimeBundle, RuntimeFailure } from "#plate/dev/runtime-assets.ts";
 import { sessionHref } from "#plate/dev/sitting.ts";
 import { boundedStore, sessionStore } from "#plate/dev/store.ts";
 import type { SessionEntry, SessionStore, Store } from "#plate/dev/store.ts";
@@ -126,12 +137,18 @@ export type Handler = (request: Request) => Promise<Response>;
  * session; `newInstance` draws the instance token of each item the playground opens,
  * `drawInstance`'s random UUID when absent, and must give a new token each call, since the
  * playground holds each open item under its token (a test gives a fixed one so a sitting's values
- * follow from its seed alone). They are data; the playground's caches and its config provider are
- * services, which the handler's Layer provides ({@link PlaygroundLayer}).
+ * follow from its seed alone); `runtime` turns the browser runtime on (issue m3d-13), off when
+ * absent: the playground then serves plate's runtime modules under `/runtime/`, every page loads
+ * the boot module, and the page policy admits `script-src 'self'` in place of `script-src 'none'`.
+ * The modules are read and stripped when the first one is asked for and kept while that succeeds,
+ * so a changed runtime module reaches the pages when the playground restarts. They are data; the
+ * playground's caches and its config provider are services, which the handler's Layer provides
+ * ({@link PlaygroundLayer}).
  */
 export interface PlaygroundSettings {
   readonly configuration?: Partial<Configuration>;
   readonly newInstance?: () => string;
+  readonly runtime?: boolean;
   readonly seed?: string;
   readonly tests?: SessionStore;
 }
@@ -279,8 +296,9 @@ type HostFailure = Config.ConfigError | CorpusFileUnreadable | CorpusMissing | I
  * A playground's state and settings: its theme box's appearance, its open items' sittings, oldest
  * first, its configuration input, how it draws an opened item's instance token, the seed its
  * sittings begin under and its test sessions process under (none for one `begin` or `startTest`
- * draws), the verdicts of the corpus's members, its packages, its test sessions, and the plain-HTML
- * host, built the first time it is asked for.
+ * draws), the verdicts of the corpus's members, its packages, its test sessions, the plain-HTML
+ * host, built the first time it is asked for, and, when the runtime is on, the runtime's modules,
+ * built the first time one is asked for and kept while the build succeeds.
  */
 interface Playground {
   readonly appearance: Ref.Ref<Appearance>;
@@ -288,6 +306,7 @@ interface Playground {
   readonly host: Effect.Effect<HtmlHost, HostFailure>;
   readonly newInstance: () => string;
   readonly packages: PackageCache;
+  readonly runtime: Option.Option<RuntimeBundle>;
   readonly seed: Option.Option<string>;
   readonly sessions: Store<Session>;
   readonly tests: SessionStore;
@@ -836,8 +855,8 @@ const scoredPage = (
   );
 
 /**
- * The failure of a route: the corpus, a package, a stylesheet or the ledger is missing or
- * unreadable, or the settings are missing or invalid.
+ * The failure of a route: the corpus, a package, a stylesheet, the ledger or a runtime module is
+ * missing or unreadable, or the settings are missing or invalid.
  */
 type RouteFailure =
   | Config.ConfigError
@@ -846,12 +865,13 @@ type RouteFailure =
   | InvalidConfiguration
   | LedgerUnreadable
   | PackagesFailure
+  | RuntimeFailure
   | SheetUnreadable;
 
 /**
  * Construct the page a route's failure answers with: the 404 page for a path the corpus does not
- * hold, and a developer error's page when the corpus, a package, a stylesheet or the ledger is
- * missing or unreadable or the settings are missing or invalid.
+ * hold, and a developer error's page when the corpus, a package, a stylesheet, the ledger or a
+ * runtime module is missing or unreadable or the settings are missing or invalid.
  *
  * @param error The failure.
  * @returns The page.
@@ -1301,6 +1321,46 @@ const serveSheet = Effect.fn("playground.serveSheet")(function* serveSheet(
 });
 
 /**
+ * Serve one module of the runtime's graph, or the 404 page for a path the graph does not hold
+ * (issue m3d-13).
+ *
+ * The path is matched whole against the URLs the graph's own imports gave, never read as a file
+ * path, so nothing outside the graph is reachable by any spelling of a path. While the runtime is
+ * off, every path under `/runtime/` is the 404 page it was before the runtime existed, whatever the
+ * method.
+ *
+ * @param runtime The runtime's modules by URL path, none while the runtime is off.
+ * @param request The request.
+ * @param pathname The request path, still percent-encoded.
+ * @param refusedMethod Answers a method the route does not take with the 405 page.
+ * @returns The module's response, the 405 page, or the 404 page.
+ */
+const serveRuntime = (
+  runtime: Option.Option<RuntimeBundle>,
+  request: Request,
+  pathname: string,
+  refusedMethod: (allowed: readonly string[]) => Effect.Effect<Page>,
+): Effect.Effect<Page | Response, RuntimeFailure> => {
+  if (Option.isNone(runtime)) {
+    return Effect.succeed(notFound());
+  }
+
+  return request.method === "GET"
+    ? runtime.value.pipe(
+        Effect.map((modules) => {
+          const source = modules.get(pathname);
+
+          return source === undefined
+            ? notFound()
+            : new Response(source, {
+                headers: { ...pageHeaders, "content-type": runtimeScriptType },
+              });
+        }),
+      )
+    : refusedMethod(["GET"]);
+};
+
+/**
  * Read one text field of a form post.
  *
  * @param form The post's fields.
@@ -1470,11 +1530,11 @@ const routeTests = (
 
 /**
  * Route one request: the listing, the verdicts page, the ledger page, an item page, a post, an
- * asset, a stylesheet, or a theme box post; any other path goes to {@link routeTests}. A method a
- * route does not take is a 405 whose `Allow` names the methods it takes. A member the listing or
- * the verdicts page cannot read is a developer error there, since the page's own address exists;
- * so is a ledger that cannot be read, while a ledger not yet written shows the command that
- * writes it.
+ * asset, a runtime module while the runtime is on, a stylesheet, or a theme box post; any other
+ * path goes to {@link routeTests}. A method a route does not take is a 405 whose `Allow` names the
+ * methods it takes. A member the listing or the verdicts page cannot read is a developer error
+ * there, since the page's own address exists; so is a ledger that cannot be read, while a ledger
+ * not yet written shows the command that writes it.
  *
  * @param playground The playground.
  * @param request The request.
@@ -1553,6 +1613,10 @@ const route = (
     return request.method === "GET" ? serveAsset(playground, url.pathname) : refusedMethod(["GET"]);
   }
 
+  if (url.pathname.startsWith("/runtime/")) {
+    return serveRuntime(playground.runtime, request, url.pathname, refusedMethod);
+  }
+
   const sheet = sheets.get(url.pathname);
   if (sheet !== undefined) {
     return request.method === "GET" ? serveSheet(sheet) : refusedMethod(["GET"]);
@@ -1587,7 +1651,8 @@ const ownTarget = (request: Request): string => {
 /**
  * Answer with a route's outcome: a response as it is, or a page written with its chrome, the
  * stored appearance read now and the theme box returning to the page's own path and query unless
- * the page names another, with the page headers and then the page's own.
+ * the page names another, with the page headers (those of {@link runtimePageHeaders} while the
+ * runtime is on) and then the page's own.
  *
  * @param playground The playground.
  * @param request The request.
@@ -1601,17 +1666,22 @@ const answer = (
 ): Effect.Effect<Response> =>
   outcome instanceof Response
     ? Effect.succeed(outcome)
-    : Effect.map(
-        Ref.get(playground.appearance),
-        (appearance) =>
-          new Response(
-            pageHtml(outcome, {
-              appearance,
-              back: Option.getOrElse(outcome.back, () => ownTarget(request)),
-            }),
-            { headers: { ...pageHeaders, ...outcome.headers }, status: outcome.status },
-          ),
-      );
+    : Effect.map(Ref.get(playground.appearance), (appearance) => {
+        const chrome: Chrome = {
+          appearance,
+          back: Option.getOrElse(outcome.back, () => ownTarget(request)),
+        };
+
+        return Option.isSome(playground.runtime)
+          ? new Response(pageHtml(outcome, { ...chrome, runtime: runtimeUrl(bootModule) }), {
+              headers: { ...runtimePageHeaders, ...outcome.headers },
+              status: outcome.status,
+            })
+          : new Response(pageHtml(outcome, chrome), {
+              headers: { ...pageHeaders, ...outcome.headers },
+              status: outcome.status,
+            });
+      });
 
 /**
  * Construct a playground's Fetch handler, with its own store of open items' sittings and their
@@ -1631,8 +1701,8 @@ const answer = (
  *   const response = await handle(new Request("http://127.0.0.1:5190/"));
  *   // 200, the listing
  *
- * @param settings The configuration input, the sittings' seed and instance tokens, and the test
- *   sessions' store, each optional.
+ * @param settings The configuration input, the sittings' seed and instance tokens, the test
+ *   sessions' store, and whether the browser runtime is on, each optional.
  * @param layer The verdict and package caches and the config provider; {@link playgroundCaches},
  *   over the process environment, when absent.
  * @returns The handler.
@@ -1653,6 +1723,10 @@ export const createHandler = (
       ),
     ),
     newInstance: settings.newInstance ?? drawInstance,
+    runtime:
+      settings.runtime === true
+        ? Option.some(Effect.runSync(keptOnSuccess(runtimeBundle)))
+        : Option.none(),
     seed: Option.fromUndefinedOr(settings.seed),
     sessions: boundedStore(),
     tests: settings.tests ?? sessionStore(),
