@@ -57,12 +57,12 @@ import {
 } from "#pantry/qti/declarations.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { qtiRelations } from "#pantry/qti/base.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge as judgeHost } from "#pantry/test/host-judge.ts";
+import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/test/host-judge.ts";
 import { lawNamesOf } from "#pantry/test/host-law-names.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import { judge as judgeOracle, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
 /**
@@ -88,8 +88,8 @@ const overlays = {
 };
 
 describe("qti/declarations.ts, declared", () => {
-  it("builds a schema of Qti's relations and the O2 overlays with every law, each statement once", () => {
-    const built = schema("DeclarationLayer", { ...Qti.relations, ...overlays }, [
+  it("builds a schema of the schema's relations and the O2 overlays with every law, each statement once", () => {
+    const built = schema("DeclarationLayer", { ...qtiRelations, ...overlays }, [
       ...nodeLaws,
       ...chardataLaws,
       ...attributeLaws,
@@ -166,7 +166,7 @@ describe("qti/declarations.ts, declared", () => {
 
     // §2.2.2.3 says SCORE and MAXSCORE of items ("Items that declare ... SCORE MUST be a float",
     // "MAXSCORE MUST be a float") and PASSED of "Items or tests": a test's SCORE or MAXSCORE of
-    // another base type is lawful (info.txt:8478, :8480, :8482).
+    // another base type is lawful (info.txt:4663, :4664, :4665).
     assert.sameDeepMembers(
       reservedBaseTypes.map(({ baseType, identifier, root }) => [identifier, baseType, root]),
       [

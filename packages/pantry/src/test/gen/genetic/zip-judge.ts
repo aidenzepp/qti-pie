@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 /**
  * The zip container search's judge (lane GEN-B): the package reader (`readZip`) and writer
  * (`writeZip`) of `#pantry/package/zip.ts` against Python's `zipfile`, a reader that shares no code
