@@ -42,8 +42,8 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
-import { xmlWhitespaceRun } from "#plate/model/attributes.ts";
-import { isNcName, trimXmlSpace } from "#plate/model/values.ts";
+import { collapseXmlSpace } from "#plate/model/attributes.ts";
+import { isNcName } from "#plate/model/values.ts";
 import { packageOccurrences, packageTables } from "#plate/package/tables.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
@@ -207,7 +207,7 @@ const packageRoot: Target = { kind: "inside", segments: [""] };
  * inside, as is every relative reference under a base outside.
  *
  * @param base The target the reference is resolved against.
- * @param reference The reference, collapsed ({@link collapse}).
+ * @param reference The reference, collapsed ({@link collapseXmlSpace}).
  * @returns Its target.
  * @see https://www.rfc-editor.org/rfc/rfc3986#section-5.2
  */
@@ -257,17 +257,6 @@ const keyOf = (target: Target): string => {
     }
   }
 };
-
-/**
- * Read an `xs:anyURI` value as XML Schema's `collapse` whitespace facet reads it, as every manifest
- * `href` and every `xml:base` is typed: its outer XML whitespace removed and each inner run of it
- * one space (reading 102). A resource's `identifier`, an `xs:ID`, and a `dependency`'s
- * `identifierref`, an `xs:IDREF`, collapse alike.
- *
- * @param value The value as written.
- * @returns The value, collapsed.
- */
-const collapse = (value: string): string => trimXmlSpace(value).replaceAll(xmlWhitespaceRun, " ");
 
 /**
  * Take an element's children in the manifest's namespace with one local name.
@@ -337,7 +326,7 @@ const baseOf = (base: Target, element: SourceElement): Target =>
         (attribute) => attribute.namespace === xmlNamespace && attribute.local === "base",
       ),
     ),
-    { onNone: () => base, onSome: (attribute) => resolve(base, collapse(attribute.value)) },
+    { onNone: () => base, onSome: (attribute) => resolve(base, collapseXmlSpace(attribute.value)) },
   );
 
 /**
@@ -741,7 +730,7 @@ const resourcesOf = (
     Option.map(attributeOf(element, "href"), (attribute) => ({
       at: attributePath(pathOf(element), attribute),
       href: attribute.value,
-      target: resolve(base, collapse(attribute.value)),
+      target: resolve(base, collapseXmlSpace(attribute.value)),
     }));
   const rootBase = baseOf(packageRoot, root);
 
@@ -815,7 +804,7 @@ const checkResources = (
   const identifiers = new Set(
     entries.flatMap((entry) =>
       Option.toArray(
-        Option.map(attributeOf(entry.element, "identifier"), (id) => collapse(id.value)),
+        Option.map(attributeOf(entry.element, "identifier"), (id) => collapseXmlSpace(id.value)),
       ),
     ),
   );
@@ -849,7 +838,7 @@ const checkResources = (
     );
     const unresolved = entry.dependencies
       .filter((dependency) => {
-        const named = collapse(dependency.identifier);
+        const named = collapseXmlSpace(dependency.identifier);
 
         return isNcName(named) && !identifiers.has(named);
       })
@@ -960,7 +949,7 @@ const forbiddenResourceTypes: ReadonlySet<string> = new Set(["exam", "self asses
  * @returns Its text, collapsed.
  */
 const collapsedText = (element: SourceElement): string =>
-  collapse(element.children.map((child) => writtenText(child)).join(""));
+  collapseXmlSpace(element.children.map((child) => writtenText(child)).join(""));
 
 /**
  * Check every LOM learning resource type the walk checks against reading 122: one whose `source`

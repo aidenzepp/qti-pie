@@ -18,6 +18,7 @@ import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/docu
 import {
   attributeOf,
   childrenNamed,
+  collapseXmlSpace,
   elementsOf,
   floatOf,
   greatestInt,
@@ -523,7 +524,7 @@ const itemRef = (
       }),
       control,
       fixed,
-      href: trimXmlSpace(href).replaceAll(xmlWhitespaceRun, " "),
+      href: collapseXmlSpace(href),
       identifier,
       kind: "item-ref",
       mappings: new Map(mappings),
