@@ -3722,7 +3722,9 @@ const spellSet = (set: CodeSet): string => {
 
 /**
  * PostgreSQL's largest repetition count, `RE_DUP_MAX` (19rc1, `src/include/regex/regex.h`): a
- * bound above it is written as several repetitions.
+ * bound above it is written as several repetitions. grizzle exports it as `regexMaxRepeat`; this
+ * pure layer imports no grizzle, so it states the number, and `domains.test.ts` holds every count
+ * the grammar writes to grizzle's.
  */
 const repetitionLimit = 255;
 

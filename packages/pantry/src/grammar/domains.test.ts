@@ -18,6 +18,7 @@ import { globSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
+import { regexMaxRepeat } from "@bjornpagen/grizzle";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
 import { array, element, int, map, weighted } from "@grizzle/testing/gen";
@@ -1158,11 +1159,6 @@ describe.skipIf(!specCached)("The name tables", () => {
 });
 
 /**
- * PostgreSQL's largest repetition count, `RE_DUP_MAX`.
- */
-const duplicateMax = 255;
-
-/**
  * What one escape of a pattern takes: how many characters past its backslash, and each way it
  * leaves the shared syntax.
  */
@@ -1204,8 +1200,8 @@ const escapeAt = (points: readonly string[], at: number, inClass: boolean): Esca
  * `u`-flag regular expressions share: a bracket expression holds code points, ranges and escapes
  * of a code point; outside one, an escape is of a metacharacter or a code point; a group is
  * `(?:`, never a lookaround, which grizzle's `str.regex` grammar refuses (`scalar/regex/parse.ts`);
- * a quantifier's counts are at most 255; and no `.`, no class shorthand, no backreference, no `\x`
- * and no `\u{…}`.
+ * a quantifier's counts are at most grizzle's `regexMaxRepeat`, PostgreSQL's `RE_DUP_MAX`; and no
+ * `.`, no class shorthand, no backreference, no `\x` and no `\u{…}`.
  *
  * @param pattern - The pattern.
  * @returns Each way it leaves the shared syntax.
@@ -1243,8 +1239,8 @@ const outsideSharedSyntax = (pattern: string): readonly string[] => {
         .split(",")
         .filter((count) => count !== "")
         .map(Number);
-      if (counts.some((count) => count > duplicateMax)) {
-        problems.push(`a repetition count above ${duplicateMax} at ${at}`);
+      if (counts.some((count) => count > regexMaxRepeat.value)) {
+        problems.push(`a repetition count above ${regexMaxRepeat.value} at ${at}`);
       }
     }
   }
