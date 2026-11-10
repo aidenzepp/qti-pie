@@ -1,10 +1,12 @@
+import { isDeepStrictEqual } from "node:util";
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Option, Result } from "effect";
 import { attr, el, ssmlNamespace, text } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceChild, SourceElement } from "#plate/document/source.ts";
 import { speechPlan } from "#plate/speech/plan.ts";
-import type { Lexicon, SpeechSegment } from "#plate/speech/plan.ts";
+import type { Lexicon, LexiconEntry, SpeechSegment } from "#plate/speech/plan.ts";
 import { checkAllowlist, sourceModules } from "#plate/test/imports.ts";
+import { decodeDataSsml } from "#plate/validate/data-ssml.ts";
 
 /**
  * The namespace the item's HTML-like elements stand in for a test: QTI's, as `el` gives by default.
@@ -61,7 +63,294 @@ const segment = (
   ...rest,
 });
 
+/**
+ * Construct a lexicon of alias entries, with no alphabet and no language.
+ *
+ * @param entries The entries, in document order.
+ * @returns The lexicon.
+ */
+const lexiconOf = (...entries: readonly LexiconEntry[]): Lexicon => ({
+  alphabet: Option.none(),
+  entries,
+  lang: Option.none(),
+});
+
+/**
+ * Report whether the plan reads a function from a `data-ssml` value: whether the plan of a span
+ * that holds `W3C` and carries the value differs from the text spoken as written.
+ *
+ * @param value The attribute's value.
+ * @returns Whether the plan reads a function.
+ */
+const readsFunction = (value: string): boolean =>
+  !isDeepStrictEqual(
+    speechPlan(html("p", [], [html("span", [dataSsml(value)], [text("W3C")])])).segments,
+    [segment("W3C")],
+  );
+
+/**
+ * The `strength` values of the Data-SSML binding's `BreakDType`, from the binding.
+ */
+const strengths = ["none", "x-weak", "weak", "medium", "strong", "x-strong"];
+
+/**
+ * The `alphabet` values of the binding's `PhonemeDType`, from the binding.
+ */
+const alphabets = ["ipa", "x-sampa"];
+
+/**
+ * The `type` values of the binding's `PhonemeDType`, from the binding.
+ */
+const types = ["default", "ruby"];
+
+/**
+ * The `interpret-as` values of the binding's `SayAsDType`, from the binding.
+ */
+const interpretations = ["cardinal", "characters", "date", "ordinal", "telephone", "time"];
+
+/**
+ * Data-SSML values the binding admits, each giving the plan a function it can show: every
+ * property of the five functions, every value of each enumeration, and the spellings JSON allows.
+ */
+const admitted: readonly string[] = [
+  ...strengths.map((strength) => `{"break":{"strength":"${strength}"}}`),
+  '{"break":{"strength":"strong","time":"250ms"}}',
+  '{"break":{"time":"3s"}}',
+  '{"break":{}}',
+  ...alphabets.flatMap((alphabet) =>
+    types.map((type) => `{"phoneme":{"alphabet":"${alphabet}","ph":"x","type":"${type}"}}`),
+  ),
+  '{"phoneme":{"ph":"x"}}',
+  '{"phoneme":{"ph":""}}',
+  '{"prosody":{"rate":"slow"}}',
+  '{"prosody":{"rate":"+10%"}}',
+  '{"prosody":{"rate":""}}',
+  ...interpretations.map((interpretation) => `{"say-as":{"interpret-as":"${interpretation}"}}`),
+  '{"sub":{"alias":"x"}}',
+  '{"sub":{"alias":""}}',
+  '{"sub":{"alias":"a\\tb"}}',
+  ' {"sub":{"alias":"x"}} ',
+  '{"su\\u0062":{"alias":"x"}}',
+  '{"sub":{"alias":"a"},"sub":{"alias":"b"}}',
+  '{"break":{"strength":"weak","time":"1s"},"phoneme":{"alphabet":"ipa","ph":"x","type":"ruby"},"prosody":{"rate":"fast"},"say-as":{"interpret-as":"characters"},"sub":{"alias":"x"}}',
+];
+
+/**
+ * Values the binding refuses, each a way to fail it: bad JSON, a value that is no object, a
+ * property or definition key it does not define, a missing required property, a value of the
+ * wrong JSON type, a tab, line feed or carriage return in a NormalizedString, a value outside an
+ * enumeration, and one bad function beside good ones.
+ */
+const refused: readonly string[] = [
+  "",
+  "not json",
+  "{",
+  '{"sub":{"alias":"x"}',
+  "{'sub':{}}",
+  '{"break":{"time":"1\ts"}}',
+  "[]",
+  '[{"sub":{"alias":"x"}}]',
+  '"sub"',
+  "3",
+  "null",
+  "true",
+  '{"speak":{}}',
+  '{"sub":{"alias":"x"},"speak":{}}',
+  '{"__proto__":{}}',
+  '{"sub":{"alias":"x","lang":"en"}}',
+  '{"break":{"strength":"weak","pitch":"high"}}',
+  '{"sub":{"alias":"x","__proto__":"y"}}',
+  '{"sub":{}}',
+  '{"phoneme":{"alphabet":"ipa"}}',
+  '{"say-as":{}}',
+  '{"sub":{"alias":1}}',
+  '{"sub":{"alias":null}}',
+  '{"sub":"x"}',
+  '{"sub":[]}',
+  '{"sub":null}',
+  '{"phoneme":{"ph":true}}',
+  '{"break":{"time":5}}',
+  '{"break":{"time":"1\\ts"}}',
+  '{"break":{"time":"1\\ns"}}',
+  '{"prosody":{"rate":"fast\\r"}}',
+  '{"break":{"strength":"loud"}}',
+  '{"break":{"strength":"Medium"}}',
+  '{"phoneme":{"alphabet":"sampa","ph":"x"}}',
+  '{"phoneme":{"ph":"x","type":"other"}}',
+  '{"say-as":{"interpret-as":"money"}}',
+  '{"sub":{"alias":"x"},"break":{"strength":"loud"}}',
+];
+
 describe("speechPlan", () => {
+  it("[A-3a] [A-3b] the carrier nearest the text wins in a nested tree", () => {
+    const outer = html(
+      "span",
+      [dataSsml('{"sub":{"alias":"World Wide Web Consortium"}}')],
+      [text("the "), ssml("sub", [attr("alias", "W three C")], [text("W3C")]), text(" site")],
+    );
+
+    assert.deepStrictEqual(speechPlan(html("p", [], [outer])).segments, [
+      segment("the ", "World Wide Web Consortium"),
+      segment("W3C", "W three C"),
+      segment(" site"),
+    ]);
+
+    const mirror = html(
+      "p",
+      [],
+      [
+        ssml(
+          "sub",
+          [attr("alias", "outer")],
+          [html("span", [dataSsml('{"sub":{"alias":"inner"}}')], [text("W3C")])],
+        ),
+      ],
+    );
+
+    assert.deepStrictEqual(speechPlan(mirror).segments, [segment("W3C", "inner")]);
+  });
+
+  it("[A-3a] [A-3b] a carrier that holds a nearer one speaks its alias once and spells out or pronounces each of its own runs", () => {
+    const wrapped = html(
+      "p",
+      [],
+      [
+        html(
+          "span",
+          [dataSsml('{"sub":{"alias":"outer"}}')],
+          [
+            html("b", [], [text("x "), ssml("sub", [attr("alias", "inner")], [text("I")])]),
+            text(" y"),
+          ],
+        ),
+      ],
+    );
+
+    assert.deepStrictEqual(speechPlan(wrapped).segments, [
+      segment("x ", "outer"),
+      segment("I", "inner"),
+      segment(" y"),
+    ]);
+
+    const spelled = html(
+      "p",
+      [],
+      [
+        ssml(
+          "say-as",
+          [attr("interpret-as", "characters")],
+          [text("QT"), ssml("sub", [attr("alias", "eye")], [text("I")]), text("QT")],
+        ),
+      ],
+    );
+    const characters = { sayAs: Option.some("characters") };
+
+    assert.deepStrictEqual(speechPlan(spelled).segments, [
+      segment("QT", "Q T", characters),
+      segment("I", "eye"),
+      segment("QT", "Q T", characters),
+    ]);
+
+    const pronounced = html(
+      "p",
+      [],
+      [
+        ssml(
+          "phoneme",
+          [attr("ph", "ˈtɛst")],
+          [text("a "), ssml("sub", [attr("alias", "b")], [text("B")]), text(" c")],
+        ),
+      ],
+    );
+    const phoneme = { phoneme: Option.some({ alphabet: Option.none(), ph: "ˈtɛst" }) };
+
+    assert.deepStrictEqual(speechPlan(pronounced).segments, [
+      segment("a ", "a ", phoneme),
+      segment("B", "b"),
+      segment(" c", " c", phoneme),
+    ]);
+  });
+
+  it("[A-3b] data-ssml on an SSML element is not a carrier", () => {
+    const value = dataSsml('{"sub":{"alias":"x"}}');
+
+    assert.deepStrictEqual(speechPlan(html("div", [], [ssml("p", [value], [text("Hello")])])), {
+      segments: [segment("Hello")],
+    });
+    assert.deepStrictEqual(speechPlan(html("div", [], [html("p", [value], [text("Hello")])])), {
+      segments: [segment("Hello", "x")],
+    });
+  });
+
+  it("[A-35] [A-3a] a lexicon alias applies after a sub alias", () => {
+    const lexicon = lexiconOf({
+      alias: "Question and Test Interoperability",
+      graphemes: ["QTI"],
+    });
+    const plan = speechPlan(
+      html("p", [], [ssml("sub", [attr("alias", "QTI")], [text("Q.T.I.")])]),
+      lexicon,
+    );
+
+    assert.deepStrictEqual(plan.segments, [
+      segment("Q.T.I.", "Question and Test Interoperability"),
+    ]);
+
+    const writtenOnly = speechPlan(
+      html("p", [], [ssml("sub", [attr("alias", "QTI")], [text("Q.T.I.")])]),
+      lexiconOf({ alias: "never", graphemes: ["Q.T.I."] }),
+    );
+
+    assert.deepStrictEqual(writtenOnly.segments, [segment("Q.T.I.", "QTI")]);
+  });
+
+  it("[A-35] [A-3a] [A-3b] say-as characters is spelled out, then substituted", () => {
+    const spelled = html(
+      "p",
+      [],
+      [ssml("say-as", [attr("interpret-as", "characters")], [text("QTI")])],
+    );
+    const characters = { sayAs: Option.some("characters") };
+
+    assert.deepStrictEqual(
+      speechPlan(spelled, lexiconOf({ alias: "spelled", graphemes: ["Q T I"] })).segments,
+      [segment("QTI", "spelled", characters)],
+    );
+    assert.deepStrictEqual(
+      speechPlan(spelled, lexiconOf({ alias: "never", graphemes: ["QTI"] })).segments,
+      [segment("QTI", "Q T I", characters)],
+    );
+  });
+
+  it("[A-35] [A-3a] a phoneme segment keeps its phoneme while its spoken text is substituted", () => {
+    const plan = speechPlan(
+      html("p", [], [ssml("phoneme", [attr("ph", "x")], [text("QTI")])]),
+      lexiconOf({ alias: "Question and Test Interoperability", graphemes: ["QTI"] }),
+    );
+
+    assert.deepStrictEqual(plan.segments, [
+      segment("QTI", "Question and Test Interoperability", {
+        phoneme: Option.some({ alphabet: Option.none(), ph: "x" }),
+      }),
+    ]);
+  });
+
+  it("[A-3b] the plan's Data-SSML decoder agrees with the Schema binding over a table of values", () => {
+    assert.isAtLeast(admitted.length + refused.length, 25);
+
+    for (const value of [...admitted, ...refused]) {
+      assert.strictEqual(readsFunction(value), Result.isSuccess(decodeDataSsml(value)), value);
+    }
+
+    for (const value of admitted) {
+      assert.isTrue(Result.isSuccess(decodeDataSsml(value)), `the binding admits ${value}`);
+    }
+
+    for (const value of refused) {
+      assert.isTrue(Result.isFailure(decodeDataSsml(value)), `the binding refuses ${value}`);
+    }
+  });
+
   it("[A-3b] a data-ssml sub reads into one segment with the alias spoken", () => {
     const span = html(
       "span",
@@ -157,7 +446,7 @@ describe("speechPlan", () => {
     ]);
   });
 
-  it("[A-3a] [A-3b] data-qti-suppress-tts marks its content suppressed for its reading type", () => {
+  it("[A-40f] data-qti-suppress-tts marks its content suppressed for its reading type", () => {
     const plan = speechPlan(
       html(
         "div",
@@ -321,7 +610,7 @@ describe("speechPlan", () => {
     ]);
   });
 
-  it("[A-3a] [A-3b] plan.ts keeps the browser rule", () => {
+  it("plan.ts keeps the browser rule", () => {
     assert.deepStrictEqual(checkAllowlist(sourceModules(), ["src/speech/plan.ts"]), []);
   });
 });
