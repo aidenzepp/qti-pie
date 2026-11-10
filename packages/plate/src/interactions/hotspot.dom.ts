@@ -43,7 +43,7 @@ const isFinished = (root: HTMLElement): boolean =>
 
 /**
  * Read the most hotspots the candidate may choose from the Root's `data-max-choices`, the count the
- * Order and Graphic Order cores write for their runtimes.
+ * Hotspot core writes beside the Order and Graphic Order cores' for their runtimes.
  *
  * @param root The interaction's root.
  * @returns The limit, or `undefined` for no limit: `max-choices` 0, or no count written.
@@ -110,7 +110,8 @@ const checkedCount = (root: HTMLElement): number =>
  * - Each change of a checkbox announces the count, "N of M chosen." (or "N chosen." with no limit). A
  *   radio group announces nothing: its control states its own selection.
  *
- * The limit is the root's `data-max-choices`; a root that does not carry it has no limit enforced.
+ * The limit is the root's `data-max-choices`, which the Hotspot core writes (0 is no limit); a root
+ * that does not carry it has no limit enforced.
  * A finished root (`data-mode` `review` or `solution`, or `data-disabled`) gets nothing attached. A
  * root with no image part has no pointer listener but still counts and limits its Controls. The
  * upgrade moves no focus and announces nothing.

@@ -182,19 +182,6 @@ const needControl = (scope: ParentNode, selector: string): HTMLInputElement => {
 };
 
 /**
- * Read the `max-choices` an item's XML writes, which a rendered Hotspot's Root carries as
- * `data-max-choices`.
- *
- * @param xml The item's XML.
- * @returns The written count.
- */
-const writtenMaxChoices = (xml: string): string =>
-  new DOMParser()
-    .parseFromString(xml, "application/xml")
-    .querySelector("qti-hotspot-interaction")
-    ?.getAttribute("max-choices") ?? "";
-
-/**
  * Put rendered HTML inside a form, with a button before it to hold focus, at the end of the page's
  * body, and make the image one the page can load.
  *
@@ -373,17 +360,6 @@ const watched = (item: Mounted) => {
 };
 
 /**
- * Give an item's Root the `max-choices` its XML writes, as the Root's `data-max-choices`, which is
- * where the controller reads the limit.
- *
- * @param item The mounted item.
- * @param xml The item's XML.
- */
-const limitedAsWritten = (item: Mounted, xml: string): void => {
-  item.root.dataset["maxChoices"] = writtenMaxChoices(xml);
-};
-
-/**
  * An identifier value of one or more entries, as a restored response.
  *
  * @param identifiers The identifiers.
@@ -491,7 +467,6 @@ describe(server.browser, () => {
         yield* withSheet(
           withItem(xml, {}, (item) =>
             Effect.gen(function* drive() {
-              limitedAsWritten(item, xml);
               item.begin();
               yield* clickAt(item, 100, 80);
               yield* clickAt(item, 300, 90);
@@ -527,7 +502,6 @@ describe(server.browser, () => {
         yield* withSheet(
           withItem(xml, {}, (item) =>
             Effect.gen(function* drive() {
-              limitedAsWritten(item, xml);
               item.begin();
 
               yield* clickAt(item, 100, 80);
@@ -606,46 +580,49 @@ describe(server.browser, () => {
         Effect.gen(function* quietAndUndone() {
           const xml = yield* fileText(fixture);
 
-          yield* withSheet(
-            withItem(xml, {}, (item) =>
-              Effect.gen(function* drive() {
-                const focused: EventTarget[] = [];
-                const record = (event: FocusEvent) => {
-                  focused.push(event.target ?? document);
-                };
-                const before = document.activeElement;
-                const watch = watched(item);
+          yield* withItem(xml, {}, (item) =>
+            Effect.gen(function* drive() {
+              const focused: EventTarget[] = [];
+              const record = (event: FocusEvent) => {
+                focused.push(event.target ?? document);
+              };
+              const before = document.activeElement;
+              const watch = watched(item);
 
-                limitedAsWritten(item, xml);
-                document.addEventListener("focusin", record);
+              document.addEventListener("focusin", record);
 
-                const upgraded = item.begin();
+              const upgraded = item.begin();
 
-                yield* frames;
-                document.removeEventListener("focusin", record);
+              yield* frames;
+              document.removeEventListener("focusin", record);
 
-                assert.strictEqual(document.activeElement, before);
-                assert.deepStrictEqual(focused, []);
-                assert.deepStrictEqual(watch.records(), []);
-                assert.strictEqual(item.live.textContent, "");
+              assert.strictEqual(document.activeElement, before);
+              assert.deepStrictEqual(focused, []);
+              assert.deepStrictEqual(watch.records(), []);
+              assert.strictEqual(item.live.textContent, "");
 
-                yield* clickAt(item, 257, 47);
-                assert.deepStrictEqual(checked(item), ["D"]);
-                assert.strictEqual(yield* heard(item), "1 of 2 chosen.");
-                watch.stop();
+              yield* clickAt(item, 100, 80);
+              yield* clickAt(item, 300, 90);
+              assert.deepStrictEqual(checked(item), ["A", "B"]);
+              assert.strictEqual(yield* heard(item), "2 of 2 chosen.");
 
-                upgraded.teardown();
+              yield* clickAt(item, 140, 235);
+              assert.deepStrictEqual(checked(item), ["A", "B"]);
+              assert.strictEqual(yield* heard(item), atMostTwo);
+              watch.stop();
 
-                const after = watched(item);
+              upgraded.teardown();
 
-                yield* clickAt(item, 257, 47);
-                yield* frames;
+              const after = watched(item);
 
-                assert.deepStrictEqual(checked(item), ["D"]);
-                assert.deepStrictEqual(after.records(), []);
-                after.stop();
-              }),
-            ),
+              yield* clickAt(item, 20, 280);
+              item.control("C").click();
+              yield* frames;
+
+              assert.deepStrictEqual(checked(item), ["A", "B", "C"]);
+              assert.deepStrictEqual(after.records(), []);
+              after.stop();
+            }),
           );
         }),
     );
@@ -659,7 +636,6 @@ describe(server.browser, () => {
             Effect.gen(function* drive() {
               const watch = watched(item);
 
-              limitedAsWritten(item, xml);
               item.begin();
               assert.deepStrictEqual(checked(item), ["B"]);
 
@@ -826,7 +802,6 @@ describe(server.browser, () => {
         yield* withSheet(
           withItem(xml, {}, (item) =>
             Effect.gen(function* drive() {
-              limitedAsWritten(item, xml);
               item.begin();
 
               yield* clickAt(item, 100, 80);
@@ -849,7 +824,6 @@ describe(server.browser, () => {
         yield* withSheet(
           withItem(xml, {}, (item) =>
             Effect.gen(function* drive() {
-              limitedAsWritten(item, xml);
               item.begin();
               yield* tabTo(item.control("A"));
               yield* Effect.promise(() => userEvent.keyboard(" "));
