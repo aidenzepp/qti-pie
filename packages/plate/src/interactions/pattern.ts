@@ -98,6 +98,7 @@ const refusals = {
   file: "malformedFile",
   "file-text": "notAccepted",
   identifier: "notAccepted",
+  module: "notAccepted",
   number: "notAccepted",
   point: "notAccepted",
   "single-many": "malformedSingleMany",
