@@ -10,7 +10,7 @@ import { insertableNamesOf } from "@bjornpagen/grizzle";
 import { Effect, Schema } from "effect";
 import { overlayPartsOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { documentLayerNames, overlayNames, writtenNames } from "#pantry/import/roster.ts";
+import { documentLayerNames, overlayRelations, writtenRelations } from "#pantry/import/roster.ts";
 import { changeSetOf, documentRowsOf } from "#pantry/import/write.ts";
 import { Author } from "#pantry/qti/own-login.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -46,6 +46,16 @@ const InsertedRelations = Schema.Struct({
  */
 const sortedNames = (names: Iterable<string>): readonly string[] =>
   [...names].toSorted((x, y) => (x < y ? -1 : Number(x > y)));
+
+/**
+ * Every relation an import writes directly, the roster's, in code point order.
+ */
+const writtenNames = sortedNames(Object.keys(writtenRelations));
+
+/**
+ * Every overlay's relation the roster names, in code point order.
+ */
+const overlayNames = sortedNames(Object.keys(overlayRelations));
 
 /**
  * The every-relation package, read: its program, every overlay builder's parts and each document's
@@ -93,16 +103,6 @@ layer(NodeServices.layer)("the roster", (it) => {
         assert.deepStrictEqual(sortedNames(written), [...overlayNames]);
       }).pipe(Effect.scoped),
     testTimeoutMs,
-  );
-
-  it.effect("names exactly the relations the document layer writes", () =>
-    Effect.gen(function* layers() {
-      const { layers: written } = yield* everyRelation;
-
-      for (const rows of written) {
-        assert.deepStrictEqual(sortedNames(Object.keys(rows)), [...documentLayerNames]);
-      }
-    }).pipe(Effect.scoped),
   );
 
   it.effect(

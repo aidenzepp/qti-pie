@@ -297,21 +297,6 @@ export const documentLayerNames = [
 export const documentLayer = Struct.pick(writtenRelations, documentLayerNames);
 
 /**
- * Order relation names by their code points, the order each list here is kept in, so
- * `roster.test.ts` compares each as one set with the relations a real import writes.
- *
- * @param names - The names.
- * @returns The names, sorted.
- */
-const sorted = <N extends string>(names: readonly N[]): readonly N[] =>
-  names.toSorted((x, y) => (x < y ? -1 : Number(x > y)));
-
-/**
- * Every relation an import writes directly, in code point order: the keys of `PackageInputs`.
- */
-export const writtenNames = sorted(Struct.keys(writtenRelations));
-
-/**
  * Every overlay's relation, by its name: each written relation but the two roots, `Node` and
  * `Package`, and the document layer's. `overlayRowsOf` (`#pantry/import/overlays/index.ts`) unions
  * `OverlayRows` over it, which the type checker holds to name every relation of `OverlayRows`.
@@ -321,9 +306,3 @@ export const overlayRelations = Struct.omit(writtenRelations, [
   "Package",
   ...documentLayerNames,
 ]);
-
-/**
- * Every overlay's relation name, the keys of `overlayRelations`, in code point order.
- * `roster.test.ts` holds them to exactly the relations the overlay builders write.
- */
-export const overlayNames = sorted(Struct.keys(overlayRelations));
