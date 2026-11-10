@@ -230,5 +230,54 @@ describe("checkSpeak", () => {
       ),
       [],
     );
+
+    const defining = speak([ssml("mark", [attr("name", "b")], []), text("Two")]);
+
+    assert.deepStrictEqual(rulesOf(crossing), ["mark"]);
+    assert.deepStrictEqual(rulesOf(defining), []);
+  });
+
+  it("[A-3a] a lookup names a lexicon of its own fragment", () => {
+    const lexicon = (id: string): SourceElement =>
+      ssml("lexicon", [attr("id", id, xmlNamespace), attr("uri", "words.pls")], []);
+    const lookup = (attributes: readonly SourceAttribute[]): SourceElement =>
+      ssml("p", [], [ssml("lookup", attributes, [text("Hello")])]);
+    const lookupPath = `${step("speak")}/${step("p")}/${step("lookup")}`;
+
+    assert.deepStrictEqual(rulesOf(speak([lexicon("a"), lookup([attr("ref", "a")])])), []);
+
+    const unknown = checkSpeak(speak([lexicon("a"), lookup([attr("ref", "b")])]));
+
+    assert.deepStrictEqual(
+      unknown.map(({ path, rule }) => ({ path, rule })),
+      [{ path: lookupPath, rule: "lookup" }],
+    );
+    assert.include(unknown[0]?.detail, "b");
+
+    const missing = checkSpeak(speak([lexicon("a"), lookup([])]));
+
+    assert.deepStrictEqual(
+      missing.map(({ path, rule }) => ({ path, rule })),
+      [{ path: lookupPath, rule: "lookup" }],
+    );
+    assert.include(missing[0]?.detail, "ref");
+
+    assert.deepStrictEqual(rulesOf(speak([lexicon("a"), lookup([attr("ref", "A")])])), ["lookup"]);
+    assert.deepStrictEqual(rulesOf(speak([lookup([attr("ref", "a")])])), ["lookup"]);
+    assert.deepStrictEqual(
+      rulesOf(
+        speak([
+          ssml("lexicon", [attr("id", "a"), attr("uri", "words.pls")], []),
+          lookup([attr("ref", "a")]),
+        ]),
+      ),
+      ["lookup"],
+    );
+
+    const referring = speak([lookup([attr("ref", "a")])]);
+    const defining = speak([lexicon("a"), text("Hello")]);
+
+    assert.deepStrictEqual(rulesOf(referring), ["lookup"]);
+    assert.deepStrictEqual(rulesOf(defining), []);
   });
 });
