@@ -1,4 +1,4 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
@@ -9,6 +9,7 @@ import { decode, entryName } from "#plate/form/encoding.ts";
 import type { ValueBinding } from "#plate/form/encoding.ts";
 import { encodeRedacted } from "#plate/codec/redacted.ts";
 import { interactionsIn as bodyInteractions, isStubbed } from "#plate/model/interactions.ts";
+import type { ModelOf, Modules } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -55,6 +56,7 @@ import type {
 import { redact, render } from "#plate/render.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { stubElement, stubKind } from "#plate/test/stub-kind.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptForTest, acceptedItem, check } from "#plate/validate/verdict.ts";
 
@@ -2895,6 +2897,67 @@ const postingOf = (
 });
 
 /**
+ * The module file of the stub kind, which {@link withAbsentFalse} mocks.
+ */
+const stubFile = `#plate/interactions/${stubKind}.ts`;
+
+/**
+ * A node of the stub kind bound to the boolean response `DONE`, the bare node the table of modules
+ * holds for a stub: what a body holds for a module whose `absentValue` the postings read through
+ * the hub. It goes with `stubKind` when the last stub lands: a landed module sets the fact on its
+ * own node.
+ */
+const stubNode: ModelOf<typeof stubKind> = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  kind: stubKind,
+  path: `qti-assessment-item/qti-item-body/${stubElement}`,
+  response: "DONE",
+};
+
+/**
+ * Run an effect with the stub kind's module binding its one response in base 10 and answering
+ * `absentValue` false, every module it imports loaded afresh, and the module restored after. The
+ * mock keeps the stub's every other member, so {@link stubNode} reaches `postingsIn`, which reads
+ * only `bindings` and `absentValue` of it.
+ *
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withAbsentFalse = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(stubFile, async (importOriginal) => {
+      const actual = await importOriginal<Record<string, Modules[typeof stubKind]>>();
+
+      return Object.fromEntries(
+        Object.entries(actual).map(([name, module]) => [
+          name,
+          {
+            ...module,
+            absentValue: (): Value => ({
+              baseType: "boolean",
+              cardinality: "single",
+              values: [{ baseType: "boolean", value: false }],
+            }),
+            bindings: (interaction: { readonly response: string }) => [
+              { base: Option.none(), response: interaction.response },
+            ],
+          },
+        ]),
+      );
+    });
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(stubFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
  * The responses of the smaller item the growth check reads, each bound to its own Text Entry,
  * before it reads one with {@link growthFactor} times as many.
  */
@@ -3092,6 +3155,50 @@ describe("postings", () => {
       Option.some(truth),
     );
   });
+
+  it.effect(
+    "carries a module's absentValue in its response's posting, so no entry decodes to it, and no option when the module gives none",
+    () =>
+      withAbsentFalse(
+        Effect.gen(function* absentPosting() {
+          const payloads = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const falsity: Value = {
+            baseType: "boolean",
+            cardinality: "single",
+            values: [{ baseType: "boolean", value: false }],
+          };
+          const truth: Value = { ...falsity, values: [{ baseType: "boolean", value: true }] };
+          const [done, capital, ...others] = payloads.postingsIn(
+            {
+              body: [stubNode, choice],
+              responses: [
+                { baseType: "boolean", cardinality: "single", identifier: "DONE" },
+                { baseType: "identifier", cardinality: "single", identifier: "CAPITAL" },
+              ],
+            },
+            instance,
+          );
+
+          assert.lengthOf(others, 0);
+          assert.deepStrictEqual(done, {
+            ...postingOf("DONE", "boolean", 10),
+            options: { absent: falsity, base: 10 },
+          });
+          assert.deepStrictEqual(capital, postingOf("CAPITAL", "identifier", 10));
+
+          const { binding, options } = done ?? assert.fail("DONE has no posting.");
+
+          assert.deepStrictEqual(
+            Result.getSuccess(decode([], binding, options)),
+            Option.some(falsity),
+          );
+          assert.deepStrictEqual(
+            Result.getSuccess(decode([[binding.name, "true"]], binding, options)),
+            Option.some(truth),
+          );
+        }),
+      ),
+  );
 
   it("gives no posting to a declared response no interaction binds, so a post carries nothing over its record value", () => {
     const unbound: Item = { ...item, body: [choice] };
