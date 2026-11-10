@@ -2735,7 +2735,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      first of them by namespace name and then local name, Canonical XML's keys, never the first written, so `<div
      foo="1" data-="x">` and `<div data-="x" foo="1">` are both refused under `unmodeled-vocabulary`, for `data-`.
      Main stored no order: its `AttributeLexical` was keyed by `(node, attribute)` (`2b276d76`). This binds pantry
-     and plate alike. This is not a case of documents in conflict. (Operator ruling of 2026-11-06 that attribute and
+     and plate alike. This is not a case of documents in conflict. (Bjorn's ruling of 2026-11-06 that attribute and
      namespace-declaration order is kept as written, from RV seat AO.)
 
 **R6-hexdouble** (a proposal for the operator; numbered at integration). A MathML `cn` of type `hexdouble` holds
