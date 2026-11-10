@@ -190,7 +190,7 @@ export const Lexical = str.bytes(regexTextBytes, str.regex(charsPattern));
 /**
  * XML whitespace `S`, possibly none: what a lexical form holds around its token or value, an
  * `Idref` piece's and every other lead and trail of the schema, each typed by this one type.
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
  */
@@ -208,14 +208,14 @@ const nonSpacePattern = Compute.pattern(`^[${xmlNonSpace}]+$`);
  * (`#pantry/qti/limits.ts`), the bound `(node, uri, local)` reads it at. Its pattern is read under
  * `su`, which reads an NCName exactly as `u` does (it holds no `.`), so its law, the byte bound's,
  * is no other type's: {@link EntityName} writes the same NCName under `u`, and a refusal names each
- * by its pattern. Exported for `src/import/refusal.ts`, which names its pattern law.
+ * by its pattern. Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const OpenLocal = str.bytes(localNameBytes, str.regex(`^[${ncStart}][${ncChar}]*$`, "su"));
 
 /**
  * An entity's name inside an attribute's lexical form: an NCName, since no entity name holds a
  * colon (Namespaces in XML 1.0, §7).
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const EntityName = str.regex(`^[${ncStart}][${ncChar}]*$`);
 
