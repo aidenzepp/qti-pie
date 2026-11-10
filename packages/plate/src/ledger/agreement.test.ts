@@ -70,13 +70,25 @@ const recordedDisagreement = (row: Finding): Disagreement => ({
   plate: row.plate,
 });
 
+/**
+ * Report whether a finding row records a disagreement that is resolved: its sides, as the row now
+ * states them, agree. Such a row stays in the file as the record of the difference and of what
+ * resolved it, and the run must find its package agreeing.
+ *
+ * @param row The finding row.
+ * @returns Whether the row's sides agree.
+ */
+const resolved = (row: Finding): boolean => agrees(row.plate, row.pantry);
+
 describe("ledger/agreement.ts", () => {
   it.effect(
-    "every disagreement has its finding row, and every finding row is a disagreement",
+    "every disagreement has its finding row, every open finding row is a disagreement, and every resolved row's package agrees",
     () =>
       Effect.gen(function* disagreementsRecorded() {
-        const seen = (yield* disagreements).map(keyOf);
-        const recorded = (yield* findings).map(keyOf);
+        const found = yield* disagreements;
+        const rows = yield* findings;
+        const seen = found.map(keyOf);
+        const recorded = rows.filter((row) => !resolved(row)).map(keyOf);
 
         assert.deepStrictEqual(
           seen.filter((key) => !recorded.includes(key)),
@@ -88,7 +100,19 @@ describe("ledger/agreement.ts", () => {
           [],
           "finding rows with no disagreement",
         );
-        assert.strictEqual(new Set(recorded).size, recorded.length, "one row per disagreement");
+        assert.deepStrictEqual(
+          rows
+            .filter(resolved)
+            .map((row) => row.file)
+            .filter((file) => found.some((entry) => entry.file === file)),
+          [],
+          "resolved rows whose package still disagrees",
+        );
+        assert.strictEqual(
+          new Set(rows.map((row) => row.file)).size,
+          rows.length,
+          "one row per package",
+        );
       }),
     { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
@@ -102,14 +126,29 @@ describe("ledger/agreement.ts", () => {
   );
 
   it.effect(
-    "no ruling is stale: each ruled row still disagrees, in the state its ruling was made on",
+    "no ruling is stale: each open ruled row still disagrees, in the state its ruling was made on, and a resolved row's ruling records the sides that agree",
     () =>
       Effect.gen(function* rulingsHold() {
+        const rows = yield* findings;
+
         assert.deepStrictEqual(
-          staleRulings(yield* findings, yield* disagreements),
+          staleRulings(
+            rows.filter((row) => !resolved(row)),
+            yield* disagreements,
+          ),
           [],
           "stale rulings",
         );
+        for (const row of rows.filter(resolved)) {
+          assert.notStrictEqual(row.ruling, "pending", `${row.file}: a resolved row is ruled`);
+          if (row.ruling !== "pending") {
+            assert.deepStrictEqual(
+              { pantry: row.ruling.state.pantry, plate: row.ruling.state.plate },
+              { pantry: row.pantry, plate: row.plate },
+              `${row.file}: the ruling records the sides that agree`,
+            );
+          }
+        }
       }),
     { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
