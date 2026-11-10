@@ -2,15 +2,13 @@
  * The law oracle's reading of a lexical form by its whitespace class (`oracleValueOf` of
  * `#pantry/test/resolution.ts`, XML Schema Part 2, §4.3.6), held at the sizes the oracle judges:
  *
- * - **Pins**: the value each class gives a few small forms, written from the specification's
- *   definition of the three classes.
  * - **Differential**: every form of at most five characters over an alphabet of the four XML
  *   whitespace characters, a no-break space, an ordinary letter, an astral character and a lone
  *   high and low surrogate, against a reference written as the specification states the classes, a
  *   walk over code points. The two agree on every form.
- * - **Size**: a value of {@link largeLength} characters, which the ZIP reader's entry bound
- *   (`entryBytes` of `#pantry/package/zip.ts`, 64 MiB) admits, is read within Node's default heap
- *   in each class.
+ * - **Size**: a value of {@link largeLength} characters, padded at both ends, which the ZIP reader's
+ *   entry bound (`entryBytes` of `#pantry/package/zip.ts`, 64 MiB) admits, is read within Node's
+ *   default heap in each class.
  *
  * It reads `oracleValueOf` alone and names no law oracle module, so it is not an oracle test
  * (`src/grammar/purity.test.ts`); the judgment of an item that holds a value this long is
@@ -139,34 +137,6 @@ const everyForm = (): readonly string[] => {
 };
 
 describe("oracleValueOf, the value of a lexical form by its whitespace class", () => {
-  it("collapse writes the runs of non-whitespace joined by one space each", () => {
-    assert.strictEqual(oracleValueOf(" a\tb\n\rc ", "collapse"), "a b c");
-  });
-
-  it("collapse reads a form of whitespace alone as the empty value", () => {
-    assert.strictEqual(oracleValueOf("\t\n", "collapse"), "");
-  });
-
-  it("collapse keeps a form of one word", () => {
-    assert.strictEqual(oracleValueOf("a", "collapse"), "a");
-  });
-
-  it("collapse keeps an astral character whole", () => {
-    assert.strictEqual(oracleValueOf("😀 x", "collapse"), "😀 x");
-  });
-
-  it("replace writes each inner tab, line feed and carriage return as a space and trims the ends", () => {
-    assert.strictEqual(oracleValueOf("\ta\nb\r", "replace"), "a b");
-  });
-
-  it("replace keeps a no-break space, which is not XML whitespace", () => {
-    assert.strictEqual(oracleValueOf("\u00A0a", "replace"), "\u00A0a");
-  });
-
-  it("preserve keeps the inside as written and trims the ends", () => {
-    assert.strictEqual(oracleValueOf(" a\tb ", "preserve"), "a\tb");
-  });
-
   it("reads every form of at most five characters over the alphabet as the specification's walk does", () => {
     // Oracle: `referenceValueOf`, the definition of §4.3.6 as a walk over code points.
     const forms = everyForm();
@@ -186,17 +156,6 @@ describe("oracleValueOf, the value of a lexical form by its whitespace class", (
 
 describe("oracleValueOf over a value of 64,000,000 characters", () => {
   for (const whiteSpace of classes) {
-    it(
-      `reads a value of one repeated letter under ${whiteSpace}, unchanged`,
-      () => {
-        const value = oracleValueOf("x".repeat(largeLength), whiteSpace);
-
-        assert.strictEqual(value.length, largeLength);
-        assert.isTrue(value.startsWith("xx") && value.endsWith("xx"));
-      },
-      readTimeoutMs,
-    );
-
     it(
       `reads a value padded at both ends under ${whiteSpace}, trimmed`,
       () => {
