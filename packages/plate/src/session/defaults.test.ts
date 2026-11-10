@@ -10,6 +10,7 @@ import {
   decode,
   encodeSession,
   entryName,
+  open,
   partition,
   postings,
   redact,
@@ -27,7 +28,6 @@ import type {
   TestSession,
   Value,
 } from "#plate/index.ts";
-import { open } from "#plate/validate/open.ts";
 
 /**
  * The session instance the sitting starts with.

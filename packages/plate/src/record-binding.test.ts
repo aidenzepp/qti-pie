@@ -7,6 +7,7 @@ import {
   configure,
   decode,
   entryName,
+  open,
   partition,
   postings,
   redact,
@@ -27,7 +28,6 @@ import type {
 } from "#plate/index.ts";
 import { attribute } from "#plate/test/accessibility.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
-import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**

@@ -172,7 +172,7 @@ import type {
   ReferenceEntry,
 } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
-import { occurrenceOf } from "#plate/model/item-refs.ts";
+import { itemRefsIn, occurrenceOf } from "#plate/model/item-refs.ts";
 import { withLtiLinks, withUnheldReads } from "#plate/model/test.ts";
 import type { LtiLink, UnheldRead } from "#plate/model/test.ts";
 import { isLanguageTag, isNcName, trimXmlSpace } from "#plate/model/values.ts";
@@ -188,11 +188,25 @@ import {
   processingRefusals,
 } from "#plate/validate/rules.ts";
 import type { CollectedTyper, PrefixedTyper } from "#plate/validate/rules.ts";
+import { judgedInSpan } from "#plate/validate/open.ts";
 import { tables } from "#plate/validate/tables.ts";
-import { acceptMarkedTest, acceptedItem, check, judgedInSpan } from "#plate/validate/verdict.ts";
+import { acceptMarkedTest, acceptedItem, check } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedStimulus, AcceptedTest, Verdict } from "#plate/validate/verdict.ts";
 import { ltiLinkTypes, resourceRoots, resourceTypes } from "#plate/vocabulary.ts";
 import type { CpVersion } from "#plate/vocabulary.ts";
+
+/**
+ * One item ref of a test, as {@link itemRefs} lists it: its identifier and its `href` as the test
+ * model reads them.
+ */
+export interface ItemRefEntry {
+  /**
+   * The `href` with its outer whitespace removed and each inner run of it one space, as an
+   * `anyURI` reads.
+   */
+  readonly href: string;
+  readonly identifier: string;
+}
 
 /**
  * One test of an accepted package, with each of its item refs resolved to the item it names.
@@ -6566,6 +6580,18 @@ export const openPackage = Effect.fn("plate.openPackage")(function* openPackage(
 
   return verdict;
 });
+
+/**
+ * List a test's item refs in document order, each with its identifier and its `href`, the item refs
+ * a session over the test delivers.
+ *
+ * @param test The accepted test.
+ * @returns Its item refs, every part's and section's, in document order.
+ */
+export const itemRefs = (test: AcceptedTest): readonly ItemRefEntry[] =>
+  test.test.parts.flatMap((part) =>
+    itemRefsIn(part.children).map(({ href, identifier }) => ({ href, identifier })),
+  );
 
 /**
  * Brand a package's contents as accepted, the one named seam through which a test builds an

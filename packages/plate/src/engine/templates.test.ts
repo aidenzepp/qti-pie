@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { decodeRecord } from "#plate/codec/record.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
-import { decode, entryName, isPosted, score } from "#plate/index.ts";
+import { decode, entryName, isPosted, open, score } from "#plate/index.ts";
 import type { Accepted, Value } from "#plate/index.ts";
 import type {
   AreaMapping,
@@ -14,7 +14,6 @@ import type {
 } from "#plate/model/item.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { format } from "#plate/model/values.ts";
-import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
@@ -190,60 +189,6 @@ const choicesIn = (nodes: readonly BodyNode[]): readonly ChoiceInteraction[] =>
 
     return node.kind === "element" ? choicesIn(node.children) : [];
   });
-
-/**
- * Count the feedback inlines a run of body nodes holds, at any depth: inside elements, template
- * and feedback content, Prompts, Labels and choices' content.
- *
- * @param nodes The body nodes.
- * @returns How many `feedback-inline` nodes they hold.
- */
-const feedbackInlinesIn = (nodes: readonly BodyNode[]): number => {
-  let count = 0;
-  for (const node of nodes) {
-    switch (node.kind) {
-      case "element": {
-        count += feedbackInlinesIn(node.children);
-        break;
-      }
-      case "feedback-inline": {
-        count += 1 + feedbackInlinesIn(node.content);
-        break;
-      }
-      case "feedback-block":
-      case "template-block":
-      case "template-inline": {
-        count += feedbackInlinesIn(node.content);
-        break;
-      }
-      case "choice":
-      case "inline-choice": {
-        count += feedbackInlinesIn(
-          Option.getOrElse(node.kind === "choice" ? node.prompt : node.label, () => []),
-        );
-        for (const choice of node.choices) {
-          count += feedbackInlinesIn(choice.content);
-        }
-        break;
-      }
-      case "extended-text": {
-        count += feedbackInlinesIn(Option.getOrElse(node.prompt, () => []));
-        break;
-      }
-      case "printed-variable":
-      case "text":
-      case "text-entry":
-      case "unsupported": {
-        break;
-      }
-      default: {
-        node satisfies never;
-      }
-    }
-  }
-
-  return count;
-};
 
 /**
  * Clamp a mapped sum by an area mapping's bounds, as `qti-map-response-point` does.
@@ -541,7 +486,7 @@ describe("a canonical template whose tree needs what template-requirements does 
 describe("the built-in templates over named corpus items", { tags: ["corpus"] }, () => {
   for (const location of cc2MatchItems) {
     it.effect(
-      `[I-9b] [I-10] ${location} (CC2_match) is accepted with its modal and inline feedback, and scores its correct response 1, a choice outside it 0 and no response 0`,
+      `[I-9b] ${location} (CC2_match) scores its correct response 1, a choice outside it 0 and no response 0`,
       () =>
         Effect.gen(function* cc2Match() {
           const { accepted, verdict } = yield* openAccepted(location);
@@ -560,17 +505,20 @@ describe("the built-in templates over named corpus items", { tags: ["corpus"] },
                 ),
             ) ?? assert.fail(`${location} presents no choice outside its correct response`);
 
-          assert.strictEqual(verdict.verdict, "accepted");
-          assert.deepStrictEqual(unsupported, []);
-          assert.isNotEmpty(
-            item.modalFeedback ?? [],
-            "a CC2_match item holds its qti-modal-feedback",
+          assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+          assert.isTrue(
+            unsupported.some(
+              (feature) => feature.feature === "qti-modal-feedback" && feature.shown === "mark",
+            ),
+            "a CC2_match item holds qti-modal-feedback as a mark",
           );
-          assert.isAbove(
-            feedbackInlinesIn(item.body),
-            0,
-            "a CC2_match item holds its qti-feedback-inline as a body node",
+          assert.isTrue(
+            unsupported.some(
+              (feature) => feature.feature === "qti-feedback-inline" && feature.shown === "notice",
+            ),
+            "a CC2_match item holds qti-feedback-inline as a notice",
           );
+          assert.deepStrictEqual(unsupported.filter(namesProcessing), []);
           assert.isTrue(Option.isSome(item.processing));
           assert.strictEqual(
             numberOf(outcomesAfter(accepted, { [response]: correct })["SCORE"], "SCORE"),
@@ -597,7 +545,7 @@ describe("the built-in templates over named corpus items", { tags: ["corpus"] },
 
   for (const location of cc2MapResponseItems) {
     it.effect(
-      `[I-9b] [I-10] ${location} (CC2_map_response) is accepted with its modal feedback, and maps its first key's text, a text no key matches and no response, setting FEEDBACK against MAXSCORE`,
+      `[I-9b] ${location} (CC2_map_response) maps its first key's text, a text no key matches and no response, setting FEEDBACK against MAXSCORE`,
       () =>
         Effect.gen(function* cc2MapResponse() {
           const { accepted, verdict } = yield* openAccepted(location);
@@ -637,12 +585,14 @@ describe("the built-in templates over named corpus items", { tags: ["corpus"] },
           });
           const none = outcomesAfter(accepted, {});
 
-          assert.strictEqual(verdict.verdict, "accepted");
-          assert.deepStrictEqual(unsupported, []);
-          assert.isNotEmpty(
-            item.modalFeedback ?? [],
-            "a CC2_map_response item holds its qti-modal-feedback",
+          assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+          assert.isTrue(
+            unsupported.some(
+              (feature) => feature.feature === "qti-modal-feedback" && feature.shown === "mark",
+            ),
+            "a CC2_map_response item holds qti-modal-feedback as a mark",
           );
+          assert.deepStrictEqual(unsupported.filter(namesProcessing), []);
           assert.isTrue(Option.isSome(item.processing));
           assert.isTrue(Option.isNone(declaration.correct));
 

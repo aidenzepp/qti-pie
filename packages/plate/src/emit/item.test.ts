@@ -35,12 +35,10 @@ const instance = "i1";
  */
 const payloadOf = (finished: boolean, mode: RenderMode = "answering"): Payload => ({
   body: [],
-  credit: Option.none(),
   finished,
   instance,
   lang: "en-GB",
   messages: [],
-  modalFeedback: [],
   mode,
   notices: [],
   title: "Colours",

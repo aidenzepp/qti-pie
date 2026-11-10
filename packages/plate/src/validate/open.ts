@@ -1,20 +1,41 @@
 /**
- * `open`, the host's entry from a document's bytes to its verdict: parse, then validate. It is
- * published as `@qti-pie/plate/open`, apart from the serving entry, because it loads the full XSD
- * tables, a committed JSON module of 5 MB, which a host serving admitted content never needs.
+ * `open`, the host's one entry from a document's bytes to its verdict: parse, then validate.
  *
  * It reads the bytes with the shared reader's adapter and checks the source against the committed
- * XSD tables. Its verdict is one of the two ways a host reaches an `Accepted`, which `redact` and
- * `score` take; `openAdmitted`'s, for a document a check like this one already admitted, is the
- * other. It stays server-side: the tables are 5 MB, and the reader is crust's.
+ * XSD tables. Its verdict is the only way a host reaches an `Accepted`, which `redact` and `score`
+ * take. It stays server-side: the tables load from a committed JSON module through `Schema`, and
+ * the reader is crust's.
  *
  * @module
  */
 import { Effect, Option, Result } from "effect";
 import { readSource } from "#plate/document/read.ts";
 import { tables } from "#plate/validate/tables.ts";
-import { check, judgedInSpan } from "#plate/validate/verdict.ts";
+import { check } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
+
+/**
+ * Judge one document under the `plate.check` span, which carries the document's location, and the
+ * verdict's kind and verdict once the judgement returns.
+ *
+ * The judgement stays the synchronous function it is; the span only wraps the call, so the verdict
+ * is the one the judgement gives. The attributes are the location and the verdict's two names,
+ * never a refusal's detail or anything the document holds.
+ *
+ * @param location The document's location as the host named it.
+ * @param judge The judgement: `check`, or a package's judgement of a document it read.
+ * @returns The judgement's verdict.
+ */
+export const judgedInSpan = (location: string, judge: () => Verdict): Effect.Effect<Verdict> =>
+  Effect.sync(judge).pipe(
+    Effect.tap((verdict) =>
+      Effect.annotateCurrentSpan({
+        "document.kind": verdict.kind,
+        "document.verdict": verdict.verdict,
+      }),
+    ),
+    Effect.withSpan("plate.check", { attributes: { "document.location": location } }),
+  );
 
 /**
  * Open a document: read its bytes into the source view, then judge it with `check` against the

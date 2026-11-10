@@ -20,6 +20,7 @@ import {
   itemRefs,
   itemView,
   navigationState,
+  openPackage,
   partition,
   permits,
   postings,
@@ -34,6 +35,7 @@ import {
 } from "#plate/index.ts";
 import type {
   Accepted,
+  AcceptedPackage,
   AcceptedTest,
   Attributes,
   Configuration,
@@ -42,6 +44,7 @@ import type {
   Intent,
   ItemView,
   Node,
+  PackageVerdict,
   PartOverrides,
   Redacted,
   Responses,
@@ -50,8 +53,6 @@ import type {
   Value,
 } from "#plate/index.ts";
 import { isRecordValue } from "#plate/model/values.ts";
-import { openPackage } from "#plate/package/index.ts";
-import type { AcceptedPackage, PackageVerdict } from "#plate/package/index.ts";
 import { attribute, checkTree, inputType } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";

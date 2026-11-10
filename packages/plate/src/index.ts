@@ -2,32 +2,23 @@
  * The public surface of `@qti-pie/plate`, published through the `exports` map in `package.json`:
  * the functions an author calls, the native-form helpers, their types and their errors.
  *
- * This is the serving entry. Items: `openAdmitted` opens a document the host's content store has
- * already admitted, `begin` starts an item's stored record, `redact` and `render` show an item,
- * `checkResponses` and `score` take its answers, `solution` gives its correct responses and
- * `restore` reads its stored record back. Tests: `itemRefs` lists a test's item refs; `startTest`,
- * `current`, `itemView`, `permits`, `allowedIntents` and `advance` run a test session, which
- * `encodeSession` and `decodeSession` store; `navigationState` and the intent helpers
- * (`intentName`, `encodeIntent`, `decodeIntent`) are the navigation API, and `renderNavigation`
- * adds plain-button parts over it. `results` writes a Results Reporting document.
+ * Items: `open` checks a document, `begin` starts an item's stored record, `redact` and `render`
+ * show an item, `checkResponses` and `score` take its answers, `solution` gives its correct
+ * responses and `restore` reads its stored record back. Packages and tests: `openPackage` checks a
+ * content package and `itemRefs` lists a test's item refs; `startTest`, `current`, `itemView`,
+ * `permits`, `allowedIntents` and `advance` run a test session, which `encodeSession` and
+ * `decodeSession` store; `navigationState` and the intent helpers (`intentName`, `encodeIntent`,
+ * `decodeIntent`) are the navigation API, and `renderNavigation` adds plain-button parts over it.
+ * `results` writes a Results Reporting document.
  *
- * Checking content has entries of its own, so that a host serving items never loads the tables
- * they check by: `@qti-pie/plate/open` (`src/validate/open.ts`) gives `open`, which checks a
- * document against the full XSD tables, and `@qti-pie/plate/package` (`src/package/index.ts`)
- * gives `openPackage`, which checks a content package. A host checks content with `open` when its
- * store admits it, and serves it with `openAdmitted`, which loads only the securing tables.
+ * `open`, `openPackage` and `configure` return Effects. Every other function is plain, callable
+ * with no Effect runtime: it returns its value, or a `Result` when a caller can make it fail.
  *
- * `openAdmitted` and `configure` return Effects. Every other function is plain, callable with no
- * Effect runtime: it returns its value, or a `Result` when a caller can make it fail.
- * `@qti-pie/plate/effect` (`src/effect.ts`) gives these same names, each function that returns a
- * `Result` as an Effect, for a server that runs Effect.
- *
- * Nothing else under `src/` is reachable from outside the package but the two checking entries and
- * the Effect entry. The tests' seams (`acceptForTest`, `acceptTestForTest`, `acceptSectionForTest`,
- * `acceptStimulusForTest` and `acceptPackageForTest`) and the redacted item's brand constructor
- * (`brandRedacted`) and the predicate that reads its mark are never exported here, so only `check`,
- * or `checkAdmitted` for content admission already checked, makes an `Accepted` and the other
- * accepted roots, only `openPackage` makes an `AcceptedPackage`, and only `redact` and
+ * Nothing else under `src/` is reachable from outside the package. The tests' seams
+ * (`acceptForTest`, `acceptTestForTest`, `acceptSectionForTest`, `acceptStimulusForTest` and
+ * `acceptPackageForTest`) and the redacted item's brand constructor (`brandRedacted`) and the
+ * predicate that reads its mark are never exported here, so only `check` makes an `Accepted` and
+ * the other accepted roots, only `openPackage` makes an `AcceptedPackage`, and only `redact` and
  * `decodeRedacted` make a `Redacted`, which `render` checks at run time too (`NotRedacted`).
  *
  * @module
@@ -127,6 +118,16 @@ export type {
 
 export { navigationState, renderNavigation } from "#plate/navigation.ts";
 
+export type {
+  AcceptedPackage,
+  ItemRefEntry,
+  PackageResource,
+  PackageTest,
+  PackageVerdict,
+} from "#plate/package/open.ts";
+
+export { itemRefs, openPackage } from "#plate/package/open.ts";
+
 export type { Posting, Redacted, RenderMode, ValidationMessage } from "#plate/payload.ts";
 
 export { postings } from "#plate/payload.ts";
@@ -169,10 +170,6 @@ export { UnknownItemRef } from "#plate/session/control.ts";
 
 export { allowedIntents } from "#plate/session/intents.ts";
 
-export type { ItemRefEntry } from "#plate/session/item-refs.ts";
-
-export { itemRefs } from "#plate/session/item-refs.ts";
-
 export type {
   Intent,
   Responses,
@@ -197,7 +194,7 @@ export {
 
 export { solution } from "#plate/solution.ts";
 
-export { openAdmitted } from "#plate/validate/admitted.ts";
+export { open } from "#plate/validate/open.ts";
 
 export type {
   Accepted,

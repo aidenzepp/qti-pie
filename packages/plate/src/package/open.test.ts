@@ -7,7 +7,7 @@ import { corpusRoot, readCorpusFile } from "#plate/document/corpus.ts";
 import { directoryOf, pathOf, resolveIn, resolveInside } from "#plate/document/href.ts";
 import { readSource } from "#plate/document/read.ts";
 import { readManifest } from "#plate/package/manifest.ts";
-import { acceptPackageForTest, openPackage } from "#plate/package/open.ts";
+import { acceptPackageForTest, itemRefs, openPackage } from "#plate/package/open.ts";
 import type {
   AcceptedPackage,
   PackageResource,
@@ -15,7 +15,6 @@ import type {
   PackageVerdict,
 } from "#plate/package/open.ts";
 import { fileLocation, manifestFile } from "#plate/package/store.ts";
-import { itemRefs } from "#plate/session/item-refs.ts";
 import {
   cpuMillis,
   growthFactor,
@@ -23,7 +22,6 @@ import {
   growthRatio,
   growthRuns,
 } from "#plate/test/growth.ts";
-import { openAdmitted } from "#plate/validate/admitted.ts";
 import { open as openDocument } from "#plate/validate/open.ts";
 import type { Location, Refusal } from "#plate/validate/refusal.ts";
 import { describeRefusal } from "#plate/validate/verdict.ts";
@@ -8857,20 +8855,6 @@ describe("the library's spans", () => {
         const spans = yield* spansOf(openDocument("a.xml", bytes));
 
         assert.deepStrictEqual(childrenOf(spans, spanNamed(spans, "plate.open")), [
-          ["plate.readSource", [["document.location", "a.xml"]]],
-          ["plate.check", acceptedItemCheck("a.xml")],
-        ]);
-      }),
-  );
-
-  it.effect(
-    "plate span tree: openAdmitted of one item reads it under plate.readSource and judges it under plate.check, both under plate.openAdmitted",
-    () =>
-      Effect.gen(function* admittedSpans() {
-        const bytes = new TextEncoder().encode(itemXml("a", "SCORE"));
-        const spans = yield* spansOf(openAdmitted("a.xml", bytes));
-
-        assert.deepStrictEqual(childrenOf(spans, spanNamed(spans, "plate.openAdmitted")), [
           ["plate.readSource", [["document.location", "a.xml"]]],
           ["plate.check", acceptedItemCheck("a.xml")],
         ]);

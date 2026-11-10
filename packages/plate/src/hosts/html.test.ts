@@ -400,20 +400,19 @@ describe("the plain-HTML host", () => {
       }),
   );
 
-  it("imports only the public entries #plate/index.ts and #plate/validate/open.ts and node: modules, type imports included", () => {
+  it("imports only #plate/index.ts and node: modules, type imports included", () => {
     const { imports, unreadable } = readImports(
       readFileSync(new URL("html.ts", import.meta.url), "utf-8"),
     );
-    const entries = new Set(["#plate/index.ts", "#plate/validate/open.ts"]);
 
     assert.deepStrictEqual(unreadable, []);
-    assert.includeMembers(
+    assert.include(
       imports.map(({ specifier }) => specifier),
-      [...entries],
+      "#plate/index.ts",
     );
     assert.deepStrictEqual(
       imports.flatMap(({ specifier }) =>
-        entries.has(specifier) || specifier.startsWith("node:") ? [] : [specifier],
+        specifier === "#plate/index.ts" || specifier.startsWith("node:") ? [] : [specifier],
       ),
       [],
     );

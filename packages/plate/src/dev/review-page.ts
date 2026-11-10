@@ -210,7 +210,7 @@ const itemPage = (
         view.configuration,
       );
       const item = yield* render(
-        redact(document, view.page, view.configuration),
+        redact(document, view.record, view.configuration),
         view.configuration,
         {
           assetBase: itemAssetBase(sitting, document),
