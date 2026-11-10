@@ -3918,4 +3918,42 @@ export const fixed: readonly Known[] = [
     owner: "genetic-repair gr-6",
     signature: { kind: "oracle-only-law", law: "Variable mapping source" },
   },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part/><qti-test-part/></qti-assessment-test>`,
+      ],
+    ],
+    fix: "efafab06, reading 147: an element that writes no identifier has no name in the law oracle, which read it as the empty one before, so two of one document, two test parts that write none, broke Structure identifier beside AL3 in the oracle alone (folded from import/overlays/unwritten-identifier.oracle.test.ts, unrun under the moratorium)",
+    owner: "FB-TESTS",
+    signature: { kind: "oracle-only-law", law: "Structure identifier" },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part/><qti-test-part/></qti-assessment-test>`,
+      ],
+    ],
+    fix: "efafab06, reading 147: an element that writes no identifier has no name in the law oracle, which read it as the empty one before, so two of one assembly, two test parts that write none, broke Test name key beside AL3 in the oracle alone (folded from import/overlays/unwritten-identifier.oracle.test.ts, unrun under the moratorium)",
+    owner: "FB-TESTS",
+    signature: { kind: "oracle-only-law", law: "Test name key" },
+  },
 ];
