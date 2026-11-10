@@ -21,9 +21,10 @@ import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
- * The M2 fixture package's folder, relative to this file, as `commands.readFile` resolves a path.
+ * The M2 fixture package's folder, relative to the package, the in-page project's root, which
+ * `commands.readFile` resolves this file's paths against.
  */
-const fixtureFolder = "../../fixtures/m2";
+const fixtureFolder = "fixtures/m2";
 
 /**
  * Read one of the M2 fixture package's files as text, through the test server.
@@ -99,7 +100,7 @@ const frames = (): Promise<number> =>
 /**
  * An item by hand: its root, its live part, a Gap Match root and a Choice root.
  */
-const handBuiltItem = `<div data-slot="item"><div data-slot="item-live" role="status"></div><fieldset data-slot="gap-match-interaction"></fieldset><fieldset data-slot="choice-interaction"></fieldset></div>`;
+const handBuiltItem = `<div data-slot="item"><div data-slot="item-live" aria-live="polite" aria-atomic="true"></div><fieldset data-slot="gap-match-interaction"></fieldset><fieldset data-slot="choice-interaction"></fieldset></div>`;
 
 describe(server.browser, () => {
   describe("upgrade", () => {

@@ -694,14 +694,15 @@ const markerAndState: ReadonlySet<string> = new Set(["data-disabled", "data-mode
 /**
  * The names a row's `merged` column holds that its connect function never computes, by marker:
  * the Inline Choice Option's and Placeholder's `disabled` and `hidden`, which plate owns by their
- * absence alone.
+ * absence alone, and the item Live part's `role`, which it leaves to a host override so the live
+ * region is no second Status region (D14).
  */
-const ownedAbsent: ReadonlyMap<string, readonly string[]> = new Map(
-  (["option", "placeholder"] as const).map((part) => [
-    rowFor("inline-choice-interaction", part).slot,
-    ["disabled", "hidden"],
-  ]),
-);
+const ownedAbsent: ReadonlyMap<string, readonly string[]> = new Map<string, readonly string[]>([
+  ...(["option", "placeholder"] as const).map(
+    (part) => [rowFor("inline-choice-interaction", part).slot, ["disabled", "hidden"]] as const,
+  ),
+  [rowFor("item", "live").slot, ["role"]],
+]);
 
 /**
  * Every state an item is rendered in. Each writes attributes the others may not, such as the text

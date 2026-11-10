@@ -595,7 +595,9 @@ export const pinned: Observed = {
     '<input aria-labelledby="det-RESPONSE-label-1" data-slot="choice-interaction-control" id="det-RESPONSE-control-1" name="det.RESPONSE" type="radio" value="B">',
     '<label data-slot="choice-interaction-label" for="det-RESPONSE-control-1" id="det-RESPONSE-label-1">',
     '<span aria-hidden="true" data-slot="choice-interaction-indicator"></span>Shown by CHOICE</label></li>',
-    "</ul></fieldset></qti-assessment-item>",
+    "</ul></fieldset>",
+    '<div aria-atomic="true" aria-live="polite" data-slot="item-live"></div>',
+    "</qti-assessment-item>",
   ].join(""),
   outcomes: {
     DRAWN: integer(1n),
