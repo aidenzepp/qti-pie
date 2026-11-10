@@ -25,7 +25,9 @@
  * which issue pci-05 consumes.
  *
  * Decisions this module keeps: the type-identifier rule runs on the page, not in the frame
- * (`factoryFor`, issue pci-01); a route that is not an absolute URL resolves against the page's
+ * (issue pci-01's R7, restated here as {@link factoryFor} because the in-page graph admits only
+ * `.dom.ts` modules and `pci/type-identifier.ts`, the rule's source of truth, also serves the
+ * server side); a route that is not an absolute URL resolves against the page's
  * base URL; the frame's `title` is the Prompt's text, else the root's `aria-label`, else this
  * module's own English sentence (decision D7); the frame's height is its `height` attribute,
  * never an inline `style`; the Notice and the Markup part are hidden with the `hidden` attribute
@@ -46,7 +48,6 @@ import type {
   PciFrameConfiguration,
   PciFrameRoute,
 } from "#plate/pci/frame-protocol.ts";
-import { factoryFor } from "#plate/pci/type-identifier.ts";
 import type { Teardown } from "#plate/runtime/contract.dom.ts";
 
 /**
@@ -145,6 +146,38 @@ export const completionGraceMs = 3000;
  * The frame's title when the root has neither a Prompt nor an `aria-label` (decision D7).
  */
 const defaultTitle = "Portable custom interaction";
+
+/**
+ * Which registered factory serves a PCI element, by R7: a mirror of `FactoryChoice` in
+ * `pci/type-identifier.ts`, the source of truth, which this in-page module cannot import (the
+ * runtime graph admits only `.dom.ts` modules, and that module also serves the server side).
+ */
+type FactoryChoice =
+  | { readonly kind: "exact"; readonly typeIdentifier: string }
+  | { readonly kind: "none" }
+  | { readonly kind: "only"; readonly typeIdentifier: string; readonly written: string };
+
+/**
+ * Choose the registered factory that serves a PCI element (R7): a mirror of `factoryFor` in
+ * `pci/type-identifier.ts`, the source of truth; a change to one is a change to both.
+ *
+ * @param written The element's `custom-interaction-type-identifier`, as written.
+ * @param registered The `typeIdentifier` of every factory the PCI's modules registered, in
+ *   registration order.
+ * @returns `exact` when one registered identifier equals `written`; else `only` when exactly one
+ *   factory registered, that one; else `none`.
+ */
+const factoryFor = (written: string, registered: readonly string[]): FactoryChoice => {
+  if (registered.includes(written)) {
+    return { kind: "exact", typeIdentifier: written };
+  }
+
+  const [only, ...rest] = registered;
+
+  return only !== undefined && rest.length === 0
+    ? { kind: "only", typeIdentifier: only, written }
+    : { kind: "none" };
+};
 
 /**
  * The marker of the PCI's Prompt part, whose text names the frame.
@@ -580,7 +613,7 @@ export const hostFrame = (root: HTMLElement): Teardown => {
   const srcdoc = srcdocOf(root, markup, facts, nonce);
   const restoreNotice = hide(notice);
   const restoreMarkup = hide(markup);
-  let chosen: { readonly kind: "exact" | "only"; readonly typeIdentifier: string } | undefined;
+  let chosen: Exclude<FactoryChoice, { readonly kind: "none" }> | undefined;
   let closing = false;
   let removed = false;
   let grace: ReturnType<typeof setTimeout> | undefined;
