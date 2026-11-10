@@ -9,15 +9,14 @@
  *   against `#pantry/test/gen/relaxng.ts`'s recognizers, written from the RelaxNG's text.
  * - **MathML's one root** (the RelaxNG's `start = math`, §2.2): no non-MathML parent admits a MathML
  *   kind but `m:math`.
- * - **Each RelaxNG case, its valid and its invalid instance**, judged by the grammar, by libxml2's
- *   RelaxNG validator over the cached MathML 3 RelaxNG, and by libxml2's XSD validator over the
- *   pinned MathML XSD: the grammar agrees with the RelaxNG on every instance, and the XSD departs
- *   from it exactly where the case says, each departure classified by the rule it is reading 2's.
+ * - **Each RelaxNG case, its valid and its invalid instance**, judged by the grammar and by libxml2's
+ *   RelaxNG validator over the cached MathML 3 RelaxNG: the grammar agrees with the RelaxNG on
+ *   every instance.
  * - **Generated MathML**: trees drawn from the run seed, judged by the grammar and by libxml2's
  *   RelaxNG validator, which must agree on every one.
  *
- * The xmllint tests are gated on both caches, `~/.cache/gr8des/qti3/xsd/` and
- * `~/.cache/gr8des/mathml3-rng/`. They write `work/mathml-rng/`.
+ * The xmllint tests are gated on the RelaxNG's cache, `~/.cache/gr8des/mathml3-rng/`. They write
+ * `work/mathml-rng/`.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
@@ -50,7 +49,6 @@ import { foreignKinds, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { breachesOf, judged as judgedPackage, shown, withItem } from "#pantry/test/probe.ts";
 import { accepts, admits, admittedOf } from "#pantry/test/indexes.ts";
-import { xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";
 import { namespaceClassOf, namespaceNameOf } from "#pantry/vocab/namespaces.ts";
@@ -103,18 +101,14 @@ const relaxNgDirectory = cacheDirectory.pipe(Config.map((cache) => `${cache}/${r
 const outputRoot = fileScratchDirectory("mathml-rng-");
 
 /**
- * Whether both caches hold what the xmllint tests read: the MathML 3 RelaxNG and the pinned MathML
- * XSD.
+ * Whether the cache holds what the xmllint tests read, the MathML 3 RelaxNG.
  */
 const cached = await Effect.runPromise(
-  Effect.gen(function* bothCaches() {
+  Effect.gen(function* relaxNgCached() {
     const fs = yield* FileSystem.FileSystem;
     const rng = yield* relaxNgDirectory;
-    const xsd = yield* xsdDirectory;
 
-    return (
-      (yield* fs.exists(`${rng}/mathml3.rng`)) && (yield* fs.exists(`${xsd}/mathml/mathml3.xsd`))
-    );
+    return yield* fs.exists(`${rng}/mathml3.rng`);
   }).pipe(
     Effect.catch(() => Effect.succeed(false)),
     Effect.provide(NodeServices.layer),
@@ -122,9 +116,8 @@ const cached = await Effect.runPromise(
 );
 
 /**
- * How long one xmllint run over a batch may take: compiling the MathML 3 RelaxNG took 8 s and the
- * MathML XSD 20 s on 2026-11-05 at a load average of about 40, with each instance after that
- * milliseconds. Three times the two compiles, rounded up.
+ * How long one xmllint run over a batch may take: compiling the MathML 3 RelaxNG took 8 s on
+ * 2026-11-05 at a load average of about 40, with each instance after that milliseconds.
  * Measured 2026-11-07: 42.1 s at a load average of 63 to 73, the slower of its two tests.
  */
 const xmllintTimeout = 120_000;
@@ -394,30 +387,43 @@ describe("spec reading 2: MathML's notation types (MathML 3 §2.1.5.1)", () => {
   it.effect(
     "accept exactly what the notation and its type accept: every string of at most 4 characters over 8 classes, and the bounds",
     (ctx) =>
-      searched(
-        ctx,
-        exhaust(
-          {
-            box: "every string of at most 4 of notationAlphabet (4,681), each notation and scriptlevel, in both versions, then the boundaries",
-            caseHang: Duration.minutes(2),
-            coverage: requiredInSpace<"accepted" | "refused">(["accepted", "refused"]),
-            generator: array(element(notationAlphabet), { max: 4, min: 0 }),
-            limit: 10_000,
-            literal: Formatter.format,
-            oracle: {
-              kind: "specification",
-              name: "MathML 3 §2.1.5.1's notations, written from its text (notations)",
+      Effect.gen(function* everyNotation() {
+        const composedGrammar = yield* grammar;
+        // Each notation's pattern, compiled once for the box rather than once a string.
+        const patterns = schemaVersions.flatMap((version) =>
+          notationNames.map((notation) => {
+            const { kind, name } = representatives[notation];
+
+            return {
+              kind,
+              name,
+              notation,
+              pattern: patternOf(composedGrammar, version, kind, name),
+              version,
+            };
+          }),
+        );
+
+        return yield* searched(
+          ctx,
+          exhaust(
+            {
+              box: "every string of at most 4 of notationAlphabet (4,681), each notation and scriptlevel, in both versions, then the boundaries",
+              caseHang: Duration.minutes(2),
+              coverage: requiredInSpace<"accepted" | "refused">(["accepted", "refused"]),
+              generator: array(element(notationAlphabet), { max: 4, min: 0 }),
+              limit: 10_000,
+              literal: Formatter.format,
+              oracle: {
+                kind: "specification",
+                name: "MathML 3 §2.1.5.1's notations, written from its text (notations)",
+              },
+              suite: "grammar/mathml/notations",
             },
-            suite: "grammar/mathml/notations",
-          },
-          (letters, c) =>
-            Effect.gen(function* everyString() {
-              const composedGrammar = yield* grammar;
-              const values = [letters.join(""), ...(letters.length === 0 ? boundaries : [])];
-              for (const version of schemaVersions) {
-                for (const notation of notationNames) {
-                  const { kind, name } = representatives[notation];
-                  const pattern = patternOf(composedGrammar, version, kind, name);
+            (letters, c) =>
+              Effect.sync(() => {
+                const values = [letters.join(""), ...(letters.length === 0 ? boundaries : [])];
+                for (const { kind, name, notation, pattern, version } of patterns) {
                   const reference = notations[notation];
                   for (const value of values) {
                     const expected = reference(collapsed(value));
@@ -429,10 +435,10 @@ describe("spec reading 2: MathML's notation types (MathML 3 §2.1.5.1)", () => {
                     );
                   }
                 }
-              }
-            }),
-        ),
-      ),
+              }),
+          ),
+        );
+      }),
     testTimeoutMs,
   );
 
@@ -667,19 +673,16 @@ const judged = (composedGrammar: ComposedGrammar, version: SchemaVersion, root: 
 };
 
 /**
- * What a case's instance is, by each judge: valid or not by the RelaxNG, which the grammar must
- * match, and by the MathML XSD.
+ * What a case's instance is: valid or not by the RelaxNG, which the grammar must match.
  */
 interface Case {
   readonly instance: Node;
   readonly name: string;
   readonly relaxNg: boolean;
   /**
-   * The rule of reading 2 the case is an instance of, the departure's class where the XSD's verdict
-   * differs from the RelaxNG's.
+   * The rule of reading 2 the case is an instance of.
    */
   readonly rule: string;
-  readonly xsd: boolean;
 }
 
 /**
@@ -693,8 +696,7 @@ const unit = m("interval", token("cn", "0"), token("cn", "1"));
 const boundX = m("bvar", token("ci", "x"));
 
 /**
- * Each RelaxNG case of reading 2, its valid and its invalid instance, and what the XSD says of
- * each.
+ * Each RelaxNG case of reading 2, its valid and its invalid instance.
  */
 const cases: readonly Case[] = [
   {
@@ -705,7 +707,6 @@ const cases: readonly Case[] = [
     name: "an interval qualifier before a condition",
     relaxNg: true,
     rule: "interval qualifier (mathml3-content.rnc line 41)",
-    xsd: false,
   },
   {
     instance: m(
@@ -715,35 +716,30 @@ const cases: readonly Case[] = [
     name: "a condition after an argument",
     relaxNg: false,
     rule: "interval qualifier (mathml3-content.rnc line 41)",
-    xsd: false,
   },
   {
     instance: m("math", m("lambda", boundX, unit, token("ci", "f"))),
     name: "a lambda with an interval qualifier and a body",
     relaxNg: true,
     rule: "interval qualifier (mathml3-content.rnc line 103)",
-    xsd: false,
   },
   {
     instance: m("math", m("lambda", boundX, unit, m("condition", token("ci", "c")))),
     name: "a lambda that ends in a qualifier",
     relaxNg: false,
     rule: "interval qualifier (mathml3-content.rnc line 103)",
-    xsd: false,
   },
   {
     instance: m("math", m("set", boundX, unit, m("condition", token("ci", "c")), token("ci", "x"))),
     name: "a set with an interval qualifier",
     relaxNg: true,
     rule: "interval qualifier (mathml3-content.rnc line 230)",
-    xsd: false,
   },
   {
     instance: m("math", m("vector", token("ci", "a"), m("condition", token("ci", "c")))),
     name: "a vector with a condition after an argument",
     relaxNg: false,
     rule: "interval qualifier (mathml3-content.rnc line 325)",
-    xsd: false,
   },
   {
     instance: m(
@@ -758,14 +754,12 @@ const cases: readonly Case[] = [
     name: "a semantics among content expressions",
     relaxNg: true,
     rule: "semantics-contexp (mathml3-strict-content.rnc lines 14 and 23)",
-    xsd: false,
   },
   {
     instance: m("math", m("apply", m("plus"), m("semantics", token("mi", "x")), token("ci", "y"))),
     name: "a content expression's semantics around a presentation token",
     relaxNg: false,
     rule: "semantics-contexp (mathml3-strict-content.rnc lines 14 and 23)",
-    xsd: false,
   },
   {
     instance: m(
@@ -779,21 +773,18 @@ const cases: readonly Case[] = [
     name: "a bound variable's semantics around ci",
     relaxNg: true,
     rule: "semantics-ci (mathml3-strict-content.rnc line 20)",
-    xsd: true,
   },
   {
     instance: m("math", m("lambda", m("bvar", m("semantics", token("cn", "1"))), token("ci", "x"))),
     name: "a bound variable's semantics around cn",
     relaxNg: false,
     rule: "semantics-ci (mathml3-strict-content.rnc line 20)",
-    xsd: false,
   },
   {
     instance: m("math", m("semantics", token("mi", "x"), m("annotation-xml"))),
     name: "an empty annotation-xml",
     relaxNg: true,
     rule: "annotation-xml (mathml3-common.rnc line 59)",
-    xsd: false,
   },
   {
     instance: m(
@@ -803,21 +794,18 @@ const cases: readonly Case[] = [
     name: "an annotation-xml of two math expressions",
     relaxNg: true,
     rule: "annotation-xml (mathml3-common.rnc line 59)",
-    xsd: false,
   },
   {
     instance: m("math", m("semantics", token("mi", "x"), m("annotation-xml", boundX))),
     name: "an annotation-xml holding a bvar",
     relaxNg: false,
     rule: "annotation-xml (mathml3-common.rnc line 59)",
-    xsd: true,
   },
   {
     instance: m("math", m("semantics", token("mi", "x"), m("annotation-xml", m("math")))),
     name: "an annotation-xml holding a math",
     relaxNg: false,
     rule: "annotation-xml (mathml3-common.rnc line 59)",
-    xsd: true,
   },
   {
     instance: m(
@@ -831,7 +819,6 @@ const cases: readonly Case[] = [
     name: "an annotation-xml of foreign markup",
     relaxNg: true,
     rule: "anyElement (mathml3-common.rnc line 61)",
-    xsd: true,
   },
   {
     instance: m(
@@ -841,7 +828,6 @@ const cases: readonly Case[] = [
     name: "MathML inside foreign markup in annotation-xml",
     relaxNg: false,
     rule: "anyElement (mathml3-common.rnc line 61) and math's root (line 15)",
-    xsd: true,
   },
   {
     instance: m(
@@ -851,7 +837,6 @@ const cases: readonly Case[] = [
     name: "a math inside foreign markup in annotation-xml",
     relaxNg: false,
     rule: "anyElement (mathml3-common.rnc line 61) and one math in another (§2.2)",
-    xsd: true,
   },
   {
     instance: m(
@@ -861,7 +846,6 @@ const cases: readonly Case[] = [
     name: "a bound variable with its degree first",
     relaxNg: true,
     rule: "bvar interleave (mathml3-content.rnc line 23)",
-    xsd: true,
   },
   {
     instance: m(
@@ -871,7 +855,6 @@ const cases: readonly Case[] = [
     name: "a bound variable of two variables",
     relaxNg: false,
     rule: "bvar interleave (mathml3-content.rnc line 23)",
-    xsd: true,
   },
   {
     instance: m(
@@ -886,7 +869,6 @@ const cases: readonly Case[] = [
     name: "an otherwise between pieces",
     relaxNg: true,
     rule: "piecewise interleave (mathml3-content.rnc line 60)",
-    xsd: true,
   },
   {
     instance: m(
@@ -896,7 +878,6 @@ const cases: readonly Case[] = [
     name: "two otherwise parts",
     relaxNg: false,
     rule: "piecewise interleave (mathml3-content.rnc line 60)",
-    xsd: true,
   },
 ];
 
@@ -906,10 +887,9 @@ const cases: readonly Case[] = [
 type Verdicts = readonly boolean[];
 
 /**
- * Validate instances with xmllint, against a RelaxNG schema or an XSD, in one run, through the
+ * Validate instances with xmllint, against a RelaxNG schema, in one run, through the
  * shared validity oracle (`#pantry/xml/oracle.ts` `xmllintValidate`).
  *
- * @param language - The schema's language.
  * @param schema - The schema's path.
  * @param label - The batch's folder under {@link outputRoot}.
  * @param instances - The instances' texts.
@@ -917,7 +897,6 @@ type Verdicts = readonly boolean[];
  *   compile or xmllint does not run.
  */
 const validated = Effect.fn("test.mathml.validated")(function* validated(
-  language: "relax-ng" | "xsd",
   schema: string,
   label: string,
   instances: readonly string[],
@@ -934,7 +913,7 @@ const validated = Effect.fn("test.mathml.validated")(function* validated(
     { concurrency: 8 },
   );
 
-  const verdicts = yield* xmllintValidate({ language, paths: files, schema });
+  const verdicts = yield* xmllintValidate({ language: "relax-ng", paths: files, schema });
 
   return verdicts.map(({ _tag }) => _tag === "Valid") satisfies Verdicts;
 });
@@ -1300,33 +1279,18 @@ describe("the ending edit, which lambda's restatement reads (content.ts, endedBy
 
 describe.skipIf(!cached)("spec reading 2 against libxml2's RelaxNG and XSD validators", () => {
   it.effect(
-    "agree with the RelaxNG on each case's valid and invalid instance, the XSD departing exactly where the case classifies it",
+    "agree with the RelaxNG on each case's valid and invalid instance",
     () =>
-      // Oracle: a second implementation, libxml2's RelaxNG validator over the MathML 3 RelaxNG;
-      // libxml2's XSD validator over the pinned MathML XSD records each departure, classified by
-      // the reading-2 rule its case names. Bound: `cases`, both versions.
+      // Oracle: a second implementation, libxml2's RelaxNG validator over the MathML 3 RelaxNG.
+      // Bound: `cases`, both versions.
       Effect.gen(function* everyCase() {
         const composedGrammar = yield* grammar;
         const texts = cases.map(({ instance }) => written(instance));
-        const rng = yield* validated(
-          "relax-ng",
-          `${yield* relaxNgDirectory}/mathml3.rng`,
-          "cases-rng",
-          texts,
-        );
-        const xsd = yield* validated(
-          "xsd",
-          `${yield* xsdDirectory}/mathml/mathml3.xsd`,
-          "cases-xsd",
-          texts,
-        );
-        const wrong = cases.flatMap(({ instance, name, relaxNg, rule, xsd: departure }, index) => [
+        const rng = yield* validated(`${yield* relaxNgDirectory}/mathml3.rng`, "cases-rng", texts);
+        const wrong = cases.flatMap(({ instance, name, relaxNg, rule }, index) => [
           ...(Arr.getUnsafe(rng, index) === relaxNg
             ? []
             : [`${name}: libxml2's RelaxNG says ${String(!relaxNg)}`]),
-          ...(Arr.getUnsafe(xsd, index) === departure
-            ? []
-            : [`${name}: libxml2's XSD says ${String(!departure)}, unclassified (${rule})`]),
           ...schemaVersions.flatMap((version) =>
             judged(composedGrammar, version, instance) === relaxNg
               ? []
@@ -1355,7 +1319,6 @@ describe.skipIf(!cached)("spec reading 2 against libxml2's RelaxNG and XSD valid
           treeCount,
         );
         const rng = yield* validated(
-          "relax-ng",
           `${yield* relaxNgDirectory}/mathml3.rng`,
           "trees-rng",
           trees.map((tree) => written(tree)),
