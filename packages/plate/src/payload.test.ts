@@ -2142,7 +2142,57 @@ describe("redactItem on responses only hidden content binds", () => {
   });
 });
 
+/**
+ * Collect every key named `host`, at any depth, in a JSON value.
+ *
+ * @param value The JSON value: the redacted item's encoded form, or any value under it.
+ * @param path Where it stands, for the report.
+ * @returns The path of each `host` key found, in document order.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- the walk visits every value of the encoded JSON, of any type, looking only for a key's name.
+const hostKeysIn = (value: unknown, path = "$"): readonly string[] => {
+  if (Array.isArray(value)) {
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- each member of the JSON array is a value of any type, walked the same way.
+    return value.flatMap((entry: unknown, index) => hostKeysIn(entry, `${path}[${String(index)}]`));
+  }
+
+  if (!Predicate.isObject(value)) {
+    return [];
+  }
+
+  return Object.entries(value).flatMap(([key, entry]) => [
+    ...(key === "host" ? [`${path}.host`] : []),
+    ...hostKeysIn(entry, `${path}.${key}`),
+  ]);
+};
+
 describe("payload", () => {
+  it("[W0-AZ] host facts never reach the redacted item or its JSON", () => {
+    const fixtures: readonly (readonly [string, Redacted])[] = [
+      ["item", redacted],
+      ["river", riverRedacted],
+      ["list", listOf(Option.none(), 1n)],
+      ["referencing", referencing("a")],
+    ];
+    const host = { pci: { loader: "/pci/loader.js", modules: new Map() } };
+
+    for (const [name, fixture] of fixtures) {
+      // A pin: the redacted item is made before any view, so no host fact can be in its JSON.
+      const encoded = Result.getOrThrow(encodeRedacted(fixture));
+
+      assert.deepStrictEqual(hostKeysIn(encoded), [], name);
+      assert.notInclude(JSON.stringify(encoded), "/pci/loader.js", name);
+
+      // The view carries the facts, and the payload still has no `host` field: a module reads its
+      // member through the kit, and nothing of the shipped kinds does.
+      const built = payload(fixture, { ...answering, host });
+
+      assert.notProperty(built, "host", name);
+      assert.notInclude(json(built), "/pci/loader.js", name);
+      assert.notInclude(json(built), '"host"', name);
+    }
+  });
+
   it("[Q-2] [Q-20] [Q-5] holds no correct response, mapping key, default or rule value in any view", () => {
     const views: readonly (readonly [string, View])[] = [
       ["no messages", answering],

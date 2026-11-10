@@ -40,6 +40,7 @@ import type {
   UnnamedPosition,
   View,
 } from "#plate/payload.ts";
+import type { HostFacts } from "#plate/pci/host.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
 import type { BaseType } from "#plate/vocabulary.ts";
 
@@ -172,6 +173,7 @@ const noCopy: RedactKit = {
   autofocus: false,
   formName: (response) => response,
   held: () => Option.none(),
+  host: {},
   instance: "",
   nodes: () => [],
   posted: () => Option.none(),
@@ -445,8 +447,8 @@ interface LandedModel extends ModuleInteraction<typeof landedKind> {
  * The payload node of {@link landedGapMatch}: what its `redact` copies of the model node, its
  * gapped content among it, which its render writes through `emitNodes`, and what it reads of the
  * view through the kit: the name its hidden inputs post under, the texts they restore (the posted
- * strings when the view has messages, else the shown pairs), and the other facts the kit carries,
- * each copied so a test reads what the kit handed the module.
+ * strings when the view has messages, else the shown pairs), the host's facts whole, and the other
+ * facts the kit carries, each copied so a test reads what the kit handed the module.
  */
 interface LandedPayload {
   readonly autofocus: boolean;
@@ -460,6 +462,7 @@ interface LandedPayload {
    * ({@link landedVariables}), read through the kit's `held`; empty when it held none.
    */
   readonly held: readonly string[];
+  readonly host: HostFacts;
   readonly instance: string;
   readonly posted: Option.Option<readonly string[]>;
   readonly response: string;
@@ -547,25 +550,6 @@ const gapIdentifier = (element: ElementPayload): string =>
 const landedVariables = ["HELD", "OTHER_HELD"] as const;
 
 /**
- * The row of {@link landedGapMatch}'s Root.
- */
-const landedRoot = partRow({ owner: landedOwner, parts: landedParts }, "root");
-
-/**
- * Compute the attributes of {@link landedGapMatch}'s Root: its class, the response it binds, its
- * marker, and `data-held` holding the held texts joined by one space, when the redaction held any.
- *
- * @param interaction The payload node.
- * @returns The Root's attributes.
- */
-const landedRootProps = (interaction: LandedPayload): Attributes => ({
-  class: interaction.class,
-  ...when(interaction.held.length > 0, { "data-held": interaction.held.join(" ") }),
-  "data-response": interaction.response,
-  "data-slot": landedRoot.slot,
-});
-
-/**
  * Render a `qti-gap` of {@link landedGapMatch}'s gapped content as a Gap, a `span` marked as the
  * module's Gap part and named by the gap's identifier; any other element is not the module's. The
  * Gap is written without `applyPart`: the part table types a part key from the parts the modules
@@ -582,6 +566,33 @@ const landedGap: OwnedElements = (element) =>
         ]),
       )
     : Option.none();
+
+/**
+ * Compute the attributes of {@link landedGapMatch}'s Root, as its `connect` does: the module's
+ * class, its response, its marker, `data-held` holding the held texts joined by one space when
+ * the redaction held any, and what its controller needs of the host's facts: the names of the
+ * members the record holds (`data-host-keys`, empty for a record without one) and, when the PCI
+ * member is present, the loader the host serves (`data-host-loader`). A module reads only its own
+ * member and writes onto its own Root, so a test sees the host's facts reach a module through the
+ * kit and the page through the Root alone.
+ *
+ * @param interaction The payload node.
+ * @returns The Root's attributes.
+ */
+const landedRootAttributes = (interaction: LandedPayload): Attributes => {
+  const shared: Attributes = {
+    class: interaction.class,
+    ...when(interaction.held.length > 0, { "data-held": interaction.held.join(" ") }),
+    "data-host-keys": Object.keys(interaction.host).toSorted().join(" "),
+    "data-response": interaction.response,
+    "data-slot": landedOwner,
+  };
+
+  return Option.match(Option.fromUndefinedOr(interaction.host.pci), {
+    onNone: () => shared,
+    onSome: (pci) => ({ ...shared, "data-host-loader": pci.loader }),
+  });
+};
 
 /**
  * A Gap Match module as one that has landed would be: implemented, with its own model node, payload
@@ -608,11 +619,7 @@ const landedGapMatch: InteractionModule<
     values: [{ baseType: "directedPair", value: ["W", "G1"] }],
   }),
   bindings: (interaction) => [{ base: Option.none(), response: interaction.response }],
-  /**
-   * The Root's attributes ({@link landedRootProps}), the one part whose attributes the fake
-   * computes; its render places the same attributes.
-   */
-  connect: (interaction) => ({ root: landedRootProps(interaction) }),
+  connect: (interaction) => ({ root: landedRootAttributes(interaction) }),
   /**
    * The element the fake owns as the container of its interactions ({@link landedStage}): its
    * `parse` keeps the children the body walk read, marked on the element, so a test sees the walk
@@ -725,6 +732,7 @@ const landedGapMatch: InteractionModule<
         onNone: () => [],
         onSome: (value) => value.values.map(format),
       }),
+      host: kit.host,
       instance: kit.instance,
       posted,
       response: interaction.response,
@@ -754,8 +762,10 @@ const landedGapMatch: InteractionModule<
       written: "nodes" as const,
     },
   ],
-  render: (interaction, payload, state) =>
-    Result.gen(function* landedRendered() {
+  render: (interaction, payload, state) => {
+    const row = partRow({ owner: landedOwner, parts: landedParts }, "root");
+
+    return Result.gen(function* landedRoot() {
       const content = yield* emitNodes(
         interaction.content,
         payload,
@@ -763,13 +773,14 @@ const landedGapMatch: InteractionModule<
         nestedInteraction(landedOwner, landedGap),
       );
 
-      return yield* applyPart(landedRoot, landedRootProps(interaction), [
+      return yield* applyPart(row, landedRootAttributes(interaction), [
         ...content,
         ...interaction.restore.map((value) =>
           h("input", { name: interaction.formName, type: "hidden", value }),
         ),
       ]);
-    }),
+    });
+  },
   replaceRegions: (interaction, contents) => {
     const [first, ...rest] = contents;
     const prompt = pipe(
@@ -1401,6 +1412,76 @@ describe("a module that lands", () => {
           );
         }),
       ),
+  );
+
+  it.effect(
+    "[W0-AZ] a module reads its host facts and writes what its controller needs onto its root",
+    () =>
+      withLanded(
+        Effect.gen(function* hostFacts() {
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const configuration = yield* configure({});
+          const built = yield* Effect.fromResult(model.buildItem(landedDocument));
+          const redactedItem = payload.redactItem(built);
+          const host: HostFacts = { pci: { loader: "/pci/loader.js", modules: new Map() } };
+
+          const { html } = yield* Effect.fromResult(
+            plate.render(redactedItem, configuration, { host, instance: "q1" }),
+          );
+
+          const root = new RegExp(`<div [^>]*data-slot="${landedOwner}"[^>]*>`, "u").exec(html);
+
+          assert.isNotNull(root);
+          assert.include(root?.[0], 'data-host-keys="pci"');
+          assert.include(root?.[0], 'data-host-loader="/pci/loader.js"');
+          assert.notInclude(html.replace(root?.[0] ?? "", ""), "data-host-loader");
+
+          const without = yield* Effect.fromResult(
+            plate.render(redactedItem, configuration, { instance: "q1" }),
+          );
+
+          assert.notInclude(without.html, "data-host-loader");
+          assert.notInclude(without.html, "/pci/loader.js");
+        }),
+      ),
+  );
+
+  it.effect("[W0-AZ] a view without host facts gives every module an empty record", () =>
+    withLanded(
+      Effect.gen(function* emptyHost() {
+        const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+        const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+        const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+        const configuration = yield* configure({});
+        const built = yield* Effect.fromResult(model.buildItem(landedDocument));
+        const redactedItem = payload.redactItem(built);
+
+        // Through render with no `host`: the Root names no member of the record.
+        const { html } = yield* Effect.fromResult(
+          plate.render(redactedItem, configuration, { instance: "q1" }),
+        );
+
+        assert.match(html, /<div [^>]*data-host-keys=""[^>]*>/u);
+
+        // Through the payload: the kit handed the module exactly the empty record.
+        const view: View = {
+          finished: false,
+          instance: "q1",
+          locale: configuration.locale,
+          messages: [],
+          mode: "answering",
+          names: new Map(),
+          posted: Option.none(),
+          values: new Map(),
+        };
+        const node = Arr.findFirst(payload.payload(redactedItem, view).body, landedPayloadOf);
+        const handed: Option.Option<HostFacts> = node.pipe(Option.map((landed) => landed.host));
+
+        assert.deepStrictEqual(handed, Option.some<HostFacts>({}));
+      }),
+    ),
   );
 
   it.effect(
