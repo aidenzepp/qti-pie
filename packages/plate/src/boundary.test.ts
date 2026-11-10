@@ -382,4 +382,24 @@ describe("the core, from src/index.ts", () => {
     assert.strictEqual(devDependencies["axe-core"], "4.14.0");
     assert.notProperty(dependencies, "axe-core");
   });
+
+  it("holds the React reference app's nine packages at exact versions among the devDependencies, never the dependencies", () => {
+    const { dependencies, devDependencies } = readManifest();
+    const pins: readonly (readonly [name: string, version: string])[] = [
+      ["@base-ui/react", "1.9.0"],
+      ["@tailwindcss/vite", "4.3.5"],
+      ["@tanstack/react-form", "1.33.5"],
+      ["class-variance-authority", "0.7.1"],
+      ["clsx", "2.1.1"],
+      ["lucide-react", "1.70.0"],
+      ["react-hook-form", "7.91.0"],
+      ["tailwind-merge", "3.7.0"],
+      ["tailwindcss", "4.3.5"],
+    ];
+
+    for (const [name, version] of pins) {
+      assert.strictEqual(devDependencies[name], version, name);
+      assert.notProperty(dependencies, name);
+    }
+  });
 });
