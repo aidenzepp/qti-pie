@@ -142,12 +142,55 @@ export interface GateContext {
 }
 
 /**
+ * A scope a time limit bounds, named for the session hub: an item ref, a section, a test part or
+ * the test, by its identifier (the test's own for `test`). A module's `gate` names the scope whose
+ * time has run out, and the hub knows how to leave each kind, so the module never reads the
+ * session's structure. The session records each scope that expired, in order, as
+ * `TestSession.expired`.
+ */
+export interface TimedScope {
+  readonly identifier: string;
+  readonly kind: "item-ref" | "part" | "section" | "test";
+}
+
+/**
  * What a module's `gate` says of an intent: `refuse`, with the module's own rule and the reason in
- * words, or, for a move, `target`, the sequence index the move reaches in place of the one the
- * part's modes give (a branch rule's target). None lets the intent through to the modes' rules.
+ * words; for a move, `target`, the sequence index the move reaches in place of the one the part's
+ * modes give (a branch rule's target); or `expire`, that the time of a scope the intent falls in
+ * has run out. None lets the intent through to the modes' rules.
+ *
+ * An `expire` answers any intent, a move included, and the session hub (`expireScope` in
+ * `#plate/session/expire.ts`, which `advance` calls) carries it out in place of the intent:
+ *
+ * - The request's own responses are not saved: the expiry runs before the step is saved, so the
+ *   current item keeps what it held, and only the time the item was shown is added.
+ * - Every presented item of the scope whose attempt is open, or which holds saved responses not yet
+ *   processed, is submitted with its saved responses, as a submission processes it; an item of the
+ *   scope never presented is ended without an attempt. In a simultaneous part an item ref's or a
+ *   section's expiry processes nothing, since the part's submission processes each item once: the
+ *   items are locked and wait for `submit-part`. A part's or the test's expiry processes each
+ *   presented item once in either submission mode.
+ * - The scope is left: an item ref's expiry moves on in a linear part, as `next` does there, and in a
+ *   nonlinear part leaves the position where it is; a section's expiry moves to the first item
+ *   after the section when the current item is in it, else leaves the position, and ends the part
+ *   when no item of the part follows an individual section; a part's expiry ends the part, so the
+ *   next part that holds an item becomes current or the test closes; the test's expiry ends every
+ *   part and closes the test.
+ * - Each item of the scope is left `locked`, so it is closed: its controls render disabled, and
+ *   `submit-item` is no longer offered for it.
+ * - The scope is appended to the session's `expired`, so a host learns it happened by reading the
+ *   session `advance` returns; `advance` returns the session as for any other step. A scope expires
+ *   once: an `expire` naming a scope already in `expired` lets the intent through to the modes'
+ *   rules, so a module states that a scope's time is over as often as it is asked, and keeps no
+ *   memory of what the hub did.
+ * - A restored session reads `locked` and `expired` back, so the stored form carries them.
+ *
+ * `qti-time-limits` (issue m3f-01b) is the first module to answer `expire`, implementing reading
+ * D19 of `docs/spec-readings.md`.
  */
 export type GateVerdict =
   | { readonly detail: string; readonly kind: "refuse"; readonly rule: string }
+  | { readonly kind: "expire"; readonly scope: TimedScope }
   | { readonly kind: "target"; readonly sequenceIndex: number };
 
 /**

@@ -4,10 +4,11 @@
  *
  * Without script the interaction is its image with each hotspot drawn over its area and named by
  * its `hotspot-label`, an ordered list of positions beside the image, and the author's restored
- * order shown twice: as a position number (the Badge) on each ordered hotspot and in the positions.
- * One hidden input per ordered hotspot, in order, posts the order under the entry name the host
- * chose; the runtime reads `data-entry-name`, `data-min-choices` and `data-max-choices` from the
- * Root. Nothing but the response is posted, so a post is an `ordered` `identifier` response.
+ * order shown twice: as a position number (the Badge) drawn on each ordered hotspot and in the
+ * positions. One hidden input per ordered hotspot, in order, posts the order under the entry name
+ * the host chose; the runtime reads `data-entry-name`, `data-min-choices` and `data-max-choices`
+ * from the Root. Nothing but the response is posted, so a post is an `ordered` `identifier`
+ * response.
  *
  * It follows four readings of `docs/spec-readings.md`, each cited by its wording:
  *
@@ -28,8 +29,17 @@
  * Beyond those readings, an outline needs the image's size to place a coordinate written in
  * percentages; plate reads it from the `width` and `height` attributes of the image (`img`, the
  * `img` of a `picture`, or `object`), and draws a percentage with no outline when the image gives
- * neither. Pixel coordinates need no size to be drawn, and a hotspot's Badge is placed at the
- * centre of its area.
+ * neither. Pixel coordinates need no size to be drawn.
+ *
+ * The Badge is an SVG `text` inside its hotspot's Outline, after the shape, at the centre of the
+ * area in the Outline's own coordinate space: `x` and `y` in the units the shape is drawn in, and
+ * `50%` of each for a `default` area, the image's centre. plate's pages carry a Content Security
+ * Policy that allows no inline style, so the Badge is placed by those attributes and carries no
+ * `style` (issue ei-10b, GitHub issue #193). Three consequences follow from its place. The Outline
+ * is `aria-hidden`, so a screen reader hears each position in the positions and not on the
+ * hotspot. A hotspot whose area draws nothing has no Outline and so no Badge; its position is in
+ * the positions alone. A later hotspot's Outline may cover an earlier hotspot's Badge where their
+ * areas overlap, as it covers the earlier area.
  *
  * Strings the renderer writes here live in this module, in English ({@link words}).
  *
@@ -226,15 +236,17 @@ export type GraphicOrderPart =
  * The Root is a `role="group"` custom element, as an Extended Text's is, and holds the Prompt, the
  * image with its hotspots and the positions. The Hotspots and the positions are lists, so a
  * swap to a flow container takes the list joint rule's roles. The Outline is an `svg` that stays
- * `aria-hidden`; the Hidden input stays a hidden input of the name and value plate computed.
+ * `aria-hidden` and holds its shape and, for an ordered hotspot, the Badge, an SVG `text` that
+ * `any` element may replace; the Hidden input stays a hidden input of the name and value plate
+ * computed.
  */
 const parts = {
   badge: {
     defaults: {},
-    element: "span",
+    element: "text",
     listOwner: false,
-    merged: ["style", "data-position"],
-    tagClass: "phrasing-container",
+    merged: ["x", "y", "data-position"],
+    tagClass: "any",
   },
   hidden: {
     defaults: {},
@@ -773,29 +785,27 @@ const drawingOf = (
 };
 
 /**
- * Write a Badge's position as the `style` that places it at the centre of its area: percentages of
- * the image when its size is known, pixels otherwise; the `default` area's centre is the image's.
+ * Write a Badge's position as the `x` and `y` of the SVG `text` that sits at the centre of its
+ * area, in the Outline's own coordinate space (Q-9, issue ei-10b, GitHub issue #193).
+ *
+ * The Badge lies inside the Outline beside the shape, so its coordinates are the shape's: the
+ * drawing's centre in the units the shape is drawn in, which is the units of the Outline's
+ * `viewBox` when the image's size is known and the coordinates as written otherwise. A `default`
+ * area is drawn at `100%` of the image, so its centre is `50%`. The position is two attributes of
+ * the SVG, and never an inline `style`, which plate's Content Security Policy refuses.
  *
  * @param hotspot The hotspot.
  * @param drawing The hotspot's drawing.
- * @param frame The image's size.
- * @returns The `style` attribute's value.
+ * @returns The Badge's `x` and `y`.
  */
-const placementOf = (
-  hotspot: GraphicOrderHotspot,
-  drawing: Drawing,
-  frame: Option.Option<Frame>,
-): string => {
-  const [x, y] = drawing.centre;
+const placementOf = (hotspot: GraphicOrderHotspot, drawing: Drawing) => {
   if (hotspot.area === "default") {
-    return "left:50%;top:50%";
+    return { x: "50%", y: "50%" };
   }
 
-  return Option.match(frame, {
-    onNone: () => `left:${digits(x)}px;top:${digits(y)}px`,
-    onSome: (size) =>
-      `left:${digits((x / size.width) * 100)}%;top:${digits((y / size.height) * 100)}%`,
-  });
+  const [x, y] = drawing.centre;
+
+  return { x: digits(x), y: digits(y) };
 };
 
 /**
@@ -831,7 +841,9 @@ const authoredName = (
  */
 interface HotspotProps {
   /**
-   * The Badge's text and attributes, none for a hotspot that is not ordered.
+   * The Badge's text and attributes, none for a hotspot that is not ordered and none for one whose
+   * area holds no drawing: the Badge is an SVG `text` inside the Outline, so it has no Outline to
+   * lie in (Q-9, issue ei-10b, GitHub issue #193).
    */
   readonly badge: Option.Option<TextProps>;
   readonly drawing: Option.Option<Drawing>;
@@ -876,7 +888,10 @@ interface Props {
  *   under the others, and, when ordered, its position as `data-position`.
  * - Outline: `aria-hidden`, and, when the image's size is known, `viewBox` of that size with
  *   `preserveAspectRatio="none"`, so it scales with the image.
- * - Badge: the position, placed at the centre of the area, only for an ordered hotspot.
+ * - Badge: the position, an SVG `text` whose `x` and `y` are the centre of the area in the Outline's
+ *   coordinate space ({@link placementOf}), only for an ordered hotspot whose area holds a drawing;
+ *   it carries no `style`, which plate's Content Security Policy refuses (issue ei-10b, GitHub
+ *   issue #193).
  * - Ordered: `aria-label`; each position holds the hotspot placed there, or "Empty" (`data-empty`).
  * - Hidden: one per ordered hotspot, only while the page is editable and not finished.
  *
@@ -899,17 +914,16 @@ const connectOf = (interaction: GraphicOrderPayload, payload: Payload, locale: L
       badge:
         position === -1
           ? Option.none()
-          : Option.some({
-              props: {
-                "data-position": String(position + 1),
-                "data-slot": rows.badge.slot,
-                ...Option.match(drawing, {
-                  onNone: () => ({}),
-                  onSome: (figure) => ({ style: placementOf(hotspot, figure, frame) }),
-                }),
-              },
-              text: numeral(locale, position + 1),
-            }),
+          : drawing.pipe(
+              Option.map((figure): TextProps => ({
+                props: {
+                  "data-position": String(position + 1),
+                  "data-slot": rows.badge.slot,
+                  ...placementOf(hotspot, figure),
+                },
+                text: numeral(locale, position + 1),
+              })),
+            ),
       drawing,
       hotspot: {
         "aria-label": nameOf(interaction.hotspots, index, locale),
@@ -1004,7 +1018,9 @@ const flattened = (props: Props): Connected => ({
  * The Prompt's and the image's content go through {@link emitNodes}, as the body's do, so they get
  * its id scoping, heading shift, URLs and Notices. Each part goes through `applyPart` with its
  * replacement from `state.parts`, so every swap holds I1 to I4. A hotspot whose area holds no
- * drawing is written with no Outline.
+ * drawing is written with no Outline, and so with no Badge: an ordered hotspot's Badge is an SVG
+ * `text` placed inside its Outline after the shape, which the Outline hands its replacement as
+ * children beside the shape (Q-9, issue ei-10b, GitHub issue #193).
  *
  * @param interaction The Graphic Order's payload.
  * @param payload The render's payload.
@@ -1047,11 +1063,6 @@ const renderGraphicOrder = (
     const hotspots = yield* Result.all(
       props.hotspots.map((entry) =>
         Result.gen(function* hotspotItem() {
-          const outline = yield* Result.transposeOption(
-            entry.drawing.pipe(
-              Option.map(({ figure }) => place("outline", entry.outline, [figure])),
-            ),
-          );
           const badge = yield* Result.transposeOption(
             entry.badge.pipe(
               Option.map(({ props: attributes, text: written }) =>
@@ -1059,11 +1070,15 @@ const renderGraphicOrder = (
               ),
             ),
           );
+          const outline = yield* Result.transposeOption(
+            entry.drawing.pipe(
+              Option.map(({ figure }) =>
+                place("outline", entry.outline, [figure, ...Option.toArray(badge)]),
+              ),
+            ),
+          );
 
-          return yield* place("hotspot", entry.hotspot, [
-            ...Option.toArray(outline),
-            ...Option.toArray(badge),
-          ]);
+          return yield* place("hotspot", entry.hotspot, Option.toArray(outline));
         }),
       ),
     );

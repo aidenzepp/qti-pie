@@ -1411,7 +1411,7 @@
 
 /*
  * The outline fills the image's box, so its coordinates scale with the image. A default area lies
- * under the others, which it would hide; every Badge lies over them all.
+ * under the others, which it would hide.
  */
 :where([data-slot="graphic-order-interaction-outline"]) {
   position: absolute;
@@ -1449,29 +1449,22 @@
 }
 
 /*
- * The Badge, a hotspot's position: a round chip centred on its area, where the page's own `left`
- * and `top` place it. With none it sits at the image's corner. Its number is text, so it is read.
+ * The Badge, a hotspot's position: an SVG text inside the outline, centred on its area by the `x`
+ * and `y` the page writes in the outline's own units, so it takes no inline style. Its fill is the
+ * primary colour and the halo, a stroke in the card colour painted under the fill, keeps the number
+ * legible over any image, as the chip's border did (1.4.11). The number is text, so the order never
+ * shows by colour alone (1.4.1). It scales with the image, as the outline's viewBox does.
  */
 :where([data-slot="graphic-order-interaction-badge"]) {
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-start: 0;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  min-inline-size: 1.5rem;
-  min-block-size: 1.5rem;
-  padding: 0 0.25rem;
-  border: 2px solid var(--card, oklch(1 0 0));
-  border-radius: 9999px;
-  background-color: var(--primary, oklch(0.205 0 0));
-  color: var(--primary-foreground, oklch(0.985 0 0));
+  fill: var(--primary, oklch(0.205 0 0));
+  stroke: var(--card, oklch(1 0 0));
+  stroke-width: 4px;
+  paint-order: stroke;
   font-size: 0.875rem;
   font-weight: 600;
-  line-height: 1;
-  translate: -50% -50%;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
 }
 
 /* The positions: a numbered list beside the image. */
@@ -1659,12 +1652,78 @@
 /* end slider-interaction */
 
 /* begin media-interaction (issue ei-03) */
+
+/* The Media Root: a block holding the Prompt, then the author's audio or video. */
+:where([data-slot="media-interaction"]) {
+  display: block;
+}
+
+/* The Media Prompt: its own line, set apart by weight as Choice's and Slider's are. */
+:where([data-slot="media-interaction-prompt"]) {
+  margin-block-end: 0.5rem;
+  font-weight: 500;
+}
+
+/*
+ * The media part wraps the author's element, whose browser controls, when the author asked for
+ * them, and whose focus ring stay the browser's own: nothing here draws a player or clips a ring.
+ */
+:where([data-slot="media-interaction-media"]) {
+  display: block;
+  margin-block-end: 0.5rem;
+}
+
 /* end media-interaction */
 
 /* begin upload-interaction (issue ei-01) */
 /* end upload-interaction */
 
 /* begin end-attempt-interaction (issue ei-02) */
+
+/* The End Attempt Root: inline, in the run of the author's sentence, as the Inline Choice Root is. */
+:where([data-slot="end-attempt-interaction"]) {
+  display: inline-block;
+}
+
+/*
+ * The End Attempt Control, a native submit button: the navigation buttons' card surface, border
+ * and font. It is 24px at the least in both directions, so a button that stands alone is no
+ * smaller a target than WCAG 2.5.8 (Minimum) asks; in the author's sentence it falls under that
+ * criterion's Inline exception too.
+ */
+:where([data-slot="end-attempt-interaction-control"]) {
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--input, oklch(0.922 0 0));
+  border-radius: calc(var(--radius, 0.625rem) * 0.8);
+  font: inherit;
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/* The End Attempt Control under the pointer, unless it is disabled: a navigation button's hover. */
+:where([data-slot="end-attempt-interaction-control"]:hover:not(:disabled)) {
+  background-color: var(--accent, oklch(0.97 0 0));
+  color: var(--accent-foreground, oklch(0.205 0 0));
+}
+
+/*
+ * A disabled End Attempt Control, in review and solution and when the author disabled the Root. It
+ * stays dimmed in every mode: it carries no answer to read, so no mode shows it at full strength.
+ */
+:where([data-slot="end-attempt-interaction-control"]:disabled) {
+  opacity: 0.5;
+}
+
+/* Focus on the End Attempt Control: the same ring as a navigation button's. */
+:where([data-slot="end-attempt-interaction-control"]:focus-visible) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
+
 /* end end-attempt-interaction */
 
 /* begin portable-custom-interaction (issue pci-03) */
