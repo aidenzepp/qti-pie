@@ -375,6 +375,49 @@ describe("[Q-9] Graphic Order", () => {
   );
 
   it.effect(
+    "[Q-9] a circle's percentage radius is a percentage of the smaller of the image's width and height",
+    () =>
+      Effect.gen(function* radius() {
+        const page = yield* rendered(
+          yield* fixture("graphic-order.xml", [['coords="160,70,30"', 'coords="50%,35%,15%"']]),
+        );
+
+        assert.deepStrictEqual(drawnOf(outlineOf(page.root, "H2")?.figure), {
+          attrs: { cx: "160", cy: "70", r: "30" },
+          tag: "circle",
+        });
+      }),
+  );
+
+  it.effect(
+    "[Q-9] on an image taller than wide the circle's percentage radius is of the width, which is the smaller side, and an ellipse's radii stay on their own axes",
+    () =>
+      Effect.gen(function* taller() {
+        const page = yield* rendered(
+          yield* fixture("graphic-order.xml", [
+            ['width="320" height="200"', 'width="200" height="320"'],
+            ['coords="160,70,30"', 'coords="50%,35%,15%"'],
+            ['coords="90,165,45,20"', 'coords="30%,50%,15%,10%"'],
+          ]),
+        );
+        const outlines = parts(page.root, "-outline");
+
+        assert.deepStrictEqual(drawnOf(outlineOf(page.root, "H2")?.figure), {
+          attrs: { cx: "100", cy: "112", r: "30" },
+          tag: "circle",
+        });
+        assert.deepStrictEqual(drawnOf(outlineOf(page.root, "H4")?.figure), {
+          attrs: { cx: "60", cy: "160", rx: "30", ry: "32" },
+          tag: "ellipse",
+        });
+        assert.lengthOf(outlines, 4);
+        for (const svg of outlines) {
+          assert.strictEqual(attr(svg, "viewBox"), "0 0 200 320");
+        }
+      }),
+  );
+
+  it.effect(
     "[Q-9] a hotspot's template-identifier is a mark on the verdict, and the hotspot renders as shown",
     () =>
       Effect.gen(function* templated() {

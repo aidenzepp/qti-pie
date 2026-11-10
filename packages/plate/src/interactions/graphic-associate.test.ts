@@ -378,6 +378,44 @@ describe("[Q-7] Graphic Associate", () => {
       }),
   );
 
+  it.effect(
+    "[Q-7] a circle's percentage radius is a percentage of the smaller of the image's width and height",
+    () =>
+      Effect.gen(function* radius() {
+        const page = yield* rendered(
+          yield* fixture([['coords="170,70,30"', 'coords="25%,35%,15%"']]),
+        );
+
+        assert.deepStrictEqual(drawnOf(outlineOf(page.root, "H3")?.figure), {
+          attrs: { cx: "80", cy: "70", r: "30" },
+          tag: "circle",
+        });
+      }),
+  );
+
+  it.effect(
+    "[Q-7] on an image taller than wide the circle's percentage radius is of the width, which is the smaller side",
+    () =>
+      Effect.gen(function* taller() {
+        const page = yield* rendered(
+          yield* fixture([
+            ['width="320" height="200"', 'width="200" height="320"'],
+            ['coords="170,70,30"', 'coords="25%,35%,15%"'],
+          ]),
+        );
+        const outlines = parts(page.root, "-outline");
+
+        assert.deepStrictEqual(drawnOf(outlineOf(page.root, "H3")?.figure), {
+          attrs: { cx: "50", cy: "112", r: "30" },
+          tag: "circle",
+        });
+        assert.lengthOf(outlines, 4);
+        for (const svg of outlines) {
+          assert.strictEqual(attr(svg, "viewBox"), "0 0 200 320");
+        }
+      }),
+  );
+
   it.effect("[Q-7] restored pairs name both hotspots and write one hidden input each", () =>
     Effect.gen(function* restored() {
       const page = yield* rendered(yield* fixture(), {
