@@ -61,9 +61,8 @@ import {
   VariableRef,
   VariableRefDeclaration,
 } from "#pantry/qti/expressions.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Author, AuthorApp } from "#pantry/test/qti.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
-import { Author } from "#pantry/qti/roles.ts";
 import {
   assertVerdict,
   judged,

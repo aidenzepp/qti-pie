@@ -68,7 +68,7 @@ import type {
 } from "#pantry/qti/attributes.ts";
 import type { Document, Namespace } from "#pantry/qti/chardata.ts";
 import type { Node } from "#pantry/qti/node.ts";
-import type { Author } from "#pantry/qti/roles.ts";
+import type { AuthorRole } from "#pantry/qti/roles.ts";
 
 /**
  * The ids one document's rows are written under, and where it stands in its package: every overlay
@@ -1055,15 +1055,15 @@ const rowsOfSet = Struct.lambda<RowsOfSet>((set) => [...set.values()]);
  * their families nested; the `Package` insert its record. Every other input is its keyed set's
  * rows, flat, those of {@link patternInputs} sorted by their pattern's inputs.
  *
- * The caller passes the role, the one its database was opened on: describing `Author` costs about
- * 2 s and 271 MB when `#pantry/qti/roles.ts` loads (measured 2026-11-06 at load average 27), and
- * a caller that only builds rows, such as the dry run, never needs it.
+ * The caller passes the role, the one its database was opened on: describing the author role costs
+ * about 2 s and 271 MB (measured 2026-11-06 at load average 27), and a caller that only builds
+ * rows, such as the dry run, never needs it.
  *
- * @param author - The author role, `Author` of `#pantry/qti/roles.ts`.
+ * @param author - The author role (`#pantry/qti/roles.ts` `authorRole`).
  * @param inputs - The package's inputs.
  * @returns The ChangeSet, compiled by `db.apply` for the one call that applies it.
  */
-export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
+export const changeSetOf = (author: AuthorRole, inputs: PackageInputs) =>
   ChangeSet.empty(author).insertAll({
     ...Struct.map(rowsOfSet)(inputs),
     ...patternOrdered(inputs),

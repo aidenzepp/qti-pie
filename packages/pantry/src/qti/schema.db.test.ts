@@ -14,7 +14,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { NodeKind } from "#pantry/grammar/install.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { AuthorApp } from "#pantry/test/qti.ts";
 import { authorRole, loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 

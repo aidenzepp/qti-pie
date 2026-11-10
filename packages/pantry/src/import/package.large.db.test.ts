@@ -44,7 +44,7 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { AuthorApp } from "#pantry/test/qti.ts";
 import { Package } from "#pantry/qti/package.ts";
 import { authorRole, loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";

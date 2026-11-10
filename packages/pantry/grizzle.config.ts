@@ -2,7 +2,7 @@ import { defineConfig } from "@bjornpagen/grizzle";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { Effect } from "effect";
 import { migrationConnection } from "#pantry/db/connection.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { authorLogin } from "#pantry/qti/logins.ts";
 import { qti } from "#pantry/qti/schema.ts";
 
 /**
@@ -18,7 +18,7 @@ export default defineConfig({
   connection: await Effect.runPromise(
     migrationConnection.pipe(Effect.provide(NodeFileSystem.layer)),
   ),
-  logins: [AuthorApp],
+  logins: [authorLogin(qti())],
   migrations: "migrations",
   schemas: [qti()],
 });

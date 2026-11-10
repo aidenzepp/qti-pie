@@ -33,10 +33,10 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import type { Report } from "#pantry/export/compare.ts";
 import { compareWithRecord, exportEntries, exportPackage } from "#pantry/export/package.ts";
-import { documentScan, documentsOf } from "#pantry/export/scan.ts";
+import { authorReadsOf, documentScanOf } from "#pantry/export/scan.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { AuthorApp, Qti } from "#pantry/test/qti.ts";
 import { loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -72,14 +72,14 @@ const accepted = [
 ] as const;
 
 /**
- * The statements one page of `documentScan` runs in its flight: one for the `Node` rows, one for
- * each of the seven attachments on a node (comment, instruction, doctype, foreign element name,
- * `Document` row, attributes, namespace declarations), one for the XML declaration on the
- * `Document` row, one for each of the two on the declaration (encoding, standalone), and one for
- * each of the two on an attribute (entity references, open name). An attachment over exact parents
- * is pipelined, its own statement in the parent's flight and snapshot (the engine's
- * `lower/shapes/attach/index.ts`, `chooseAttachment`), so the count is the scan's shape and no
- * row's.
+ * The statements one page of the document scan (`documentScanOf`) runs in its flight: one for the
+ * `Node` rows, one for each of the seven attachments on a node (comment, instruction, doctype,
+ * foreign element name, `Document` row, attributes, namespace declarations), one for the XML
+ * declaration on the `Document` row, one for each of the two on the declaration (encoding,
+ * standalone), and one for each of the two on an attribute (entity references, open name). An
+ * attachment over exact parents is pipelined, its own statement in the parent's flight and snapshot
+ * (the engine's `lower/shapes/attach/index.ts`, `chooseAttachment`), so the count is the scan's
+ * shape and no row's.
  */
 const scanStatements = 13;
 
@@ -298,11 +298,13 @@ describe.skipIf(!hasLease)(
               }
 
               for (const { id, name } of yield* Imported) {
-                const documents = yield* (yield* db.execute(documentsOf, { package: id })).collect;
+                const documents = yield* (yield* db.execute(authorReadsOf(Qti).documentsOf, {
+                  package: id,
+                })).collect;
 
                 assert.isAbove(documents.length, 0, name);
                 for (const { node, path: entry } of documents) {
-                  const plans = yield* db.explain(documentScan, { document: node });
+                  const plans = yield* db.explain(documentScanOf(Qti), { document: node });
                   const [scan] = plans;
                   const where = `${name} ${entry}`;
 
@@ -314,8 +316,9 @@ describe.skipIf(!hasLease)(
                     assert.isTrue(readsByIndex(types), `${where}: ${types.join(" > ")}`);
                   }
 
-                  const starts = (yield* (yield* db.execute(documentScan, { document: node }))
-                    .collect).map(({ start }) => start);
+                  const starts = (yield* (yield* db.execute(documentScanOf(Qti), {
+                    document: node,
+                  })).collect).map(({ start }) => start);
                   assert.isTrue(
                     starts.every((start, at) => at === 0 || (starts[at - 1] ?? start) < start),
                     `${where}: the scan's rows in start order`,
