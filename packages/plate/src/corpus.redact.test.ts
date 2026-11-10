@@ -2306,6 +2306,7 @@ describe("the held sweep over the corpus", () => {
               item: accepted.item,
               json: Result.getOrThrow(plate.encodeRedacted(redacted)),
               location: `${heldControlLocation} (${state.name})`,
+              normalised: normalisedTexts(member),
               record: state.record,
               redacted,
               state: state.name,
