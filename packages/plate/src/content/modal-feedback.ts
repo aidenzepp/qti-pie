@@ -29,6 +29,14 @@ const notImplemented = (): never => {
  * The Modal Feedback module, a stub.
  */
 export const modalFeedbackModule: ItemContentModule<typeof element, never> = {
+  /**
+   * Modal Feedback's payload copy: not implemented; issue m5-01 fills it.
+   */
+  /**
+   * No content: a stub has no payload node, so the heading shift reads none.
+   */
+  content: () => [],
+  copy: notImplemented,
   element,
   feature: ["I-10"],
   /**
@@ -41,9 +49,14 @@ export const modalFeedbackModule: ItemContentModule<typeof element, never> = {
    * does not read, until issue m5-01 reads the element.
    */
   parse: (_source, context) => context.mark(element),
+  /**
+   * Refuse the element in a redacted item, as the codec refused every node of it before: the model
+   * holds none until issue m5-01 reads the element.
+   */
+  payloadSchema: ({ unimplementedContent }) => unimplementedContent({ element }),
   placement: "item",
   /**
-   * Modal Feedback's payload copy: not implemented; issue m5-01 fills it.
+   * Modal Feedback's redaction: not implemented; issue m5-01 fills it.
    */
   redact: notImplemented,
   /**

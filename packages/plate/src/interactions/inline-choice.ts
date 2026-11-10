@@ -121,6 +121,10 @@ const textIn = (nodes: readonly PayloadNode[]): string =>
         case "text-entry": {
           return "";
         }
+        case "content": {
+          // A content module's node is written through its render, never as option text.
+          return "";
+        }
         default: {
           // Only a payload that lost its type on the way here holds another kind.
           node satisfies never;

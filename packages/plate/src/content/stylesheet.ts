@@ -29,6 +29,14 @@ const notImplemented = (): never => {
  * The Stylesheet module, a stub.
  */
 export const stylesheetModule: ItemContentModule<typeof element, never> = {
+  /**
+   * Stylesheet's payload copy: not implemented; issue m5-06 fills it.
+   */
+  /**
+   * No content: a stub has no payload node, so the heading shift reads none.
+   */
+  content: () => [],
+  copy: notImplemented,
   element,
   feature: ["I-6"],
   /**
@@ -41,9 +49,14 @@ export const stylesheetModule: ItemContentModule<typeof element, never> = {
    * not read, until issue m5-06 reads the element.
    */
   parse: (_source, context) => context.mark(element),
+  /**
+   * Refuse the element in a redacted item, as the codec refused every node of it before: the model
+   * holds none until issue m5-06 reads the element.
+   */
+  payloadSchema: ({ unimplementedContent }) => unimplementedContent({ element }),
   placement: "item",
   /**
-   * Stylesheet's payload copy: not implemented; issue m5-06 fills it.
+   * Stylesheet's redaction: not implemented; issue m5-06 fills it.
    */
   redact: notImplemented,
   /**
