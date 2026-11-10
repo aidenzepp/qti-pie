@@ -928,7 +928,6 @@ export const documentRowsOf = (
             [
               self,
               {
-                documentType: document.documentType,
                 node: self,
                 package: ids.package,
                 path: document.path,

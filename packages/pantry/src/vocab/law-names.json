@@ -1026,6 +1026,12 @@
     "__declaration_base_type_counted_declaration_base_nf76vvhjak": {
       "name": "Declaration overlay"
     },
+    "__declaration_base_type_generated_base_type_lexical_feemqkbjkx": {
+      "name": "E1 derived"
+    },
+    "__declaration_base_type_generated_value_base_dadtehit6u": {
+      "name": "E1 derived"
+    },
     "__declaration_base_type_in_attribute_jy4tytjg4h": {
       "name": "Declaration overlay"
     },
@@ -1043,6 +1049,9 @@
     },
     "__declaration_cardinality_counted_declaration_ezdzbomuwx": {
       "name": "Declaration overlay"
+    },
+    "__declaration_cardinality_generated_cardinality_dit7vkuytv": {
+      "name": "E1 derived"
     },
     "__declaration_cardinality_in_attribute_mduokyxqyf": {
       "name": "Declaration overlay"
@@ -1912,6 +1921,9 @@
       "name": "Key text bound"
     },
     "__literal_pk_node_d23l3545zu": {
+      "name": "E1 derived"
+    },
+    "__literal_typed_generated_base_type_lcxovvdztm": {
       "name": "E1 derived"
     },
     "__literal_typed_in_literal_65uaay3ga5": {
@@ -3597,6 +3609,9 @@
     "__required_ssml_property_in_data_ssml_property_kmrwg7xowb": {
       "name": "Data SSML"
     },
+    "__resource_document_generated_document_type_hmq6fddtza": {
+      "name": "E1 derived"
+    },
     "__resource_document_in_document_b7z5kfpp6w": {
       "name": "E1 derived"
     },
@@ -3677,6 +3692,9 @@
     },
     "__resource_pk_node_jhcuk2uvtq": {
       "name": "Manifest overlay"
+    },
+    "__resource_typed_generated_type_lexical_yj5tdfmtro": {
+      "name": "E1 derived"
     },
     "__resource_typed_in_resource_t4mzi4etmm": {
       "name": "E1 derived"
@@ -4689,6 +4707,9 @@
     "__value_base_type_cardinalities_in_field_value_mnifoanx2r": {
       "name": "Declaration overlay"
     },
+    "__value_base_type_generated_base_type_lexical_mldsdle3hu": {
+      "name": "E1 derived"
+    },
     "__value_base_type_in_attribute_fum3puumat": {
       "name": "Declaration overlay"
     },
@@ -4769,6 +4790,9 @@
     },
     "__variable_mapping_pk_node_fbuszizg4u": {
       "name": "Test overlay"
+    },
+    "__variable_ref_cardinality_generated_cardinality_asp3jpgqvi": {
+      "name": "E1 derived"
     },
     "__variable_ref_cardinality_in_declaration_j3lz67gcda": {
       "name": "E1 derived"

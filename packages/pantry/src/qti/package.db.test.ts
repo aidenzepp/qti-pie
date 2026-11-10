@@ -330,40 +330,6 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
       }),
     );
 
-    it.effect("refuses a resource's row by its own law: its code", () =>
-      // Oracle: PostgreSQL, judged as the rows are inserted: C17's "E1 derived", a CHECK on a
-      // resource's type (a code its lexical form does not spell). P4 "Manifest id space", the
-      // key over the query `ManifestIdSpace` (`src/qti/queries.ts`), is a rule over a query the
-      // database judges at COMMIT, witnessed through the importer by a resource of the
-      // manifest's identifier (`#pantry/import/program.oracle.db.test.ts`). Which types a version admits is the `type` attribute's value
-      // domain's (spec reading 67), a law of `Attribute`, so no law of the row reads it.
-      // Bound: one case per law, every other law of its rows kept.
-      Effect.gen(function* resourceChecks() {
-        const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
-        const cases = [
-          {
-            facts: importFacts({
-              ResourceTyped: [
-                {
-                  node: stray,
-                  package: stray,
-                  type: "imsqti_item_xmlv3p0",
-                  typeLexical: "webcontent",
-                },
-              ],
-            }),
-            law: checkNamed("ResourceTyped", "E1_derived"),
-            name: "E1 derived",
-          },
-        ];
-        for (const { facts, law, name } of cases) {
-          const outcome = yield* db.workload.importWrite.apply(facts, {});
-
-          assert.isTrue(rejectedBy(outcome, law), `${name}: ${outcome.kind}`);
-        }
-      }),
-    );
-
     it.effect(
       "refuses a document whose root its resource type does not name, and a document of no resource but the manifest",
       () =>
@@ -397,7 +363,6 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               Document: [item],
               ResourceDocument: [
                 {
-                  documentType: item.documentType,
                   node: item.node,
                   package: item.package,
                   path: item.path,
@@ -823,7 +788,6 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                     node: stray,
                     package: stray,
                     type: "imsqti_item_xmlv3p0",
-                    typeLexical: "imsqti_item_xmlv3p0",
                   },
                   relation: ResourceTyped,
                 },

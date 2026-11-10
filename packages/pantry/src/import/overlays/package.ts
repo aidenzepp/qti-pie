@@ -810,12 +810,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
 
       for (const typeLexical of Option.toArray(valueOf(node, "type"))) {
         for (const code of Option.toArray(typeOf(typeLexical))) {
-          resourceTypes.set(node.id, {
-            node: node.id,
-            package: ids.package,
-            type: code,
-            typeLexical,
-          });
+          resourceTypes.set(node.id, { node: node.id, package: ids.package, type: code });
         }
       }
 

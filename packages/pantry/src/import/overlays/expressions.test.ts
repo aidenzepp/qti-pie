@@ -77,7 +77,6 @@ import {
   setKindHandles,
   TailCardinality,
   ValueBaseForm,
-  ValueBaseOf,
   ValueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
@@ -203,8 +202,6 @@ const forms = new Map(
 const literalPatterns = new Map(
   BaseTypePattern.rows.map(({ baseType, pattern }) => [baseType, new RegExp(pattern, "u")]),
 );
-
-const valueBaseOf = new Map(ValueBaseOf.rows.map(({ baseType, value }) => [baseType, value]));
 
 const valueCardinalityOf = new Map(
   ValueCardinalityOf.rows.map(({ cardinality, value }) => [cardinality, value]),
@@ -746,21 +743,15 @@ const attributeDerives = (
 };
 
 /**
- * The laws a base value's typed rows break: `LiteralTyped`'s `E1_derived`, its code the one its
- * base type is, never `unknown`, and its `Literal_lexical`, its text a form of that code.
+ * The laws a base value's typed rows break: its `Literal_lexical`, its text a form of its code.
  *
  * @param rows - The rows.
  * @returns The laws broken, once each per row.
  */
 const literalBreaches = (rows: ExpressionRows): readonly Law[] =>
-  [...rows.LiteralTyped.values()].flatMap((l): readonly Law[] => [
-    ...(l.baseType === "unknown" || valueBaseOf.get(l.typeCode) !== l.baseType
-      ? (["E1_derived"] as const)
-      : []),
-    ...((literalPatterns.get(l.typeCode)?.test(l.text) ?? false)
-      ? []
-      : (["Literal_lexical"] as const)),
-  ]);
+  [...rows.LiteralTyped.values()].flatMap((l): readonly Law[] =>
+    (literalPatterns.get(l.typeCode)?.test(l.text) ?? false) ? [] : (["Literal_lexical"] as const),
+  );
 
 /**
  * The laws the rows of the smaller overlays break: `Processing`'s language, `ExpressionAttribute`'s

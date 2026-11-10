@@ -47,7 +47,6 @@ import {
   reservedBaseTypes,
   sessionVariables,
   TypedValue,
-  ValueBaseType,
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -94,13 +93,12 @@ interface DeclarationFacts {
 
 /**
  * A declaration's facts, lawful on their own beside its base type's row ({@link declared}): an
- * outcome `A` of single cardinality, its lexical forms the handles' own, its identifier, which
+ * outcome `A` of single cardinality, its identifier, which
  * copies its row's document, kind and counts, and its name, which copies its identifier and its
  * cardinality (spec readings 157 and 158).
  *
  * @param fields - The fields the case sets.
  * @param fields.cardinality - Its cardinality.
- * @param fields.cardinalityLexical - Its `cardinality` as written.
  * @param fields.identifier - Its collapsed identifier, written bare.
  * @param fields.kind - Its kind.
  * @param fields.parentKind - The kind of its parent, an item unless the case says a test.
@@ -108,7 +106,6 @@ interface DeclarationFacts {
  */
 const declarationRow = (fields: {
   readonly cardinality?: string;
-  readonly cardinalityLexical?: string;
   readonly identifier?: string;
   readonly kind?: string;
   readonly parentKind?: string;
@@ -119,11 +116,7 @@ const declarationRow = (fields: {
   const identifier = fields.identifier ?? "A";
 
   return {
-    cardinality: {
-      cardinality,
-      cardinalityLexical: fields.cardinalityLexical ?? cardinality,
-      node: strayNode(1),
-    },
+    cardinality: { cardinality, node: strayNode(1) },
     identifier: {
       cardinalities: 1n,
       declarationKind: kind,
@@ -181,7 +174,7 @@ const declared = (
     { fact: row, relation: Declaration },
     { fact: cardinality, relation: DeclarationCardinality },
     ...Option.toArray(baseType).map((code): Stated => ({
-      fact: { baseType: code, baseTypeLexical: code, node: strayNode(1), valueBase: code },
+      fact: { baseType: code, node: strayNode(1) },
       relation: DeclarationBaseType,
     })),
     { fact: { ...identifier, baseTypes }, relation: DeclarationIdentifier },
@@ -502,97 +495,19 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
     );
 
     it.effect(
-      "refuses a code that disagrees with its lexical form, through direct SQL, by E1 derived",
+      "refuses an identifier its pieces do not spell, through direct SQL, by E1 derived",
       () =>
-        // Oracle: the closed relations, `BaseTypeLexical` and `CardinalityLexical` (C17): a code
-        // is the handle its lexical form spells, and `base-type` and `cardinality` restrict
-        // xs:string, so a padded form spells no handle; and a base type's `ValueBaseOf` image is
-        // its expression type.
-        // Bound: each kind of disagreement, named, and its control, on a declaration's row and on
-        // a declaration's and a value's base type row.
+        // Oracle: XML Schema's whitespace collapse: an identifier is its lexical form without its
+        // outer whitespace, and the pieces written around it concatenate to the form. A code's
+        // spelling and its expression type are the database's (`CardinalityLexical`,
+        // `BaseTypeLexical`, `ValueBaseOf`), so no row disagrees with its code.
+        // Bound: each kind of disagreement, named, and its control.
         Effect.gen(function* codes() {
           const client = yield* loginSession;
-          const baseTypes = [
-            {
-              baseType: "float",
-              baseTypeLexical: "float",
-              label: "control",
-              refused: false,
-              valueBase: "float",
-            },
-            {
-              baseType: "integer",
-              baseTypeLexical: "float",
-              label: "integer written float",
-              refused: true,
-              valueBase: "integer",
-            },
-            {
-              baseType: "float",
-              baseTypeLexical: " float",
-              label: "padded",
-              refused: true,
-              valueBase: "float",
-            },
-            {
-              baseType: "float",
-              baseTypeLexical: "",
-              label: "empty",
-              refused: true,
-              valueBase: "float",
-            },
-            {
-              baseType: "float",
-              baseTypeLexical: "float",
-              label: "expression type integer",
-              refused: true,
-              valueBase: "integer",
-            },
-          ];
-          // A value's own base type has no expression type, so its row is lawful where only a
-          // declaration's expression type disagrees.
-          for (const { baseType, baseTypeLexical, label, refused, valueBase } of baseTypes) {
-            const valueRefused = refused && baseType === valueBase;
-            assertVerdict(
-              yield* judged(
-                client,
-                statedInserts([
-                  {
-                    fact: { baseType, baseTypeLexical, node: strayNode(1), valueBase },
-                    relation: DeclarationBaseType,
-                  },
-                ]),
-              ),
-              checkConstraintOf(Qti, DeclarationBaseType.name, "E1_derived"),
-              refused,
-              `declaration base type ${label}`,
-            );
-            assertVerdict(
-              yield* judged(
-                client,
-                statedInserts([
-                  {
-                    fact: { baseType, baseTypeLexical, cardinalities: 1n, node: strayNode(3) },
-                    relation: ValueBaseType,
-                  },
-                ]),
-              ),
-              checkConstraintOf(Qti, ValueBaseType.name, "E1_derived"),
-              valueRefused,
-              `value base type ${label}`,
-            );
-          }
-
           const control = declarationRow({});
           const padded = declarationRow({ identifier: " A" });
           const cases = [
             { facts: control, label: "control", on: DeclarationIdentifier, refused: false },
-            {
-              facts: declarationRow({ cardinalityLexical: "multiple" }),
-              label: "cardinality single written multiple",
-              on: DeclarationCardinality,
-              refused: true,
-            },
             {
               facts: {
                 ...control,

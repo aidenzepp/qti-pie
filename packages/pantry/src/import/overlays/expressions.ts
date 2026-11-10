@@ -1199,12 +1199,7 @@ const expressionRowsOf = (
     // A literal is typed where its base-type spells a code, the one its type is (7230d050).
     const typeCode = spelledBaseTypeOf(Option.fromUndefinedOr(valueOf(doc, node.id, "base-type")));
     if (type.baseType !== "unknown" && Option.isSome(typeCode)) {
-      built.LiteralTyped.set(node.id, {
-        baseType: type.baseType,
-        node: node.id,
-        text,
-        typeCode: typeCode.value,
-      });
+      built.LiteralTyped.set(node.id, { node: node.id, text, typeCode: typeCode.value });
     }
   }
 };
@@ -1299,7 +1294,6 @@ const referenceDeclarationsOf = (
       for (const declCardinality of Option.toArray(declared.cardinality)) {
         cardinalities.set(at, {
           attribute: reference.attribute,
-          cardinality: reference.cardinality,
           declCardinality,
           declaration: declared.node,
           node: reference.node,

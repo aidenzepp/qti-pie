@@ -997,7 +997,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             written: true,
           };
           const literal: Addition<typeof LiteralTyped> = {
-            baseType: "integer",
             node,
             text: "abc",
             typeCode: "integer",

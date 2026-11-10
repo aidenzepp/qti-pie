@@ -42,7 +42,6 @@ import type {
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
 import { normalMinimumDefaults } from "#pantry/vocab/terms/declarations.ts";
-import { valueBaseOf } from "#pantry/vocab/terms/expression-types.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
@@ -558,20 +557,11 @@ const addDeclaration = (
   const parentKind = parentKindOf(reading, node);
   reading.rows.Declaration.set(node.id, { ...tupleOf(reading, node), declarationKind, parentKind });
   for (const cardinality of Option.toArray(typed.cardinality)) {
-    reading.rows.DeclarationCardinality.set(node.id, {
-      cardinality,
-      cardinalityLexical: cardinality,
-      node: node.id,
-    });
+    reading.rows.DeclarationCardinality.set(node.id, { cardinality, node: node.id });
   }
 
   for (const baseType of Option.toArray(typed.baseType)) {
-    reading.rows.DeclarationBaseType.set(node.id, {
-      baseType,
-      baseTypeLexical: baseType,
-      node: node.id,
-      valueBase: valueBaseOf(baseType),
-    });
+    reading.rows.DeclarationBaseType.set(node.id, { baseType, node: node.id });
   }
 
   for (const { lexical, pieces } of Option.toArray(typed.name)) {
@@ -697,7 +687,6 @@ const addValue = (
   for (const baseType of Option.toArray(spelledBaseTypeOf(fieldBaseType))) {
     reading.rows.ValueBaseType.set(node.id, {
       baseType,
-      baseTypeLexical: baseType,
       cardinalities: set.cardinalities,
       node: node.id,
     });

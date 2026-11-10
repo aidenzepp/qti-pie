@@ -72,6 +72,7 @@ import {
   counted,
   drawn,
   fin,
+  generated,
   key,
   natural,
   on,
@@ -275,8 +276,9 @@ export const Declaration = relation(
 
 /**
  * A declaration's `cardinality`, keyed by its node, where it spells a code, a counted member of its
- * {@link Declaration}: `cardinalityLexical`, its lexical form as written (C18's copy), and
- * `cardinality`, the `Cardinality` that form spells (C17).
+ * {@link Declaration}: `cardinality`, the `Cardinality` its lexical form spells (C17), and
+ * `cardinalityLexical`, that code's spelling, which the database derives (`CardinalityLexical`) and
+ * the attribute as written is copied into (C18).
  *
  * It is the one row a declaration's cardinality is read from: every row that names a declaration
  * copies whether it has one (`cardinalities`), and one that reads the cardinality copies it from
@@ -286,16 +288,20 @@ export const Declaration = relation(
  *
  * Copied text is `keyText` (`#pantry/qti/limits.ts`): each copy sits in a containment's index.
  */
-export const DeclarationCardinality = relation(
+export const DeclarationCardinality = relation.generated(
   "DeclarationCardinality",
-  { cardinality: closedId(Cardinality), cardinalityLexical: keyText, node: uuid },
+  { cardinality: closedId(Cardinality), node: uuid },
   ["node"],
+  (c) => ({
+    cardinalityLexical: generated(keyText, CardinalityLexical.at("lexical", c.cardinality)),
+  }),
 );
 
 /**
  * A declaration's `base-type`, keyed by its node, where it spells a code, a counted member of its
- * {@link Declaration}: `baseTypeLexical`, its lexical form as written (C18's copy), `baseType`, the
- * `BaseType` that form spells (C17), and `valueBase`, that code as an expression's type
+ * {@link Declaration}: `baseType`, the `BaseType` its lexical form spells (C17), and two fields the
+ * database derives from it: `baseTypeLexical`, the code's spelling (`BaseTypeLexical`), which the
+ * attribute as written is copied into (C18), and `valueBase`, the code as an expression's type
  * (`ValueBaseOf`). A record writes none ("Variables with record cardinality have no base-type",
  * QTI 3.0 information model, tables 4.5.3, 5.34.3, 5.115.3 and 5.151.3), and has no row; nor has a
  * declaration whose `base-type` spells nothing, which its value domain refuses alone (spec reading
@@ -305,15 +311,14 @@ export const DeclarationCardinality = relation(
  * copies whether it has one (`baseTypes`), and one that reads the type copies it from here, so
  * only where it is.
  */
-export const DeclarationBaseType = relation(
+export const DeclarationBaseType = relation.generated(
   "DeclarationBaseType",
-  {
-    baseType: closedId(BaseType),
-    baseTypeLexical: keyText,
-    node: uuid,
-    valueBase: closedId(ValueBase),
-  },
+  { baseType: closedId(BaseType), node: uuid },
   ["node"],
+  (b) => ({
+    baseTypeLexical: generated(keyText, BaseTypeLexical.at("lexical", b.baseType)),
+    valueBase: generated(closedId(ValueBase), ValueBaseOf.at("value", b.baseType)),
+  }),
 );
 
 /**
@@ -528,8 +533,9 @@ export const TypedValue = relation(
 
 /**
  * A value's own `base-type`, keyed by its `qti-value` node, where it writes one that spells a code:
- * `baseTypeLexical`, its lexical form as written, `baseType`, the `BaseType` that form spells
- * (C17), and `cardinalities`, its {@link Value}'s. A record's field's text is read in it
+ * `baseType`, the `BaseType` that form spells (C17), `baseTypeLexical`, that code's spelling, which
+ * the database derives (`BaseTypeLexical`) and the attribute as written is copied into, and
+ * `cardinalities`, its {@link Value}'s. A record's field's text is read in it
  * (information model §7.46.2, Value's base-type: "This characteristic is only used for specifying
  * the base-type of a value that forms part of a record"), through its {@link FieldValue}; any other
  * value's is read in its declaration's, and `Value_cardinality` refuses the attribute there.
@@ -537,15 +543,11 @@ export const TypedValue = relation(
  * A `base-type` written as no code has no row, and its value domain refuses it alone (the
  * orchestrator's ruling of 2026-11-06: one cause is refused under one rule).
  */
-export const ValueBaseType = relation(
+export const ValueBaseType = relation.generated(
   "ValueBaseType",
-  {
-    baseType: closedId(BaseType),
-    baseTypeLexical: keyText,
-    cardinalities: natural,
-    node: uuid,
-  },
+  { baseType: closedId(BaseType), cardinalities: natural, node: uuid },
   ["node"],
+  (b) => ({ baseTypeLexical: generated(keyText, BaseTypeLexical.at("lexical", b.baseType)) }),
 );
 
 /**
@@ -1383,19 +1385,7 @@ export const declarationLawsByName = {
   ],
   "E1 derived": [
     contained(on(Declaration, "kind", "declarationKind"), on(Declares, "kind", "declaration")),
-    check("E1_derived", DeclarationCardinality, (c) =>
-      c.eq(CardinalityLexical.at("lexical", c.cardinality), c.cardinalityLexical),
-    ),
     check("E1_derived", DeclarationIdentifier, collapsedDeclared),
-    check("E1_derived", DeclarationBaseType, (b) =>
-      b.and(
-        b.eq(BaseTypeLexical.at("lexical", b.baseType), b.baseTypeLexical),
-        b.eq(ValueBaseOf.at("value", b.baseType), b.valueBase),
-      ),
-    ),
-    check("E1_derived", ValueBaseType, (b) =>
-      b.eq(BaseTypeLexical.at("lexical", b.baseType), b.baseTypeLexical),
-    ),
     check("E1_derived", RecordFieldName, collapsedField),
     check("E1_derived", NormalMinimum, (n) =>
       n.or(

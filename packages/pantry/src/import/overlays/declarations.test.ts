@@ -1039,25 +1039,6 @@ const documentsOf = (dir: string) =>
 const checkDocument = (path: string, tree: XdmDocument<Composed>): number => {
   const rows = rowsOf(tree, ids);
   assertRows(rows, walk(tree), path);
-  for (const declaration of rows.DeclarationCardinality.values()) {
-    const at = `${path} ${declaration.node}`;
-    assert.strictEqual(
-      CardinalityLexical.rows.find(({ code }) => code === declaration.cardinality)?.lexical,
-      declaration.cardinalityLexical,
-      `${at} cardinality`,
-    );
-  }
-
-  for (const [at, typed] of [
-    ...[...rows.DeclarationBaseType.values()].map((row) => [`${path} base-type`, row] as const),
-    ...[...rows.ValueBaseType.values()].map((row) => [`${path} field base-type`, row] as const),
-  ]) {
-    assert.strictEqual(
-      BaseTypeLexical.rows.find(({ code }) => code === typed.baseType)?.lexical,
-      typed.baseTypeLexical,
-      at,
-    );
-  }
 
   return rows.Declaration.size;
 };

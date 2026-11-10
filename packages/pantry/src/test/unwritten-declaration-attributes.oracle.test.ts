@@ -330,11 +330,8 @@ const assertRows = (drawn: Case, inputs: PackageInputs, label: string): void => 
   switch (drawn.kind) {
     case "declaration": {
       assert.deepStrictEqual(
-        [...inputs.DeclarationBaseType.values()].map(({ baseType, baseTypeLexical }) => [
-          baseType,
-          baseTypeLexical,
-        ]),
-        drawn.baseType === "spelled" ? [["float", "float"]] : [],
+        [...inputs.DeclarationBaseType.values()].map(({ baseType }) => baseType),
+        drawn.baseType === "spelled" ? ["float"] : [],
         `${label}: DeclarationBaseType`,
       );
       assert.strictEqual(inputs.Declaration.size, 1, `${label}: Declaration`);

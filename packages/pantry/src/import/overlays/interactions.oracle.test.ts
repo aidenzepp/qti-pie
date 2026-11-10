@@ -816,7 +816,6 @@ const scored: Addition<typeof DeclarationIdentifier> = {
  */
 const scoredCardinality: Addition<typeof DeclarationCardinality> = {
   cardinality: "single",
-  cardinalityLexical: "single",
   node: scored.node,
 };
 
@@ -825,9 +824,7 @@ const scoredCardinality: Addition<typeof DeclarationCardinality> = {
  */
 const scoredBaseType: Addition<typeof DeclarationBaseType> = {
   baseType: "identifier",
-  baseTypeLexical: "identifier",
   node: scored.node,
-  valueBase: "identifier",
 };
 
 describe("import/overlays/interactions.ts, section references", () => {

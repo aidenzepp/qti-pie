@@ -184,7 +184,7 @@ const expectResource = (
       : Option.none();
   expected.Resource.set(node, row);
   for (const code of Option.toArray(type)) {
-    expected.ResourceTyped.set(node, { node, package: pkg, type: code, typeLexical: code });
+    expected.ResourceTyped.set(node, { node, package: pkg, type: code });
   }
 
   if (href !== undefined) {

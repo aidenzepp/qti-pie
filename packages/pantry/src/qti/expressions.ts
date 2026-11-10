@@ -391,25 +391,30 @@ export const VariableRefDeclaration = relation(
 );
 
 /**
- * A declared {@link VariableRef}'s declaration beside its cardinality, keyed as the reference,
- * where the declaration has one (spec reading 159): `declaration`, its
- * {@link VariableRefDeclaration}'s; `declCardinality`, the declaration's
- * {@link DeclarationCardinality}'s; and `cardinality`, the reference's type's, which `E1_derived`
- * holds to `ValueCardinalityOf`'s image of it. A reference to a declaration whose cardinality is
- * unwritten or spells nothing has none, and its type's cardinality is `unknown`, so no law reads a
- * cardinality the declaration does not have, and AL3 or its value domain refuses it alone (spec
- * reading 158): a missing value is a row of its own relation, never a sentinel.
+ * A declared {@link VariableRef}'s declaration beside its cardinality, keyed as the reference, where
+ * the declaration has one (spec reading 159): `declaration`, its {@link VariableRefDeclaration}'s;
+ * `declCardinality`, the declaration's {@link DeclarationCardinality}'s; and `cardinality`, the
+ * reference's type's, `ValueCardinalityOf`'s image of it, which the database derives. A reference
+ * to a declaration whose cardinality is unwritten or spells nothing has none, and its type's
+ * cardinality is `unknown`, so no law reads a cardinality the declaration does not have, and AL3 or
+ * its value domain refuses it alone (spec reading 158): a missing value is a row of its own
+ * relation, never a sentinel.
  */
-export const VariableRefCardinality = relation(
+export const VariableRefCardinality = relation.generated(
   "VariableRefCardinality",
   {
     attribute: closedId(AttributeName),
-    cardinality: closedId(ValueCardinality),
     declCardinality: closedId(Cardinality),
     declaration: uuid,
     node: uuid,
   },
   ["node", "attribute"],
+  (c) => ({
+    cardinality: generated(
+      closedId(ValueCardinality),
+      ValueCardinalityOf.at("value", c.declCardinality),
+    ),
+  }),
 );
 
 /**
@@ -555,20 +560,17 @@ export const Literal = relation(
 
 /**
  * A base value's type, keyed by its `qti-base-value` node, where its `base-type` spells a base: its
- * text, the declaration code `BaseTypePattern` is keyed by, and its base type, each its
- * {@link Literal} row's. A base value whose `base-type` spells none has an `unknown` base type and
+ * text, the declaration code `BaseTypePattern` is keyed by, each its {@link Literal} row's, and its
+ * base type, the code's `ValueBaseOf` image, which the database derives and its {@link Literal}
+ * holds. A base value whose `base-type` spells none has an `unknown` base type and
  * no row here, so no law reads its text in a type it does not have, and AL1's value domain refuses
  * its `base-type` alone.
  */
-export const LiteralTyped = relation(
+export const LiteralTyped = relation.generated(
   "LiteralTyped",
-  {
-    baseType: closedId(ValueBase),
-    node: uuid,
-    text: keyText,
-    typeCode: closedId(BaseType),
-  },
+  { node: uuid, text: keyText, typeCode: closedId(BaseType) },
   ["node"],
+  (l) => ({ baseType: generated(closedId(ValueBase), ValueBaseOf.at("value", l.typeCode)) }),
 );
 
 /**
@@ -2714,9 +2716,6 @@ export const expressionLawsByName = {
       on(VariableRefCardinality, "declaration", "declCardinality"),
       on(DeclarationCardinality, "node", "cardinality"),
     ),
-    check("E1_derived", VariableRefCardinality, (c) =>
-      c.eq(c.cardinality, ValueCardinalityOf.at("value", c.declCardinality)),
-    ),
     contained(
       on(typedVariableRefs, "declaration", "baseType"),
       on(DeclarationBaseType, "node", "valueBase"),
@@ -2870,9 +2869,6 @@ export const expressionLawsByName = {
     contained(
       on(Literal, "node", "parent", "kind", "language", "baseType", "cardinality"),
       exprRef,
-    ),
-    check("E1_derived", LiteralTyped, (l) =>
-      l.and(l.ne(l.baseType, "unknown"), l.eq(ValueBaseOf.at("value", l.typeCode), l.baseType)),
     ),
     contained(on(templateAttributes, "node", "lexical"), on(ProcessingTemplate, "node", "uri")),
     check("E1_derived", ProcessingTemplate, (t) =>

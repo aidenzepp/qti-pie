@@ -205,19 +205,17 @@ export const ResourceId = relation.generated(
 
 /**
  * A resource's type, keyed by the `cp:resource` node, where its `type` spells a `ResourceType`
- * handle (C17): its package, its `type` as written, and the code. A resource whose `type` spells
- * none, or that writes none, has no row here and names no type anywhere, so AL1's value domain, or
- * AL3, refuses its `type` alone (spec reading 67), and no law reads a type it does not have.
+ * handle (C17): its package, the code, and `typeLexical`, the code's spelling, which the database
+ * derives (`ResourceTypeLexical`) and the `type` as written is copied into. A resource whose `type`
+ * spells none, or that writes none, has no row here and names no type anywhere, so AL1's value
+ * domain, or AL3, refuses its `type` alone (spec reading 67), and no law reads a type it does not
+ * have.
  */
-export const ResourceTyped = relation(
+export const ResourceTyped = relation.generated(
   "ResourceTyped",
-  {
-    node: uuid,
-    package: uuid,
-    type: closedId(ResourceType),
-    typeLexical: keyText,
-  },
+  { node: uuid, package: uuid, type: closedId(ResourceType) },
   ["node"],
+  (r) => ({ typeLexical: generated(keyText, ResourceTypeLexical.at("lexical", r.type)) }),
 );
 
 /**
@@ -319,12 +317,13 @@ export const ResourceHref = relation(
  * `documentType`, and every other document's is the type here, by `ResourceDocumentType`.
  *
  * - **the host's:** `type`, the type its listing names it under (`#pantry/import/program.ts`); and
- *   its `Document`'s `package`, `path`, `rootKind` and `documentType`, which "E1 derived" proves.
+ *   its `Document`'s `package`, `path` and `rootKind`, which "E1 derived" proves;
+ * - **the database's:** `documentType`, its type's (`ResourceDocumentType`), which its `Document`
+ *   holds.
  */
-export const ResourceDocument = relation(
+export const ResourceDocument = relation.generated(
   "ResourceDocument",
   {
-    documentType: closedId(DocumentType),
     node: uuid,
     package: uuid,
     path: EntryPath,
@@ -332,6 +331,12 @@ export const ResourceDocument = relation(
     type: closedId(ResourceType),
   },
   ["node"],
+  (r) => ({
+    documentType: generated(
+      closedId(DocumentType),
+      ResourceDocumentType.at("documentType", r.type),
+    ),
+  }),
 );
 
 /**
@@ -782,18 +787,12 @@ export const packageLawsByName = {
       on(ResourceDocument, "node", "package", "path", "rootKind", "documentType"),
       on(Document, "node", "package", "path", "rootKind", "documentType"),
     ),
-    check("E1_derived", ResourceDocument, (r) =>
-      r.eq(r.documentType, ResourceDocumentType.at("documentType", r.type)),
-    ),
     contained(
       on(
         select(Document, (d) => d.ne(d.documentType, "manifest")),
         "node",
       ),
       on(ResourceDocument, "node"),
-    ),
-    check("E1_derived", ResourceTyped, (r) =>
-      r.eq(ResourceTypeLexical.at("lexical", r.type), r.typeLexical),
     ),
     contained(on(spelledTypes, "node", "lexical"), on(ResourceTyped, "node", "typeLexical")),
     contained(on(ResourceTyped, "node", "package"), on(Resource, "node", "package")),

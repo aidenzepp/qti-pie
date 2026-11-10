@@ -119,7 +119,8 @@ export const namedBy = (
  * The law each generated field of Qti's stored relations is named by, by `Relation.field`: grizzle
  * names one when PostgreSQL refuses a row because the field's column is NULL there (23502). grizzle
  * writes no NULL, so only the field's term can have no value: a closed read `C.at` at a key its
- * closed relation holds no row at. No term of Qti's reads `C.at`, so no row breaks one. Each is
+ * closed relation holds no row at. Every `C.at` a term of Qti's reads is keyed by a closed id of
+ * the row's own, at a relation that holds a row for every handle, so no row breaks one. Each is
  * named by the law that states its value exists, its relation's rows'. The dictionary's generator
  * (`#pantry/test/law-names.ts`) enters each under its GeneratedLawId, and the census
  * (`refusal.oracle.test.ts`) holds the table to `lawsOf(Qti)` both ways:
@@ -150,6 +151,13 @@ export const namedBy = (
  *   ASCII case-folded (a LOM string's `languageTag`) or collapsed and case-folded (an object's
  *   `langTag`), cast into the form's own key text, a cast the schema proves total: a written text,
  *   never NULL.
+ * - A code's spelling and its expression type are a closed read keyed by the row's own code, which
+ *   holds a row for every handle: a declaration's cardinality's and base type's, a value's base
+ *   type's and a resource type's `…Lexical` (`CardinalityLexical`, `BaseTypeLexical`,
+ *   `ResourceTypeLexical`), a declaration's base type's `valueBase` and a base value's `baseType`
+ *   (`ValueBaseOf`), a reference's `cardinality` (`ValueCardinalityOf`), and a resource's
+ *   document's `documentType` (`ResourceDocumentType`): never NULL, a field a closed relation
+ *   determines, E1 derived.
  * - An maction's `selection` is 1 where it writes none, its collapsed form read as an integer where
  *   that is one and not negative, and 0 otherwise: every arm a value, never NULL.
  */
@@ -182,6 +190,14 @@ export const generatedNames: readonly (readonly [string, LawName])[] = [
     "LomStringLanguage.languageTag",
     "ObjectLang.langTag",
     "MathAction.selection",
+    "DeclarationCardinality.cardinalityLexical",
+    "DeclarationBaseType.baseTypeLexical",
+    "DeclarationBaseType.valueBase",
+    "ValueBaseType.baseTypeLexical",
+    "ResourceTyped.typeLexical",
+    "ResourceDocument.documentType",
+    "VariableRefCardinality.cardinality",
+    "LiteralTyped.baseType",
   ),
   ...namedBy("Entry family", "Entry.digest"),
 ];

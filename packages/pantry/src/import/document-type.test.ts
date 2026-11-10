@@ -109,12 +109,8 @@ describe("a document's type", () => {
                 [documentType],
               );
               assert.deepStrictEqual(
-                [...layer.ResourceDocument.values()].map(({ documentType: held, node, type }) => [
-                  node,
-                  type,
-                  held,
-                ]),
-                manifest ? [] : [[idOf(0), documentType, documentType]],
+                [...layer.ResourceDocument.values()].map(({ node, type }) => [node, type]),
+                manifest ? [] : [[idOf(0), documentType]],
               );
             }),
         ),
