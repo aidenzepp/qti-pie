@@ -28,13 +28,36 @@ import type { Kind } from "#pantry/grammar/compose.ts";
 import { booleanOf, isNcName } from "#pantry/grammar/domains.ts";
 import { Flag, grammar } from "#pantry/grammar/install.ts";
 import { isSiteKind } from "#pantry/import/context.ts";
-import { foldAt, foldOf } from "#pantry/import/fold.ts";
+import { foldAt, foldOf, governorOf } from "#pantry/import/fold.ts";
 import type { Folds } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import { comparedPathOf, entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type {
+  AssembledName,
+  BranchResolution,
+  BranchRule,
+  BranchShuffle,
+  BranchTarget,
+  Inclusion,
+  Instance,
+  InstanceName,
+  Named,
+  Section,
+  SectionMember,
+  SectionOrdering,
+  SectionSelection,
+  Site,
+  SitePath,
+  SiteTarget,
+  StimulusRef,
+  TestDocument,
+  TestFlag,
+  TestToken,
+  VariableMapping,
+} from "#pantry/qti/tests.ts";
 import {
   assembledRoots,
   branchRuleKind,
@@ -53,31 +76,8 @@ import {
   splicingParents,
   stimulusRefKind,
   testKind,
-} from "#pantry/qti/tests.ts";
-import type {
-  AssembledName,
-  BranchResolution,
-  BranchRule,
-  BranchShuffle,
-  BranchTarget,
-  FlagName,
-  Inclusion,
-  Instance,
-  InstanceName,
-  Named,
-  Section,
-  SectionMember,
-  SectionOrdering,
-  SectionSelection,
-  Site,
-  SitePath,
-  SiteTarget,
-  StimulusRef,
-  TestDocument,
-  TestFlag,
-  TestToken,
-  VariableMapping,
-} from "#pantry/qti/tests.ts";
+} from "#pantry/vocab/terms/tests.ts";
+import type { FlagName } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * What one document's rows are written under: its nodes' ids, its package's id, its entry's path,
@@ -254,11 +254,10 @@ const placesAt = (
 ): boolean =>
   site.kind === sectionRefKind ||
   Option.isSome(
-    grammar.include.includeRoot.lookup({
-      kind: root,
-      parent: site.parentKind,
-      version: site.version,
-    }),
+    Option.flatMap(
+      grammar.include.includeSetOf.lookup({ parent: site.parentKind, version: site.version }),
+      ({ set }) => grammar.include.includeMember.lookup({ kind: root, set }),
+    ),
   );
 
 /**
@@ -621,7 +620,6 @@ const sectionsOf = (view: View, flag: FlagOf): Sections => {
 
   for (const node of view.rows.nodes.filter(({ kind }) => kind === sectionKind)) {
     const above = aboveOf(view, scopes, node);
-    const visible = Option.getOrElse(flag(node, "visible"), () => false);
     const keepTogether = flagOr(flag, node, "keep-together");
     // A section with no ordering keeps its children's order, and one with no selection selects
     // each child once (the XSD's OrderingDType and SelectionDType: "If no ordering rule is given,
@@ -633,7 +631,9 @@ const sectionsOf = (view: View, flag: FlagOf): Sections => {
     const withReplacement = Option.exists(childOf(node, selectionKind), (child) =>
       flagOr(flag, child, "with-replacement"),
     );
-    const loose = !visible && !keepTogether;
+    // Invisible only where it writes `visible` false: one that writes none is neither visible nor
+    // invisible (information model §4.2.6), so it is not loose, and AL3 alone refuses it.
+    const loose = Option.contains(flag(node, "visible"), false) && !keepTogether;
     const scope: Scope = {
       looseChain: loose && above.parentLooseChain,
       mixes: shuffle || (loose && above.parentMixes),
@@ -644,6 +644,7 @@ const sectionsOf = (view: View, flag: FlagOf): Sections => {
     rows.set(node.id, {
       ...tupleOf(view, node),
       keepTogether,
+      loose,
       looseChain: scope.looseChain,
       mixes: scope.mixes,
       parentKind: parentKindOf(view, node),
@@ -653,7 +654,6 @@ const sectionsOf = (view: View, flag: FlagOf): Sections => {
       replaced: above.replaced,
       replacing: scope.replacing,
       shuffle,
-      visible,
       withReplacement,
     });
   }
@@ -731,9 +731,12 @@ const membersOf = (view: View, flag: FlagOf): ReadonlyMap<string, Addition<typeo
   );
 
 /**
- * Write a document's selections, each with its `select` split around its integer and its
- * section's count of parts. A selection whose `select` is absent or holds no integer has no row:
- * AL3 or AL1 refuses it, and `SectionSelection`'s mirror names it too.
+ * Write a document's selections, each with its `select` split around its collapsed value and its
+ * section's count of parts. A selection that writes no `select` has no row: AL3 refuses it, and
+ * `SectionSelection`'s mirror names it too. One whose `select` names no integer has its row all
+ * the same, its form as written: `SelectForm`'s pattern law refuses the form as PostgreSQL casts it
+ * into its column, and the attribute's value domain refuses the attribute, so the database judges
+ * the form and this builder never does.
  *
  * @param view - The document.
  * @param flag - Each node's flags.
@@ -747,29 +750,25 @@ const selectionsOf = (
     view.rows.nodes
       .filter(({ kind }) => kind === selectionKind)
       .flatMap((node) =>
-        Option.toArray(valueOf(view, node, "select")).flatMap((lexical) => {
+        Option.toArray(valueOf(view, node, "select")).map((lexical) => {
           const pieces = piecesOf(lexical);
           const parts = childrenOf(view, node.parent).filter((child) =>
             among(sectionParts, child.kind),
           );
 
-          return /^[+-]?[0-9]+$/u.test(pieces.value)
-            ? [
-                [
-                  node.id,
-                  {
-                    ...tupleOf(view, node),
-                    members: BigInt(parts.length),
-                    required: BigInt(parts.filter((part) => flagOr(flag, part, "required")).length),
-                    selectForm: pieces.value,
-                    selectLead: pieces.lead,
-                    selectLexical: lexical,
-                    selectTrail: pieces.trail,
-                    withReplacement: flagOr(flag, node, "with-replacement"),
-                  },
-                ] as const,
-              ]
-            : [];
+          return [
+            node.id,
+            {
+              ...tupleOf(view, node),
+              members: BigInt(parts.length),
+              required: BigInt(parts.filter((part) => flagOr(flag, part, "required")).length),
+              selectForm: pieces.value,
+              selectLead: pieces.lead,
+              selectLexical: lexical,
+              selectTrail: pieces.trail,
+              withReplacement: flagOr(flag, node, "with-replacement"),
+            },
+          ] as const;
         }),
       ),
   );
@@ -848,7 +847,7 @@ const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> => {
                 node: node.id,
                 package: view.ids.package,
                 path: comparedPathOf(resolution, lexical),
-                resolved: entryPathOf(resolution) !== undefined,
+                resolved: Option.isSome(entryPathOf(resolution)),
               },
             ] as const;
           })
@@ -902,7 +901,7 @@ const sitesOf = (
             children: BigInt(childrenOf(view, node.id).length),
             documentType: view.ids.documentType,
             external: hrefs.get(node.id)?.external ?? false,
-            governs: node.governs,
+            governor: governorOf(node.version, node.kind, node.governs),
             nearestKind: foldAt(view.folds, node.id).nearestKind,
             parentKind,
             parentLooseChain: parentKind === sectionKind && above.parentLooseChain,
@@ -1127,8 +1126,8 @@ const keptIf = <A>(assembled: boolean, rows: ReadonlyMap<string, A>): ReadonlyMa
  * where the document is in an assembly, none otherwise.
  *
  * An absent required attribute leaves out the row whose copy proves it (an item ref's or a site's
- * `href`, a selection's `select`, a name's or a stimulus ref's `identifier`), or leaves its field
- * at its null value (a section's `visible` false), and AL3 refuses the element either way.
+ * `href`, a selection's `select`, a name's or a stimulus ref's `identifier`, a section's
+ * `visible`), and AL3 refuses the element.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.

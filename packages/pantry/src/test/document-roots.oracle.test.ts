@@ -135,7 +135,7 @@ const readerVerdict = (drawn: RootCase) =>
       return "read";
     }
 
-    return read.failure._tag === "ImportRefused" ? read.failure.rule : read.failure._tag;
+    return read.failure._tag === "ImportRefused" ? read.failure.rules.join("|") : read.failure._tag;
   });
 
 /**
@@ -320,7 +320,7 @@ describe("model/shred.ts and test/oracle.ts, a document's root", () => {
                 Result.isSuccess(read)
                   ? [...read.success.inputs.Document.values()]
                       .filter(({ path }) => path === "doc.xml")
-                      .map(({ resourceType, rootKind }) => `${resourceType} ${rootKind}`)
+                      .map(({ documentType, rootKind }) => `${documentType} ${rootKind}`)
                   : read.failure._tag,
                 [`${drawn.type} ${drawn.root}`],
                 `${JSON.stringify(drawn)}: the import's Document cell`,
