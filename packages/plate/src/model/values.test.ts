@@ -4,6 +4,7 @@ import type * as plate from "#plate/index.ts";
 import {
   format,
   isModelled,
+  isLanguageTag,
   isNcName,
   isNull,
   isNullResponse,
@@ -12,6 +13,7 @@ import {
   nullOf,
   parseElementText,
   parseLexical,
+  readIeeeDouble,
   sameRecord,
 } from "#plate/model/values.ts";
 import type {
@@ -526,6 +528,146 @@ describe("isNcName", () => {
     }
     for (const text of ["", "1", "6", "a:b", "-a", ".a", "a b", "a\n"]) {
       assert.isFalse(isNcName(text), JSON.stringify(text));
+    }
+  });
+
+  it("align-54 values E12: refuses a character XML 1.0 Second Edition's tables do not hold, and one they admit only later written first (readings 94 and 152)", () => {
+    const refused = [
+      // A letter Unicode assigned after version 2.0 (probe a94_ncname_u3400).
+      "R\u{3400}",
+      "\u{3400}",
+      // A character of the supplementary planes (probe a94_ncname_supp).
+      "R\u{10000}",
+      "\u{10000}",
+      // A letter the Second Edition leaves out on purpose (probe a94_ncname_IJ).
+      "\u{132}",
+      "a\u{132}",
+      // A digit written first: ARABIC-INDIC DIGIT ZERO (probe r152-arabic-digit).
+      "\u{660}a",
+      // An extender written first (probe a94_ncname_extender_first).
+      "\u{2D0}a",
+      "\u{B7}a",
+      // A combining character written first.
+      "\u{300}a",
+    ];
+    for (const text of refused) {
+      assert.isFalse(isNcName(text), JSON.stringify(text));
+    }
+  });
+
+  it("align-54 values E12: accepts ASCII names and the Second Edition's letters, digits, combining characters and extenders where its production puts them", () => {
+    const accepted = [
+      "RESPONSE_1",
+      "a-b.c",
+      // BaseChar: LATIN CAPITAL LETTER A WITH GRAVE, first and alone.
+      "\u{C0}",
+      // Ideographic, first, then an Extender (IDEOGRAPHIC ITERATION MARK).
+      "\u{4E00}\u{3005}",
+      // An Extender after the first (probe a94_ncname_extender_later), and MIDDLE DOT.
+      "a\u{2D0}",
+      "a\u{B7}",
+      // A Digit and a CombiningChar after the first.
+      "a\u{660}",
+      "\u{C0}\u{300}",
+      // Hangul, the last BaseChar range.
+      "\u{AC00}\u{D7A3}",
+    ];
+    for (const name of accepted) {
+      assert.isTrue(isNcName(name), JSON.stringify(name));
+    }
+  });
+});
+
+describe("isLanguageTag", () => {
+  it("align-54 values E32a: accepts RFC 5646's well-formed tags, private-use and grandfathered ones included, in any ASCII case (reading 129)", () => {
+    const accepted = [
+      "en",
+      "en-US",
+      "zh-Hant-TW",
+      "de-CH-1996",
+      // The private-use tag a corpus manifest writes, the control.
+      "x-none",
+      "x-private",
+      "i-klingon",
+      "en-GB-oed",
+      "sgn-BE-FR",
+      "zh-min-nan",
+      "EN-us",
+      "I-KLINGON",
+      "zh-yue-HK",
+      "es-419",
+      "sl-rozaj-biske",
+      "de-Latn-DE-1901-u-co-phonebk-x-private",
+      // Well-formed but not valid: validity is reading 129's stated limit.
+      "qq-ZZ",
+      "de-1996-1996",
+    ];
+    for (const tag of accepted) {
+      assert.isTrue(isLanguageTag(tag), tag);
+    }
+  });
+
+  it("align-54 values E32a: refuses text RFC 5646's Language-Tag does not produce: whitespace, underscores, a bare singleton, empty subtags and the empty string (reading 129)", () => {
+    const refused = [
+      "",
+      "en_US",
+      "english-",
+      "1en",
+      "en_US x",
+      "english language",
+      "a-value",
+      "en--x",
+      "1a",
+      "en-",
+      "x",
+      "x-",
+      "en-x",
+      "en ",
+      " en",
+      "abcdefghi",
+      "en-a",
+      "x-abcdefghi",
+      // KELVIN SIGN, which lower case maps to an ASCII k.
+      "i-\u{212A}lingon",
+    ];
+    for (const text of refused) {
+      assert.isFalse(isLanguageTag(text), JSON.stringify(text));
+    }
+  });
+});
+
+describe("readIeeeDouble", () => {
+  it("align-54 values B5a: reads a literal as its IEEE double rounded to nearest, an infinity past the largest finite double and a zero below the least subnormal, each of its sign (reading 144)", () => {
+    const cases: readonly (readonly [string, number])[] = [
+      ["1e400", Number.POSITIVE_INFINITY],
+      ["2e400", Number.POSITIVE_INFINITY],
+      ["INF", Number.POSITIVE_INFINITY],
+      ["-1e400", Number.NEGATIVE_INFINITY],
+      ["-INF", Number.NEGATIVE_INFINITY],
+      ["0", 0],
+      ["-0", -0],
+      ["1e-400", 0],
+      ["-1e-400", -0],
+      ["NaN", Number.NaN],
+      ["2.5", 2.5],
+      // The nearest double: below the midpoint past the largest finite double, and above it.
+      ["1.7976931348623158e308", Number.MAX_VALUE],
+      ["1.7976931348623159e308", Number.POSITIVE_INFINITY],
+      // The least subnormal, from just above half of it; just below half of it is a zero.
+      ["2.4703282292062328e-324", Number.MIN_VALUE],
+      ["2.4703282292062327e-324", 0],
+      ["-2.4703282292062327e-324", -0],
+    ];
+    for (const [lexical, number] of cases) {
+      const read = readIeeeDouble(lexical);
+      assert.isTrue(Option.isSome(read), lexical);
+      assert.isTrue(Object.is(Option.getOrUndefined(read), number), lexical);
+    }
+  });
+
+  it("align-54 values B5a: reads nothing outside xs:double's lexical space", () => {
+    for (const text of ["", " 1", "1 ", "+INF", "Infinity", "inf", "1e", "0x10", "1_000"]) {
+      assert.isTrue(Option.isNone(readIeeeDouble(text)), JSON.stringify(text));
     }
   });
 });

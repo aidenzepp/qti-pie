@@ -1,9 +1,16 @@
 import { assert } from "@effect/vitest";
-import { Effect } from "effect";
+import { ConfigProvider, Effect, Layer } from "effect";
 import type { Locator, Page } from "playwright-core";
 import { entryName } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
-import { eachEngine, nextControlKey, playgroundLayer, withPage } from "#plate/test/browsers.ts";
+import {
+  eachEngine,
+  nextControlKey,
+  playgroundLayer,
+  WalkCorpus,
+  walkCorpusLayer,
+  withPage,
+} from "#plate/test/browsers.ts";
 import { tabOrder } from "#plate/test/keyboard.ts";
 import {
   choicesOf,
@@ -19,25 +26,39 @@ import {
   tabUntil,
 } from "#plate/test/playground-page.ts";
 import type { Choice } from "#plate/test/playground-page.ts";
+import { choicesItem } from "#scripts/walk-corpus.ts";
 
 /**
- * The corpus paths of the items the walk answers: BG007's True/False Choice, BG008's Choice with
- * `max-choices="3"` over five choices, the shuffled Choices of Composition of Water, and a Choice
- * of the Common Cartridge package scored by `CC2_match`.
+ * The paths of the items the walk answers: in the example corpus, BG007's True/False Choice,
+ * BG008's Choice with `max-choices="3"` over five choices, and a Choice of the Common Cartridge
+ * package scored by `CC2_match`; in the walk corpus, `choices.xml`'s shuffled Choices.
  */
 const paths = {
   bg007: "QTI3_BPIG_Examples/items/BG007.xml",
   bg008: "QTI3_BeginnersGuide_Examples/items/BG008.xml",
   ccPackage: "qtiv3-examples/packaging/ccPackage/testitems/QUE_102010.xml",
-  water:
-    "qtiv3-examples/items/shared-vocabulary/Items/Item_QTI3_CompWater_03/composition_of_water_qti3.xml",
+  choices: choicesItem,
 } as const;
 
 /**
- * Composition of Water's responses, one per shuffled Choice, in document order; `RESPONSE1`'s
- * Choice has `max-choices="2"`.
+ * `choices.xml`'s responses, one per shuffled Choice, in document order; `RESPONSE1`'s Choice has
+ * `max-choices="2"`.
  */
-const waterResponses = ["RESPONSE1", "RESPONSE2", "RESPONSE3"] as const;
+const choicesResponses = ["RESPONSE1", "RESPONSE2", "RESPONSE3"] as const;
+
+/**
+ * The walk corpus, and a playground over it with the configuration the walk's other cases use, the
+ * default one; it provides both {@link WalkCorpus} and the playground.
+ */
+const choicesPlaygroundLayer = Layer.unwrap(
+  Effect.gen(function* overWalkCorpus() {
+    const { directory } = yield* WalkCorpus;
+
+    return playgroundLayer({
+      provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory }),
+    });
+  }),
+).pipe(Layer.provideMerge(walkCorpusLayer));
 
 /**
  * Tick a choice's Control by mouse: a click at its centre, then a check that it is now checked.
@@ -188,13 +209,32 @@ eachEngine((it) => {
     );
 
     walk.effect(
-      "[Q-2] Composition of Water's shuffled Choices keep each presented order across a refused submit of three ticks against max-choices 2",
+      "[Q-2] [I-9b] a ccPackage CC2_match item scores 1: QUE_102010's correct choice clicked, then Submit",
+      () =>
+        withPage({ javaScriptEnabled: false }, (page) =>
+          Effect.gen(function* ccPackage() {
+            const tree = yield* openItem(page, paths.ccPackage);
+            const entry = entryName(instanceOf(tree), "RESPONSE");
+            const correct = yield* correctOf(paths.ccPackage, "RESPONSE");
+
+            yield* tick(control(page, "radio", entry, pick(choicesOf(tree, entry), correct, true)));
+            yield* submitWith(page, () => submitButton(page).click());
+
+            assert.strictEqual(yield* inStatus(page, message("en", "score", { score: "1" })), 1);
+          }),
+        ),
+    );
+  });
+
+  it.layer(choicesPlaygroundLayer)("the walk, answering, over the walk corpus", (choices) => {
+    choices.effect(
+      "[Q-2] choices.xml's shuffled Choices keep each presented order across a refused submit of three ticks against max-choices 2",
       () =>
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* shuffled() {
-            const tree = yield* openItem(page, paths.water);
+            const tree = yield* openItem(page, paths.choices);
             const instance = instanceOf(tree);
-            const entries = waterResponses.map((response) => entryName(instance, response));
+            const entries = choicesResponses.map((response) => entryName(instance, response));
             const [first = ""] = entries;
             const before = yield* Effect.all(entries.map((entry) => presentedOrder(page, entry)));
             const ticked = choicesOf(tree, first).slice(0, 3);
@@ -227,23 +267,6 @@ eachEngine((it) => {
               yield* Effect.all(entries.map((entry) => presentedOrder(page, entry))),
               before,
             );
-          }),
-        ),
-    );
-
-    walk.effect(
-      "[Q-2] [I-9b] a ccPackage CC2_match item scores 1: QUE_102010's correct choice clicked, then Submit",
-      () =>
-        withPage({ javaScriptEnabled: false }, (page) =>
-          Effect.gen(function* ccPackage() {
-            const tree = yield* openItem(page, paths.ccPackage);
-            const entry = entryName(instanceOf(tree), "RESPONSE");
-            const correct = yield* correctOf(paths.ccPackage, "RESPONSE");
-
-            yield* tick(control(page, "radio", entry, pick(choicesOf(tree, entry), correct, true)));
-            yield* submitWith(page, () => submitButton(page).click());
-
-            assert.strictEqual(yield* inStatus(page, message("en", "score", { score: "1" })), 1);
           }),
         ),
     );

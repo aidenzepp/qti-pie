@@ -51,46 +51,533 @@ export const isModelled = (baseType: string): baseType is ModelledBaseType =>
   modelledBaseTypes.some((name) => name === baseType);
 
 /**
- * The body of the character class of an NCName's first character: XML 1.0 (Fifth Edition)'s
+ * A range of code points, its first and its last.
+ */
+type CodeRange = readonly [first: number, last: number];
+
+/**
+ * The body of a `u`-flag character class: each range of code points as `\u{…}-\u{…}`, so a range
+ * holds exactly its code points whatever characters they are.
+ *
+ * @param ranges Ranges of code points, each its first and last.
+ * @returns The class's body, which `[${…}]` encloses.
+ */
+const classBody = (ranges: readonly CodeRange[]): string =>
+  ranges.map(([first, last]) => `\\u{${first.toString(16)}}-\\u{${last.toString(16)}}`).join("");
+
+/**
+ * The body of the character class of a `pattern-mask`'s `\i`: XML 1.0 (Fifth Edition)'s
  * `NameStartChar` without the colon, written as the inside of a `u`-flag character class, so
  * `[${nameStartClass}]` matches one such character. Each range is a range of code points.
  *
- * The XSD regular-expression translator builds `\i` from it, and {@link ncName} its first
- * character.
+ * The XSD regular-expression translator builds `\i` from it, by reading 55's own decision that a
+ * `pattern-mask` takes the later edition. An NCName does not (reading 94): {@link isNcName} reads
+ * the Second Edition's tables.
  *
  * @see https://www.w3.org/TR/2008/REC-xml-20081126/#NT-NameStartChar
  */
 export const nameStartClass = String.raw`A-Z_a-z\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{2FF}\u{370}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}`;
 
 /**
- * The body of the character class of an NCName's later characters: XML 1.0 (Fifth Edition)'s
+ * The body of the character class of a `pattern-mask`'s `\c`: XML 1.0 (Fifth Edition)'s
  * `NameChar` without the colon, written as the inside of a `u`-flag character class, so
  * `[${nameClass}]` matches one such character. Each range is a range of code points.
  *
- * The XSD regular-expression translator builds `\c` from it, and {@link ncName} the characters
- * after the first.
+ * The XSD regular-expression translator builds `\c` from it, by reading 55's own decision, as it
+ * builds `\i` from {@link nameStartClass}. An NCName does not take it (reading 94).
  *
  * @see https://www.w3.org/TR/2008/REC-xml-20081126/#NT-NameChar
  */
 export const nameClass = String.raw`-.0-9A-Z_a-z\u{B7}\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{203F}-\u{2040}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}`;
 
 /**
- * An XML NCName: a `Name` of XML 1.0 (Fifth Edition), `NameStartChar` then `NameChar`s, with the
- * colon removed from both. The `u` flag makes each range a range of code points, so a character
- * outside the Basic Multilingual Plane matches as one character and a lone surrogate never does.
+ * XML 1.0 (Second Edition)'s `BaseChar` (Appendix B, production 85), as the specification lists
+ * it. XML 1.0 (Fifth Edition) keeps the same tables in its Appendix B, no longer used for its own
+ * names.
  *
- * @see https://www.w3.org/TR/2008/REC-xml-20081126/#NT-NameStartChar
- * @see https://www.w3.org/TR/xml-names/#NT-NCName
+ * @see https://www.w3.org/TR/2000/REC-xml-20001006#CharClasses
  */
-const ncName = new RegExp(`^[${nameStartClass}][${nameClass}]*$`, "u");
+const baseChar: readonly CodeRange[] = [
+  [0x41, 0x5a],
+  [0x61, 0x7a],
+  [0xc0, 0xd6],
+  [0xd8, 0xf6],
+  [0xf8, 0xff],
+  [0x1_00, 0x1_31],
+  [0x1_34, 0x1_3e],
+  [0x1_41, 0x1_48],
+  [0x1_4a, 0x1_7e],
+  [0x1_80, 0x1_c3],
+  [0x1_cd, 0x1_f0],
+  [0x1_f4, 0x1_f5],
+  [0x1_fa, 0x2_17],
+  [0x2_50, 0x2_a8],
+  [0x2_bb, 0x2_c1],
+  [0x3_86, 0x3_86],
+  [0x3_88, 0x3_8a],
+  [0x3_8c, 0x3_8c],
+  [0x3_8e, 0x3_a1],
+  [0x3_a3, 0x3_ce],
+  [0x3_d0, 0x3_d6],
+  [0x3_da, 0x3_da],
+  [0x3_dc, 0x3_dc],
+  [0x3_de, 0x3_de],
+  [0x3_e0, 0x3_e0],
+  [0x3_e2, 0x3_f3],
+  [0x4_01, 0x4_0c],
+  [0x4_0e, 0x4_4f],
+  [0x4_51, 0x4_5c],
+  [0x4_5e, 0x4_81],
+  [0x4_90, 0x4_c4],
+  [0x4_c7, 0x4_c8],
+  [0x4_cb, 0x4_cc],
+  [0x4_d0, 0x4_eb],
+  [0x4_ee, 0x4_f5],
+  [0x4_f8, 0x4_f9],
+  [0x5_31, 0x5_56],
+  [0x5_59, 0x5_59],
+  [0x5_61, 0x5_86],
+  [0x5_d0, 0x5_ea],
+  [0x5_f0, 0x5_f2],
+  [0x6_21, 0x6_3a],
+  [0x6_41, 0x6_4a],
+  [0x6_71, 0x6_b7],
+  [0x6_ba, 0x6_be],
+  [0x6_c0, 0x6_ce],
+  [0x6_d0, 0x6_d3],
+  [0x6_d5, 0x6_d5],
+  [0x6_e5, 0x6_e6],
+  [0x9_05, 0x9_39],
+  [0x9_3d, 0x9_3d],
+  [0x9_58, 0x9_61],
+  [0x9_85, 0x9_8c],
+  [0x9_8f, 0x9_90],
+  [0x9_93, 0x9_a8],
+  [0x9_aa, 0x9_b0],
+  [0x9_b2, 0x9_b2],
+  [0x9_b6, 0x9_b9],
+  [0x9_dc, 0x9_dd],
+  [0x9_df, 0x9_e1],
+  [0x9_f0, 0x9_f1],
+  [0xa_05, 0xa_0a],
+  [0xa_0f, 0xa_10],
+  [0xa_13, 0xa_28],
+  [0xa_2a, 0xa_30],
+  [0xa_32, 0xa_33],
+  [0xa_35, 0xa_36],
+  [0xa_38, 0xa_39],
+  [0xa_59, 0xa_5c],
+  [0xa_5e, 0xa_5e],
+  [0xa_72, 0xa_74],
+  [0xa_85, 0xa_8b],
+  [0xa_8d, 0xa_8d],
+  [0xa_8f, 0xa_91],
+  [0xa_93, 0xa_a8],
+  [0xa_aa, 0xa_b0],
+  [0xa_b2, 0xa_b3],
+  [0xa_b5, 0xa_b9],
+  [0xa_bd, 0xa_bd],
+  [0xa_e0, 0xa_e0],
+  [0xb_05, 0xb_0c],
+  [0xb_0f, 0xb_10],
+  [0xb_13, 0xb_28],
+  [0xb_2a, 0xb_30],
+  [0xb_32, 0xb_33],
+  [0xb_36, 0xb_39],
+  [0xb_3d, 0xb_3d],
+  [0xb_5c, 0xb_5d],
+  [0xb_5f, 0xb_61],
+  [0xb_85, 0xb_8a],
+  [0xb_8e, 0xb_90],
+  [0xb_92, 0xb_95],
+  [0xb_99, 0xb_9a],
+  [0xb_9c, 0xb_9c],
+  [0xb_9e, 0xb_9f],
+  [0xb_a3, 0xb_a4],
+  [0xb_a8, 0xb_aa],
+  [0xb_ae, 0xb_b5],
+  [0xb_b7, 0xb_b9],
+  [0xc_05, 0xc_0c],
+  [0xc_0e, 0xc_10],
+  [0xc_12, 0xc_28],
+  [0xc_2a, 0xc_33],
+  [0xc_35, 0xc_39],
+  [0xc_60, 0xc_61],
+  [0xc_85, 0xc_8c],
+  [0xc_8e, 0xc_90],
+  [0xc_92, 0xc_a8],
+  [0xc_aa, 0xc_b3],
+  [0xc_b5, 0xc_b9],
+  [0xc_de, 0xc_de],
+  [0xc_e0, 0xc_e1],
+  [0xd_05, 0xd_0c],
+  [0xd_0e, 0xd_10],
+  [0xd_12, 0xd_28],
+  [0xd_2a, 0xd_39],
+  [0xd_60, 0xd_61],
+  [0xe_01, 0xe_2e],
+  [0xe_30, 0xe_30],
+  [0xe_32, 0xe_33],
+  [0xe_40, 0xe_45],
+  [0xe_81, 0xe_82],
+  [0xe_84, 0xe_84],
+  [0xe_87, 0xe_88],
+  [0xe_8a, 0xe_8a],
+  [0xe_8d, 0xe_8d],
+  [0xe_94, 0xe_97],
+  [0xe_99, 0xe_9f],
+  [0xe_a1, 0xe_a3],
+  [0xe_a5, 0xe_a5],
+  [0xe_a7, 0xe_a7],
+  [0xe_aa, 0xe_ab],
+  [0xe_ad, 0xe_ae],
+  [0xe_b0, 0xe_b0],
+  [0xe_b2, 0xe_b3],
+  [0xe_bd, 0xe_bd],
+  [0xe_c0, 0xe_c4],
+  [0xf_40, 0xf_47],
+  [0xf_49, 0xf_69],
+  [0x10_a0, 0x10_c5],
+  [0x10_d0, 0x10_f6],
+  [0x11_00, 0x11_00],
+  [0x11_02, 0x11_03],
+  [0x11_05, 0x11_07],
+  [0x11_09, 0x11_09],
+  [0x11_0b, 0x11_0c],
+  [0x11_0e, 0x11_12],
+  [0x11_3c, 0x11_3c],
+  [0x11_3e, 0x11_3e],
+  [0x11_40, 0x11_40],
+  [0x11_4c, 0x11_4c],
+  [0x11_4e, 0x11_4e],
+  [0x11_50, 0x11_50],
+  [0x11_54, 0x11_55],
+  [0x11_59, 0x11_59],
+  [0x11_5f, 0x11_61],
+  [0x11_63, 0x11_63],
+  [0x11_65, 0x11_65],
+  [0x11_67, 0x11_67],
+  [0x11_69, 0x11_69],
+  [0x11_6d, 0x11_6e],
+  [0x11_72, 0x11_73],
+  [0x11_75, 0x11_75],
+  [0x11_9e, 0x11_9e],
+  [0x11_a8, 0x11_a8],
+  [0x11_ab, 0x11_ab],
+  [0x11_ae, 0x11_af],
+  [0x11_b7, 0x11_b8],
+  [0x11_ba, 0x11_ba],
+  [0x11_bc, 0x11_c2],
+  [0x11_eb, 0x11_eb],
+  [0x11_f0, 0x11_f0],
+  [0x11_f9, 0x11_f9],
+  [0x1e_00, 0x1e_9b],
+  [0x1e_a0, 0x1e_f9],
+  [0x1f_00, 0x1f_15],
+  [0x1f_18, 0x1f_1d],
+  [0x1f_20, 0x1f_45],
+  [0x1f_48, 0x1f_4d],
+  [0x1f_50, 0x1f_57],
+  [0x1f_59, 0x1f_59],
+  [0x1f_5b, 0x1f_5b],
+  [0x1f_5d, 0x1f_5d],
+  [0x1f_5f, 0x1f_7d],
+  [0x1f_80, 0x1f_b4],
+  [0x1f_b6, 0x1f_bc],
+  [0x1f_be, 0x1f_be],
+  [0x1f_c2, 0x1f_c4],
+  [0x1f_c6, 0x1f_cc],
+  [0x1f_d0, 0x1f_d3],
+  [0x1f_d6, 0x1f_db],
+  [0x1f_e0, 0x1f_ec],
+  [0x1f_f2, 0x1f_f4],
+  [0x1f_f6, 0x1f_fc],
+  [0x21_26, 0x21_26],
+  [0x21_2a, 0x21_2b],
+  [0x21_2e, 0x21_2e],
+  [0x21_80, 0x21_82],
+  [0x30_41, 0x30_94],
+  [0x30_a1, 0x30_fa],
+  [0x31_05, 0x31_2c],
+  [0xac_00, 0xd7_a3],
+];
 
 /**
- * Report whether text is an XML NCName, the lexical space of a QTI identifier.
+ * XML 1.0 (Second Edition)'s `Ideographic` (Appendix B, production 86).
+ */
+const ideographic: readonly CodeRange[] = [
+  [0x4e_00, 0x9f_a5],
+  [0x30_07, 0x30_07],
+  [0x30_21, 0x30_29],
+];
+
+/**
+ * XML 1.0 (Second Edition)'s `CombiningChar` (Appendix B, production 87).
+ */
+const combiningChar: readonly CodeRange[] = [
+  [0x3_00, 0x3_45],
+  [0x3_60, 0x3_61],
+  [0x4_83, 0x4_86],
+  [0x5_91, 0x5_a1],
+  [0x5_a3, 0x5_b9],
+  [0x5_bb, 0x5_bd],
+  [0x5_bf, 0x5_bf],
+  [0x5_c1, 0x5_c2],
+  [0x5_c4, 0x5_c4],
+  [0x6_4b, 0x6_52],
+  [0x6_70, 0x6_70],
+  [0x6_d6, 0x6_dc],
+  [0x6_dd, 0x6_df],
+  [0x6_e0, 0x6_e4],
+  [0x6_e7, 0x6_e8],
+  [0x6_ea, 0x6_ed],
+  [0x9_01, 0x9_03],
+  [0x9_3c, 0x9_3c],
+  [0x9_3e, 0x9_4c],
+  [0x9_4d, 0x9_4d],
+  [0x9_51, 0x9_54],
+  [0x9_62, 0x9_63],
+  [0x9_81, 0x9_83],
+  [0x9_bc, 0x9_bc],
+  [0x9_be, 0x9_be],
+  [0x9_bf, 0x9_bf],
+  [0x9_c0, 0x9_c4],
+  [0x9_c7, 0x9_c8],
+  [0x9_cb, 0x9_cd],
+  [0x9_d7, 0x9_d7],
+  [0x9_e2, 0x9_e3],
+  [0xa_02, 0xa_02],
+  [0xa_3c, 0xa_3c],
+  [0xa_3e, 0xa_3e],
+  [0xa_3f, 0xa_3f],
+  [0xa_40, 0xa_42],
+  [0xa_47, 0xa_48],
+  [0xa_4b, 0xa_4d],
+  [0xa_70, 0xa_71],
+  [0xa_81, 0xa_83],
+  [0xa_bc, 0xa_bc],
+  [0xa_be, 0xa_c5],
+  [0xa_c7, 0xa_c9],
+  [0xa_cb, 0xa_cd],
+  [0xb_01, 0xb_03],
+  [0xb_3c, 0xb_3c],
+  [0xb_3e, 0xb_43],
+  [0xb_47, 0xb_48],
+  [0xb_4b, 0xb_4d],
+  [0xb_56, 0xb_57],
+  [0xb_82, 0xb_83],
+  [0xb_be, 0xb_c2],
+  [0xb_c6, 0xb_c8],
+  [0xb_ca, 0xb_cd],
+  [0xb_d7, 0xb_d7],
+  [0xc_01, 0xc_03],
+  [0xc_3e, 0xc_44],
+  [0xc_46, 0xc_48],
+  [0xc_4a, 0xc_4d],
+  [0xc_55, 0xc_56],
+  [0xc_82, 0xc_83],
+  [0xc_be, 0xc_c4],
+  [0xc_c6, 0xc_c8],
+  [0xc_ca, 0xc_cd],
+  [0xc_d5, 0xc_d6],
+  [0xd_02, 0xd_03],
+  [0xd_3e, 0xd_43],
+  [0xd_46, 0xd_48],
+  [0xd_4a, 0xd_4d],
+  [0xd_57, 0xd_57],
+  [0xe_31, 0xe_31],
+  [0xe_34, 0xe_3a],
+  [0xe_47, 0xe_4e],
+  [0xe_b1, 0xe_b1],
+  [0xe_b4, 0xe_b9],
+  [0xe_bb, 0xe_bc],
+  [0xe_c8, 0xe_cd],
+  [0xf_18, 0xf_19],
+  [0xf_35, 0xf_35],
+  [0xf_37, 0xf_37],
+  [0xf_39, 0xf_39],
+  [0xf_3e, 0xf_3e],
+  [0xf_3f, 0xf_3f],
+  [0xf_71, 0xf_84],
+  [0xf_86, 0xf_8b],
+  [0xf_90, 0xf_95],
+  [0xf_97, 0xf_97],
+  [0xf_99, 0xf_ad],
+  [0xf_b1, 0xf_b7],
+  [0xf_b9, 0xf_b9],
+  [0x20_d0, 0x20_dc],
+  [0x20_e1, 0x20_e1],
+  [0x30_2a, 0x30_2f],
+  [0x30_99, 0x30_99],
+  [0x30_9a, 0x30_9a],
+];
+
+/**
+ * XML 1.0 (Second Edition)'s `Digit` (Appendix B, production 88).
+ */
+const xmlDigit: readonly CodeRange[] = [
+  [0x30, 0x39],
+  [0x6_60, 0x6_69],
+  [0x6_f0, 0x6_f9],
+  [0x9_66, 0x9_6f],
+  [0x9_e6, 0x9_ef],
+  [0xa_66, 0xa_6f],
+  [0xa_e6, 0xa_ef],
+  [0xb_66, 0xb_6f],
+  [0xb_e7, 0xb_ef],
+  [0xc_66, 0xc_6f],
+  [0xc_e6, 0xc_ef],
+  [0xd_66, 0xd_6f],
+  [0xe_50, 0xe_59],
+  [0xe_d0, 0xe_d9],
+  [0xf_20, 0xf_29],
+];
+
+/**
+ * XML 1.0 (Second Edition)'s `Extender` (Appendix B, production 89).
+ */
+const extender: readonly CodeRange[] = [
+  [0xb7, 0xb7],
+  [0x2_d0, 0x2_d0],
+  [0x2_d1, 0x2_d1],
+  [0x3_87, 0x3_87],
+  [0x6_40, 0x6_40],
+  [0xe_46, 0xe_46],
+  [0xe_c6, 0xe_c6],
+  [0x30_05, 0x30_05],
+  [0x30_31, 0x30_35],
+  [0x30_9d, 0x30_9e],
+  [0x30_fc, 0x30_fe],
+];
+
+/**
+ * The characters an NCName may start with: the Second Edition's `Letter` (`BaseChar |
+ * Ideographic`, production 84) and `_`.
+ */
+const ncNameStart: readonly CodeRange[] = [...baseChar, ...ideographic, [0x5f, 0x5f]];
+
+/**
+ * The characters an NCName may hold after its first, Namespaces in XML 1.0's `NCNameChar`: a
+ * `Letter`, a `Digit`, `.`, `-`, `_`, a `CombiningChar` or an `Extender`.
+ */
+const ncNameCharacter: readonly CodeRange[] = [
+  ...ncNameStart,
+  ...xmlDigit,
+  ...combiningChar,
+  ...extender,
+  [0x2d, 0x2e],
+];
+
+/**
+ * An NCName as XML Schema 1.0 reads `xs:NCName`: Namespaces in XML 1.0's `(Letter | '_')
+ * (NCNameChar)*` over XML 1.0 (Second Edition)'s tables, reading 94 ("An `xs:NCName` takes its
+ * name characters from XML 1.0 Second Edition, as XML Schema 1.0 reads them, and the production
+ * states no length"). XML Schema Part 2 defines `\i` and `\c` by that edition (Appendix F.1.1), so
+ * the Fifth Edition's wider ranges are no part of it: a letter Unicode assigned after version 2.0
+ * (U+3400), a supplementary character (U+10000), a letter the Second Edition leaves out (U+0132),
+ * and a digit, combining character or extender written first (U+0660, U+02D0) are refused, as
+ * libxml2's `xmllint` refuses them. The `u` flag makes each range a range of code points, so a
+ * character outside the Basic Multilingual Plane is one character and a lone surrogate matches no
+ * range.
+ *
+ * @see https://www.w3.org/TR/1999/REC-xml-names-19990114/#NT-NCName
+ * @see https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/#NCName
+ */
+const ncName = new RegExp(`^[${classBody(ncNameStart)}][${classBody(ncNameCharacter)}]*$`, "u");
+
+/**
+ * Report whether text is an XML NCName, the lexical space of a QTI identifier and of every type
+ * derived from `xs:NCName`, read by XML 1.0 (Second Edition)'s tables (reading 94). A value that is
+ * not one names nothing (reading 152, "A value names something only where it is an NCName").
  *
  * @param text The text as written; no whitespace is removed first.
  * @returns Whether `text` is an NCName.
  */
 export const isNcName = (text: string): boolean => ncName.test(text);
+
+/**
+ * The 26 grandfathered tags of RFC 5646's `irregular` and `regular` productions (section 2.1,
+ * Figure 1), in lower case, the case {@link isLanguageTag} compares in.
+ */
+const grandfatheredTags = [
+  "en-gb-oed",
+  "i-ami",
+  "i-bnn",
+  "i-default",
+  "i-enochian",
+  "i-hak",
+  "i-klingon",
+  "i-lux",
+  "i-mingo",
+  "i-navajo",
+  "i-pwn",
+  "i-tao",
+  "i-tay",
+  "i-tsu",
+  "sgn-be-fr",
+  "sgn-be-nl",
+  "sgn-ch-de",
+  "art-lojban",
+  "cel-gaulish",
+  "no-bok",
+  "no-nyn",
+  "zh-guoyu",
+  "zh-hakka",
+  "zh-min",
+  "zh-min-nan",
+  "zh-xiang",
+];
+
+/**
+ * RFC 5646's `Language-Tag` (section 2.1, Figure 1) over lower-case ASCII: a `langtag` (a
+ * language, then an optional script and region, variants, extensions and a private-use part), a
+ * `privateuse` tag, or a grandfathered one. Its repetitions are unbounded, as the ABNF's `*` is.
+ * Each subtag ends at a hyphen or the end and its length and kind decide which production takes
+ * it, so a failed match backtracks over a bounded few choices per subtag.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc5646#section-2.1
+ */
+const languageTag = new RegExp(
+  [
+    "^(?:",
+    "(?:[a-z]{2,3}(?:-[a-z]{3}){0,3}|[a-z]{4}|[a-z]{5,8})",
+    "(?:-[a-z]{4})?",
+    "(?:-(?:[a-z]{2}|[0-9]{3}))?",
+    "(?:-(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3}))*",
+    "(?:-[0-9a-wy-z](?:-[a-z0-9]{2,8})+)*",
+    "(?:-x(?:-[a-z0-9]{1,8})+)?",
+    "|x(?:-[a-z0-9]{1,8})+",
+    `|${grandfatheredTags.join("|")}`,
+    ")$",
+  ].join(""),
+  "u",
+);
+
+/**
+ * The characters a language tag is written in: ASCII letters, digits and hyphens. Checked before
+ * the text is put in lower case, since lower case maps a few other characters to ASCII letters:
+ * KELVIN SIGN (U+212A) becomes `k`.
+ */
+const languageTagCharacters = /^[-0-9A-Za-z]*$/u;
+
+/**
+ * Report whether text is a well-formed BCP 47 language tag, as RFC 5646 defines one, reading 129
+ * ("`xml:lang`, `lang` and a track's `srclang` hold BCP 47 language tags, well-formed as RFC 5646
+ * defines them"): a `langtag`, a private-use tag such as `x-none`, or one of the 26 grandfathered
+ * tags. Tags "are to be treated as case insensitive" (section 2.1.1), so `EN-us` is one, and
+ * "Whitespace is not permitted in a language tag" (section 2.1), so `en ` is not.
+ *
+ * Well-formedness is the whole check. A tag is valid when its subtags are in the IANA Language
+ * Subtag Registry and it repeats no variant or singleton (section 2.2.9); that is reading 129's
+ * stated limit, so `qq-ZZ` and `de-1996-1996` are tags. The empty string is no tag: an attribute
+ * that may be empty, such as `xml:lang`, admits it before asking this.
+ *
+ * @param text The text as written; no whitespace is removed first.
+ * @returns Whether `text` is a well-formed language tag.
+ * @see https://www.rfc-editor.org/rfc/rfc5646#section-2.2.9
+ */
+export const isLanguageTag = (text: string): boolean =>
+  languageTagCharacters.test(text) && languageTag.test(text.toLowerCase());
 
 /**
  * Report whether a character is XML whitespace: space, tab, carriage return or line feed. No other
@@ -349,7 +836,9 @@ const valueIf = (holds: boolean, single: Single): Option.Option<Single> =>
  * XML Schema 1.0 maps a decimal to the value of the basic value space closest to it, and the
  * infinities are special values outside that space that only `INF` and `-INF` name. So a decimal
  * beyond the largest double, such as `1e400`, reads as the largest finite double of its sign, where
- * `Number` would round it to an infinity.
+ * `Number` would round it to an infinity: reading 56 ("An `xs:double` literal beyond the largest
+ * finite double names the largest finite double of its sign"), which plate keeps for a float or
+ * duration value. {@link readIeeeDouble} reads a literal by reading 144 instead.
  *
  * @param lexical The lexical form.
  * @returns The number it names; `INF` and `-INF` are the infinities and `NaN` is NaN.
@@ -370,6 +859,37 @@ const readDouble = (lexical: string): number => {
   }
 
   return number === Number.NEGATIVE_INFINITY ? -Number.MAX_VALUE : number;
+};
+
+/**
+ * Read text in xs:double's lexical space as its IEEE double, reading 144 ("A bounded `xs:double` is
+ * judged on its IEEE value"): the literal rounded to the nearest double, ties to even, as XML
+ * Schema 1.1's doubleLexicalMap reads it (Part 2, section 3.3.5.2). A magnitude past the midpoint
+ * between the largest finite double and 2^1024, such as `1e400`, is an infinity of its sign; one
+ * below 2^-1075, half the least subnormal, such as `1e-400`, is a zero of its sign. `INF` and
+ * `-INF` are the infinities and `NaN` is NaN. `Number` rounds a decimal exactly so.
+ *
+ * {@link readDouble} reads a float or duration value differently, by reading 56: `1e400` there is
+ * the largest finite double. This reader is for what reading 144 governs, a literal compared or
+ * judged by its double, such as a bound or a float map key.
+ *
+ * The lexical space is XML Schema 1.0's ({@link doubleLexical}), so `+INF`, `Infinity` and padded
+ * text are outside it.
+ *
+ * @param lexical The text, as written; no whitespace is removed first.
+ * @returns The double it names, or none when the text is outside xs:double's lexical space.
+ * @see https://www.w3.org/TR/xmlschema11-2/#f-doubleLexmap
+ */
+export const readIeeeDouble = (lexical: string): Option.Option<number> => {
+  if (!doubleLexical.test(lexical)) {
+    return Option.none();
+  }
+
+  if (lexical === "INF") {
+    return Option.some(Number.POSITIVE_INFINITY);
+  }
+
+  return Option.some(lexical === "-INF" ? Number.NEGATIVE_INFINITY : Number(lexical));
 };
 
 /**

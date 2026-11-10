@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
-import { Config, ConfigProvider, Data, Duration, Effect, Option, Result } from "effect";
+import { Config, ConfigProvider, Data, Duration, Effect, Option } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
@@ -45,7 +45,6 @@ import type {
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
-import { score as scoreItem } from "#plate/score.ts";
 import { rptemplatesDirectory } from "#plate/test/caches.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { acceptedOf, openCorpus } from "#plate/test/sweep.ts";
@@ -1251,6 +1250,38 @@ const lookupElement = (identifier: string, source: string): SourceElement =>
     [attr("identifier", identifier)],
     [el("qti-variable", [attr("identifier", source)])],
   );
+
+/**
+ * Construct an item whose response processing looks up the outcome `TARGET` from the integer
+ * response `RESPONSE`, `TARGET` holding a match table: an identifier outcome, or a record, which
+ * writes no base type.
+ *
+ * @param cardinality `TARGET`'s cardinality.
+ * @returns The document at `items/test.xml`.
+ */
+const lookedUpItem = (cardinality: string): SourceDocument => {
+  const table = el(
+    "qti-match-table",
+    [attr("default-value", "F")],
+    [el("qti-match-table-entry", [attr("source-value", "1"), attr("target-value", "A")])],
+  );
+
+  return item({
+    after: [el("qti-response-processing", [], [lookupElement("TARGET", "RESPONSE")])],
+    attributes: [attr("time-dependent", "false")],
+    body: [],
+    declarations: [
+      declaration("qti-response-declaration", "RESPONSE", "integer", "single"),
+      cardinality === "record"
+        ? el(
+            "qti-outcome-declaration",
+            [attr("cardinality", "record"), attr("identifier", "TARGET")],
+            [table],
+          )
+        : declaration("qti-outcome-declaration", "TARGET", "identifier", cardinality, [table]),
+    ],
+  });
+};
 
 describe("buildItem", () => {
   it.effect(
@@ -4094,73 +4125,63 @@ describe("buildItem", () => {
       }),
   );
 
-  it("[I-9a] marks a lookup into an outcome that is not single, so open accepts it with processing none and score does not fail: outcome-type for a multiple or an ordered outcome, as a template's, and variable for a record one, which the model does not hold", () => {
-    const processing = `${root}/qti-response-processing`;
-    const table = el(
-      "qti-match-table",
-      [attr("default-value", "F")],
-      [el("qti-match-table-entry", [attr("source-value", "1"), attr("target-value", "A")])],
-    );
-    const cases = [
-      {
-        marks: [{ feature: "outcome-type:TARGET", path: processing }],
-        outcome: declaration("qti-outcome-declaration", "TARGET", "identifier", "multiple", [
-          table,
-        ]),
-      },
-      {
-        marks: [{ feature: "outcome-type:TARGET", path: processing }],
-        outcome: declaration("qti-outcome-declaration", "TARGET", "identifier", "ordered", [table]),
-      },
-      {
-        // The control: the model holds no record outcome, so its lookup is an unheld variable's mark.
-        marks: [
-          { feature: 'cardinality="record"', path: `${root}/qti-outcome-declaration` },
-          { feature: "variable:TARGET", path: processing },
-        ],
-        outcome: el(
-          "qti-outcome-declaration",
-          [attr("cardinality", "record"), attr("identifier", "TARGET")],
-          [table],
-        ),
-      },
-    ] as const;
+  it("align-54 lookup refused for a non-single outcome E15: refuses a match table under a multiple, an ordered or a record outcome as misplaced-element, check lookup-cardinality, so check refuses the item (reading 100)", () => {
+    for (const cardinality of ["multiple", "ordered", "record"]) {
+      const verdict = check(lookedUpItem(cardinality), tables, Option.none());
 
-    for (const [index, { marks, outcome }] of cases.entries()) {
-      const label = `case ${index + 1}`;
-      const verdict = check(
-        item({
-          after: [el("qti-response-processing", [], [lookupElement("TARGET", "RESPONSE")])],
-          attributes: [attr("time-dependent", "false")],
-          body: [],
-          declarations: [
-            declaration("qti-response-declaration", "RESPONSE", "integer", "single"),
-            outcome,
-          ],
-        }),
-        tables,
-      );
-      const accepted = Option.getOrElse(acceptedItem(verdict), () =>
-        assert.fail(`${label}: the item is ${verdict.verdict}, not accepted.`),
-      );
-
-      assert.strictEqual(verdict.verdict, "accepted-with-unsupported", label);
       assert.deepStrictEqual(
-        accepted.unsupported,
-        marks.map((mark) => ({ ...mark, shown: "mark" })),
-        label,
-      );
-      assert.deepStrictEqual(accepted.item.processing, Option.none(), label);
-      assert.strictEqual(
-        Result.match(scoreItem(accepted, { RESPONSE: integer(1n) }), {
-          onFailure: (failure) => failure._tag,
-          onSuccess: () => "scored",
-        }),
-        "scored",
-        label,
+        verdict.verdict === "refused"
+          ? verdict.refusals.map((refusal) => [refusal.rule, refusal.location, refusal.detail])
+          : verdict.verdict,
+        [
+          [
+            "misplaced-element",
+            { kind: "path", path: `${root}/qti-outcome-declaration/qti-match-table` },
+            {
+              check: "lookup-cardinality",
+              element: "qti-match-table",
+              identifier: "TARGET",
+              reading: "100",
+            },
+          ],
+        ],
+        cardinality,
       );
     }
   });
+
+  it.effect(
+    "[I-9a] marks a lookup into an outcome that is not single where buildItem reads the item without the structural walk, the one path that still reaches the mark: outcome-type for a multiple or an ordered outcome, and variable for a record one, which the model does not hold",
+    () =>
+      Effect.gen(function* marksUnwalkedLookup() {
+        const processing = `${root}/qti-response-processing`;
+        const cases = [
+          {
+            cardinality: "multiple",
+            marks: [{ feature: "outcome-type:TARGET", path: processing }],
+          },
+          { cardinality: "ordered", marks: [{ feature: "outcome-type:TARGET", path: processing }] },
+          {
+            cardinality: "record",
+            marks: [
+              { feature: 'cardinality="record"', path: `${root}/qti-outcome-declaration` },
+              { feature: "variable:TARGET", path: processing },
+            ],
+          },
+        ] as const;
+
+        for (const { cardinality, marks } of cases) {
+          const built = yield* buildItem(lookedUpItem(cardinality));
+
+          assert.deepStrictEqual(
+            built.unsupported,
+            marks.map((mark) => ({ ...mark, shown: "mark" })),
+            cardinality,
+          );
+          assert.deepStrictEqual(built.processing, Option.none(), cardinality);
+        }
+      }),
+  );
 
   it.effect('[Q-2] refuses max-choices="-1" as value-type, outside xs:nonNegativeInteger', () =>
     Effect.gen(function* refusesNegativeCount() {
@@ -4751,7 +4772,7 @@ describe("buildItem", () => {
 
   it("[I-5] marks template processing that reads or sets a name the engine does not hold while it runs, at the qti-template-processing, and runs neither processing", () => {
     for (const { declarations, marks, rule, unheld } of unheldTemplating) {
-      const verdict = check(templatingItem(declarations, rule), tables);
+      const verdict = check(templatingItem(declarations, rule), tables, Option.none());
       const accepted = Option.getOrElse(acceptedItem(verdict), () =>
         assert.fail(`${unheld}: the item is ${verdict.verdict}, not accepted.`),
       );
@@ -4782,6 +4803,7 @@ describe("buildItem", () => {
         variableElement("B"),
       ),
       tables,
+      Option.none(),
     );
     const accepted = Option.getOrElse(acceptedItem(verdict), () =>
       assert.fail(`the item is ${verdict.verdict}, not accepted.`),
@@ -4827,6 +4849,7 @@ describe("buildItem", () => {
         variableElement("B"),
       ),
       tables,
+      Option.none(),
     );
     const accepted = Option.getOrElse(acceptedItem(verdict), () =>
       assert.fail(`the item is ${verdict.verdict}, not accepted.`),
@@ -5347,5 +5370,104 @@ describe("buildItem over the corpus", { tags: ["corpus"] }, () => {
         }
       }),
     corpusTimeoutMs,
+  );
+});
+
+/**
+ * Construct a rule that names a variable by its `identifier` and holds one expression.
+ *
+ * @param local The rule's local name.
+ * @param identifier The variable it names.
+ * @param expression The expression.
+ * @returns The rule.
+ */
+const naming = (local: string, identifier: string, expression: SourceElement): SourceElement =>
+  el(local, [attr("identifier", identifier)], [expression]);
+
+/**
+ * Construct a `qti-base-value`.
+ *
+ * @param baseType Its `base-type`.
+ * @param value Its text.
+ * @returns The expression.
+ */
+const literal = (baseType: string, value: string): SourceElement =>
+  el("qti-base-value", [attr("base-type", baseType)], [text(value)]);
+
+describe("align-54 built-ins by kind: the engine holds a built-in a rule names by its kind (reading 111)", () => {
+  it.effect(
+    "align-54 built-ins by kind E22a: runs template processing that sets a correct response of numAttempts and a default of numAttempts and of completionStatus, and response processing that reads a qti-correct of numAttempts, with no mark",
+    () =>
+      Effect.gen(function* runsBuiltInTargets() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              el(
+                "qti-response-processing",
+                [],
+                [
+                  naming(
+                    "qti-set-outcome-value",
+                    "N",
+                    el("qti-correct", [attr("identifier", "numAttempts")]),
+                  ),
+                ],
+              ),
+            ],
+            body: [],
+            declarations: [
+              declaration("qti-outcome-declaration", "N", "integer", "single"),
+              el(
+                "qti-template-processing",
+                [],
+                [
+                  naming("qti-set-correct-response", "numAttempts", literal("integer", "7")),
+                  naming("qti-set-default-value", "numAttempts", literal("integer", "5")),
+                  naming(
+                    "qti-set-default-value",
+                    "completionStatus",
+                    literal("identifier", "done"),
+                  ),
+                ],
+              ),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.isTrue(Option.isSome(built.templateProcessing), "the template processing runs");
+        assert.isTrue(Option.isSome(built.processing), "the response processing runs");
+      }),
+  );
+
+  it.effect(
+    "align-54 built-ins by kind E22a: still marks a set of duration, which the engine holds no value of, and a correct response of completionStatus, a built-in outcome",
+    () =>
+      Effect.gen(function* marksUnheldBuiltInTargets() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              el(
+                "qti-template-processing",
+                [],
+                [
+                  naming("qti-set-default-value", "duration", literal("float", "1")),
+                  naming(
+                    "qti-set-correct-response",
+                    "completionStatus",
+                    literal("identifier", "done"),
+                  ),
+                ],
+              ),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.unsupported.map(({ feature }) => feature),
+          ["variable:duration", "variable:completionStatus"],
+        );
+      }),
   );
 });

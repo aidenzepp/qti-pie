@@ -10,8 +10,8 @@
  * package holds its manifest at its root, as `imsmanifest.xml` (`package-manifest-missing`); every
  * file the manifest lists by a relative reference is held (b, `package-file-missing`); every file
  * held is listed (c, `package-file-unlisted`); and no file lies above the manifest
- * (`package-path-outside`). Reading each file and what its document holds belongs to the package
- * reader.
+ * (`package-path-outside`), nor has a key with a backslash or a drive prefix (reading 138). Reading
+ * each file and what its document holds belongs to the package reader.
  *
  * @module
  * @see https://www.imsglobal.org/content/packaging/cpv1p2pd2/imscp_infov1p2pd2.html
@@ -73,29 +73,44 @@ const refuse = (
   });
 
 /**
+ * A drive prefix at the start of a key, a letter and a colon, as a Windows path begins `C:`.
+ */
+const drivePrefix = /^[A-Za-z]:/u;
+
+/**
  * Bring a key of a package's files to its normal form: segments separated by `/`, with no `.` or
- * `..` segment, no leading `/` and no backslash.
+ * `..` segment and no leading `/`.
  *
- * A backslash separates segments as `/` does, as an archive written on Windows spells its paths. A
- * `.` segment is removed and a `..` segment removes the segment before it, as RFC 3986 section
- * 5.2.4 removes dot segments ({@link appendSegments}), so `items/sub/../a.xml` is `items/a.xml`,
- * and a key that ends in a dot segment names a directory, ending in `/`. A key is a file's name,
- * not a URI reference: a `%`, a `?` and a `#` are characters of the name and are never decoded or
- * set aside, which is what the manifest's resolved `href` paths are compared with.
+ * A key that holds a backslash or begins with a drive prefix names no entry of the package and is
+ * refused, in a zip and in a directory alike (reading 138): the ZIP format stores a path with
+ * forward slashes and no drive letter (APPNOTE 6.3.10, section 4.4.17.1), and a manifest's `href`,
+ * an RFC 3986 reference, holds no `\` and parses a leading `C:` as a scheme. A `.` segment is
+ * removed and a `..` segment removes the segment before it, as RFC 3986 section 5.2.4 removes dot
+ * segments ({@link appendSegments}), so `items/sub/../a.xml` is `items/a.xml`, and a key that ends
+ * in a dot segment names a directory, ending in `/`. A key is a file's name, not a URI reference: a
+ * `%`, a `?` and a `#` are characters of the name and are never decoded or set aside, which is what
+ * the manifest's resolved `href` paths are compared with.
  *
  * @param path The key as the package's reader found it.
  * @param location The package's location, which a refusal carries as its `document`.
  * @returns The path from the package's root, or the `package-path-outside` refusal, its detail the
- *   key as written, when a `..` climbs above the root or the key is rooted, starting with `/`
- *   after its dot segments are removed.
+ *   key as written: with `check: "entry-key"` and the `reading` when the key holds a backslash or
+ *   begins with a drive prefix, and alone when a `..` climbs above the root or the key is rooted,
+ *   starting with `/` after its dot segments are removed.
  * @see https://www.rfc-editor.org/rfc/rfc3986#section-5.2.4
  */
 export const normalisePath = (path: string, location: string): Result.Result<string, Refusal> => {
-  const { climbed, segments } = appendSegments(
-    [],
-    path.replaceAll("\\", "/").split("/"),
-    (segment) => segment,
-  );
+  if (path.includes("\\") || drivePrefix.test(path)) {
+    return Result.fail(
+      refuse(location, "package-path-outside", wholePackage, {
+        check: "entry-key",
+        path,
+        reading: "138",
+      }),
+    );
+  }
+
+  const { climbed, segments } = appendSegments([], path.split("/"), (segment) => segment);
   const normal = segments.join("/");
 
   return climbed || normal.startsWith("/")
@@ -177,7 +192,8 @@ const verdictOf = <A>(
  * @param location The package's location, which every refusal carries as its `document`.
  * @returns The files keyed by normal form, a directory entry passed over and, of two keys with one
  *   normal form, the first held kept; or every refusal: `package-path-outside` for each key that
- *   leaves the root, in the order held, then `package-manifest-missing`, both at the whole package.
+ *   leaves the root or names no entry, in the order held, then `package-manifest-missing`, both at
+ *   the whole package.
  */
 export const packageFiles = <Content>(
   files: ReadonlyMap<string, Content>,
@@ -196,9 +212,10 @@ export const packageFiles = <Content>(
  * `package-file-unlisted` at the whole package. A path a resource's `file` entry names that the
  * package does not hold is `package-file-missing`, once for each resource that lists it, located at
  * that resource in the manifest (`ManifestResource.location`) of the document
- * `fileLocation(location, manifestFile)`. A file the manifest names by an absolute URI is never
- * looked for (reading 35). Refusals come in that order: the keys', the manifest's absence, the
- * unlisted files in the order held, then the missing ones in the manifest's order.
+ * `fileLocation(location, manifestFile)`. A file the manifest names by an external link, an
+ * absolute URI (reading 35) or a path that leads outside the package (reading 102), is never
+ * looked for. Refusals come in that order: the keys', the manifest's absence, the unlisted files
+ * in the order held, then the missing ones in the manifest's order.
  *
  * @param manifest The package's manifest, as `readManifest` read it.
  * @param files The package's files, keyed as its reader found them.

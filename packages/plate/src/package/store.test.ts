@@ -198,9 +198,44 @@ describe("package/store.ts", () => {
       assert.strictEqual(normalised("items/sub/.."), "items/");
     });
 
-    it("reads a backslash as a segment separator, so no backslash is left", () => {
-      assert.strictEqual(normalised(String.raw`items\a.xml`), "items/a.xml");
-      assert.strictEqual(normalised(String.raw`items\sub\..\a.xml`), "items/a.xml");
+    it("align-54 hrefs and keys E36: a key holding a backslash or beginning with a drive prefix (C:/x.xml) is refused package-path-outside, check entry-key, where it was read as a path (reading 138)", () => {
+      for (const written of [
+        String.raw`a\b.xml`,
+        "C:/x.xml",
+        String.raw`items\sub\..\a.xml`,
+        String.raw`..\x`,
+        String.raw`\x`,
+        "c:x.xml",
+      ]) {
+        const result = normalisePath(written, location);
+
+        assert.deepStrictEqual(
+          Result.isFailure(result) ? seen(result.failure) : undefined,
+          {
+            detail: { check: "entry-key", path: written, reading: "138" },
+            document: location,
+            location: wholeDocument,
+            rule: "package-path-outside",
+          },
+          written,
+        );
+      }
+
+      assert.strictEqual(normalised("items/C:x.xml"), "items/C:x.xml");
+      assert.deepStrictEqual(
+        refusalsOf(
+          packageFiles(
+            held(manifestFile, "items/a.xml", String.raw`a\b.xml`, "C:/x.xml"),
+            location,
+          ),
+        ),
+        [String.raw`a\b.xml`, "C:/x.xml"].map((key) => ({
+          detail: { check: "entry-key", path: key, reading: "138" },
+          document: location,
+          location: wholeDocument,
+          rule: "package-path-outside",
+        })),
+      );
     });
 
     it("keeps a percent escape, a query and a fragment as characters of the file's name", () => {
@@ -209,7 +244,7 @@ describe("package/store.ts", () => {
     });
 
     it("refuses a path that climbs above the root as package-path-outside, naming it", () => {
-      for (const written of ["../x", "items/../../x", String.raw`..\x`, ".."]) {
+      for (const written of ["../x", "items/../../x", ".."]) {
         const result = normalisePath(written, location);
 
         assert.deepStrictEqual(
@@ -226,7 +261,7 @@ describe("package/store.ts", () => {
     });
 
     it("refuses a rooted path as package-path-outside, so no leading / is left", () => {
-      for (const written of ["/x", String.raw`\x`, ".//x", "items/..//x"]) {
+      for (const written of ["/x", ".//x", "items/..//x"]) {
         const result = normalisePath(written, location);
 
         assert.deepStrictEqual(
@@ -326,18 +361,14 @@ describe("package/store.ts", () => {
     });
 
     it("compares each held key in its normal form, and gives the files keyed by it", () => {
-      const result = checkFiles(
-        oneItem,
-        held(`./${manifestFile}`, String.raw`items\sub\..\a.xml`),
-        location,
-      );
+      const result = checkFiles(oneItem, held(`./${manifestFile}`, "items/sub/../a.xml"), location);
 
       assert.deepStrictEqual(refusalsOf(result), []);
       assert.deepStrictEqual(
         [...Result.getOrThrow(result)],
         [
           [manifestFile, `./${manifestFile}`],
-          ["items/a.xml", String.raw`items\sub\..\a.xml`],
+          ["items/a.xml", "items/sub/../a.xml"],
         ],
       );
     });
@@ -349,11 +380,12 @@ describe("package/store.ts", () => {
       assert.deepStrictEqual([...Result.getOrThrow(result).keys()], [manifestFile, "items/a.xml"]);
     });
 
-    it("never looks for a file the manifest names by an absolute URI (reading 35)", () => {
+    it("never looks for a file the manifest names by an external link (readings 35 and 102)", () => {
       const manifest = manifestOf(
         resource("a", 1, [
           relative("items/a.xml"),
           { href: "https://example.org/a.css", path: Option.none() },
+          { href: "../b.css", path: Option.none() },
         ]),
       );
 

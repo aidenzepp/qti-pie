@@ -21,8 +21,9 @@ import type { FamilyReaders, ReaderSpec } from "#plate/model/expressions/read.ts
 /**
  * The operand rule of `qti-integer-divide`, `qti-integer-modulus` and `qti-integer-to-float`: each
  * operand must be a single integer, so each operand of another type is a mismatch that accepts
- * `integer`, `single`. The qti package refuses the same (P23, `operandRules` in
- * `packages/pantry/src/processing/check.ts`).
+ * `integer`, `single`. The qti package refuses the same (P23, the `Operand fit` law in
+ * `packages/pantry/src/qti/expressions.ts`, over the kinds' typings in `expressionTypings`,
+ * `packages/pantry/src/grammar/expression.ts`).
  */
 const integerSingle: KindRule["operandsAccept"] = everyOperand(["integer"], ["single"]);
 

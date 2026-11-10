@@ -51,8 +51,8 @@ const opening = [
 const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
 
 /**
- * The README's sections: the eleven it had before M2, the four M2 adds, the one M3.b-2 adds and
- * the one M3.b-3 adds.
+ * The README's sections: the eleven it had before M2, the four M2 adds, the one M3.b-2 adds, the
+ * one M3.b-3 adds and the two align-54 adds.
  */
 const headings = [
   "## Install",
@@ -65,6 +65,8 @@ const headings = [
   "## Scoring",
   "## Template processing",
   "## Outcome processing",
+  "## Documents and packages",
+  "## Limits",
   "## Server and browser",
   "## Hosts",
   "## Styling",
@@ -854,22 +856,23 @@ describe("README.md", () => {
 
     for (const fragment of [
       "the `duration` of a part, a section or an item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`",
-      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name that does not start with a part, section or item ref of the test document itself",
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name, judged by the test document alone, unless the name is a part, section or item ref of the test document itself, a dot, and a variable name that holds no dot.",
       "So do a `qti-variable`, `qti-correct` or `qti-default` of a `file` variable, of a `record` outcome or template variable, or of a `record` response with a `file` field",
       "A test's `qti-default` of its own `duration` gives NULL of a single duration",
       "A test reads an item's `numAttempts` as the number of attempts started, the count `results` writes",
       "`qti-number-correct` and `qti-number-incorrect` consider an item's `file` and `record` responses",
       "| A `qti-lookup-outcome-value` of a dotted name whose value is not a single `integer`, `float` or `duration` | `expression-type` | P22 |",
       "A dotted name the test declares whole, such as an outcome named `S.TOTAL`, is that declaration",
-      "| A dotted name, read or set, that two readings resolve | `ambiguous-reference` | `prefixed-ref` |",
+      "| A dotted name, read, that two readings resolve, such as `a.b` that the test declares whole beside an item ref `a` whose item declares `b` | `ambiguous-reference` | `prefixed-ref` |",
       '`pattern="{ITEM1.N}"`',
-      "| A dotted `qti-correct` that reads anything but a response *(pending)* | `undeclared-variable` | none |",
-      "plate and pantry differ in the last three rows",
+      "| A dotted `qti-correct` that reads anything but a response | `undeclared-variable` | `variable-kind` |",
+      "pantry refuses the last three rows too",
       "judges its expressions under each test that reaches it",
     ]) {
       assert.include(outcomes, fragment);
     }
     assert.notInclude(outcomes, "the last two rows");
+    assert.notInclude(outcomes, "pantry accepts all three");
     assert.include(
       flatSectionOf("## Server and browser"),
       "`itemView`'s configuration never carries the processing seed",
@@ -898,7 +901,7 @@ describe("README.md", () => {
     assert.include(outcomes, "when the processing holds one of the eight expressions above");
     assert.include(
       outcomes,
-      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name that does not start with a part, section or item ref of the test document itself",
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name, judged by the test document alone, unless the name is a part, section or item ref of the test document itself, a dot, and a variable name that holds no dot.",
     );
   });
 
@@ -907,7 +910,7 @@ describe("README.md", () => {
 
     assert.include(
       scoring,
-      "| A `qti-mapping` in a response declaration of base type `file` or `duration`, or of cardinality `record`, or a `qti-area-mapping` in one whose base type is not `point` | `misplaced-element` | `mapping-base-type`, `area-mapping-point` |",
+      "| A `qti-mapping` in a response declaration of base type `file` or `duration`, or of cardinality `record`, or a `qti-area-mapping` in one whose base type is not `point` | `misplaced-element` | `mapping-base-type` |",
     );
     assert.notInclude(scoring, "first entry listed *(pending)*");
 
@@ -1102,6 +1105,111 @@ describe("README.md", () => {
       "compare one field instead: the `qti-field-value` of `stringValue` with `qti-match`, or that of `floatValue` with `qti-equal`.",
     ]) {
       assert.include(scoring, fragment);
+    }
+  });
+
+  it("align-54 r11 docs M1: the Limits table holds the item duration, says what stays unchecked under an LTI link and what the walk never visits, and no longer holds the numbered reading", () => {
+    const limits = flatSectionOf("## Limits");
+
+    for (const fragment of [
+      "or marks processing it cannot run, for the cause the row names.",
+      "| plate holds no item's `duration` for processing, so processing that reads one, timed or not, is marked and does not run: an item's own, and a test's through an item ref, such as `ITEM1.duration` (reading 150) | The engine holds no measured item duration | An engine given the session's measured item durations by its host |",
+      "a variable mapping's source and a name read through the ref are accepted unchecked (readings 106 and 110). The mapping's target is judged by reading 97 |",
+      "a QTI root or a manifest nested in lax content (reading 6); and content a complex `xsi:type` keeps unchecked (reading 50). There an `xml:lang` is not checked (reading 129), an `xml:id` takes no part in the ID table, and an IDREF that names the `id` of a MathML or SSML element is not refused |",
+    ]) {
+      assert.include(limits, fragment);
+    }
+    for (const gone of [
+      "The engine counts every numbered reading",
+      "a session counts the numbered reading too",
+      "a variable mapping and a name read through the ref are accepted unchecked",
+    ]) {
+      assert.notInclude(limits, gone);
+    }
+  });
+
+  it("align-54 r11 docs 2, 6, 7, 12 and 13b: Documents and packages names a stimulus's choices, every document's headers and q, a custom interaction in lax content, a mapping's target under an LTI link and the bounded refusal facts", () => {
+    const documents = flatSectionOf("## Documents and packages");
+
+    for (const fragment of [
+      "A choice's identifier is used by no other choice of its item or stimulus, of any class, a `qti-gap` among them. In an item it names no item variable or built-in",
+      "Like the `data-ssml` rule, both hold in every document: an item, a stimulus, a test's or a section's rubric block, and a test's feedback.",
+      "One inside lax wildcard content is not refused: the XSD gives it no global declaration, so the walk does not check it as QTI there",
+      "are at most 1,024 characters: a longer one keeps its first 512 and its last 511 characters around one `…`.",
+      "A variable mapping's source under the ref is not checked. Its target is judged by [reading 97](../../docs/spec-readings.md)",
+      "are refused `duplicate-identifier`. A name read through the ref is accepted",
+    ]) {
+      assert.include(documents, fragment);
+    }
+    assert.notInclude(documents, "No rule judges a variable mapping under the ref.");
+  });
+
+  it("align-54 r12 own prefix through a section document N1: Outcome processing says which dotted names a test that holds a section ref marks, a dotted variable name through the test's own item ref among them", () => {
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    for (const fragment of [
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name, judged by the test document alone, unless the name is a part, section or item ref of the test document itself, a dot, and a variable name that holds no dot.",
+      "After an item ref that a selection with replacement can repeat, an occurrence number may come before the variable name, as in `a.2.SCORE`.",
+      "So it marks `I1.SCORE` where `I1` is an item ref in a section document, and `a.b.SCORE` where `a` is the test's own item ref and `a.b` a section document's, even when `a`'s item declares `b.SCORE`.",
+      "A session delivers only the items of the test document's own item refs, which is why the verdict marks the dotted names listed earlier in this section.",
+    ]) {
+      assert.include(outcomes, fragment);
+    }
+    assert.notInclude(
+      outcomes,
+      "a dotted name that does not start with a part, section or item ref",
+    );
+    assert.notInclude(
+      outcomes,
+      "the verdict marks a dotted name that reads through a section document",
+    );
+  });
+
+  it("align-54 r12 limit docs assembly-limit: the Limits table holds the assembly limit with both bounds, its cause and issue #64, and Documents and packages advises a time limit for openPackage that names the bound", () => {
+    const limits = flatSectionOf("## Limits");
+
+    for (const fragment of [
+      "| A package whose tests together place section documents more than 2,048 times, or place more than 4 MiB (4,194,304 bytes) of them, is refused `assembly-limit`, its `bound` `placements` or `bytes`, and none of its tests is judged. A section document placed in two test parts, or in two tests, counts twice, and its bytes count each time |",
+      "| A section document is judged once for each placement (readings 5 and 145), so the work follows the assembled tests, which test parts, tests and chains of section documents can make far larger than the package |",
+      "| The redesign that [issue #64](https://github.com/aidenzepp/qti-pie/issues/64) tracks: no placement for each test part, and a section document judged once across tests whose reaches agree |",
+    ]) {
+      assert.include(limits, fragment);
+    }
+
+    const advice =
+      paragraphsOf("## Documents and packages").find((paragraph) =>
+        paragraph.includes("time limit"),
+      ) ?? assert.fail("Documents and packages advises no time limit for openPackage");
+    for (const fragment of [
+      "To open packages you do not trust, call `openPackage` under a time limit too, as [Scoring](#scoring) says for `score`.",
+      "more than 2,048 times, or place more than 4 MiB of them, is refused `assembly-limit` before any test is judged",
+    ]) {
+      assert.include(advice, fragment);
+    }
+  });
+
+  it("align-54 r12 limit docs D1: Outcome processing says that openPackage marks a name of the test's own form whose one resolving reading is a section document's, which the test document alone leaves unmarked", () => {
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    for (const fragment of [
+      "it also marks a dotted name, judged by the test document alone, unless the name is a part, section or item ref of the test document itself",
+      "`openPackage` reads the items, and marks a name that the test document alone leaves unmarked when the one reading that resolves the name is through an item ref or section that a section document holds.",
+      "It marks `x.y.SCORE`, for example, where the test's own item ref `x.y` names an item that declares no `SCORE` and a section document's item ref `x` names one that declares `y.SCORE`.",
+    ]) {
+      assert.include(outcomes, fragment);
+    }
+    assert.notInclude(outcomes, "it also marks a dotted name unless the name is");
+  });
+
+  it("align-54 r11 docs 4, 6 and 9: Outcome processing names a test's map response of a built-in, a mapping's target under an LTI link and every section document the manifest lists", () => {
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    for (const fragment of [
+      "| A `qti-map-response` or `qti-map-response-point` of a test's built-in `duration`, or of `numAttempts` where the test declares none (reading 166): a built-in declares no mapping | `template-requirements` | P27 |",
+      "Under an item ref that names an LTI link, the second mapping and a target that names `completionStatus`, `numAttempts` or `duration` other than its own source | `duplicate-identifier` | `variable-mapping-target` |",
+      "`openPackage` refuses the item refs, section refs, variable mappings and template defaults of every section document the manifest lists as it refuses the test's, whether or not a test reaches it, and judges its expressions under each test that reaches it.",
+    ]) {
+      assert.include(outcomes, fragment);
     }
   });
 

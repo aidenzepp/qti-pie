@@ -74,8 +74,9 @@ const mismatchAt = (
 
 /**
  * The operand rule of `qti-match`: two operands of the same base type and cardinality, unless one
- * says nothing yet, and neither a duration, as the qti package reads it (P23, `operandRules` in
- * `packages/pantry/src/processing/check.ts`).
+ * says nothing yet, and neither a duration, as the qti package reads it (P23, the `Operand fit` and
+ * `One base` laws in `packages/pantry/src/qti/expressions.ts`, over the kind's typing in
+ * `expressionTypings`, `packages/pantry/src/grammar/expression.ts`).
  *
  * The first operand sets the type: it is refused only as a duration, when it takes every base type
  * but `duration`, in any cardinality. The second takes the first's base type and cardinality, or
@@ -157,7 +158,8 @@ const equalRule: KindRule = {
 /**
  * The rule of `qti-duration-lt` and `qti-duration-gte`: a single boolean, of "two sub-expressions
  * which must both have single cardinality and base-type duration" (`info.txt:9486`, `:9490`), as
- * the qti package reads it (P23, `operandRules` in `packages/pantry/src/processing/check.ts`).
+ * the qti package reads it (P23, the `Operand fit` law in `packages/pantry/src/qti/expressions.ts`,
+ * over the kinds' typings in `expressionTypings`, `packages/pantry/src/grammar/expression.ts`).
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpDurationLT
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpDurationGTE

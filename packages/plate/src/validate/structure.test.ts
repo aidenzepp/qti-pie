@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
+import { readCorpusFile } from "#plate/document/corpus.ts";
+import { readSource } from "#plate/document/read.ts";
 import {
   attr,
   doc,
@@ -8,9 +10,11 @@ import {
   entity,
   mathmlNamespace,
   qtiNamespace,
+  ssmlNamespace,
   text,
   walk as walkDocument,
   xmlNamespace,
+  xincludeNamespace,
   xmlnsNamespace,
   xsdNamespace,
   xsiNamespace,
@@ -21,7 +25,14 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
-import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
+import { packageTables } from "#plate/package/tables.ts";
+import {
+  cpuMillis,
+  growthFactor,
+  growthLimit,
+  growthRatio,
+  growthRuns,
+} from "#plate/test/growth.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { checkStructure, governingTables } from "#plate/validate/structure.ts";
 import { tables as generatedTables } from "#plate/validate/tables.ts";
@@ -35,6 +46,7 @@ import type {
   TypeEntry,
   Wildcard,
 } from "#plate/validate/xsd.ts";
+import { manifestNamespace } from "#plate/vocabulary.ts";
 
 /**
  * The location every hand-built document in these tests carries.
@@ -600,7 +612,8 @@ const mappable =
 /**
  * Where a `qti-area-mapping` must sit, as its placement row words it.
  */
-const pointed = "in a qti-response-declaration whose base type is point";
+const pointed =
+  "in a qti-response-declaration whose base type is point and whose cardinality is not record";
 
 /**
  * Construct an item whose catalog holds one card.
@@ -616,11 +629,6 @@ const carded = (...children: readonly SourceChild[]): SourceDocument =>
       [el("qti-catalog", [attr("id", "glossary")], [el("qti-card", [], children)])],
     ),
   ]);
-
-/**
- * The path of the card {@link carded} builds.
- */
-const card = "qti-assessment-item/qti-catalog-info/qti-catalog/qti-card";
 
 /**
  * Construct an item whose body holds one PCI with the given children.
@@ -1076,17 +1084,16 @@ const badDiv = el("div", [badId]);
 const looseChoice = el("qti-simple-choice", [attr("identifier", "A")], [text("A")]);
 
 /**
- * Report whether a committed element table declares `id` as an `NCName`.
+ * Report whether a committed element table declares `id` with a given built-in type.
  *
  * @param local The element's local name.
+ * @param name The built-in, `ID` by default, the type the XSD's `UniqueIdentifierDType` restricts.
  * @returns Whether its table declares `id` with that type.
  */
-const declaresNcNameId = (local: string): boolean =>
+const declaresId = (local: string, name: BuiltinName = "ID"): boolean =>
   generatedTables.elements[local]?.attributes.some(
     (attribute) =>
-      attribute.local === "id" &&
-      attribute.type.kind === "builtin" &&
-      attribute.type.name === "NCName",
+      attribute.local === "id" && attribute.type.kind === "builtin" && attribute.type.name === name,
   ) ?? false;
 
 /**
@@ -1232,7 +1239,7 @@ const printed = (format: string): SourceDocument =>
   literal("qti-printed-variable", attr("identifier", "SCORE"), attr("format", format));
 
 /**
- * The detail of a refused printed variable's `format` (pantry R38).
+ * The detail of a refused printed variable's `format` (reading 132).
  *
  * @param format The `format`, as written.
  * @returns The detail.
@@ -1242,25 +1249,25 @@ const formatDetail = (format: string) => ({
   check: "printf-format",
   element: "qti-printed-variable",
   expected:
-    "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
-  pantry: "R38",
-  source: "info.txt:70323",
+    "a printf format: any text, %% for a percent sign, and conversions, each a %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the codes E, e, f, G, g, r, R, i, o, X, x and d",
+  reading: "132",
   value: format,
 });
 
 /**
- * The printed variable's `format` pattern as it stood before review `079e8c44` P2-13, kept as the
- * oracle the check must agree with. Its flags and its width both match `0`, so a refused `%`, a run
- * of zeros and a letter that is no code backtracks over every split of the run: quadratic time.
+ * The printed variable's `format` as readings 132 and 161 and the operator's P1 write it, a width
+ * of any digits, kept as the oracle the check must agree with. Its flags and its width both match
+ * `0`, so a refused `%`, a run of zeros and a letter that is no code backtracks over every split of
+ * the run: quadratic time.
  */
-const quadraticPrintfFormat = /^%[#0 +-]*[0-9]*(?:\.[0-9]*)?[EefGgrRioXx]$/u;
+const quadraticPrintfFormat = /^(?:[^%]|%%|%[#0 +-]*[0-9]*(?:\.[0-9]*)?[EefGgrRioXxd])*$/u;
 
 /**
  * The characters the `format` agreement check builds its strings from: the percent sign, every
- * flag, the digits that start a width with and without a zero, the point, two codes and `d`, which
- * is no code.
+ * flag, the digits that start a width with and without a zero, the point, three codes, `d` among
+ * them, and `q`, which is no code.
  */
-const formatAlphabet = ["%", "#", "0", " ", "+", "-", "1", "9", ".", "f", "i", "d"] as const;
+const formatAlphabet = ["%", "#", "0", " ", "+", "-", "1", "9", ".", "f", "i", "d", "q"] as const;
 
 /**
  * List every string of at most `length` characters over an alphabet, shortest first.
@@ -1296,8 +1303,9 @@ const formatZeros = 64_000;
 const formatGrowthTimeoutMs = 60_000;
 
 /**
- * The `format` equivalence check judges 271,453 strings. It takes about 0.75 s alone and took
- * 6.9 s on a loaded machine, past vitest's default of 5 s, so it is given room to finish there.
+ * The `format` equivalence check judges 402,234 strings. It took about 0.75 s alone over 271,453 of
+ * them and 6.9 s on a loaded machine, past vitest's default of 5 s, so it is given room to finish
+ * there.
  */
 const formatEquivalenceTimeoutMs = 60_000;
 
@@ -1355,6 +1363,65 @@ const testDeclaring = (outcomes: readonly SourceElement[]): SourceDocument =>
   );
 
 /**
+ * The four kinds of variable declaration, each with a `cardinality` and a `base-type`.
+ */
+const variableKinds = [
+  "qti-context-declaration",
+  "qti-outcome-declaration",
+  "qti-response-declaration",
+  "qti-template-declaration",
+] as const;
+
+/**
+ * Construct an outcome declaration of record cardinality.
+ *
+ * @param identifier Its `identifier`, as written.
+ * @param base Its `base-type`, when it writes one.
+ * @returns The declaration.
+ */
+const recordOutcome = (identifier: string, base?: string): SourceElement =>
+  el("qti-outcome-declaration", [
+    attr("identifier", identifier),
+    attr("cardinality", "record"),
+    ...(base === undefined ? [] : [attr("base-type", base)]),
+  ]);
+
+/**
+ * The detail of the refusal of a typed outcome declared `record`, at its `cardinality`.
+ *
+ * @param identifier The outcome.
+ * @param fixed The base type it must have.
+ * @returns The detail.
+ */
+const reservedRecord = (identifier: string, fixed: string) => ({
+  attribute: "cardinality",
+  baseType: fixed,
+  check: "reserved-outcome-type",
+  element: "qti-outcome-declaration",
+  expected: `single, multiple or ordered: an outcome named ${identifier} has the base type ${fixed}, and a record has none`,
+  identifier,
+  pantry: "ReservedOutcomeTypes",
+  reading: "153",
+  value: "record",
+});
+
+/**
+ * The refusals below an item's root, checked against the generated tables: the hand-built item
+ * writes none of its root's required attributes, which these tests do not judge.
+ *
+ * @param source The item.
+ * @returns Each refusal below the root, with its rule, location and detail, in the order found.
+ */
+const declarationRefusals = (source: SourceDocument) =>
+  checkStructure(source, generatedTables)
+    .filter(
+      (refusal) =>
+        refusal.location.kind === "path" &&
+        refusal.location.path.startsWith("qti-assessment-item/"),
+    )
+    .map((refusal) => [refusal.rule, refusal.location, refusal.detail] as const);
+
+/**
  * The `attribute-type` refusals of a document checked against the generated tables, by
  * location.
  *
@@ -1365,6 +1432,808 @@ const mistyped = (source: SourceDocument): readonly Location[] =>
   checkStructure(source, generatedTables)
     .filter((refusal) => refusal.rule === "attribute-type")
     .map((refusal) => refusal.location);
+
+/**
+ * Construct an item, whole by the generated tables, holding the given children: its root writes
+ * the three attributes the tables require of it.
+ *
+ * @param children The item's children.
+ * @returns The item as a source document.
+ */
+const wholeItem = (children: readonly SourceChild[]): SourceDocument =>
+  item(children, [
+    attr("identifier", "item"),
+    attr("title", "Item"),
+    attr("time-dependent", "false"),
+  ]);
+
+/**
+ * An item whose body holds a paragraph around one `object` with the attributes the tables
+ * require of it and the given others.
+ *
+ * @param attributes The object's other attributes.
+ * @returns The item.
+ */
+const objectWith = (...attributes: readonly SourceAttribute[]): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-item-body",
+      [],
+      [
+        el(
+          "p",
+          [],
+          [el("object", [attr("data", "x.png"), attr("type", "image/png"), ...attributes])],
+        ),
+      ],
+    ),
+  ]);
+
+/**
+ * Where an attribute of {@link objectWith}'s object sits.
+ *
+ * @param name The attribute's name as its path step spells it.
+ * @returns The location.
+ */
+const objectAttribute = (name: string): Location =>
+  at(`qti-assessment-item/qti-item-body/p/object/@${name}`);
+
+/**
+ * Check a document against the generated tables, keeping each refusal's rule, location and detail.
+ *
+ * @param source The document.
+ * @returns Its refusals, in the order found.
+ */
+const judged = (source: SourceDocument) =>
+  checkStructure(source, generatedTables).map(
+    (refusal) => [refusal.rule, refusal.location, refusal.detail] as const,
+  );
+
+/**
+ * An image, as a graphic interaction or a position object stage holds one.
+ */
+const picture = el("img", [attr("alt", "A map"), attr("src", "map.png")]);
+
+/**
+ * Construct a hotspot of a graphic interaction: a `qti-hotspot-choice`, or a
+ * `qti-associable-hotspot` with the `match-max` it requires.
+ *
+ * @param local The hotspot's local name.
+ * @param identifier Its `identifier`.
+ * @param geometry Its `shape`, as written.
+ * @returns The hotspot.
+ */
+const hotspot = (local: string, identifier: string, geometry: string): SourceElement =>
+  el(local, [
+    attr("identifier", identifier),
+    attr("shape", geometry),
+    attr("coords", "10,10,5"),
+    ...(local === "qti-associable-hotspot" ? [attr("match-max", "1")] : []),
+  ]);
+
+/**
+ * Construct a whole item whose body holds one graphic interaction with an image and the given
+ * children after it.
+ *
+ * @param interaction The interaction's local name.
+ * @param children The interaction's children after its image: hotspots, and text between them.
+ * @returns The item as a source document.
+ */
+const graphicItem = (interaction: string, ...children: readonly SourceChild[]): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-item-body",
+      [],
+      [el(interaction, [attr("response-identifier", "RESPONSE")], [picture, ...children])],
+    ),
+  ]);
+
+/**
+ * The detail of the refusal of a default hotspot out of its place (reading 80).
+ *
+ * @param local The hotspot's local name.
+ * @param context The interaction that holds it.
+ * @returns The detail.
+ */
+const defaultHotspot = (local: string, context: string) => ({
+  check: "default-hotspot",
+  context,
+  element: local,
+  reading: "80",
+});
+
+/**
+ * The default hotspot choices of the smaller interaction the default hotspot growth check reads,
+ * and the text runs after them; the larger holds {@link growthFactor} times as many of each.
+ */
+const fewerDefaultHotspots = 1000;
+
+/**
+ * The hotspot choices, and the text runs after them, of the hostile-size default hotspot case: the
+ * size at which a scan of the interaction's children per default hotspot took over a second.
+ */
+const hostileDefaultHotspots = 16_000;
+
+/**
+ * The default hotspot growth check and hostile-size case check interactions of up to 16,000
+ * hotspot choices and 16,000 text runs several times each. A scan of the children per default
+ * hotspot took several seconds of that, past vitest's default of 5 s, and a failing case should
+ * report its ratio, not a timeout.
+ */
+const hotspotGrowthTimeoutMs = 60_000;
+
+/**
+ * Construct a whole item whose hotspot interaction holds, after its image, a run of hotspot
+ * choices of one shape and then as many text runs, each a line break. The reader keeps text that
+ * comments keep apart as separate runs, so the runs are what a line break and a comment, repeated,
+ * read as: no element follows the last hotspot, and every text run follows every hotspot.
+ *
+ * @param hotspots The hotspot choices, and the text runs after them.
+ * @param geometry Each hotspot choice's `shape`, as written.
+ * @returns The item as a source document.
+ */
+const crowdedHotspots = (hotspots: number, geometry: string): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-item-body",
+      [],
+      [
+        el(
+          "qti-hotspot-interaction",
+          [attr("response-identifier", "RESPONSE")],
+          [
+            picture,
+            ...Array.from({ length: hotspots }, (_, index) =>
+              hotspot("qti-hotspot-choice", `H${index + 1}`, geometry),
+            ),
+            ...Array.from({ length: hotspots }, () => text("\n")),
+          ],
+        ),
+      ],
+    ),
+  ]);
+
+/**
+ * The path of a hotspot choice of {@link crowdedHotspots}'s interaction.
+ *
+ * @param position Its 1-based position among the interaction's hotspot choices.
+ * @returns Its location.
+ */
+const crowdedHotspot = (position: number): Location =>
+  at(`qti-assessment-item/qti-item-body/qti-hotspot-interaction/qti-hotspot-choice[${position}]`);
+
+/**
+ * Construct a whole item whose body holds a position object stage with one position object
+ * interaction.
+ *
+ * @param attributes The interaction's attributes beside its `response-identifier`.
+ * @returns The item as a source document.
+ */
+const positioned = (...attributes: readonly SourceAttribute[]): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-item-body",
+      [],
+      [
+        el(
+          "qti-position-object-stage",
+          [],
+          [
+            picture,
+            el(
+              "qti-position-object-interaction",
+              [attr("response-identifier", "RESPONSE"), ...attributes],
+              [picture],
+            ),
+          ],
+        ),
+      ],
+    ),
+  ]);
+
+/**
+ * Construct a whole item with one outcome declaration holding a lookup table.
+ *
+ * @param identifier The outcome's `identifier`.
+ * @param cardinality Its `cardinality`, as written.
+ * @param base Its `base-type`, none for a record.
+ * @param table The lookup table.
+ * @returns The item as a source document.
+ */
+const lookedUp = (
+  identifier: string,
+  cardinality: string,
+  base: Option.Option<string>,
+  table: SourceElement,
+): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-outcome-declaration",
+      [
+        attr("identifier", identifier),
+        attr("cardinality", cardinality),
+        ...Option.match(base, {
+          onNone: () => [],
+          onSome: (written) => [attr("base-type", written)],
+        }),
+      ],
+      [table],
+    ),
+  ]);
+
+/**
+ * A match table with one entry, as the research probe `p100-multiple-table` writes it.
+ */
+const matchTable = el(
+  "qti-match-table",
+  [attr("default-value", "0")],
+  [el("qti-match-table-entry", [attr("source-value", "1"), attr("target-value", "1.5")])],
+);
+
+/**
+ * An interpolation table with one entry.
+ */
+const interpolationTable = el(
+  "qti-interpolation-table",
+  [],
+  [el("qti-interpolation-table-entry", [attr("source-value", "1"), attr("target-value", "1.5")])],
+);
+
+/**
+ * The location of the lookup table a {@link lookedUp} item's outcome holds.
+ *
+ * @param local The table's local name.
+ * @returns Its location.
+ */
+const lookupTable = (local: string): Location =>
+  at(`qti-assessment-item/qti-outcome-declaration/${local}`);
+
+/**
+ * The detail of the refusal of a lookup table under an outcome that is not single (reading 100).
+ *
+ * @param local The table's local name.
+ * @param identifier The outcome's identifier.
+ * @returns The detail.
+ */
+const lookupCardinality = (local: string, identifier: string) => ({
+  check: "lookup-cardinality",
+  element: local,
+  identifier,
+  reading: "100",
+});
+
+/**
+ * Check a document against the generated tables, keeping each refusal's rule and location.
+ *
+ * @param source The document.
+ * @returns Its refusals' rules and locations, in the order found.
+ */
+const ruled = (source: SourceDocument) =>
+  judgedMapping(source).map(({ location: where, rule }) => [rule, where]);
+
+/**
+ * An image, as a `picture` holds one after its sources.
+ */
+const pictureImage = el("img", [attr("alt", "A map"), attr("src", "map.png")]);
+
+/**
+ * Construct a whole item whose body holds the given content.
+ *
+ * @param content The body's children.
+ * @returns The item as a source document.
+ */
+const bodied = (...content: readonly SourceChild[]): SourceDocument =>
+  wholeItem([el("qti-item-body", [], content)]);
+
+/**
+ * The location of an element or attribute in a {@link bodied} item's body.
+ *
+ * @param step The path below the body.
+ * @returns Its location.
+ */
+const inBody = (step: string): Location => at(`qti-assessment-item/qti-item-body/${step}`);
+
+/**
+ * Check a document against the generated tables, and keep each refusal's rule and location and
+ * the reading its detail cites.
+ *
+ * @param source The document.
+ * @returns Its refusals' rules, locations and readings, in the order found.
+ */
+const cited = (source: SourceDocument) =>
+  judged(source).map(([rule, where, detail]) => [rule, where, detail["reading"]] as const);
+
+/**
+ * Construct a whole item whose body holds a video with one track.
+ *
+ * @param attributes The track's attributes beside its `src`.
+ * @returns The item as a source document.
+ */
+const trackedVideo = (...attributes: readonly SourceAttribute[]): SourceDocument =>
+  bodied(
+    el("video", [attr("src", "clip.mp4")], [el("track", [attr("src", "en.vtt"), ...attributes])]),
+  );
+
+/**
+ * LOM's namespace, whose elements a manifest's metadata holds.
+ */
+const lomNamespace = "http://ltsc.ieee.org/xsd/LOM";
+
+/**
+ * Construct a 3.0.0 manifest whose own LOM record holds one title string.
+ *
+ * @param language The string's `xml:lang`, as written.
+ * @returns The manifest as a source document.
+ */
+const titledManifest = (language: string): SourceDocument =>
+  doc(
+    "imsmanifest.xml",
+    el(
+      "manifest",
+      [attr("identifier", "M")],
+      [
+        el(
+          "metadata",
+          [],
+          [
+            el("schema", [], [text("QTI Package")], manifestNamespace),
+            el("schemaversion", [], [text("3.0.0")], manifestNamespace),
+            el(
+              "lom",
+              [],
+              [
+                el(
+                  "general",
+                  [],
+                  [
+                    el(
+                      "title",
+                      [],
+                      [
+                        el(
+                          "string",
+                          [attr("lang", language, xmlNamespace)],
+                          [text("A test")],
+                          lomNamespace,
+                        ),
+                      ],
+                      lomNamespace,
+                    ),
+                  ],
+                  lomNamespace,
+                ),
+              ],
+              lomNamespace,
+            ),
+          ],
+          manifestNamespace,
+        ),
+        el("organizations", [], [], manifestNamespace),
+        el("resources", [], [], manifestNamespace),
+      ],
+      manifestNamespace,
+    ),
+  );
+
+/**
+ * Check a manifest as the manifest walk does: no QTI tables, and the 3.0.0 profile's tables of
+ * every namespace it reaches.
+ *
+ * @param source The manifest.
+ * @returns Its refusals.
+ */
+const walkedManifest = (source: SourceDocument) =>
+  checkStructure(source, { elements: {}, types: {} }, packageTables.get("3.0.0"));
+
+/**
+ * The namespace of the AfA DRD that a content package's schema set imports, through the content
+ * packaging extension.
+ */
+const drdNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0";
+
+/**
+ * The namespace of the AfA DRD 2.0, which no schema set of QTI 3.0 imports: an item's ASI XSD
+ * imports no DRD (reading 81).
+ */
+const drdV2Namespace = "http://www.imsglobal.org/xsd/accessibility/drdv2p0";
+
+/**
+ * Name an element of a namespace other than QTI's as its path step does.
+ *
+ * @param namespace The element's namespace.
+ * @param local The element's local name.
+ * @returns Its step.
+ */
+const stepIn = (namespace: string, local: string): string => `{${namespace}}${local}`;
+
+/**
+ * Construct an item, valid by the committed tables, whose `qti-companion-materials-info` holds the
+ * given children. Its content model ends in `grpStrict.any`, a `strict` `##other` element wildcard
+ * that may repeat, after the particles that name the materials.
+ *
+ * @param children The companion materials' children.
+ * @returns The item as a source document.
+ */
+const companioned = (...children: readonly SourceChild[]): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "item"), attr("time-dependent", "false"), attr("title", "Strict")],
+      [el("qti-companion-materials-info", [], children)],
+    ),
+  );
+
+/**
+ * The path of the companion materials {@link companioned} builds.
+ */
+const companion = "qti-assessment-item/qti-companion-materials-info";
+
+/**
+ * Construct a `widget` of {@link otherNamespace}, which no table declares, with `o` bound to that
+ * namespace and {@link declarations} bound too.
+ *
+ * @param attributes The widget's other attributes, its `xsi:type` among them where it has one.
+ * @param children The widget's children.
+ * @returns The widget.
+ */
+const foreignWidget = (
+  attributes: readonly SourceAttribute[],
+  ...children: readonly SourceChild[]
+): SourceElement =>
+  el(
+    "widget",
+    [attr("o", otherNamespace, xmlnsNamespace), ...declarations, ...attributes],
+    children,
+    otherNamespace,
+  );
+
+/**
+ * The path step of a {@link foreignWidget}.
+ */
+const widgetStep = stepIn(otherNamespace, "widget");
+
+/**
+ * Construct an `xsi:type`.
+ *
+ * @param written The type as written.
+ * @returns The attribute.
+ */
+const instanceType = (written: string): SourceAttribute => attr("type", written, xsiNamespace);
+
+/**
+ * Construct a 3.0.0 manifest whose own LOM record's `general` holds some children, and whose one
+ * resource's one file has metadata that holds others. LOM's `general` ends in a `lax` `##other`
+ * element wildcard, and a file's metadata, `FileMetadataDType`, is `grpStrict.any` alone, a
+ * `strict` `##other` element wildcard.
+ *
+ * @param general The children of the LOM record's `general`.
+ * @param file The children of the file's metadata.
+ * @returns The manifest as a source document.
+ */
+const packaged = (general: readonly SourceChild[], file: readonly SourceChild[]): SourceDocument =>
+  doc(
+    "imsmanifest.xml",
+    el(
+      "manifest",
+      [attr("identifier", "M")],
+      [
+        el(
+          "metadata",
+          [],
+          [
+            el("schema", [], [text("QTI Package")], manifestNamespace),
+            el("schemaversion", [], [text("3.0.0")], manifestNamespace),
+            el("lom", [], [el("general", [], general, lomNamespace)], lomNamespace),
+          ],
+          manifestNamespace,
+        ),
+        el("organizations", [], [], manifestNamespace),
+        el(
+          "resources",
+          [],
+          [
+            el(
+              "resource",
+              [attr("identifier", "R"), attr("type", "imsqti_item_xmlv3p0")],
+              [
+                el(
+                  "file",
+                  [attr("href", "item.xml")],
+                  [el("metadata", [], file, manifestNamespace)],
+                  manifestNamespace,
+                ),
+              ],
+              manifestNamespace,
+            ),
+          ],
+          manifestNamespace,
+        ),
+      ],
+      manifestNamespace,
+    ),
+  );
+
+/**
+ * The path of the LOM record's `general` {@link packaged} builds.
+ */
+const packagedGeneral = [
+  stepIn(manifestNamespace, "manifest"),
+  stepIn(manifestNamespace, "metadata"),
+  stepIn(lomNamespace, "lom"),
+  stepIn(lomNamespace, "general"),
+].join("/");
+
+/**
+ * The path of the file's metadata {@link packaged} builds.
+ */
+const packagedFile = ["manifest", "resources", "resource", "file", "metadata"]
+  .map((local) => stepIn(manifestNamespace, local))
+  .join("/");
+
+/**
+ * Construct a `qti-physical-material`, a fresh element on each call.
+ *
+ * @returns The element.
+ */
+const physicalMaterial = (): SourceElement => el("qti-physical-material", [], [text("A ruler")]);
+
+/**
+ * Construct the DRD's `accessForAllResource`, whose content model ends in `grpStrict.any`, a
+ * `strict` `##other` element wildcard that may repeat, after the particles that name its
+ * properties.
+ *
+ * @param children Its children.
+ * @returns The element.
+ */
+const accessForAll = (...children: readonly SourceChild[]): SourceElement =>
+  el("accessForAllResource", [], children, drdNamespace);
+
+/**
+ * The path step of an {@link accessForAll}.
+ */
+const accessForAllStep = stepIn(drdNamespace, "accessForAllResource");
+
+/**
+ * The path of an ID/IDREF case's item body.
+ */
+const idBody = "qti-assessment-item/qti-item-body";
+
+/**
+ * The path of an ID/IDREF case's response processing.
+ */
+const idProcessing = "qti-assessment-item/qti-response-processing";
+
+/**
+ * The path of an ID/IDREF case's `qti-set-outcome-value`.
+ */
+const idSetting = `${idProcessing}/qti-set-outcome-value`;
+
+/**
+ * A response declaration of one identifier, `RESPONSE`, of base type string.
+ */
+const idResponse = el("qti-response-declaration", [
+  attr("identifier", "RESPONSE"),
+  attr("cardinality", "single"),
+  attr("base-type", "string"),
+]);
+
+/**
+ * A context declaration of one identifier, `CTX`.
+ */
+const idContext = el("qti-context-declaration", [
+  attr("identifier", "CTX"),
+  attr("cardinality", "single"),
+  attr("base-type", "string"),
+]);
+
+/**
+ * The outcome `SCORE`, which an ID/IDREF case's response processing sets.
+ */
+const idScore = el("qti-outcome-declaration", [
+  attr("identifier", "SCORE"),
+  attr("cardinality", "single"),
+  attr("base-type", "float"),
+]);
+
+/**
+ * Set `SCORE` to an expression, in an ID/IDREF case's response processing.
+ *
+ * @param expression The expression.
+ * @returns The `qti-set-outcome-value`.
+ */
+const idSet = (expression: SourceElement): SourceElement =>
+  el("qti-set-outcome-value", [attr("identifier", "SCORE")], [expression]);
+
+/**
+ * Construct an item, valid by the committed tables, for the ID/IDREF table's cases: its
+ * declarations, a body, and a response processing holding the given rules when any are given. Its
+ * root binds the prefix `q` to QTI's namespace, for an `xsi:type`.
+ *
+ * @param declared The item's declarations.
+ * @param content The body's children.
+ * @param processing The response processing's children, none for no response processing.
+ * @returns The item as a source document.
+ */
+const idItem = (
+  declared: readonly SourceElement[],
+  content: readonly SourceChild[],
+  processing: readonly SourceElement[] = [],
+): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-assessment-item",
+      [
+        attr("q", qtiNamespace, xmlnsNamespace),
+        attr("identifier", "item"),
+        attr("time-dependent", "false"),
+        attr("title", "IDs"),
+      ],
+      [
+        ...declared,
+        el("qti-item-body", [], content),
+        ...(processing.length > 0 ? [el("qti-response-processing", [], processing)] : []),
+      ],
+    ),
+  );
+
+/**
+ * Check a document against the committed tables and keep each refusal's rule, location and detail.
+ *
+ * @param source The document.
+ * @returns The refusals, in the order they were found.
+ */
+const idFound = (source: SourceDocument) =>
+  checkStructure(source, generatedTables).map(
+    (refusal) => [refusal.rule, refusal.location, refusal.detail] as const,
+  );
+
+/**
+ * The detail of an `idref-target` refusal.
+ *
+ * @param on The element's name.
+ * @param attribute The attribute's name.
+ * @param token The token that names no ID.
+ * @returns The detail.
+ */
+const idrefTarget = (on: string, attribute: string, token: string) => ({
+  attribute,
+  check: "idref-target",
+  element: on,
+  reading: "156",
+  value: token,
+});
+
+/**
+ * Construct the research probe `a84_null_textentry_idref`'s item: a `qti-null` typed
+ * `TextEntryInteractionDType`, whose `response-identifier` is then an IDREF (reading 84).
+ *
+ * @param response The `response-identifier` as written.
+ * @returns The item as a source document.
+ */
+const idNulled = (response: string): SourceDocument =>
+  idItem(
+    [idResponse, idScore],
+    [el("p", [], [text("x")])],
+    [
+      idSet(
+        el("qti-null", [
+          attr("type", "q:TextEntryInteractionDType", xsiNamespace),
+          attr("response-identifier", response),
+        ]),
+      ),
+    ],
+  );
+
+/**
+ * Construct the research probes `p109a`, `p109b` and `p109d`'s item: a `qti-exit-response` typed
+ * `ImgDType`, which declares `id` of an ID type and admits other attributes by a lax wildcard.
+ *
+ * @param attributes The exit's attributes beside its type, `alt` and `src`.
+ * @returns The item as a source document.
+ */
+const idExit = (...attributes: readonly SourceAttribute[]): SourceDocument =>
+  idItem(
+    [idScore],
+    [el("p", [], [text("x")])],
+    [
+      el("qti-exit-response", [
+        attr("type", "q:ImgDType", xsiNamespace),
+        attr("alt", "a"),
+        attr("src", "x.png"),
+        ...attributes,
+      ]),
+    ],
+  );
+
+/**
+ * Give a declaration another identifier.
+ *
+ * @param declaration The declaration.
+ * @param identifier The identifier it declares instead.
+ * @returns The declaration with that identifier.
+ */
+const renamed = (declaration: SourceElement, identifier: string): SourceElement => ({
+  ...declaration,
+  attributes: declaration.attributes.map((attribute) =>
+    attribute.local === "identifier" ? attr("identifier", identifier) : attribute,
+  ),
+});
+
+/**
+ * Construct a manifest resource `R` of one item file, with the given dependencies.
+ *
+ * @param dependencies Its `dependency` elements.
+ * @returns The resource.
+ */
+const idResource = (dependencies: readonly SourceElement[]): SourceElement =>
+  el(
+    "resource",
+    [attr("identifier", "R"), attr("type", "imsqti_item_xmlv3p0"), attr("href", "items/r.xml")],
+    [el("file", [attr("href", "items/r.xml")], [], manifestNamespace), ...dependencies],
+    manifestNamespace,
+  );
+
+/**
+ * Construct an ID/IDREF case's item whose body holds the given content and then a custom
+ * interaction, whose `##any` `lax` element wildcard admits the given children.
+ *
+ * @param before The body's children before the custom interaction.
+ * @param children The custom interaction's children.
+ * @returns The item as a source document.
+ */
+const laxItem = (
+  before: readonly SourceChild[],
+  ...children: readonly SourceChild[]
+): SourceDocument =>
+  idItem(
+    [idResponse],
+    [...before, el("qti-custom-interaction", [attr("response-identifier", "RESPONSE")], children)],
+  );
+
+/**
+ * An element of another namespace, which no table declares, so the walk passes over it laxly in
+ * a custom interaction's content.
+ *
+ * @param local Its local name.
+ * @param attributes Its attributes.
+ * @returns The element.
+ */
+const laxWidget = (local: string, ...attributes: readonly SourceAttribute[]): SourceElement =>
+  el(local, attributes, [text("w")], otherNamespace);
+
+/**
+ * The path of a {@link laxItem}'s custom interaction.
+ */
+const laxInteraction = `${idBody}/qti-custom-interaction`;
+
+/**
+ * The committed tables, with the custom interaction's element wildcard made `skip`, so its
+ * content is never visited: no committed table holds a `skip` wildcard.
+ */
+const skipping: Tables = {
+  ...generatedTables,
+  elements: {
+    ...generatedTables.elements,
+    "qti-custom-interaction": {
+      ...element(),
+      ...generatedTables.elements["qti-custom-interaction"],
+      anyElement: { namespace: "##any", process: "skip" },
+    },
+  },
+};
+
+/**
+ * Construct a {@link laxItem} whose custom interaction holds one element of another namespace that
+ * writes an `xml:lang`.
+ *
+ * @param language The `xml:lang`, as written.
+ * @param attributes The element's attributes before it.
+ * @returns The item as a source document.
+ */
+const laxLanguage = (language: string, ...attributes: readonly SourceAttribute[]): SourceDocument =>
+  laxItem([], laxWidget("w", ...attributes, attr("lang", language, xmlNamespace)));
 
 describe("checkStructure", () => {
   describe("the six rules", () => {
@@ -1986,7 +2855,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("readings 16, 17 and 18: the narrowed attributes", () => {
+  describe('readings 16 and 17, and reading 18 ("an order or graphic-order interaction\'s `min-choices`, where written, is from 1 to its number of choices"): the narrowed attributes', () => {
     it("[I-2] refuses normal-maximum 0, 0.0, -0 and 0e0 as attribute-type, and admits 1 (reading 16)", () => {
       const path = "qti-assessment-item/qti-outcome-declaration/@normal-maximum";
 
@@ -2009,7 +2878,7 @@ describe("checkStructure", () => {
       assert.deepStrictEqual(found(item([outcome(attr("view", "candidate"))])), []);
     });
 
-    it('[I-8] refuses min-choices="0" on an order interaction as attribute-type, and admits it on a choice interaction (reading 18)', () => {
+    it('[I-8] refuses min-choices="0" on an order interaction as attribute-type, and admits it on a choice interaction, by reading 18 ("an order or graphic-order interaction\'s `min-choices`, where written, is from 1 to its number of choices")', () => {
       const order = body(
         el("qti-order-interaction", [
           attr("response-identifier", "RESPONSE"),
@@ -2083,7 +2952,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("readings 22, 23 and 38: placements", () => {
+  describe('readings 22 and 23, and reading 38 ("a `qti-gap` appears only within a gap-match interaction, and a `qti-hottext` may appear in any flow or inline content"): placements', () => {
     it("[I-2] refuses a qti-template-constraint inside qti-template-if as misplaced-element, and still walks it (reading 22)", () => {
       const constraint =
         "qti-assessment-item/qti-template-processing/qti-template-condition/qti-template-if/qti-template-constraint";
@@ -2189,7 +3058,7 @@ describe("checkStructure", () => {
       assert.deepStrictEqual(found(doc(location, section), generatedTables), []);
     });
 
-    it("[I-8] refuses a qti-gap outside a qti-gap-match-interaction as misplaced-element (reading 38)", () => {
+    it('[I-8] refuses a qti-gap outside a qti-gap-match-interaction as misplaced-element, by reading 38 ("a `qti-gap` appears only within a gap-match interaction, and a `qti-hottext` may appear in any flow or inline content")', () => {
       const gap = el("qti-gap", [attr("identifier", "G1")]);
       const loose = body(el("p", [], [gap]));
       const graphic = body(
@@ -2223,7 +3092,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("the information model's mapping placements (pantry mapping-base-type and area-mapping-point)", () => {
+  describe("the information model's mapping placements (pantry mapping-base-type)", () => {
     it("[I-1] refuses a qti-mapping in a file response, the mapping its base type forbids, as misplaced-element (pantry mapping-base-type; info.txt:34086)", () => {
       assert.deepStrictEqual(
         judgedMapping(mappingItem("single", Option.some("file"), mapping)),
@@ -2245,21 +3114,21 @@ describe("checkStructure", () => {
       );
     });
 
-    it("[I-1] refuses a qti-area-mapping in an identifier response, an area mapping off a point, as misplaced-element (pantry area-mapping-point; info.txt:39388)", () => {
+    it("[I-1] refuses a qti-area-mapping in an identifier response, an area mapping off a point, as misplaced-element (pantry mapping-base-type; info.txt:39388)", () => {
       assert.deepStrictEqual(
         judgedMapping(mappingItem("single", Option.some("identifier"), areaMapping)),
         misplacedMapping("qti-area-mapping", pointed),
       );
     });
 
-    it("[I-1] refuses a qti-area-mapping in a record response, an area mapping off a point, as misplaced-element (pantry area-mapping-point; info.txt:39388)", () => {
+    it("[I-1] refuses a qti-area-mapping in a record response, an area mapping off a point, as misplaced-element (pantry mapping-base-type; info.txt:39388)", () => {
       assert.deepStrictEqual(
         judgedMapping(mappingItem("record", Option.none(), areaMapping)),
         misplacedMapping("qti-area-mapping", pointed),
       );
     });
 
-    it("[I-1] admits a qti-mapping in a string and a directedPair response, and a qti-area-mapping in a single and a multiple point response (pantry mapping-base-type, area-mapping-point)", () => {
+    it("[I-1] admits a qti-mapping in a string and a directedPair response, and a qti-area-mapping in a single and a multiple point response (pantry mapping-base-type)", () => {
       assert.deepStrictEqual(
         [
           mappingItem("single", Option.some("string"), mapping),
@@ -2282,7 +3151,137 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("readings 20, 21 and 31, and single cardinality: child counts", () => {
+  describe('reading 90 ("on an element the Schematron\'s extension-attribute lists cover, an attribute its XSD does not declare is a `data-` attribute, or the document is refused")', () => {
+    it("align-54 extension lists E10: refuses object's alt and qti-extended-text-interaction's patternMask, which neither declares, as unknown-attribute", () => {
+      const extended = wholeItem([
+        el(
+          "qti-item-body",
+          [],
+          [
+            el("qti-extended-text-interaction", [
+              attr("response-identifier", "RESPONSE"),
+              attr("patternMask", "x"),
+            ]),
+          ],
+        ),
+      ]);
+
+      assert.isTrue(generatedTables.elements["object"]?.extensionCovered);
+      assert.isTrue(generatedTables.elements["qti-extended-text-interaction"]?.extensionCovered);
+      assert.deepStrictEqual(judged(objectWith(attr("alt", "x"))), [
+        [
+          "unknown-attribute",
+          objectAttribute("alt"),
+          { attribute: "alt", element: "object", reading: "90" },
+        ],
+      ]);
+      assert.deepStrictEqual(judged(extended), [
+        [
+          "unknown-attribute",
+          at("qti-assessment-item/qti-item-body/qti-extended-text-interaction/@patternMask"),
+          {
+            attribute: "patternMask",
+            element: "qti-extended-text-interaction",
+            reading: "90",
+          },
+        ],
+      ]);
+    });
+
+    it("align-54 extension lists E10: refuses an attribute in another namespace, and an xml: attribute the element does not declare, xml:id and xml:space, as unknown-attribute", () => {
+      for (const [written, name] of [
+        [attr("x", "1", otherNamespace), `{${otherNamespace}}x`],
+        [attr("id", "o1", xmlNamespace), "xml:id"],
+        [attr("space", "preserve", xmlNamespace), "xml:space"],
+      ] as const) {
+        assert.deepStrictEqual(
+          judged(objectWith(written)),
+          [
+            [
+              "unknown-attribute",
+              objectAttribute(name),
+              { attribute: name, element: "object", reading: "90" },
+            ],
+          ],
+          name,
+        );
+      }
+    });
+
+    it("align-54 extension lists E10: accepts a data- attribute, a valid xsi:type and reading 10's aria-keyshortcuts on a covered element", () => {
+      const objectTyped = objectWith(
+        attr("qti", qtiNamespace, xmlnsNamespace),
+        attr("type", "qti:ObjectDType", xsiNamespace),
+      );
+      const shortcut = wholeItem([
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "p",
+              [],
+              [
+                el("img", [
+                  attr("alt", "A map"),
+                  attr("src", "map.png"),
+                  attr("aria-keyshortcuts", "Alt+K"),
+                ]),
+              ],
+            ),
+          ],
+        ),
+      ]);
+
+      assert.isTrue(generatedTables.elements["img"]?.extensionCovered);
+      assert.deepStrictEqual(judged(objectWith(attr("data-x", "1"))), []);
+      assert.deepStrictEqual(judged(objectTyped), []);
+      assert.deepStrictEqual(judged(shortcut), []);
+    });
+
+    it("align-54 extension lists E10: refuses a data- name reading 13 refuses as reading 13 does, suggesting its lower case", () => {
+      const source = objectWith(attr("data-X", "1"));
+
+      assert.deepStrictEqual(judged(source), [
+        [
+          "unknown-attribute",
+          objectAttribute("data-X"),
+          { attribute: "data-X", element: "object", reading: "13" },
+        ],
+      ]);
+      assert.deepStrictEqual(
+        checkStructure(source, generatedTables)[0]?.suggestion,
+        Option.some("data-x"),
+      );
+    });
+
+    it("align-54 extension lists E10: leaves an element the lists do not cover to its wildcard, so qti-custom-operator keeps an attribute in another namespace", () => {
+      const operator = wholeItem([
+        el(
+          "qti-response-processing",
+          [],
+          [
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "SCORE")],
+              [el("qti-custom-operator", [attr("x", "1", otherNamespace)])],
+            ),
+          ],
+        ),
+      ]);
+      const written = `qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-custom-operator/@{${otherNamespace}}x`;
+
+      assert.isUndefined(generatedTables.elements["qti-custom-operator"]?.extensionCovered);
+      assert.deepStrictEqual(
+        judged(operator).filter(
+          ([, refused]) => refused.kind === "path" && refused.path === written,
+        ),
+        [],
+      );
+    });
+  });
+
+  describe("readings 20 and 21, and single cardinality: child counts", () => {
     it("[Q-31] refuses a PCI with no qti-interaction-markup, or two, as child-count (reading 20)", () => {
       const path = "qti-assessment-item/qti-item-body/qti-portable-custom-interaction";
       const none = customInteraction();
@@ -2322,36 +3321,6 @@ describe("checkStructure", () => {
               [],
               [el("qti-base-value", [attr("base-type", "integer")], [text("1")])],
             ),
-          ),
-        ),
-        [],
-      );
-    });
-
-    it("refuses a card or a card entry with no content as child-count (reading 31)", () => {
-      const empty = carded();
-      const emptyEntry = carded(el("qti-card-entry"));
-
-      assert.deepStrictEqual(found(empty), [["child-count", at(card)]]);
-      assert.deepStrictEqual(first(empty)?.detail, {
-        child: "qti-html-content or qti-file-href or qti-card-entry",
-        element: "qti-card",
-        required: "at least one",
-        source: "reading 31",
-      });
-      assert.deepStrictEqual(found(emptyEntry), [["child-count", at(`${card}/qti-card-entry`)]]);
-      assert.deepStrictEqual(first(emptyEntry)?.detail, {
-        child: "qti-html-content or qti-file-href",
-        element: "qti-card-entry",
-        required: "at least one",
-        source: "reading 31",
-      });
-      assert.deepStrictEqual(found(carded(el("qti-html-content", [], [text("A word.")]))), []);
-      assert.deepStrictEqual(
-        found(
-          carded(
-            el("qti-card-entry", [], [el("qti-file-href", [], [text("a.mp3")])]),
-            el("qti-card-entry", [], [el("qti-file-href", [], [text("b.mp3")])]),
           ),
         ),
         [],
@@ -2633,7 +3602,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("the built-in variables' reserved identifiers (pantry DeclarationNotReserved) and qti-equal's tolerance tokens (pantry P6)", () => {
+  describe("the built-in variables' reserved identifiers (pantry DeclarationNotReserved) and qti-equal's tolerance values (reading 121)", () => {
     it("[I-9a] refuses a declaration named completionStatus, numAttempts or duration as attribute-type, on each of the four declarations (pantry DeclarationNotReserved; info.txt:12006, :22603, :39226, :45843)", () => {
       for (const [name, line] of reservations) {
         for (const identifier of ["completionStatus", "numAttempts", "duration", " duration "]) {
@@ -2700,6 +3669,91 @@ describe("checkStructure", () => {
       );
     });
 
+    it("align-54 R3 test declarations F2: admits a test's outcome declarations numAttempts and completionStatus, and its context declaration numAttempts, which shadow no built-in of a test (reading 168)", () => {
+      const context = el("qti-context-declaration", [
+        attr("identifier", "numAttempts"),
+        attr("cardinality", "single"),
+        attr("base-type", "integer"),
+      ]);
+
+      assert.deepStrictEqual(
+        found(
+          testDeclaring([
+            outcomeOf("numAttempts", "integer"),
+            outcomeOf("completionStatus", "identifier"),
+            outcomeOf(" numAttempts ", "integer"),
+          ]),
+          generatedTables,
+        ),
+        [],
+      );
+      assert.deepStrictEqual(found(testDeclaring([context]), generatedTables), []);
+    });
+
+    it("align-54 R3 test declarations F2: refuses a test's outcome or context declaration named duration as attribute-type, its expected naming duration alone (reading 168)", () => {
+      for (const [name, line] of reservations.filter(
+        ([kind]) => kind === "qti-context-declaration" || kind === "qti-outcome-declaration",
+      )) {
+        for (const identifier of ["duration", " duration "]) {
+          const source = testDeclaring([
+            el(name, [
+              attr("identifier", identifier),
+              attr("cardinality", "single"),
+              attr("base-type", "float"),
+            ]),
+          ]);
+
+          assert.deepStrictEqual(found(source, generatedTables), [
+            ["attribute-type", at(`qti-assessment-test/${name}/@identifier`)],
+          ]);
+          assert.deepStrictEqual(first(source, generatedTables)?.detail, {
+            attribute: "identifier",
+            check: "reserved-identifier",
+            element: name,
+            expected: "an identifier other than the built-in variable duration",
+            pantry: "DeclarationNotReserved",
+            source: line,
+            value: identifier,
+          });
+        }
+      }
+    });
+
+    it("align-54 R3 test declarations F2: still refuses an item's declaration of each kind named completionStatus, numAttempts or duration, its expected naming all three (reading 168)", () => {
+      for (const [name, line] of reservations) {
+        for (const identifier of ["completionStatus", "numAttempts", "duration"]) {
+          assert.deepStrictEqual(
+            declarationRefusals(
+              item([
+                el(name, [
+                  attr("identifier", identifier),
+                  attr("cardinality", "single"),
+                  attr("base-type", "identifier"),
+                ]),
+              ]),
+            ),
+            [
+              [
+                "attribute-type",
+                at(`qti-assessment-item/${name}/@identifier`),
+                {
+                  attribute: "identifier",
+                  check: "reserved-identifier",
+                  element: name,
+                  expected:
+                    "an identifier other than the built-in variables' completionStatus, numAttempts and duration",
+                  pantry: "DeclarationNotReserved",
+                  source: line,
+                  value: identifier,
+                },
+              ],
+            ],
+            `${name} ${identifier}`,
+          );
+        }
+      }
+    });
+
     it("[I-9a] refuses an outcome named SCORE or MAXSCORE that is not a float, and one named PASSED that is not a boolean, as attribute-type at its base-type (pantry ReservedOutcomeTypes; info.txt:8478, :8480, :8482)", () => {
       for (const [identifier, fixed, line] of typedOutcomes) {
         for (const written of [identifier, ` ${identifier} `]) {
@@ -2760,7 +3814,7 @@ describe("checkStructure", () => {
       }
     });
 
-    it("[I-9a] admits SCORE, MAXSCORE and PASSED of any base type on a response or template declaration, and on a record outcome, which pantry's ReservedOutcomeTypes does not read (G-R2, pending)", () => {
+    it("[I-9a] admits SCORE, MAXSCORE and PASSED of any base type on a response or template declaration, which is no outcome", () => {
       for (const [identifier] of typedOutcomes) {
         for (const name of ["qti-response-declaration", "qti-template-declaration"]) {
           assert.deepStrictEqual(
@@ -2777,11 +3831,6 @@ describe("checkStructure", () => {
             `${name} ${identifier}`,
           );
         }
-        assert.deepStrictEqual(
-          found(outcomeAs(identifier, "integer", "record"), generatedTables),
-          [],
-          `record ${identifier}`,
-        );
       }
     });
 
@@ -2842,79 +3891,831 @@ describe("checkStructure", () => {
       ]);
     });
 
-    it("[I-9a] refuses a qti-equal tolerance token that is neither an xs:double nor an NCName, such as 1,5, as attribute-type (pantry P6, info.txt:24946)", () => {
+    it("align-54 value grammars E24: refuses a qti-equal tolerance of no value, of three values, or with a number not above 0, 0, -1 and NaN among them, as attribute-type (reading 121)", () => {
       for (const tolerance of [
-        "1,5",
-        "0.5 1,5",
-        "{TOL}",
-        "+INF",
-        "1.5.5",
-        "5%",
-        "-TOL",
-        "TOL 1e",
+        "",
+        " ",
+        "1 2 3",
+        "TOL 1 2",
+        "0",
+        "-1",
+        "NaN",
+        "-INF",
+        "-0",
+        "+0",
+        "0.0",
+        "0e5",
+        ".0E-3",
+        "-0.1234567890123456",
+        "0.5 0",
+        "TOL -1",
+        "NaN 1",
       ]) {
         const source = tolerated(tolerance);
 
         assert.deepStrictEqual(
           found(source, generatedTables),
           [["attribute-type", at("qti-equal/@tolerance")]],
-          tolerance,
+          JSON.stringify(tolerance),
         );
         assert.deepStrictEqual(first(source, generatedTables)?.detail, {
           attribute: "tolerance",
           check: "tolerance-token",
           element: "qti-equal",
-          expected: "a list of numbers (xs:double) and variable names (NCName), one space apart",
-          pantry: "P6",
-          source: "info.txt:24946",
+          expected:
+            "one or two values, one space apart, each a number above 0 or a variable's name",
+          reading: "121",
           value: tolerance,
         });
       }
     });
 
-    it("[I-9a] admits tolerance tokens that are each an xs:double or an NCName, 0.5, 1 2, TOL and INF among them, and an empty tolerance, as pantry's toleranceList does", () => {
+    it("align-54 value grammars E24: accepts one or two values, each a number above 0 or a variable's name, +INF and 1,5 among them, which name variables read at run time (reading 121)", () => {
       for (const tolerance of [
+        "+INF",
+        "1,5",
+        "0.5 1,5",
+        "{TOL}",
+        "1.5.5",
+        "5%",
+        "-TOL",
+        "TOL 1e",
         "0.5",
         "1 2",
         "TOL",
         "INF",
-        "-INF",
-        "NaN",
+        "INF INF",
         "1e-3",
+        "1e-400",
+        "0.5e0",
         ".5",
         "5.",
         "+2",
+        "00.010",
         "TOL 0.5",
         "_low é",
         " 0.5\t1\n",
-        "",
       ]) {
-        assert.deepStrictEqual(found(tolerated(tolerance), generatedTables), [], tolerance);
+        assert.deepStrictEqual(
+          found(tolerated(tolerance), generatedTables),
+          [],
+          JSON.stringify(tolerance),
+        );
+      }
+    });
+
+    it("align-54 value grammars E24: refuses a tolerance of 0 under exact, the default mode, as under absolute, since the count and the sign bind every tolerance (reading 121)", () => {
+      for (const exact of [
+        literal("qti-equal", attr("tolerance", "0")),
+        literal("qti-equal", attr("tolerance-mode", "exact"), attr("tolerance", "")),
+      ]) {
+        assert.deepStrictEqual(found(exact, generatedTables), [
+          ["attribute-type", at("qti-equal/@tolerance")],
+        ]);
       }
     });
   });
 
-  describe("a printed variable's format (pantry R38)", () => {
-    it("[I-5] refuses a format that is not one whole printf conversion, %d, %u and Score: %.1f among them, as attribute-type at format (pantry R38, info.txt:70323)", () => {
+  describe("align-54 reserved outcomes: records as reserved outcomes and record declarations (readings 153 and 158)", () => {
+    it("align-54 reserved outcomes B1b: refuses an item's SCORE and MAXSCORE, and a lone declaration's, declared record, as attribute-type at its cardinality, whether or not it writes a base-type (reading 153)", () => {
+      for (const [identifier, fixed] of typedOutcomes) {
+        if (identifier === "PASSED") {
+          continue;
+        }
+
+        const record = recordOutcome(identifier);
+        const cardinality = "qti-assessment-item/qti-outcome-declaration/@cardinality";
+
+        assert.deepStrictEqual(
+          declarationRefusals(item([record])),
+          [["attribute-type", at(cardinality), reservedRecord(identifier, fixed)]],
+          identifier,
+        );
+        assert.deepStrictEqual(
+          declarationRefusals(item([recordOutcome(identifier, fixed)])).map(([rule, where]) => [
+            rule,
+            where,
+          ]),
+          [
+            ["attribute-type", at(cardinality)],
+            ["unknown-attribute", at("qti-assessment-item/qti-outcome-declaration/@base-type")],
+          ],
+          `${identifier} with a base-type`,
+        );
+        assert.deepStrictEqual(
+          found(doc(location, recordOutcome(` ${identifier} `)), generatedTables),
+          [["attribute-type", at("qti-outcome-declaration/@cardinality")]],
+          `a lone ${identifier}`,
+        );
+      }
+    });
+
+    it("align-54 reserved outcomes B1b: refuses a PASSED declared record in an item and in a test, as attribute-type at its cardinality (reading 153)", () => {
+      assert.deepStrictEqual(declarationRefusals(item([recordOutcome("PASSED")])), [
+        [
+          "attribute-type",
+          at("qti-assessment-item/qti-outcome-declaration/@cardinality"),
+          reservedRecord("PASSED", "boolean"),
+        ],
+      ]);
+      assert.deepStrictEqual(found(testDeclaring([recordOutcome("PASSED")]), generatedTables), [
+        ["attribute-type", at("qti-assessment-test/qti-outcome-declaration/@cardinality")],
+      ]);
+    });
+
+    it("align-54 reserved outcomes B1b: admits a test's SCORE and MAXSCORE declared record, which a test may declare of any base type (P8), and a record outcome of any other name", () => {
+      assert.deepStrictEqual(
+        found(
+          testDeclaring([
+            recordOutcome("SCORE"),
+            recordOutcome("MAXSCORE"),
+            recordOutcome("TOTAL"),
+          ]),
+          generatedTables,
+        ),
+        [],
+      );
+      assert.deepStrictEqual(
+        declarationRefusals(item([recordOutcome("Score"), recordOutcome("TOTAL")])),
+        [],
+      );
+      for (const kind of ["qti-response-declaration", "qti-template-declaration"]) {
+        assert.deepStrictEqual(
+          declarationRefusals(
+            item([el(kind, [attr("identifier", "SCORE"), attr("cardinality", "record")])]),
+          ),
+          [],
+          kind,
+        );
+      }
+    });
+
+    it("align-54 reserved outcomes B1c: refuses a base-type on a record declaration of each kind, as unknown-attribute at the base-type (reading 153)", () => {
+      for (const kind of variableKinds) {
+        for (const base of ["float", "string", "identifier"]) {
+          const source = item([
+            el(kind, [
+              attr("identifier", "RECORD"),
+              attr("cardinality", "record"),
+              attr("base-type", base),
+            ]),
+          ]);
+
+          assert.deepStrictEqual(
+            declarationRefusals(source),
+            [
+              [
+                "unknown-attribute",
+                at(`qti-assessment-item/${kind}/@base-type`),
+                { attribute: "base-type", element: kind, reading: "153" },
+              ],
+            ],
+            `${kind} ${base}`,
+          );
+        }
+      }
+    });
+
+    it("align-54 reserved outcomes B1c: leaves a record's base-type that spells no base type, and a base-type beside a cardinality that spells no cardinality, to the value domain alone (reading 158)", () => {
+      assert.deepStrictEqual(
+        declarationRefusals(
+          item([
+            el("qti-outcome-declaration", [
+              attr("identifier", "RECORD"),
+              attr("cardinality", "record"),
+              attr("base-type", " float"),
+            ]),
+          ]),
+        ).map(([rule, where]) => [rule, where]),
+        [["attribute-type", at("qti-assessment-item/qti-outcome-declaration/@base-type")]],
+      );
+      assert.deepStrictEqual(
+        declarationRefusals(
+          item([
+            el("qti-outcome-declaration", [
+              attr("identifier", "RECORD"),
+              attr("cardinality", " record"),
+              attr("base-type", "float"),
+            ]),
+          ]),
+        ).map(([rule, where]) => [rule, where]),
+        [["attribute-type", at("qti-assessment-item/qti-outcome-declaration/@cardinality")]],
+      );
+    });
+
+    it("align-54 reserved outcomes E39a: refuses a single, multiple or ordered declaration of each kind that writes no base-type, as missing-attribute at the declaration (reading 158)", () => {
+      for (const kind of variableKinds) {
+        for (const cardinality of ["single", "multiple", "ordered"]) {
+          const source = item([
+            el(kind, [attr("identifier", "UNTYPED"), attr("cardinality", cardinality)]),
+          ]);
+
+          assert.deepStrictEqual(
+            declarationRefusals(source),
+            [
+              [
+                "missing-attribute",
+                at(`qti-assessment-item/${kind}`),
+                { attribute: "base-type", element: kind, reading: "158" },
+              ],
+            ],
+            `${kind} ${cardinality}`,
+          );
+        }
+      }
+      assert.deepStrictEqual(
+        found(
+          testDeclaring([
+            el("qti-outcome-declaration", [
+              attr("identifier", "TOTAL"),
+              attr("cardinality", "single"),
+            ]),
+          ]),
+          generatedTables,
+        ),
+        [["missing-attribute", at("qti-assessment-test/qti-outcome-declaration")]],
+      );
+    });
+
+    it("align-54 reserved outcomes E39a: admits a record declaration with no base-type, and leaves one whose cardinality spells no cardinality to the value domain alone (reading 158)", () => {
+      for (const kind of variableKinds) {
+        assert.deepStrictEqual(
+          declarationRefusals(
+            item([el(kind, [attr("identifier", "RECORD"), attr("cardinality", "record")])]),
+          ),
+          [],
+          kind,
+        );
+        assert.deepStrictEqual(
+          declarationRefusals(
+            item([el(kind, [attr("identifier", "UNTYPED"), attr("cardinality", "many")])]),
+          ).map(([rule, where]) => [rule, where]),
+          [["attribute-type", at(`qti-assessment-item/${kind}/@cardinality`)]],
+          kind,
+        );
+      }
+    });
+  });
+
+  describe("align-54 interaction rows: a default hotspot's place, a position object's least count, a lookup table's outcome, a declaration read as written, and an empty card (readings 80, 92, 100, 157 and 158, and P5)", () => {
+    it("align-54 interaction rows E5: refuses a default hotspot choice that is not the last hotspot of its hotspot or graphic order interaction as misplaced-element, and admits one last, before trailing text (reading 80)", () => {
+      for (const interaction of ["qti-hotspot-interaction", "qti-graphic-order-interaction"]) {
+        const path = `qti-assessment-item/qti-item-body/${interaction}/qti-hotspot-choice[1]`;
+
+        assert.deepStrictEqual(
+          judged(
+            graphicItem(
+              interaction,
+              hotspot("qti-hotspot-choice", "ELSEWHERE", "default"),
+              hotspot("qti-hotspot-choice", "TOWN", "circle"),
+            ),
+          ),
+          [["misplaced-element", at(path), defaultHotspot("qti-hotspot-choice", interaction)]],
+          interaction,
+        );
+        assert.deepStrictEqual(
+          judged(
+            graphicItem(
+              interaction,
+              hotspot("qti-hotspot-choice", "TOWN", "circle"),
+              hotspot("qti-hotspot-choice", "ELSEWHERE", "default"),
+              text("\n  "),
+            ),
+          ),
+          [],
+          `${interaction}, default last`,
+        );
+        assert.deepStrictEqual(
+          judged(
+            graphicItem(
+              interaction,
+              hotspot("qti-hotspot-choice", "ELSEWHERE", " default"),
+              hotspot("qti-hotspot-choice", "TOWN", "circle"),
+            ),
+          ).map(([rule, where]) => [rule, where]),
+          [["attribute-type", at(`${path}/@shape`)]],
+          `${interaction}, a shape that spells no shape`,
+        );
+      }
+    });
+
+    it("align-54 interaction rows E5: refuses a default associable hotspot in a graphic gap match interaction, last or not, as misplaced-element, and admits one anywhere in a graphic associate interaction (reading 80)", () => {
+      const interaction = "qti-graphic-gap-match-interaction";
+
+      assert.deepStrictEqual(
+        judged(
+          graphicItem(
+            interaction,
+            hotspot("qti-associable-hotspot", "TOWN", "circle"),
+            hotspot("qti-associable-hotspot", "ELSEWHERE", "default"),
+          ),
+        ),
+        [
+          [
+            "misplaced-element",
+            at(`qti-assessment-item/qti-item-body/${interaction}/qti-associable-hotspot[2]`),
+            defaultHotspot("qti-associable-hotspot", interaction),
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        judged(
+          graphicItem(
+            "qti-graphic-associate-interaction",
+            hotspot("qti-associable-hotspot", "ELSEWHERE", "default"),
+            hotspot("qti-associable-hotspot", "TOWN", "circle"),
+          ),
+        ),
+        [],
+      );
+    });
+
+    it('align-54 interaction rows E11b: refuses min-choices="0" on a position object interaction as attribute-type, and admits 1 and none written (reading 92)', () => {
+      const refusals = judged(positioned(attr("min-choices", "0")));
+
+      assert.deepStrictEqual(
+        refusals.map(([rule, where]) => [rule, where]),
+        [
+          [
+            "attribute-type",
+            at(
+              "qti-assessment-item/qti-item-body/qti-position-object-stage/qti-position-object-interaction/@min-choices",
+            ),
+          ],
+        ],
+      );
+      assert.strictEqual(refusals[0]?.[2]["reading"], "92");
+      assert.strictEqual(refusals[0]?.[2]["expected"], "an integer at least 1");
+      assert.deepStrictEqual(judged(positioned(attr("min-choices", "1"))), []);
+      assert.deepStrictEqual(judged(positioned()), []);
+    });
+
+    it("align-54 interaction rows E15: refuses a lookup table under an outcome that is not single as misplaced-element, the research probe p100-multiple-table among them, and leaves a cardinality that spells none to the value domain alone (reading 100)", () => {
+      assert.deepStrictEqual(
+        judged(lookedUp("SCORE", "multiple", Option.some("float"), matchTable)),
+        [
+          [
+            "misplaced-element",
+            lookupTable("qti-match-table"),
+            lookupCardinality("qti-match-table", "SCORE"),
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        judged(lookedUp("GRADE", "ordered", Option.some("float"), interpolationTable)),
+        [
+          [
+            "misplaced-element",
+            lookupTable("qti-interpolation-table"),
+            lookupCardinality("qti-interpolation-table", "GRADE"),
+          ],
+        ],
+      );
+      assert.deepStrictEqual(judged(lookedUp("GRADE", "record", Option.none(), matchTable)), [
+        [
+          "misplaced-element",
+          lookupTable("qti-match-table"),
+          lookupCardinality("qti-match-table", "GRADE"),
+        ],
+      ]);
+      assert.deepStrictEqual(
+        [matchTable, interpolationTable].map((held) =>
+          judged(lookedUp("SCORE", "single", Option.some("float"), held)),
+        ),
+        [[], []],
+      );
+      assert.deepStrictEqual(
+        judged(lookedUp("GRADE", " multiple", Option.some("float"), matchTable)).map(
+          ([rule, where]) => [rule, where],
+        ),
+        [["attribute-type", at("qti-assessment-item/qti-outcome-declaration/@cardinality")]],
+      );
+    });
+
+    it("align-54 interaction rows E40b: reads a response declaration's base-type and cardinality exactly as written for its mapping and area mapping, so one that spells nothing, or a base type unwritten, is refused alone (readings 157 and 158)", () => {
+      const declaration = "qti-assessment-item/qti-response-declaration";
+
+      assert.deepStrictEqual(ruled(mappingItem("single", Option.some(" file"), mapping)), [
+        ["attribute-type", at(`${declaration}/@base-type`)],
+      ]);
+      assert.deepStrictEqual(ruled(mappingItem(" record", Option.none(), mapping)), [
+        ["attribute-type", at(`${declaration}/@cardinality`)],
+      ]);
+      for (const base of [" point", "bogus"]) {
+        assert.deepStrictEqual(
+          ruled(mappingItem("single", Option.some(base), areaMapping)),
+          [["attribute-type", at(`${declaration}/@base-type`)]],
+          base,
+        );
+      }
+      assert.deepStrictEqual(ruled(mappingItem("single", Option.none(), areaMapping)), [
+        ["missing-attribute", at(declaration)],
+      ]);
+      assert.deepStrictEqual(ruled(mappingItem("record", Option.some("point"), areaMapping)), [
+        ["unknown-attribute", at(`${declaration}/@base-type`)],
+        ["misplaced-element", at(`${declaration}/qti-area-mapping`)],
+      ]);
+    });
+
+    it("align-54 interaction rows P5: admits a card and a card entry with no content, as the operator ruled", () => {
+      assert.deepStrictEqual(found(carded()), []);
+      assert.deepStrictEqual(found(carded(el("qti-card-entry"))), []);
+      assert.deepStrictEqual(
+        found(carded(el("qti-card-entry"), el("qti-html-content", [], [text("A word.")]))),
+        [],
+      );
+    });
+  });
+
+  describe("align-54 HTML rows: ARIA roles, a bdo's direction, media sources and URLs, a subtitles track, MIME types and language tags (readings 9, 123, 124, 125, 129 and 135)", () => {
+    it("align-54 HTML rows D5: refuses a role on a source as unknown-attribute, and an h1's role other than heading, tab or presentation as attribute-type, and leaves an h2 every role the XSD lists (reading 9)", () => {
+      assert.deepStrictEqual(
+        judged(
+          bodied(
+            el(
+              "video",
+              [],
+              [el("source", [attr("src", "clip.mp4"), attr("role", "presentation")])],
+            ),
+          ),
+        ),
+        [
+          [
+            "unknown-attribute",
+            inBody("video/source/@role"),
+            { attribute: "role", element: "source", reading: "9" },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(cited(bodied(el("h1", [attr("role", "banner")], [text("Maps")]))), [
+        ["attribute-type", inBody("h1/@role"), "9"],
+      ]);
+      for (const role of ["heading", "tab", "presentation"]) {
+        assert.deepStrictEqual(
+          judged(bodied(el("h1", [attr("role", role)], [text("Maps")]))),
+          [],
+          role,
+        );
+      }
+      assert.deepStrictEqual(
+        judged(bodied(el("h2", [attr("role", "banner")], [text("Maps")]))),
+        [],
+      );
+    });
+
+    it('align-54 HTML rows E26: refuses a bdo with no dir as missing-attribute, and dir="auto" on it as attribute-type, and admits ltr and rtl, and auto on another element (reading 123)', () => {
+      const overridden = (...attributes: readonly SourceAttribute[]) =>
+        bodied(el("p", [], [el("bdo", attributes, [text("abc")])]));
+
+      assert.deepStrictEqual(judged(overridden()), [
+        [
+          "missing-attribute",
+          inBody("p/bdo"),
+          { attribute: "dir", element: "bdo", reading: "123" },
+        ],
+      ]);
+      assert.deepStrictEqual(cited(overridden(attr("dir", "auto"))), [
+        ["attribute-type", inBody("p/bdo/@dir"), "123"],
+      ]);
+      for (const dir of ["ltr", "rtl"]) {
+        assert.deepStrictEqual(judged(overridden(attr("dir", dir))), [], dir);
+      }
+      assert.deepStrictEqual(judged(bodied(el("p", [attr("dir", "auto")], [text("abc")]))), []);
+    });
+
+    it("align-54 HTML rows E27: refuses a picture's source with no srcset, and an audio's or a video's source with no src, as missing-attribute, and admits each with it (reading 124)", () => {
+      assert.deepStrictEqual(
+        judged(
+          bodied(
+            el(
+              "div",
+              [],
+              [el("picture", [], [el("source", [attr("type", "image/webp")]), pictureImage])],
+            ),
+          ),
+        ),
+        [
+          [
+            "missing-attribute",
+            inBody("div/picture/source"),
+            { attribute: "srcset", element: "source", reading: "124" },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        judged(
+          bodied(
+            el(
+              "div",
+              [],
+              [el("picture", [], [el("source", [attr("srcset", "map.webp")]), pictureImage])],
+            ),
+          ),
+        ),
+        [],
+      );
+      for (const media of ["audio", "video"]) {
+        assert.deepStrictEqual(
+          judged(bodied(el(media, [], [el("source", [attr("type", `${media}/ogg`)])]))),
+          [
+            [
+              "missing-attribute",
+              inBody(`${media}/source`),
+              { attribute: "src", element: "source", reading: "124" },
+            ],
+          ],
+          media,
+        );
+        assert.deepStrictEqual(
+          judged(bodied(el(media, [], [el("source", [attr("src", "clip.ogg")])]))),
+          [],
+          `${media}, with src`,
+        );
+      }
+    });
+
+    it('align-54 HTML rows E27: refuses a blank media URL, src=" " among them, as attribute-type, and admits one padded with spaces (reading 124, and reading 125 for a track\'s src)', () => {
+      const blanks = [
+        [el("audio", [attr("src", " ")]), "audio/@src", "124"],
+        [el("video", [attr("src", "")]), "video/@src", "124"],
+        [el("video", [attr("poster", "\t")]), "video/@poster", "124"],
+        [el("video", [], [el("source", [attr("src", " ")])]), "video/source/@src", "124"],
+        [
+          el(
+            "div",
+            [],
+            [el("picture", [], [el("source", [attr("srcset", " \n ")]), pictureImage])],
+          ),
+          "div/picture/source/@srcset",
+          "124",
+        ],
+        [
+          el("video", [], [el("track", [attr("kind", "captions"), attr("src", " ")])]),
+          "video/track/@src",
+          "125",
+        ],
+      ] as const;
+
+      for (const [content, step, reading] of blanks) {
+        assert.deepStrictEqual(
+          cited(bodied(content)),
+          [["attribute-type", inBody(step), reading]],
+          step,
+        );
+      }
+      assert.deepStrictEqual(
+        judged(bodied(el("video", [attr("src", " clip.mp4 "), attr("poster", "\tstill.png")]))),
+        [],
+      );
+    });
+
+    it('align-54 HTML rows E28: refuses a track with no kind, or kind="subtitles", and no srclang as missing-attribute, and admits a track of another kind without one (reading 125)', () => {
+      for (const kind of [[], [attr("kind", "subtitles")]]) {
+        assert.deepStrictEqual(
+          judged(trackedVideo(...kind)),
+          [
+            [
+              "missing-attribute",
+              inBody("video/track"),
+              { attribute: "srclang", element: "track", reading: "125" },
+            ],
+          ],
+          kind.length === 0 ? "no kind" : "subtitles",
+        );
+      }
+      assert.deepStrictEqual(judged(trackedVideo(attr("srclang", "en"))), []);
+      for (const kind of ["captions", "chapters", "descriptions", "metadata"]) {
+        assert.deepStrictEqual(judged(trackedVideo(attr("kind", kind))), [], kind);
+      }
+    });
+
+    it('align-54 HTML rows E35: refuses a MIME type that is not two tokens joined by a slash, type="image /png" among them, as attribute-type, and admits image/svg+xml, */* and a padded upload list (reading 135)', () => {
+      const typedAt = (mime: string) =>
+        [
+          [
+            bodied(
+              el("p", [], [el("a", [attr("href", "x.html"), attr("type", mime)], [text("x")])]),
+            ),
+            "p/a/@type",
+          ],
+          [
+            bodied(el("div", [], [el("object", [attr("data", "x.svg"), attr("type", mime)])])),
+            "div/object/@type",
+          ],
+          [
+            bodied(
+              el(
+                "div",
+                [],
+                [
+                  el(
+                    "object",
+                    [attr("data", "x.svg"), attr("type", "image/svg+xml")],
+                    [
+                      el("param", [
+                        attr("name", "n"),
+                        attr("value", "v"),
+                        attr("valuetype", "DATA"),
+                        attr("type", mime),
+                      ]),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            "div/object/param/@type",
+          ],
+          [
+            bodied(el("video", [], [el("source", [attr("src", "clip.mp4"), attr("type", mime)])])),
+            "video/source/@type",
+          ],
+          [
+            bodied(
+              el("qti-upload-interaction", [
+                attr("response-identifier", "RESPONSE"),
+                attr("type", `text/plain ${mime}`),
+              ]),
+            ),
+            "qti-upload-interaction/@type",
+          ],
+        ] as const;
+
+      for (const mime of ["image /png", " image/png", "image/png ", "a b/c", "image/png\u007F"]) {
+        for (const [source, step] of typedAt(mime)) {
+          const where = inBody(step);
+          const listed = step.startsWith("qti-upload-interaction");
+          if (listed && mime !== "image/png\u007F") {
+            continue;
+          }
+
+          assert.deepStrictEqual(
+            cited(source),
+            [["attribute-type", where, "135"]],
+            `${step}: ${JSON.stringify(mime)}`,
+          );
+        }
+      }
+      for (const mime of ["image/svg+xml", "*/*", "IMAGE/PNG", "application/vnd.ms-excel"]) {
+        for (const [source, step] of typedAt(mime)) {
+          assert.deepStrictEqual(judged(source), [], `${step}: ${mime}`);
+        }
+      }
+      assert.deepStrictEqual(
+        cited(
+          wholeItem([
+            el("qti-stylesheet", [attr("href", "style.css"), attr("type", "text /css")]),
+            el("qti-item-body"),
+          ]),
+        ),
+        [["attribute-type", at("qti-assessment-item/qti-stylesheet/@type"), "135"]],
+      );
+      assert.deepStrictEqual(
+        judged(
+          bodied(
+            el("qti-upload-interaction", [
+              attr("response-identifier", "RESPONSE"),
+              attr("type", " image/png  text/plain "),
+            ]),
+          ),
+        ),
+        [],
+      );
+    });
+
+    it('align-54 HTML rows E32b: refuses xml:lang="en_US", lang="1en", lang="en " and srclang="" as attribute-type, and an empty xml:lang on an item or a stimulus, and admits x-none, an empty xml:lang and lang on body content, and a padded xml:lang (reading 129)', () => {
+      const paragraph = (attribute: SourceAttribute) =>
+        bodied(el("p", [attribute], [text("Colour")]));
+
+      assert.deepStrictEqual(cited(paragraph(attr("lang", "en_US", xmlNamespace))), [
+        ["attribute-type", inBody("p/@xml:lang"), "129"],
+      ]);
+      for (const tag of ["1en", "en "]) {
+        assert.deepStrictEqual(
+          cited(paragraph(attr("lang", tag))),
+          [["attribute-type", inBody("p/@lang"), "129"]],
+          JSON.stringify(tag),
+        );
+      }
+      assert.deepStrictEqual(
+        cited(
+          bodied(
+            el(
+              "video",
+              [attr("src", "clip.mp4")],
+              [el("track", [attr("src", "en.vtt"), attr("srclang", "")])],
+            ),
+          ),
+        ),
+        [["attribute-type", inBody("video/track/@srclang"), "129"]],
+      );
+      assert.deepStrictEqual(
+        cited(
+          item(
+            [el("qti-item-body")],
+            [
+              attr("identifier", "item"),
+              attr("title", "Item"),
+              attr("time-dependent", "false"),
+              attr("lang", "", xmlNamespace),
+            ],
+          ),
+        ),
+        [["attribute-type", at("qti-assessment-item/@xml:lang"), "129"]],
+      );
+      assert.deepStrictEqual(
+        cited(
+          doc(
+            location,
+            el(
+              "qti-assessment-stimulus",
+              [attr("identifier", "S"), attr("title", "Stimulus"), attr("lang", " ", xmlNamespace)],
+              [el("qti-stimulus-body", [], [el("p", [], [text("Colour")])])],
+            ),
+          ),
+        ),
+        [["attribute-type", at("qti-assessment-stimulus/@xml:lang"), "129"]],
+      );
+      for (const attribute of [
+        attr("lang", "x-none", xmlNamespace),
+        attr("lang", "", xmlNamespace),
+        attr("lang", " en-GB ", xmlNamespace),
+        attr("lang", ""),
+        attr("lang", "zh-Hant-TW"),
+      ]) {
+        assert.deepStrictEqual(
+          judged(paragraph(attribute)),
+          [],
+          `${attribute.namespace === "" ? "" : "xml:"}${attribute.local}=${JSON.stringify(attribute.value)}`,
+        );
+      }
+    });
+
+    it('align-54 HTML rows E32b: the manifest walk reads the same row, so it refuses xml:lang="en_US" on a LOM string its attribute wildcard admits, and admits x-none (reading 129)', () => {
+      const string = `{${manifestNamespace}}manifest/{${manifestNamespace}}metadata/{${lomNamespace}}lom/{${lomNamespace}}general/{${lomNamespace}}title/{${lomNamespace}}string`;
+
+      assert.deepStrictEqual(
+        walkedManifest(titledManifest("en_US")).map((refusal) => [
+          refusal.rule,
+          refusal.location,
+          refusal.detail["reading"],
+        ]),
+        [["attribute-type", at(`${string}/@xml:lang`), "129"]],
+      );
+      assert.deepStrictEqual(walkedManifest(titledManifest("x-none")), []);
+    });
+
+    describe("the manifest walk's corpus control", { tags: ["corpus"] }, () => {
+      it.effect(
+        'align-54 HTML rows E32b: admits the languages of BBQsTest.zip\'s manifest, whose LOM strings write xml:lang="x-none" (reading 129)',
+        () =>
+          Effect.gen(function* manifestLanguages() {
+            const path = "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip.d/imsmanifest.xml";
+            const source = yield* readCorpusFile(path).pipe(
+              Effect.flatMap((bytes) => readSource(path, bytes)),
+            );
+            const languages = [...walkDocument(source)].flatMap(({ element: walked }) =>
+              walked.attributes.filter(
+                (attribute) => attribute.namespace === xmlNamespace && attribute.local === "lang",
+              ),
+            );
+
+            assert.include(
+              languages.map((attribute) => attribute.value),
+              "x-none",
+            );
+            assert.deepStrictEqual(
+              walkedManifest(source).filter(
+                (refusal) =>
+                  refusal.location.kind === "path" && refusal.location.path.endsWith("/@xml:lang"),
+              ),
+              [],
+            );
+          }),
+      );
+    });
+  });
+
+  describe("a printed variable's format (readings 132 and 161, and the operator's P1)", () => {
+    it("align-54 value grammars B2c: refuses %q, %u, a conversion with no code and a trailing %, as attribute-type at format (reading 132)", () => {
       for (const format of [
-        "%d",
-        "%u",
-        "Score: %.1f",
-        "%i of %i",
-        "%.1f%%",
-        "%%",
         "%q",
+        "%u",
         "%5.2",
-        "2f",
         "%",
-        "",
+        "2f%",
+        "%i of %",
+        "Score: %",
+        "%%%",
+        "%i%q",
+        "100% sure",
+        "%%%%%",
       ]) {
         const source = printed(format);
 
         assert.deepStrictEqual(
           found(source, generatedTables),
           [["attribute-type", at("qti-printed-variable/@format")]],
-          format,
+          JSON.stringify(format),
         );
         assert.deepStrictEqual(
           first(source, generatedTables)?.detail,
@@ -2924,16 +4725,30 @@ describe("checkStructure", () => {
       }
     });
 
-    it("[I-5] refuses a format padded at either end, which pantry R38 reads as xs:normalizedString does, without trimming", () => {
-      for (const format of [" %.1f", "%.1f ", "\t%i", "%i\n"]) {
-        const source = printed(format);
+    it("align-54 value grammars P1a, B2b.1: accepts %d, several conversions, %%, text around a conversion and a format of text alone (readings 132 and 161, the operator's P1)", () => {
+      for (const format of [
+        "%d",
+        "%d %d",
+        "%i of %i",
+        "Score: %.1f",
+        "100%%",
+        "Points",
+        "",
+        "%.1f%%",
+        "%%",
+        "2f",
+        "%%%e%%%G",
+        "%i, %.2f and %#x",
+        "%05d of %-3d",
+        "%%d",
+      ]) {
+        assert.deepStrictEqual(found(printed(format), generatedTables), [], JSON.stringify(format));
+      }
+    });
 
-        assert.deepStrictEqual(
-          found(source, generatedTables),
-          [["attribute-type", at("qti-printed-variable/@format")]],
-          JSON.stringify(format),
-        );
-        assert.deepStrictEqual(first(source, generatedTables)?.detail, formatDetail(format));
+    it("align-54 value grammars P1a: accepts a format padded at either end, its tabs and line breaks replaced, as text around the conversion (reading 161)", () => {
+      for (const format of [" %.1f", "%.1f ", "\t%i", "%i\n"]) {
+        assert.deepStrictEqual(found(printed(format), generatedTables), [], JSON.stringify(format));
       }
     });
 
@@ -2943,7 +4758,7 @@ describe("checkStructure", () => {
       }
     });
 
-    it("[I-5] admits one whole printf conversion, %.1f, %i, %08.3e and %-8X among them, and a printed variable with no format (pantry R38)", () => {
+    it("[I-5] admits one whole printf conversion, %.1f, %i, %08.3e and %-8X among them, and a printed variable with no format (reading 132)", () => {
       for (const format of [
         "%.1f",
         "%i",
@@ -2967,8 +4782,11 @@ describe("checkStructure", () => {
       );
     });
 
-    it("[I-5] refuses %d at format on a printed variable inside an item body, and leaves a text entry interaction's format unchecked (pantry R38)", () => {
+    it("[I-5] refuses %q at format on a printed variable inside an item body, and leaves a text entry interaction's format unchecked (reading 132)", () => {
+      // The response declaration gives the text entry's `response-identifier`, an IDREF, the ID it
+      // names (reading 14), so the case refuses the format alone.
       const source = item([
+        idResponse,
         el(
           "qti-item-body",
           [],
@@ -2977,10 +4795,10 @@ describe("checkStructure", () => {
               "p",
               [],
               [
-                el("qti-printed-variable", [attr("identifier", "SCORE"), attr("format", "%d")]),
+                el("qti-printed-variable", [attr("identifier", "SCORE"), attr("format", "%q")]),
                 el("qti-text-entry-interaction", [
                   attr("response-identifier", "RESPONSE"),
-                  attr("format", "%d"),
+                  attr("format", "%q"),
                 ]),
               ],
             ),
@@ -2994,7 +4812,7 @@ describe("checkStructure", () => {
     });
 
     it(
-      "[I-5] admits exactly the formats the quadratic pattern admits, every string of at most 5 characters over %, #, 0, space, +, -, 1, 9, ., f, i and d (review 079e8c44 P2-13)",
+      "[I-5] admits exactly the formats the quadratic pattern admits, every string of at most 5 characters over %, #, 0, space, +, -, 1, 9, ., f, i, d and q (review 079e8c44 P2-13)",
       () => {
         const strings = stringsUpTo(formatAlphabet, 5);
         const disagreeing = strings.filter(
@@ -3003,18 +4821,18 @@ describe("checkStructure", () => {
             (found(printed(format), generatedTables).length === 0),
         );
 
-        assert.strictEqual(strings.length, 271_453);
+        assert.strictEqual(strings.length, 402_234);
         assert.deepStrictEqual(disagreeing, []);
       },
       formatEquivalenceTimeoutMs,
     );
 
     it.effect(
-      "[I-5] refuses a format of %, 64,000 zeros and d as attribute-type at format, 8 times the zeros in under 32 times the time (review 079e8c44 P2-13)",
+      "[I-5] refuses a format of %, 64,000 zeros and q as attribute-type at format, 8 times the zeros in under 32 times the time (review 079e8c44 P2-13)",
       () =>
         Effect.gen(function* checksFormatInLinearTime() {
-          const fewer = printed(`%${"0".repeat(formatZeros / growthFactor)}d`);
-          const more = printed(`%${"0".repeat(formatZeros)}d`);
+          const fewer = printed(`%${"0".repeat(formatZeros / growthFactor)}q`);
+          const more = printed(`%${"0".repeat(formatZeros)}q`);
           assert.deepStrictEqual(found(more, generatedTables), [
             ["attribute-type", at("qti-printed-variable/@format")],
           ]);
@@ -3034,6 +4852,71 @@ describe("checkStructure", () => {
           );
         }),
       formatGrowthTimeoutMs,
+    );
+  });
+
+  describe("align-54 r11 default hotspot position: a default hotspot's place is read once per interaction (reading 80)", () => {
+    it.effect(
+      "align-54 r11 default hotspot position finding 13 (b): refuses every default hotspot choice but the last of a hotspot interaction that ends in text as misplaced-element, and checks 8 times the hotspots and text in under 32 times the time (reading 80)",
+      () =>
+        Effect.gen(function* checksDefaultHotspotsInLinearTime() {
+          const more = fewerDefaultHotspots * growthFactor;
+          const fewerSource = crowdedHotspots(fewerDefaultHotspots, "default");
+          const moreSource = crowdedHotspots(more, "default");
+          const refused = judged(moreSource);
+          assert.strictEqual(refused.length, more - 1);
+          assert.deepStrictEqual(refused[0], [
+            "misplaced-element",
+            crowdedHotspot(1),
+            defaultHotspot("qti-hotspot-choice", "qti-hotspot-interaction"),
+          ]);
+          assert.deepStrictEqual(refused.at(-1)?.[1], crowdedHotspot(more - 1));
+
+          const growth = yield* growthRatio(
+            () => {
+              checkStructure(fewerSource, generatedTables);
+            },
+            () => {
+              checkStructure(moreSource, generatedTables);
+            },
+          );
+          assert.isBelow(
+            growth,
+            growthLimit,
+            `8 times the hotspots and text took ${growth.toFixed(1)} times as long`,
+          );
+        }),
+      hotspotGrowthTimeoutMs,
+    );
+
+    it.effect(
+      "align-54 r11 default hotspot position finding 13 (b): checks a hotspot interaction of 16,000 default hotspot choices and then 16,000 text runs in under twice the thread CPU of the same interaction with rect hotspot choices (reading 80)",
+      () =>
+        Effect.gen(function* checksHostileHotspotsPromptly() {
+          const defaults = crowdedHotspots(hostileDefaultHotspots, "default");
+          const rects = crowdedHotspots(hostileDefaultHotspots, "rect");
+          assert.strictEqual(judged(defaults).length, hostileDefaultHotspots - 1);
+          assert.deepStrictEqual(judged(rects), []);
+
+          let defaultsMs = Number.POSITIVE_INFINITY;
+          let rectsMs = Number.POSITIVE_INFINITY;
+          for (let run = 0; run < growthRuns; run += 1) {
+            const defaultsRun = yield* cpuMillis(() => {
+              checkStructure(defaults, generatedTables);
+            });
+            const rectsRun = yield* cpuMillis(() => {
+              checkStructure(rects, generatedTables);
+            });
+            defaultsMs = Math.min(defaultsMs, defaultsRun);
+            rectsMs = Math.min(rectsMs, rectsRun);
+          }
+          assert.isBelow(
+            defaultsMs,
+            2 * rectsMs,
+            `the default hotspots took ${defaultsMs.toFixed(0)} ms, the rect ones ${rectsMs.toFixed(0)} ms`,
+          );
+        }),
+      hotspotGrowthTimeoutMs,
     );
   });
 
@@ -3348,7 +5231,7 @@ describe("checkStructure", () => {
         assert.isFalse(generatedTables.elements[local]?.global, local);
       }
       for (const local of ["div", "p", "qti-choice-interaction"]) {
-        assert.isTrue(declaresNcNameId(local), local);
+        assert.isTrue(declaresId(local), local);
       }
       assert.isUndefined(generatedTables.elements["div"]?.anyElement);
       assert.isFalse(
@@ -3420,10 +5303,15 @@ describe("checkStructure", () => {
       // WeightDType requires `identifier` and `value` and admits no child, so it would refuse this.
       assert.deepStrictEqual(found(customized(widget("q:WeightDType")), generatedTables), []);
       assert.deepStrictEqual(found(customized(widget("xs:anyType")), generatedTables), [fault]);
-      assert.deepStrictEqual(found(customized(widget("z:WeightDType")), generatedTables), [fault]);
+      assert.deepStrictEqual(found(customized(widget("q:NoSuchDType")), generatedTables), [fault]);
+      // A prefix nothing binds is refused itself (reading 83), and the content stays lax.
+      assert.deepStrictEqual(found(customized(widget("z:WeightDType")), generatedTables), [
+        ["attribute-type", at(`${custom}/{${otherNamespace}}widget/@{${xsiNamespace}}type`)],
+        fault,
+      ]);
     });
 
-    it("relies on the committed tables: the simple and complex types the reading 60 cases name", () => {
+    it('relies on the committed tables: the simple and complex types the cases of reading 60 ("a simple type it names governs its text and is checked") name', () => {
       assert.deepStrictEqual(
         [
           generatedTables.types["MimeTypeListDType"],
@@ -3440,7 +5328,7 @@ describe("checkStructure", () => {
       );
     });
 
-    it("[I-8] refuses an attribute and a child element on foreign content typed by a simple type, and leaves its text unchecked (reading 60)", () => {
+    it('[I-8] refuses an attribute and a child element on foreign content typed by a simple type, and leaves its text unchecked, plate\'s open limit that reading 60 ("a simple type it names governs its text and is checked") records', () => {
       const widgetPath = `${custom}/{${otherNamespace}}widget`;
       const widget = (
         written: string,
@@ -3495,7 +5383,7 @@ describe("checkStructure", () => {
       }
     });
 
-    it("[I-8] cites reading 60 on the refusals of foreign content typed by a simple type", () => {
+    it('[I-8] cites reading 60 ("a simple type it names governs its text and is checked") on the refusals of foreign content typed by a simple type', () => {
       const source = customized(
         el(
           "widget",
@@ -3565,7 +5453,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("reading 61: QTI's own elements in qti-ordering's extension slot", () => {
+  describe("reading 61 (\"an element in QTI's own namespace inside `qti-ordering`'s extension slot is valid\"): the slot read as ##any, laxly", () => {
     it("relies on the committed tables: qti-weight is declared only locally, and qti-selection's slot is ##other lax too", () => {
       assert.isFalse(generatedTables.elements["qti-weight"]?.global ?? true);
       assert.deepStrictEqual(generatedTables.elements["qti-selection"]?.anyElement, {
@@ -3574,18 +5462,20 @@ describe("checkStructure", () => {
       });
     });
 
-    it("accepts a QTI element in qti-ordering's slot as extension content, walking nothing below it", () => {
+    it("passes over a QTI element declared only locally in qti-ordering's slot as foreign content, and admits its children laxly", () => {
       const weight = el("qti-weight", [attr("identifier", "W"), attr("value", "2")]);
       const holding = ordered(el("qti-weight", [attr("identifier", "W")], [badDiv, looseChoice]));
       const governing = governingTables(holding, generatedTables);
 
       assert.deepStrictEqual(found(ordered(weight), generatedTables), []);
-      assert.deepStrictEqual(found(holding, generatedTables), []);
+      assert.deepStrictEqual(found(holding, generatedTables), [
+        ["attribute-type", at(`${ordering}/qti-weight/div/@id`)],
+      ]);
       assert.isFalse(governing.has(elementAt(holding, `${ordering}/qti-weight`)));
-      assert.isFalse(governing.has(elementAt(holding, `${ordering}/qti-weight/div`)));
+      assert.isTrue(governing.has(elementAt(holding, `${ordering}/qti-weight/div`)));
     });
 
-    it("still refuses a QTI element in qti-selection's slot, which reading 61 does not cover", () => {
+    it("still refuses a QTI element in qti-selection's slot, which reading 61 (\"an element in QTI's own namespace inside `qti-ordering`'s extension slot is valid\") does not cover", () => {
       const weight = el("qti-weight", [attr("identifier", "W"), attr("value", "2")]);
 
       assert.deepStrictEqual(found(selected(weight), generatedTables), [
@@ -3594,7 +5484,291 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("reading 56: one reader of xs:double", () => {
+  describe("align-54 wildcards: qti-ordering's slot read laxly, strict wildcards and xsi:type, and the order after a repeated wildcard (readings 61, 81, 83, 96 and 113)", () => {
+    it("relies on the committed tables: the strict wildcards of the companion materials, a file's metadata and accessForAllResource, and the global names the cases read", () => {
+      const strict: Wildcard = { namespace: "##other", process: "strict" };
+      const profile = packageTables.get("3.0.0");
+      const drd = profile?.get(drdNamespace);
+      const packaging = profile?.get(manifestNamespace);
+
+      assert.deepStrictEqual(
+        generatedTables.elements["qti-companion-materials-info"]?.anyElement,
+        strict,
+      );
+      assert.deepStrictEqual(packaging?.elements["metadata"]?.anyElement, strict);
+      assert.deepStrictEqual(drd?.elements["accessForAllResource"]?.anyElement, strict);
+      assert.isTrue(drd?.elements["accessForAllResource"]?.global);
+      assert.isTrue(packaging?.elements["manifest"]?.global);
+      assert.isFalse(profile?.has(otherNamespace) ?? true);
+      assert.isFalse(profile?.has(qtiNamespace) ?? true);
+      assert.isTrue(generatedTables.elements["p"]?.extensionCovered);
+    });
+
+    it("align-54 wildcards D9: checks a global QTI element in qti-ordering's slot by its table, as lax assessment reads it (reading 61)", () => {
+      const checkedDiv = ordered(badDiv);
+
+      assert.deepStrictEqual(found(ordered(el("p", [attr("onclick", "go()")])), generatedTables), [
+        ["unknown-attribute", at(`${ordering}/p/@onclick`)],
+      ]);
+      assert.deepStrictEqual(found(checkedDiv, generatedTables), [
+        ["attribute-type", at(`${ordering}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(found(ordered(el("div", [], [looseChoice])), generatedTables), [
+        ["unknown-element", at(`${ordering}/div/qti-simple-choice`)],
+      ]);
+      assert.strictEqual(
+        governingTables(checkedDiv, generatedTables).get(elementAt(checkedDiv, `${ordering}/div`)),
+        generatedTables.elements["div"],
+      );
+    });
+
+    it("align-54 wildcards D9: keeps a QTI element no global declaration names in qti-ordering's slot as foreign content, its attributes unchecked and its children admitted laxly, and a nested QTI root unchecked (readings 61 and 6)", () => {
+      const choice = el("qti-simple-choice", [attr("unknown", "x")], [badDiv]);
+      const nested = el(
+        "qti-assessment-item",
+        [attr("identifier", "1x"), attr("time-dependent", "false"), attr("title", "Nested")],
+        [badDiv],
+      );
+
+      assert.deepStrictEqual(found(ordered(choice), generatedTables), [
+        ["attribute-type", at(`${ordering}/qti-simple-choice/div/@id`)],
+      ]);
+      assert.deepStrictEqual(found(ordered(nested), generatedTables), []);
+    });
+
+    it("align-54 wildcards D9: admits an element of no namespace in qti-ordering's slot laxly, as the slot is read as ##any (reading 61)", () => {
+      assert.deepStrictEqual(found(ordered(el("loose", [], [badDiv], "")), generatedTables), [
+        ["attribute-type", at(`${ordering}/{}loose/div/@id`)],
+      ]);
+    });
+
+    it("align-54 wildcards E6: refuses an element a strict wildcard holds that no table declares and no xsi:type types, as unknown-element: the research probes a81_strict_foreign and a81_strict_drd (reading 81)", () => {
+      const drd = el("educationalComplexityOfAdaptation", [], [text("x")], drdV2Namespace);
+
+      assert.deepStrictEqual(
+        checkStructure(companioned(foreignWidget([], text("a"))), generatedTables).map(
+          (refusal) => [refusal.rule, refusal.location, refusal.detail],
+        ),
+        [
+          [
+            "unknown-element",
+            at(`${companion}/${widgetStep}`),
+            { element: widgetStep, parent: "qti-companion-materials-info", reading: "81" },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(found(companioned(drd), generatedTables), [
+        [
+          "unknown-element",
+          at(`${companion}/${stepIn(drdV2Namespace, "educationalComplexityOfAdaptation")}`),
+        ],
+      ]);
+    });
+
+    it("align-54 wildcards E6: refuses an element under a strict wildcard whose xsi:type names no type, bound or not, or is no QName, as unknown-element: the research probe a81_strict_xsitype_unknown (reading 81)", () => {
+      for (const written of ["o:Nope", "zz:Nope", "xs:Nope", "1x"]) {
+        assert.deepStrictEqual(
+          found(companioned(foreignWidget([instanceType(written)], text("abc"))), generatedTables),
+          [["unknown-element", at(`${companion}/${widgetStep}`)]],
+          written,
+        );
+      }
+    });
+
+    it('align-54 wildcards E6: admits an element under a strict wildcard that an xsi:type types, as lax assessment reads it: the research probes a81_strict_xsitype and a81_strict_xsitype_int_bad, whose text stays unchecked, plate\'s open limit that reading 60 ("a simple type it names governs its text and is checked") records (reading 81)', () => {
+      const typedWidget = `${companion}/${widgetStep}`;
+
+      assert.deepStrictEqual(
+        found(companioned(foreignWidget([instanceType("xs:string")], text("a"))), generatedTables),
+        [],
+      );
+      assert.deepStrictEqual(
+        found(
+          companioned(foreignWidget([instanceType("xs:integer")], text("abc"))),
+          generatedTables,
+        ),
+        [],
+      );
+      assert.deepStrictEqual(
+        found(
+          companioned(foreignWidget([instanceType("xs:string"), attr("size", "3")])),
+          generatedTables,
+        ),
+        [["unknown-attribute", at(`${typedWidget}/@size`)]],
+      );
+      assert.deepStrictEqual(
+        found(companioned(foreignWidget([instanceType("q:WeightDType")], badDiv)), generatedTables),
+        [],
+      );
+      assert.deepStrictEqual(
+        found(companioned(foreignWidget([instanceType("xs:anyType")], badDiv)), generatedTables),
+        [["attribute-type", at(`${typedWidget}/div/@id`)]],
+      );
+    });
+
+    it("align-54 wildcards E6: keeps MathML, SSML and XInclude under a strict wildcard unwalked, which the item's schema set declares and plate holds no tables for: the research probes a81_strict_math_bad and a81_strict_ssml_ok (reading 81)", () => {
+      const math = el("math", [], [el("bogus", [], [], mathmlNamespace)], mathmlNamespace);
+      const speak = el("speak", [attr("version", "1.1")], [text("a")], ssmlNamespace);
+      const include = el("include", [attr("href", "a.xml")], [], xincludeNamespace);
+
+      assert.deepStrictEqual(found(companioned(math, speak, include), generatedTables), []);
+    });
+
+    it("align-54 wildcards E6: checks a global of the manifest's schema set under a file's strict metadata wildcard by its table, keeps a nested manifest under accessForAllResource's foreign, and refuses a QTI root, which that set does not declare (readings 81 and 113)", () => {
+      const nestedManifest = el(
+        "manifest",
+        [],
+        [el("stray", [], [], manifestNamespace)],
+        manifestNamespace,
+      );
+      const root = el("qti-assessment-item", [attr("identifier", "I")]);
+
+      assert.deepStrictEqual(
+        walkedManifest(packaged([], [accessForAll(foreignWidget([], text("a")))])).map(
+          (refusal) => [refusal.rule, refusal.location],
+        ),
+        [["unknown-element", at(`${packagedFile}/${accessForAllStep}/${widgetStep}`)]],
+      );
+      assert.deepStrictEqual(walkedManifest(packaged([], [accessForAll(nestedManifest)])), []);
+      assert.deepStrictEqual(
+        walkedManifest(packaged([], [root])).map((refusal) => [refusal.rule, refusal.location]),
+        [["unknown-element", at(`${packagedFile}/qti-assessment-item`)]],
+      );
+      // A manifest in the file metadata's own namespace is no element its `##other` admits.
+      assert.deepStrictEqual(
+        walkedManifest(packaged([], [nestedManifest])).map((refusal) => [
+          refusal.rule,
+          refusal.location,
+        ]),
+        [["unknown-element", at(`${packagedFile}/${stepIn(manifestNamespace, "manifest")}`)]],
+      );
+    });
+
+    it("align-54 wildcards E6: reads a global of the manifest's schema set in a LOM element's lax wildcard by its declaration, where it was kept foreign, and keeps a nested manifest there foreign (readings 81 and 6)", () => {
+      const nestedManifest = el(
+        "manifest",
+        [],
+        [el("stray", [], [], manifestNamespace)],
+        manifestNamespace,
+      );
+
+      assert.deepStrictEqual(
+        walkedManifest(packaged([accessForAll(foreignWidget([], text("a")))], [])).map(
+          (refusal) => [refusal.rule, refusal.location],
+        ),
+        [["unknown-element", at(`${packagedGeneral}/${accessForAllStep}/${widgetStep}`)]],
+      );
+      assert.deepStrictEqual(walkedManifest(packaged([nestedManifest], [])), []);
+    });
+
+    it("align-54 wildcards E6: checks a global of another namespace's tables in lax wildcard content by its table, where it was kept foreign, and leaves a local one to lax assessment (reading 81)", () => {
+      const nested = customized(el("box", [], [badDiv], xNamespace));
+      const local = customized(el("part", [], [badDiv], xNamespace));
+      const box = `${custom}/${xStep("box")}`;
+
+      assert.deepStrictEqual(foundWith(nested, generatedTables), [
+        ["missing-attribute", at(box)],
+        ["attribute-type", at(`${box}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(found(nested, generatedTables), [
+        ["attribute-type", at(`${box}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(foundWith(local, generatedTables), [
+        ["attribute-type", at(`${custom}/${xStep("part")}/div/@id`)],
+      ]);
+      assert.strictEqual(
+        governingTables(nested, generatedTables, others).get(elementAt(nested, box)),
+        xTables.elements["box"],
+      );
+    });
+
+    it("align-54 wildcards E6: refuses an xsi:type on foreign content under a lax wildcard whose prefix no declaration in scope binds, or that is no QName, as attribute-type, and admits its children laxly: the research probe a83_xsitype_unbound_foreign (readings 83 and 47)", () => {
+      const unbound = el("widget", [instanceType("zz:Foo")], [badDiv], otherNamespace);
+      const instancePath = `${custom}/${widgetStep}/@{${xsiNamespace}}type`;
+
+      assert.deepStrictEqual(found(customized(unbound), generatedTables), [
+        ["attribute-type", at(instancePath)],
+        ["attribute-type", at(`${custom}/${widgetStep}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(checkStructure(customized(unbound), generatedTables)[0]?.detail, {
+        attribute: `{${xsiNamespace}}type`,
+        element: widgetStep,
+        expected: "a QName whose prefix a namespace declaration in scope binds",
+        reading: "83",
+        value: "zz:Foo",
+      });
+      assert.deepStrictEqual(
+        checkStructure(customized(foreignWidget([instanceType("1x")])), generatedTables).map(
+          (refusal) => [refusal.rule, refusal.location, refusal.detail["reading"]],
+        ),
+        [["attribute-type", at(instancePath), "47"]],
+      );
+      assert.deepStrictEqual(
+        found(customized(foreignWidget([instanceType("o:Nope")], text("a"))), generatedTables),
+        [],
+      );
+    });
+
+    it("align-54 wildcards E13: refuses a companion material after a child the repeated strict wildcard holds as misplaced-element, check order, and admits one before it (reading 96)", () => {
+      const speak = el("speak", [attr("version", "1.1")], [text("a")], ssmlNamespace);
+      const math = el("math", [], [], mathmlNamespace);
+
+      assert.deepStrictEqual(
+        checkStructure(
+          companioned(physicalMaterial(), speak, physicalMaterial()),
+          generatedTables,
+        ).map((refusal) => [refusal.rule, refusal.location, refusal.detail]),
+        [
+          [
+            "misplaced-element",
+            at(`${companion}/qti-physical-material[2]`),
+            {
+              check: "order",
+              context: "qti-companion-materials-info",
+              element: "qti-physical-material",
+              reading: "96",
+            },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(found(companioned(math, physicalMaterial()), generatedTables), [
+        ["misplaced-element", at(`${companion}/qti-physical-material`)],
+      ]);
+      assert.deepStrictEqual(
+        found(companioned(physicalMaterial(), physicalMaterial(), speak, math), generatedTables),
+        [],
+      );
+    });
+
+    it("align-54 wildcards E13: refuses a manifest accessForAllResource's isPartialAdaptationOf after a child its repeated strict wildcard holds as misplaced-element, check order, and admits one before it (reading 96)", () => {
+      const partial = el("isPartialAdaptationOf", [], [text("urn:example:item")], drdNamespace);
+      const held = foreignWidget([instanceType("xs:string")], text("a"));
+      const partialStep = stepIn(drdNamespace, "isPartialAdaptationOf");
+
+      assert.deepStrictEqual(
+        walkedManifest(packaged([], [accessForAll(held, partial)])).map((refusal) => [
+          refusal.rule,
+          refusal.location,
+          refusal.detail,
+        ]),
+        [
+          [
+            "misplaced-element",
+            at(`${packagedFile}/${accessForAllStep}/${partialStep}`),
+            {
+              check: "order",
+              context: accessForAllStep,
+              element: partialStep,
+              reading: "96",
+            },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(walkedManifest(packaged([], [accessForAll(partial, held)])), []);
+    });
+  });
+
+  describe('reading 56 ("an `xs:double` literal beyond the largest finite double names the largest finite double of its sign"): one reader of xs:double', () => {
     it("[I-2] admits normal-maximum 1e400 and INF, and refuses -1e400, 0e0, -0 and NaN (reading 16)", () => {
       const path = "qti-assessment-item/qti-outcome-declaration/@normal-maximum";
 
@@ -3693,24 +5867,6 @@ describe("checkStructure", () => {
       ]);
     });
 
-    it("passes over a global element of another namespace nested in lax wildcard content, as reading 6 passes over QTI's roots", () => {
-      const nested = customized(el("box", [], [badDiv], xNamespace));
-      const local = customized(el("part", [], [badDiv], xNamespace));
-
-      assert.deepStrictEqual(foundWith(nested, generatedTables), []);
-      assert.deepStrictEqual(found(nested, generatedTables), [
-        ["attribute-type", at(`${custom}/${xStep("box")}/div/@id`)],
-      ]);
-      assert.deepStrictEqual(foundWith(local, generatedTables), [
-        ["attribute-type", at(`${custom}/${xStep("part")}/div/@id`)],
-      ]);
-      assert.isFalse(
-        governingTables(nested, generatedTables, others).has(
-          elementAt(nested, `${custom}/${xStep("box")}`),
-        ),
-      );
-    });
-
     it("judges xsi:type and xsi:nil on another namespace's element, and lets a type its tables derive govern it", () => {
       const wide = xBox(attr("type", "x:WideBoxType", xsiNamespace), attr("width", "3"));
       const plain = xBox(attr("width", "3"));
@@ -3746,6 +5902,426 @@ describe("checkStructure", () => {
       );
 
       assert.deepStrictEqual(foundWith(source), []);
+    });
+  });
+  describe("align-54 ID table: the document's IDs are one table, and an IDREF names one of them (readings 14, 74, 84, 101, 109 and 156)", () => {
+    it("align-54 ID table E16: refuses a second element with one id as duplicate-identifier, its id collapsed as its type reads it (reading 101)", () => {
+      assert.deepStrictEqual(
+        idFound(
+          idItem([], [el("p", [attr("id", "a")], [text("x")]), el("div", [attr("id", " a ")])]),
+        ),
+        [["duplicate-identifier", at(`${idBody}/div/@id`), { identifier: "a", reading: "101" }]],
+      );
+      assert.deepStrictEqual(
+        idFound(
+          idItem([], [el("p", [attr("id", "a")], [text("x")]), el("div", [attr("id", "b")])]),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 ID table E16: an id that is no NCName is no ID: its value domain alone refuses it, nothing repeats it and no IDREF names it (reading 156)", () => {
+      const refusals = idFound(
+        idItem(
+          [],
+          [
+            el("p", [attr("id", "1a")], [text("x")]),
+            el("div", [attr("id", "1a"), attr("aria-labelledby", "1a")]),
+          ],
+        ),
+      );
+
+      assert.deepStrictEqual(
+        refusals.map(([rule, where, detail]) => [rule, where, detail["check"]]),
+        [
+          ["attribute-type", at(`${idBody}/p/@id`), undefined],
+          ["attribute-type", at(`${idBody}/div/@id`), undefined],
+          ["attribute-type", at(`${idBody}/div/@aria-labelledby`), undefined],
+          ["attribute-type", at(`${idBody}/div/@aria-labelledby`), "idref-target"],
+        ],
+      );
+    });
+
+    it("align-54 ID table E16: refuses an IDREF, and each token of a list of IDREFs, that names no id of the document as attribute-type, idref-target, and resolves one that names a later id", () => {
+      assert.deepStrictEqual(
+        idFound(
+          idItem(
+            [],
+            [
+              el("div", [attr("aria-describedby", "a b"), attr("aria-activedescendant", "z")]),
+              el("p", [attr("aria-labelledby", "later")], [text("x")]),
+              el("p", [attr("id", "a")], [text("y")]),
+              el("div", [attr("id", "later")]),
+            ],
+          ),
+        ),
+        [
+          [
+            "attribute-type",
+            at(`${idBody}/div[1]/@aria-describedby`),
+            idrefTarget("div", "aria-describedby", "b"),
+          ],
+          [
+            "attribute-type",
+            at(`${idBody}/div[1]/@aria-activedescendant`),
+            idrefTarget("div", "aria-activedescendant", "z"),
+          ],
+        ],
+      );
+    });
+
+    it("align-54 ID table E16: refuses a text entry's response-identifier under qti-null's xsi:type that names no ID, as the governing type makes it an IDREF (reading 84): the research probe a84_null_textentry_idref", () => {
+      assert.deepStrictEqual(idFound(idNulled("NOPE")), [
+        [
+          "attribute-type",
+          at(`${idSetting}/qti-null/@response-identifier`),
+          idrefTarget("qti-null", "response-identifier", "NOPE"),
+        ],
+      ]);
+      assert.deepStrictEqual(idFound(idNulled("RESPONSE")), []);
+    });
+
+    it("align-54 ID table E16: refuses a wildcard xml:id on an element whose governing type declares an ID, written or not, as unknown-attribute (reading 109): the research probes p109a and p109d", () => {
+      const exited = `${idProcessing}/qti-exit-response`;
+      const wild = [
+        "unknown-attribute",
+        at(`${exited}/@xml:id`),
+        { attribute: "xml:id", element: "qti-exit-response", reading: "109" },
+      ] as const;
+
+      assert.deepStrictEqual(idFound(idExit(attr("id", "b", xmlNamespace))), [wild]);
+      assert.deepStrictEqual(idFound(idExit(attr("id", "a"), attr("id", "b", xmlNamespace))), [
+        wild,
+      ]);
+      assert.deepStrictEqual(idFound(idExit()), []);
+    });
+
+    it("align-54 ID table E16: a wildcard xml:id where the governing type declares no ID is one of the document's IDs: an IDREF resolves to it, and another element may not repeat it (reading 109)", () => {
+      const operator = idSet(el("qti-custom-operator", [attr("id", "w", xmlNamespace)]));
+
+      assert.deepStrictEqual(
+        idFound(
+          idItem([idScore], [el("p", [attr("aria-labelledby", "w")], [text("x")])], [operator]),
+        ),
+        [],
+      );
+      assert.deepStrictEqual(
+        idFound(idItem([idScore], [el("p", [attr("id", "w")], [text("x")])], [operator])),
+        [
+          [
+            "duplicate-identifier",
+            at(`${idSetting}/qti-custom-operator/@xml:id`),
+            { identifier: "w", reading: "101" },
+          ],
+        ],
+      );
+    });
+
+    it("align-54 ID table D3b: refuses an element id equal to a response declaration's identifier as duplicate-identifier, and resolves a text entry's response-identifier to the declaration (reading 14): the research probe a74_resp_id", () => {
+      assert.deepStrictEqual(
+        idFound(idItem([idResponse], [el("p", [attr("id", "RESPONSE")], [text("x")])])),
+        [
+          [
+            "duplicate-identifier",
+            at(`${idBody}/p/@id`),
+            { identifier: "RESPONSE", reading: "14" },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        idFound(
+          idItem(
+            [idResponse],
+            [
+              el(
+                "p",
+                [],
+                [el("qti-text-entry-interaction", [attr("response-identifier", "RESPONSE")])],
+              ),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 ID table E1b: refuses an element id equal to a context declaration's identifier as duplicate-identifier (reading 74): the research probe a74_ctx_id", () => {
+      assert.deepStrictEqual(
+        idFound(idItem([idResponse, idContext], [el("p", [attr("id", "CTX")], [text("x")])])),
+        [["duplicate-identifier", at(`${idBody}/p/@id`), { identifier: "CTX", reading: "74" }]],
+      );
+    });
+
+    it("align-54 ID table E1b: leaves two of the root's declarations of one identifier to the prose rules, which refuse them as two declarations of one name (E1a)", () => {
+      assert.deepStrictEqual(idFound(idItem([idResponse, renamed(idContext, "RESPONSE")], [])), []);
+      assert.deepStrictEqual(idFound(idItem([idResponse, idResponse], [])), []);
+    });
+
+    it("align-54 ID table E16: does not resolve an outcome declaration's variable-identifier-ref, which reading 15 sets aside", () => {
+      const referring = el("qti-outcome-declaration", [
+        attr("identifier", "SCORE"),
+        attr("cardinality", "single"),
+        attr("base-type", "float"),
+        attr("variable-identifier-ref", "EXTERNAL"),
+      ]);
+
+      assert.deepStrictEqual(idFound(idItem([referring], [])), []);
+    });
+
+    it("align-54 ID table E16: leaves an IDREF unrefused where the table cannot be complete: in a document that includes a fragment (reading 117), and where it names an id of a MathML island", () => {
+      const labelled = el("p", [attr("aria-labelledby", "m1")], [text("x")]);
+      const island = el(
+        "math",
+        [],
+        [el("mi", [attr("id", "m1")], [text("y")], mathmlNamespace)],
+        mathmlNamespace,
+      );
+      const include = el("include", [attr("href", "fragment.xml")], [], xincludeNamespace);
+
+      assert.deepStrictEqual(idFound(idItem([], [labelled, include])), []);
+      assert.deepStrictEqual(idFound(idItem([], [labelled, el("p", [], [island])])), []);
+      assert.deepStrictEqual(idFound(idItem([], [labelled])), [
+        [
+          "attribute-type",
+          at(`${idBody}/p/@aria-labelledby`),
+          idrefTarget("p", "aria-labelledby", "m1"),
+        ],
+      ]);
+    });
+
+    it("align-54 ID table E16: judges no manifest's IDs: a repeated resource identifier and a dependency that names nothing draw no ID refusal, the manifest's own rules judging the dependency (rule db2ef322)", () => {
+      const manifest = titledManifest("en");
+      const resources = el(
+        "resources",
+        [],
+        [
+          idResource([el("dependency", [attr("identifierref", "NONE")], [], manifestNamespace)]),
+          idResource([]),
+        ],
+        manifestNamespace,
+      );
+      const source = doc(manifest.location, {
+        ...manifest.root,
+        children: manifest.root.children.map((child) =>
+          child.kind === "element" && child.local === "resources" ? resources : child,
+        ),
+      });
+
+      assert.deepStrictEqual(
+        walkedManifest(source).filter(
+          (refusal) =>
+            refusal.rule === "duplicate-identifier" || refusal.detail["check"] === "idref-target",
+        ),
+        [],
+      );
+    });
+
+    it("align-54 ID table E16: a repeated id on qti-interaction-module, typed xs:NCName, is no ID (the control)", () => {
+      assert.isTrue(declaresId("qti-interaction-module", "NCName"));
+      assert.isTrue(declaresId("p"));
+    });
+
+    it.effect(
+      "align-54 ID table E16: the fractions documents' repeated qti-interaction-module id draws no duplicate-identifier, so they stay refused only as before (the control)",
+      () =>
+        Effect.gen(function* fractions() {
+          const path = "qtiv3-examples/packaging/pci/pci_item_examples.zip.d/fractions1.xml";
+          const source = yield* readCorpusFile(path).pipe(
+            Effect.flatMap((bytes) => readSource(path, bytes)),
+          );
+          const modules = [...walkDocument(source)].filter(
+            ({ element: walked }) => walked.local === "qti-interaction-module",
+          );
+
+          assert.isAbove(modules.length, 1);
+          assert.deepStrictEqual(
+            checkStructure(source, generatedTables).filter(
+              (refusal) =>
+                refusal.rule === "duplicate-identifier" ||
+                refusal.detail["check"] === "idref-target",
+            ),
+            [],
+          );
+        }),
+      { tags: ["corpus"] },
+    );
+  });
+
+  describe("align-54 r11 lax xml attributes: xml:id and xml:lang are assessed wherever the walk visits an element (readings 101, 129 and 156)", () => {
+    it("align-54 r11 lax xml attributes finding 8: refuses a second xml:id of one value on an element passed over laxly as duplicate-identifier, and one equal to a checked element's id (reading 101)", () => {
+      assert.deepStrictEqual(
+        idFound(
+          laxItem(
+            [],
+            laxWidget("w", attr("id", "a", xmlNamespace)),
+            laxWidget("v", attr("id", "a", xmlNamespace)),
+          ),
+        ),
+        [
+          [
+            "duplicate-identifier",
+            at(`${laxInteraction}/{${otherNamespace}}v/@xml:id`),
+            { identifier: "a", reading: "101" },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        idFound(
+          laxItem(
+            [el("p", [attr("id", "a")], [text("x")])],
+            laxWidget("w", attr("id", " a ", xmlNamespace)),
+          ),
+        ),
+        [
+          [
+            "duplicate-identifier",
+            at(`${laxInteraction}/{${otherNamespace}}w/@xml:id`),
+            { identifier: "a", reading: "101" },
+          ],
+        ],
+      );
+    });
+
+    it("align-54 r11 lax xml attributes finding 8: an IDREF naming the xml:id of an element passed over laxly resolves to it (reading 156)", () => {
+      assert.deepStrictEqual(
+        idFound(
+          laxItem(
+            [el("p", [attr("aria-labelledby", "lab")], [text("x")])],
+            laxWidget("w", attr("id", "lab", xmlNamespace)),
+          ),
+        ),
+        [],
+      );
+      assert.deepStrictEqual(
+        idFound(
+          laxItem(
+            [el("p", [attr("aria-labelledby", "lab")], [text("x")])],
+            laxWidget("w", attr("id", "lab")),
+          ),
+        ),
+        [
+          [
+            "attribute-type",
+            at(`${idBody}/p/@aria-labelledby`),
+            idrefTarget("p", "aria-labelledby", "lab"),
+          ],
+        ],
+      );
+    });
+
+    it("align-54 r11 lax xml attributes finding 8: refuses an xml:id that is no NCName as attribute-type, expected ID, on a qti-custom-operator whose attribute wildcard admits it and on an element passed over laxly, and it binds no ID, so two of them do not collide (reading 156)", () => {
+      const operator = idSet(
+        el("qti-custom-operator", [attr("class", "c"), attr("id", "1a", xmlNamespace)]),
+      );
+      const refusedId = (local: string) =>
+        [
+          "attribute-type",
+          at(`${laxInteraction}/{${otherNamespace}}${local}/@xml:id`),
+          {
+            attribute: "xml:id",
+            element: `{${otherNamespace}}${local}`,
+            expected: "ID",
+            value: "1a",
+          },
+        ] as const;
+
+      assert.deepStrictEqual(idFound(idItem([idScore], [el("p", [], [text("x")])], [operator])), [
+        [
+          "attribute-type",
+          at(`${idSetting}/qti-custom-operator/@xml:id`),
+          { attribute: "xml:id", element: "qti-custom-operator", expected: "ID", value: "1a" },
+        ],
+      ]);
+      assert.deepStrictEqual(
+        idFound(
+          laxItem(
+            [],
+            laxWidget("w", attr("id", "1a", xmlNamespace)),
+            laxWidget("v", attr("id", "1a", xmlNamespace)),
+          ),
+        ),
+        [refusedId("w"), refusedId("v")],
+      );
+    });
+
+    it('align-54 r11 lax xml attributes finding 8: refuses xml:lang="en_US" on an element passed over laxly as reading 129\'s row refuses it on a checked one, after its unresolvable xsi:type, and admits x-none and a padded tag (reading 129)', () => {
+      const at129 = (language: string) =>
+        [
+          "attribute-type",
+          at(`${laxInteraction}/{${otherNamespace}}w/@xml:lang`),
+          {
+            attribute: "xml:lang",
+            element: `{${otherNamespace}}w`,
+            expected: "a well-formed BCP 47 language tag, or empty",
+            reading: "129",
+            value: language,
+          },
+        ] as const;
+
+      assert.deepStrictEqual(idFound(laxLanguage("en_US")), [at129("en_US")]);
+      assert.deepStrictEqual(
+        idFound(laxLanguage("en_US", attr("type", "nowhere:T", xsiNamespace))).map(
+          ([rule, where, detail]) => [rule, where, detail["reading"]],
+        ),
+        [
+          [
+            "attribute-type",
+            at(`${laxInteraction}/{${otherNamespace}}w/@{${xsiNamespace}}type`),
+            "83",
+          ],
+          ["attribute-type", at(`${laxInteraction}/{${otherNamespace}}w/@xml:lang`), "129"],
+        ],
+      );
+      for (const language of ["x-none", " en-GB ", ""]) {
+        assert.deepStrictEqual(idFound(laxLanguage(language)), [], JSON.stringify(language));
+      }
+    });
+
+    it("align-54 r11 lax xml attributes finding 8: judges no xml:id or xml:lang in content a skip wildcard admits, which the walk never visits (the control)", () => {
+      const content = [
+        laxWidget("w", attr("id", "a", xmlNamespace), attr("lang", "en_US", xmlNamespace)),
+        laxWidget("v", attr("id", "a", xmlNamespace)),
+        laxWidget("u", attr("id", "1a", xmlNamespace)),
+      ];
+
+      assert.isNotEmpty(idFound(laxItem([], ...content)));
+      assert.deepStrictEqual(
+        checkStructure(laxItem([], ...content), skipping).map((refusal) => [
+          refusal.rule,
+          refusal.location,
+        ]),
+        [],
+      );
+    });
+
+    it("align-54 r11 lax xml attributes finding 8: a checked element's xml:id and xml:lang are judged as before: once each, and a wildcard xml:id beside a declared ID only as reading 109 refuses it (the control)", () => {
+      assert.deepStrictEqual(
+        cited(bodied(el("p", [attr("lang", "en_US", xmlNamespace)], [text("Colour")]))),
+        [["attribute-type", inBody("p/@xml:lang"), "129"]],
+      );
+      assert.deepStrictEqual(
+        idFound(idItem([], [el("p", [attr("id", "1a")], [text("x")])])).map(
+          ([rule, where, detail]) => [rule, where, detail["expected"]],
+        ),
+        [["attribute-type", at(`${idBody}/p/@id`), "ID"]],
+      );
+      assert.deepStrictEqual(idFound(idExit(attr("id", "1a", xmlNamespace))), [
+        [
+          "unknown-attribute",
+          at(`${idProcessing}/qti-exit-response/@xml:id`),
+          { attribute: "xml:id", element: "qti-exit-response", reading: "109" },
+        ],
+      ]);
+      assert.deepStrictEqual(
+        idFound(
+          idItem(
+            [idScore],
+            [el("p", [attr("aria-labelledby", "w")], [text("x")])],
+            [idSet(el("qti-custom-operator", [attr("id", " w ", xmlNamespace)]))],
+          ),
+        ),
+        [],
+      );
     });
   });
 });
