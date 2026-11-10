@@ -1220,7 +1220,7 @@ export const DoubleBound = closed.relation(
  * no `ValueDomainOf` row and no pattern, and no lexical form is in it (`emptyDomains` of the
  * attribute grammar): `xs:NOTATION`'s in the pinned grammar, the text domain of a foreign element
  * whose `xsi:type` names it (C47). A law refuses a value of one by `¬in(domain, emptyDomains)`,
- * since grizzle admits no pattern no text matches (`scalar/regex/admit.ts:98-102`, `matchPattern`).
+ * since grizzle admits no pattern no text matches (`admitMatch` of its `scalar/regex/admit.ts`).
  */
 export const emptyDomains: readonly (typeof ValueDomain.handles)[number][] =
   grammar.attributes.emptyDomains.map((domain) => asValueDomain(domain));
