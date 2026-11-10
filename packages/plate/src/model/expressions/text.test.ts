@@ -171,8 +171,8 @@ describe("the text family's reader specs and kind rules", () => {
           [attr("case-sensitive", "true")],
           [stringElement("York"), stringElement("New York")],
         );
-        const built = yield* buildItem(
-          passedItem(expressionElement("and", [], [stringMatch, substring])),
+        const built = yield* Effect.fromResult(
+          buildItem(passedItem(expressionElement("and", [], [stringMatch, substring]))),
         );
 
         assert.deepStrictEqual(built.unsupported, []);
@@ -214,12 +214,14 @@ describe("the text family's reader specs and kind rules", () => {
 
   it.effect("[I-9a] read qti-string-match's substring as false when it is absent", () =>
     Effect.gen(function* readsSubstringDefault() {
-      const built = yield* buildItem(
-        passedItem(
-          expressionElement(
-            "string-match",
-            [attr("case-sensitive", "true")],
-            [stringElement("a"), stringElement("a")],
+      const built = yield* Effect.fromResult(
+        buildItem(
+          passedItem(
+            expressionElement(
+              "string-match",
+              [attr("case-sensitive", "true")],
+              [stringElement("a"), stringElement("a")],
+            ),
           ),
         ),
       );
@@ -315,7 +317,7 @@ describe("the text family's reader specs and kind rules", () => {
     () =>
       Effect.gen(function* marksRefusedPattern() {
         const document = passedItem(patternElement("a(b", stringElement("ab")));
-        const built = yield* buildItem(document);
+        const built = yield* Effect.fromResult(buildItem(document));
 
         assert.deepStrictEqual(refusalsOf(document), []);
         assert.deepStrictEqual(built.processing, Option.none());
@@ -335,7 +337,7 @@ describe("the text family's reader specs and kind rules", () => {
 
         assert.deepStrictEqual(refusalsOf(passedItem(expression, [digits])), []);
 
-        const built = yield* buildItem(passedItem(expression, [digits]));
+        const built = yield* Effect.fromResult(buildItem(passedItem(expression, [digits])));
         const [rule] = Option.getOrElse(built.processing, () => []);
         const read = rule?.kind === "set-outcome" ? rule.expression : undefined;
 
@@ -381,7 +383,7 @@ describe("the text family's reader specs and kind rules", () => {
     () =>
       Effect.gen(function* readsUnnamedBraces() {
         const document = passedItem(patternElement("{NOPE}", stringElement("{NOPE}")));
-        const built = yield* buildItem(document);
+        const built = yield* Effect.fromResult(buildItem(document));
 
         assert.deepStrictEqual(refusalsOf(document), []);
         assert.deepStrictEqual(built.processing, Option.none());
@@ -402,7 +404,7 @@ describe("the text family's reader specs and kind rules", () => {
             attr("identifier", "T"),
           ]),
         ]);
-        const built = yield* buildItem(document);
+        const built = yield* Effect.fromResult(buildItem(document));
         const rules = Option.getOrElse(built.processing, () => assert.fail("no processing"));
         const passedAt = (pattern: string) =>
           Effect.fromResult(
@@ -435,7 +437,7 @@ describe("the text family's reader specs and kind rules", () => {
           variableElement("RESPONSE"),
         );
         const declarations = [responseDeclaration("RESPONSE", "point")];
-        const built = yield* buildItem(passedItem(expression, declarations));
+        const built = yield* Effect.fromResult(buildItem(passedItem(expression, declarations)));
         const [rule] = Option.getOrElse(built.processing, () => []);
         const read = rule?.kind === "set-outcome" ? rule.expression : undefined;
 
@@ -477,7 +479,7 @@ describe("the text family's reader specs and kind rules", () => {
           [tooMany, [50, 50, 10, 90, 1, 2]],
         ] as const) {
           const document = passedItem(expression, declarations);
-          const built = yield* buildItem(document);
+          const built = yield* Effect.fromResult(buildItem(document));
           const [rule] = Option.getOrElse(built.processing, () => []);
           const read = rule?.kind === "set-outcome" ? rule.expression : undefined;
 
@@ -510,7 +512,7 @@ describe("the text family's reader specs and kind rules", () => {
           insideElement({ coords: "10%,20,30,40", shape: "rect" }, variableElement("RESPONSE")),
           [responseDeclaration("RESPONSE", "point")],
         );
-        const built = yield* buildItem(document);
+        const built = yield* Effect.fromResult(buildItem(document));
 
         assert.deepStrictEqual(refusalsOf(document), []);
         assert.deepStrictEqual(built.processing, Option.none());
@@ -537,7 +539,7 @@ describe("the text family's reader specs and kind rules", () => {
           ],
         );
         const document = passedItem(expressionElement("is-null", [], [custom]));
-        const built = yield* buildItem(document);
+        const built = yield* Effect.fromResult(buildItem(document));
         const [rule] = Option.getOrElse(built.processing, () => []);
         const isNull = rule?.kind === "set-outcome" ? rule.expression : undefined;
         const read = isNull?.kind === "is-null" ? isNull.operands[0] : undefined;

@@ -14,7 +14,7 @@
  *
  * @module
  */
-import { Effect, Option, Result, pipe } from "effect";
+import { Option, Result, pipe } from "effect";
 import type { SourceElement } from "#plate/document/source.ts";
 import {
   coordsOf,
@@ -34,7 +34,7 @@ import {
   singleOf,
   stringOrRefOf,
 } from "#plate/model/expression.ts";
-import type { FamilyRules, KindRule } from "#plate/model/expression.ts";
+import type { Expression, FamilyRules, KindRule } from "#plate/model/expression.ts";
 import type { FamilyReaders, ReaderSpec, Variant } from "#plate/model/expressions/read.ts";
 import { compile } from "#plate/model/regex.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
@@ -128,8 +128,8 @@ const requiredBoolean = (
   walk: ModelWalk,
   element: SourceElement,
   name: string,
-): Effect.Effect<boolean, Refusal> =>
-  Effect.flatMap(requiredAttribute(walk, element, name), () =>
+): Result.Result<boolean, Refusal> =>
+  Result.flatMap(requiredAttribute(walk, element, name), () =>
     xsBoolean(walk, element, name, false),
   );
 
@@ -144,7 +144,7 @@ const stringMatchReader: ReaderSpec<"string-match"> = {
   _tag: "generic",
   arity: "two",
   attributes: (context, element) =>
-    Effect.gen(function* readStringMatchFlags() {
+    Result.gen(function* readStringMatchFlags() {
       const caseSensitive = yield* requiredBoolean(context.walk, element, "case-sensitive");
       const substring = yield* xsBoolean(context.walk, element, "substring", false);
 
@@ -162,7 +162,7 @@ const substringReader: ReaderSpec<"substring"> = {
   _tag: "generic",
   arity: "two",
   attributes: (context, element) =>
-    Effect.map(
+    Result.map(
       requiredBoolean(context.walk, element, "case-sensitive"),
       (caseSensitive) => (operands) => ({ caseSensitive, kind: "substring", operands }),
     ),
@@ -192,7 +192,7 @@ const substringReader: ReaderSpec<"substring"> = {
 const patternMatchReader: ReaderSpec<"pattern-match"> = {
   _tag: "custom",
   read: (context, element) =>
-    Effect.gen(function* readPatternMatch() {
+    Result.gen(function* readPatternMatch() {
       const [operand, ...extra] = elementsOf(element);
       if (operand === undefined || extra.length > 0) {
         return yield* context.unread(element);
@@ -239,13 +239,13 @@ const patternMatchReader: ReaderSpec<"pattern-match"> = {
 const insideReader: ReaderSpec<"inside"> = {
   _tag: "custom",
   read: (context, element) =>
-    Effect.gen(function* readInside() {
+    Result.gen(function* readInside() {
       const [operand, ...extra] = elementsOf(element);
       if (operand === undefined || extra.length > 0) {
         return yield* context.unread(element);
       }
 
-      const shape = yield* Effect.flatMap(
+      const shape = yield* Result.flatMap(
         requiredAttribute(context.walk, element, "shape"),
         (attribute) => listed(context.walk, element, "shape", attribute, areaShapes),
       );
@@ -286,13 +286,13 @@ const insideReader: ReaderSpec<"inside"> = {
 const customOperatorReader: ReaderSpec<"custom-operator"> = {
   _tag: "custom",
   read: (context, element) =>
-    Effect.gen(function* readCustomOperator() {
+    Result.gen(function* readCustomOperator() {
       yield* context.mark(element, "qti-custom-operator");
 
-      const read = yield* Effect.forEach(
-        elementsOf(element).filter((child) => isQti(child)),
-        (child) => context.expression(child),
-      );
+      const read: Option.Option<Expression>[] = [];
+      for (const child of elementsOf(element).filter((each) => isQti(each))) {
+        read.push(yield* context.expression(child));
+      }
 
       return pipe(
         Option.all(read),

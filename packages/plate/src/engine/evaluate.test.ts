@@ -1015,7 +1015,7 @@ describe("response rules: lookup, exit and a typed NULL", () => {
     "[I-9a] an inline lookup through an interpolation table runs into a single outcome, and into a multiple or an ordered one is marked with processing none, as a match table's (repair7-1)",
     () =>
       Effect.gen(function* looksUpInline() {
-        const single = yield* buildItem(bandItem("single"));
+        const single = yield* Effect.fromResult(buildItem(bandItem("single")));
         const rules = yield* Option.match(single.processing, {
           onNone: () => Effect.die("the single outcome's lookup does not run"),
           onSome: Effect.succeed,
@@ -1044,7 +1044,7 @@ describe("response rules: lookup, exit and a typed NULL", () => {
         }
 
         for (const cardinality of ["multiple", "ordered"] as const) {
-          const marked = yield* buildItem(bandItem(cardinality));
+          const marked = yield* Effect.fromResult(buildItem(bandItem(cardinality)));
 
           assert.deepStrictEqual(marked.processing, Option.none(), cardinality);
           assert.deepStrictEqual(
@@ -1097,37 +1097,39 @@ describe("response rules: lookup, exit and a typed NULL", () => {
 
   it.effect("[I-9a] a nested fragment's rules run in its place", () =>
     Effect.gen(function* runsFragment() {
-      const built = yield* buildItem(
-        doc(
-          "items/fragment.xml",
-          el(
-            "qti-assessment-item",
-            [attr("identifier", "fragment"), attr("title", "Fragment")],
-            [
-              el("qti-outcome-declaration", [
-                attr("base-type", "float"),
-                attr("cardinality", "single"),
-                attr("identifier", "SCORE"),
-              ]),
-              el("qti-item-body"),
-              el(
-                "qti-response-processing",
-                [],
-                [
-                  scoreElement("1"),
-                  el(
-                    "qti-response-processing-fragment",
-                    [],
-                    [
-                      scoreElement("2"),
-                      el("qti-response-processing-fragment", [], [el("qti-exit-response")]),
-                      scoreElement("3"),
-                    ],
-                  ),
-                  scoreElement("4"),
-                ],
-              ),
-            ],
+      const built = yield* Effect.fromResult(
+        buildItem(
+          doc(
+            "items/fragment.xml",
+            el(
+              "qti-assessment-item",
+              [attr("identifier", "fragment"), attr("title", "Fragment")],
+              [
+                el("qti-outcome-declaration", [
+                  attr("base-type", "float"),
+                  attr("cardinality", "single"),
+                  attr("identifier", "SCORE"),
+                ]),
+                el("qti-item-body"),
+                el(
+                  "qti-response-processing",
+                  [],
+                  [
+                    scoreElement("1"),
+                    el(
+                      "qti-response-processing-fragment",
+                      [],
+                      [
+                        scoreElement("2"),
+                        el("qti-response-processing-fragment", [], [el("qti-exit-response")]),
+                        scoreElement("3"),
+                      ],
+                    ),
+                    scoreElement("4"),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -1191,24 +1193,32 @@ describe("evaluateExpression", () => {
 
   it.effect("a match tells an integer correct response beyond 2^53 from its neighbour", () =>
     Effect.gen(function* exactIntegerMatch() {
-      const built = yield* buildItem(
-        doc(
-          "items/exact.xml",
-          el(
-            "qti-assessment-item",
-            [attr("identifier", "exact"), attr("title", "Exact")],
-            [
-              el(
-                "qti-response-declaration",
-                [
-                  attr("base-type", "integer"),
-                  attr("cardinality", "single"),
-                  attr("identifier", "RESPONSE"),
-                ],
-                [el("qti-correct-response", [], [el("qti-value", [], [text("9007199254740993")])])],
-              ),
-              el("qti-item-body"),
-            ],
+      const built = yield* Effect.fromResult(
+        buildItem(
+          doc(
+            "items/exact.xml",
+            el(
+              "qti-assessment-item",
+              [attr("identifier", "exact"), attr("title", "Exact")],
+              [
+                el(
+                  "qti-response-declaration",
+                  [
+                    attr("base-type", "integer"),
+                    attr("cardinality", "single"),
+                    attr("identifier", "RESPONSE"),
+                  ],
+                  [
+                    el(
+                      "qti-correct-response",
+                      [],
+                      [el("qti-value", [], [text("9007199254740993")])],
+                    ),
+                  ],
+                ),
+                el("qti-item-body"),
+              ],
+            ),
           ),
         ),
       );

@@ -14,7 +14,7 @@
  *
  * @module
  */
-import { Effect, Option } from "effect";
+import { Option, Result } from "effect";
 import { enumerated, listed, requiredAttribute, requiredValue } from "#plate/model/attributes.ts";
 import { everyOperand, integerOrRefOf, roundingModes, singleOf } from "#plate/model/expression.ts";
 import type { FamilyRules, KindRule, ReferenceEntry } from "#plate/model/expression.ts";
@@ -91,7 +91,7 @@ export const roundingRules: FamilyRules<"equal-rounded" | "round" | "round-to" |
 const roundReader: ReaderSpec<"round"> = {
   _tag: "generic",
   arity: "one",
-  attributes: () => Effect.succeed((operands) => ({ kind: "round", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "round", operands })),
 };
 
 /**
@@ -100,7 +100,7 @@ const roundReader: ReaderSpec<"round"> = {
 const truncateReader: ReaderSpec<"truncate"> = {
   _tag: "generic",
   arity: "one",
-  attributes: () => Effect.succeed((operands) => ({ kind: "truncate", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "truncate", operands })),
 };
 
 /**
@@ -119,7 +119,7 @@ const roundToReader: ReaderSpec<"round-to"> = {
   _tag: "generic",
   arity: "one",
   attributes: (context, element) =>
-    Effect.gen(function* readRoundTo() {
+    Result.gen(function* readRoundTo() {
       const mode = yield* requiredAttribute(context.walk, element, "rounding-mode");
       const roundingMode = yield* listed(
         context.walk,
@@ -146,7 +146,7 @@ const equalRoundedReader: ReaderSpec<"equal-rounded"> = {
   _tag: "generic",
   arity: "two",
   attributes: (context, element) =>
-    Effect.gen(function* readEqualRounded() {
+    Result.gen(function* readEqualRounded() {
       const roundingMode = Option.getOrElse(
         yield* enumerated(context.walk, element, "rounding-mode", roundingModes),
         () => "significantFigures" as const,

@@ -246,7 +246,7 @@ describe("buildTest", () => {
     "[T-4] [T-7] [S-0] [S-7] reads a two-part test with a nested section as its tree, in document order",
     () =>
       Effect.gen(function* readsTwoParts() {
-        const built = yield* buildTest(twoParts);
+        const built = yield* Effect.fromResult(buildTest(twoParts));
 
         assert.deepStrictEqual(checkStructure(twoParts, tables), []);
         assert.strictEqual(built.document, "tests/test.xml");
@@ -319,7 +319,7 @@ describe("buildTest", () => {
     "holds each session-control attribute as written or absent, never filled in from a default",
     () =>
       Effect.gen(function* readsControl() {
-        const built = yield* buildTest(twoParts);
+        const built = yield* Effect.fromResult(buildTest(twoParts));
 
         assert.deepStrictEqual(nodeNamed(built, "S1a", "section").control, {
           ...absentControl,
@@ -383,7 +383,7 @@ describe("buildTest", () => {
             ],
           ),
         ]);
-        const built = yield* buildTest(marked);
+        const built = yield* Effect.fromResult(buildTest(marked));
         const firstSection = `${firstPart}/qti-assessment-section`;
 
         assert.deepStrictEqual(checkStructure(marked, tables), []);
@@ -440,7 +440,7 @@ describe("buildTest", () => {
             section("S2", [itemRef("I2", "items/two.xml"), itemRef("I3", "items/three.xml")]),
           ]),
         ]);
-        const built = yield* buildTest(adaptive);
+        const built = yield* Effect.fromResult(buildTest(adaptive));
 
         assert.deepStrictEqual(checkStructure(adaptive, tables), []);
         assert.deepStrictEqual(built.unsupported, [
@@ -476,16 +476,18 @@ describe("buildTest", () => {
         ]),
         el("qti-outcome-declaration", [attr("cardinality", "record"), attr("identifier", "REC")]),
       ];
-      const built = yield* buildTest(
-        test([...declarations, part("P1", "linear", "individual", [section("S1", [])])]),
+      const built = yield* Effect.fromResult(
+        buildTest(test([...declarations, part("P1", "linear", "individual", [section("S1", [])])])),
       );
-      const item = yield* buildItem(
-        doc(
-          "items/item.xml",
-          el(
-            "qti-assessment-item",
-            [attr("identifier", "item"), attr("title", "Item")],
-            declarations,
+      const item = yield* Effect.fromResult(
+        buildItem(
+          doc(
+            "items/item.xml",
+            el(
+              "qti-assessment-item",
+              [attr("identifier", "item"), attr("title", "Item")],
+              declarations,
+            ),
           ),
         ),
       );
@@ -518,12 +520,14 @@ describe("buildTest", () => {
     "[T-1] holds a test outcome of base type duration, its default read as seconds, and marks one of base type file",
     () =>
       Effect.gen(function* holdsDurationOutcome() {
-        const built = yield* buildTest(
-          test([
-            outcome("TIME", "duration", [defaultValue("90.5")]),
-            outcome("UPLOAD", "file"),
-            part("P1", "linear", "individual", [section("S1", [])]),
-          ]),
+        const built = yield* Effect.fromResult(
+          buildTest(
+            test([
+              outcome("TIME", "duration", [defaultValue("90.5")]),
+              outcome("UPLOAD", "file"),
+              part("P1", "linear", "individual", [section("S1", [])]),
+            ]),
+          ),
         );
 
         assert.deepStrictEqual([...built.outcomes.keys()], ["TIME"]);
@@ -562,16 +566,18 @@ describe("buildTest", () => {
         ),
         outcome("PASSED", "boolean"),
       ];
-      const built = yield* buildTest(
-        test([...declarations, part("P1", "linear", "individual", [section("S1", [])])]),
+      const built = yield* Effect.fromResult(
+        buildTest(test([...declarations, part("P1", "linear", "individual", [section("S1", [])])])),
       );
-      const item = yield* buildItem(
-        doc(
-          "items/item.xml",
-          el(
-            "qti-assessment-item",
-            [attr("identifier", "item"), attr("title", "Item")],
-            declarations,
+      const item = yield* Effect.fromResult(
+        buildItem(
+          doc(
+            "items/item.xml",
+            el(
+              "qti-assessment-item",
+              [attr("identifier", "item"), attr("title", "Item")],
+              declarations,
+            ),
           ),
         ),
       );
@@ -603,16 +609,18 @@ describe("buildTest", () => {
   it.effect("refuses a malformed normal-maximum on a test outcome at the attribute", () =>
     Effect.gen(function* refusesNormalMaximum() {
       const refusal = yield* Effect.flip(
-        buildTest(
-          test([
-            el("qti-outcome-declaration", [
-              attr("base-type", "float"),
-              attr("cardinality", "single"),
-              attr("identifier", "TOTAL"),
-              attr("normal-maximum", "ten"),
+        Effect.fromResult(
+          buildTest(
+            test([
+              el("qti-outcome-declaration", [
+                attr("base-type", "float"),
+                attr("cardinality", "single"),
+                attr("identifier", "TOTAL"),
+                attr("normal-maximum", "ten"),
+              ]),
+              part("P1", "linear", "individual", [section("S1", [])]),
             ]),
-            part("P1", "linear", "individual", [section("S1", [])]),
-          ]),
+          ),
         ),
       );
 
@@ -628,13 +636,15 @@ describe("buildTest", () => {
   it.effect("refuses a max-attempts outside xs:int at the attribute", () =>
     Effect.gen(function* refusesAttempts() {
       const refusal = yield* Effect.flip(
-        buildTest(
-          test([
-            part("P1", "linear", "individual", [
-              control(attr("max-attempts", "2147483648")),
-              section("S1", []),
+        Effect.fromResult(
+          buildTest(
+            test([
+              part("P1", "linear", "individual", [
+                control(attr("max-attempts", "2147483648")),
+                section("S1", []),
+              ]),
             ]),
-          ]),
+          ),
         ),
       );
 
@@ -740,20 +750,22 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
     "[T-9] declared holds every identifier the test's outcome and context declarations declare, those the model does not hold included",
     () =>
       Effect.gen(function* holdsDeclared() {
-        const built = yield* buildTest(
-          test([
-            outcome("SCORE", "float"),
-            el("qti-outcome-declaration", [
-              attr("cardinality", "record"),
-              attr("identifier", "DETAIL"),
+        const built = yield* Effect.fromResult(
+          buildTest(
+            test([
+              outcome("SCORE", "float"),
+              el("qti-outcome-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "DETAIL"),
+              ]),
+              el("qti-context-declaration", [
+                attr("base-type", "float"),
+                attr("cardinality", "single"),
+                attr("identifier", "I1.SCORE"),
+              ]),
+              part("P1", "linear", "individual", [section("S1", [itemRef("I1", "items/one.xml")])]),
             ]),
-            el("qti-context-declaration", [
-              attr("base-type", "float"),
-              attr("cardinality", "single"),
-              attr("identifier", "I1.SCORE"),
-            ]),
-            part("P1", "linear", "individual", [section("S1", [itemRef("I1", "items/one.xml")])]),
-          ]),
+          ),
         );
 
         assert.deepStrictEqual([...built.outcomes.keys()], ["SCORE"]);
@@ -763,7 +775,7 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
 
   it.effect("[T-9] absent, marked or runs: a test with no outcome processing is absent", () =>
     Effect.gen(function* absent() {
-      const built = yield* buildTest(twoParts);
+      const built = yield* Effect.fromResult(buildTest(twoParts));
 
       assert.deepStrictEqual(built.outcomeProcessing, { kind: "absent" });
     }),
@@ -802,7 +814,7 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
           ),
           el("qti-exit-test"),
         ]);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(built.unsupported, []);
@@ -852,7 +864,7 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
             ],
           ),
         ]);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
@@ -883,7 +895,7 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
           ],
           [outcome("numAttempts", "integer")],
         );
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(built.unsupported, []);
@@ -901,7 +913,7 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
           setting("qti-set-outcome-value", "TIME", variable("I1.duration")),
           setting("qti-set-outcome-value", "TIME", variable("duration")),
         ]);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
         const declared = test([
           outcome("P1.duration", "duration"),
           part("P1", "linear", "individual", [section("S1", [itemRef("I1", "items/one.xml")])]),
@@ -911,7 +923,7 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
             [setting("qti-set-outcome-value", "P1.duration", variable("P1.duration"))],
           ),
         ]);
-        const whole = yield* buildTest(declared);
+        const whole = yield* Effect.fromResult(buildTest(declared));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
@@ -932,11 +944,11 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
         const reads = (name: string): SourceDocument =>
           processed([setting("qti-set-outcome-value", "TIME", variable(name))]);
         const first = reads("I1.1.duration");
-        const built = yield* buildTest(first);
-        const padded = yield* buildTest(reads("I1.02.duration"));
-        const plain = yield* buildTest(reads("I1.duration"));
-        const scored = yield* buildTest(
-          processed([setting("qti-set-outcome-value", "SCORE", variable("I1.1.SCORE"))]),
+        const built = yield* Effect.fromResult(buildTest(first));
+        const padded = yield* Effect.fromResult(buildTest(reads("I1.02.duration")));
+        const plain = yield* Effect.fromResult(buildTest(reads("I1.duration")));
+        const scored = yield* Effect.fromResult(
+          buildTest(processed([setting("qti-set-outcome-value", "SCORE", variable("I1.1.SCORE"))])),
         );
 
         assert.deepStrictEqual(checkStructure(first, tables), []);
@@ -967,7 +979,7 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
             ),
           ),
         ]);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
@@ -999,7 +1011,7 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
             ]),
           ]),
         ]);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
         const weighted = nodeNamed(built, "I1", "item-ref");
         const plain = nodeNamed(built, "I2", "item-ref");
 
@@ -1169,7 +1181,7 @@ describe("buildTest's template defaults", () => {
           ),
           templateDefault("T1", baseValue("integer", "3")),
         ]);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(defaultsOf(built), [
@@ -1193,7 +1205,7 @@ describe("buildTest's template defaults", () => {
           templateDefault("T2", baseValue("integer", "2")),
           templateDefault("T3", variable("S1.duration")),
         ]);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(defaultsOf(built), [
@@ -1215,7 +1227,7 @@ describe("buildTest's template defaults", () => {
           templateDefault("T2", variable("SCORE")),
           templateDefault("T3", variable("duration")),
         ]);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(defaultsOf(built), [
@@ -1238,7 +1250,7 @@ describe("buildTest's template defaults", () => {
           ),
           templateDefault("T2", baseValue("integer", "2")),
         ]);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(defaultsOf(built), [
@@ -1264,7 +1276,7 @@ describe("buildTest's template defaults", () => {
           setting("qti-set-outcome-value", "SCORE", variable("I1.SCORE")),
           setting("qti-set-outcome-value", "TIME", variable("S2.duration")),
         ]);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
         const withDefaults = referring(
           "I0",
           [setting("qti-set-outcome-value", "SCORE", baseValue("float", "1"))],
@@ -1273,12 +1285,14 @@ describe("buildTest's template defaults", () => {
             templateDefault("T2", baseValue("integer", "2")),
           ],
         );
-        const defaultsBuilt = yield* buildTest(withDefaults);
-        const own = yield* buildTest(
-          referring("I1", [setting("qti-set-outcome-value", "SCORE", variable("I1.SCORE"))]),
+        const defaultsBuilt = yield* Effect.fromResult(buildTest(withDefaults));
+        const own = yield* Effect.fromResult(
+          buildTest(
+            referring("I1", [setting("qti-set-outcome-value", "SCORE", variable("I1.SCORE"))]),
+          ),
         );
-        const unreferred = yield* buildTest(
-          processed([setting("qti-set-outcome-value", "SCORE", variable("I9.SCORE"))]),
+        const unreferred = yield* Effect.fromResult(
+          buildTest(processed([setting("qti-set-outcome-value", "SCORE", variable("I9.SCORE"))])),
         );
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
@@ -1330,8 +1344,8 @@ describe("buildTest's template defaults", () => {
           ]),
           el("qti-outcome-processing", [], rules),
         ]);
-        const built = yield* buildTest(once);
-        const repeated = yield* buildTest(replacing);
+        const built = yield* Effect.fromResult(buildTest(once));
+        const repeated = yield* Effect.fromResult(buildTest(replacing));
 
         assert.deepStrictEqual(checkStructure(once, tables), []);
         assert.deepStrictEqual(checkStructure(replacing, tables), []);
@@ -1376,7 +1390,7 @@ describe("buildTest's template defaults", () => {
             ]),
           ]),
         ]);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(built.repeatable, new Set(["a", "b", "f"]));
@@ -1392,7 +1406,7 @@ describe("buildTest's template defaults", () => {
           "a",
           names.map((name) => setting("qti-set-outcome-value", "SCORE", variable(name))),
         );
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
@@ -1416,7 +1430,7 @@ describe("buildTest's template defaults", () => {
             templateDefault("T5", baseValue("integer", "2")),
           ],
         );
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(nodeNamed(built, "a", "item-ref").templateDefaults, [
@@ -1469,9 +1483,9 @@ describe("buildTest's template defaults", () => {
             setting("qti-set-outcome-value", "SCORE", variable(name)),
           ),
         );
-        const ownBuilt = yield* buildTest(ownAB);
-        const repeatableBuilt = yield* buildTest(repeatable);
-        const apartBuilt = yield* buildTest(apart);
+        const ownBuilt = yield* Effect.fromResult(buildTest(ownAB));
+        const repeatableBuilt = yield* Effect.fromResult(buildTest(repeatable));
+        const apartBuilt = yield* Effect.fromResult(buildTest(apart));
 
         for (const document of [ownAB, repeatable, apart]) {
           assert.deepStrictEqual(checkStructure(document, tables), []);
@@ -1496,7 +1510,7 @@ describe("buildTest's template defaults", () => {
     () =>
       Effect.gen(function* marksBesideSectionRef() {
         const document = referring("I0", aggregating, [], counters);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
@@ -1525,7 +1539,7 @@ describe("buildTest's template defaults", () => {
             [],
             counters,
           );
-          const built = yield* buildTest(document);
+          const built = yield* Effect.fromResult(buildTest(document));
 
           assert.deepStrictEqual(checkStructure(document, tables), [], local);
           assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" }, local);
@@ -1546,7 +1560,7 @@ describe("buildTest's template defaults", () => {
     () =>
       Effect.gen(function* runsWithoutSectionRef() {
         const document = processed(aggregating, counters);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.strictEqual(built.outcomeProcessing.kind, "runs");
@@ -1564,7 +1578,7 @@ describe("buildTest's template defaults", () => {
           [],
           counters,
         );
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.strictEqual(built.outcomeProcessing.kind, "runs");
@@ -1580,7 +1594,7 @@ describe("withLtiLinks", () => {
     "align-54 LTI item ref E21: leaves each item ref that names an LTI link out of the tree, a nested section's included, and marks it lti-link at its path after the test's own marks, once each; with none it gives the test back",
     () =>
       Effect.gen(function* linkedItemRefs() {
-        const built = yield* buildTest(twoParts);
+        const built = yield* Effect.fromResult(buildTest(twoParts));
         const nested = `${root}/qti-test-part[1]/qti-assessment-section/qti-assessment-section/qti-assessment-item-ref`;
         const second = `${root}/qti-test-part[2]/qti-assessment-section/qti-assessment-item-ref`;
         const linked = withLtiLinks(
@@ -1622,7 +1636,7 @@ describe("withLtiLinks", () => {
           ],
           counters,
         );
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
         const ref = `${root}/qti-test-part/qti-assessment-section/qti-assessment-item-ref`;
         const linked = withLtiLinks(
           {
@@ -1665,7 +1679,7 @@ describe("withLtiLinks", () => {
         const document = processed([
           setting("qti-set-outcome-value", "SCORE", variable("I1.SCORE")),
         ]);
-        const built = yield* buildTest(document);
+        const built = yield* Effect.fromResult(buildTest(document));
         const ref = `${root}/qti-test-part/qti-assessment-section/qti-assessment-item-ref`;
         const linked = withLtiLinks(built, [{ identifier: "I1", path: ref }], document);
 

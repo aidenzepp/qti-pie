@@ -12,7 +12,7 @@
  *
  * @module
  */
-import { Array as Arr, Effect, Option, pipe } from "effect";
+import { Array as Arr, Option, Result } from "effect";
 import { attributePath, walk } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import {
@@ -284,8 +284,8 @@ const requiredListed = <const T extends string>(
   element: SourceElement,
   name: string,
   allowed: readonly T[],
-): Effect.Effect<T, Refusal> =>
-  Effect.flatMap(requiredAttribute(build, element, name), (attribute) =>
+): Result.Result<T, Refusal> =>
+  Result.flatMap(requiredAttribute(build, element, name), (attribute) =>
     listed(build, element, name, attribute, allowed),
   );
 
@@ -301,16 +301,16 @@ const booleanValue = (
   build: ModelWalk,
   element: SourceElement,
   attribute: SourceAttribute,
-): Effect.Effect<boolean, Refusal> =>
+): Result.Result<boolean, Refusal> =>
   Option.match(xsBooleanOf(attribute.value), {
     onNone: () =>
-      Effect.fail(
+      Result.fail(
         refusal(build, "value-type", attributePath(pathOf(build, element), attribute), {
           baseType: "boolean",
           lexical: attribute.value,
         }),
       ),
-    onSome: (value) => Effect.succeed(value),
+    onSome: (value) => Result.succeed(value),
   });
 
 /**
@@ -325,8 +325,8 @@ const booleanAttribute = (
   build: ModelWalk,
   element: SourceElement,
   name: string,
-): Effect.Effect<Option.Option<boolean>, Refusal> =>
-  Effect.transposeOption(
+): Result.Result<Option.Option<boolean>, Refusal> =>
+  Result.transposeOption(
     Option.map(attributeOf(element, name), (attribute) => booleanValue(build, element, attribute)),
   );
 
@@ -342,8 +342,8 @@ const requiredBoolean = (
   build: ModelWalk,
   element: SourceElement,
   name: string,
-): Effect.Effect<boolean, Refusal> =>
-  Effect.flatMap(requiredAttribute(build, element, name), (attribute) =>
+): Result.Result<boolean, Refusal> =>
+  Result.flatMap(requiredAttribute(build, element, name), (attribute) =>
     booleanValue(build, element, attribute),
   );
 
@@ -361,8 +361,8 @@ const intAttribute = (
   build: ModelWalk,
   element: SourceElement,
   name: string,
-): Effect.Effect<Option.Option<number>, Refusal> =>
-  Effect.transposeOption(
+): Result.Result<Option.Option<number>, Refusal> =>
+  Result.transposeOption(
     Option.map(attributeOf(element, name), (attribute) =>
       Option.match(
         Option.filter(
@@ -371,13 +371,13 @@ const intAttribute = (
         ),
         {
           onNone: () =>
-            Effect.fail(
+            Result.fail(
               refusal(build, "value-type", attributePath(pathOf(build, element), attribute), {
                 baseType: "xs:int",
                 lexical: trimXmlSpace(attribute.value),
               }),
             ),
-          onSome: (value) => Effect.succeed(Number(value)),
+          onSome: (value) => Result.succeed(Number(value)),
         },
       ),
     ),
@@ -394,18 +394,28 @@ const intAttribute = (
 const controlOf = (
   build: ModelWalk,
   owner: SourceElement,
-): Effect.Effect<ControlAttributes, Refusal> =>
+): Result.Result<ControlAttributes, Refusal> =>
   Option.match(Arr.head(childrenNamed(owner, "qti-item-session-control")), {
-    onNone: () => Effect.succeed(absentControl),
+    onNone: () => Result.succeed(absentControl),
     onSome: (control) =>
-      Effect.all({
-        allowComment: booleanAttribute(build, control, "allow-comment"),
-        allowReview: booleanAttribute(build, control, "allow-review"),
-        allowSkipping: booleanAttribute(build, control, "allow-skipping"),
-        maxAttempts: intAttribute(build, control, "max-attempts"),
-        showFeedback: booleanAttribute(build, control, "show-feedback"),
-        showSolution: booleanAttribute(build, control, "show-solution"),
-        validateResponses: booleanAttribute(build, control, "validate-responses"),
+      Result.gen(function* readControl() {
+        const allowComment = yield* booleanAttribute(build, control, "allow-comment");
+        const allowReview = yield* booleanAttribute(build, control, "allow-review");
+        const allowSkipping = yield* booleanAttribute(build, control, "allow-skipping");
+        const maxAttempts = yield* intAttribute(build, control, "max-attempts");
+        const showFeedback = yield* booleanAttribute(build, control, "show-feedback");
+        const showSolution = yield* booleanAttribute(build, control, "show-solution");
+        const validateResponses = yield* booleanAttribute(build, control, "validate-responses");
+
+        return {
+          allowComment,
+          allowReview,
+          allowSkipping,
+          maxAttempts,
+          showFeedback,
+          showSolution,
+          validateResponses,
+        };
       }),
   });
 
@@ -424,12 +434,12 @@ const controlOf = (
 const weightOf = (
   build: ModelWalk,
   element: SourceElement,
-): Effect.Effect<readonly [string, number], Refusal> =>
-  Effect.gen(function* readWeight() {
+): Result.Result<readonly [string, number], Refusal> =>
+  Result.gen(function* readWeight() {
     const identifier = yield* identifierAttribute(build, element, "identifier");
     const written = yield* requiredAttribute(build, element, "value");
     const lexical = trimXmlSpace(written.value);
-    const value = yield* Effect.mapError(Effect.fromResult(parseLexical("float", lexical)), () =>
+    const value = yield* Result.mapError(parseLexical("float", lexical), () =>
       refusal(build, "value-type", attributePath(pathOf(build, element), written), {
         baseType: "xs:double",
         lexical,
@@ -450,11 +460,13 @@ const weightOf = (
 const mappingOf = (
   build: ModelWalk,
   element: SourceElement,
-): Effect.Effect<readonly [string, string], Refusal> =>
-  Effect.all([
-    identifierAttribute(build, element, "target-identifier"),
-    identifierAttribute(build, element, "source-identifier"),
-  ]);
+): Result.Result<readonly [string, string], Refusal> =>
+  Result.gen(function* readMapping() {
+    const target = yield* identifierAttribute(build, element, "target-identifier");
+    const source = yield* identifierAttribute(build, element, "source-identifier");
+
+    return [target, source] as const;
+  });
 
 /**
  * Read a `qti-template-default` into the default the engine applies, none when the engine cannot
@@ -466,7 +478,7 @@ const mappingOf = (
  */
 type DefaultReader = (
   element: SourceElement,
-) => Effect.Effect<Option.Option<TemplateDefault>, Refusal>;
+) => Result.Result<Option.Option<TemplateDefault>, Refusal>;
 
 /**
  * Read a `qti-assessment-item-ref`, its weights, its variable mappings and its template defaults
@@ -482,23 +494,27 @@ const itemRef = (
   build: ModelWalk,
   readDefault: DefaultReader,
   element: SourceElement,
-): Effect.Effect<ItemRef, Refusal> =>
-  Effect.gen(function* readItemRef() {
+): Result.Result<ItemRef, Refusal> =>
+  Result.gen(function* readItemRef() {
     const identifier = yield* identifierAttribute(build, element, "identifier");
     const href = yield* requiredValue(build, element, "href");
     const required = yield* xsBoolean(build, element, "required", false);
     const fixed = yield* xsBoolean(build, element, "fixed", false);
     const control = yield* controlOf(build, element);
-    const mappings = yield* Effect.forEach(childrenNamed(element, "qti-variable-mapping"), (each) =>
-      mappingOf(build, each),
-    );
-    const weights = yield* Effect.forEach(childrenNamed(element, "qti-weight"), (each) =>
-      weightOf(build, each),
-    );
-    const templateDefaults = yield* Effect.forEach(
-      childrenNamed(element, "qti-template-default"),
-      readDefault,
-    );
+    const mappings: (readonly [string, string])[] = [];
+    for (const each of childrenNamed(element, "qti-variable-mapping")) {
+      mappings.push(yield* mappingOf(build, each));
+    }
+
+    const weights: (readonly [string, number])[] = [];
+    for (const each of childrenNamed(element, "qti-weight")) {
+      weights.push(yield* weightOf(build, each));
+    }
+
+    const templateDefaults: Option.Option<TemplateDefault>[] = [];
+    for (const each of childrenNamed(element, "qti-template-default")) {
+      templateDefaults.push(yield* readDefault(each));
+    }
 
     return {
       category: Option.match(valueOf(element, "category"), {
@@ -530,8 +546,8 @@ const section = (
   build: ModelWalk,
   readDefault: DefaultReader,
   element: SourceElement,
-): Effect.Effect<Section, Refusal> =>
-  Effect.gen(function* readSection() {
+): Result.Result<Section, Refusal> =>
+  Result.gen(function* readSection() {
     const identifier = yield* identifierAttribute(build, element, "identifier");
     const required = yield* xsBoolean(build, element, "required", false);
     const fixed = yield* xsBoolean(build, element, "fixed", false);
@@ -539,18 +555,19 @@ const section = (
     const visible = yield* requiredBoolean(build, element, "visible");
     const keepTogether = yield* xsBoolean(build, element, "keep-together", true);
     const control = yield* controlOf(build, element);
-    const children = yield* Effect.forEach(
-      element.children.filter(
-        (child): child is SourceElement =>
-          child.kind === "element" &&
-          isQti(child) &&
-          (child.local === "qti-assessment-section" || child.local === "qti-assessment-item-ref"),
-      ),
-      (child): Effect.Effect<SectionChild, Refusal> =>
+    const children: SectionChild[] = [];
+    for (const child of element.children.filter(
+      (each): each is SourceElement =>
+        each.kind === "element" &&
+        isQti(each) &&
+        (each.local === "qti-assessment-section" || each.local === "qti-assessment-item-ref"),
+    )) {
+      children.push(
         child.local === "qti-assessment-section"
-          ? section(build, readDefault, child)
-          : itemRef(build, readDefault, child),
-    );
+          ? yield* section(build, readDefault, child)
+          : yield* itemRef(build, readDefault, child),
+      );
+    }
 
     return {
       children,
@@ -577,16 +594,16 @@ const testPart = (
   build: ModelWalk,
   readDefault: DefaultReader,
   element: SourceElement,
-): Effect.Effect<TestPart, Refusal> =>
-  Effect.gen(function* readTestPart() {
+): Result.Result<TestPart, Refusal> =>
+  Result.gen(function* readTestPart() {
     const identifier = yield* identifierAttribute(build, element, "identifier");
     const navigation = yield* requiredListed(build, element, "navigation-mode", navigationModes);
     const submission = yield* requiredListed(build, element, "submission-mode", submissionModes);
     const control = yield* controlOf(build, element);
-    const children = yield* Effect.forEach(
-      childrenNamed(element, "qti-assessment-section"),
-      (child) => section(build, readDefault, child),
-    );
+    const children: Section[] = [];
+    for (const child of childrenNamed(element, "qti-assessment-section")) {
+      children.push(yield* section(build, readDefault, child));
+    }
 
     return { children, control, identifier, navigation, submission };
   });
@@ -1228,16 +1245,16 @@ const processingReading = (
 
   return {
     declared: named,
-    mark: (element, feature) =>
-      Effect.sync(() => {
-        record(element, feature);
-      }),
-    unread: (element, feature = nameOf(element)) =>
-      Effect.sync(() => {
-        record(element, feature);
+    mark: (element, feature) => {
+      record(element, feature);
 
-        return Option.none();
-      }),
+      return Result.void;
+    },
+    unread: (element, feature = nameOf(element)) => {
+      record(element, feature);
+
+      return Result.succeed(Option.none());
+    },
     walk: build,
   };
 };
@@ -1263,13 +1280,16 @@ const branchOf = (when: Expression, then: readonly Rule[]): Branch => ({ then, w
 const outcomeRules = (
   reading: ExpressionReading,
   elements: readonly SourceElement[],
-): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> =>
-  pipe(
-    elements,
-    // oxlint-disable-next-line eslint/no-use-before-define -- `outcomeRules` and `outcomeRule` are mutually recursive, as conditions and fragments nest; the call runs only after both are defined.
-    Effect.forEach((element) => outcomeRule(reading, element)),
-    Effect.map((read) => Option.map(Option.all(read), (each) => each.flat())),
-  );
+): Result.Result<Option.Option<readonly Rule[]>, Refusal> =>
+  Result.gen(function* readOutcomeRules() {
+    const read: Option.Option<readonly Rule[]>[] = [];
+    for (const element of elements) {
+      // oxlint-disable-next-line eslint/no-use-before-define -- `outcomeRules` and `outcomeRule` are mutually recursive, as conditions and fragments nest; the call runs only after both are defined.
+      read.push(yield* outcomeRule(reading, element));
+    }
+
+    return Option.map(Option.all(read), (each) => each.flat());
+  });
 
 /**
  * Read a `qti-outcome-if` or `qti-outcome-else-if`: its first child is the condition and the rest
@@ -1283,8 +1303,8 @@ const outcomeRules = (
 const outcomeBranch = (
   reading: ExpressionReading,
   element: SourceElement,
-): Effect.Effect<Option.Option<Branch>, Refusal> =>
-  Effect.gen(function* readOutcomeBranch() {
+): Result.Result<Option.Option<Branch>, Refusal> =>
+  Result.gen(function* readOutcomeBranch() {
     const [test, ...body] = elementsOf(element);
     if (test === undefined) {
       return yield* reading.unread(element);
@@ -1318,24 +1338,28 @@ const isOutcomeBranch = (part: SourceElement): boolean =>
 const outcomeCondition = (
   reading: ExpressionReading,
   element: SourceElement,
-): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> =>
-  Effect.gen(function* readOutcomeCondition() {
+): Result.Result<Option.Option<readonly Rule[]>, Refusal> =>
+  Result.gen(function* readOutcomeCondition() {
     const parts = elementsOf(element);
-    const branches = yield* Effect.forEach(parts.filter(isOutcomeBranch), (part) =>
-      outcomeBranch(reading, part),
-    );
+    const branches: Option.Option<Branch>[] = [];
+    for (const part of parts.filter(isOutcomeBranch)) {
+      branches.push(yield* outcomeBranch(reading, part));
+    }
+
     const otherwise = yield* Option.match(
       Arr.findFirst(parts, (part) => isQti(part, "qti-outcome-else")),
       {
-        onNone: () => Effect.succeed(Option.some(Option.none<readonly Rule[]>())),
+        onNone: () => Result.succeed(Option.some(Option.none<readonly Rule[]>())),
         onSome: (part) =>
-          Effect.map(outcomeRules(reading, elementsOf(part)), Option.map(Option.some)),
+          Result.map(outcomeRules(reading, elementsOf(part)), Option.map(Option.some)),
       },
     );
-    const strays = yield* Effect.forEach(
-      parts.filter((part) => !isOutcomeBranch(part) && !isQti(part, "qti-outcome-else")),
-      (part) => reading.unread(part),
-    );
+    const strays: Option.Option<never>[] = [];
+    for (const part of parts.filter(
+      (each) => !isOutcomeBranch(each) && !isQti(each, "qti-outcome-else"),
+    )) {
+      strays.push(yield* reading.unread(part));
+    }
 
     return Option.map(
       Option.all({ branches: Option.all(branches), otherwise, strays: Option.all(strays) }),
@@ -1359,8 +1383,8 @@ const outcomeSetting = (
   reading: ExpressionReading,
   element: SourceElement,
   kind: "lookup-outcome" | "set-outcome",
-): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> =>
-  Effect.gen(function* readOutcomeSetting() {
+): Result.Result<Option.Option<readonly Rule[]>, Refusal> =>
+  Result.gen(function* readOutcomeSetting() {
     const identifier = yield* identifierAttribute(reading.walk, element, "identifier");
     const [operand, ...extra] = elementsOf(element);
     if (operand === undefined || extra.length > 0) {
@@ -1387,13 +1411,13 @@ const outcomeSetting = (
 const outcomeRule = (
   reading: ExpressionReading,
   element: SourceElement,
-): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> => {
+): Result.Result<Option.Option<readonly Rule[]>, Refusal> => {
   if (isQti(element, "qti-outcome-processing-fragment")) {
     return outcomeRules(reading, elementsOf(element));
   }
 
   if (isQti(element, "qti-exit-test")) {
-    return Effect.succeed(Option.some<readonly Rule[]>([{ kind: "exit" }]));
+    return Result.succeed(Option.some<readonly Rule[]>([{ kind: "exit" }]));
   }
 
   if (isQti(element, "qti-set-outcome-value")) {
@@ -1471,8 +1495,8 @@ const outcomeProcessingOf = (
   build: ModelWalk,
   element: SourceElement,
   names: ProcessingNames,
-): Effect.Effect<ReadProcessing, Refusal> =>
-  Effect.gen(function* readOutcomeProcessing() {
+): Result.Result<ReadProcessing, Refusal> =>
+  Result.gen(function* readOutcomeProcessing() {
     const recorded: MarkedFeature[] = [];
     const tree = yield* outcomeRules(
       processingReading(build, names.named, recorded),
@@ -1530,8 +1554,8 @@ const templateDefaultOf = (
   build: ModelWalk,
   names: ProcessingNames,
   element: SourceElement,
-): Effect.Effect<ReadDefault, Refusal> =>
-  Effect.gen(function* readTemplateDefault() {
+): Result.Result<ReadDefault, Refusal> =>
+  Result.gen(function* readTemplateDefault() {
     const templateIdentifier = yield* identifierAttribute(build, element, "template-identifier");
     const recorded: MarkedFeature[] = [];
     const reading = processingReading(build, names.named, recorded);
@@ -1588,8 +1612,8 @@ const templateDefaultOf = (
  *   space. A document the validator would refuse can also fail with `missing-attribute` or
  *   `attribute-type`.
  */
-export const buildTest = (source: SourceDocument): Effect.Effect<Test, Refusal> =>
-  Effect.gen(function* readTest() {
+export const buildTest = (source: SourceDocument): Result.Result<Test, Refusal> =>
+  Result.gen(function* readTest() {
     const build: ModelWalk = { builder: "buildTest", document: source, paths: pathsOf(source) };
     const { root } = source;
     const identifier = yield* identifierAttribute(build, root, "identifier");
@@ -1605,19 +1629,21 @@ export const buildTest = (source: SourceDocument): Effect.Effect<Test, Refusal> 
     const names = processingNamesOf(root, outcomes);
     const placed = new Map<SourceElement, readonly MarkedFeature[]>();
     const readDefault: DefaultReader = (element) =>
-      Effect.gen(function* readPlacedDefault() {
+      Result.gen(function* readPlacedDefault() {
         const read = yield* templateDefaultOf(build, names, element);
         placed.set(element, read.marks);
 
         return read.templateDefault;
       });
-    const parts = yield* Effect.forEach(childrenNamed(root, "qti-test-part"), (part) =>
-      testPart(build, readDefault, part),
-    );
+    const parts: TestPart[] = [];
+    for (const part of childrenNamed(root, "qti-test-part")) {
+      parts.push(yield* testPart(build, readDefault, part));
+    }
+
     const processing = Arr.head(childrenNamed(root, "qti-outcome-processing"));
     const read = yield* Option.match(processing, {
       onNone: () =>
-        Effect.succeed<ReadProcessing>({ marks: [], outcomeProcessing: { kind: "absent" } }),
+        Result.succeed<ReadProcessing>({ marks: [], outcomeProcessing: { kind: "absent" } }),
       onSome: (element) => outcomeProcessingOf(build, element, names),
     });
     if (Option.isSome(processing)) {

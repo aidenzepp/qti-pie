@@ -12,12 +12,12 @@
  * with a notice beside its element. Its {@link Accepted} is the only input `redact` and `score`
  * take. On a test it builds the test model, the {@link AcceptedTest} a session starts from; a
  * section or a stimulus is accepted and marked, delivered by neither M2 nor M1. A refusal is a
- * verdict, never a failure, so `check` is a plain function; it lifts each builder, which stays an
- * Effect, once.
+ * verdict, never a failure, so `check` is a plain function; each builder returns a `Result`, which
+ * it reads with no Effect runtime.
  *
  * @module
  */
-import { Array as Arr, Brand, Effect, Option, Result } from "effect";
+import { Array as Arr, Brand, Option, Result } from "effect";
 import {
   attributePath,
   mathmlNamespace,
@@ -955,7 +955,7 @@ const checkItem = (
 ): Verdict => {
   const document = source.location;
   const secured = secure(source, tables);
-  const built = Effect.runSync(Effect.result(buildItem(secured.source)));
+  const built = buildItem(secured.source);
   if (Result.isFailure(built)) {
     return { document, kind: "item", refusals: [built.failure], verdict: "refused" };
   }
@@ -981,7 +981,7 @@ const checkItem = (
  */
 const checkTest = (source: SourceDocument, version: Option.Option<CpVersion>): Verdict => {
   const document = source.location;
-  const built = Effect.runSync(Effect.result(buildTest(source)));
+  const built = buildTest(source);
   if (Result.isFailure(built)) {
     return { document, kind: "test", refusals: [built.failure], verdict: "refused" };
   }

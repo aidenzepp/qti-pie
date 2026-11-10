@@ -10,7 +10,7 @@
  *
  * @module
  */
-import { Array as Arr, Effect, Option, Result, pipe } from "effect";
+import { Array as Arr, Option, Result, pipe } from "effect";
 import { attributePath, walk, xincludeNamespace } from "#plate/document/source.ts";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import {
@@ -1043,12 +1043,17 @@ const valueIn = (
   container: SourceElement,
   baseType: ModelledBaseType,
   cardinality: Value["cardinality"],
-): Effect.Effect<Value, Refusal> =>
-  Effect.forEach(childrenNamed(container, "qti-value"), (value) =>
-    typed(build, pathOf(build, value), parseElementText(baseType, textOf(value))),
-  ).pipe(
-    Effect.map((parsed) => ({ baseType, cardinality, values: parsed.flatMap(Option.toArray) })),
-  );
+): Result.Result<Value, Refusal> =>
+  Result.gen(function* readValueIn() {
+    const parsed: Option.Option<Single>[] = [];
+    for (const value of childrenNamed(container, "qti-value")) {
+      parsed.push(
+        yield* typed(build, pathOf(build, value), parseElementText(baseType, textOf(value))),
+      );
+    }
+
+    return { baseType, cardinality, values: parsed.flatMap(Option.toArray) };
+  });
 
 /**
  * Read a declaration's optional value container.
@@ -1065,8 +1070,8 @@ const optionalValue = (
   declaration: SourceElement,
   local: string,
   declared: Declared,
-): Effect.Effect<Option.Option<Value>, Refusal> =>
-  Effect.transposeOption(
+): Result.Result<Option.Option<Value>, Refusal> =>
+  Result.transposeOption(
     Option.map(Arr.head(childrenNamed(declaration, local)), (container) =>
       valueIn(build, container, declared.baseType, declared.cardinality),
     ),
@@ -1101,8 +1106,8 @@ interface WrittenType {
 const writtenType = (
   build: ModelWalk,
   declaration: SourceElement,
-): Effect.Effect<WrittenType, Refusal> =>
-  Effect.gen(function* readWrittenType() {
+): Result.Result<WrittenType, Refusal> =>
+  Result.gen(function* readWrittenType() {
     const identifier = yield* identifierAttribute(build, declaration, "identifier");
     yield* requiredAttribute(build, declaration, "cardinality");
 
@@ -1124,8 +1129,8 @@ const writtenType = (
 const declared = (
   build: ModelWalk,
   declaration: SourceElement,
-): Effect.Effect<Option.Option<Declared>, Refusal> =>
-  Effect.map(writtenType(build, declaration), ({ baseType, cardinality, identifier }) =>
+): Result.Result<Option.Option<Declared>, Refusal> =>
+  Result.map(writtenType(build, declaration), ({ baseType, cardinality, identifier }) =>
     Option.flatMap(Option.all({ baseType, cardinality }), (read) =>
       read.cardinality !== "record" && isModelled(read.baseType)
         ? Option.some({ baseType: read.baseType, cardinality: read.cardinality, identifier })
@@ -1149,8 +1154,8 @@ const unheldDeclaration = (
   build: ModelWalk,
   declaration: SourceElement,
   kind: UnheldDeclaration["kind"],
-): Effect.Effect<Option.Option<UnheldDeclaration>, Refusal> =>
-  Effect.map(writtenType(build, declaration), ({ baseType, cardinality, identifier }) =>
+): Result.Result<Option.Option<UnheldDeclaration>, Refusal> =>
+  Result.map(writtenType(build, declaration), ({ baseType, cardinality, identifier }) =>
     cardinality.pipe(
       Option.filter(
         (read) => read === "record" || Option.exists(baseType, (type) => type === "file"),
@@ -1181,27 +1186,30 @@ const mappingOf = (
   build: Build,
   mapping: SourceElement,
   baseType: ModelledBaseType,
-): Effect.Effect<Mapping, Refusal> =>
-  Effect.gen(function* readMapping() {
+): Result.Result<Mapping, Refusal> =>
+  Result.gen(function* readMapping() {
     const defaultValue = yield* floatAttribute(build, mapping, "default-value");
     const lowerBound = yield* floatAttribute(build, mapping, "lower-bound");
     const upperBound = yield* floatAttribute(build, mapping, "upper-bound");
-    const entries = yield* Effect.forEach(childrenNamed(mapping, "qti-map-entry"), (entry) =>
-      Effect.gen(function* mapEntry() {
-        const key = yield* requiredAttribute(build, entry, "map-key");
-        const value = yield* requiredAttribute(build, entry, "mapped-value");
-        const path = pathOf(build, entry);
+    const entries: MapEntry[] = [];
+    for (const entry of childrenNamed(mapping, "qti-map-entry")) {
+      entries.push(
+        yield* Result.gen(function* mapEntry() {
+          const key = yield* requiredAttribute(build, entry, "map-key");
+          const value = yield* requiredAttribute(build, entry, "mapped-value");
+          const path = pathOf(build, entry);
 
-        return {
-          caseSensitive: yield* xsBoolean(build, entry, "case-sensitive", false),
-          key: yield* typed(build, attributePath(path, key), parseLexical(baseType, key.value)),
-          value: floatOf(
-            build,
-            yield* typed(build, attributePath(path, value), parseLexical("float", value.value)),
-          ),
-        };
-      }),
-    );
+          return {
+            caseSensitive: yield* xsBoolean(build, entry, "case-sensitive", false),
+            key: yield* typed(build, attributePath(path, key), parseLexical(baseType, key.value)),
+            value: floatOf(
+              build,
+              yield* typed(build, attributePath(path, value), parseLexical("float", value.value)),
+            ),
+          };
+        }),
+      );
+    }
 
     return {
       defaultValue: Option.getOrElse(defaultValue, () => 0),
@@ -1223,9 +1231,9 @@ const mappingOf = (
 const areaEntryOf = (
   build: Build,
   entry: SourceElement,
-): Effect.Effect<{ readonly entry: AreaMapEntry; readonly percent: boolean }, Refusal> =>
-  Effect.gen(function* readAreaEntry() {
-    const shape = yield* Effect.flatMap(requiredAttribute(build, entry, "shape"), (attribute) =>
+): Result.Result<{ readonly entry: AreaMapEntry; readonly percent: boolean }, Refusal> =>
+  Result.gen(function* readAreaEntry() {
+    const shape = yield* Result.flatMap(requiredAttribute(build, entry, "shape"), (attribute) =>
       listed(build, entry, "shape", attribute, areaShapes),
     );
     const coords = yield* coordsOf(build, entry);
@@ -1250,14 +1258,15 @@ const areaEntryOf = (
  * @param mapping The mapping element.
  * @returns The mapping, or the refusal at the first attribute outside its type.
  */
-const areaMappingOf = (build: Build, mapping: SourceElement): Effect.Effect<AreaMapping, Refusal> =>
-  Effect.gen(function* readAreaMapping() {
+const areaMappingOf = (build: Build, mapping: SourceElement): Result.Result<AreaMapping, Refusal> =>
+  Result.gen(function* readAreaMapping() {
     const defaultValue = yield* floatAttribute(build, mapping, "default-value");
     const lowerBound = yield* floatAttribute(build, mapping, "lower-bound");
     const upperBound = yield* floatAttribute(build, mapping, "upper-bound");
-    const read = yield* Effect.forEach(childrenNamed(mapping, "qti-area-map-entry"), (entry) =>
-      areaEntryOf(build, entry),
-    );
+    const read: { readonly entry: AreaMapEntry; readonly percent: boolean }[] = [];
+    for (const entry of childrenNamed(mapping, "qti-area-map-entry")) {
+      read.push(yield* areaEntryOf(build, entry));
+    }
 
     return {
       defaultValue: Option.getOrElse(defaultValue, () => 0),
@@ -1297,10 +1306,10 @@ type WrittenField =
 const writtenField = (
   build: ModelWalk,
   value: SourceElement,
-): Effect.Effect<WrittenField, Refusal> =>
-  Effect.gen(function* readWrittenField() {
+): Result.Result<WrittenField, Refusal> =>
+  Result.gen(function* readWrittenField() {
     const identifier = yield* identifierAttribute(build, value, "field-identifier");
-    const baseType = yield* Effect.flatMap(
+    const baseType = yield* Result.flatMap(
       requiredAttribute(build, value, "base-type"),
       (attribute) => listed(build, value, "base-type", attribute, baseTypes),
     );
@@ -1334,10 +1343,17 @@ const writtenFields = (
   build: ModelWalk,
   declaration: SourceElement,
   local: string,
-): Effect.Effect<Option.Option<readonly WrittenField[]>, Refusal> =>
-  Effect.transposeOption(
+): Result.Result<Option.Option<readonly WrittenField[]>, Refusal> =>
+  Result.transposeOption(
     Option.map(Arr.head(childrenNamed(declaration, local)), (container) =>
-      Effect.forEach(childrenNamed(container, "qti-value"), (value) => writtenField(build, value)),
+      Result.gen(function* readWrittenFields() {
+        const fields: WrittenField[] = [];
+        for (const value of childrenNamed(container, "qti-value")) {
+          fields.push(yield* writtenField(build, value));
+        }
+
+        return fields;
+      }),
     ),
   );
 
@@ -1387,8 +1403,8 @@ type RecordResponse =
 const recordResponse = (
   build: ModelWalk,
   declaration: SourceElement,
-): Effect.Effect<RecordResponse, Refusal> =>
-  Effect.gen(function* readRecordResponse() {
+): Result.Result<RecordResponse, Refusal> =>
+  Result.gen(function* readRecordResponse() {
     const { baseType, cardinality, identifier } = yield* writtenType(build, declaration);
     if (!Option.exists(cardinality, (read) => read === "record")) {
       const other: RecordResponse = { kind: "other" };
@@ -1432,8 +1448,8 @@ const recordResponse = (
 const responseDeclaration = (
   build: Build,
   declaration: SourceElement,
-): Effect.Effect<Option.Option<ResponseDeclaration>, Refusal> =>
-  Effect.gen(function* readResponseDeclaration() {
+): Result.Result<Option.Option<ResponseDeclaration>, Refusal> =>
+  Result.gen(function* readResponseDeclaration() {
     const read = yield* declared(build, declaration);
     if (Option.isNone(read)) {
       return Option.none();
@@ -1441,12 +1457,12 @@ const responseDeclaration = (
 
     const correct = yield* optionalValue(build, declaration, "qti-correct-response", read.value);
     const defaultValue = yield* optionalValue(build, declaration, "qti-default-value", read.value);
-    const mapping = yield* Effect.transposeOption(
+    const mapping = yield* Result.transposeOption(
       Option.map(Arr.head(childrenNamed(declaration, "qti-mapping")), (element) =>
         mappingOf(build, element, read.value.baseType),
       ),
     );
-    const areaMapping = yield* Effect.transposeOption(
+    const areaMapping = yield* Result.transposeOption(
       pipe(
         Arr.head(childrenNamed(declaration, "qti-area-mapping")),
         Option.filter(() => read.value.baseType === "point"),
@@ -1469,26 +1485,31 @@ const responseDeclaration = (
 const viewAttribute = (
   declaration: SourceElement,
   refuse: AttributeRefusal,
-): Effect.Effect<Option.Option<readonly OutcomeView[]>, Refusal> =>
-  Effect.transposeOption(
+): Result.Result<Option.Option<readonly OutcomeView[]>, Refusal> =>
+  Result.transposeOption(
     Option.map(attributeOf(declaration, "view"), (attribute) =>
-      Effect.forEach(
-        attribute.value.split(xmlWhitespaceRun).filter((token) => token !== ""),
-        (token) =>
-          Option.match(
-            Arr.findFirst(outcomeViews, (view) => view === token),
-            {
-              onNone: () =>
-                Effect.fail(
-                  refuse(attribute, "attribute-type", {
-                    attribute: "view",
-                    value: attribute.value,
-                  }),
-                ),
-              onSome: (view) => Effect.succeed(view),
-            },
-          ),
-      ),
+      Result.gen(function* readViews() {
+        const views: OutcomeView[] = [];
+        for (const token of attribute.value.split(xmlWhitespaceRun).filter((each) => each !== "")) {
+          views.push(
+            yield* Option.match(
+              Arr.findFirst(outcomeViews, (view) => view === token),
+              {
+                onNone: () =>
+                  Result.fail(
+                    refuse(attribute, "attribute-type", {
+                      attribute: "view",
+                      value: attribute.value,
+                    }),
+                  ),
+                onSome: (view) => Result.succeed(view),
+              },
+            ),
+          );
+        }
+
+        return views;
+      }),
     ),
   );
 
@@ -1506,8 +1527,8 @@ const outcomeReporting = (
   build: ModelWalk,
   declaration: SourceElement,
   refuse: AttributeRefusal,
-): Effect.Effect<OutcomeReporting, Refusal> =>
-  Effect.gen(function* readOutcomeReporting() {
+): Result.Result<OutcomeReporting, Refusal> =>
+  Result.gen(function* readOutcomeReporting() {
     const view = yield* viewAttribute(declaration, refuse);
     const normalMaximum = yield* doubleAttribute(build, declaration, "normal-maximum", refuse);
     const normalMinimum = yield* doubleAttribute(build, declaration, "normal-minimum", refuse);
@@ -1537,8 +1558,8 @@ const tableDefault = (
   build: ModelWalk,
   table: SourceElement,
   baseType: ModelledBaseType,
-): Effect.Effect<Option.Option<Single>, Refusal> =>
-  Effect.transposeOption(
+): Result.Result<Option.Option<Single>, Refusal> =>
+  Result.transposeOption(
     Option.map(attributeOf(table, "default-value"), (attribute) =>
       typed(
         build,
@@ -1561,8 +1582,8 @@ const targetValue = (
   build: ModelWalk,
   entry: SourceElement,
   baseType: ModelledBaseType,
-): Effect.Effect<Single, Refusal> =>
-  Effect.flatMap(requiredAttribute(build, entry, "target-value"), (attribute) =>
+): Result.Result<Single, Refusal> =>
+  Result.flatMap(requiredAttribute(build, entry, "target-value"), (attribute) =>
     typed(
       build,
       attributePath(pathOf(build, entry), attribute),
@@ -1583,8 +1604,8 @@ const matchEntryOf = (
   build: ModelWalk,
   entry: SourceElement,
   baseType: ModelledBaseType,
-): Effect.Effect<MatchTableEntry, Refusal> =>
-  Effect.gen(function* readMatchEntry() {
+): Result.Result<MatchTableEntry, Refusal> =>
+  Result.gen(function* readMatchEntry() {
     const source = yield* requiredAttribute(build, entry, "source-value");
     const path = attributePath(pathOf(build, entry), source);
     const lexical = trimXmlSpace(source.value);
@@ -1593,7 +1614,7 @@ const matchEntryOf = (
       yield* typed(build, path, parseLexical("integer", lexical)),
     );
     if (sourceValue < leastInt || sourceValue > greatestInt) {
-      return yield* Effect.fail(
+      return yield* Result.fail(
         refusal(build, "value-type", path, { baseType: "xs:int", lexical }),
       );
     }
@@ -1614,8 +1635,8 @@ const interpolationEntryOf = (
   build: ModelWalk,
   entry: SourceElement,
   baseType: ModelledBaseType,
-): Effect.Effect<InterpolationTableEntry, Refusal> =>
-  Effect.gen(function* readInterpolationEntry() {
+): Result.Result<InterpolationTableEntry, Refusal> =>
+  Result.gen(function* readInterpolationEntry() {
     const source = yield* requiredAttribute(build, entry, "source-value");
     const sourceValue = floatOf(
       build,
@@ -1647,36 +1668,34 @@ const lookupTableOf = (
   build: ModelWalk,
   declaration: SourceElement,
   baseType: ModelledBaseType,
-): Effect.Effect<Option.Option<LookupTable>, Refusal> =>
-  Effect.transposeOption(
+): Result.Result<Option.Option<LookupTable>, Refusal> =>
+  Result.transposeOption(
     Option.orElse(
       Option.map(
         Arr.head(childrenNamed(declaration, "qti-match-table")),
-        (table): Effect.Effect<LookupTable, Refusal> =>
-          Effect.gen(function* readMatchTable() {
-            return {
-              defaultValue: yield* tableDefault(build, table, baseType),
-              entries: yield* Effect.forEach(
-                childrenNamed(table, "qti-match-table-entry"),
-                (entry) => matchEntryOf(build, entry, baseType),
-              ),
-              kind: "match" as const,
-            };
+        (table): Result.Result<LookupTable, Refusal> =>
+          Result.gen(function* readMatchTable() {
+            const defaultValue = yield* tableDefault(build, table, baseType);
+            const entries: MatchTableEntry[] = [];
+            for (const entry of childrenNamed(table, "qti-match-table-entry")) {
+              entries.push(yield* matchEntryOf(build, entry, baseType));
+            }
+
+            return { defaultValue, entries, kind: "match" as const };
           }),
       ),
       () =>
         Option.map(
           Arr.head(childrenNamed(declaration, "qti-interpolation-table")),
-          (table): Effect.Effect<LookupTable, Refusal> =>
-            Effect.gen(function* readInterpolationTable() {
-              return {
-                defaultValue: yield* tableDefault(build, table, baseType),
-                entries: yield* Effect.forEach(
-                  childrenNamed(table, "qti-interpolation-table-entry"),
-                  (entry) => interpolationEntryOf(build, entry, baseType),
-                ),
-                kind: "interpolation" as const,
-              };
+          (table): Result.Result<LookupTable, Refusal> =>
+            Result.gen(function* readInterpolationTable() {
+              const defaultValue = yield* tableDefault(build, table, baseType);
+              const entries: InterpolationTableEntry[] = [];
+              for (const entry of childrenNamed(table, "qti-interpolation-table-entry")) {
+                entries.push(yield* interpolationEntryOf(build, entry, baseType));
+              }
+
+              return { defaultValue, entries, kind: "interpolation" as const };
             }),
         ),
     ),
@@ -1695,8 +1714,8 @@ const lookupTableOf = (
 export const outcomeDeclaration = (
   build: ModelWalk,
   declaration: SourceElement,
-): Effect.Effect<Option.Option<OutcomeDeclaration>, Refusal> =>
-  Effect.gen(function* readOutcomeDeclaration() {
+): Result.Result<Option.Option<OutcomeDeclaration>, Refusal> =>
+  Result.gen(function* readOutcomeDeclaration() {
     const read = yield* declared(build, declaration);
     if (Option.isNone(read)) {
       return Option.none();
@@ -1725,8 +1744,8 @@ export const outcomeDeclaration = (
 const templateDeclaration = (
   build: ModelWalk,
   declaration: SourceElement,
-): Effect.Effect<Option.Option<TemplateDeclaration>, Refusal> =>
-  Effect.gen(function* readTemplateDeclaration() {
+): Result.Result<Option.Option<TemplateDeclaration>, Refusal> =>
+  Result.gen(function* readTemplateDeclaration() {
     const read = yield* declared(build, declaration);
     if (Option.isNone(read)) {
       return Option.none();
@@ -1747,12 +1766,11 @@ const templateDeclaration = (
  * @param path The part's path.
  * @returns The unsupported node.
  */
-const notice = (build: Build, feature: string, path: string): Effect.Effect<Unsupported> =>
-  Effect.sync(() => {
-    record(build, { feature, path, shown: "notice" });
+const notice = (build: Build, feature: string, path: string): Result.Result<Unsupported> => {
+  record(build, { feature, path, shown: "notice" });
 
-    return { feature, kind: "unsupported", path };
-  });
+  return Result.succeed({ feature, kind: "unsupported", path });
+};
 
 /**
  * Read a body element's attributes as written, without namespace declarations, attributes of
@@ -1779,12 +1797,16 @@ const bodyAttributes = (element: SourceElement): readonly BodyAttribute[] =>
 const bodyNodes = (
   build: Build,
   parent: SourceElement,
-): Effect.Effect<readonly BodyNode[], Refusal> =>
-  pipe(
-    parent.children,
-    // oxlint-disable-next-line eslint/no-use-before-define -- `bodyNodes` and `bodyNode` are mutually recursive, as body elements nest; the call runs only after both are defined.
-    Effect.forEach((child) => bodyNode(build, parent, child)),
-  );
+): Result.Result<readonly BodyNode[], Refusal> =>
+  Result.gen(function* readBodyNodes() {
+    const nodes: BodyNode[] = [];
+    for (const child of parent.children) {
+      // oxlint-disable-next-line eslint/no-use-before-define -- `bodyNodes` and `bodyNode` are mutually recursive, as body elements nest; the call runs only after both are defined.
+      nodes.push(yield* bodyNode(build, parent, child));
+    }
+
+    return nodes;
+  });
 
 /**
  * Read the content of an interaction's first child of one name, such as its `qti-prompt` or an
@@ -1799,8 +1821,8 @@ const firstContent = (
   build: Build,
   interaction: SourceElement,
   local: "qti-label" | "qti-prompt",
-): Effect.Effect<Option.Option<readonly BodyNode[]>, Refusal> =>
-  Effect.transposeOption(
+): Result.Result<Option.Option<readonly BodyNode[]>, Refusal> =>
+  Result.transposeOption(
     Option.map(Arr.head(childrenNamed(interaction, local)), (child) => {
       markElement(build, child, true);
 
@@ -1877,8 +1899,8 @@ const textFields = (
   build: Build,
   interaction: SourceElement,
   baseType: TextEntryInteraction["baseType"],
-): Effect.Effect<Omit<TextEntryInteraction, "cardinality" | "kind">, Refusal> =>
-  Effect.gen(function* readTextFields() {
+): Result.Result<Omit<TextEntryInteraction, "cardinality" | "kind">, Refusal> =>
+  Result.gen(function* readTextFields() {
     const base = yield* xsInt(build, interaction, "base");
 
     return {
@@ -1915,8 +1937,8 @@ const templateVisibilityOf = (
   build: Build,
   element: SourceElement,
   templateIdentifier: string,
-): Effect.Effect<TemplateVisibility, Refusal> =>
-  Effect.map(enumerated(build, element, "show-hide", showHides), (showHide) => ({
+): Result.Result<TemplateVisibility, Refusal> =>
+  Result.map(enumerated(build, element, "show-hide", showHides), (showHide) => ({
     showHide: Option.getOrElse(showHide, () => "show" as const),
     templateIdentifier,
   }));
@@ -1934,13 +1956,13 @@ const templateVisibilityOf = (
 const simpleChoiceOf = (
   build: Build,
   choice: SourceElement,
-): Effect.Effect<SimpleChoice, Refusal> =>
-  Effect.gen(function* simpleChoice() {
+): Result.Result<SimpleChoice, Refusal> =>
+  Result.gen(function* simpleChoice() {
     markElement(build, choice, true);
 
     const identifier = yield* identifierAttribute(build, choice, "identifier");
     const fixed = yield* xsBoolean(build, choice, "fixed", false);
-    const templateVisibility = yield* Effect.transposeOption(
+    const templateVisibility = yield* Result.transposeOption(
       Option.map(valueOf(choice, "template-identifier"), (written) =>
         templateVisibilityOf(build, choice, identifierOf(written)),
       ),
@@ -1966,16 +1988,16 @@ const choiceInteraction = (
   build: Build,
   interaction: SourceElement,
   cardinality: ChoiceInteraction["cardinality"],
-): Effect.Effect<ChoiceInteraction, Refusal> =>
-  Effect.gen(function* readChoice() {
+): Result.Result<ChoiceInteraction, Refusal> =>
+  Result.gen(function* readChoice() {
     const maxChoices = yield* countAttribute(build, interaction, "max-choices");
     const minChoices = yield* countAttribute(build, interaction, "min-choices");
     const shuffle = yield* xsBoolean(build, interaction, "shuffle", false);
     const prompt = yield* firstContent(build, interaction, "qti-prompt");
-    const choices = yield* Effect.forEach(
-      childrenNamed(interaction, "qti-simple-choice"),
-      (choice) => simpleChoiceOf(build, choice),
-    );
+    const choices: SimpleChoice[] = [];
+    for (const choice of childrenNamed(interaction, "qti-simple-choice")) {
+      choices.push(yield* simpleChoiceOf(build, choice));
+    }
 
     return {
       ariaLabel: valueOf(interaction, "aria-label"),
@@ -2013,16 +2035,16 @@ const choiceInteraction = (
 const inlineChoiceInteraction = (
   build: Build,
   interaction: SourceElement,
-): Effect.Effect<InlineChoiceInteraction, Refusal> =>
-  Effect.gen(function* readInlineChoice() {
+): Result.Result<InlineChoiceInteraction, Refusal> =>
+  Result.gen(function* readInlineChoice() {
     const minChoices = yield* countAttribute(build, interaction, "min-choices");
     const required = yield* xsBoolean(build, interaction, "required", false);
     const shuffle = yield* xsBoolean(build, interaction, "shuffle", false);
     const label = yield* firstContent(build, interaction, "qti-label");
-    const choices = yield* Effect.forEach(
-      childrenNamed(interaction, "qti-inline-choice"),
-      (choice) => simpleChoiceOf(build, choice),
-    );
+    const choices: SimpleChoice[] = [];
+    for (const choice of childrenNamed(interaction, "qti-inline-choice")) {
+      choices.push(yield* simpleChoiceOf(build, choice));
+    }
 
     return {
       ariaLabel: valueOf(interaction, "aria-label"),
@@ -2059,13 +2081,13 @@ const interactionNode = (
   build: Build,
   interaction: SourceElement,
   name: InteractionName,
-): Effect.Effect<BodyNode, Refusal> =>
-  Effect.gen(function* readInteraction() {
+): Result.Result<BodyNode, Refusal> =>
+  Result.gen(function* readInteraction() {
     const path = pathOf(build, interaction);
     const response = yield* requiredAttribute(build, interaction, "response-identifier");
     const declaration = boundDeclaration(build, interaction);
     if (Option.isNone(declaration)) {
-      return yield* Effect.fail(
+      return yield* Result.fail(
         refusal(build, "undeclared-response", attributePath(path, response), {
           response: identifierOf(response.value),
         }),
@@ -2176,8 +2198,8 @@ const normalizedString = (written: string): string => written.replaceAll(/[\t\n\
 const printedVariable = (
   build: Build,
   element: SourceElement,
-): Effect.Effect<PrintedVariable, Refusal> =>
-  Effect.gen(function* readPrintedVariable() {
+): Result.Result<PrintedVariable, Refusal> =>
+  Result.gen(function* readPrintedVariable() {
     markElement(build, element, true);
 
     const identifier = yield* identifierAttribute(build, element, "identifier");
@@ -2220,19 +2242,20 @@ const printedVariable = (
 const templateBlockContent = (
   build: Build,
   block: SourceElement,
-): Effect.Effect<readonly BodyNode[], Refusal> =>
-  Effect.map(
-    Effect.forEach(elementsOf(block), (part) => {
+): Result.Result<readonly BodyNode[], Refusal> =>
+  Result.gen(function* readTemplateBlockContent() {
+    const parts: (readonly BodyNode[])[] = [];
+    for (const part of elementsOf(block)) {
       if (isQti(part, "qti-content-body")) {
-        return bodyNodes(build, part);
+        parts.push(yield* bodyNodes(build, part));
+      } else {
+        record(build, { feature: nameOf(part), path: pathOf(build, part), shown: "mark" });
+        parts.push([]);
       }
+    }
 
-      record(build, { feature: nameOf(part), path: pathOf(build, part), shown: "mark" });
-
-      return Effect.succeed([]);
-    }),
-    (parts) => parts.flat(),
-  );
+    return parts.flat();
+  });
 
 /**
  * Name the responses a template block's or inline's source content binds: the
@@ -2285,8 +2308,8 @@ const templateContent = (
   build: Build,
   element: SourceElement,
   kind: TemplateContent["kind"],
-): Effect.Effect<TemplateContent, Refusal> =>
-  Effect.gen(function* readTemplateContent() {
+): Result.Result<TemplateContent, Refusal> =>
+  Result.gen(function* readTemplateContent() {
     markElement(build, element, true);
 
     const identifier = yield* identifierAttribute(build, element, "identifier");
@@ -2320,9 +2343,9 @@ const bodyNode = (
   build: Build,
   parent: SourceElement,
   child: SourceChild,
-): Effect.Effect<BodyNode, Refusal> => {
+): Result.Result<BodyNode, Refusal> => {
   if (child.kind === "text") {
-    return Effect.succeed({ kind: "text", text: child.text });
+    return Result.succeed({ kind: "text", text: child.text });
   }
 
   if (child.kind === "entity") {
@@ -2350,7 +2373,7 @@ const bodyNode = (
     return notice(build, nameOf(child), pathOf(build, child));
   }
 
-  return Effect.gen(function* bodyElement() {
+  return Result.gen(function* bodyElement() {
     markElement(build, child, true);
 
     const children = yield* bodyNodes(build, child);
@@ -2377,12 +2400,11 @@ const unread = (
   build: Build,
   element: SourceElement,
   feature: string = nameOf(element),
-): Effect.Effect<Option.Option<never>> =>
-  Effect.sync(() => {
-    record(build, { feature, path: pathOf(build, element), shown: "mark" });
+): Result.Result<Option.Option<never>> => {
+  record(build, { feature, path: pathOf(build, element), shown: "mark" });
 
-    return Option.none();
-  });
+  return Result.succeed(Option.none());
+};
 
 /**
  * Give the generic expression reader its context for a build: the walk, the names the item holds,
@@ -2393,10 +2415,11 @@ const unread = (
  */
 const readingOf = (build: Build): ExpressionReading => ({
   declared: build.names,
-  mark: (element, feature) =>
-    Effect.sync(() => {
-      record(build, { feature, path: pathOf(build, element), shown: "mark" });
-    }),
+  mark: (element, feature) => {
+    record(build, { feature, path: pathOf(build, element), shown: "mark" });
+
+    return Result.void;
+  },
   unread: (element, feature) => unread(build, element, feature),
   walk: build,
 });
@@ -2418,7 +2441,7 @@ const readingOf = (build: Build): ExpressionReading => ({
 const expression = (
   build: Build,
   element: SourceElement,
-): Effect.Effect<Option.Option<Expression>, Refusal> => readExpression(readingOf(build), element);
+): Result.Result<Option.Option<Expression>, Refusal> => readExpression(readingOf(build), element);
 
 /**
  * Construct a branch.
@@ -2441,13 +2464,16 @@ const branchOf = (when: Expression, then: readonly Rule[]): Branch => ({ then, w
 const rules = (
   build: Build,
   elements: readonly SourceElement[],
-): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> =>
-  pipe(
-    elements,
-    // oxlint-disable-next-line eslint/no-use-before-define -- `rules` and `rule` are mutually recursive, as conditions and fragments nest; the call runs only after both are defined.
-    Effect.forEach((element) => rule(build, element)),
-    Effect.map((read) => Option.map(Option.all(read), (each) => each.flat())),
-  );
+): Result.Result<Option.Option<readonly Rule[]>, Refusal> =>
+  Result.gen(function* readRules() {
+    const read: Option.Option<readonly Rule[]>[] = [];
+    for (const element of elements) {
+      // oxlint-disable-next-line eslint/no-use-before-define -- `rules` and `rule` are mutually recursive, as conditions and fragments nest; the call runs only after both are defined.
+      read.push(yield* rule(build, element));
+    }
+
+    return Option.map(Option.all(read), (each) => each.flat());
+  });
 
 /**
  * Read a `qti-response-if` or `qti-response-else-if`: its first child is the condition and the rest
@@ -2460,8 +2486,8 @@ const rules = (
 const branch = (
   build: Build,
   element: SourceElement,
-): Effect.Effect<Option.Option<Branch>, Refusal> =>
-  Effect.gen(function* readBranch() {
+): Result.Result<Option.Option<Branch>, Refusal> =>
+  Result.gen(function* readBranch() {
     const [test, ...body] = elementsOf(element);
     if (test === undefined) {
       return yield* unread(build, element);
@@ -2493,8 +2519,8 @@ const outcomeRule = (
   build: Build,
   element: SourceElement,
   kind: "lookup-outcome" | "set-outcome",
-): Effect.Effect<Option.Option<Rule>, Refusal> =>
-  Effect.gen(function* readOutcomeRule() {
+): Result.Result<Option.Option<Rule>, Refusal> =>
+  Result.gen(function* readOutcomeRule() {
     const identifier = yield* identifierAttribute(build, element, "identifier");
     const [operand, ...extra] = elementsOf(element);
     if (operand === undefined || extra.length > 0) {
@@ -2520,8 +2546,8 @@ const outcomeRule = (
 const rule = (
   build: Build,
   element: SourceElement,
-): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> =>
-  Effect.gen(function* readRule() {
+): Result.Result<Option.Option<readonly Rule[]>, Refusal> =>
+  Result.gen(function* readRule() {
     if (element.namespace === xincludeNamespace && element.local === "include") {
       return yield* unread(build, element, includeMark);
     }
@@ -2546,26 +2572,29 @@ const rule = (
     }
 
     const parts = elementsOf(element);
-    const branches = yield* Effect.forEach(
-      parts.filter((part) => isQti(part, "qti-response-if") || isQti(part, "qti-response-else-if")),
-      (part) => branch(build, part),
-    );
+    const branches: Option.Option<Branch>[] = [];
+    for (const part of parts.filter(
+      (each) => isQti(each, "qti-response-if") || isQti(each, "qti-response-else-if"),
+    )) {
+      branches.push(yield* branch(build, part));
+    }
+
     const otherwise = yield* Option.match(
       Arr.findFirst(parts, (part) => isQti(part, "qti-response-else")),
       {
-        onNone: () => Effect.succeed(Option.some(Option.none<readonly Rule[]>())),
-        onSome: (part) => Effect.map(rules(build, elementsOf(part)), Option.map(Option.some)),
+        onNone: () => Result.succeed(Option.some(Option.none<readonly Rule[]>())),
+        onSome: (part) => Result.map(rules(build, elementsOf(part)), Option.map(Option.some)),
       },
     );
-    const strays = yield* Effect.forEach(
-      parts.filter(
-        (part) =>
-          !isQti(part, "qti-response-if") &&
-          !isQti(part, "qti-response-else-if") &&
-          !isQti(part, "qti-response-else"),
-      ),
-      (part) => unread(build, part),
-    );
+    const strays: Option.Option<never>[] = [];
+    for (const part of parts.filter(
+      (each) =>
+        !isQti(each, "qti-response-if") &&
+        !isQti(each, "qti-response-else-if") &&
+        !isQti(each, "qti-response-else"),
+    )) {
+      strays.push(yield* unread(build, part));
+    }
 
     return Option.map(
       Option.all({ branches: Option.all(branches), otherwise, strays: Option.all(strays) }),
@@ -2773,7 +2802,7 @@ interface ProcessingTree {
 const processingOf = (
   build: Build,
   processing: SourceElement,
-): Effect.Effect<Option.Option<ProcessingTree>, Refusal> => {
+): Result.Result<Option.Option<ProcessingTree>, Refusal> => {
   const uri = valueOf(processing, "template");
   const builtIn = uri.pipe(Option.flatMap(templateName));
   if (Option.isSome(uri) && Option.isNone(builtIn)) {
@@ -2786,13 +2815,13 @@ const processingOf = (
 
   const inline = elementsOf(processing);
   if (inline.length > 0 || Option.isNone(uri)) {
-    return Effect.map(
+    return Result.map(
       rules(build, inline),
       Option.map((tree) => ({ template: Option.none(), tree })),
     );
   }
 
-  return Effect.succeed(
+  return Result.succeed(
     builtIn.pipe(Option.map((name) => ({ template: Option.some(name), tree: templates[name] }))),
   );
 };
@@ -3710,8 +3739,8 @@ const recordResponseNames = (
  *   space. A document the validator would refuse can also fail with `missing-attribute`,
  *   `attribute-type` or `undeclared-response`.
  */
-export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> =>
-  Effect.gen(function* readItem() {
+export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> =>
+  Result.gen(function* readItem() {
     const build: Build = {
       builder: "buildItem",
       declarations: declarationsOf(source),
@@ -3735,8 +3764,8 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     const holdUnheld = (
       declaration: SourceElement,
       kind: UnheldDeclaration["kind"],
-    ): Effect.Effect<void, Refusal> =>
-      Effect.map(unheldDeclaration(build, declaration, kind), (read) => {
+    ): Result.Result<void, Refusal> =>
+      Result.map(unheldDeclaration(build, declaration, kind), (read) => {
         if (Option.isSome(read)) {
           unheld.set(read.value.identifier, read.value);
         }
