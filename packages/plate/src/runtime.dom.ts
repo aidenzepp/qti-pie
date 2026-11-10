@@ -42,6 +42,16 @@ export type {
   UpgradedRoot,
 } from "#plate/runtime/contract.dom.ts";
 
+export { readAloud } from "#plate/runtime/read-aloud.dom.ts";
+
+export type {
+  ReadAloud,
+  ReadAloudOptions,
+  ReadAloudState,
+  ReadAloudSynthesis,
+  ReadAloudUtterance,
+} from "#plate/runtime/read-aloud.dom.ts";
+
 /**
  * The controllers the runtime attaches, by kind and by content slot: closed, so a host cannot add
  * one, and complete, one controller for every runtime kind, each from its own module

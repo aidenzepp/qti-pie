@@ -264,6 +264,8 @@ plate's work runs in spans:
   `document.kind` and `document.verdict`.
 - `plate.configure` runs `configure` and `ConfigurationFromEnv`.
 - `plate.readPnp` runs `readPnp`, which reads a PNP document into supports.
+- `plate.readLexicon` runs `readLexicon`, which reads a PLS document into the lexicon the speech
+  plan applies.
 - The tooling reads the corpus under `plate.readCorpusFile` and `plate.corpusDocuments`, and
   builds its tables under `plate.generateTables` and `plate.generateOccurrences`.
 - The Effect functions that do an item's or a session's work run under `plate.` and their name:
