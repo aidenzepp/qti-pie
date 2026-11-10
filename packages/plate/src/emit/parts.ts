@@ -50,6 +50,23 @@ interface ShippedPartsOf {
 }
 
 /**
+ * The part keys of the content slots, by owner, a part's name with a lower-case first letter: each
+ * slot a content module renders into (issues m5-01, m5-02, m5-04, m5-06, m5-07, m5-11 and m3e-01),
+ * and the test-level ones. Every content module is a stub, so no render emits one of these parts
+ * yet; the rows exist for the issues that fill them to key a style block and a witness on.
+ */
+interface ContentPartsOf {
+  "alt-text": "root";
+  "companion-materials": "root";
+  "feedback-block": "root";
+  "feedback-inline": "root";
+  "modal-feedback": "close" | "root";
+  rubric: "root";
+  "test-feedback": "root";
+  "test-stylesheet": "root";
+}
+
+/**
  * The stub interaction modules beside `#plate/interactions/contract.ts`, by type only, so this
  * module imports none of them at run time and no module that imports it forms a cycle.
  */
@@ -79,15 +96,15 @@ type StubModule =
 type StubPartsOf = { readonly [M in StubModule as M["owner"]]: keyof M["parts"] & string };
 
 /**
- * The part keys of each interaction, of the item chrome and of the test chrome: the shipped
- * interactions' and the chrome's ({@link ShippedPartsOf}) and each stub module's
+ * The part keys of each owner: the shipped interactions' and the chrome's
+ * ({@link ShippedPartsOf}), the content slots' ({@link ContentPartsOf}) and each stub module's
  * ({@link StubPartsOf}), so a module's parts are typed from the module itself.
  */
-type PartsOf = ShippedPartsOf & StubPartsOf;
+type PartsOf = ContentPartsOf & ShippedPartsOf & StubPartsOf;
 
 /**
- * The owner of a group of parts: the item chrome, one of the interactions plate renders, or the
- * test chrome's navigation, `test-navigation`.
+ * The owner of a group of parts: the item chrome, one of the interactions plate renders, the test
+ * chrome's navigation, `test-navigation`, or a content slot.
  *
  * It is also the first key of {@link PartOverrides}.
  */
@@ -129,6 +146,13 @@ export type Position = "flow" | "phrasing";
  * - `inline-label`: a `label`, or a phrasing container, so a Label stays phrasing content inside the
  *   author's sentence. `label` is no phrasing container, and a `div` or `p` there would close the
  *   author's `p` in the HTML parser.
+ * - `svg-content`: a part inside an `svg`, which may become one of {@link svgElements}, in its own
+ *   case, and no HTML or custom element: the HTML parser moves an HTML tag such as `strong` or
+ *   `div` out of an `svg` to its next sibling, and keeps any other name as an SVG element that
+ *   renders nothing.
+ * - `svg`: the `svg` element only, the root of a picture placed under an HTML parent: the parser
+ *   opens the picture's foreign content at an `svg` start tag, and under any other element its
+ *   shapes are unknown HTML elements that draw nothing.
  * - `any`: any element.
  */
 export type TagClass =
@@ -148,6 +172,8 @@ export type TagClass =
   | "phrasing-container"
   | "prompt"
   | "select"
+  | "svg"
+  | "svg-content"
   | "text-input"
   | "textarea";
 
@@ -257,6 +283,80 @@ export const links: ReadonlySet<string> = new Set(["a", "area"]);
 export const lists: ReadonlySet<string> = new Set(["menu", "ol", "ul"]);
 
 /**
+ * The SVG elements a part inside an `svg` may become, each in its own case: the SVG 2 element index
+ * less `a`, `script` and `style`.
+ *
+ * `a` is a link, which no tag class admits; plate emits neither `script` nor `style` anywhere, and
+ * its pages carry a content security policy with no `unsafe-inline`. The names keep their case
+ * because the emitter writes a tag as given and a DOM host creates the element by that name, so
+ * `foreignObject` is in the set and `foreignobject` is not. A nested `svg` is SVG content.
+ *
+ * @see https://www.w3.org/TR/SVG2/eltindex.html
+ */
+export const svgElements: ReadonlySet<string> = new Set([
+  "animate",
+  "animateMotion",
+  "animateTransform",
+  "circle",
+  "clipPath",
+  "defs",
+  "desc",
+  "ellipse",
+  "feBlend",
+  "feColorMatrix",
+  "feComponentTransfer",
+  "feComposite",
+  "feConvolveMatrix",
+  "feDiffuseLighting",
+  "feDisplacementMap",
+  "feDistantLight",
+  "feDropShadow",
+  "feFlood",
+  "feFuncA",
+  "feFuncB",
+  "feFuncG",
+  "feFuncR",
+  "feGaussianBlur",
+  "feImage",
+  "feMerge",
+  "feMergeNode",
+  "feMorphology",
+  "feOffset",
+  "fePointLight",
+  "feSpecularLighting",
+  "feSpotLight",
+  "feTile",
+  "feTurbulence",
+  "filter",
+  "foreignObject",
+  "g",
+  "image",
+  "line",
+  "linearGradient",
+  "marker",
+  "mask",
+  "metadata",
+  "mpath",
+  "path",
+  "pattern",
+  "polygon",
+  "polyline",
+  "radialGradient",
+  "rect",
+  "set",
+  "stop",
+  "svg",
+  "switch",
+  "symbol",
+  "text",
+  "textPath",
+  "title",
+  "tspan",
+  "use",
+  "view",
+]);
+
+/**
  * The heading elements.
  */
 export const headings: ReadonlySet<string> = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
@@ -352,6 +452,7 @@ const blockContainers: ReadonlySet<string> = new Set([
   "aside",
   "blockquote",
   "details",
+  "dialog",
   "div",
   "fieldset",
   "figure",
@@ -494,13 +595,23 @@ const admits = {
   "phrasing-container": ({ tag }) => isPhrasingContainer(tag),
   prompt: ({ tag }) => tag === "p" || isFlowContainer(tag),
   select: ({ attrs, tag }) => tag === "select" && isDropDown(attrs),
+  svg: ({ tag }) => tag === "svg",
+  "svg-content": ({ tag }) => svgElements.has(tag),
   "text-input": ({ attrs, tag }) => tag === "input" && isTextType(attributeOf(attrs, "type")),
   textarea: ({ tag }) => tag === "textarea",
 } satisfies { readonly [C in TagClass]: (element: Element) => boolean };
 
 /**
  * The rows of the part table, the item chrome's, then each interaction's, then the test chrome's
- * navigation rows, before {@link partTable} derives each marker.
+ * navigation rows, then the content slots', before {@link partTable} derives each marker.
+ *
+ * The item Root merges `data-magnification`, the marker the Root hook writes under a magnification
+ * support (issue m3e-09b), so a host's replacement cannot drop it and the stylesheet may key on it.
+ * The hook is a stub, so no render writes it yet.
+ *
+ * Each content row names the issue whose module renders its part. None defaults or merges an
+ * attribute: no content module computes one beyond the marker, so a name joins a row's `merged`
+ * with the module that computes it and the test that renders it.
  *
  * The five navigation buttons are plain buttons (rule `9af3809b`): each defaults `type` to
  * `button`, and no navigation row merges `type`, `name`, `value` or a `form*` attribute, so a
@@ -520,7 +631,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     element: "qti-assessment-item",
     interaction: "item",
     listOwner: false,
-    merged: ["lang", "id"],
+    merged: ["lang", "id", "data-magnification"],
     part: "root",
     tagClass: "flow-container",
   },
@@ -881,6 +992,121 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     part: "time",
     tagClass: "flow-container",
   },
+  /**
+   * Modal Feedback's root (issue m5-01): a native `dialog`, shown by its `open` attribute without
+   * script. A `dialog` is flow content.
+   */
+  {
+    defaults: {},
+    element: "dialog",
+    interaction: "modal-feedback",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  /**
+   * Modal Feedback's close (issue m5-01): the `button` that dismisses the dialog and returns focus.
+   */
+  {
+    defaults: {},
+    element: "button",
+    interaction: "modal-feedback",
+    listOwner: false,
+    merged: [],
+    part: "close",
+    tagClass: "button",
+  },
+  /**
+   * Block Feedback's root (issue m5-02): the `div` that holds the feedback's flow content.
+   */
+  {
+    defaults: {},
+    element: "div",
+    interaction: "feedback-block",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  /**
+   * Inline Feedback's root (issue m5-02): a `div` as the Block's is, which its tag class lets
+   * become a `span` where the module places the feedback inside the author's sentence, since a
+   * `div` there would close the sentence's `p`.
+   */
+  {
+    defaults: {},
+    element: "div",
+    interaction: "feedback-inline",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  /**
+   * Companion Materials's root (issue m5-07): the `aside` that holds the tools and materials the
+   * item names beside its body.
+   */
+  {
+    defaults: {},
+    element: "aside",
+    interaction: "companion-materials",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  /**
+   * Alt Text's root (issue m5-11): the `span` that holds an image's alternative text, which is
+   * phrasing content.
+   */
+  {
+    defaults: {},
+    element: "span",
+    interaction: "alt-text",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "phrasing-container",
+  },
+  /**
+   * Test Feedback's root (issue m5-04): the `section` that holds a test's feedback, shown during
+   * the test or at its end.
+   */
+  {
+    defaults: {},
+    element: "section",
+    interaction: "test-feedback",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  /**
+   * The Test Stylesheet's root (issue m5-06): the `section` that holds a test's stylesheet.
+   */
+  {
+    defaults: {},
+    element: "section",
+    interaction: "test-stylesheet",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  /**
+   * The Rubric's root (issue m3e-01): the `section` that holds a rubric block's content for the
+   * view it is shown to.
+   */
+  {
+    defaults: {},
+    element: "section",
+    interaction: "rubric",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
 ];
 
 /**
@@ -911,11 +1137,11 @@ export class PartTableDefect extends Data.TaggedError("PartTableDefect")<{
  * an interaction module's `partRow` (`#plate/interactions/contract.ts`), so no code spells one by
  * hand.
  *
- * @param interaction The component: an interaction, `item` for the host chrome, or
- *   `test-navigation` for the test chrome.
+ * @param interaction The component: an interaction, `item` for the host chrome,
+ *   `test-navigation` for the test chrome, or a content slot's owner.
  * @param part The part.
  * @returns The marker: `choice-interaction`, `choice-interaction-indicator`, `item-status-heading`,
- *   `test-navigation-item-button`.
+ *   `test-navigation-item-button`, `modal-feedback-close`.
  */
 export const slotFor = (interaction: InteractionKey, part: PartKey): string =>
   part === "root"
@@ -923,13 +1149,15 @@ export const slotFor = (interaction: InteractionKey, part: PartKey): string =>
     : `${interaction}-${part.replaceAll(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`;
 
 /**
- * The part table, one row per part of the item chrome, each interaction plate renders here and the
- * test chrome's navigation, in {@link rows}' order, each with its derived marker.
+ * The part table, one row per part of the item chrome, each interaction plate renders here, the
+ * test chrome's navigation and the content slots, in {@link rows}' order, each with its derived
+ * marker.
  *
  * An interaction module's rows live in its module, not here: a module gives each part's
  * `PartSpec` in its `parts`, and its render places the part through `partRow`
  * (`#plate/interactions/contract.ts`), which derives the owner, the part and the marker as this
- * table does. This table, and {@link rowFor}, serve the four shipped kinds and the chrome only.
+ * table does. This table, and {@link rowFor}, serve the four shipped kinds, the chrome and the
+ * content slots only.
  *
  * The Notice, the StatusHeading and the Choice Root and Prompt hold their context-free defaults: a
  * phrasing `span`, `h1`, and the `labelledby` markup with no legend. {@link rowFor} gives the row
@@ -940,6 +1168,90 @@ export const partTable: readonly PartRow[] = rows.map((row) => ({
   legendOwner: false,
   slot: slotFor(row.interaction, row.part),
 }));
+
+/**
+ * The prefix of the `data-*` names plate reserves wholesale, matched without regard to ASCII case.
+ *
+ * Decision D24 reserves `data-qti-*` so plate's own markers may grow without a table change.
+ * `data-qti-suppress-tts` is under it and is also an attribute the XSD declares (decision D22), so
+ * it still passes: E3 securing and the emitter ask the XSD first and this prefix second.
+ */
+export const reservedDataPrefix = "data-qti-";
+
+/**
+ * The `data-*` names the Root and the runtime write that no part row lists: `data-mode` and
+ * `data-disabled` are written on every Root by the emitter's own code, and `data-runtime` is the
+ * mark a stub controller's upgrade sets, so no part row's `merged` list holds them.
+ */
+const stateDataNames = ["data-disabled", "data-mode", "data-runtime"] as const;
+
+/**
+ * The four fixed reserved names: the part and area markers, and the position and emptiness a part
+ * announces.
+ */
+const fixedDataNames = ["data-area", "data-empty", "data-position", "data-slot"] as const;
+
+/**
+ * The `data-*` names plate itself writes or reads, which an author's attribute never overrides.
+ *
+ * Decision D24 (operator ruling, 2026-11-10): "Pass valid author data-* attributes through to the
+ * rendered HTML, on HTML content elements and on interaction roots, unchanged. Plate's own markers
+ * are reserved: data-slot, data-area, data-position, data-empty, data-qti-*, and every data-* name
+ * plate emits, all derived from one table. An author attribute with a reserved name is dropped, not
+ * refused. It never overrides plate's marker, and the drop is documented, with a test. Plate
+ * attaches no behaviour to passed-through attributes. They're inert in HTML until the app's own CSS
+ * or JS reads them. PCI keeps the route it has now."
+ *
+ * The basis is QTI 3 Binding, section 6.7. This is the one table: E3 securing (`check`), the
+ * emitter's guard (`emitBody`) and every test read it, and none keeps a list of its own. It holds
+ * the four fixed names, the Root and runtime names no row lists, and every `data-*` name a part
+ * row's `merged` list holds, so a part row that gains a `data-*` name reserves it with no edit
+ * here. It is defined in this file, beside {@link partTable}, because the emitter is a browser
+ * module and imports this leaf already; `#plate/vocabulary.ts` exports it too. The `data-qti-`
+ * prefix is {@link reservedDataPrefix}, not a member, and {@link isReservedData} asks both.
+ *
+ * Scope: this unit passes the author attributes of the body's HTML content elements. Interaction
+ * roots: W0-AU.2, a unit of its own; a portable custom interaction keeps its route (`pci-03`).
+ *
+ * The names an interaction module writes on its own parts (Gap Match's `data-gap` and
+ * `data-match-group`, for one) are not derived here: they live in `interactions/*.ts`, which
+ * value-import the emitter that imports this file, so reading them from here would close an import
+ * cycle.
+ */
+export const reservedDataNames: ReadonlySet<string> = new Set([
+  ...fixedDataNames,
+  ...stateDataNames,
+  ...partTable.flatMap((row) => row.merged.filter((name) => name.startsWith("data-"))),
+]);
+
+/**
+ * Whether a `data-*` name is plate's own and an author's attribute of it is dropped.
+ *
+ * HTML matches an attribute name without regard to ASCII case, so the name is folded before it is
+ * asked: `data-SLOT` is the reserved `data-slot` to a browser.
+ *
+ * @param name The attribute's name, as authored.
+ * @returns Whether the name is in {@link reservedDataNames} or under {@link reservedDataPrefix}.
+ */
+export const isReservedData = (name: string): boolean => {
+  const folded = name.replaceAll(/[A-Z]/gu, (letter) => letter.toLowerCase());
+
+  return folded.startsWith(reservedDataPrefix) || reservedDataNames.has(folded);
+};
+
+/**
+ * Whether an attribute name is an author `data-*` plate passes through: the reading's form
+ * (`data-` and one or more of `a-z`, `0-9`, `_`, `.` and `-`, reading 13) and not
+ * {@link isReservedData}.
+ *
+ * The name is the attribute's local name; one in a namespace is never an author `data-*`, and the
+ * caller checks the namespace.
+ *
+ * @param name The attribute's local name, as authored.
+ * @returns Whether plate keeps the attribute.
+ */
+export const isAuthorData = (name: string): boolean =>
+  /^data-[a-z0-9_.-]+$/u.test(name) && !isReservedData(name);
 
 /**
  * Give the key of a part in the lookups: the interaction and the part, which neither key's spelling
@@ -986,7 +1298,7 @@ export const partForSlot = (slot: string): Option.Option<PartName> =>
   Option.fromUndefinedOr(slotIndex.get(slot));
 
 /**
- * The owners of the part table's rows: the four shipped kinds and the chrome.
+ * The owners of the part table's rows: the four shipped kinds, the chrome and the content slots.
  */
 const tableOwners: ReadonlySet<string> = new Set(partTable.map((row) => row.interaction));
 
@@ -1048,8 +1360,9 @@ export const adoptModuleParts = (parts: readonly PartName[]): void => {
  * `fieldset`, owns it as its first child and names no Prompt id. Under `labelledby` the rows are
  * the table's: the Prompt keeps the `id` the Root's `aria-labelledby` names.
  *
- * It serves the four shipped kinds and the chrome only. An interaction module's parts have no row
- * in the table: the module places each through `partRow` (`#plate/interactions/contract.ts`).
+ * It serves the four shipped kinds, the chrome and the content slots only. An interaction module's
+ * parts have no row in the table: the module places each through `partRow`
+ * (`#plate/interactions/contract.ts`).
  *
  * @param interaction The interaction that owns the part.
  * @param part The part.

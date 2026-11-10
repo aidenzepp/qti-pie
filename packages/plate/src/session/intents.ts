@@ -8,19 +8,20 @@
  * item's view, whose part modes and closed state are what the submissions check. So the two agree
  * without this module calling a submission, and the list takes time in proportion to the items. It
  * is pure and keeps nothing between calls. This is a browser module: it imports neither
- * `advance.ts` nor `submit.ts`, which reach `score`, and value-imports from `effect` only
- * `Result`.
+ * `advance.ts` nor `submit.ts`, which reach `score`, and value-imports from `effect` only `Option`
+ * and `Result`.
  *
  * @module
  */
-import { Result } from "effect";
+import { Option, Result } from "effect";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { moveTargets } from "#plate/session/navigate.ts";
 import type { MoveIntent, MoveRefused } from "#plate/session/navigate.ts";
 import type { Intent, TestSession } from "#plate/session/session.ts";
 import { current, readingBase } from "#plate/session/start.ts";
 import type { ItemNotInSession, ItemView } from "#plate/session/start.ts";
-import type { AcceptedTest } from "#plate/validate/verdict.ts";
+import { testFeatures } from "#plate/test-features/table.ts";
+import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 
 /**
  * Say whether `advance` takes a move from where a session stands.
@@ -62,6 +63,8 @@ const takesMove = (view: ItemView, target: Result.Result<number, MoveRefused>): 
  *
  * @param test The test the session was started from.
  * @param session The session.
+ * @param items The test's items, where the host has them, which the moves' gate is handed; the
+ *   list is the same with or without them, since every module decides a move from the session.
  * @returns The intents; {@link ItemNotInSession} for an open session whose position is past its
  *   items; {@link UnknownItemRef} when the test holds no item ref an item names, as when the
  *   session belongs to another test.
@@ -69,6 +72,7 @@ const takesMove = (view: ItemView, target: Result.Result<number, MoveRefused>): 
 export const allowedIntents = (
   test: AcceptedTest,
   session: TestSession,
+  items?: ReadonlyMap<string, Accepted>,
 ): Result.Result<readonly Intent[], ItemNotInSession | UnknownItemRef> =>
   Result.flatMap(current(test, session, readingBase), (shown) => {
     if (shown.kind === "summary") {
@@ -93,8 +97,11 @@ export const allowedIntents = (
         : []),
     ];
 
-    return Result.map(moveTargets(test, session), (decide): readonly Intent[] => [
-      ...moves.filter((intent) => takesMove(shown, decide(intent))),
-      ...submissions,
-    ]);
+    return Result.map(
+      moveTargets(test, session, testFeatures, Option.none(), items),
+      (decide): readonly Intent[] => [
+        ...moves.filter((intent) => takesMove(shown, decide(intent))),
+        ...submissions,
+      ],
+    );
   });
