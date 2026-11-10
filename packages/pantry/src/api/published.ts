@@ -25,6 +25,7 @@ import {
   SectionMember,
   SectionSelection,
   TestDocument,
+  TestFlag,
 } from "#pantry/qti/tests.ts";
 
 export { BaseType } from "#pantry/grammar/install.ts";
@@ -42,6 +43,7 @@ export {
   SectionMember,
   SectionSelection,
   TestDocument,
+  TestFlag,
 } from "#pantry/qti/tests.ts";
 
 /**
@@ -88,10 +90,10 @@ const published = <
 
 /**
  * The published relations by name (spec section 2.2, on the schema #55 brought: `Document`'s type
- * field is `documentType`, and `Section`'s visibility is a row of its own, not a field): each
- * relation's key and published fields,
- * and {@link BaseType} as a roster. The surface test pins this record, and its fields are the
- * contract {@link PublishedRow} types.
+ * field is `documentType`): each relation's key and published fields, and {@link BaseType} as a
+ * roster. A section's visibility is no field of `Section`: it is the section's {@link TestFlag}
+ * row named `visible`, which QTI's required attribute gives every section (decision 503). The
+ * surface test pins this record, and its fields are the contract {@link PublishedRow} types.
  */
 export const publishedRelations = {
   BaseType: { kind: "roster", relation: BaseType } satisfies PublishedRoster<typeof BaseType>,
@@ -129,6 +131,7 @@ export const publishedRelations = {
     ["node", "document", "parent", "select", "withReplacement"],
   ),
   TestDocument: published(TestDocument, ["node"], ["node", "package", "path", "rootKind"]),
+  TestFlag: published(TestFlag, ["node", "name"], ["node", "name", "value"]),
 } as const;
 
 /**

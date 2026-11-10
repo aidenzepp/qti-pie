@@ -62,6 +62,7 @@ export {
   SectionMember,
   SectionSelection,
   TestDocument,
+  TestFlag,
 } from "#pantry/api/published.ts";
 
 export type { ImportVerdict, PreviewVerdict, Refusal } from "#pantry/api/verdict.ts";

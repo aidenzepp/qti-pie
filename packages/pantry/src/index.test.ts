@@ -32,6 +32,7 @@ const runtimeNames: readonly string[] = [
   "SectionSelection",
   "ServedAuthorLogin",
   "TestDocument",
+  "TestFlag",
   "authorLogin",
   "authorRole",
   "documentScanOf",
@@ -60,8 +61,8 @@ interface ContractEntry {
 /**
  * The published relations' contract, spec section 2.2 on the schema #55 brought: each relation's
  * key and published fields, `Document`'s type field named `documentType` and `Section` without
- * `visible`, which is a row of its own, and `BaseType`, a roster published with its handles and no
- * fields.
+ * `visible`, which is its `TestFlag` row named `visible` (decision 503), and `BaseType`, a roster
+ * published with its handles and no fields.
  */
 const publishedContract = {
   BaseType: { kind: "roster" },
@@ -115,6 +116,7 @@ const publishedContract = {
     key: ["node"],
     kind: "relation",
   },
+  TestFlag: { fields: ["node", "name", "value"], key: ["node", "name"], kind: "relation" },
 } satisfies Readonly<Record<string, ContractEntry>>;
 
 layer(NodeServices.layer, { excludeTestServices: true })("the package entry", (it) => {

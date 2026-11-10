@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { publishedRelations } from "#pantry/api/published.ts";
 
 /**
- * The published relations' names, spec section 2.2's ten, sorted.
+ * The published relations' names, spec section 2.2's ten and `TestFlag` (decision 503), sorted.
  */
 const publishedNames: readonly string[] = [
   "BaseType",
@@ -15,10 +15,19 @@ const publishedNames: readonly string[] = [
   "SectionMember",
   "SectionSelection",
   "TestDocument",
+  "TestFlag",
 ];
 
 describe("publishedRelations", () => {
-  it("names exactly the ten published relations", () => {
+  it("publishes TestFlag, where a section's visibility is the row named visible", () => {
+    const { TestFlag } = publishedRelations;
+
+    assert.strictEqual(TestFlag.kind, "relation");
+    assert.deepStrictEqual(TestFlag.key, ["node", "name"]);
+    assert.deepStrictEqual(TestFlag.fields, ["node", "name", "value"]);
+  });
+
+  it("names exactly the eleven published relations", () => {
     assert.deepStrictEqual(Object.keys(publishedRelations).toSorted(), publishedNames);
   });
 
