@@ -395,17 +395,13 @@ describe("check", () => {
     ]);
   });
 
-  it("leaves a MathML child unchecked, with no accepted document", () => {
+  it("accepts an item holding MathML, which the MathML module judges", () => {
     const math = el("math", [], [el("mi", [], [text("x")], mathmlNamespace)], mathmlNamespace);
     const verdict = verdictOf(item([body([el("p", [], [text("Solve "), math])])]));
 
-    assert.strictEqual(verdict.verdict, "unchecked");
-    assert.isFalse("accepted" in verdict);
-    if (verdict.verdict === "unchecked") {
-      assert.deepStrictEqual(verdict.reasons, [
-        { path: `${bodyPath}/p/{${mathmlNamespace}}math`, reason: "mathml" },
-      ]);
-    }
+    assert.strictEqual(verdict.verdict, "accepted");
+    assert.isTrue("accepted" in verdict);
+    assert.isFalse("reasons" in verdict, "no mathml reason leaves the document unchecked");
   });
 
   it("leaves an XInclude child unchecked, with no accepted document", () => {
@@ -1686,18 +1682,16 @@ describe("check, every QTI 3 root", () => {
     }
   });
 
-  it("leaves a stimulus holding MathML unchecked, of kind stimulus", () => {
+  it("accepts a stimulus holding MathML, which the MathML module judges, of kind stimulus", () => {
     const math = el("math", [], [el("mi", [], [text("x")], mathmlNamespace)], mathmlNamespace);
     const verdict = verdictOf(stimulus([el("p", [], [math])]));
 
-    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
     assert.strictEqual(verdict.kind, "stimulus");
-    if (verdict.verdict === "unchecked") {
-      assert.deepStrictEqual(verdict.reasons, [
-        {
-          path: `qti-assessment-stimulus/qti-stimulus-body/p/{${mathmlNamespace}}math`,
-          reason: "mathml",
-        },
+    assert.isFalse("reasons" in verdict, "no mathml reason leaves the document unchecked");
+    if (verdict.verdict === "accepted-with-unsupported") {
+      assert.deepStrictEqual(featuresOf(verdict.accepted.unsupported), [
+        "root:qti-assessment-stimulus@qti-assessment-stimulus",
       ]);
     }
   });
