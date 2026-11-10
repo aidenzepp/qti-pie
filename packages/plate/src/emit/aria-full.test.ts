@@ -294,21 +294,6 @@ const variantOf = (
   edit: (attributes: readonly BodyAttribute[]) => readonly BodyAttribute[],
 ): Accepted => acceptForTest({ ...item, body: editElement(item.body, id, edit) });
 
-/**
- * Give an attribute list the value of one attribute replaced.
- *
- * @param attributes The attributes.
- * @param name The attribute to change.
- * @param value Its new value.
- * @returns The attributes with `name` set to `value`.
- */
-const withValue = (
-  attributes: readonly BodyAttribute[],
-  name: string,
-  value: string,
-): readonly BodyAttribute[] =>
-  attributes.map((candidate) => (candidate.name === name ? { name, value } : candidate));
-
 describe("ARIA Full over the body walk", () => {
   it.effect(
     "[A-2b] every declared aria state and property on body HTML reaches the rendered HTML",
@@ -380,21 +365,33 @@ describe("ARIA Full over the body walk", () => {
     }),
   );
 
-  it.effect("[A-2b] an ID reference naming no element of the item is dropped", () =>
-    Effect.gen(function* dangling() {
-      const { accepted } = yield* acceptFixture();
-      const variant = variantOf(accepted.item, "relations", (attributes) =>
-        withValue(withValue(attributes, "aria-details", "nowhere"), "aria-flowto", "elsewhere"),
-      );
-      const { html, root } = yield* renderAccepted(variant);
-      const relations = byId(root, renderedId("relations"));
+  it.effect(
+    "[A-2b] an ID reference naming no element of the item is refused at open, so the body walk never sees one",
+    () =>
+      Effect.gen(function* dangling() {
+        const text = yield* fixtureText;
+        const xml = text
+          .replace('aria-details="details"', 'aria-details="nowhere"')
+          .replace('aria-flowto="notes"', 'aria-flowto="elsewhere"');
+        const verdict: Verdict = yield* open(location, new TextEncoder().encode(xml));
+        const refusals = verdict.verdict === "refused" ? verdict.refusals : [];
 
-      assert.strictEqual(attribute(relations, "aria-owns"), renderedId("owned"));
-      assert.isUndefined(attribute(relations, "aria-details"), "aria-details names no element");
-      assert.isUndefined(attribute(relations, "aria-flowto"), "aria-flowto names no element");
-      assert.notInclude(html, "nowhere");
-      assert.notInclude(html, "elsewhere");
-    }),
+        assert.notStrictEqual(xml, text, "the variant differs from the fixture");
+        assert.strictEqual(verdict.verdict, "refused");
+        assert.isTrue(Option.isNone(acceptedItem(verdict)), "no accepted item reaches redact");
+        assert.deepStrictEqual(
+          refusals
+            .map(
+              (refusal) =>
+                `${refusal.rule} ${refusal.detail["check"] ?? ""} reading ${refusal.detail["reading"] ?? ""}: ${refusal.detail["attribute"] ?? ""}="${refusal.detail["value"] ?? ""}"`,
+            )
+            .toSorted(),
+          [
+            'attribute-type idref-target reading 156: aria-details="nowhere"',
+            'attribute-type idref-target reading 156: aria-flowto="elsewhere"',
+          ],
+        );
+      }),
   );
 
   it.effect("[A-2b] aria-keyshorts on an empty element is written aria-keyshortcuts", () =>
@@ -513,33 +510,6 @@ describe("ARIA Full over the body walk", () => {
         assert.strictEqual(again.html, html);
       }
     }),
-  );
-
-  it.effect(
-    "[A-2b] a document whose ID reference names no element is refused at open, so no render holds it",
-    () =>
-      Effect.gen(function* refusedAtOpen() {
-        const xml = (yield* fixtureText).replace(
-          'aria-details="details"',
-          'aria-details="nowhere"',
-        );
-        const verdict: Verdict = yield* open(location, new TextEncoder().encode(xml));
-
-        assert.notStrictEqual(xml, yield* fixtureText, "the variant differs from the fixture");
-        assert.strictEqual(verdict.verdict, "refused");
-        assert.isTrue(
-          verdict.verdict === "refused" &&
-            verdict.refusals.some(
-              (refusal) =>
-                refusal.rule === "attribute-type" &&
-                refusal.detail["check"] === "idref-target" &&
-                refusal.detail["attribute"] === "aria-details" &&
-                refusal.detail["value"] === "nowhere",
-            ),
-          "the refusal is an idref-target on aria-details naming nowhere",
-        );
-        assert.isTrue(Option.isNone(acceptedItem(verdict)));
-      }),
   );
 
   it.effect(
