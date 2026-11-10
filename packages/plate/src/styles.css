@@ -1335,10 +1335,16 @@
   pointer-events: none;
 }
 
-/* A hotspot covers the image's box. It forms no stacking context, so its parts stack with the others'. */
+/*
+ * A hotspot covers the image's box. It forms no stacking context, so its parts stack with the
+ * others'. It is at least 24 CSS px each way (WCAG 2.2, 2.5.8), so the target holds in an image
+ * smaller than that.
+ */
 :where([data-slot="graphic-associate-interaction-hotspot"]) {
   position: absolute;
   inset: 0;
+  min-block-size: 24px;
+  min-inline-size: 24px;
   margin: 0;
 }
 
@@ -1402,6 +1408,66 @@
 :where([data-slot="graphic-associate-interaction"][data-disabled])
   :where([data-slot="graphic-associate-interaction-pair"]) {
   opacity: 0.5;
+}
+
+/*
+ * A hotspot at its limit. The shared look dims the element, which here also holds the lines its
+ * pairs draw in its outline, so it keeps full strength and its area shows it: no veil and a dotted
+ * stroke, which a held or cursor rule below overrides. A line sets its own dash.
+ */
+:where([data-slot="graphic-associate-interaction-hotspot"][aria-disabled="true"]) {
+  opacity: 1;
+}
+
+:where([data-slot="graphic-associate-interaction-hotspot"][aria-disabled="true"])
+  :where([data-slot="graphic-associate-interaction-outline"]) {
+  fill: transparent;
+  stroke-dasharray: 2 4;
+}
+
+/*
+ * A held hotspot. The shared held look fills the element, which here is the image's whole box, so
+ * the hotspot stays unpainted and its area shows it instead: a heavier stroke over a veil of the
+ * primary colour, which forced colours keep as a width.
+ */
+:where([data-slot="graphic-associate-interaction-hotspot"][aria-pressed="true"]) {
+  background-color: transparent;
+}
+
+:where([data-slot="graphic-associate-interaction-hotspot"][aria-pressed="true"])
+  :where([data-slot="graphic-associate-interaction-outline"]) {
+  fill: color-mix(in oklab, var(--primary, oklch(0.205 0 0)) 30%, transparent);
+  stroke-width: 6px;
+}
+
+/*
+ * The area the cursor is on: a dashed, heavier stroke, so the cursor never reads as the held area's
+ * solid one. The dashed outline the shared block draws would go round the whole image, so only a
+ * default area, which is the whole image, keeps it.
+ */
+:where(
+  [data-slot="graphic-associate-interaction-hotspot"]:not([data-area="default"])[data-cursor]
+) {
+  outline-style: none;
+}
+
+:where([data-slot="graphic-associate-interaction-hotspot"][data-cursor])
+  :where([data-slot="graphic-associate-interaction-outline"]) {
+  stroke-dasharray: 8 4;
+  stroke-width: 6px;
+}
+
+/*
+ * Focus on a hotspot: the shared ring goes round the whole image, so the focused area also takes
+ * a heavier stroke, which shows which area has focus. The outline lines restate the ring's measure
+ * on the part that draws the stroke and draw none of their own.
+ */
+:where([data-slot="graphic-associate-interaction-hotspot"]:focus-visible)
+  :where([data-slot="graphic-associate-interaction-outline"]) {
+  outline-offset: 0;
+  outline-style: none;
+  outline-width: 3px;
+  stroke-width: 6px;
 }
 
 /* end graphic-associate-interaction */
