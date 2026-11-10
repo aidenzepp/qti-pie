@@ -313,6 +313,90 @@ const visitsOf = (tree: Element): readonly Visit[] => {
 };
 
 /**
+ * One heading of a tree as the heading-order rule reads it: whether it is one the author wrote
+ * inside the item body, whether its level breaks the order, and the visit itself.
+ */
+interface HeadingStep {
+  /**
+   * Whether the author wrote the heading and plate reproduced it as authored: it carries no
+   * `data-slot` marker, since the emitter drops an authored one and marks every part of its own,
+   * the item's Status heading among them.
+   */
+  readonly authored: boolean;
+  /**
+   * Whether the heading sits below the base level.
+   */
+  readonly below: boolean;
+  /**
+   * Whether the heading is more than one level deeper than the heading before it, the base level
+   * less one before the first.
+   */
+  readonly skips: boolean;
+  /**
+   * Whether the heading before it is one the author wrote too, so a skip between them is the
+   * author's own order; false before the first heading and after one plate emits.
+   */
+  readonly skipsAuthored: boolean;
+  readonly visit: Visit;
+}
+
+/**
+ * Read the headings of a tree in document order, each judged against the base level and the
+ * heading before it ({@link HeadingStep}).
+ *
+ * A heading plate itself emits is held to the order: it must not sit below the base level or skip
+ * a level. A heading the author wrote is held to the base level, which plate's heading shift
+ * lands the item's shallowest heading at, so a shallower one is plate's failure, and to the order
+ * after a heading plate emits; a gap between two of the author's own headings, though, is the
+ * author's order, reproduced as authored, so the rule does not count it against plate and
+ * `authorFindings` reports it instead.
+ *
+ * @param baseLevel The heading level the tree's headings start at.
+ * @param visits The tree's elements, in document order.
+ * @returns Each heading, judged.
+ */
+const headingSteps = (baseLevel: number, visits: readonly Visit[]): readonly HeadingStep[] => {
+  let previous = baseLevel - 1;
+  let previousAuthored = false;
+
+  return visits.flatMap((visit): readonly HeadingStep[] => {
+    const level = /^h(?<level>[1-6])$/u.exec(visit.element.tag)?.groups?.["level"];
+    if (level === undefined) {
+      return [];
+    }
+
+    const current = Number(level);
+    const authored = attribute(visit.element, "data-slot") === undefined;
+    const skips = current > previous + 1;
+    const step: HeadingStep = {
+      authored,
+      below: current < baseLevel,
+      skips,
+      skipsAuthored: skips && authored && previousAuthored,
+      visit,
+    };
+    previous = current;
+    previousAuthored = authored;
+
+    return [step];
+  });
+};
+
+/**
+ * A finding about the item's authored content, which plate reproduces as written and which is no
+ * failure of plate: today one kind, `heading-gap`, an authored heading more than one level deeper
+ * than the authored heading before it, which the author's own order holds and plate's heading
+ * shift keeps.
+ */
+export interface Finding {
+  readonly finding: "heading-gap";
+  /**
+   * The tags from the tree's root down to the heading, both included.
+   */
+  readonly path: readonly string[];
+}
+
+/**
  * Read a visit's parent.
  *
  * @param visit The visit to read.
@@ -649,22 +733,10 @@ const rules = {
         (tabindexOf(visit.element) ?? -1) >= 0 &&
         !isNativeFocusable(visit.element, parentOf(visit)),
     ),
-  "heading-order": ({ baseLevel, visits }) => {
-    let previous = baseLevel - 1;
-
-    return visits.filter((visit) => {
-      const level = /^h(?<level>[1-6])$/u.exec(visit.element.tag)?.groups?.["level"];
-      if (level === undefined) {
-        return false;
-      }
-
-      const current = Number(level);
-      const broken = current < baseLevel || current > previous + 1;
-      previous = current;
-
-      return broken;
-    });
-  },
+  "heading-order": ({ baseLevel, visits }) =>
+    headingSteps(baseLevel, visits).flatMap((step) =>
+      step.below || (step.skips && !step.skipsAuthored) ? [step.visit] : [],
+    ),
   "hidden-control": ({ visits }) =>
     visits.filter(
       (visit) =>
@@ -823,7 +895,9 @@ const rules = {
  * `qti-prompt` the `fieldset` names through `aria-labelledby`. A text interaction's Prompt names
  * its one Control; an Extended Text Root that holds several Controls is a group its Prompt names,
  * and one whose Controls the cap's Notice replaces names nothing. A Root with no Prompt has no name
- * requirement (Q9).
+ * requirement (Q9). `heading-order` holds every heading to the base level and plate's own headings
+ * (those with a `data-slot` marker) to the order; a gap the author's own headings make is no
+ * failure of plate, and {@link authorFindings} reports it.
  *
  * @param tree The tree's root, which must carry `lang`.
  * @param options How the tree sits in its page.
@@ -839,3 +913,24 @@ export const checkTree = (
 
   return checks.flatMap((check) => rules[check](scope).map((visit) => violation(check, visit)));
 };
+
+/**
+ * Read the findings about an emitted tree's authored content, which {@link checkTree} counts
+ * against no one: each authored heading that skips a level after another authored heading
+ * (`heading-gap`), the author's own order, which plate's heading shift reproduces as written, in
+ * document order.
+ *
+ * @param tree The tree's root.
+ * @param options How the tree sits in its page, as `checkTree` takes it.
+ * @param options.baseLevel The heading level the tree's headings start at.
+ * @returns Every finding, empty when the author's headings skip no level.
+ */
+export const authorFindings = (
+  tree: Element,
+  options: { readonly baseLevel: number },
+): readonly Finding[] =>
+  headingSteps(options.baseLevel, visitsOf(tree)).flatMap((step) =>
+    step.skipsAuthored && !step.below
+      ? [{ finding: "heading-gap", path: violation("heading-order", step.visit).path }]
+      : [],
+  );
