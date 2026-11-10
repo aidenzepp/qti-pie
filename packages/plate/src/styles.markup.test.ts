@@ -476,7 +476,7 @@ const authored: readonly Authored[] = [
     ),
     location: "witness/order.xml",
     posted: {},
-    verdict: "accepted-with-unsupported",
+    verdict: "accepted",
   },
 ];
 

@@ -228,7 +228,7 @@ describe("the skip test under allow-skipping false", () => {
         assert.isTrue(item.responses.has("RESPONSE"));
         assert.deepStrictEqual(
           item.unsupported.map(({ shown }) => shown),
-          ["notice"],
+          [],
         );
         proceeds(given, configuration);
       }),
