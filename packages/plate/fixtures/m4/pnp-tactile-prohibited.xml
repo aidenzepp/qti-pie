@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The tactile profile with tactile graphics also named in prohibit-set, which wins over the assignment and the start set. -->
+<access-for-all-pnp xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <tactile/>
+  <activate-at-initialization-set>
+    <tactile/>
+  </activate-at-initialization-set>
+  <prohibit-set>
+    <tactile/>
+  </prohibit-set>
+</access-for-all-pnp>
