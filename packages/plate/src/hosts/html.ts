@@ -7,6 +7,14 @@
  * `score`, and the page comes back with the Status part above the form. The host is stateless: it
  * keeps no record, so each post is scored as a first attempt, and it sets no attempt limit.
  *
+ * It reads a post of two content types: `application/x-www-form-urlencoded`, which it reads as
+ * text, and `multipart/form-data`, which it reads through `request.formData()`, as a page that
+ * holds a file input posts, since a file cannot travel form-urlencoded. A post of any other
+ * content type is answered with 415, and a body of either type that cannot be read, a multipart
+ * body with no boundary among them, with 400. Both types give the same entries, so a post decodes
+ * and restores alike whichever type carried it; the host reads each body whole, so the server
+ * that mounts it bounds the size of a post.
+ *
  * It keeps the duty the README states for a form that holds a Choice: the form carries
  * `autocomplete="off"` and every page it answers sends `Cache-Control: no-store`, so a browser
  * restores no Choice's checked state from its form cache or its back-forward cache over what the
@@ -24,6 +32,7 @@ import {
   decode,
   open,
   partition,
+  postedStrings,
   postings,
   redact,
   render,
@@ -139,6 +148,25 @@ const notePage = (
     { lang: "en", main: [`<h1>${escapeHtml(title)}</h1>`, `<p>${escapeHtml(detail)}</p>`], title },
     headers,
   );
+
+/**
+ * Read a post's `multipart/form-data` body as form data, which holds each file as a `Blob`.
+ *
+ * @param request The post.
+ * @returns The form data, which rejects when the body is not well-formed multipart.
+ */
+const formDataOf = (request: Request): Promise<FormData> =>
+  // oxlint-disable-next-line typescript/no-deprecated -- The deprecation warns against parsing an untrusted server's multipart response; this is a candidate's post to the host's own form, and the server that mounts the host bounds a body's size before the handler sees it, as src/dev/listen.ts does for the playground.
+  request.formData();
+
+/**
+ * Construct the page that answers a post whose body could not be read, of either content type the
+ * host takes.
+ *
+ * @returns The 400 response.
+ */
+const unreadable = (): Response =>
+  notePage(400, "Unreadable post", "The post's body could not be read; submit the form again.");
 
 /**
  * Read a stored float: a JSON number, or the name a stored record writes a float JSON has no
@@ -266,23 +294,17 @@ export const itemHost = (accepted: Accepted, configuration: Configuration): Html
    * Score a form post: decode each response the item posts, an integer in the base its
    * interaction declares, check them, then score them, and answer with the page after the submit.
    *
-   * @param body The post's form-urlencoded body.
+   * @param entries The post's entries in posted order, from either content type the host reads.
    * @returns The page: refused, with the post's strings and messages, or scored.
    */
-  const submitted = (body: string): Response => {
-    const entries = Array.from(new URLSearchParams(body), ([name, value]): Entry => [name, value]);
+  const submitted = (entries: readonly Entry[]): Response => {
     const { own } = partition(entries, instance);
     const decoded = bindings.map(({ binding, identifier, options }) => ({
       identifier,
       result: decode(own, binding, options),
     }));
     const posted = Object.fromEntries(
-      bindings.map(({ binding, identifier }) => [
-        identifier,
-        own.flatMap(([name, value]) =>
-          name !== binding.name || value instanceof Blob ? [] : [value],
-        ),
-      ]),
+      bindings.map(({ binding, identifier }) => [identifier, postedStrings(own, binding)]),
     );
     const messages = checkResponses(
       accepted,
@@ -350,25 +372,32 @@ export const itemHost = (accepted: Accepted, configuration: Configuration): Html
     }
 
     const type = request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
-    if (type !== "application/x-www-form-urlencoded") {
-      return Promise.resolve(
-        notePage(
-          415,
-          "Not a form post",
-          "Post the page's form, which sends its answers form-urlencoded.",
-        ),
+    if (type === "application/x-www-form-urlencoded") {
+      return request
+        .text()
+        .then(
+          (body) =>
+            submitted(
+              Array.from(new URLSearchParams(body), ([name, value]): Entry => [name, value]),
+            ),
+          unreadable,
+        );
+    }
+
+    if (type === "multipart/form-data") {
+      return formDataOf(request).then(
+        (form) => submitted(Array.from(form, ([name, value]): Entry => [name, value])),
+        unreadable,
       );
     }
 
-    return request
-      .text()
-      .then(submitted, () =>
-        notePage(
-          400,
-          "Unreadable post",
-          "The post's body could not be read; submit the form again.",
-        ),
-      );
+    return Promise.resolve(
+      notePage(
+        415,
+        "Not a form post",
+        "This page takes a post of type application/x-www-form-urlencoded or multipart/form-data; post the page's form.",
+      ),
+    );
   };
 };
 

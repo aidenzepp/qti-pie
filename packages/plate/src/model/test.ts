@@ -17,10 +17,17 @@
  */
 import { Array as Arr, Option, Result } from "effect";
 import { attributePath, walk } from "#plate/document/source.ts";
-import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
+import type {
+  SourceAttribute,
+  SourceDocument,
+  SourceElement,
+  Visit,
+} from "#plate/document/source.ts";
+import type { ReaderKit } from "#plate/interactions/contract.ts";
 import {
   attributeOf,
   childrenNamed,
+  collapseXmlSpace,
   elementsOf,
   floatOf,
   greatestInt,
@@ -44,12 +51,13 @@ import type { Branch, Expression, KindRule, Rule } from "#plate/model/expression
 import { kindRules, readExpression } from "#plate/model/expressions/read.ts";
 import { testRules } from "#plate/model/expressions/test.ts";
 import type { ExpressionReading } from "#plate/model/expressions/read.ts";
-import { outcomeDeclaration, pathsOf } from "#plate/model/item.ts";
-import type { OutcomeDeclaration, UnsupportedFeature } from "#plate/model/item.ts";
+import { outcomeDeclaration, parseContextOf, pathsOf } from "#plate/model/item.ts";
+import type { OutcomeDeclaration, ParseContextOf, UnsupportedFeature } from "#plate/model/item.ts";
 import { occurrenceOf } from "#plate/model/item-refs.ts";
 import { readersOf } from "#plate/model/reader.ts";
 import { integerLexical, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type {
+  FeatureOwner,
   TestFeatureKey,
   TestFeatureModule,
   TestFeatureNodes,
@@ -166,11 +174,14 @@ export interface TestPart {
 }
 
 /**
- * A feature a test holds and M2 does not deliver, where it is. A test feature is always a mark on
- * the verdict, never a notice.
+ * A feature a test holds and M2 does not deliver, where it is. A test feature is a mark on the
+ * verdict, and so is every element the test model marks. The one `notice` it holds is the one the
+ * body walk gives inside the content a module reads through `TestParseContext.read`
+ * (`#plate/test-features/contract.ts`), kept as the walk recorded it, so the module that shows
+ * that content decides how a notice looks.
  */
 export interface MarkedFeature extends UnsupportedFeature {
-  readonly shown: "mark";
+  readonly shown: "mark" | "notice";
 }
 
 /**
@@ -197,9 +208,10 @@ export type TestFeatures = TestFeatureNodes<AnyTestFeature>;
  * item model holds an item's, and `outcomeProcessing` its outcome processing in one of three
  * states. `unsupported` lists every feature not delivered, in document order, each once per feature
  * and path: the keys of `testMarks`, the marks the item model gives an outcome declaration it does
- * not hold, and the marks of outcome processing the engine cannot run. A package's test may follow
- * them with the marks only its items show ({@link withUnheldReads}) and those of its item refs that
- * name an LTI link ({@link withLtiLinks}).
+ * not hold, the marks of outcome processing the engine cannot run, and the features the body walk
+ * records in the content a module reads through its context. A package's test may follow them with
+ * the marks only its items show ({@link withUnheldReads}) and those of its item refs that name an
+ * LTI link ({@link withLtiLinks}).
  */
 export interface Test {
   /**
@@ -541,7 +553,7 @@ const itemRef = (
       }),
       control,
       fixed,
-      href: trimXmlSpace(href).replaceAll(xmlWhitespaceRun, " "),
+      href: collapseXmlSpace(href),
       identifier,
       kind: "item-ref",
       mappings: new Map(mappings),
@@ -699,35 +711,152 @@ interface FeatureWalk {
 }
 
 /**
+ * The owner of what sits directly in the test: the test itself.
+ */
+const testOwner: FeatureOwner = { kind: "test" };
+
+/**
+ * The structural elements that own what they hold, by local name, each with the kind of owner it
+ * makes. A `qti-assessment-section-ref` is not among them: it is a mark and owns nothing.
+ */
+const structuralOwners: ReadonlyMap<string, "item-ref" | "part" | "section"> = new Map([
+  ["qti-assessment-item-ref", "item-ref"],
+  ["qti-assessment-section", "section"],
+  ["qti-test-part", "part"],
+]);
+
+/**
+ * Give the owner of what sits directly in an element: the element itself when it is structural,
+ * named by its `identifier` as the model reads it and the empty string when it writes none, and
+ * otherwise the owner the element sits in.
+ *
+ * @param element The element.
+ * @param enclosing The owner the element itself sits in.
+ * @returns The owner of the element's children.
+ */
+const ownerBelow = (element: SourceElement, enclosing: FeatureOwner): FeatureOwner => {
+  const kind = isQti(element) ? structuralOwners.get(element.local) : undefined;
+
+  return kind === undefined
+    ? enclosing
+    : {
+        identifier: Option.match(valueOf(element, "identifier"), {
+          onNone: () => "",
+          onSome: identifierOf,
+        }),
+        kind,
+      };
+};
+
+/**
+ * Give the owner of an element the walk has reached and record what its children inherit. The walk
+ * is in document order, so an element's parent has been recorded before the element is reached.
+ *
+ * @param owners What the elements the walk has reached hand their children, by element.
+ * @param visit The element the walk has reached.
+ * @returns The owner of the element: the nearest structural element above it, the test when none.
+ */
+const ownerOf = (owners: Map<SourceElement, FeatureOwner>, visit: Visit): FeatureOwner => {
+  const enclosing = Option.getOrElse(
+    visit.parent.pipe(Option.flatMap((parent) => Option.fromUndefinedOr(owners.get(parent)))),
+    () => testOwner,
+  );
+  owners.set(visit.element, ownerBelow(visit.element, enclosing));
+
+  return enclosing;
+};
+
+/**
+ * Join the features the walk of a module's reader kit recorded to the marks of the test, each once
+ * per feature and path, after those already there.
+ *
+ * @param into Where the marks are collected.
+ * @param recorded The features the kit recorded, in the order recorded.
+ */
+const carryRecorded = (into: FeatureWalk, recorded: readonly UnsupportedFeature[]): void => {
+  for (const entry of recorded) {
+    if (!into.marks.some((each) => each.feature === entry.feature && each.path === entry.path)) {
+      into.marks.push(entry);
+    }
+  }
+};
+
+/**
+ * The reader kit over a test document, made when it is first used, and the features recorded
+ * through it.
+ */
+interface FreshKit {
+  /**
+   * Give the kit, building it on the first call.
+   */
+  readonly kit: () => ReaderKit;
+  /**
+   * Give the features recorded through the kit so far, none while it has not been used.
+   */
+  readonly recorded: () => readonly UnsupportedFeature[];
+}
+
+/**
+ * Make the reader kit over a test document by the item model, once and only when it is asked for,
+ * since a stub never reads a body and the build walks the whole document.
+ *
+ * @param source The test document.
+ * @param element The element being parsed, one of the document's.
+ * @returns The kit, built on first use, and the features recorded through it.
+ */
+const freshKitOf = (source: SourceDocument, element: SourceElement): FreshKit => {
+  let made: ParseContextOf | undefined;
+
+  return {
+    kit: () => {
+      made ??= parseContextOf(source, element);
+
+      return made.context.read;
+    },
+    recorded: () => made?.unsupported ?? [],
+  };
+};
+
+/**
  * Read an element a test-feature module names by the module's `parse`, which the way to record
- * the element's mark, its path and the readers are handed to: a stub records the mark and reads no
- * node; a module that has landed reads its node, which is collected under the module's key.
+ * the element's mark, its owner, its path, the reader kit over the test document and the readers
+ * are handed to: a stub records the mark and reads no node; a module that has landed reads its
+ * node, which is collected under the module's key. The features the module's reader kit recorded
+ * join the marks once `parse` returns ({@link carryRecorded}).
  *
  * @param build The build.
  * @param into Where the marks and the nodes are collected.
  * @param module The element's module.
- * @param element The element.
- * @param path Its path.
+ * @param visit The element the walk reached, with its path.
+ * @param owner The owner of the element.
  * @returns Nothing, or the refusal the module's `parse` gives.
  */
 const readFeature = (
   build: ModelWalk,
   into: FeatureWalk,
   module: TestFeatureModule<TestFeatureKey, unknown>,
-  element: SourceElement,
-  path: string,
-): Result.Result<void, Refusal> =>
-  Result.map(
+  visit: Visit,
+  owner: FeatureOwner,
+): Result.Result<void, Refusal> => {
+  const { element, path } = visit;
+  const fresh = freshKitOf(build.document, element);
+
+  return Result.map(
     module.parse(element, {
       mark: (feature) => {
         into.marks.push({ feature, path, shown: "mark" });
 
         return Result.succeed(Option.none());
       },
+      owner,
       path,
+      get read() {
+        return fresh.kit();
+      },
       readers: readersOf(build),
     }),
     (node) => {
+      carryRecorded(into, fresh.recorded());
       if (Option.isSome(node)) {
         const nodes = into.nodes.get(module.key) ?? [];
         nodes.push(node.value);
@@ -735,14 +864,17 @@ const readFeature = (
       }
     },
   );
+};
 
 /**
  * Give every feature a test holds and M2 does not deliver, in document order, and the nodes the
  * test-feature modules read.
  *
- * An element a module names is handed to the module's `parse` ({@link readFeature}): a stub marks
- * it at its path, and either way its own subtree is not searched, so a rubric block's stylesheet
- * is not marked apart from the block. A `qti-item-session-control` gives its own marks. A
+ * An element a module names is handed to the module's `parse` ({@link readFeature}) with its owner,
+ * the nearest test, part, section or item ref above it: a stub marks it at its path, and either way
+ * its own subtree is not searched, so a rubric block's stylesheet is not marked apart from the
+ * block; what a module reads of its subtree through its context is marked where the body walk
+ * records it. A `qti-item-session-control` gives its own marks. A
  * test-level outcome declaration is marked as the item model marks an item's: the `renders` marks
  * that sit on it, at its path, and each `qti-*` element below it that the model does not read,
  * keyed by its name, its subtree not searched. An element a reader has marked already, the outcome
@@ -766,9 +898,11 @@ const marksOf = (
     const { marks } = into;
     const quiet = new Set<SourceElement>();
     const declared = new Set<SourceElement>();
+    const owners = new Map<SourceElement, FeatureOwner>();
     for (const visit of walk(source)) {
       const { element, path } = visit;
       const parent = Option.getOrUndefined(visit.parent);
+      const owner = ownerOf(owners, visit);
       const module = Option.getOrUndefined(featureAt(features, element));
       const read = placed.get(element);
       if (parent !== undefined && quiet.has(parent)) {
@@ -793,7 +927,7 @@ const marksOf = (
           declared.add(element);
         }
       } else if (module !== undefined) {
-        yield* readFeature(build, into, module, element, path);
+        yield* readFeature(build, into, module, visit, owner);
         quiet.add(element);
       } else if (isQti(element) && element.local === "qti-item-session-control") {
         marks.push(...controlMarks(element, path));

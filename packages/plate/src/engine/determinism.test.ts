@@ -26,6 +26,7 @@ import type { Draw } from "#plate/engine/random.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
+import type { RecordValue } from "#plate/model/values.ts";
 import { redact, render } from "#plate/render.ts";
 import { restore } from "#plate/restore.ts";
 import { score } from "#plate/score.ts";
@@ -405,4 +406,76 @@ describe("criterion 7 in Node: the determinism fixture's template defaults", () 
     assert.strictEqual(scoped?.numAttempts, record.numAttempts);
     assert.deepStrictEqual(scoped?.declarations.templates, pickerItem.templates);
   });
+});
+
+/**
+ * Where {@link recordAnswerXml} is opened from.
+ */
+const recordAnswerLocation = "items/record-answer.xml";
+
+/**
+ * A hand-built item whose `record` response `R`, which a Text Entry binds, sets the integer
+ * outcome `COUNT` to its field `integerValue` plus the template value `SHIFT`, which template
+ * processing draws, so its stored record holds a drawn value beside the record answer.
+ */
+const recordAnswerXml = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="record-answer" title="Record answer" time-dependent="false" xml:lang="en">
+  <qti-response-declaration identifier="R" cardinality="record"/>
+  <qti-outcome-declaration identifier="COUNT" base-type="integer" cardinality="single"/>
+  <qti-template-declaration identifier="SHIFT" base-type="integer" cardinality="single"/>
+  <qti-template-processing>
+    <qti-set-template-value identifier="SHIFT"><qti-random-integer min="1" max="9"/></qti-set-template-value>
+  </qti-template-processing>
+  <qti-item-body><p>Add <qti-printed-variable identifier="SHIFT"/> to <qti-text-entry-interaction response-identifier="R"/></p></qti-item-body>
+  <qti-response-processing>
+    <qti-set-outcome-value identifier="COUNT"><qti-sum><qti-field-value field-identifier="integerValue"><qti-variable identifier="R"/></qti-field-value><qti-variable identifier="SHIFT"/></qti-sum></qti-set-outcome-value>
+  </qti-response-processing>
+</qti-assessment-item>
+`;
+
+/**
+ * The record a candidate's answer to `R` gives, as a host's `decode` builds it from typed text.
+ */
+const recordAnswer: RecordValue = {
+  cardinality: "record",
+  fields: [
+    { identifier: "stringValue", value: { baseType: "string", value: "12" } },
+    { identifier: "integerValue", value: { baseType: "integer", value: 12n } },
+  ],
+};
+
+describe("criterion 7 in Node: a session with a record answer", () => {
+  it.effect(
+    "record answer determinism: two fresh begins under one seed, each scored with the same record answer, store the same record, restore it and render the same HTML",
+    () =>
+      Effect.gen(function* recordAnswerAlike() {
+        const verdict = yield* open(
+          recordAnswerLocation,
+          new TextEncoder().encode(recordAnswerXml),
+        );
+        const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+          assert.fail(`${recordAnswerLocation} is ${verdict.verdict}, not accepted`),
+        );
+        const sessionOf = Effect.fnUntraced(function* sessionOf() {
+          const begun = yield* Effect.fromResult(
+            begin(accepted, { instance: determinismInstance, seed: determinismSeed }),
+          );
+          const scored = yield* Effect.fromResult(score(accepted, { R: recordAnswer }, begun));
+          const restored = yield* Effect.fromResult(restore(accepted, scored));
+
+          return {
+            html: renderedFrom(accepted, restored.record, restored.values),
+            records: restored.record.records,
+            scored,
+          };
+        });
+        const first = yield* sessionOf();
+        const second = yield* sessionOf();
+
+        assert.deepStrictEqual(first.records, { R: recordAnswer });
+        assert.deepStrictEqual(second.scored, first.scored);
+        assert.deepStrictEqual(second.records, first.records);
+        assert.strictEqual(second.html, first.html);
+      }),
+  );
 });

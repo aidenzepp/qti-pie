@@ -158,7 +158,6 @@ them. Only this boundary logs the failure; callers must avoid logging it again.
 Decisive evidence: the error log receives the original sanitized `CatalogTimeout` instance, retaining its tag, timeout reason, and timeout duration with the operation annotation. The returned typed error carries only the curated read-retry message.
 
 ```ts
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -213,7 +212,6 @@ export const loadCatalog = Effect.fn("catalog.get")(function* loadCatalog(
 Decisive evidence: the log still has error level and the operation annotation, and the public typed failure is unchanged, but `cause.message` loses the original error object, timeout reason, and timeout duration. This example is negative only on preservation of diagnostic structure.
 
 ```ts
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 

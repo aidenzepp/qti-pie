@@ -3,8 +3,9 @@ import { materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { FileEdit, FixtureSpec, TextEdit } from "#pantry/test/fixtures.ts";
 import { annotationXmlBlock, mathmlGroups } from "#pantry/test/mathml-blocks.ts";
 import type { MathmlBlock, MathmlGroup } from "#pantry/test/mathml-blocks.ts";
-import type { LawName, Rule } from "#pantry/import/refusal.ts";
+import type { LawName } from "#pantry/import/refusal.ts";
 import { mathmlNamespace, xlinkNamespace } from "#pantry/vocab/namespaces.ts";
+import type { Rule } from "#pantry/import/rules.ts";
 
 /**
  * The MathML fixtures of phase 6 revision N: names, specs and the verdict each one is expected to
