@@ -18,6 +18,7 @@ import { redact, render } from "#plate/render.ts";
 import type { Options } from "#plate/render.ts";
 import { upgrade } from "#plate/runtime.dom.ts";
 import { readHidden } from "#plate/runtime/wire.dom.ts";
+import { tabTo } from "#plate/test/tab.dom.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -368,7 +369,7 @@ describe(server.browser, () => {
       await withPage({}, async (page) => {
         const h1 = page.hotspot("H1");
 
-        await userEvent.tab();
+        await tabTo(h1, userEvent);
         assert.strictEqual(document.activeElement, h1);
 
         await userEvent.keyboard("{Enter}");
@@ -787,7 +788,7 @@ describe(server.browser, () => {
 
       try {
         assert.deepStrictEqual(
-          nameless.controllers.map(({ kind }) => kind),
+          nameless.controllers.flatMap((upgraded) => ("kind" in upgraded ? [upgraded.kind] : [])),
           ["graphic-associate"],
         );
 
