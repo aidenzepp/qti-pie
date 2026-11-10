@@ -4,9 +4,9 @@
  *
  * A package's entries are its `Entry` family, in listing order. Each entry that is a document, a
  * `Document` row of the package at its path, is read by one ordered scan of its nodes, page by page
- * (`#pantry/export/scan.ts` `documentScanOf`, `#pantry/export/pages.ts`), assembled with one stack
- * (`#pantry/model/assemble.ts`) and written by `unshred` in its export charset; every other entry
- * is written as the bytes the import read. No tree is walked and no query recurses.
+ * (`#pantry/export/scan.ts` `documentScanOf`, `#pantry/export/pages.ts`), and written from its
+ * folded rows by `scanXml` (`#pantry/export/render.ts`) in its export charset; every other entry is
+ * written as the bytes the import read. No tree is walked and no query recurses.
  */
 import { Db } from "@bjornpagen/grizzle";
 import type { CursorError, DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
@@ -14,13 +14,11 @@ import { Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import type { PlatformError } from "effect";
 import { compareRecord } from "#pantry/export/compare.ts";
 import type { Report } from "#pantry/export/compare.ts";
-import { addRow, assembleScan, emptyScan, scannedRows } from "#pantry/export/pages.ts";
+import { addRow, emptyScan, scannedRows } from "#pantry/export/pages.ts";
 import type { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
-import { grammar } from "#pantry/grammar/install.ts";
+import { scanXml } from "#pantry/export/render.ts";
 import type { AssembleError } from "#pantry/model/assemble.ts";
-import { namesOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { unshred } from "#pantry/model/unshred.ts";
 import { writeZip } from "#pantry/package/zip.ts";
 import type { ZipEntry } from "#pantry/package/zip.ts";
 import { authorLogin } from "#pantry/qti/logins.ts";
@@ -28,12 +26,6 @@ import { Package } from "#pantry/qti/package.ts";
 import type { AuthorRole } from "#pantry/qti/roles.ts";
 import { qti } from "#pantry/qti/schema.ts";
 import type { EncodeError } from "@qti-pie/crust/errors.ts";
-
-/**
- * The names every document is written under: the composed grammar's, the one `install.ts` loads
- * for the schema, so the export computes no grammar of its own.
- */
-const names = namesOf(grammar);
 
 /**
  * The rows each page of a document's scan asks for.
@@ -77,11 +69,11 @@ type EntriesError =
 /**
  * The entries an export of the package `packageId` writes, in listing order, without writing any.
  *
- * Each document of the package is scanned in pages of `size` rows, assembled, and written by
- * `unshred` in its export charset; a document that cannot be written in that charset fails here,
- * and nothing falls back to another. Every other entry is the record's bytes. A document whose
- * path the record lacks, which `Entry`'s laws refuse, is written after the record's entries, so a
- * comparison reports it rather than losing it.
+ * Each document of the package is scanned in pages of `size` rows and written from the folded rows
+ * by `scanXml` (`#pantry/export/render.ts`) in its export charset; a document that cannot be
+ * written in that charset fails here, and nothing falls back to another. Every other entry is the
+ * record's bytes. A document whose path the record lacks, which `Entry`'s laws refuse, is written
+ * after the record's entries, so a comparison reports it rather than losing it.
  *
  * The documents, the record and each page are separate reads, each in a snapshot of its own. They
  * agree because a package is written once, in one transaction, and never changed: no relation of
@@ -115,9 +107,8 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
       emptyScan<Composed>,
       addRow,
     ).pipe(Effect.withSpan("export.scanDocument", { attributes: { document: node, path } }));
-    const document = yield* Effect.fromResult(assembleScan(node, scan));
 
-    rendered.set(path, yield* unshred(document, names));
+    rendered.set(path, yield* scanXml(node, scan));
   }
 
   const recorded = new Set(record.map(({ path }) => path));
@@ -174,12 +165,46 @@ export const compareWithRecord = Effect.fn("export.compareWithRecord")(function*
 });
 
 /**
+ * Write entries to `target`: a directory holding each entry as a file at its path, or, when
+ * `target` ends `.zip`, one zip file holding the entries at those paths, written by `writeZip`.
+ *
+ * The directory, or the zip file's directory, and every directory an entry's path names are
+ * created when absent.
+ *
+ * @param entries - The entries to write, as {@link exportEntries} gives them.
+ * @param target - The directory to write under, or the `.zip` file to write.
+ * @returns Completes once every entry is written. Fails with the file system's error.
+ */
+export const writeEntries = Effect.fn("export.writeEntries")(function* writeEntries(
+  entries: readonly ZipEntry[],
+  target: string,
+): Effect.fn.Return<void, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path> {
+  yield* Effect.annotateCurrentSpan({ entries: entries.length, target });
+
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+
+  if (target.endsWith(".zip")) {
+    yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+    yield* fs.writeFile(target, writeZip(entries));
+
+    return;
+  }
+
+  for (const entry of entries) {
+    const file = path.join(target, entry.path);
+
+    yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+    yield* fs.writeFile(file, entry.bytes);
+  }
+});
+
+/**
  * Write the package `packageId` to `target`: a directory of the files it was imported from, or,
  * when `target` ends `.zip`, one zip file holding the same entries.
  *
- * The entries are those of {@link exportEntries}, all read, assembled and encoded before anything
- * is written, so an export that cannot be made writes nothing. A zip target holds those entries at
- * those paths, written by `writeZip`, and its directory is created when absent.
+ * The entries are those of {@link exportEntries}, all read, assembled and encoded before
+ * {@link writeEntries} writes anything, so an export that cannot be made writes nothing.
  *
  * @param packageId - The id of the imported package.
  * @param target - The directory to write under, or the `.zip` file to write, created when absent.
@@ -196,23 +221,8 @@ export const exportPackage = Effect.fn("export.exportPackage")(function* exportP
 > {
   yield* Effect.annotateCurrentSpan({ packageId, target });
 
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   const entries = yield* exportEntries(packageId);
-
-  if (target.endsWith(".zip")) {
-    yield* fs.makeDirectory(path.dirname(target), { recursive: true });
-    yield* fs.writeFile(target, writeZip(entries));
-
-    return entries;
-  }
-
-  for (const entry of entries) {
-    const file = path.join(target, entry.path);
-
-    yield* fs.makeDirectory(path.dirname(file), { recursive: true });
-    yield* fs.writeFile(file, entry.bytes);
-  }
+  yield* writeEntries(entries, target);
 
   return entries;
 });
