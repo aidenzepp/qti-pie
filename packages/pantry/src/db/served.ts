@@ -37,10 +37,13 @@ export const servedPath: string = fileURLToPath(
 );
 
 /**
- * The served file's text as the JSON value grizzle's `served` takes, which grizzle reads whole and
- * checks against the login's name when the layer is built.
+ * The served file's text as the JSON value grizzle's `served` takes: parsed once, and handed over
+ * as it is. grizzle reads the value through its one reader of a served file and checks it against
+ * the login's name when the layer is built, so it is not walked again here: `Schema.Json` would
+ * only prove of every node what the parse already did, and doubles the cost of reading the
+ * login's megabytes.
  */
-export const ServedText = Schema.fromJsonString(Schema.Json);
+export const ServedText = Schema.fromJsonString(Schema.Unknown);
 
 /**
  * The author login, served from its committed file (grizzle's `served`): the one value the layer is
