@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The transcript profile with the support also named in prohibit-set, which wins over the assignment and the activation. -->
+<access-for-all-pnp xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <transcript/>
+  <activate-at-initialization-set>
+    <transcript/>
+  </activate-at-initialization-set>
+  <prohibit-set>
+    <transcript/>
+  </prohibit-set>
+</access-for-all-pnp>

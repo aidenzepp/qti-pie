@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A hand-written item whose audio clip names a catalog holding a transcript card (two speakers) and an audio-description card. -->
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m4-catalog-transcript" title="Catalog transcript" adaptive="false" time-dependent="false" xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>B</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <p>Listen to the interview with the lighthouse keeper, then answer the question.</p>
+    <audio controls="controls" src="media/interview.mp3" data-catalog-idref="interview-alternatives">
+      Your browser cannot play the interview.
+    </audio>
+    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-prompt>For how long has the keeper tended the lamp?</qti-prompt>
+      <qti-simple-choice identifier="A">Three years</qti-simple-choice>
+      <qti-simple-choice identifier="B">Thirty years</qti-simple-choice>
+      <qti-simple-choice identifier="C">Three hundred years</qti-simple-choice>
+    </qti-choice-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+  <qti-catalog-info>
+    <qti-catalog id="interview-alternatives">
+      <qti-card support="transcript">
+        <qti-html-content>
+          <p><strong>Interviewer:</strong> Welcome aboard the harbour light. How long have you kept the lamp?</p>
+          <p><strong>Keeper:</strong> Thirty years now, and the beam has not failed in a single storm.</p>
+          <p><em>[A foghorn sounds twice in the distance.]</em></p>
+        </qti-html-content>
+      </qti-card>
+      <qti-card support="audio-description">
+        <qti-html-content>
+          <p>Narrator: A weathered keeper in a yellow coat stands beside the great lamp as the sea churns below.</p>
+        </qti-html-content>
+      </qti-card>
+    </qti-catalog>
+  </qti-catalog-info>
+</qti-assessment-item>
