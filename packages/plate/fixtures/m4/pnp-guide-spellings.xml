@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A hand-written AfA PNP 3.0 bulk file of one record in the guide's spellings, one per row of the
+  twelve points where the guide and the schema disagree: the guide's namespace (3), assignment-id
+  (9), every hazard plus an ext: value with a hyphen (2, 4), the two extra input requirements (5),
+  skip-chemical-equations (6), ubae (12), spell-checker and homophone-checker (8), color-theme (1),
+  a relative font-size (10), letter-spacing in pixels (11) and activate-at-initiation-set (7).
+-->
+<access-for-all-pnp-records xmlns="http://www.imsglobal.org/xsd/qtiv3p0/imsafa3p0pnp_v1p0">
+  <access-for-all-pnp-record>
+    <person-sourced-id source-system="sis.example">person-300</person-sourced-id>
+    <assignment-id>assignment-7</assignment-id>
+    <access-for-all-pnp>
+      <hazard-avoidance>flashing</hazard-avoidance>
+      <hazard-avoidance>sound</hazard-avoidance>
+      <hazard-avoidance>olfactory-hazard</hazard-avoidance>
+      <hazard-avoidance>motion-simulation</hazard-avoidance>
+      <hazard-avoidance>ext:iowa-reading</hazard-avoidance>
+      <input-requirements>full-switch-control</input-requirements>
+      <input-requirements>full-touchscreen-control</input-requirements>
+      <spoken>
+        <restriction-type>skip-chemical-equations</restriction-type>
+      </spoken>
+      <braille>
+        <braille-type>ubae</braille-type>
+      </braille>
+      <spell-checker/>
+      <homophone-checker/>
+      <text-appearance>
+        <color-theme>yellow-blue</color-theme>
+        <font-size>1.6</font-size>
+        <letter-spacing>2</letter-spacing>
+      </text-appearance>
+      <activate-at-initiation-set>
+        <spoken/>
+        <spell-checker/>
+      </activate-at-initiation-set>
+    </access-for-all-pnp>
+  </access-for-all-pnp-record>
+</access-for-all-pnp-records>
