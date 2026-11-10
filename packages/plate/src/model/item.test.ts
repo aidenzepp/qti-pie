@@ -5838,6 +5838,55 @@ describe("buildItem, catalog references", () => {
         ]);
       }),
   );
+
+  it.effect(
+    "[W0-AU] the D22 names and data-catalog-idref are unchanged beside an author data-*",
+    () =>
+      Effect.gen(function* specialCasesStand() {
+        const ssml = '{"say-as":{"interpret-as":"characters"}}';
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "p",
+                  [
+                    attr("data-catalog-idref", "glossary"),
+                    attr("data-author-note", "x"),
+                    attr("data-ssml", ssml),
+                  ],
+                  [el("span", [attr("data-qti-suppress-tts", "true")], [text("QTI")])],
+                ),
+              ],
+              declarations: [],
+            }),
+          ),
+        );
+
+        assert.deepStrictEqual(built.body[0], {
+          attributes: [
+            { name: "data-author-note", value: "x" },
+            { name: "data-ssml", value: ssml },
+          ],
+          catalog: "glossary",
+          children: [
+            {
+              attributes: [{ name: "data-qti-suppress-tts", value: "true" }],
+              children: [{ kind: "text", text: "QTI" }],
+              kind: "element",
+              path: `${body}/p/span`,
+              tag: "span",
+            },
+          ],
+          kind: "element",
+          path: `${body}/p`,
+          tag: "p",
+        });
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "data-catalog-idref", path: `${body}/p`, shown: "mark" },
+        ]);
+      }),
+  );
 });
 
 describe("buildItem on an element a module could own as its container", () => {

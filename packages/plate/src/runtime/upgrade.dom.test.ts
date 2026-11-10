@@ -1,11 +1,11 @@
 /**
  * The runtime's entry, its walk and its two page-side services, in each engine's page: `upgrade`
- * attaches nothing and moves no focus over every M2 fixture item as plate renders it, the walk
- * attaches a registered controller once per root with its item's live region, the live region
- * re-announces by clearing first, and the hidden-input wire keeps one input per value. Through the
- * page's registry, `upgrade` attaches, in every fixture item of every area, exactly the roots whose
- * kind has a runtime, tears them down to the SSR's markup, and never moves focus or speaks on its
- * own.
+ * attaches nothing but the item's Root and moves no focus over every M2 fixture item as plate
+ * renders it, the walk attaches a registered controller once per root with its item's live region,
+ * the live region re-announces by clearing first, and the hidden-input wire keeps one input per
+ * value. Through the page's registry, `upgrade` attaches, in every fixture item of every area, the
+ * item's Root and exactly the interaction roots whose kind has a runtime, tears them down to the
+ * SSR's markup, and never moves focus or speaks on its own.
  *
  * Every case sits under a `describe` named by the engine (`server.browser`), as in
  * `src/test/page.dom.test.ts`.
@@ -162,8 +162,15 @@ const nativeSlots = [
 ] as const;
 
 /**
- * Count, by `data-slot` marker, the interaction roots under a node and how many of them an upgrade
- * attached a controller to.
+ * The selector of every root an upgrade may attach a controller to in an item as plate renders it:
+ * the item's own Root, then the interaction roots, which carry markers of their own.
+ */
+const upgradableRootSelector = `[data-slot="item"],${interactionRootSelector}`;
+
+/**
+ * Count, by `data-slot` marker, the item Roots and the interaction roots under a node, and how many
+ * of them an upgrade attached a controller to. A Root's marker is `item`, so it is counted apart
+ * from every interaction root, whose marker ends `-interaction`.
  *
  * @param root The node the upgrade ran under.
  * @param upgraded The upgrade.
@@ -176,7 +183,7 @@ const countBySlot = (
   const counts = new Map<string, { attached: number; roots: number }>();
   const attachedRoots = new Set(upgraded.controllers.map(({ root: element }) => element));
 
-  for (const element of root.querySelectorAll<HTMLElement>(interactionRootSelector)) {
+  for (const element of root.querySelectorAll<HTMLElement>(upgradableRootSelector)) {
     const slot = element.dataset["slot"] ?? "";
     const count = counts.get(slot) ?? { attached: 0, roots: 0 };
 
@@ -190,38 +197,46 @@ const countBySlot = (
 
 describe(server.browser, () => {
   describe("upgrade", () => {
-    it.effect("attaches nothing and moves no focus over every M2 fixture item", () =>
-      Effect.gen(function* fixturesStayStill() {
-        const items = yield* fixtureItems;
+    it.effect(
+      "[W0-ROOT-CTRL] every fixture item's Root is upgraded, and only it, where no interaction has a runtime",
+      () =>
+        Effect.gen(function* fixturesStayStill() {
+          const items = yield* fixtureItems;
 
-        assert.isAtLeast(items.length, 5);
+          assert.isAtLeast(items.length, 5);
 
-        for (const file of items) {
-          const container = mount(yield* renderedFixture(file));
-          const focused: EventTarget[] = [];
-          const record = (event: FocusEvent) => {
-            focused.push(event.target ?? document);
-          };
-          const before = document.activeElement;
+          for (const file of items) {
+            const container = mount(yield* renderedFixture(file));
+            const itemRoot = container.querySelector<HTMLElement>('[data-slot="item"]');
+            const focused: EventTarget[] = [];
+            const record = (event: FocusEvent) => {
+              focused.push(event.target ?? document);
+            };
+            const before = document.activeElement;
 
-          document.addEventListener("focusin", record);
+            document.addEventListener("focusin", record);
 
-          const scoped = upgrade(container);
-          const whole = upgrade();
+            const scoped = upgrade(container);
+            const whole = upgrade();
 
-          document.removeEventListener("focusin", record);
+            document.removeEventListener("focusin", record);
 
-          assert.isAbove(container.querySelectorAll('[data-slot$="-interaction"]').length, 0, file);
-          assert.deepStrictEqual(scoped.controllers, [], file);
-          assert.deepStrictEqual(whole.controllers, [], file);
-          assert.strictEqual(document.activeElement, before, file);
-          assert.deepStrictEqual(focused, [], file);
+            assert.isNotNull(itemRoot, file);
+            assert.isAbove(
+              container.querySelectorAll('[data-slot$="-interaction"]').length,
+              0,
+              file,
+            );
+            assert.deepStrictEqual(scoped.controllers, [{ root: itemRoot, slot: "item" }], file);
+            assert.deepStrictEqual(whole.controllers, [], file);
+            assert.strictEqual(document.activeElement, before, file);
+            assert.deepStrictEqual(focused, [], file);
 
-          scoped.teardown();
-          whole.teardown();
-          container.remove();
-        }
-      }),
+            scoped.teardown();
+            whole.teardown();
+            container.remove();
+          }
+        }),
     );
 
     it("reads a runtime kind from an interaction root's marker only", () => {
@@ -297,16 +312,25 @@ describe(server.browser, () => {
           for (const [label, html] of items) {
             const container = mount(html);
             const roots = [...container.querySelectorAll<HTMLElement>(interactionRootSelector)];
+            const itemRoots = [...container.querySelectorAll<HTMLElement>('[data-slot="item"]')];
             const upgraded = upgrade(container);
 
+            assert.isAbove(itemRoots.length, 0, label);
             assert.deepStrictEqual(
               upgraded.controllers.map(({ root }) => root),
-              roots.filter((root) => runtimeSlots.has(root.dataset["slot"] ?? "")),
+              [
+                ...roots.filter((root) => runtimeSlots.has(root.dataset["slot"] ?? "")),
+                ...itemRoots,
+              ],
               label,
             );
 
-            for (const { kind, root } of upgraded.controllers) {
-              assert.strictEqual(root.dataset["slot"], `${kind}-interaction`, label);
+            for (const entry of upgraded.controllers) {
+              assert.strictEqual(
+                entry.root.dataset["slot"],
+                "kind" in entry ? `${entry.kind}-interaction` : entry.slot,
+                label,
+              );
             }
 
             for (const [slot, count] of countBySlot(container, upgraded)) {
@@ -330,14 +354,50 @@ describe(server.browser, () => {
 
           assert.isAtLeast(gapMatch?.roots ?? 0, 1);
           assert.strictEqual(gapMatch?.attached, gapMatch?.roots);
+
+          const itemRoots = totals.get("item");
+
+          assert.isAtLeast(itemRoots?.roots ?? 0, items.length);
+          assert.strictEqual(itemRoots?.attached, itemRoots?.roots);
         }),
     );
+
+    it("[W0-ROOT-CTRL] countBySlot counts the Root apart from the interaction roots", () => {
+      const container = mount(everyKindItem);
+      const itemRoot = container.querySelector<HTMLElement>('[data-slot="item"]');
+      const upgraded = upgrade(container);
+      const counts = countBySlot(container, upgraded);
+
+      assert.isNotNull(itemRoot);
+
+      for (const kind of runtimeKinds) {
+        assert.deepStrictEqual(counts.get(`${kind}-interaction`), { attached: 1, roots: 1 }, kind);
+      }
+
+      assert.deepStrictEqual(counts.get("item"), { attached: 1, roots: 1 });
+      assert.sameMembers(
+        [...counts.keys()],
+        ["item", ...runtimeKinds.map((kind) => `${kind}-interaction`)],
+      );
+      assert.lengthOf(upgraded.controllers, runtimeKinds.length + 1);
+      assert.deepStrictEqual(
+        upgraded.controllers.filter((entry) => "slot" in entry),
+        [{ root: itemRoot, slot: "item" }],
+      );
+      assert.deepStrictEqual(
+        upgraded.controllers.flatMap((entry) => ("kind" in entry ? [entry.kind] : [])),
+        [...runtimeKinds],
+      );
+
+      upgraded.teardown();
+      container.remove();
+    });
 
     it("[runtime] teardown removes every mark and a second upgrade re-attaches", () => {
       const container = mount(everyKindItem);
       const first = upgrade(container);
 
-      assert.strictEqual(first.controllers.length, runtimeKinds.length);
+      assert.strictEqual(first.controllers.length, runtimeKinds.length + 1);
 
       const upgradedRoots = new Set<Element>(first.controllers.map(({ root }) => root));
 

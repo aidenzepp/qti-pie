@@ -69,6 +69,8 @@ It exits 0 only when every test whose title carries the tag passed and none was 
 
 Browser tests: `pnpm --filter @qti-pie/plate test:browser`. It runs Chromium and WebKit, and both must pass. Report the counts per engine.
 
+Keyboard rows in an in-page test (`*.dom.test.ts`) move focus with `tabTo` or `nextControlKey` from `packages/plate/src/test/tab.dom.ts`, never with a bare `userEvent.tab()` or `userEvent.keyboard("{Tab}")`: WebKit on macOS moves Tab between text fields only, so a bare Tab passes in CI and fails on the maintainers' machines, which run the browser suite before an area merges.
+
 Caches. The environment pre-fetches `~/.cache/gr8des`. `PLATE_REQUIRE_CACHES` is not set in the cloud. The three `conformance-text` tests skip there, because the source text cannot be reproduced on the VM, and that is expected. Every other test must run and pass.
 
 ## Rules
@@ -92,6 +94,7 @@ Each rule is one line, and each has a reason in the fan-out plan.
 15. Every exported name has TSDoc, per `.agents/skills/document-code/SKILL.md`.
 16. Commit as `<type>(plate): <title>`, per `.agents/skills/conventional-commits/SKILL.md`.
 17. Create no scratch file in the checkout except under `packages/plate/work/`, which git ignores.
+18. A module's part that lives inside an `svg` declares `svg-content`, and its `svg` part declares `svg`, never `any`, because the HTML parser moves an HTML tag out of an svg and keeps any other name as a foreign element, so a host's swap to an HTML tag breaks the picture.
 
 ## The pull request
 
