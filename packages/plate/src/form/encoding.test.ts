@@ -412,6 +412,42 @@ describe("encode and decode", () => {
     }),
   );
 
+  it.effect(
+    "decodes no entry as the absent option's value, one empty entry as NULL still, and ignores it for a record",
+    () =>
+      Effect.gen(function* absentOption() {
+        const single = binding("boolean");
+        const falsity = value(single, booleanOf(false));
+        const point = binding("point");
+        const origin = value(point, { baseType: "point", value: [0n, 0n] });
+
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode([], single, { absent: falsity })),
+          falsity,
+        );
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(posted(""), single, { absent: falsity })),
+          value(single),
+        );
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(posted("true"), single, { absent: falsity })),
+          value(single, booleanOf(true)),
+        );
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode([], point, { absent: origin })),
+          origin,
+        );
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(postedPoints([""], [""]), point, { absent: origin })),
+          value(point),
+        );
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode([], recordBinding, { absent: falsity })),
+          { cardinality: "record", fields: [] },
+        );
+      }),
+  );
+
   it.effect("[Q-20] refuses abc, INF, -INF and NaN as a float", () =>
     Effect.gen(function* floatRefusals() {
       for (const text of ["abc", "INF", "-INF", "NaN"]) {

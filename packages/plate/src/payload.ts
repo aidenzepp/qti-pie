@@ -39,6 +39,7 @@ import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions
 import type { Locale } from "#plate/messages.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
 import {
+  absentValueOf,
   interactionsIn,
   isInteraction,
   isStubbed,
@@ -2332,7 +2333,10 @@ export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): Readonly
  * `#plate/form/encoding.ts`), one whole number in each, x then y, so a module renders
  * `name="<entry>.x"` and `name="<entry>.y"` for each value and `decode` pairs them by position. A
  * `boolean` response posts one entry whose value is `true` or `false`; an absent entry is no
- * response.
+ * response, NULL, unless the module of an interaction that binds the response says otherwise
+ * through its `absentValue` (`InteractionModule` in `#plate/interactions/contract.ts`), which the
+ * posting carries as `options.absent` and `decode` gives for no entry: End Attempt's `false`,
+ * once issue ei-02 lands it.
  */
 export interface Posting {
   readonly binding: Binding;
@@ -2340,7 +2344,10 @@ export interface Posting {
   /**
    * The number base its integer is written in: the `base` of the first Text Entry or Extended
    * Text, in document order, that binds the response, and 10 when only a Choice or an Inline
-   * Choice binds it. `decode` does not apply it to a record.
+   * Choice binds it. `decode` does not apply it to a record. And the value no entry decodes to,
+   * `absent`, when the first interaction in document order that binds the response and whose
+   * module gives one (`absentValueOf` in `#plate/model/interactions.ts`) says so; no `absent` when
+   * none does, so no entry is NULL.
    */
   readonly options: DecodeOptions;
 }
@@ -2425,13 +2432,13 @@ export const postingsIn = (
       return [];
     }
 
-    return [
-      {
-        binding: binding.value,
-        identifier,
-        options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
-      },
-    ];
+    const base = Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10);
+    const options: DecodeOptions = Option.match(
+      Arr.findFirst(bound, (interaction) => Option.fromUndefinedOr(absentValueOf(interaction))),
+      { onNone: () => ({ base }), onSome: (absent) => ({ absent, base }) },
+    );
+
+    return [{ binding: binding.value, identifier, options }];
   });
 };
 
