@@ -1,6 +1,7 @@
 /**
  * `AuthorAppLayer` with no database: built from the committed served file and released at once,
- * and no production module imports a migration artifact as a module.
+ * the listing queries among the author login's workload members, and no production module imports
+ * a migration artifact as a module.
  *
  * The layer reads the author login's served file from disk (`#pantry/db/served.ts` resolves
  * `#migrations/qti/served/author_app.json` with `import.meta.resolve`, and `#pantry/db/layer.ts`
@@ -22,6 +23,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Cause, ConfigProvider, Effect, Exit, FileSystem } from "effect";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { exportWork } from "#pantry/test/author.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
@@ -91,6 +93,15 @@ layer(NodeServices.layer)("db/layer.ts, built from the committed served file", (
       assert.isTrue(Exit.isSuccess(exit), Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "");
     }).pipe(Effect.scoped),
   );
+});
+
+describe("the author login the layer serves", () => {
+  it("holds the listing queries in the author login's export workload", () => {
+    // Oracle: the login value itself (`#pantry/qti/logins.ts` `authorLogin`), whose workload
+    // records are the programs `grizzle generate` compiles into the served file the layer reads.
+    // Bound: the two listing members by name.
+    assert.includeMembers(Object.keys(exportWork.programs), ["packages", "documents"]);
+  });
 });
 
 describe("db/layer.ts, read from disk", () => {

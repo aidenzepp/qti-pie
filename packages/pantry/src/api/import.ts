@@ -7,16 +7,17 @@
  * own type, since it says nothing about the package. The importer's programs own the spans
  * (`import.importPackage`, `import.previewPackage`), so these add none.
  */
-import type { ApplyError, DbLayer, OpenError } from "@bjornpagen/grizzle";
+import type { ApplyError, DbLayer, OpenError } from "@bjornpagen/grizzle/runtime";
 import { Effect } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { refusalOf } from "#pantry/api/verdict.ts";
 import type { ImportVerdict, PreviewVerdict, Refusal } from "#pantry/api/verdict.ts";
+import type { ServedAuthorLogin } from "#pantry/db/served.ts";
 import type { RefusedAbove } from "#pantry/import/above.ts";
 import { importPackage as storePackage } from "#pantry/import/package.ts";
 import type { CommitUnresolved } from "#pantry/import/package.ts";
 import { previewPackage as countPackage } from "#pantry/import/preview.ts";
-import type { ImportRefused } from "#pantry/import/refusal.ts";
+import type { ImportRefused } from "#pantry/import/rules.ts";
 import type { PackageSource } from "#pantry/package/read.ts";
 import type { AuthorRole } from "#pantry/qti/roles.ts";
 
@@ -36,8 +37,9 @@ const refusedVerdict = (
  * whole package or nothing of it. Every id is minted afresh, so the same package imported twice
  * is two packages.
  *
- * Requires the platform's `FileSystem` and the author login's `DbLayer`, the app's own connection
- * to the installation of the `Qti` schema.
+ * Requires the platform's `FileSystem`, the author login's `DbLayer`, the app's own connection to
+ * the installation of the `Qti` schema, and the served login that layer is built over
+ * (`ServedAuthorLogin`), whose author role `Db.open` takes.
  *
  * @param source - The package: a directory, a `.zip` file, or a zip archive's bytes.
  * @returns `accepted` with the stored package's id, or `refused` with the {@link Refusal} that
@@ -52,7 +54,7 @@ export const importPackage = (
 ): Effect.Effect<
   ImportVerdict,
   PlatformError.PlatformError | ApplyError | OpenError | CommitUnresolved,
-  FileSystem.FileSystem | DbLayer<AuthorRole>
+  FileSystem.FileSystem | ServedAuthorLogin | DbLayer<AuthorRole>
 > =>
   storePackage(source).pipe(
     Effect.map((packageId) => ({ packageId, verdict: "accepted" }) as const),
