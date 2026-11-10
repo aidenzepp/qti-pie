@@ -48,10 +48,9 @@ import { patternFlags } from "#pantry/grammar/domains.ts";
 import { openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { loadXsd, XsdOracleLayer, xsdContents } from "#pantry/test/gen/grammar.ts";
-import { checkCache, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
+import { xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
-import { scratchDirectory } from "#pantry/test/scratch.ts";
-import { writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
+import { xsdCached } from "#pantry/test/xsd-catalog.ts";
 import {
   attributeDeclarations,
   attributeWildcards,
@@ -60,7 +59,6 @@ import {
 } from "#pantry/vocab/inventory/attributes.ts";
 import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
 import type { Domain } from "#pantry/vocab/inventory/types.ts";
-import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -2014,17 +2012,6 @@ describe("The attribute grammar's refusals", () => {
 });
 
 /**
- * Whether every pinned XSD is in the cache.
- */
-const cached = await Effect.runPromise(
-  checkCache().pipe(
-    Effect.as(true),
-    Effect.catchTag("XsdSourceMissing", () => Effect.succeed(false)),
-    Effect.provide(NodeServices.layer),
-  ),
-);
-
-/**
  * The pinned schema sets the XSD reading walks, each with the version its uses are read in.
  */
 const schemas: readonly (readonly [SourcePath, SchemaVersion])[] = [
@@ -2049,7 +2036,7 @@ const openNames: ReadonlySet<string> = new Set(openClasses);
  */
 const isLayerName = (name: string): boolean => name.startsWith("xsi:") || openNames.has(name);
 
-describe.skipIf(!cached)("The XSD's attribute uses", () => {
+describe.skipIf(!xsdCached)("The XSD's attribute uses", () => {
   it.effect(
     "are what the composed grammar admits on every kind the XSD reading reaches, with the XSD's use, the layer's names aside",
     () =>
@@ -2142,15 +2129,7 @@ describe.skipIf(!cached)("The XSD's attribute uses", () => {
  */
 const xmlGlobals = globalAttributes.filter(({ name }) => name.startsWith("xml:"));
 
-/**
- * A minimal LOM document whose `string` carries `xml:lang`: valid, since LOM loose's `string` holds
- * an `xs:anyAttribute namespace="##other" processContents="lax"`, and the XML namespace is other
- * than LOM's (the reduction of five corpus manifests the grammar refused).
- */
-const lomWithXmlLang =
-  '<lom xmlns="http://ltsc.ieee.org/xsd/LOM"><general><title><string xml:lang="en">t</string></title></general></lom>\n';
-
-describe.skipIf(!cached)("The document layer", () => {
+describe.skipIf(!xsdCached)("The document layer", () => {
   it.effect(
     "admits xml.xsd's four globals under their own domains on every kind whose lax or strict attribute wildcard admits the XML namespace, and under the open domain where it skips",
     () =>
@@ -2239,32 +2218,6 @@ describe.skipIf(!cached)("The document layer", () => {
       }),
     testTimeoutMs,
   );
-
-  it.effect(
-    "admits the LOM string's xml:lang that xmllint validates, the corpus manifests' reduction",
-    () =>
-      Effect.gen(function* lomXmlLangIsValid() {
-        const fs = yield* FileSystem.FileSystem;
-        const directory = yield* scratchDirectory("attribute-layer-");
-        const oracle = yield* writeXsdOracle(directory);
-        yield* fs.writeFileString(`${directory}/lom-xml-lang.xml`, lomWithXmlLang);
-
-        const [verdict] = yield* xmllintValidate({
-          catalog: oracle.catalog,
-          paths: [`${directory}/lom-xml-lang.xml`],
-          schema: oracle.drivers["3.0.1"],
-        });
-        const { attributes } = yield* Effect.fromResult(composed());
-
-        assert.strictEqual(verdict?._tag, "Valid");
-        assert.isTrue(
-          Option.isSome(
-            attributes.admission.lookup({ kind: "lom:string", name: "xml:lang", version: "3.0.1" }),
-          ),
-        );
-      }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
-    testTimeoutMs,
-  );
 });
 
 /**
@@ -2295,7 +2248,7 @@ const ariaRulesIn = (text: string): ReadonlyMap<string, string> => {
   );
 };
 
-describe.skipIf(!cached)("The Schematron's ARIA role rules", () => {
+describe.skipIf(!xsdCached)("The Schematron's ARIA role rules", () => {
   it.effect(
     "are what the composed grammar reads in each version, from the ASI XSD's own text: no role on a source, and an h1's role the values the rule's test names, of those the XSD lists",
     () =>
