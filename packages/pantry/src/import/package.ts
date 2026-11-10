@@ -186,15 +186,15 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
  * Import a package `readPackage` read.
  *
  * Mints every id afresh and builds every row from the package's documents and files, reading
- * nothing of its directory, then applies them as one ChangeSet through the author role. `Db.open`
- * contacts nothing of the database and refuses only what the host decides (grizzle `d994809c`), so
- * it runs once; the `importWrite` apply is retried on a transient refusal and on nothing else. When
- * the commit's outcome is unknown the package row is read back by its id ({@link
- * settleCommitUnknown}): present, the import was accepted; absent, the error is the answer; a
- * read-back that fails is `CommitUnresolved`. The same package imported twice, or one package value
- * imported twice, is two packages, each with its own ids. The retries run on {@link RetrySchedule},
- * and each attempt of the apply through {@link WrapApply}; both are references whose defaults are
- * the live ones, so a caller provides neither.
+ * nothing of its directory, then applies them as one ChangeSet through the author role. The
+ * `importWrite` apply is retried on a transient refusal and on nothing else; `Db.open` is not,
+ * since it contacts nothing of the database and refuses only what the host decides (grizzle
+ * `d994809c`), never a transient failure. When the commit's outcome is unknown the package row is
+ * read back by its id ({@link settleCommitUnknown}): present, the import was accepted; absent, the
+ * error is the answer; a read-back that fails is `CommitUnresolved`. The same package imported
+ * twice, or one package value imported twice, is two packages, each with its own ids. The retries
+ * run on {@link RetrySchedule}, and each attempt of the apply through {@link WrapApply}; both are
+ * references whose defaults are the live ones, so a caller provides neither.
  *
  * @param pkg - The package, as `readPackage` read it.
  * @returns The id of the committed package. Fails with `ImportRefused` naming the rules the
@@ -240,8 +240,9 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
     // so a `some` or `first` refusal stays under every rule its laws carry. The witness is the key
     // of the first stated row that breaks a law, or `unreported` for a foreign key and for a law no
     // stated row breaks as grizzle's host judges it (README "Errors and outcomes"). A law no row of
-    // the law table names still prints its text, and carries no rule. The laws are named from the
-    // committed dictionary, which compiles nothing, and the naming has a span of its own.
+    // the law table names still prints its text, and carries no rule. Naming the laws and
+    // explaining the refusal read the committed dictionary and the installed grammar's rows, so
+    // that step has a span of its own, which records the laws it named and their rules.
     const { refused } = outcome;
     const refusal = yield* Effect.sync(() => refusalOf(refused, outcome.witness, grammar)).pipe(
       Effect.tap((built) =>

@@ -2,14 +2,16 @@
  * The login that opens a connection: the author application, over the author role, with the export
  * scan and the import's write program as its workload, built over any `Qti` schema value.
  *
- * The import's write program is the login's `importWrite` member, declared with an empty array for
- * each relation an import writes, so each is an array member that takes a package's rows with each
- * call (README, "Reading": `db.workload.<name>`). `grizzle generate` compiles it into the login's
- * served file and `grizzle check` holds the committed file to it, so a schema whose writes cannot
- * compile fails there, never at the first import (R87, whose `BranchResolution.instanceEnd` made
- * every import's ChangeSet refuse once a migrated schema ran it). `importPackage` applies it to
- * each package's facts (`packageFactsOf` of `#pantry/import/write.ts`), and the layer loads it
- * compiling nothing.
+ * The import's write program is the login's `importWrite` member, declared with no rows: an empty
+ * array for each relation an import writes, so each is an array member that takes a package's rows
+ * with each call (README, "Reading": `db.workload.<name>`). grizzle compiles it wherever it
+ * compiles a workload: `grizzle generate`, which writes the compiled login as the served file
+ * (`migrations/qti/served/author_app.json` for this package's own), and `grizzle check`, which
+ * compiles it again and holds the file to it. A schema whose writes cannot compile then fails
+ * there, never at the first import (R87, whose `BranchResolution.instanceEnd` made every import's
+ * ChangeSet refuse once a migrated schema ran it). The runtime serves that file and compiles
+ * nothing (`#pantry/db/served.ts`): `importPackage` applies the served `importWrite` member to each
+ * package's facts (`packageFactsOf` of `#pantry/import/write.ts`; the W5 amendment's C19).
  */
 import { insertableNamesOf, login, paged, workload } from "@bjornpagen/grizzle";
 import { pipe, Record as Rec, Struct } from "effect";
@@ -67,10 +69,12 @@ export const authorWorkloadsOf = (qti: QtiSchema, author: AuthorRole) => {
  *   `packageOf`, the `Package` row by its key, a key member whose handle's `get` the export reads
  *   to refuse an id no package has and the import reads back after a commit with no answer, so
  *   every read pantry runs is a member of the workload;
- * - **the import's write program**: `changeSetOf`'s ChangeSet with no rows, every insert an array
- *   member, which each import applies to its package's facts (`importWrite`). The schema's own
- *   compile already refuses a column or a relation no write fills, so compiling it guards the
- *   refusals of the write program itself, an insert outside the author role (`OutsideRole`) and a
+ * - **the import's write program**: `changeSetOf`'s ChangeSet with no rows, the member `importWrite`,
+ *   every insert an array member. grizzle compiles a ChangeSet from its Description, which names
+ *   each insert and none of its rows, so this is the program every package's import applies to its
+ *   package's facts, compiled once into the served file. Compiling it also guards the refusals of
+ *   the write program itself: the schema's own compile already refuses a column or a relation no
+ *   write fills, and this one refuses an insert outside the author role (`OutsideRole`) and a
  *   stratum no order of its statements keeps every key at (`UnorderableStratum`).
  *
  * Its name is the one every earlier installation used, so a migration from scratch needs no
@@ -78,7 +82,7 @@ export const authorWorkloadsOf = (qti: QtiSchema, author: AuthorRole) => {
  * it, named by the level of `Qti` it is over, and its connection's password is that role's
  * (`#pantry/db/connection.ts`). Each call builds a login, a role and workloads of its own, and
  * grizzle puts a role in one login only: an install builds its login once and holds it
- * (`#pantry/qti/own.ts` for this package's own).
+ * (`#pantry/qti/own-login.ts` for the tests' own).
  *
  * @param qti - The `Qti` schema, built for an install's policy or none
  *   (`#pantry/qti/schema.ts` `qtiSchema`).

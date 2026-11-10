@@ -12,8 +12,9 @@
  *   ({@link lawTable}). An outcome's law is named one way ({@link lawNameOf}): a check by its own
  *   name ({@link lawOfCheck}), and every other law by its id, the one the outcome carries
  *   (grizzle's `RefusedLaw.id`), in the committed dictionary (`#pantry/vocab/law-names.json`),
- *   which `src/test/law-names.ts` generates from the schema's own naming. The dictionary is keyed
- *   by the database's law, never a judge.
+ *   which `src/test/law-names.ts` generates from the schema's own naming (`src/test/law-namer.ts`)
+ *   and `law-names.committed.test.ts` holds to it, so naming a refusal builds no schema. The
+ *   dictionary is keyed by the database's law, never a judge.
  * - **A refusal is what the database said.** A family's axis foreign key discharges the family and
  *   every containment and fold merged into it, and its violation names them all. The refusal
  *   carries how grizzle decided them, every law it named and the set of their rules

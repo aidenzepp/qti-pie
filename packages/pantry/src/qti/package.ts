@@ -615,7 +615,7 @@ const nodesOf = (kind: "cp:dependency" | "cp:file" | "cp:manifest" | "cp:resourc
 
 /**
  * The lexical forms of a resource's `type` that spell a `ResourceType` handle
- * (`ResourceTypeLexical`'s, every handle but `none`), each as written, since the attribute's type
+ * (`ResourceTypeLexical`'s, every handle), each as written, since the attribute's type
  * is an `xs:string` enumeration, whose whitespace is preserved (XSD 1.1 Part 2, §4.3.6).
  */
 const spelledResourceTypes = ResourceTypeLexical.rows.map(({ lexical }) => lexical);

@@ -1061,8 +1061,9 @@ export const packageFactsOf = (inputs: PackageInputs) => ({
  *
  * @param author - The author role (`#pantry/qti/roles.ts` `authorRoleOf`), its login's.
  * @param inputs - The package's inputs.
- * @returns The ChangeSet: with no rows, the program of the login's `importWrite` member, which
- *   `grizzle generate` compiles.
+ * @returns The ChangeSet that inserts the inputs' rows. Over no rows, as the author login declares
+ *   it, it is the `importWrite` program that `grizzle generate` compiles into the login's served
+ *   file.
  */
 export const changeSetOf = (author: AuthorRole, inputs: PackageInputs) =>
   ChangeSet.empty(author).insertAll(packageFactsOf(inputs));

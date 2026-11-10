@@ -2,7 +2,8 @@
  * The census of the committed migration (plan-qti-pie Q6.02): the one `_init` folder the Qti
  * schema's migrations hold, beside the snapshot's two files and `served/`, which holds the one file
  * `grizzle generate` writes for the author login (`#pantry/db/served.ts`), taken by
- * `#pantry/test/census.ts`, meets fin.md §13's zero targets and holds the measured counts. It lands
+ * `#pantry/test/census.ts`, meets fin.md §13's zero targets, except its validate files and
+ * constraint triggers, which the measured counts hold instead, and holds those counts. It lands
  * with the migration it reads, so it is a file of its own: the census's parser and its targets are
  * `census.test.ts`'s, which need no migration.
  */
@@ -74,7 +75,7 @@ const membersOf = (kind: "closed" | "relation"): number =>
 
 describe("the committed migration", () => {
   it.effect(
-    "is one _init folder, its snapshot's two files and the author login's served file, meets every zero target, and holds the measured counts",
+    "is one _init folder, its snapshot's two files and the author login's served file, meets the zero targets but validate files and constraint triggers, and holds the measured counts",
     () =>
       // Oracle: the specification as a checker, fin.md §13's zero targets (the ones
       // `census.test.ts` states as predicates) and plan-qti-pie Q6.02's counts, over the committed

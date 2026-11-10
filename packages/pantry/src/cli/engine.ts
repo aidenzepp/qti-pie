@@ -6,11 +6,12 @@ import { Effect } from "effect";
  * load that module only once the pool's settings resolve.
  *
  * `Effect.provide` builds `ImportLive` before the effect it wraps runs, so the cluster's
- * settings, its CA and the snapshot are read first, and a run that cannot reach the database fails
- * there, with kind `config`, before `load` runs. The importer and the exporter reach the author
- * login (`#pantry/qti/own-login.ts`), whose workload grizzle builds when that module is evaluated,
- * and the layer itself loads the login only after its settings, so a command that cannot reach the
- * database never builds the workload.
+ * settings and its CA are read first, then the author login's served workload, the committed file
+ * or the one of the install `GR8DES_QTI_INSTALL` names, and a run whose settings, CA or served
+ * file cannot be read fails there, with kind `config`, before `load` runs. The importer and the
+ * exporter take the author login from that layer (`AuthorLogin` of `#pantry/db/served.ts`), which
+ * grizzle serves from the file as the login's type, with no schema module evaluated and no
+ * workload built, so no command pays for one.
  *
  * @param load - Imports the engine module: a dynamic `import()` of it, so the command line's
  *   static graph never reaches it.

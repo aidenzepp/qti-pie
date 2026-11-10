@@ -331,8 +331,9 @@ export const Processing = relation(
  * The declaration a declared reference names is a row of its own, {@link VariableRefDeclaration}
  * (lane NIL's NS1: a reference that names no declaration has no declaration row, never the nil
  * uuid), and so are the table its element needs that declaration to hold, {@link VariableRefTable},
- * where it claims one, and the type of a setter's or a lookup's one expression, {@link HeldType}. A
- * type field its element leaves unread holds `unknown`.
+ * where it claims one, and the type of a setter's or a lookup's one expression, `HeldType`, a
+ * derived relation of `#pantry/qti/queries.ts`. A type field its element leaves unread holds
+ * `unknown`.
  */
 export const VariableRef = relation(
   "VariableRef",
@@ -1589,7 +1590,7 @@ const resolvingReadings = select(Reading, resolves);
  * so each is a containment into that table's own row (`Mapping`, `AreaMapping`) by its declaration.
  * A built-in response has no declaration, so no row here: {@link mapsNoBuiltInResponse} refuses its
  * reading. A reading that names anything but a response is `Variable kind`'s alone, and one
- * through an LTI link resolves unchecked (reading 110), its source `none`, with no declaration.
+ * through an LTI link resolves unchecked (reading 110), its source `link`, with no declaration.
  *
  * @param kind - The reader's kind.
  * @returns The selection.

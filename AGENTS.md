@@ -15,9 +15,11 @@ is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (public, MIT-licens
 - pnpm workspace. Effect is pinned to `4.1.2`, and the workspace must keep exactly one copy (`pnpm why effect -r`).
 - grizzle trunk at commit `26e3c15` (`26e3c15fc5d95fc8a2306cd9ae6da90a587bd258`) is vendored as tarballs; see
   `vendor/README.md`.
-- Git LFS holds every `packages/*/migrations/**/snapshot.json` and `manifest.json` (`.gitattributes`), the two files
-  of a grizzle snapshot. Install `git-lfs` before cloning; without it the snapshot checks out as pointer files and
-  grizzle refuses it.
+- Git LFS holds every `packages/*/migrations/**/snapshot.json` and `manifest.json`, the two files of a grizzle
+  snapshot, and every `packages/*/migrations/**/served/*.json`, the served workload of each login that `grizzle
+  generate` writes (`.gitattributes`). Install `git-lfs` before cloning; without it each checks out as a pointer file:
+  grizzle refuses the snapshot, and pantry fails with `ServedLoadError` opening its author login from
+  `migrations/qti/served/author_app.json`, about 19 MB.
 - Vite+ (`vp`) formats, lints and runs tests. TypeScript `7.0.2` typechecks under the strict settings in `tsconfig.json`.
 
 Run before completing implementation:
@@ -54,7 +56,9 @@ reads `grizzle.config.ts` from there.
 - The lint's `sort-keys` rule orders object keys, a relation's fields included, and field order is column order. Run
   `pnpm fix` before `grizzle generate`, or the lint fix becomes an ungenerated schema change that `grizzle check`
   refuses.
-- Read every drafted SQL file and resolve its markers. Never edit `snapshot.json`, `manifest.json` or `meta.json`.
+- Read every drafted SQL file and resolve its markers. Never edit `snapshot.json`, `manifest.json`, `meta.json` or a
+  `served/*.json` file; `grizzle generate` writes them, and `grizzle check` holds each served file to what its login
+  compiles to.
 - grizzle refuses what its README's Limits section lists: no nullable columns, no timestamp type, no outer joins, no
   window functions, no raw SQL at run time. Its field types (README, "Tables
   and types") include no JSON or XML type. Model within them.
