@@ -40,7 +40,6 @@ import {
 import type {
   AttributeInsert,
   DocumentLayerRows,
-  DoubleValueInsert,
   EntityInsert,
   IdrefInsert,
   NamespaceInsert,
@@ -73,7 +72,6 @@ import type {
 import type {
   Attribute,
   AttributeEntity,
-  DoubleValue,
   Idref,
   OpenAttributeName,
 } from "#pantry/qti/attributes.ts";
@@ -82,7 +80,7 @@ import type { Node } from "#pantry/qti/node.ts";
 import type { Entry } from "#pantry/qti/package.ts";
 import type { TextIdrefInsert } from "#pantry/import/overlays/identity.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
 import {
   caseHang,
@@ -113,7 +111,7 @@ const packageId = idOf(0xff_ff_ff);
  * slot its place in its element's family.
  *
  * @param root - The document's `Node` insert.
- * @param flat - Its document layer's flat rows.
+ * @param flat - Its document layer's flat rows, each element's named governing type among them.
  * @returns The rows `flatten` writes, which `assemble` reads.
  */
 const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed> => {
@@ -144,7 +142,12 @@ const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed>
     const row = {
       at: BigInt(at),
       end: 0n,
-      governs: node.governs,
+      governs: Option.map(
+        Option.orElse(Option.fromNullishOr(flat.ElementType.get(node.id)), () =>
+          Option.fromNullishOr(flat.OpenElementType.get(node.id)),
+        ),
+        ({ type }) => type,
+      ),
       id: node.id,
       kind: node.kind,
       parent,
@@ -238,9 +241,9 @@ const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed>
 const roundTripOf = (tree: XdmDocument<Composed>, ids: (index: number) => NodeId) =>
   assemble(
     flatRowsOf(
-      rootInsertOf(tree, { context: ownContext(ids(0)), documentType: "none", idOf: ids }),
+      rootInsertOf(tree, { context: ownContext(ids(0)), documentType: "manifest", idOf: ids }),
       documentRowsOf(
-        { path: "item.xml", resourceType: "none", tree },
+        { documentType: "manifest", path: "item.xml", tree },
         { assembled: false, context: ownContext(ids(0)), idOf: ids, package: packageId },
       ),
     ),
@@ -656,7 +659,6 @@ const nestings: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map([
   [
     "Attribute",
     new Map([
-      ["doubleValue", "DoubleValue"],
       ["entities", "AttributeEntity"],
       ["idrefs", "Idref"],
       ["openName", "OpenAttributeName"],
@@ -670,7 +672,6 @@ const nestings: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map([
     new Map([
       ["attributes", "Attribute"],
       ["children", "Node"],
-      ["doubleValue", "TextDoubleValue"],
       ["namespaces", "Namespace"],
     ]),
   ],
@@ -684,14 +685,12 @@ const nestings: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map([
 const suppliedByNesting: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["Attribute", new Set(["node"])],
   ["AttributeEntity", new Set(["attribute", "node"])],
-  ["DoubleValue", new Set(["attribute", "node"])],
   ["Entry", new Set(["package"])],
   ["Idref", new Set(["attribute", "node"])],
   ["Instance", new Set(["assembly", "parent"])],
   ["Namespace", new Set(["node"])],
   ["Node", new Set(["document", "parent"])],
   ["OpenAttributeName", new Set(["attribute", "node"])],
-  ["TextDoubleValue", new Set(["node"])],
   ["TextIdref", new Set(["node"])],
 ]);
 
@@ -859,7 +858,7 @@ describe("the written types", () => {
       chars: true,
       documentType: true,
       first: true,
-      governs: true,
+      governor: true,
       id: true,
       kind: true,
       last: true,
@@ -873,12 +872,10 @@ describe("the written types", () => {
       ...node,
       attributes: true,
       children: true,
-      doubleValue: true,
       namespaces: true,
     } as const satisfies Record<keyof NodeMember, true>;
     const root = { ...member, document: true } as const satisfies Record<keyof NodeRoot, true>;
     const attribute = {
-      doubleValue: true,
       entities: true,
       id: true,
       idrefs: true,
@@ -888,7 +885,6 @@ describe("the written types", () => {
       prefix: true,
       slot: true,
     } as const satisfies Record<keyof AttributeInsert, true>;
-    const doubleValue = { value: true } as const satisfies Record<keyof DoubleValueInsert, true>;
     const openName = {
       elementNamespace: true,
       local: true,
@@ -908,7 +904,6 @@ describe("the written types", () => {
     type Absent<T> = [T] extends [never] ? true : false;
     const noLeak = {
       attribute: true,
-      doubleValue: true,
       entity: true,
       entry: true,
       idref: true,
@@ -919,10 +914,9 @@ describe("the written types", () => {
       readonly attribute: Absent<
         Extract<
           keyof AttributeInsert,
-          Exclude<Unwritten<typeof Attribute>, "doubleValue" | "entities" | "idrefs" | "openName">
+          Exclude<Unwritten<typeof Attribute>, "entities" | "idrefs" | "openName">
         >
       >;
-      readonly doubleValue: Absent<Extract<keyof DoubleValueInsert, Unwritten<typeof DoubleValue>>>;
       readonly entity: Absent<Extract<keyof EntityInsert, Unwritten<typeof AttributeEntity>>>;
       readonly entry: Absent<Extract<keyof EntryRow, Unwritten<typeof Entry>>>;
       readonly idref: Absent<Extract<keyof IdrefInsert, Unwritten<typeof Idref>>>;
@@ -930,16 +924,15 @@ describe("the written types", () => {
       readonly node: Absent<
         Extract<
           keyof NodeRoot,
-          Exclude<Unwritten<typeof Node>, "attributes" | "children" | "doubleValue" | "namespaces">
+          Exclude<Unwritten<typeof Node>, "attributes" | "children" | "namespaces">
         >
       >;
       readonly openName: Absent<Extract<keyof OpenNameInsert, Unwritten<typeof OpenAttributeName>>>;
     };
 
     assert.isTrue(Object.values(noLeak).every(Boolean));
-    assert.lengthOf(Object.keys(root), 18);
-    assert.lengthOf(Object.keys(attribute), 9);
-    assert.lengthOf(Object.keys(doubleValue), 1);
+    assert.lengthOf(Object.keys(root), 17);
+    assert.lengthOf(Object.keys(attribute), 8);
     assert.lengthOf(
       [openName, idref, entity, namespace, entry].flatMap((record) => Object.keys(record)),
       12,
@@ -1224,13 +1217,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) =>
         const entries = program.files.map(({ path }) => path);
         for (const again of listed) {
           const minted = nodeIdsOf(
-            [...listed, { ...again, resourceType: "imsqti_item_xmlv3p0" }],
+            [...listed, { ...again, documentType: "imsqti_item_xmlv3p0" }],
             entries,
           );
           const firstAt = (path: string, named: boolean) =>
             Option.fromUndefinedOr(
               minted.documents
-                .find(({ ids }) => ids.path === path && (!named || ids.documentType !== "none"))
+                .find(({ ids }) => ids.path === path && (!named || ids.documentType !== "manifest"))
                 ?.ids.idOf(0),
             );
 

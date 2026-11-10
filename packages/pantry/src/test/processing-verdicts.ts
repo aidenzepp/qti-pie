@@ -13,7 +13,7 @@
  */
 import path from "node:path";
 import { Effect, FileSystem, Option, Schema } from "effect";
-import type { Rule } from "#pantry/import/refusal.ts";
+import type { Rule } from "#pantry/import/rules.ts";
 
 /**
  * One package's verdict: the rule it is refused under, or `accepted`, and what gives it.

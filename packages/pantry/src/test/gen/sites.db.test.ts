@@ -17,7 +17,6 @@ import { Duration, Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import {
@@ -29,7 +28,8 @@ import {
 } from "#pantry/test/gen/sites.ts";
 import type { SiteBox } from "#pantry/test/gen/sites.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * Import one package of the box and hold the database's verdict to the case table's
@@ -61,21 +61,19 @@ const importJudged = (box: SiteBox) =>
       assert.fail(`${literal} failed with ${refused.message}`);
     }
 
-    const [only] = rules;
     assert.isTrue(
-      rules.size === 1 ? refused.rule === only : rules.has(refused.rule),
-      `${literal} was refused under ${refused.rule}, and its cases' rules are ${[...rules].join(", ")}: ${refused.message}`,
+      refused.rules.some((rule) => rules.has(rule)),
+      `${literal} was refused under ${refused.rules.join(", ")}, and its cases' rules are ${[...rules].join(", ")}: ${refused.message}`,
     );
     assert.isTrue(
-      verdict.kind === "refused" && verdict.rules.has(refused.rule),
-      `${literal} was refused under ${refused.rule}, which the law oracle does not name`,
+      verdict.kind === "refused" && refused.rules.some((rule) => verdict.rules.has(rule)),
+      `${literal} was refused under ${refused.rules.join(", ")}, none of which the law oracle names`,
     );
   }).pipe(Effect.scoped);
 
 describe.skipIf(!hasLease)("test/gen/sites.ts, on the lease", { timeout: 3_600_000 }, () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
-    timeout: authorLayerHookTimeoutMs,
   })("each package of the site box imported and judged by PostgreSQL", (it) => {
     it.effect(
       "gives every package of the site box the law oracle's verdict, and an include that places nothing include-target or the fragment's outside rule",

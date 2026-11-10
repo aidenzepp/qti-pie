@@ -42,6 +42,7 @@
  */
 import {
   accumulated,
+  alternatives,
   check,
   closed,
   closedId,
@@ -52,7 +53,6 @@ import {
   fold,
   generated,
   key,
-  lexicalForm,
   mirrors,
   Monoid,
   natural,
@@ -66,25 +66,9 @@ import {
 import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { idValuePattern, spacePattern } from "#pantry/qti/identity.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { integerForm, keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
-
-/**
- * The kinds of the rounding operators, whose `figures` reading 119 reads.
- */
-export const roundingKinds = ["qti-equal-rounded", "qti-round-to"] as const;
-
-/**
- * The rounding modes, the values of `RoundingModeEnum` (info §8.26).
- */
-export const roundingModes = ["decimalPlaces", "significantFigures"] as const;
-
-/**
- * The `rounding-mode` in force on a `qti-equal-rounded` that writes none: the XSD's default
- * (`EqualRoundedDType`'s `rounding-mode`, `default="significantFigures"`; info §5.47.1). A
- * `qti-round-to` has none, since `RoundToDType` requires the attribute (§5.119.1).
- */
-export const equalRoundedMode = "significantFigures" satisfies (typeof roundingModes)[number];
+import { equalRoundedMode, roundingKinds, roundingModes } from "#pantry/vocab/terms/operators.ts";
 
 /**
  * Which of reading 119's two inputs a rounding operator has, its {@link Rounding} row's `holds`:
@@ -104,25 +88,23 @@ export const RoundingHolds = closed("RoundingHolds", ["neither", "mode", "figure
 export const rangeModes = ["absolute", "relative"] as const;
 
 /**
- * The lexical form of a `figures` that `Compute.cast` reads exactly: `xs:integer`'s, within the
- * signed 64-bit range spec reading 46 holds `figures` to, so every integer AL1's lexical half
- * admits is in it.
- */
-export const integerForm = lexicalForm(pg.bigint);
-
-/**
- * `xs:double`'s lexical space (XML Schema 1.0 Part 2 §3.2.5.1): a decimal mantissa with an
- * optional exponent, `INF`, `-INF` or `NaN`, unbounded in its digits. A tolerance value in it is a
- * number; any other is a string, which names a variable read at run time (spec reading 121).
+ * `xs:double`'s lexical space, pantry's one statement of it: XML Schema 1.0's (Part 2 §3.2.5.1),
+ * the edition QTI 3.0's XSDs are written in (spec reading 71), a decimal mantissa of any digits
+ * with an optional exponent of any digits, `INF`, `-INF` or `NaN`. XML Schema 1.1's adds `+INF`,
+ * which this space refuses, the stricter of the two (readings 144 and 154).
  *
- * The test is by form, not by a cast: grizzle's double form bounds a mantissa to 15 significant
- * digits (`lexicalForm(pg["double precision"])`), so a longer negative number would fall outside
- * it and pass as a string.
+ * It lies inside grizzle's `doubleText`, 1.1's grammar, which is this pattern with `+INF`, so
+ * `Compute.parseDouble` reads every form of it total: a value of it is the double that parse maps
+ * it to, XML Schema 1.1's doubleLexicalMap (Part 2 §3.3.5.2, reading 144), and every double pantry
+ * reads from a form in the database is read by that parse, guarded by this pattern or typed by it
+ * (`Slider_bounds`, `Mastery_range`, `MapKeyFloat`). A tolerance value in it is a number; any other
+ * is a string, which names a variable read at run time (spec reading 121).
  *
  * @see {@link https://www.w3.org/TR/xmlschema-2/#double | XML Schema Part 2, 3.2.5 double}
  */
-export const doublePattern =
-  "^(?:[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|-?INF|NaN)$";
+export const doublePattern = Compute.pattern(
+  "^(?:[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|-?INF|NaN)$",
+);
 
 /**
  * The positive values of {@link doublePattern}'s space, read off the form: a mantissa with no `-`
@@ -133,8 +115,9 @@ export const doublePattern =
  * though binary64 rounds it to 0: "positive" is read of the number the value names, not of its
  * nearest double.
  */
-export const positivePattern =
-  "^(?:\\+?(?:[0-9]*[1-9][0-9]*(?:\\.[0-9]*)?|[0-9]*\\.[0-9]*[1-9][0-9]*)(?:[Ee][+-]?[0-9]+)?|INF)$";
+export const positivePattern = Compute.pattern(
+  "^(?:\\+?(?:[0-9]*[1-9][0-9]*(?:\\.[0-9]*)?|[0-9]*\\.[0-9]*[1-9][0-9]*)(?:[Ee][+-]?[0-9]+)?|INF)$",
+);
 
 /**
  * A rounding operator, keyed by its node: one row for every `qti-equal-rounded` and every
@@ -182,8 +165,9 @@ export const RoundingMode = relation(
 
 /**
  * A rounding operator that has both a `figures` and a mode in force, keyed by its node: the
- * `both` arm of its {@link Rounding} row's `holds`, with its {@link RoundingFigures}' `figures` and
- * its {@link RoundingMode}'s `mode`, the two reading 119 judges together ({@link roundingFigures}).
+ * `both` arm of its {@link Rounding} row's `holds`, which grizzle's `alternatives` states, with its
+ * {@link RoundingFigures}' `figures` and its {@link RoundingMode}'s `mode`, the two reading 119
+ * judges together ({@link roundingFigures}).
  */
 export const RoundingModeFigures = relation(
   "RoundingModeFigures",
@@ -294,14 +278,6 @@ const writtenModesInForce = select(RoundingMode, (m) => m.eq(m.modeWritten, true
 const figuredRoundings = select(Rounding, (r) => r.in(r.holds, ["figures", "both"]));
 
 /**
- * The rounding operators that hold both a `figures` and a mode in force, each of which has its
- * {@link RoundingModeFigures} row: the `both` arm, stated as the two containments grizzle's
- * `alternatives` would state of its one arm, since the importer's refusal tables read no
- * `alternatives` statement.
- */
-const bothHeld = select(Rounding, (r) => r.eq(r.holds, "both"));
-
-/**
  * The rounding operators that hold a mode in force.
  */
 const modedRoundings = select(Rounding, (r) => r.in(r.holds, ["mode", "both"]));
@@ -387,8 +363,8 @@ export const tolerancePositive = check("Equal_tolerance", ToleranceToken, (x) =>
  *   `holds` proved by its `figures` (both ways) and its mode in force (`E1_derived`), and its
  *   `modeWritten` by its `rounding-mode` (both ways); its `figures` copied into
  *   {@link RoundingFigures} and collapsed, its mode in force into {@link RoundingMode}, written or
- *   the default; its `both` arm, {@link RoundingModeFigures}, copying both; and reading 119,
- *   {@link roundingFigures};
+ *   the default; its `both` arm, {@link RoundingModeFigures}, an `alternatives` arm, copying both;
+ *   and reading 119, {@link roundingFigures};
  * - **Tolerance:** each `tolerance` copied into its row, both ways; its values a family whose
  *   concatenation is the value, or none for a value of whitespace alone, each value a maximal run
  *   of no whitespace (`E1_derived`);
@@ -444,7 +420,7 @@ export const operatorLawsByName = {
         m.and(m.eq(m.kind, "qti-equal-rounded"), m.eq(m.mode, equalRoundedMode)),
       ),
     ),
-    mirrors(on(bothHeld, "node"), on(RoundingModeFigures, "node")),
+    alternatives(Rounding, "holds", RoundingHolds, { both: RoundingModeFigures }),
     contained(on(RoundingModeFigures, "node", "figures"), on(RoundingFigures, "node", "figures")),
     contained(on(RoundingModeFigures, "node", "mode"), on(RoundingMode, "node", "mode")),
     contained(on(toleranceAttributes, "node", "lexical"), on(Tolerance, "node", "lexical")),
