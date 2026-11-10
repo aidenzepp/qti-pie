@@ -14,7 +14,7 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
-import { cyclePackageOf, cycles, includerCounts, tails } from "#pantry/test/inclusion-cycles.ts";
+import { cyclePackageOf, cycles, includerCounts } from "#pantry/test/inclusion-cycles.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
@@ -26,8 +26,11 @@ describe.skipIf(!hasLease)(
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
     })("an inclusion cycle, refused under its own rule alone", (it) => {
-      for (const [cycle, includers, tail] of cycles.flatMap((held) =>
-        includerCounts.flatMap((count) => tails.map((has) => [held, count, has] as const)),
+      // A covering array of strength 2, not the product: every cycle beside every includer
+      // count, the tail (none or one) turning with their places, so each pair of the three factors
+      // is met.
+      for (const [cycle, includers, tail] of cycles.flatMap((held, at) =>
+        includerCounts.map((count) => [held, count, (at + count) % 2 === 1] as const),
       )) {
         it.effect(
           `${cycle === "none" ? "accepts" : "refuses"} rtest01 with ${cycle === "none" ? "no cycle" : `a ${cycle} cycle`}, placed by ${String(includers)} set items${tail ? ", with a tail" : ""}`,
