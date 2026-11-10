@@ -14,6 +14,7 @@ import { isNcName, nullOf } from "#plate/model/values.ts";
 import { restore } from "#plate/restore.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import { bg007Item, integer } from "#plate/test/fixtures.ts";
+import { sessionItem } from "#plate/test/session-item.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptedItem, check } from "#plate/validate/verdict.ts";
 
@@ -54,12 +55,10 @@ const sessionOf = (id: string): TestSession => ({
   expired: [],
   instance: id,
   items: [
-    {
-      adaptive: false,
+    sessionItem({
       datestamp: "2026-11-05T10:00:12.500Z",
       duration: 12.5,
       firstOutcomes: Option.some(fresh(bg007Item, `${id}.1`).outcomes),
-      locked: false,
       presented: true,
       record: { ...fresh(bg007Item, `${id}.1`), attempt: "submitted", numAttempts: 1 },
       ref: "item-1",
@@ -67,9 +66,7 @@ const sessionOf = (id: string): TestSession => ({
         COUNT: integer(2n ** 53n + 1n),
         RESPONSE: nullOf("identifier", "single"),
       }),
-      sequenceIndex: 1,
-      templateDefaults: Option.none(),
-    },
+    }),
   ],
   kind: "test",
   outcomeRuns: 0,
@@ -238,5 +235,35 @@ describe("newSessionId", () => {
       [],
     );
     assert.strictEqual(new Set(ids).size, 1000);
+  });
+});
+
+describe("sessionItem", () => {
+  it("[GATE-PINS] the builder's defaults alone make a session item the codec accepts", () => {
+    const built = sessionItem({ ref: "item-1" });
+    const stored = encodeSession({ ...sessionOf("s1"), items: [built] });
+
+    assert.isTrue(Result.isSuccess(stored));
+
+    const decoded = decodeSession(Result.getOrThrow(stored), owner);
+
+    assert.isTrue(Result.isSuccess(decoded));
+    assert.deepStrictEqual(Result.getOrThrow(decoded).items[0], built);
+  });
+
+  it("[GATE-PINS] a given field wins, and ref follows the record unless given", () => {
+    const other = fresh(bg007Item, "s1.2");
+    const renamed = fresh({ ...bg007Item, identifier: "renamed-item" }, "s1.1");
+
+    assert.strictEqual(sessionItem({ record: other }).record, other);
+    assert.strictEqual(sessionItem({ record: other }).ref, other.item);
+    assert.strictEqual(sessionItem({ record: renamed }).ref, "renamed-item");
+    assert.strictEqual(sessionItem({ ref: "item-1" }).ref, "item-1");
+    assert.strictEqual(sessionItem({ ref: "item-1" }).record.item, bg007Item.identifier);
+    assert.deepStrictEqual(sessionItem({ presented: true, sequenceIndex: 2 }), {
+      ...sessionItem(),
+      presented: true,
+      sequenceIndex: 2,
+    });
   });
 });

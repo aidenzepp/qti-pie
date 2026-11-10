@@ -297,14 +297,16 @@ const targetOf = (standing: Standing, intent: MoveIntent): Result.Result<number,
  *
  *   Before the part's modes rule on a move, the test-feature modules do, through `gatedBy`: a
  *   module's refusal is the rule `feature`, and a module's target replaces the modes' (a branch
- *   rule's). A module's `expire` is neither: the modes decide the move as if no module answered,
- *   so a list of the moves allowed offers it, and `advance` carries the expiry out in the move's
- *   place when the host posts it. Every stub lets every move through.
+ *   rule's). A module's `expire` or `exit` is neither: the modes decide the move as if no module
+ *   answered, so a list of the moves allowed offers it, and `advance` carries the expiry or the
+ *   exit out in the move's place when the host posts it. Every stub lets every move through.
  *
  * @param test The test the session was started from.
  * @param session The session.
  * @param features The test-feature modules, the table by default.
  * @param now The time of the move, where the caller has one; none for a read of the moves allowed.
+ * @param items The test's items, where the caller has them, which the gate is handed; none for a
+ *   read of the moves allowed without them.
  * @returns The function that decides a move, failing with {@link MoveRefused} when the test's
  *   rules forbid it now and, once the test has closed, for every move; {@link ItemNotInSession} for
  *   an open session whose position is past its items; {@link UnknownItemRef} when the test holds
@@ -315,6 +317,7 @@ export const moveTargets = (
   session: TestSession,
   features: TestFeatureTable = testFeatures,
   now: Option.Option<Date> = Option.none(),
+  items?: ReadonlyMap<string, Accepted>,
 ): Result.Result<
   (intent: MoveIntent) => Result.Result<number, MoveRefused>,
   ItemNotInSession | UnknownItemRef
@@ -334,7 +337,13 @@ export const moveTargets = (
 
   return Result.map(standingOf(test.test, session), (standing) => (intent) => {
     const from = Option.some(originOf(standing));
-    const gated = gatedBy(features, { intent, now, session, test: test.test });
+    const gated = gatedBy(features, {
+      intent,
+      items: Option.fromUndefinedOr(items),
+      now,
+      session,
+      test: test.test,
+    });
     if (Option.isSome(gated) && gated.value.kind === "target") {
       return Result.succeed(gated.value.sequenceIndex);
     }
@@ -404,6 +413,8 @@ export const moveTarget = (
  * @param session The session.
  * @param step The move, and the responses posted with it.
  * @param now The time of the move.
+ * @param features The test-feature modules the move's gate consults, the table by default; a test
+ *   hands in one holding a module that has landed.
  * @returns The session after the move; {@link MoveRefused} when the test's rules forbid it now;
  *   `InvalidTime` for an invalid `now`; {@link ItemNotInSession} for a session whose position is
  *   past its items; {@link UnknownItemRef} when the test holds no item ref the current item names;
@@ -417,12 +428,13 @@ export const move = (
   session: TestSession,
   step: MoveStep,
   now: Date,
+  features: TestFeatureTable = testFeatures,
 ): Result.Result<
   TestSession,
   EngineFailure | InvalidTime | ItemNotInSession | MoveRefused | TestNotDeliverable | UnknownItemRef
 > =>
   Result.gen(function* moveOne() {
-    const decide = yield* moveTargets(test, session, testFeatures, Option.some(now));
+    const decide = yield* moveTargets(test, session, features, Option.some(now), items);
     const target = yield* decide(step.intent);
     const saved = yield* recordStep(session, step, now);
     const position = yield* Result.fromOption(
