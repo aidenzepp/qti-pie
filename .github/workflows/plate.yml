@@ -42,3 +42,6 @@ jobs:
       - run: bash packages/plate/scripts/cloud/fetch-caches.sh
       - run: pnpm check
       - run: pnpm --filter @qti-pie/plate test
+        env:
+          # Plate's time bounds are readings of a laptop; the runner is slower (src/test/timing.ts).
+          PLATE_TIMING_SCALE: "3"

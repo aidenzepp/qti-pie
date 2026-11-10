@@ -6,6 +6,7 @@ import type { ExpressionType } from "#plate/model/expression.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { integer } from "#plate/test/fixtures.ts";
+import { scaledMs } from "#plate/test/timing.ts";
 import {
   assertKindType,
   baseValueElement,
@@ -21,7 +22,7 @@ import {
  * How long, in milliseconds, a crafted item's processing may take here: half the default test
  * timeout of 5,000 ms. Without the bounds each takes minutes, or exhausts memory.
  */
-const quickly = 2500;
+const quickly = scaledMs(2500);
 
 /**
  * The type of a single integer.
