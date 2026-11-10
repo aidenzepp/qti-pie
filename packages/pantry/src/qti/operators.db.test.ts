@@ -1,23 +1,19 @@
 /**
- * The operator overlays' laws on the lease, PostgreSQL itself the judge (testing doctrine, rule 3),
- * written to run at Z and never by a hand: each refused package is refused under the law its one
- * edit of `simple` breaks (membership in the outcome's `refused.laws`, since one native object may
- * discharge several, C22), and the nearest valid package beside it is accepted whole.
+ * The operator overlays' laws on the lease, where PostgreSQL's own arithmetic decides: `simple`
+ * with every valid form of readings 119 and 121 in its rules is accepted whole, and the two
+ * tolerances whose verdict rests on how the database reads a `double precision` are refused under
+ * `Equal_tolerance`: one holding NaN, which PostgreSQL orders above 0, and a negative of 16
+ * significant digits, outside grizzle's double form.
  *
  * `simple`'s response processing template is replaced by rules that hold the operators, beside a
  * boolean `FLAG` and an integer `COUNT` declared.
  *
- * - **Reading 119:** a `qti-equal-rounded` with figures 0 under its default significantFigures, a
- *   `qti-round-to` with figures 0 under significantFigures (main's `processing.db.test.ts:866-880`
- *   P10 case at `2b276d76`, ported) and one with figures -1 under decimalPlaces, each by the check
- *   `Rounding_figures`; and the overlay's rows held to the tree: a missing row, a mode default
- *   written where the attribute is, and a `figures` that is not its collapse.
- * - **Reading 121:** a `qti-equal` in absolute mode with no tolerance (main's `:892-903` P36 case,
- *   ported) by the containment of the mode's `Attribute` selection in `Tolerance(node)`; three
- *   values, an empty tolerance, a 0, NaN and a negative of 16 significant digits, each by a check
- *   `Equal_tolerance`; and a tolerance row whose values are not its text, by the concat fold.
+ * The rest of both readings is the host's: the law oracle against the readings' own restatement
+ * over each reading's small box and a swarm past it (`operators.oracle.test.ts`), the import's
+ * rows against the oracle over every rounding operator's attributes
+ * (`import/overlays/operators.holds.oracle.test.ts`), and the builder's rows
+ * (`import/overlays/operators.test.ts`).
  */
-import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Layer } from "effect";
@@ -82,34 +78,6 @@ const roundingTo = (attributes: string): string =>
   `<qti-set-outcome-value identifier="SCORE"><qti-round-to${attributes}><qti-variable identifier="SCORE"/></qti-round-to></qti-set-outcome-value>`;
 
 /**
- * Pick a containment by the relations and fields of its two sides.
- *
- * @param from - The source's relation and its terms.
- * @param to - The target's relation and its terms.
- * @returns The predicate.
- */
-const containedIn =
-  (from: readonly [string, ...string[]], to: readonly [string, ...string[]]) =>
-  (law: Law): boolean =>
-    law.kind === "contained" &&
-    [law.from.relation, ...law.from.terms.map(({ field }) => field)].join(" ") === from.join(" ") &&
-    [law.to.relation, ...law.to.terms.map(({ field }) => field)].join(" ") === to.join(" ");
-
-/**
- * Pick a fold by the relation and field it ends at.
- *
- * @param relation - The end's relation.
- * @param field - The end's accumulated field.
- * @returns The predicate.
- */
-const foldInto =
-  (relation: string, field: string) =>
-  (law: Law): boolean =>
-    law.kind === "fold" &&
-    law.end.relation === relation &&
-    law.end.terms.some((term) => term.field === field);
-
-/**
  * Apply `simple` with the rules, unedited.
  *
  * @param name - The fixture's name.
@@ -138,11 +106,6 @@ const validRules = [
 ].join("");
 
 /**
- * The law that refuses a rounding operator's figures (reading 119).
- */
-const figuresLaw = [checkNamed("RoundingModeFigures", "Rounding_figures")];
-
-/**
  * The laws that refuse a tolerance's count or values (reading 121).
  */
 const toleranceLaws = [
@@ -151,68 +114,10 @@ const toleranceLaws = [
 ];
 
 /**
- * The refused cases, one law's breach each: the package's apply, the laws it may be refused
- * under, and its name.
+ * The refused cases, each a tolerance whose verdict rests on PostgreSQL's `double precision`: the
+ * package's apply, the laws it may be refused under, and its name.
  */
 const refusedCases = [
-  {
-    apply: () => applyRules("equal-rounded-zero", comparing("qti-equal-rounded", ' figures="0"')),
-    laws: figuresLaw,
-    name: "a qti-equal-rounded with figures 0 under its default significantFigures (Rounding figures, reading 119)",
-  },
-  {
-    apply: () =>
-      applyRules(
-        "round-to-significant-zero",
-        roundingTo(' rounding-mode="significantFigures" figures="0"'),
-      ),
-    laws: figuresLaw,
-    name: "a qti-round-to with figures 0 under significantFigures (Rounding figures, main's P10 case)",
-  },
-  {
-    apply: () =>
-      applyRules(
-        "round-to-decimal-negative",
-        roundingTo(' rounding-mode="decimalPlaces" figures="-1"'),
-      ),
-    laws: figuresLaw,
-    name: "a qti-round-to with figures -1 under decimalPlaces (Rounding figures, reading 119)",
-  },
-  {
-    apply: () =>
-      applyRules("equal-absolute-none", comparing("qti-equal", ' tolerance-mode="absolute"')),
-    laws: [containedIn(["Attribute", "node"], ["Tolerance", "node"])],
-    name: "a qti-equal in absolute mode with no tolerance (Equal tolerance, main's P36 case)",
-  },
-  {
-    apply: () =>
-      applyRules("equal-relative-none", comparing("qti-equal", ' tolerance-mode="relative"')),
-    laws: [containedIn(["Attribute", "node"], ["Tolerance", "node"])],
-    name: "a qti-equal in relative mode with no tolerance (Equal tolerance, reading 121)",
-  },
-  {
-    apply: () =>
-      applyRules(
-        "tolerance-three",
-        comparing("qti-equal", ' tolerance-mode="absolute" tolerance="0.1 0.2 0.3"'),
-      ),
-    laws: toleranceLaws,
-    name: "a tolerance of three values (Equal tolerance, reading 121)",
-  },
-  {
-    apply: () => applyRules("tolerance-empty", comparing("qti-equal", ' tolerance=""')),
-    laws: toleranceLaws,
-    name: "an empty tolerance (Equal tolerance, reading 121)",
-  },
-  {
-    apply: () =>
-      applyRules(
-        "tolerance-zero",
-        comparing("qti-equal", ' tolerance-mode="absolute" tolerance="0"'),
-      ),
-    laws: toleranceLaws,
-    name: "a tolerance of 0 (Equal tolerance, reading 121)",
-  },
   {
     apply: () =>
       applyRules(
@@ -230,95 +135,6 @@ const refusedCases = [
       ),
     laws: toleranceLaws,
     name: "a tolerance of a negative number of 16 significant digits, outside grizzle's double form (Equal tolerance, reading 121)",
-  },
-  {
-    apply: () =>
-      Effect.flatMap(withRules("valid", validRules), (dir) =>
-        applyEdited(dir, (inputs) => ({
-          ...inputs,
-          Rounding: new Map([...inputs.Rounding].slice(1)),
-        })),
-      ),
-    // The first rounding operator holds a figures and a mode, so its missing row breaks each of
-    // E1 derived's containments into `Rounding`: from its node, and from its figures', its mode's
-    // and their pair's rows, each now a row of its own.
-    laws: [
-      containedIn(["Node", "id"], ["Rounding", "node"]),
-      containedIn(["RoundingFigures", "node"], ["Rounding", "node"]),
-      containedIn(["RoundingMode", "node"], ["Rounding", "node"]),
-      containedIn(
-        ["RoundingMode", "node", "kind", "modeWritten"],
-        ["Rounding", "node", "kind", "modeWritten"],
-      ),
-      containedIn(["RoundingModeFigures", "node"], ["Rounding", "node"]),
-    ],
-    name: "a rounding operator with no Rounding row (E1 derived)",
-  },
-  {
-    apply: () =>
-      Effect.flatMap(withRules("valid", validRules), (dir) =>
-        applyEdited(dir, (inputs) => ({
-          ...inputs,
-          Rounding: new Map(
-            [...inputs.Rounding].map(([node, row]) => [
-              node,
-              row.modeWritten ? { ...row, modeWritten: false } : row,
-            ]),
-          ),
-        })),
-      ),
-    laws: [
-      containedIn(["Attribute", "node"], ["Rounding", "node"]),
-      containedIn(
-        ["RoundingMode", "node", "kind", "modeWritten"],
-        ["Rounding", "node", "kind", "modeWritten"],
-      ),
-      checkNamed("Rounding", "E1_derived"),
-    ],
-    name: "a written rounding-mode held as unwritten (E1 derived)",
-  },
-  {
-    apply: () =>
-      Effect.flatMap(withRules("valid", validRules), (dir) =>
-        applyEdited(dir, (inputs) => ({
-          ...inputs,
-          RoundingFigures: new Map(
-            [...inputs.RoundingFigures].map(([node, row]) => [
-              node,
-              { ...row, figures: `${row.figures} ` },
-            ]),
-          ),
-        })),
-      ),
-    laws: [
-      checkNamed("RoundingFigures", "E1_derived"),
-      containedIn(
-        ["RoundingModeFigures", "node", "figures"],
-        ["RoundingFigures", "node", "figures"],
-      ),
-    ],
-    name: "a figures that is not its collapse (E1 derived)",
-  },
-  {
-    apply: () =>
-      Effect.flatMap(withRules("valid", validRules), (dir) =>
-        applyEdited(dir, (inputs) => ({
-          ...inputs,
-          Tolerance: new Map(
-            [...inputs.Tolerance].map(([node, row]) => [
-              node,
-              {
-                ...row,
-                tokens: row.tokens.map((token) =>
-                  token.token === "0.1" ? { ...token, token: "9" } : token,
-                ),
-              },
-            ]),
-          ),
-        })),
-      ),
-    laws: [foldInto("Tolerance", "tokenText"), checkNamed("Tolerance", "E1_derived")],
-    name: "a tolerance whose values are not its text (E1 derived)",
   },
 ];
 
