@@ -1623,7 +1623,13 @@ describe("the refusals made before the database", () => {
           "entity-cycle",
           "entity-expansion",
         ] as const
-      ).map((rule) => [new ReaderRefusal({ detail: "d", rule }), "reader-refusal"] as const),
+      ).map(
+        (rule) =>
+          [
+            new ReaderRefusal({ detail: "d", position: Option.none(), rule }),
+            "reader-refusal",
+          ] as const,
+      ),
       [new WellFormednessError({ column: 1, line: 1, message: "m" }), "well-formedness"],
     ];
 

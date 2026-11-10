@@ -1,4 +1,5 @@
 import { Data } from "effect";
+import type { Option } from "effect";
 
 /**
  * The parser refused the text because it is not well-formed XML.
@@ -20,9 +21,15 @@ export class WellFormednessError extends Data.TaggedError("WellFormednessError")
  * certain encoding but [that] contains byte sequences that are not legal in that encoding", and
  * `encoding-mismatch` for an entity "presented to the XML processor in an encoding other than that
  * named in the declaration".
+ *
+ * `position` gives the `line` and `column` of what broke the rule, both from 1 as `saxes` counts
+ * them, in the text the raising site reads: the decoded source for a refusal from decoding or the
+ * prolog, and the text with the declared entities substituted for one from the body. It is none
+ * for a rule that holds of the document as a whole rather than of one place in it.
  */
 export class ReaderRefusal extends Data.TaggedError("ReaderRefusal")<{
   readonly detail: string;
+  readonly position: Option.Option<{ readonly column: number; readonly line: number }>;
   readonly rule:
     | "decode"
     | "unsupported-encoding"
