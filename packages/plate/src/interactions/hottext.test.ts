@@ -210,6 +210,19 @@ const checkedOf = (root: Element): readonly string[] =>
     .map((control) => String(control.attrs["value"]));
 
 /**
+ * Render an item as the host would and read the `data-max-choices` its Hot Text Root carries.
+ *
+ * @param xml The item's XML.
+ * @returns The attribute's value, none when the Root carries none.
+ */
+const limitOf = (xml: string) =>
+  Effect.gen(function* limit() {
+    const root = rootOf(yield* rendered(yield* accept(xml, "hottext.xml")));
+
+    return partOf(root, slots.root).attrs["data-max-choices"];
+  });
+
+/**
  * Construct a host's replacement for a part: the part as an element of one tag, keeping the
  * attributes and children it is handed.
  *
@@ -378,6 +391,20 @@ describe("Hot Text", () => {
       for (const control of partsOf(rootOf(yield* rendered(single)), slots.control)) {
         assert.strictEqual(control.attrs["type"], "radio", "max-choices 1 posts one identifier");
       }
+    }),
+  );
+
+  it.effect("[Q-11] the root carries max-choices as data-max-choices for the runtime", () =>
+    Effect.gen(function* carriesLimit() {
+      const many = fixtureText("hottext.xml");
+
+      assert.strictEqual(yield* limitOf(many), "2");
+      assert.strictEqual(yield* limitOf(fixtureText("hottext-single.xml")), "1");
+      assert.strictEqual(
+        yield* limitOf(many.replace('max-choices="2" min-choices="1"', 'max-choices="0"')),
+        "0",
+        "0 is written as it is read: no limit",
+      );
     }),
   );
 
