@@ -3771,7 +3771,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[P-1] [P-4] BPIG_22April is refused resource-type-mismatch at passages/unbelievableNight.xml, though its MathML item, math, is unchecked",
+      "[P-1] [P-4] BPIG_22April is refused resource-type-mismatch at passages/unbelievableNight.xml, and its MathML item, math, is accepted",
       () =>
         Effect.gen(function* bpig() {
           const directory = corpusPackages.bpig;
@@ -3800,7 +3800,7 @@ describe("package/open.ts", () => {
           );
           assert.deepStrictEqual(
             documentVerdict(resourceOf(verdict, "math")),
-            Option.some("unchecked"),
+            Option.some("accepted"),
           );
         }),
       { tags: ["corpus"] },

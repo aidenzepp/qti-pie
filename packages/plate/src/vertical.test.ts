@@ -482,7 +482,10 @@ describe("the vertical witness over the fixtures", { tags: ["corpus"] }, () => {
       const table: readonly (readonly [string, Verdict["verdict"]])[] = [
         [fixtures.cat, "refused"],
         [fixtures.fractions, "refused"],
-        [fixtures.mathml, "unchecked"],
+        // Accepted, not unchecked: the MathML content module's `check` gives no reason (issue
+        // m3e-05), so the item is built and judged, and its `math` keeps the structural rules issue
+        // m3e-05b checks. `unchecked` was this item's verdict while the module was a stub.
+        [fixtures.mathml, "accepted"],
         [fixtures.hotspot, hotspotVerdict],
         [fixtures.selectPoint, stubVerdict],
         [fixtures.bg007, "accepted"],
