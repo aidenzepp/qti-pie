@@ -384,7 +384,8 @@ export const staleRulings = (
   });
 
 /**
- * Read every file of a corpus package's extracted folder, keyed by its path from the folder.
+ * Read every file of a corpus package's extracted folder, at most 8 at once, keyed by its path from
+ * the folder.
  *
  * @param directory The folder, as a path from the corpus root.
  * @returns The package's files; {@link CorpusFileUnreadable} when the folder cannot be listed or a
@@ -410,7 +411,10 @@ const packageFiles = Effect.fnUntraced(function* packageFiles(
     .map((entry) =>
       path.relative(folder, path.join(entry.parentPath, entry.name)).split(path.sep).join("/"),
     );
-  const contents = yield* Effect.all(paths.map((file) => readCorpusFile(`${directory}/${file}`)));
+  const contents = yield* Effect.all(
+    paths.map((file) => readCorpusFile(`${directory}/${file}`)),
+    { concurrency: 8 },
+  );
 
   return new Map(paths.map((file, index) => [file, contents[index] ?? new Uint8Array()]));
 });
@@ -432,7 +436,8 @@ export const judgePackage = Effect.fn("judgePackage")(function* judgePackage(
 });
 
 /**
- * Every package plate and pantry disagree on, in the verdict file's order.
+ * Every package plate and pantry disagree on, in the verdict file's order, judging at most 8
+ * packages at once.
  *
  * Fails as {@link pantryVerdicts} and {@link judgePackage} fail.
  */
@@ -453,6 +458,7 @@ export const disagreements: Effect.Effect<
         plate,
       })),
     ),
+    { concurrency: 8 },
   );
 
   return judged.filter((entry) => !agrees(entry.plate, entry.pantry));

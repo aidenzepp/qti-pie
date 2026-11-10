@@ -67,7 +67,8 @@ export interface VerdictCache {
    */
   readonly verdictOf: (member: string) => Effect.Effect<Option.Option<Verdict>, OpenFailure>;
   /**
-   * Every member's verdict, in the document set's order, opening each member not opened yet.
+   * Every member's verdict, in the document set's order, opening each member not opened yet, at
+   * most 8 at once.
    */
   readonly verdicts: Effect.Effect<readonly Verdict[], OpenFailure>;
 }
@@ -117,7 +118,9 @@ export const verdictCache = (opener: Opener = openMember): Effect.Effect<Verdict
             return verdict === undefined ? Effect.succeedNone : Effect.asSome(verdict);
           }),
         ),
-      verdicts: table.pipe(Effect.flatMap((members) => Effect.all([...members.values()]))),
+      verdicts: table.pipe(
+        Effect.flatMap((members) => Effect.all([...members.values()], { concurrency: 8 })),
+      ),
     })),
   );
 

@@ -114,7 +114,7 @@ export interface PackageCache {
   readonly packageOf: (id: string) => Effect.Effect<Option.Option<PackageEntry>, PackagesFailure>;
   /**
    * Every package with its verdict, the corpus's in the order of their locations and then the
-   * fixture, opening each package not opened yet.
+   * fixture, opening each package not opened yet, at most 8 at once.
    */
   readonly packages: Effect.Effect<readonly PackageEntry[], PackagesFailure>;
 }
@@ -358,8 +358,9 @@ const readInside = Effect.fnUntraced(function* readInside(
 });
 
 /**
- * Open one package from its directory: read every file under it, keyed by its path from the
- * package's root as a host keys an unzipped package's files, and judge them with `openPackage`.
+ * Open one package from its directory: read every file under it, at most 8 at once, keyed by its
+ * path from the package's root as a host keys an unzipped package's files, and judge them with
+ * `openPackage`.
  *
  * @param source The package.
  * @returns Its verdict.
@@ -369,12 +370,13 @@ export const openDirectory: PackageOpener = Effect.fn("packages.openDirectory")(
     source: PackageSource,
   ): Effect.fn.Return<PackageVerdict, PackagesFailure> {
     const paths = yield* filesUnder(source.root, `restore the package's directory ${source.root}`);
-    const files = new Map<string, Uint8Array>();
-    for (const file of paths) {
-      files.set(file, yield* readPackageFile(source, file));
-    }
+    const files = yield* Effect.forEach(
+      paths,
+      (file) => Effect.map(readPackageFile(source, file), (bytes) => [file, bytes] as const),
+      { concurrency: 8 },
+    );
 
-    return yield* openPackage(source.location, files);
+    return yield* openPackage(source.location, new Map(files));
   },
 );
 
@@ -449,7 +451,9 @@ export const packageCache = (opener: PackageOpener = openDirectory): Effect.Effe
             return entry === undefined ? Effect.succeedNone : Effect.asSome(entry);
           }),
         ),
-      packages: table.pipe(Effect.flatMap((packages) => Effect.all([...packages.values()]))),
+      packages: table.pipe(
+        Effect.flatMap((packages) => Effect.all([...packages.values()], { concurrency: 8 })),
+      ),
     })),
   );
 
