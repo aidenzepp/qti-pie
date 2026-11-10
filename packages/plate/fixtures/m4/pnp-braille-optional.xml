@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The braille profile with braille named only in activate-as-option-set: the candidate may turn it on, and it is off at the start of the delivery. -->
+<access-for-all-pnp xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <braille>
+    <delivery-mode>refreshable</delivery-mode>
+  </braille>
+  <activate-as-option-set>
+    <braille/>
+  </activate-as-option-set>
+</access-for-all-pnp>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m4-catalog-braille" title="Braille catalog card" adaptive="false" time-dependent="false" xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>NINETY</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <p data-catalog-idref="lamp-passage">The lighthouse keeper climbed ninety steps to light the lamp before dusk.</p>
+    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-prompt>How many steps did the keeper climb?</qti-prompt>
+      <qti-simple-choice identifier="FORTY">Forty</qti-simple-choice>
+      <qti-simple-choice identifier="NINETY">Ninety</qti-simple-choice>
+      <qti-simple-choice identifier="HUNDRED">One hundred</qti-simple-choice>
+    </qti-choice-interaction>
+  </qti-item-body>
+  <qti-catalog-info>
+    <qti-catalog id="lamp-passage">
+      <qti-card support="braille">
+        <qti-html-content>
+          <p>Braille directions: feel along the dotted margin to find where the passage begins.</p>
+        </qti-html-content>
+        <qti-file-href mime-type="text/plain">braille/passage.brf</qti-file-href>
+      </qti-card>
+      <qti-card support="tactile">
+        <qti-html-content>
+          <p>Tactile aid: run a finger along the raised ridge to count the stairs.</p>
+        </qti-html-content>
+      </qti-card>
+    </qti-catalog>
+  </qti-catalog-info>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+</qti-assessment-item>
