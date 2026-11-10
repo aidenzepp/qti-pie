@@ -384,20 +384,55 @@ const declares = (table: ContentTable, namespace: string, local: string): boolea
   );
 
 /**
+ * The one element whose specification carries its own properties in wildcard-admitted
+ * attributes: a `qti-portable-custom-interaction`'s `data-*` attributes are the `properties` a
+ * host passes the interaction's module, named as HTML's `dataset` names them (the QTI 3
+ * information model's PortableCustomInteraction, and the PCI specification's configuration). E3
+ * keeps them there and nowhere else: on every other element a `data-*` attribute is admitted only
+ * by the wildcard and is marked and dropped as any such attribute is.
+ */
+const propertiesElement = "qti-portable-custom-interaction";
+
+/**
+ * The prefix of the attributes {@link propertiesElement} carries as its properties.
+ */
+const propertiesPrefix = "data-";
+
+/**
+ * Report whether an attribute is one of the properties the element's specification carries in
+ * `data-*`, which E3 keeps on {@link propertiesElement} alone.
+ *
+ * @param local The element's local name.
+ * @param attribute The attribute.
+ * @returns Whether it is a `data-*` attribute in no namespace on that element.
+ */
+const isProperty = (local: string, attribute: SourceAttribute): boolean =>
+  local === propertiesElement &&
+  attribute.namespace === "" &&
+  attribute.local.startsWith(propertiesPrefix);
+
+/**
  * Report whether E3 keeps an attribute of a QTI-namespace element.
  *
  * It keeps an allowance and an attribute the table that governs the element declares by name.
  * Reading 10 accepts both `aria-keyshorts` and `aria-keyshortcuts` where the table declares
  * `aria-keyshorts` (the empty elements), so `aria-keyshortcuts` is kept there too. Names compare
- * exactly, as XML's do.
+ * exactly, as XML's do. It keeps a `data-*` attribute on the one element whose specification
+ * carries its properties in them ({@link isProperty}), which the wildcard alone admits.
  *
+ * @param local The element's local name.
  * @param table The table that governs the element, none when the XSD declares no element of its
  *   name.
  * @param attribute The attribute.
  * @returns Whether it stays; any other attribute was admitted only by a wildcard.
  */
-const isKept = (table: Option.Option<ContentTable>, attribute: SourceAttribute): boolean =>
+const isKept = (
+  local: string,
+  table: Option.Option<ContentTable>,
+  attribute: SourceAttribute,
+): boolean =>
   isKeptEverywhere(attribute) ||
+  isProperty(local, attribute) ||
   Option.exists(
     table,
     (declared) =>
@@ -408,8 +443,9 @@ const isKept = (table: Option.Option<ContentTable>, attribute: SourceAttribute):
   );
 
 /**
- * Secure one element's attributes: remove each one only a wildcard admits (E3) and pass each URL
- * attribute through `url.ts`.
+ * Secure one element's attributes: remove each one only a wildcard admits (E3), but for the
+ * `data-*` properties of a `qti-portable-custom-interaction` ({@link isProperty}), and pass each
+ * URL attribute through `url.ts`.
  *
  * An element the structural walk checked is read by the table that governs it, so an attribute a
  * valid `xsi:type`'s type declares is kept (AD-9); any other QTI-namespace element by its name's
@@ -440,7 +476,7 @@ const secureAttributes = (
   );
   const kept: SourceAttribute[] = [];
   for (const attribute of element.attributes) {
-    if (!isKept(table, attribute)) {
+    if (!isKept(element.local, table, attribute)) {
       marks.push({ feature: `attribute:${attributeName(attribute)}`, path, shown: "mark" });
       continue;
     }

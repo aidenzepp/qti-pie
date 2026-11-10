@@ -729,6 +729,44 @@ describe("check, E3: attributes only a wildcard admits", () => {
     );
   });
 
+  it("keeps the data-* properties of a qti-portable-custom-interaction, the one element whose specification carries its properties in them, and marks and removes a data-* attribute elsewhere", () => {
+    const pci = el(
+      "qti-portable-custom-interaction",
+      [
+        attr("custom-interaction-type-identifier", "urn:example:pci"),
+        attr("data-max-count", "5"),
+        attr("data-start_value-2", "1"),
+        attr("module", "pci"),
+        attr("response-identifier", "RESPONSE"),
+      ],
+      [el("qti-interaction-markup", [], [el("p", [attr("data-note", "x")], [text("Hi")])])],
+    );
+    const accepted = acceptedOf(
+      verdictOf(item([response("integer", "single"), body([pci])])),
+      "accepted-with-unsupported",
+    );
+    const [node] = accepted.item.body;
+
+    assert.deepStrictEqual(accepted.unsupported, [
+      {
+        feature: "attribute:data-note",
+        path: `${bodyPath}/qti-portable-custom-interaction/qti-interaction-markup/p`,
+        shown: "mark",
+      },
+    ]);
+    assert.strictEqual(node?.kind, "portable-custom");
+    assert.deepStrictEqual(node?.kind === "portable-custom" ? node.properties : [], [
+      { name: "maxCount", value: "5" },
+      { name: "start_value-2", value: "1" },
+    ]);
+    assert.deepStrictEqual(
+      node?.kind === "portable-custom"
+        ? node.markup.map((inner) => (inner.kind === "element" ? namesOf(inner) : inner.kind))
+        : [],
+      [[]],
+    );
+  });
+
   it("align-54 extension lists E10: compares names exactly: an HREF is no attribute a declares, refused as unknown-attribute (reading 90), and an element A is refused", () => {
     const undeclared = verdictOf(
       item([
