@@ -11,8 +11,13 @@
  * `decodeIntent`) are the navigation API, and `renderNavigation` adds plain-button parts over it.
  * `results` writes a Results Reporting document.
  *
- * `open`, `openPackage` and `configure` return Effects. Every other function is plain, callable
- * with no Effect runtime: it returns its value, or a `Result` when a caller can make it fail.
+ * Supports: `render` and `redact` take a `Supports` value, which `noSupports` gives with every
+ * support off and `SupportsSchema` checks when a host builds one. `readPnp` is to read one from a
+ * Personal Needs and Preferences document; it is a stub until issue m4-01 fills it.
+ *
+ * `open`, `openPackage`, `configure` and `readPnp` return Effects. Every other function is plain,
+ * callable with no Effect runtime: it returns its value, or a `Result` when a caller can make it
+ * fail.
  *
  * Nothing else under `src/` is reachable from outside the package. The tests' seams
  * (`acceptForTest`, `acceptTestForTest`, `acceptSectionForTest`, `acceptStimulusForTest` and
@@ -44,6 +49,8 @@ export {
   InvalidSession,
   SessionMismatch,
 } from "#plate/codec/session.ts";
+
+export { SupportsSchema } from "#plate/codec/supports.ts";
 
 export type { Configuration } from "#plate/configuration.ts";
 
@@ -132,6 +139,10 @@ export type { Posting, Redacted, RenderMode, ValidationMessage } from "#plate/pa
 
 export { postings } from "#plate/payload.ts";
 
+export type { PnpSelector } from "#plate/pnp/read.ts";
+
+export { InvalidPnp, readPnp } from "#plate/pnp/read.ts";
+
 export type { Options, Rendered } from "#plate/render.ts";
 
 export {
@@ -193,6 +204,19 @@ export {
 } from "#plate/session/start.ts";
 
 export { solution } from "#plate/solution.ts";
+
+export type {
+  AdditionalTestingTime,
+  CatalogSupport,
+  DisplayPreferences,
+  ExtensionSupport,
+  ReadingType,
+  Supports,
+  TextAppearance,
+  ToolPreference,
+} from "#plate/supports.ts";
+
+export { catalogSupports, noSupports, toolPreferences } from "#plate/supports.ts";
 
 export { open } from "#plate/validate/open.ts";
 

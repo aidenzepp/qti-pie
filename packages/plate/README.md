@@ -410,6 +410,39 @@ A host can rely on these, and [`src/interactions/`](src/interactions/) documents
   `stringValue` in its control again. When an item's session control does not allow skipping, a
   `record` response counts as skipped while it is absent, the NULL record or its declared default.
 
+These interactions are not rendered yet. Each renders the notice in its place, and its verdict
+names it, until its issue lands:
+
+- Gap Match, `qti-gap-match-interaction` (Q-6), renders the notice until m3d-03 lands
+  *(pending m3d-03)*.
+- Graphic Gap Match, `qti-graphic-gap-match-interaction` (Q-8), renders the notice until m3d-05
+  lands *(pending m3d-05)*.
+- Hotspot, `qti-hotspot-interaction` (Q-10), renders the notice until m3d-07 lands
+  *(pending m3d-07)*.
+- Hot Text, `qti-hottext-interaction` (Q-11), renders the notice until m3d-09 lands
+  *(pending m3d-09)*.
+- Match, `qti-match-interaction` (Q-13), renders the notice until m3d-11 lands *(pending m3d-11)*.
+- Upload, `qti-upload-interaction` (Q-21), renders the notice until ei-01 lands *(pending ei-01)*.
+- End Attempt, `qti-end-attempt-interaction` (Q-4), renders the notice until ei-02 lands
+  *(pending ei-02)*.
+- Media, `qti-media-interaction` (Q-14), renders the notice until ei-03 lands *(pending ei-03)*.
+- Associate, `qti-associate-interaction` (Q-1), renders the notice until ei-04 lands
+  *(pending ei-04)*.
+- Order, `qti-order-interaction` (Q-15), renders the notice until ei-06 lands *(pending ei-06)*.
+- Graphic Associate, `qti-graphic-associate-interaction` (Q-7), renders the notice until ei-08
+  lands *(pending ei-08)*.
+- Graphic Order, `qti-graphic-order-interaction` (Q-9), renders the notice until ei-10 lands
+  *(pending ei-10)*.
+- Position Object, `qti-position-object-interaction` (Q-17), renders the notice until ei-12 lands
+  *(pending ei-12)*.
+- Select Point, `qti-select-point-interaction` (Q-18), renders the notice until ei-14 lands
+  *(pending ei-14)*.
+- Slider, `qti-slider-interaction` (Q-19), renders the notice until ei-16 lands *(pending ei-16)*.
+- Drawing, `qti-drawing-interaction` (Q-3), renders the notice until ei-17 lands
+  *(pending ei-17)*.
+- Portable Custom, `qti-portable-custom-interaction` (Q-16), renders the notice until pci-03 lands
+  *(pending pci-03)*.
+
 ## Scoring
 
 `score` runs inline response processing and six built-in templates: `match_correct`,
@@ -978,6 +1011,21 @@ and the processing that reads it is marked and does not run. The package also ma
 processing that counts over the test's items, which would count only the delivered items. A template
 default under the ref is refused `undeclared-variable`.
 
+These land with their issues, and until then each stays as the rules above say:
+
+- Section refs: a local section document assembled at `openPackage` *(pending m3f-03)*.
+- Package and resource metadata: `qti-metadata` and LOM on a `PackageResource`
+  *(pending m3f-04)*.
+- Includes: XInclude at item and section level, or a stated limit *(pending m3f-06)*.
+- Stylesheets: an item's stylesheet scoped to the item, and the package file served
+  *(pending m5-06)*.
+- Companion materials *(pending m5-07)*.
+- Feedback: modal feedback as a native dialog *(pending m5-01)*, inline and block feedback
+  *(pending m5-02)*, and a test's feedback during the test and at its end *(pending m5-04)*.
+- Adaptive items: attempts until the item's `completionStatus` says it is done
+  *(pending m5-03)*.
+- Branch rules and pre-conditions *(pending m5-05)*.
+
 ## Limits
 
 Each row is a limit of plate's own, not a rule of QTI. In each, plate refuses valid content it
@@ -1053,6 +1101,24 @@ this split. A host that sends the accepted item to the browser sends what `redac
   some are live documents. Refuse an asset path that leaves the package once it is
   percent-decoded.
 
+## Browser runtime
+
+`@qti-pie/plate/runtime` exports `upgrade(root)`, which gives a rendered item the behaviour its
+HTML alone cannot. No interaction's controller has landed, so today it changes nothing on the
+page, and each line below lands with its issue:
+
+- `upgrade(root)` finds each interaction root under `root` by its `data-slot` marker and attaches
+  its kind's controller, building no markup and moving no focus *(pending m3d-01)*.
+- Every announcement goes through the item's live region, the status region its chrome renders
+  *(pending m3d-01)*.
+- Select-then-place answers an interaction that places one thing on another: pick an item up, move
+  to a target, then place it or cancel, by keyboard or by pointer over the same model
+  *(pending m3d-02)*.
+- plate defines no custom element: the runtime upgrades the native elements the server rendered,
+  and a host registers nothing *(pending m3d-01)*.
+- A runtime interaction writes its answer into hidden inputs, named as `entryName` names them, so
+  the form posts it in the one encoding `decode` reads *(pending m3d-01)*.
+
 ## Hosts
 
 A host composes these functions with its own page, form, routes and store.
@@ -1102,6 +1168,42 @@ On a `POST`, read `await Astro.request.formData()` and score it as the plain-HTM
 build, such as `@astrojs/node`'s standalone server: Astro's dev server adds a script to every page.
 Like the plain-HTML host, it keeps no record, so it cannot score an item whose template processing
 runs.
+
+## React
+
+`@qti-pie/plate/react` is plate's React layer, a projection over the same parts `render` writes.
+Its components are stubs today, and each line below lands with its issue:
+
+- `Item` renders an item, with `useParts`, its state props and `useUpgrade` for the runtime
+  *(pending m3g-01)*.
+- The parts overrides map replaces a part with a host's own component, typed by the part
+  *(pending m3g-01)*.
+- A component for each interaction plate renders and for the item's chrome *(pending m3g-02)*,
+  for the M3.d interactions *(pending m3g-03)*, and for the elective interactions and Portable
+  Custom *(pending m3g-04)*.
+- `TestProvider` runs a test over a host's transport, with its hooks, and `createTestServer` puts
+  plate's session functions behind it on the server *(pending m3g-06)*.
+- A shadcn registry item installs the components and the sheet *(pending m3g-05)*.
+
+## Accessibility supports
+
+`render` and `redact` take a `supports` option, a `Supports` value: the catalog supports enabled
+for one candidate and the preferences their Personal Needs and Preferences (PNP) document gives.
+`noSupports` turns every support off, and `SupportsSchema` checks a value a host builds. Nothing
+reads it yet, so every value renders the same HTML, and each line below lands with its issue:
+
+- `readPnp` reads an AfA PNP 3.0 document into a `Supports` value; today it is a stub
+  *(pending m4-01)*.
+- Catalog supports: a card's content shows when its support is enabled *(pending m3e-04)*, with
+  captions *(pending m3e-07)*, glossary on screen *(pending m3e-08)*, magnification and text and
+  background colours *(pending m3e-09)*.
+- Read-aloud, started by the candidate and off under a screen reader *(pending m4-04)*.
+- Answer masking: a Choice's choices start covered, each uncovered by the candidate
+  *(pending m4-05)*.
+- Additional testing time, on the displayed and the enforced timer *(pending m4-03)*.
+- The PNP-driven supports: audio description *(pending m4-06)*, braille *(pending m4-07)*, breaks
+  *(pending m4-08)*, long description *(pending m4-09)*, sign language *(pending m4-10)*, tactile
+  *(pending m4-11)*, and transcript *(pending m4-12)*.
 
 ## Styling
 

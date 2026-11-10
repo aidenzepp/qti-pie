@@ -25,6 +25,162 @@ M3.
   of failures changes: `render` with such a level and an `outputBudget` that ends before the item's
   first heading returns `InvalidHeadingLevel` where it returned `OutputTooLarge`.
 
+### The fan-out (M3.d to M5) _(pending)_
+
+Each line names the issue that lands it. None has landed, and each issue's area replaces its
+line when the area merges.
+
+- runtime core: `upgrade(root)`, the controller registry, the live region, no focus moves
+  _(pending m3d-01)_
+- select-then-place core: pick up, move, place, cancel, announcements, key map, pointer drag over
+  the same model _(pending m3d-02)_
+- Gap Match core: model, redact, parts, SSR, validation, bindings, fixture (Q-6) _(pending m3d-03)_
+- Gap Match runtime controller and in-page tests (keyboard-only, 2.5.7, 2.5.8) (Q-6)
+  _(pending m3d-04)_
+- Graphic Gap Match core: shapes, coords, area semantics (Q-8) _(pending m3d-05)_
+- Graphic Gap Match runtime controller and in-page tests (Q-8) _(pending m3d-06)_
+- Hotspot core: positioned native checkable controls over the image; the default hotspot (Q-10)
+  _(pending m3d-07)_
+- Hotspot runtime polish (pointer areas, announcements) and in-page tests (Q-10) _(pending m3d-08)_
+- Hot Text core: inline native checkable controls (Q-11) _(pending m3d-09)_
+- Hot Text runtime polish and in-page tests (Q-11) _(pending m3d-10)_
+- Match core: the matrix, `max-associations`, directed pairs (Q-13) _(pending m3d-11)_
+- Match runtime controller and in-page tests (Q-13) _(pending m3d-12)_
+- the playground serves the runtime bundle (opt-in) so the browser walk can upgrade
+  _(pending m3d-13)_
+- pointer-drag enhancement over select-then-place (optional drag, never the only path)
+  _(pending m3d-14)_
+- rubric blocks: item rubric by view; section and test rubric shown with each item (I-11, S-5, T-13)
+  _(pending m3e-01)_
+- shared stimulus: the referenced stimulus body rendered with its items; stimulus resources (I-4,
+  P-11) _(pending m3e-02)_
+- composite items: check-first; tagged tests over a multi-interaction item's render, post and score
+  (I-17) _(pending m3e-03)_
+- catalogs: listing, and the resolution function (document, supports) -> content | dormant behind
+  render's supports option (I-14) _(pending m3e-04)_
+- MathML: normalisation (`mfenced`, `menclose`), validity per the MathML 3 Recommendation, cn hex
+  doubles (I-18) _(pending m3e-05)_
+- the full shared vocabulary and CSS classes: `vocabulary.ts` and the class table are this issue's
+  alone (I-19, I-20) _(pending m3e-06)_
+- captions: track on media, catalog captions (A-13b) _(pending m3e-07)_
+- glossary on screen: catalog glossary as a native `details/popover`, keyboard reachable (A-15)
+  _(pending m3e-08)_
+- magnification and text/background colour: supports-driven CSS variables (A-30a, A-42a)
+  _(pending m3e-09)_
+- time limits: enforcement in advance, `allow-late-submission`, the time navigation part that warns
+  before expiry (T-2, S-2, T-6, I-16) _(pending m3f-01)_
+- selection and ordering: check-first; tagged tests over the session's selection and shuffle; fixes
+  (S-3, S-4) _(pending m3f-02)_
+- section references: a local section document assembled at `openPackage` (S-9) _(pending m3f-03)_
+- package and resource metadata: `qti-metadata` and LOM on `PackageResource` (P-7, P-5, P-6, M-1,
+  M-2, M-3, M-4, M-5, M-6, M-7, M-8, M-9, M-10) _(pending m3f-04)_
+- item session control and structure claims: check-first tagged tests; fixes (T-5, T-12, S-1, T-11,
+  S-8) _(pending m3f-05)_
+- includes: XInclude at item and section level, or the stated limit with its row (I-12, S-6)
+  _(pending m3f-06)_
+- context declarations and the remaining packaging rows: claims, limited where member-only (I-15,
+  P-2, P-3, P-8, P-9, P-10, P-12, P-13) _(pending m3f-07)_
+- React core: `Item`, `useParts`, the parts override map, state props, `useUpgrade`
+  _(pending m3g-01)_
+- React components for the shipped interactions and chrome: Choice, Text Entry, Extended Text,
+  Inline Choice, Status, Navigation (Q-2, Q-5, Q-12, Q-20) _(pending m3g-02)_
+- React wrappers for the M3.d interactions (Q-6, Q-8, Q-10, Q-11, Q-13) _(pending m3g-03)_
+- React wrappers for the elective interactions and `PortableCustom` over the frame host (Q-1, Q-3,
+  Q-4, Q-7, Q-9, Q-14, Q-15, Q-17, Q-18, Q-19, Q-21) _(pending m3g-04)_
+- the shadcn registry item: `registry.json`, the item installing the components and the sheet
+  _(pending m3g-05)_
+- `TestProvider`: the transport, the hooks, and `createTestServer` over plate's session functions
+  _(pending m3g-06)_
+- the React 19 host fixture (criterion 10): one item rendered and scored with a shadcn theme
+  _(pending m3g-07)_
+- the reference app: React, shadcn, React Hook Form, a sample test end to end in Chromium and
+  WebKit; README examples compile and run _(pending m3g-08)_
+- PNP reader (AfA PNP 3.0, read tolerantly across the 12 contradictions) -> `Supports`
+  _(pending m4-01)_
+- SSML and PLS model: both carriers to one speech plan; validity per speak fragment;
+  `data-qti-suppress-tts` (A-3a, A-3b, A-35) _(pending m4-02)_
+- additional testing time: multiplier, fixed minutes, unlimited, on the displayed and the enforced
+  timer (A-6) _(pending m4-03)_
+- read-aloud engine: candidate-started, pause, stop, Web Speech, off for screen-reader,
+  pronunciations never in `aria-label` (A-40a, A-40b, A-40f) _(pending m4-04)_
+- answer masking: visually and programmatically unavailable, a toggle per choice (A-8)
+  _(pending m4-05)_
+- audio description, PNP-driven (A-9) _(pending m4-06)_
+- braille, PNP-driven (A-10a) _(pending m4-07)_
+- breaks, PNP-driven (A-11) _(pending m4-08)_
+- long description, PNP-driven (A-29) _(pending m4-09)_
+- sign language, PNP-driven (A-36) _(pending m4-10)_
+- tactile, PNP-driven (A-41) _(pending m4-11)_
+- transcript and the ARIA subset claim, PNP-driven (A-44, A-2a) _(pending m4-12)_
+- PCI module resolution (PCI-2, PCI-3, PCI-5): every corpus route, `.js` never doubled,
+  type-identifier notice _(pending pci-01)_
+- the Appendix C JSON binding, both ways, for every base type and cardinality _(pending pci-02)_
+- PCI SSR: the model, the inert template, verdict rows, a fresh fixture package; the corpus
+  packages' verdicts (PCI-1) (Q-16) _(pending pci-03)_
+- the frame host: one sandboxed iframe per PCI, AMD loader and bridge inside, `event.source` plus
+  nonce, `ResizeObserver` height, `oncompleted` before teardown (Q-16) _(pending pci-04)_
+- PCI responses and solution: Appendix C JSON in the hidden input, scored on the server; `boundTo`
+  only in the solution state; 3.0.1 deltas; Q-16 limited (Q-16) _(pending pci-05)_
+- Upload: `input type=file`, the file value, the host's `multipart/form-data` duty (Q-21)
+  _(pending ei-01)_
+- End Attempt: a native submit button naming its response; `count-attempt` at the stated default
+  (Q-4) _(pending ei-02)_
+- Media (I-8.11 controls): native video/audio, play count by runtime, `min-plays/max-plays` (Q-14)
+  _(pending ei-03)_
+- Associate core (Q-1) _(pending ei-04)_
+- Associate runtime over select-then-place (Q-1) _(pending ei-05)_
+- Order core (Q-15) _(pending ei-06)_
+- Order runtime over select-then-place; a non-drag reorder path (Q-15) _(pending ei-07)_
+- Graphic Associate core (Q-7) _(pending ei-08)_
+- Graphic Associate runtime (Q-7) _(pending ei-09)_
+- Graphic Order core (Q-9) _(pending ei-10)_
+- Graphic Order runtime (Q-9) _(pending ei-11)_
+- Position Object core (Q-17) _(pending ei-12)_
+- Position Object runtime (Q-17) _(pending ei-13)_
+- Select Point core: number inputs as the script-free path; the point value (Q-18) _(pending ei-14)_
+- Select Point runtime: click and arrow-key crosshair over the image (Q-18) _(pending ei-15)_
+- Slider core: native `input type=range`, step, `lower-bound`, `upper-bound`, reverse, `step-label`
+  (Q-19) _(pending ei-16)_
+- Drawing core: the model, the file response, the notice without script (Q-3) _(pending ei-17)_
+- Drawing runtime: canvas, pen, erase, undo, PNG into the file value, keyboard path (Q-3)
+  _(pending ei-18)_
+- elective interactions' accessibility pages: one fixture page per interaction for the local
+  screen-reader pass _(pending ei-19)_
+- modal feedback: a native dialog that returns focus; `dialog[open]` without script (I-10, M-5)
+  _(pending m5-01)_
+- inline and block feedback (`qti-feedback-inline`, `qti-feedback-block`) _(pending m5-02)_
+- adaptive items: adaptive, attempts until `completionStatus`, the metadata rows (M-1, M-2, M-3)
+  _(pending m5-03)_
+- test feedback: during and atEnd, in the test part and the test (T-8, T-10) _(pending m5-04)_
+- branch rules and pre-conditions (C6, T-O10) in advance _(pending m5-05)_
+- stylesheets: `@scope` wrap or selector prefix, the package file served (I-6, T-3)
+  _(pending m5-06)_
+- companion materials (I-13) _(pending m5-07)_
+- elementary and content MathML, hand-written fixtures (I-18) _(pending m5-08)_
+- elective result content: candidate comment, test feedback outcomes _(pending m5-09)_
+- PNP tool preferences exposed in `Supports` for the host; limited rows where plate renders no tool
+  (A-5, A-12, A-16, A-18, A-19, A-22, A-27, A-31, A-32, A-33, A-34, A-39, A-43, A-45, A-46, A-47)
+  _(pending m5-10)_
+- PNP catalog content supports (A-7, A-13a, A-21, A-23, A-24, A-28, A-37, A-38) _(pending m5-11)_
+- display preferences (A-4a, A-4b, A-17, A-20, A-26, A-30b, A-42b) _(pending m5-12)_
+- spoken preferences (A-10b, A-40c, A-40d, A-40e) _(pending m5-13)_
+- ARIA full and the remaining A-family rows' tests (A-2b) _(pending m5-14)_
+- the ledger's goal-close completeness: every unsupported-with-notice row named with its owner
+  _(pending m5-15)_
+- `data-*` and foreign content in the new interactions _(pending m5-16)_
+- the browser and accessibility sweep: axe-core class WCAG 2.2 AA over every rendered corpus item in
+  Chromium and WebKit; the contrast sweep; one command at freeze _(pending m3h-01)_
+- runtime size per module, published with the ledger (information, criterion 11) _(pending m3h-02)_
+- README and CHANGELOG for area m3d, replacing the (pending) lines from the modules' TSDoc
+  _(pending docs-m3d)_
+- README and CHANGELOG for area m3e _(pending docs-m3e)_
+- README and CHANGELOG for area m3f _(pending docs-m3f)_
+- README and CHANGELOG for area m3g _(pending docs-m3g)_
+- README and CHANGELOG for area m4 _(pending docs-m4)_
+- README and CHANGELOG for area pci _(pending docs-pci)_
+- README and CHANGELOG for area ei _(pending docs-ei)_
+- README and CHANGELOG for area m5 _(pending docs-m5)_
+
 ### How plate reads the shared readings after pantry's cutover, 2026-11-09 (align-54)
 
 - plate now reads QTI 3.0 as [`docs/spec-readings.md`](../../docs/spec-readings.md) reads it after
