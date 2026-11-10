@@ -22,8 +22,9 @@
  * for its target's root (`IncludeRoot`, reading 114), whatever its parent ({@link sitesFold}). A
  * chain of section refs and includes that returns to a document already on it would need
  * infinitely many instances, so no finite tree holds it: the count law `children = sites` refuses
- * one a head reaches, and `TestDocument.instances` above 0 one no head reaches, whose documents no
- * assembly places (reading 85). Under a test's root, each instance carries one
+ * one a head reaches, and the containment of every `TestDocument` into the documents some instance
+ * places (the query `InstanceDocument`, `#pantry/qti/queries.ts`) one no head reaches, whose
+ * documents no assembly places (reading 85). Under a test's root, each instance carries one
  * {@link InstanceName} per name of its document, and their projection
  * {@link AssembledName} holds each written element once per test, so a section document placed
  * twice names nothing twice, and the key on `(assembly, identifier)` is reading 86's one namespace.
@@ -177,7 +178,8 @@ export const collapsedPattern = Compute.pattern(
  * - **the host's:** `node`, `package`, `path` and `rootKind` (its `Document` row's);
  * - **drawn:** `targets`, `names` and `rules`, the counts of {@link siteFamily}, {@link nameFamily}
  *   and {@link ruleFamily}; and `instances`, its placements in every assembly, the count of
- *   {@link documentInstanceFamily}, which "Inclusion cycle" holds above 0;
+ *   {@link documentInstanceFamily}, which a placed share's and a placed catalog's `placements` copy
+ *   (`#pantry/qti/mathml-share.ts`, `#pantry/qti/catalog.ts`);
  * - **accumulated:** `sites`, the count of its sites that place their target ({@link sitesFold}), the
  *   children each of its instances holds.
  */
@@ -1495,11 +1497,10 @@ const flagCopies = flagCarriers.map(flagCopy);
  *   TestDocument(node, rootKind, sites)`, since no finite tree has one child per site that places
  *   its target under it.
  * - **A chain no head reaches**, such as two fragments each of which includes the other, which no
- *   head places, and any fragment only they place: `TestDocument.instances` above 0, since none of
- *   them is placed in any assembly. Its converse, every `Instance` row's document an assembled
- *   one's, is the foreign key above; the containment the other way, `TestDocument(node, rootKind,
- *   sites) ⊆ Instance(document, rootKind, children)`, has no key of `Instance` in its target's
- *   projection, which grizzle refuses, so the count states it.
+ *   head places, and any fragment only they place: every `TestDocument` is a document some instance
+ *   places, a rule over the query `InstanceDocument` (`#pantry/qti/queries.ts`), since none of them
+ *   is placed in any assembly. Its converse, every `Instance` row's document an assembled one's, is
+ *   the foreign key above.
  *
  * The heads are {@link splicingParents}'s, through `Inclusion.splices`: the query `HeadDocument`
  * (`#pantry/qti/queries.ts`), each assembled document no include splices in place, mirrored with
@@ -1992,7 +1993,6 @@ export const testLawsByName = {
     ),
     key(on(instanceRoots, "document")),
     documentInstanceFamily,
-    check("Inclusion_cycle", TestDocument, (d) => d.gt(d.instances, 0n)),
   ],
   "Item ref target": [
     contained(on(ItemRefHref, "node"), on(nodesOf(itemRefKind), "id")),

@@ -87,11 +87,13 @@ import { ResourceDocument, ResourceHref, ResourceTyped } from "#pantry/qti/packa
 import { Document } from "#pantry/qti/chardata.ts";
 import {
   AssembledName,
+  Instance,
   instanceRoots,
   InstanceName,
   ItemRefDocument,
   ItemRefHref,
   SiteTarget,
+  TestDocument,
   VariableMapping,
 } from "#pantry/qti/tests.ts";
 import { noLanguage } from "#pantry/vocab/terms/metadata.ts";
@@ -1243,14 +1245,34 @@ export const queriesOf = (base: QtiBase) => {
   );
 
   /**
+   * The documents some instance of an assembly places, by the document's node: the projection of
+   * `Instance` on its `document`. A chain of section refs and includes that returns to a document
+   * already on it, and that no head reaches, places none of its documents in any assembly, so its
+   * documents are none of these (reading 85).
+   */
+  const InstanceDocument = derived(
+    "InstanceDocument",
+    query(base).rule((r) => {
+      const { document } = v(Instance, "instance");
+
+      return r.match(Instance, { document }).find({ document });
+    }),
+  );
+
+  /**
    * The tests overlays' rules over a query, each named by its oracle law:
    *
    * - **"E1 derived":** each assembly's root is a document that heads one ({@link HeadDocument});
-   * - **"Inclusion cycle"** (reading 85): each document that heads an assembly is the root of one.
+   * - **"Inclusion cycle"** (reading 85): each document that heads an assembly is the root of one,
+   *   and every document of a test or a section is one some instance places
+   *   ({@link InstanceDocument}), so a chain no head reaches is refused.
    */
   const testQueryLawsByName = {
     "E1 derived": [contained(on(instanceRoots, "document"), on(HeadDocument, "node"))],
-    "Inclusion cycle": [contained(on(HeadDocument, "node"), on(instanceRoots, "document"))],
+    "Inclusion cycle": [
+      contained(on(HeadDocument, "node"), on(instanceRoots, "document")),
+      contained(on(TestDocument, "node"), on(InstanceDocument, "document")),
+    ],
   } as const;
 
   /**
@@ -1321,6 +1343,7 @@ export const queriesOf = (base: QtiBase) => {
     HeadDocument,
     HeldScope,
     HeldType,
+    InstanceDocument,
     ItemRefTarget,
     LinkReading,
     ListedIdentifier,

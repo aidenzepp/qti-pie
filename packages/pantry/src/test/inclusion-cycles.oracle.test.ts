@@ -4,9 +4,10 @@
  * (`host-judge.ts`): a cycle is refused by "Inclusion cycle" alone, since the import cuts it where
  * it closes and no instance repeats a document, whose placements would break the assembly's keys
  * (a binding per response, a hottext per identifier) before the cycle's law. A cycle no item
- * places, and a fragment only that cycle places, are in no assembly at all, which
- * `TestDocument.instances` refuses under the same law (spec readings 85 and 117). The database's
- * side is `import/inclusion-cycles.db.test.ts`.
+ * places, and a fragment only that cycle places, are in no assembly at all, which the containment
+ * of every `TestDocument` into the query `InstanceDocument` refuses under the same law (spec
+ * readings 85 and 117), a rule over a query that the database alone judges. The database's side is
+ * `import/inclusion-cycles.db.test.ts`.
  *
  * Oracle: the inclusion graph as each case writes it, a cycle or none, so no expected verdict is
  * computed by the import's walk or the oracle's.
@@ -191,6 +192,11 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   );
 
                   const read = yield* rowsOfCase(files);
+                  // A cycle no item places is in no assembly, which the rule over the query
+                  // `InstanceDocument` refuses, and the database alone judges a rule over a query:
+                  // the host restates it as the documents no assembly places. A cycle an item places
+                  // breaks the instance tree's count, which the host judges.
+                  const unplacedCycle = cyclic && drawn.includers === 0;
                   assert.deepStrictEqual(
                     read.keys,
                     [],
@@ -198,8 +204,13 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   );
                   assert.deepStrictEqual(
                     read.rules,
-                    cyclic ? ["Inclusion cycle"] : [],
+                    cyclic && !unplacedCycle ? ["Inclusion cycle"] : [],
                     `${JSON.stringify(drawn)}: the laws the import's rows break, ${read.laws.join("; ") || "none"}; documents no assembly places: ${read.unplaced.join(", ") || "none"}`,
+                  );
+                  assert.strictEqual(
+                    read.unplaced.length > 0,
+                    unplacedCycle,
+                    `${JSON.stringify(drawn)}: documents no assembly places: ${read.unplaced.join(", ") || "none"}`,
                   );
                 }).pipe(Effect.provide(NodeServices.layer)),
             ),
