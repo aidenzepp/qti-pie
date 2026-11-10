@@ -101,10 +101,36 @@ const baseLine = "/* == base: QTI vocabulary classes == */";
 const themeLine = "/* == theme: plate's default theme, on the part markers == */";
 
 /**
+ * The line that opens the shared `select-place` block: the one place the {@link selectPlaceStates}
+ * are styled for every kind.
+ */
+const selectPlaceBegin = "/* begin select-place (unit W0-BA) */";
+
+/**
+ * The line that closes the shared `select-place` block.
+ */
+const selectPlaceEnd = "/* end select-place */";
+
+/**
+ * The select-then-place state attributes, which the runtime's select-then-place driver
+ * (`#plate/runtime/select-place-driver.dom.ts`) writes on any kind's tokens and targets after the
+ * SSR, which never writes them: `aria-pressed` on a token (`"true"` while it is held),
+ * `data-cursor` on the target the arrow keys have reached, and `aria-disabled` on a token or
+ * target a move refuses. They are admitted for every kind, so the shared `select-place` block
+ * styles them once and a kind's own block may say more by marker.
+ */
+const selectPlaceStates: ReadonlySet<string> = new Set([
+  "aria-disabled",
+  "aria-pressed",
+  "data-cursor",
+]);
+
+/**
  * The only attribute names a selector may test: `data-slot`, the part marker; `data-mode` and
  * `data-disabled`, the Root's state; `aria-invalid` and `type` on a Control; `data-orientation`,
  * the authored orientation on the Choice Root; `aria-current`, which the current item's button
- * carries; and `readonly`, which a text Control carries in review and solution.
+ * carries; `readonly`, which a text Control carries in review and solution; and the
+ * {@link selectPlaceStates}.
  */
 const attributeNames: ReadonlySet<string> = new Set([
   "aria-current",
@@ -115,6 +141,7 @@ const attributeNames: ReadonlySet<string> = new Set([
   "data-slot",
   "readonly",
   "type",
+  ...selectPlaceStates,
 ]);
 
 /**
@@ -306,6 +333,15 @@ const holdsSlot = (compound: Compound, slot: string): boolean =>
  */
 const holdsPseudoClass = (compound: Compound, name: string): boolean =>
   compound.pseudoClasses.some((pseudoClass) => pseudoClass.name === name);
+
+/**
+ * Tell whether a compound tests one of the {@link selectPlaceStates}.
+ *
+ * @param compound One compound.
+ * @returns Whether the compound holds an attribute test on a select-then-place state.
+ */
+const holdsSelectPlaceState = (compound: Compound): boolean =>
+  compound.attributes.some((test) => selectPlaceStates.has(test.name));
 
 /**
  * Tell whether a compound tests for a validation verdict.
@@ -1902,6 +1938,92 @@ layer(Stylesheet.layer)("styles.css", (test) => {
         assert.deepStrictEqual(hidingRules(sheet, marker.inlineChoiceControl), []);
       }),
   );
+
+  test.effect(
+    "styles the select-then-place states once, in one shared block keyed to no kind: a held token, a token's focus ring at offset 0, the cursor's target and a refused part",
+    () =>
+      Effect.gen(function* selectPlace() {
+        const { text } = yield* Stylesheet;
+        const lines = text.split("\n");
+        const begin = lines.indexOf(selectPlaceBegin);
+        const end = lines.indexOf(selectPlaceEnd);
+
+        assert.strictEqual(lines.filter((line) => line === selectPlaceBegin).length, 1);
+        assert.strictEqual(lines.filter((line) => line === selectPlaceEnd).length, 1);
+        assert.isBelow(begin, end);
+
+        const block = yield* scanSheet(lines.slice(begin + 1, end).join("\n"));
+        const rulesWhere = (passes: (compound: Compound) => boolean): readonly StyleRule[] =>
+          block.rules.filter((rule) =>
+            rule.selectors.some((selector) => subjectCompounds(selector).some(passes)),
+          );
+
+        assert.isNotEmpty(block.rules);
+        assert.isTrue(
+          block.rules
+            .flatMap((rule) => rule.selectors)
+            .flatMap(subjectCompounds)
+            .filter((compound) => compound.attributes.length > 0)
+            .every(holdsSelectPlaceState),
+          "every subject, past the :where() wrapper, holds a select-then-place state",
+        );
+        assert.deepStrictEqual(
+          block.rules
+            .flatMap((rule) => rule.selectors)
+            .flatMap(compoundsDeep)
+            .flatMap((compound) => compound.attributes)
+            .filter((attribute) => attribute.name === "data-slot")
+            .map((attribute) => Option.getOrElse(attribute.value, () => ""))
+            .filter((slot) => slot !== marker.item),
+          [],
+          "the only marker is the item Root's: the block is keyed to no kind",
+        );
+
+        const held = rulesWhere(
+          (compound) =>
+            holdsEquals(compound, "aria-pressed", "true") &&
+            !holdsPseudoClass(compound, "focus-visible"),
+        );
+        const focused = rulesWhere(
+          (compound) =>
+            compound.attributes.some((attribute) => attribute.name === "aria-pressed") &&
+            holdsPseudoClass(compound, "focus-visible"),
+        );
+        const cursor = rulesWhere((compound) => holdsPresence(compound, "data-cursor"));
+        const refused = rulesWhere((compound) => holdsEquals(compound, "aria-disabled", "true"));
+
+        assert.isTrue(
+          held.some(
+            (rule) =>
+              Option.contains(tokenName(rule, "background-color"), "--primary") &&
+              Option.contains(tokenName(rule, "color"), "--primary-foreground"),
+          ),
+          "a held token takes the primary surface and its foreground",
+        );
+        assert.isTrue(
+          focused.some(
+            (rule) =>
+              Option.contains(declared(rule, "outline-width"), "3px") &&
+              Option.contains(declared(rule, "outline-offset"), "0") &&
+              Option.contains(tokenName(rule, "outline-color"), "--ring"),
+          ),
+          "a focused token shows the sheet's ring: 3px at offset 0, from --ring",
+        );
+        assert.isTrue(
+          cursor.some(
+            (rule) =>
+              Option.isSome(declared(rule, "outline-width")) &&
+              Option.contains(tokenName(rule, "outline-color"), "--primary") &&
+              !declares(rule, "outline-style", "solid"),
+          ),
+          "the cursor's target is outlined in the primary colour, never as the solid focus ring is",
+        );
+        assert.isTrue(
+          refused.some((rule) => Option.isSome(declared(rule, "opacity"))),
+          "a refused token or target is dimmed",
+        );
+      }),
+  );
 });
 
 describe("styles.css predicates, on negative controls", () => {
@@ -1992,6 +2114,24 @@ describe("styles.css predicates, on negative controls", () => {
 
       assert.deepStrictEqual(strayRefusedLooks(sheet), [bare]);
     }),
+  );
+
+  it.effect(
+    "a select-then-place state on a part's marker is admitted, and an attribute outside the list is reported",
+    () =>
+      Effect.gen(function* selectPlaceState() {
+        const held = `:where([data-slot="${marker.choice}"][aria-pressed="true"])`;
+        const cursor = `:where([data-slot="${marker.choice}"][data-cursor])`;
+        const refused = `:where([data-slot="${marker.choice}"][aria-disabled="true"])`;
+        const grabbed = `:where([data-slot="${marker.choice}"][aria-grabbed="true"])`;
+        const admitted = yield* scanSheet(
+          `${held} {\n  opacity: 0.5;\n}\n\n${cursor} {\n  opacity: 0.5;\n}\n\n${refused} {\n  opacity: 0.5;\n}\n`,
+        );
+        const stray = yield* scanSheet(`${grabbed} {\n  opacity: 0.5;\n}\n`);
+
+        assert.deepStrictEqual(strayNames(admitted), []);
+        assert.deepStrictEqual(strayNames(stray), ["attribute aria-grabbed"]);
+      }),
   );
 
   it.effect(
