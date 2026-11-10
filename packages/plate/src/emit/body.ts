@@ -51,6 +51,7 @@ import {
   authoredId,
   authoredIdrefs,
   headings,
+  isAuthorData,
   positionUnder,
   rowFor,
   scopedId,
@@ -63,7 +64,6 @@ import { isModuleKind } from "#plate/interactions/contract.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
 import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
-import { isAuthorData } from "#plate/vocabulary.ts";
 import type { ModuleKind } from "#plate/interactions/contract.ts";
 import type { KeptUrl, UrlContext } from "#plate/model/url.ts";
 import type {
