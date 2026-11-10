@@ -161,11 +161,13 @@ describe(server.browser, () => {
         container.innerHTML = `<div data-slot="item"><div data-slot="item-live" aria-live="polite" aria-atomic="true"></div><div data-slot="gap-match-interaction"></div><div data-slot="${slot}"></div></div>`;
         document.body.append(container);
 
+        const itemRootElement = container.querySelector<HTMLElement>('[data-slot="item"]');
         const interaction = container.querySelector<HTMLElement>(
           '[data-slot="gap-match-interaction"]',
         );
         const content = container.querySelector<HTMLElement>(`[data-slot="${slot}"]`);
 
+        assert.isNotNull(itemRootElement, slot);
         assert.isNotNull(interaction, slot);
         assert.isNotNull(content, slot);
 
@@ -175,6 +177,7 @@ describe(server.browser, () => {
           upgraded.controllers,
           [
             { kind: "gap-match", root: interaction },
+            { root: itemRootElement, slot: "item" },
             { root: content, slot },
           ],
           slot,
@@ -199,7 +202,7 @@ describe(server.browser, () => {
 
         const first = upgrade(container);
 
-        assert.lengthOf(first.controllers, 2, slot);
+        assert.lengthOf(first.controllers, 3, slot);
         assert.isAbove(container.querySelectorAll("[data-runtime]").length, 0, slot);
 
         first.teardown();
