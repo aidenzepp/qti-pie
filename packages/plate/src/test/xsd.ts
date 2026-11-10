@@ -123,7 +123,7 @@ const searchPath = Config.String("PATH").pipe(Config.withDefault(""));
  * `src/test/xsd-layout.ts` gives it. A relative `xsdPath` given to {@link validateAgainst} names a
  * file here, and the catalog maps every purl URL that table lists into it.
  */
-export const xsdDirectory: Config.Config<string> = Config.String("HOME").pipe(
+export const xsdDirectory: Config.Config<string> = Config.NonEmptyString("HOME").pipe(
   Config.map((home) => path.join(home, ".cache", "gr8des", "qti3", "xsd")),
 );
 

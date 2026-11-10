@@ -28,7 +28,7 @@ import { isNcName } from "#plate/model/values.ts";
  * module decodes the committed tables when it loads: after a change to the tables' Schema the old
  * file no longer decodes, and importing it would stop the regeneration that replaces it.
  */
-export const xsdPath = Config.String("HOME").pipe(
+export const xsdPath = Config.NonEmptyString("HOME").pipe(
   Config.map((home) => `${home}/.cache/gr8des/qti3/xsd/imsqti_asiv3p0p1_v1p0.xsd`),
 );
 
