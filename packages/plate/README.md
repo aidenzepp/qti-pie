@@ -1248,13 +1248,50 @@ From the repository root:
 pnpm --filter @qti-pie/plate ledger
 ```
 
-The command runs plate's tests, opens every document in 1EdTech's examples, and writes the ledger
-and the verdicts to `packages/plate/work/ledger/`, or to the folder `PLATE_LEDGER_DIR` names. It
-needs every cache the tests read, among them the QTI 3.0 conformance text at
-`~/.cache/gr8des/qti3-text/conf.txt`. Because it runs the tests with `PLATE_REQUIRE_CACHES=1`, a
-missing cache makes it fail. The ledger says only that these tests pass over these fixtures, never
-that plate is conformant or certified. The command exits with 1 when a test fails or
-[`src/ledger/honesty.ts`](src/ledger/honesty.ts) finds a problem.
+The command runs plate's tests, opens every document in 1EdTech's examples, and writes the verdicts
+(`verdicts.json` and `verdicts.txt`), the ledger (`ledger.json` and `ledger.txt`) and the browser
+runtime's size (`runtime-size.json` and `runtime-size.txt`) to `packages/plate/work/ledger/`, or to
+the folder `PLATE_LEDGER_DIR` names. It needs every cache the tests read, among them the QTI 3.0
+conformance text at `~/.cache/gr8des/qti3-text/conf.txt`. Because it runs the tests with
+`PLATE_REQUIRE_CACHES=1`, a missing cache makes it fail. The ledger says only that these tests pass
+over these fixtures, never that plate is conformant or certified. The command exits with 1 when a
+test fails or [`src/ledger/honesty.ts`](src/ledger/honesty.ts) finds a problem.
+
+The runtime's size is information. The command takes every module that `src/runtime.dom.ts` loads
+through value imports, minifies each, and counts its bytes as minified, as gzip at level 9 and as
+brotli at quality 11. `runtime-size.txt` lists the modules one by one, then the total, whose gzip
+and brotli sizes are of the modules' minified code compressed as one stream. A package the runtime
+loads, such as `effect`, is listed by name and not measured. `PLATE_RUNTIME_SIZE_BASELINE` names an
+earlier `runtime-size.json`, as an absolute path or one relative to `packages/plate/`, and the
+command prints one line that says how the total gzip size changed since it. A jump is growth of the
+total gzip size by more than 5,000 B or by more than 15 percent, and the line flags it and names
+the modules that grew most. Without a baseline, or when the path cannot be read or holds no
+measurement, the line says there is no comparison. A size, or a jump in it, is a line to read and
+never changes the exit code.
+
+The accessibility sweep is a command of its own, also from the repository root:
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH="$HOME/.cache/gr8des/ms-playwright" node packages/plate/scripts/sweep.ts
+```
+
+It runs axe-core's WCAG 2.0, 2.1 and 2.2 A and AA rules, and no other rule, over every corpus item
+`open` accepts, in Chromium and in WebKit, with plate's default stylesheet. A tag run leaves out the
+rules axe-core marks experimental or deprecated, though they carry a WCAG tag, so those do not run.
+Each item is checked in three render states, `no inputs`, `messages and posted text` and
+`disabled`, under the stylesheet's fallback colours, and its messages state once more under
+shadcn's `.dark` colours, for contrast. The command writes `sweep.json`, the whole report, and `sweep.txt`, a line for each violation, to
+`packages/plate/work/sweep/`, and prints the paths, each engine's version and the text. It exits
+with 1 when any check has a violation and with 0 when none has; a rule's incomplete results are
+counted and never change the exit code. A failure that stops the run, such as an accepted item that
+cannot be rendered, prints its message, exits with 1 and writes nothing. It is the freeze's
+command, and `test:browser` does not run it: each item is checked four times in each engine, so
+the run takes minutes. The sweep's in-page half,
+[`src/test/axe.dom.test.ts`](src/test/axe.dom.test.ts), runs the same rule tags over every fixture
+item `open` accepts, before and after `upgrade()`, in Chromium and in WebKit, as part of the
+browser tests the ledger command runs, and those tests fail on a violation. Rules that need the
+whole document do not run in-page. Automated rules settle part of a criterion only, and the
+screen-reader pass is a local, recorded pass outside the command.
 
 ## Development
 

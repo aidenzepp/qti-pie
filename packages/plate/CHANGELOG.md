@@ -27,8 +27,8 @@ M3.
 
 ### The fan-out (M3.d to M5) _(pending)_
 
-Each line names the issue that lands it. None has landed, and each issue's area replaces its
-line when the area merges.
+Each line names the issue that lands it. A line marked pending has not landed, and each area
+replaces its lines when the area merges.
 
 - runtime core: `upgrade(root)`, the controller registry, the live region, no focus moves
   _(pending m3d-01)_
@@ -168,9 +168,16 @@ line when the area merges.
 - the ledger's goal-close completeness: every unsupported-with-notice row named with its owner
   _(pending m5-15)_
 - `data-*` and foreign content in the new interactions _(pending m5-16)_
-- the browser and accessibility sweep: axe-core class WCAG 2.2 AA over every rendered corpus item in
-  Chromium and WebKit; the contrast sweep; one command at freeze _(pending m3h-01)_
-- runtime size per module, published with the ledger (information, criterion 11) _(pending m3h-02)_
+- the accessibility sweep, `node packages/plate/scripts/sweep.ts`: axe-core's WCAG 2.0, 2.1 and 2.2
+  A and AA rules over every corpus item `open` accepts, in its three render states under the
+  default stylesheet's fallback colours and once more under shadcn's `.dark` colours for contrast,
+  in Chromium and in WebKit; the same rules in-page over every fixture item before and after
+  `upgrade()`, in the browser tests (issue m3h-01)
+- the ledger command measures the browser runtime module by module, minified, gzip and brotli
+  bytes, and writes `runtime-size.json` and `runtime-size.txt` beside the ledger;
+  `PLATE_RUNTIME_SIZE_BASELINE` names an earlier `runtime-size.json`, and growth of the total gzip
+  size by more than 5,000 B or by more than 15 percent is flagged in one line, never in the exit
+  code (information, criterion 11) (issue m3h-02)
 - README and CHANGELOG for area m3d, replacing the (pending) lines from the modules' TSDoc
   _(pending docs-m3d)_
 - README and CHANGELOG for area m3e _(pending docs-m3e)_
