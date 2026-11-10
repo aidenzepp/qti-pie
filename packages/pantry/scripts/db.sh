@@ -7,7 +7,7 @@
 #   scripts/db.sh reset     drop, then create and migrate again
 #   scripts/db.sh drop      drop the database, the PostgreSQL roles the config installs and the password directory
 #   scripts/db.sh check-clear  list the config's roles left on the cluster and gr8des_qti databases other than this
-#                              one; exit 1 if any, else 0
+#                              one; exit 1 if any, 2 if it cannot list them, else 0
 #
 # Roles are cluster-wide, so drop removes the config's roles along with the database. Each role is named by grizzle's
 # roleNameOf over the config's logins and their roles, the installer's own naming, which names a login by the level of
@@ -17,8 +17,10 @@
 # GR8DES_PG_DATABASE must match ^[a-z_][a-z0-9_]{0,62}$ (lowercase, at most 63 bytes), or every command exits 2.
 # GR8DES_PG_PASSWORD_COMMAND, when set and not empty, names an executable that prints a role's password: every
 # connection runs it, without a shell, with the role's name as its one argument, and reads its output, trimmed, as
-# src/db/connection.ts does. It then replaces the migration identity's password file, and migrate gives no login a local
-# password, since every login's comes from the command too.
+# src/db/connection.ts does. A run that exits otherwise than 0, whatever it printed, or prints nothing gives no
+# password, and the command stops before psql starts. It then replaces the migration identity's password file, and
+# migrate gives no login a local password, since every login's comes from the command too. This script runs it before
+# psql starts, with no bound; grizzle migrate runs it with GR8DES_PG_PASSWORD_COMMAND_TIMEOUT's.
 # GR8DES_GRIZZLE_CONFIG names the grizzle config migrate runs (grizzle.config.ts by default), whose logins name every
 # role the other commands find.
 set -euo pipefail
@@ -47,18 +49,24 @@ owner="$GR8DES_PG_MIGRATION_ROLE"
 ca="$GR8DES_PG_CA"
 
 # Prints the migration identity's password for one connection: GR8DES_PG_PASSWORD_COMMAND's output for it, trimmed,
-# where the command is set, else the password file in the cluster's state folder.
+# where the command is set, else the password file in the cluster's state folder. Fails, printing nothing, where the
+# command exits otherwise than 0 or prints no password. Its callers read it in a command substitution, where errexit
+# does not reach, so each checks its status.
 owner_password() {
 	if [[ -z "${GR8DES_PG_PASSWORD_COMMAND:-}" ]]; then
 		cat "$GRIZZLE_PG_STATE/$owner.password"
 		return
 	fi
-	local password
-	password="$("$GR8DES_PG_PASSWORD_COMMAND" "$owner")"
+	local password status=0
+	password="$("$GR8DES_PG_PASSWORD_COMMAND" "$owner")" || status=$?
+	if ((status != 0)); then
+		echo "The password command $GR8DES_PG_PASSWORD_COMMAND exited with code $status for the role $owner, so the connection has no password. Run it by hand with $owner as its one argument to see why it fails, and sign in if it asks you to; or unset GR8DES_PG_PASSWORD_COMMAND to use the local cluster's passwords." >&2
+		return 1
+	fi
 	password="${password#"${password%%[![:space:]]*}"}"
 	password="${password%"${password##*[![:space:]]}"}"
 	if [[ -z "$password" ]]; then
-		echo "GR8DES_PG_PASSWORD_COMMAND printed no password for $owner; run it by hand with $owner as its one argument to see why." >&2
+		echo "The password command $GR8DES_PG_PASSWORD_COMMAND exited with code 0 for the role $owner but printed no password on standard output. GR8DES_PG_PASSWORD_COMMAND must print the role's password; run it by hand with $owner as its one argument to check that it is signed in." >&2
 		return 1
 	fi
 	printf '%s' "$password"
@@ -69,7 +77,7 @@ as_owner() {
 	local db=$1
 	shift
 	local password
-	password="$(owner_password)"
+	password="$(owner_password)" || return
 	PGPASSWORD="$password" "$GRIZZLE_PG_BIN/psql" -X -q -v ON_ERROR_STOP=1 -At \
 		"host=$GR8DES_PG_HOST port=$GR8DES_PG_PORT dbname=$db user=$owner sslmode=verify-full sslrootcert=$ca" "$@"
 }
@@ -103,7 +111,9 @@ installed_roles() {
 }
 
 create() {
-	if [[ -n "$(as_owner postgres -c "SELECT 1 FROM pg_database WHERE datname = '$GR8DES_PG_DATABASE'")" ]]; then
+	local exists
+	exists="$(as_owner postgres -c "SELECT 1 FROM pg_database WHERE datname = '$GR8DES_PG_DATABASE'")"
+	if [[ -n "$exists" ]]; then
 		echo "$GR8DES_PG_DATABASE: exists"
 		return
 	fi
@@ -167,15 +177,15 @@ reset() {
 # Prints each leftover as "role: <name>" or "database: <name>"; exits 1 if any were found.
 check_clear() {
 	local roles role names=""
-	roles="$(installed_roles all)"
+	roles="$(installed_roles all)" || return 2
 	for role in $roles; do
 		names="${names:+$names, }'$role'"
 	done
 	local found
 	found="$(
-		as_owner postgres -c "SELECT 'role: ' || rolname FROM pg_roles WHERE rolname IN ($names) ORDER BY rolname"
-		as_owner postgres -c "SELECT 'database: ' || datname FROM pg_database WHERE datname LIKE 'gr8des_qti%' AND datname <> '$GR8DES_PG_DATABASE' ORDER BY datname"
-	)"
+		as_owner postgres -c "SELECT 'role: ' || rolname FROM pg_roles WHERE rolname IN ($names) ORDER BY rolname" &&
+			as_owner postgres -c "SELECT 'database: ' || datname FROM pg_database WHERE datname LIKE 'gr8des_qti%' AND datname <> '$GR8DES_PG_DATABASE' ORDER BY datname"
+	)" || return 2
 	if [[ -n "$found" ]]; then
 		echo "$found"
 		return 1
