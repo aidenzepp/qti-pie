@@ -4190,19 +4190,19 @@ const recordResponseNames = (
  * its value a file's name, size and type and never its bytes; Upload and Drawing, which bind one,
  * stay notices until `ei-01` and `ei-17` land them. An outcome or template declaration of
  * cardinality `record` is held in `unheld`, beside its mark. `records` and `unheld` are each absent
- * when empty. Template
- * declarations of modelled types are read into `templates`, and a `qti-template-processing` into
- * `templateProcessing` through `templateRules` in `#plate/model/template.ts`, which marks what the
- * engine does not run as response processing's reader does. Its rules are kept only when the engine
- * holds every name they read and set while they run: each name {@link unheldIdentifiers} finds,
- * such as `QTI_CONTEXT`, a context variable, or a template variable, response or outcome the model
- * does not hold, is the mark `variable:<identifier>` at the `qti-template-processing` element's
- * path, and the template processing is then none. Nothing is refused: such an item is accepted with
- * that mark. A template variable the model holds is one the engine holds, unless the item's
- * `qti-template-processing` does not run: then no template variable is held, so a tree that reads
- * one is marked `variable:<identifier>`, and the item has no processing, whatever the tree, since
- * that template processing may set a template variable, a default value or a correct response, so a
- * score computed without it could be wrong.
+ * when empty. Template declarations of modelled types are read into `templates`, and a
+ * `qti-template-processing` into `templateProcessing` through `templateRules` in
+ * `#plate/model/template.ts`, which marks what the engine does not run as response processing's
+ * reader does. Its rules are kept only when the engine holds every name they read and set while
+ * they run: each name {@link unheldIdentifiers} finds, such as `QTI_CONTEXT`, a context variable,
+ * or a template variable, response or outcome the model does not hold, is the mark
+ * `variable:<identifier>` at the `qti-template-processing` element's path, and the template
+ * processing is then none. Nothing is refused: such an item is accepted with that mark. A template
+ * variable the model holds is one the engine holds, unless the item's `qti-template-processing`
+ * does not run: then no template variable is held, so a tree that reads one is marked
+ * `variable:<identifier>`, and the item has no processing, whatever the tree, since that template
+ * processing may set a template variable, a default value or a correct response, so a score
+ * computed without it could be wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
