@@ -1,16 +1,17 @@
 /**
  * One entry point over a test session's intents: {@link advance} carries out what a request asks,
  * through the moves of `#plate/session/navigate.ts` and the submissions of
- * `#plate/session/submit.ts`, and refuses what the test's rules forbid now with an
- * {@link IntentRefused}.
+ * `#plate/session/submit.ts`, carries out the expiry of a timed scope a test-feature module answers
+ * with (its scope read by `#plate/session/expire.ts`), and refuses what the test's rules forbid now
+ * with an {@link IntentRefused}.
  *
  * `allowedIntents` of `#plate/session/intents.ts` lists exactly the intents this accepts now, given
  * responses that pass the item's checks, so a host can offer those and post any of them. Every
  * function is pure: time is the `now` the host passes, and nothing is kept between calls.
  *
  * This is a boundary module, not a browser module: it checks a step's responses with the value
- * Schema, and it calls the submissions, which call `score`, and `score` reads and writes the stored
- * record through its Schema codec.
+ * Schema, and it calls the submissions, and an expiry processes attempts as a submission does,
+ * which call `score`, and `score` reads and writes the stored record through its Schema codec.
  *
  * @module
  */
@@ -20,6 +21,8 @@ import type { InvalidRecord } from "#plate/codec/record.ts";
 import { ResponseValueSchema } from "#plate/codec/values.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
+import { refIdentifiersIn } from "#plate/model/item-refs.ts";
+import type { Test, TestPart } from "#plate/model/test.ts";
 import type { ResponseValue } from "#plate/model/values.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { fitting, score, splitResponses } from "#plate/score.ts";
@@ -32,13 +35,25 @@ import type {
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { move, requestOf } from "#plate/session/navigate.ts";
 import type { MoveRefused, MoveRule, MoveStep } from "#plate/session/navigate.ts";
-import { alreadyExpired, expireScope } from "#plate/session/expire.ts";
-import type { UnknownTimedScope } from "#plate/session/expire.ts";
+import { alreadyExpired, expiringOf } from "#plate/session/expire.ts";
+import type { Expiring, UnknownTimedScope } from "#plate/session/expire.ts";
 import type { Intent, Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
-import { ItemNotInSession, current, valuesOf } from "#plate/session/start.ts";
+import { ItemNotInSession, current, present, recordStep, valuesOf } from "#plate/session/start.ts";
 import type { InvalidTime, TestNotDeliverable } from "#plate/session/start.ts";
-import { deliveredItem, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
-import type { SubmissionFailure, SubmissionRefused } from "#plate/session/submit.ts";
+import {
+  deliveredItem,
+  endPart,
+  outcomesProcessed,
+  partEnded,
+  processed,
+  submitItem,
+  submitPart,
+} from "#plate/session/submit.ts";
+import type {
+  PartEndFailure,
+  SubmissionFailure,
+  SubmissionRefused,
+} from "#plate/session/submit.ts";
 import type { FeatureRefusal, TimedScope } from "#plate/test-features/contract.ts";
 import { gatedBy } from "#plate/test-features/dispatch.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
@@ -306,6 +321,213 @@ const asIntent = (
   Result.mapError(result, (failure) =>
     failure._tag === "SubmissionRefused" ? refusedSubmission(intent, failure) : failure,
   );
+
+/**
+ * Why {@link expireScope} may fail: the scope is not the test's ({@link UnknownTimedScope}), or an
+ * attempt it processes, the outcome run that follows, or the part's end fails as a submission's
+ * does. No rule refuses an expiry: `SubmissionRefused` is in the type only through the part's end,
+ * which never fails with it, and `score`'s `ResponsesRefused`, for saved responses that break a
+ * limit the item sets whatever the configuration, passes through as `submitItem` passes it.
+ */
+export type ExpiryFailure = SubmissionFailure | UnknownTimedScope;
+
+/**
+ * List the item refs of the session's ended parts, whose items an expiry never processes: an
+ * individual part's end left them as they were, on purpose.
+ *
+ * @param test The test.
+ * @param session The session.
+ * @returns The refs' identifiers.
+ */
+const endedRefs = (test: Test, session: TestSession): ReadonlySet<string> =>
+  new Set(
+    test.parts.flatMap((part, index) =>
+      session.parts[index]?.status === "ended" ? refIdentifiersIn(part.children) : [],
+    ),
+  );
+
+/**
+ * Lock every item of the scope, and process each presented one whose attempt is open or which
+ * holds saved responses not yet processed, with the values it holds, when the expiry processes
+ * items. An item of an ended part is locked only.
+ *
+ * @param test The test.
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param session The session, its step saved.
+ * @param expiring What the expiry works with.
+ * @param now The time of the transition.
+ * @returns The session with its items locked and processed, and the test's outcome processing run
+ *   once when any was processed; or the failure of an attempt or of the run.
+ */
+const itemsExpired = (
+  test: Test,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  expiring: Expiring,
+  now: Date,
+): Result.Result<TestSession, SubmissionFailure> => {
+  const ended = endedRefs(test, session);
+  const pending = (item: SessionItem): boolean =>
+    expiring.processes &&
+    expiring.members.has(item.ref) &&
+    item.presented &&
+    !ended.has(item.ref) &&
+    (item.record.attempt === "none" || Option.isSome(item.saved));
+
+  return Result.flatMap(
+    Result.all(
+      session.items.map((item): Result.Result<SessionItem, SubmissionFailure> => {
+        if (!expiring.members.has(item.ref)) {
+          return Result.succeed(item);
+        }
+
+        const locked: SessionItem = { ...item, locked: true };
+
+        return pending(item)
+          ? Result.flatMap(deliveredItem(items, session, item), (accepted) =>
+              processed(accepted, locked, valuesOf(item), session.updated),
+            )
+          : Result.succeed(locked);
+      }),
+    ),
+    (expired) =>
+      session.items.some(pending)
+        ? outcomesProcessed(test, items, { ...session, items: expired }, now)
+        : Result.succeed({ ...session, items: expired }),
+  );
+};
+
+/**
+ * Move to the first item after the scope in its part and present it, or, when no item of the part
+ * follows, end an individual part and stay in a simultaneous one, which only `submit-part` ends.
+ *
+ * @param test The test.
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param session The session, its items locked.
+ * @param expiring What the expiry works with, its part present.
+ * @param index The index of the part that holds the scope.
+ * @param part That part.
+ * @param now The time of the transition.
+ * @returns The session after the move or the part's end, or their failure.
+ */
+const movedOn = (
+  test: Test,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  expiring: Expiring,
+  index: number,
+  part: TestPart,
+  now: Date,
+): Result.Result<TestSession, PartEndFailure> => {
+  const last = session.items.findLastIndex((item) => expiring.members.has(item.ref));
+  const next = last === -1 ? session.items.length : last + 1;
+  const target = session.items[next];
+  if (target !== undefined && refIdentifiersIn(part.children).includes(target.ref)) {
+    return present(test, items, { ...session, position: next }, target.sequenceIndex, now);
+  }
+
+  return part.submission === "individual"
+    ? partEnded(test, items, session, index, now)
+    : Result.succeed(session);
+};
+
+/**
+ * Leave the scope as its kind asks: close the test, end the part, move on, or stay.
+ *
+ * @param test The test.
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param session The session, its items locked and processed.
+ * @param expiring What the expiry works with.
+ * @param now The time of the transition.
+ * @returns The session after leaving the scope, or the failure of the part's end, the move or the
+ *   closing outcome run.
+ */
+const scopeLeft = (
+  test: Test,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  expiring: Expiring,
+  now: Date,
+): Result.Result<TestSession, PartEndFailure> =>
+  Option.match(expiring.part, {
+    onNone: () =>
+      outcomesProcessed(
+        test,
+        items,
+        {
+          ...session,
+          parts: session.parts.map(({ identifier }) => ({ identifier, status: "ended" as const })),
+          status: "closed",
+        },
+        now,
+      ),
+    onSome: ({ index, part }) => {
+      switch (expiring.leaving) {
+        case "end-part": {
+          return partEnded(test, items, session, index, now);
+        }
+        case "move-on": {
+          return movedOn(test, items, session, expiring, index, part, now);
+        }
+        case "close":
+        case "stay": {
+          return Result.succeed(session);
+        }
+        default: {
+          return expiring.leaving satisfies never;
+        }
+      }
+    },
+  });
+
+/**
+ * Carry out the expiry of a timed scope, in place of the intent a test-feature module answered
+ * with it. {@link expired} calls this once per scope: {@link advance} checks {@link alreadyExpired}
+ * first.
+ *
+ * The step is saved without its responses: the time the current item was shown is added to its
+ * duration and `now` becomes its datestamp and the session's `updated`, through `recordStep`, and
+ * the item keeps the responses it held. Every item of the scope is then locked. When the expiry
+ * processes items, each presented item of the scope whose attempt is open, or which holds saved
+ * responses not yet processed, is processed once with the values it holds, as a submission
+ * processes it, and the test's outcome processing then runs once; an item never presented, and an
+ * item of an ended part, is locked without an attempt. An item ref's or a section's expiry in a
+ * simultaneous part processes nothing, since `submit-part` processes each item of the part once,
+ * and that submission still processes the locked items. The scope is then left: an item ref's
+ * expiry moves on in a linear part, as `next` does there, and stays in a nonlinear one; a section's
+ * moves to the first item after the section when the current item is in it, else stays; moving on
+ * from the last item of an individual part ends the part, and of a simultaneous part stays; a
+ * part's expiry ends the part, so the next part that holds an item becomes current or the test
+ * closes; the test's ends every part and closes the test, running its outcome processing once more.
+ * Last, the scope is appended to the session's `expired`.
+ *
+ * @example
+ *   expireScope(test, items, session, { kind: "submit-item" }, { identifier: "S1", kind: "section" }, new Date());
+ *
+ * @param test The test the session was started from.
+ * @param items The test's items, keyed by item ref identifier, as `startTest` took them.
+ * @param session The session.
+ * @param intent The intent the expiry answers, which is not carried out.
+ * @param scope The scope whose time has run out.
+ * @param now The time of the transition.
+ * @returns The session after the expiry, or an {@link ExpiryFailure}.
+ */
+const expireScope = (
+  test: AcceptedTest,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  intent: Intent,
+  scope: TimedScope,
+  now: Date,
+): Result.Result<TestSession, ExpiryFailure> =>
+  Result.gen(function* expireOne() {
+    const saved = yield* recordStep(session, { intent }, now);
+    const expiring = yield* expiringOf(test.test, saved, scope);
+    const locked = yield* itemsExpired(test.test, items, saved, expiring, now);
+    const after = yield* scopeLeft(test.test, items, locked, expiring, now);
+
+    return { ...after, expired: [...after.expired, scope] };
+  });
 
 /**
  * Carry out the expiry of a timed scope a module answered the intent with, in the intent's place.
