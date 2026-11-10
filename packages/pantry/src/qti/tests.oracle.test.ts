@@ -21,17 +21,17 @@ import { attributeLaws } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { qtiRelations } from "#pantry/qti/base.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { collapsedPattern, testLaws, testRelations } from "#pantry/qti/tests.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { lawNamesOf } from "#pantry/test/host-law-names.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import { judge as judgeOracle, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
 describe("qti/tests.ts, declared", () => {
   it("builds a schema of Node, the character data, the attributes, the package and the test layer with every law, each statement once", () => {
-    const built = schema("TestLayer", { ...Qti.relations }, [
+    const built = schema("TestLayer", { ...qtiRelations }, [
       ...nodeLaws,
       ...chardataLaws,
       ...attributeLaws,
@@ -78,6 +78,7 @@ describe("qti/tests.ts, declared", () => {
       "E1 derived",
       "File exists",
       "Fragment context",
+      "Include root",
       "Inclusion cycle",
       "Item ref target",
       "Remote section ref",
@@ -139,7 +140,11 @@ describe("qti/tests.ts, collapsedPattern", () => {
               };
               c.note(situation());
 
-              assert.strictEqual(new RegExp(collapsedPattern, "u").test(text), collapsed, text);
+              assert.strictEqual(
+                new RegExp(collapsedPattern.source, "u").test(text),
+                collapsed,
+                text,
+              );
             }),
         ),
       ),

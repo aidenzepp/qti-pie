@@ -41,6 +41,14 @@ export interface SessionPart {
  */
 export interface SessionItem {
   /**
+   * Whether the item this item delivers is adaptive (`Item.adaptive`, the root's `adaptive`
+   * true), written from the item when the session starts and never changed. The reads that decide
+   * whether the item is closed and what attempt limit a submission checks hand it to the adaptive
+   * policy (`adaptivePolicy` in `#plate/engine/adaptive.ts`), so they need no items map. A
+   * restored session reads it back from the stored form.
+   */
+  readonly adaptive: boolean;
+  /**
    * When the last transition that changed this item happened, in ISO 8601 UTC.
    */
   readonly datestamp: string;

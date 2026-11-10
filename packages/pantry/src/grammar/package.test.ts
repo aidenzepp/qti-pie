@@ -6,7 +6,7 @@ import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import { roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
-import { patternFlags } from "#pantry/grammar/domains.ts";
+import { enumerationKept, patternFlags } from "#pantry/grammar/domains.ts";
 import {
   cp,
   documentRoots,
@@ -20,7 +20,6 @@ import {
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { packageGrammar } from "#pantry/grammar/package.ts";
-import { noType } from "#pantry/grammar/xsi.ts";
 import { checkCache, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { loadXsd, XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
@@ -48,16 +47,12 @@ const cached = await Effect.runPromise(
 /**
  * The package relations of production's facets, over a roster of the kinds their roots name.
  */
-const relations = Effect.gen(function* packageRelations() {
-  const kinds = yield* Effect.fromResult(roster("NodeKind", [...documentRoots]));
-
-  return yield* Effect.fromResult(
-    packageGrammar({
-      facets: [asi, cp, lom, ud, xi].map(({ package: stated }) => stated),
-      kinds,
-    }),
-  );
-});
+const relations = Effect.sync(() =>
+  packageGrammar({
+    facets: [asi, cp, lom, ud, xi].map(({ package: stated }) => stated),
+    kinds: roster("NodeKind", [...documentRoots]),
+  }),
+);
 
 /**
  * The composed grammar, whose attribute grammar states which resource types each version admits:
@@ -75,7 +70,7 @@ const resourceTypeDomain = (version: SchemaVersion): ValueDomain =>
   Option.getOrThrowWith(
     Option.flatMap(
       admissionOf(grammar.attributes, {
-        governs: noType,
+        governs: Option.none(),
         kind: "cp:resource",
         name: "type",
         version,
@@ -167,7 +162,12 @@ describe.skipIf(!cached)("cp:resource's type against the content-packaging XSDs"
 
           assert.isAbove(enumerated.length, 0, root);
           assert.deepStrictEqual(
-            new Set(resourceTypeDomain(version).enumeration),
+            new Set(
+              enumerationKept(
+                resourceTypeDomain(version).definition,
+                resourceTypeDomain(version).pattern,
+              ),
+            ),
             new Set(enumerated),
             version,
           );

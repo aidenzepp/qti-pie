@@ -24,7 +24,6 @@ import { Duration, Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import {
   assemblyLiteral,
   assemblyPackage,
@@ -35,7 +34,8 @@ import {
 } from "#pantry/test/gen/assembly.ts";
 import type { Assembly, RuleFault } from "#pantry/test/gen/assembly.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The rule a fault of reading 87's model is refused under: a target that resolves nowhere, or to a
@@ -73,8 +73,8 @@ const importJudged = (assembly: Assembly) =>
         predicted.kind === "refused" ? [...predicted.faults].map(ruleOfFault) : [],
       );
       assert.isTrue(
-        rules.has(refused.rule),
-        `${literal} was refused under ${refused.rule}, and the model's faults are ${[...rules].join(", ")}: ${refused.message}`,
+        refused.rules.some((rule) => rules.has(rule)),
+        `${literal} was refused under ${refused.rules.join(", ")}, and the model's faults are ${[...rules].join(", ")}: ${refused.message}`,
       );
     } else {
       assert.fail(`${literal} failed with ${outcome.failure.message}`);
@@ -84,7 +84,6 @@ const importJudged = (assembly: Assembly) =>
 describe.skipIf(!hasLease)("test/gen/assembly.ts, on the lease", { timeout: 3_600_000 }, () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
-    timeout: authorLayerHookTimeoutMs,
   })("each generated package imported and judged by PostgreSQL", (it) => {
     it.effect(
       "every package of the small box is accepted or refused as reading 87's model says",

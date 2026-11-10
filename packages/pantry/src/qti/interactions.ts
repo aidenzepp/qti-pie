@@ -73,16 +73,18 @@
  *   built-in one its root holds (spec reading 29: an item's `completionStatus` is no test's), so
  *   each reference carries the root kind it resolves under. A reference that names neither has no
  *   declaration row, and its law refuses it (lane NIL's NS2: never the nil uuid).
- * - A section document's feedback and printed variables ({@link SectionFeedbackName},
- *   {@link SectionPrintedName}) resolve once per test that places it ({@link SectionFeedbackRef},
- *   {@link SectionPrintedRef}, A45, each with its declaration row where it names a declaration, as
- *   an own reference has), every one of them under each placement ({@link SectionScope}, whose
- *   counts of resolutions are its document's counts of references, {@link ReferringDocument}). An
- *   included fragment's feedback, printed variables, template variables
- *   ({@link SectionTemplateName}) and context variables ({@link SectionContextName}) resolve so
- *   once per placement in each item or test that places it, a test placing it where the test or a
- *   section document splices it (spec reading 117), the same relations holding them: a fragment
- *   declares nothing, as a section does.
+ * - A section document's feedback, printed and template variables ({@link SectionFeedbackName},
+ *   {@link SectionPrintedName}, {@link SectionTemplateName}) resolve once per test that places it
+ *   ({@link SectionFeedbackRef}, {@link SectionPrintedRef}, {@link SectionTemplateRef}, A45 and
+ *   spec reading 5, each with its declaration row where it names a declaration, as an own reference
+ *   has), every one of them under each placement ({@link SectionScope}, whose counts of resolutions
+ *   are its document's counts of references, {@link ReferringDocument}). A test declares no
+ *   template variable, so a section document's template reference names none, and "Template
+ *   reference" refuses it as it refuses the test's own (§2.7.2). An included fragment's feedback,
+ *   printed, template and context variables ({@link SectionContextName}) resolve so once per
+ *   placement in each item or test that places it, a test placing it where the test or a section
+ *   document splices it (spec reading 117), the same relations holding them: a fragment declares
+ *   nothing, as a section does.
  *
  * A row a builder gets wrong is refused, never accepted: each overlay's node is its node's, through
  * `nodeRef`, and of its kinds, and each value that relaxes a law (a count written, an item
@@ -100,7 +102,7 @@ import {
   Compute,
   contained,
   counted,
-  Decimal,
+  decimalText,
   drawn,
   fin,
   key,
@@ -141,11 +143,30 @@ import {
   DeclarationCardinality,
   DeclarationIdentifier,
   declarationIdentifierRef,
+  doublesInOrder,
 } from "#pantry/qti/declarations.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
-import { Instance, itemInstances, itemKind, sectionKind, testKind } from "#pantry/qti/tests.ts";
-import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+import { Instance, itemInstances } from "#pantry/qti/tests.ts";
+
+import {
+  adaptiveName,
+  ariaNames,
+  bindingAttributes,
+  choiceKinds,
+  countDefault,
+  gapKind,
+  hotspotKinds,
+  hottextKind,
+  modulesKind,
+  pciKind,
+  readAttributes,
+  references,
+  referringRoots,
+  sliderKind,
+  extendedTextKind,
+} from "#pantry/vocab/terms/interactions.ts";
+import { itemKind } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * A `NodeKind` handle.
@@ -163,67 +184,12 @@ type Name = (typeof AttributeName.handles)[number];
  * variable's `base` and `index`. Any other value names nothing, an integer of `base` or `index`
  * among them, and its value domain refuses it alone (spec reading 152).
  */
-const namePattern = `^${ncNamePattern}$`;
-
-/**
- * The root kinds of the documents whose content references resolve in their own declarations: an
- * item's (`itemKind` of `#pantry/qti/tests.ts`), whose bindings and references the item-only laws
- * read, and a test's (`testKind`), whose feedback and printed variables name the test's own
- * declarations (the port audit's A43 and A44: a test feedback's `outcome-identifier` names an
- * outcome the test declares; a test rubric's printed variable a variable the test declares). Every
- * other document's resolve once per assembly that places it: a section document's in each test's
- * declarations, an included fragment's in each item's or test's (spec reading 117).
- */
-export const referringRoots = [itemKind, testKind] as const satisfies readonly Kind[];
-
-/**
- * The root kinds of the documents that are no included fragment's content: an item, a test, and a
- * section document, which a section ref or an include places as a section. Every other document a
- * reference stands in is a fragment (spec reading 117), whose template and context variable
- * references resolve once per item that places it, as its feedback and printed variables do.
- */
-export const unfragmentedRoots = [
-  itemKind,
-  testKind,
-  sectionKind,
-] as const satisfies readonly Kind[];
-
-/**
- * The choices: the kinds whose `identifier` names a value of their interaction's response, each a
- * child of its interaction or, for a gap, inside a gap-match interaction (reading 38), so its
- * nearest interaction (N8) is the interaction it is a choice of. A hottext may sit outside a
- * hottext interaction (reading 38's "hottext placement"), so it is {@link Hottext}'s.
- *
- * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_SimpleChoice | QTI 3.0 information model, §5.132 SimpleChoice}
- */
-export const choiceKinds = [
-  "qti-simple-choice",
-  "qti-simple-associable-choice",
-  "qti-hotspot-choice",
-  "qti-associable-hotspot",
-  "qti-gap-text",
-  "qti-gap-img",
-  "qti-inline-choice",
-  "qti-gap",
-] as const satisfies readonly Kind[];
-
-/**
- * The hottext's kind.
- */
-export const hottextKind = "qti-hottext" satisfies Kind;
+const namePattern = Compute.pattern<string>(`^${ncNamePattern}$`);
 
 /**
  * The hottext interaction's kind: the one interaction whose hottexts are its choices.
  */
 export const hottextInteraction = "qti-hottext-interaction" satisfies Kind;
-
-/**
- * The kinds that carry a `shape` the default-hotspot laws read (reading 80).
- */
-export const hotspotKinds = [
-  "qti-hotspot-choice",
-  "qti-associable-hotspot",
-] as const satisfies readonly Kind[];
 
 /**
  * The graphic gap match interaction, whose hotspots have no default (reading 80, §5.60.9: "The
@@ -242,34 +208,6 @@ export const defaultArea = "default";
  * feedback element (`qti-feedback-block`, its template form, `qti-feedback-inline`) enters.
  */
 export const feedbackKind = "qti-feedback-block" satisfies Kind;
-
-/**
- * The slider interaction, whose bounds `Slider_bounds` orders.
- */
-export const sliderKind = "qti-slider-interaction" satisfies Kind;
-
-/**
- * The extended text interaction, which needs `max-strings` when bound to a container (reading
- * 19).
- */
-export const extendedTextKind = "qti-extended-text-interaction" satisfies Kind;
-
-/**
- * The interactions with a `string-identifier`, which binds a second response variable of base type
- * string (§5.48.2, §5.162.3).
- */
-export const stringBindingKinds = [
-  "qti-text-entry-interaction",
-  extendedTextKind,
-] as const satisfies readonly Kind[];
-
-/**
- * The two attributes by which an interaction binds a response variable.
- */
-export const bindingAttributes = [
-  "response-identifier",
-  "string-identifier",
-] as const satisfies readonly Name[];
 
 /**
  * The interactions whose response cardinality their most count decides, spec reading 92: "If
@@ -301,11 +239,6 @@ export const cardinalityKinds = [
  * match with two or more gaps binds a response of multiple cardinality.
  */
 export const gapMatchKind = "qti-gap-match-interaction" satisfies Kind;
-
-/**
- * The gap's kind: the {@link Choice} rows of this kind are the ones `Interaction.gaps` counts.
- */
-export const gapKind = "qti-gap" satisfies Kind;
 
 /**
  * The interactions of any response type: those neither `BindingFit` nor `RecordBindingFit` names,
@@ -340,109 +273,10 @@ export const maxNames: readonly Name[] = [...new Set(ChoiceBound.rows.map(({ max
 export const choiceCountKinds: readonly Kind[] = ChoiceCount.rows.map(({ kind }) => kind);
 
 /**
- * The ARIA range attributes, on any element that carries them (§5.2.31, §5.2.32).
- */
-export const ariaNames = ["aria-valuemin", "aria-valuemax"] as const satisfies readonly Name[];
-
-/**
- * The `adaptive` attribute of an item, an `xs:boolean` that defaults to false.
- */
-export const adaptiveName = "adaptive" satisfies Name;
-
-/**
- * The content references, each by the relation that holds it: the attribute it is made by, and the
- * kinds `ContentReference` lists for that attribute (and, for a printed variable and a context
- * variable, which share `identifier`, its one kind).
- */
-const contentRows = ContentReference.rows;
-
-/**
- * Collect the kinds `ContentReference` lists for references made by some attributes on some kinds.
- *
- * @param attributes - The attributes.
- * @param kinds - The kinds, none for every kind.
- * @returns The kinds, each once.
- */
-const referringKinds = (attributes: readonly Name[], kinds?: readonly Kind[]): readonly Kind[] => [
-  ...new Set(
-    contentRows
-      .filter(
-        (row) =>
-          attributes.includes(row.attribute) && (kinds === undefined || kinds.includes(row.kind)),
-      )
-      .map(({ kind }) => kind),
-  ),
-];
-
-/**
- * The printed variable's kind.
- */
-const printedVariable = "qti-printed-variable" satisfies Kind;
-
-/**
- * The context variable's kind, a PCI's binding of a context variable (§5.106.6).
- */
-const contextVariableKind = "qti-context-variable" satisfies Kind;
-
-/**
  * The portable custom interaction's template variable kind (§7.38.1), the one element that names a
  * template variable without stating its type: "Template variable type" leaves it free.
  */
 const templateVariableKind = "qti-template-variable" satisfies Kind;
-
-/**
- * Each content reference relation's attributes and kinds, as `ContentReference` lists them. A
- * printed variable's `base` and `index` hold an integer or a variable's name (the XSD's union of
- * `xs:integer` and `VariableStringDType`); each other attribute is an `IdentifierDType`. Each names
- * a variable exactly where its value is an NCName ({@link namePattern}).
- */
-export const references = {
-  context: { attributes: ["identifier"], kinds: [contextVariableKind] },
-  feedback: {
-    attributes: ["outcome-identifier"],
-    kinds: referringKinds(["outcome-identifier"]),
-  },
-  printed: { attributes: ["identifier"], kinds: [printedVariable] },
-  template: {
-    attributes: ["template-identifier"],
-    kinds: referringKinds(["template-identifier"]),
-  },
-  variable: { attributes: ["base", "index"], kinds: [printedVariable] },
-} as const satisfies Readonly<
-  Record<string, { readonly attributes: readonly Name[]; readonly kinds: readonly Kind[] }>
->;
-
-/**
- * The attributes O3 reads, by name, each with the kinds it is read on: every attribute below is
- * copied into {@link InteractionAttribute}; the ARIA range attributes are read on every kind.
- */
-export const readAttributes: ReadonlyMap<Name, readonly Kind[]> = (() => {
-  const read = new Map<Name, Set<Kind>>();
-  const add = (name: Name, kinds: readonly Kind[]) => {
-    const held = read.getOrInsertComputed(name, () => new Set());
-    for (const kind of kinds) {
-      held.add(kind);
-    }
-  };
-  add("response-identifier", interactionKinds);
-  add("string-identifier", stringBindingKinds);
-  add("identifier", [...choiceKinds, hottextKind]);
-  add("shape", hotspotKinds);
-  for (const { kind, max, min } of ChoiceBound.rows) {
-    add(min, [kind]);
-    add(max, [kind]);
-  }
-  add("lower-bound", [sliderKind]);
-  add("upper-bound", [sliderKind]);
-  add(adaptiveName, [itemKind]);
-  for (const { attributes, kinds } of Object.values(references)) {
-    for (const attribute of attributes) {
-      add(attribute, kinds);
-    }
-  }
-
-  return new Map([...read].map(([name, kinds]) => [name, [...kinds]]));
-})();
 
 /**
  * An attribute an O3 law reads, keyed by its element's node and its name: the element's kind,
@@ -862,17 +696,6 @@ export const PciModuleForm = relation("PciModuleForm", { element: pg.boolean, no
  * `node`, names its owner.
  */
 export const pciModuleFamily = counted(on(PciModuleForm, "node"), fin(Interaction, "moduleForms"));
-
-/**
- * The portable custom interaction's kind, the one element whose module a form names.
- */
-export const pciKind = "qti-portable-custom-interaction" satisfies Kind;
-
-/**
- * The kind of a portable custom interaction's `qti-interaction-modules` child, the element form of
- * its module.
- */
-export const modulesKind = "qti-interaction-modules" satisfies Kind;
 
 /**
  * The custom interaction's kind, the deprecated element a 3.0.0 document holds none of ("Custom
@@ -1399,8 +1222,9 @@ export const SectionPrintedName = relation("SectionPrintedName", sectionNameFiel
 ]);
 
 /**
- * An included fragment's template variable reference, a template element's or a choice's
- * `template-identifier`, keyed by its node and attribute (spec reading 117).
+ * A section document's or an included fragment's template variable reference, a template
+ * element's or a choice's `template-identifier`, keyed by its node and attribute (spec readings 5
+ * and 117).
  */
 export const SectionTemplateName = relation("SectionTemplateName", sectionNameFields, [
   "node",
@@ -1408,8 +1232,8 @@ export const SectionTemplateName = relation("SectionTemplateName", sectionNameFi
 ]);
 
 /**
- * An included fragment's context variable reference, a `qti-context-variable`'s `identifier`,
- * keyed by its node and attribute (spec reading 117).
+ * A section document's or an included fragment's context variable reference, a
+ * `qti-context-variable`'s `identifier`, keyed by its node and attribute (spec readings 5 and 117).
  */
 export const SectionContextName = relation("SectionContextName", sectionNameFields, [
   "node",
@@ -1451,7 +1275,8 @@ export const sectionPrintedNameFamily = counted(
 );
 
 /**
- * Each fragment's template variable references, counted by `ReferringDocument.templates`.
+ * Each section document's and fragment's template variable references, counted by
+ * `ReferringDocument.templates`.
  */
 export const sectionTemplateNameFamily = counted(
   on(SectionTemplateName, "document"),
@@ -1459,7 +1284,8 @@ export const sectionTemplateNameFamily = counted(
 );
 
 /**
- * Each fragment's context variable references, counted by `ReferringDocument.contexts`.
+ * Each section document's and fragment's context variable references, counted by
+ * `ReferringDocument.contexts`.
  */
 export const sectionContextNameFamily = counted(
   on(SectionContextName, "document"),
@@ -1549,8 +1375,8 @@ export const SectionPrintedRef = relation("SectionPrintedRef", sectionReferenceF
 ]);
 
 /**
- * A fragment's template variable reference resolved under one placement, keyed as
- * {@link SectionFeedbackRef} is ("Template reference").
+ * A section document's or a fragment's template variable reference resolved under one placement,
+ * keyed as {@link SectionFeedbackRef} is ("Template reference").
  */
 export const SectionTemplateRef = relation("SectionTemplateRef", sectionReferenceFields, [
   "instance",
@@ -1559,8 +1385,8 @@ export const SectionTemplateRef = relation("SectionTemplateRef", sectionReferenc
 ]);
 
 /**
- * A fragment's context variable reference resolved under one placement, keyed as
- * {@link SectionFeedbackRef} is ("Context variable reference").
+ * A section document's or a fragment's context variable reference resolved under one placement,
+ * keyed as {@link SectionFeedbackRef} is ("Context variable reference").
  */
 export const SectionContextRef = relation("SectionContextRef", sectionReferenceFields, [
   "instance",
@@ -1901,28 +1727,6 @@ const referenceReadOf = (names: readonly Name[], kinds: readonly Kind[]) =>
 const collapsed = (v: AttributeRow) => v.eq(v.value, Compute.collapse(v.lexical));
 
 /**
- * The XSD default of an attribute on a kind in a version, as the inventory leaf declares it.
- */
-const defaults: ReadonlyMap<string, string> = new Map(
-  attributeDeclarations.flatMap(({ default: stated, kind, name, versions: held }) =>
-    Option.toArray(stated).flatMap((value) =>
-      held.map((version) => [`${version} ${kind} ${name}`, value] as const),
-    ),
-  ),
-);
-
-/**
- * Read the XSD default of a count attribute.
- *
- * @param version - The schema version.
- * @param kind - The element's kind.
- * @param name - The attribute.
- * @returns Its default's lexical form, or none where the XSD gives none.
- */
-export const countDefault = (version: string, kind: Kind, name: Name): Option.Option<string> =>
-  Option.fromNullishOr(defaults.get(`${version} ${kind} ${name}`));
-
-/**
  * The XSD defaults of one count of the pair, per version: each default's value, with the kinds
  * whose count it is. A kind whose count has no default is in none, so its count, left unwritten,
  * has no value (the law oracle's `countAttribute`).
@@ -2041,7 +1845,7 @@ const bigintForm = lexicalForm(pg.bigint);
  * its own map (`countValueOf` in `#pantry/import/overlays/interactions.ts`), and the law oracle by
  * its own (`integerOf` in `#pantry/test/oracle-view.ts`).
  */
-const countSign = "^(?:[^-]|-0+$)";
+const countSign = Compute.pattern("^(?:[^-]|-0+$)");
 
 /**
  * Select the read count attributes of some names, on the kinds whose counts `ChoiceBound` pairs,
@@ -2060,25 +1864,6 @@ const integerReadOf = (names: readonly Name[]) =>
       Compute.matches(v.value, bigintForm),
     ),
   );
-
-/**
- * The lexical form of an `xs:double` that `Compute.cast` reads exactly: XML Schema's, cut to the
- * values a double precision holds (grizzle's `lexicalForm`: at most 15 significant digits and an
- * exponent of at most 293). A bound outside it is not ordered, a stated limit of G-parse.
- */
-const doubleForm = lexicalForm(pg["double precision"]);
-
-/**
- * The numeric an `xs:decimal` ARIA value is compared in: the widest `numeric(p, s)` with a lexical
- * form, 256 integer and 255 fraction digits (grizzle's `decimalWritable`). A value outside it is
- * not ordered, a stated limit of G-parse.
- */
-const AriaDecimal = pg.numeric(511, 255);
-
-/**
- * The lexical form {@link AriaDecimal} casts from.
- */
-const decimalForm = lexicalForm(AriaDecimal);
 
 /**
  * State the default-hotspot law of each `LastWhere` rule over `shape` (reading 80, ruling D3): a
@@ -2161,41 +1946,20 @@ const referenceSources = {
 };
 
 /**
- * The read attributes a section document's or a fragment's feedback references are: its feedback
- * elements' outcomes, where they name a variable.
- */
-const sectionFeedbackSource = select(InteractionAttribute, (v) =>
-  v.and(
-    v.not(v.in(v.rootKind, referringRoots)),
-    v.in(v.name, references.feedback.attributes),
-    v.in(v.kind, references.feedback.kinds),
-    Compute.matches(v.value, namePattern),
-  ),
-);
-
-/**
- * The read attributes a section document's or a fragment's printed variable references are:
- * printed variables' names, bases and indices, where they name a variable.
- */
-const sectionPrintedSource = select(InteractionAttribute, (v) =>
-  v.and(v.not(v.in(v.rootKind, referringRoots)), printedReference(v)),
-);
-
-/**
- * Select the read attributes a fragment's references of one class are (spec reading 117): the
- * class's attributes on its kinds that name a variable, in a document that is no item, test or
- * section.
+ * Select the read attributes a section document's or a fragment's references of one class are: the
+ * class's attributes on its kinds that name a variable ({@link namePattern}), in a document that is
+ * no item or test, so each resolves once per assembly that places it (spec readings 5 and 117).
  *
  * @param reference - The class's attributes and kinds.
- * @returns The selection.
+ * @returns The selection of `InteractionAttribute`.
  */
-const fragmentReferenceOf = (reference: {
+const sectionReferenceOf = (reference: {
   readonly attributes: readonly Name[];
   readonly kinds: readonly Kind[];
 }) =>
   select(InteractionAttribute, (v) =>
     v.and(
-      v.not(v.in(v.rootKind, unfragmentedRoots)),
+      v.not(v.in(v.rootKind, referringRoots)),
       v.in(v.name, reference.attributes),
       v.in(v.kind, reference.kinds),
       Compute.matches(v.value, namePattern),
@@ -2203,11 +1967,17 @@ const fragmentReferenceOf = (reference: {
   );
 
 /**
- * The read attributes a fragment's template and context variable references are.
+ * The read attributes each section name relation holds: a section document's or a fragment's
+ * references of each class, its printed variables' names, bases and indices among them, where they
+ * name a variable.
  */
-const fragmentSources = {
-  context: fragmentReferenceOf(references.context),
-  template: fragmentReferenceOf(references.template),
+const sectionSources = {
+  context: sectionReferenceOf(references.context),
+  feedback: sectionReferenceOf(references.feedback),
+  printed: select(InteractionAttribute, (v) =>
+    v.and(v.not(v.in(v.rootKind, referringRoots)), printedReference(v)),
+  ),
+  template: sectionReferenceOf(references.template),
 };
 
 /**
@@ -2383,8 +2153,8 @@ const contentReferenceLaws = ({
       "document",
       "identifier",
       "declarationKind",
-      "cardinalities",
       "baseTypes",
+      "cardinalities",
     ),
     declarationIdentifierRef,
   ),
@@ -2430,8 +2200,8 @@ const contentReferenceLaws = ({
       "assembly",
       "identifier",
       "declarationKind",
-      "cardinalities",
       "baseTypes",
+      "cardinalities",
     ),
     declarationIdentifierRef,
   ),
@@ -2556,8 +2326,19 @@ const identifierTyped = on(
  *   count.
  * - **counts:** each bound's counts written or defaulted, a row of its own where it has a value,
  *   typed by G-parse (`E1_derived`), and "Choice bounds" over the values a count has.
- * - **ranges:** "Slider bounds", and "Aria value range" over the elements that carry both ARIA
- *   bounds.
+ * - **ranges:** "Slider bounds" (reading 9, the Schematron's 14Ba), the bounds collapsed and ordered
+ *   as `xs:double` values by `doublesInOrder` of `#pantry/qti/declarations.ts`. And "Aria value
+ *   range" over the elements that carry both ARIA bounds, each value collapsed and read where it is
+ *   in `xs:decimal`'s lexical space, grizzle's `decimalText`, the language pantry's own value
+ *   domain admits (`decimalLexical` of `#pantry/grammar/domains.ts`): the decimal it names, exactly
+ *   and of any digits, by grizzle's `Compute.parseDecimal` (XML Schema 1.1's decimalLexicalMap,
+ *   Part 2 §3.3.3.1), so a value past 256 integer or 255 fraction digits is ordered as any other. A
+ *   pair with a value that is no `xs:decimal` holds the law by its own arm, since its value domain
+ *   alone refuses it; each parse's otherwise is never read, since that arm holds wherever its guard
+ *   fails. A value is a `keyText`, at most `keyTextBytes`, below the 16,384 bytes the parse reads
+ *   (`decimalTextMaxBytes`), and a match guard keeps its subject's byte bound in its branch
+ *   (`scalar/compute/lower.ts:930-934` and `:2951-2958` of grizzle-engine at the vendored commit),
+ *   so the parse needs no byte guard.
  * - **section documents' and fragments' references:** each one's row, counted per document and class;
  *   one placement row per instance of an item's or a test's assembly whose document is neither, a
  *   section document's or a fragment's (spec reading 117), counting as many resolutions of each
@@ -2606,16 +2387,12 @@ export const interactionLawsByName = {
   ],
   "Aria value range": [
     check("Aria_value_range", AriaRange, (r) =>
-      r.le(
-        Compute.when(
-          Compute.matches(r.min, decimalForm),
-          (min) => Compute.cast(min, AriaDecimal),
-          Decimal.negativeInfinity,
-        ),
-        Compute.when(
-          Compute.matches(r.max, decimalForm),
-          (max) => Compute.cast(max, AriaDecimal),
-          Decimal.infinity,
+      r.or(
+        r.not(Compute.matches(r.min, decimalText)),
+        r.not(Compute.matches(r.max, decimalText)),
+        r.le(
+          Compute.when(Compute.matches(r.min, decimalText), (min) => Compute.parseDecimal(min), 0n),
+          Compute.when(Compute.matches(r.max, decimalText), (max) => Compute.parseDecimal(max), 0n),
         ),
       ),
     ),
@@ -2670,8 +2447,8 @@ export const interactionLawsByName = {
         "document",
         "identifier",
         "declarationKind",
-        "cardinalities",
         "baseTypes",
+        "cardinalities",
       ),
       declarationIdentifierRef,
     ),
@@ -2732,8 +2509,8 @@ export const interactionLawsByName = {
         "assembly",
         "identifier",
         "declarationKind",
-        "cardinalities",
         "baseTypes",
+        "cardinalities",
       ),
       declarationIdentifierRef,
     ),
@@ -2890,8 +2667,6 @@ export const interactionLawsByName = {
       on(Binding, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
-    key(on(attributeForms, "node")),
-    key(on(elementForms, "node")),
     key(on(moduleElements, "parent")),
     contained(on(moduleAttributes, "node"), on(attributeForms, "node")),
     contained(on(attributeForms, "node"), on(moduleAttributes, "node")),
@@ -3254,19 +3029,19 @@ export const interactionLawsByName = {
       on(ContextRef, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
     ),
     contained(
-      on(sectionFeedbackSource, "node", "name", "kind", "document", "value"),
+      on(sectionSources.feedback, "node", "name", "kind", "document", "value"),
       on(SectionFeedbackName, "node", "attribute", "kind", "document", "identifier"),
     ),
     contained(
-      on(sectionPrintedSource, "node", "name", "kind", "document", "value"),
+      on(sectionSources.printed, "node", "name", "kind", "document", "value"),
       on(SectionPrintedName, "node", "attribute", "kind", "document", "identifier"),
     ),
     contained(
-      on(fragmentSources.template, "node", "name", "kind", "document", "value"),
+      on(sectionSources.template, "node", "name", "kind", "document", "value"),
       on(SectionTemplateName, "node", "attribute", "kind", "document", "identifier"),
     ),
     contained(
-      on(fragmentSources.context, "node", "name", "kind", "document", "value"),
+      on(sectionSources.context, "node", "name", "kind", "document", "value"),
       on(SectionContextName, "node", "attribute", "kind", "document", "identifier"),
     ),
     sectionFeedbackNameFamily,
@@ -3463,26 +3238,7 @@ export const interactionLawsByName = {
       on(RecordBindingFit, "kind"),
     ),
   ],
-  "Slider bounds": [
-    check("Slider_bounds", Slider, (s) =>
-      s.or(
-        s.eq(s.lower, "NaN"),
-        s.eq(s.upper, "NaN"),
-        s.le(
-          Compute.when(
-            Compute.matches(s.lower, doubleForm),
-            (lower) => Compute.cast(lower, pg["double precision"]),
-            Number.NEGATIVE_INFINITY,
-          ),
-          Compute.when(
-            Compute.matches(s.upper, doubleForm),
-            (upper) => Compute.cast(upper, pg["double precision"]),
-            Number.POSITIVE_INFINITY,
-          ),
-        ),
-      ),
-    ),
-  ],
+  "Slider bounds": [check("Slider_bounds", Slider, (s) => doublesInOrder(s.lower, s.upper))],
   "Template variable type": [
     // Each half judges the template where what it reads spells something (spec readings 158 and
     // 159, decision 432), as "Feedback outcome type" judges an outcome: its cardinality, where it
