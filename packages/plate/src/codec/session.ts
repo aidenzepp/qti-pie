@@ -5,8 +5,11 @@
  * the test it must belong to, before the library trusts it.
  *
  * The stored form names its version, as the stored item record does, and each item's record in it
- * is a stored item record. No browser module imports this file, so Schema stays out of the browser
- * bundle.
+ * is a stored item record. It also carries the delivered sequence, the item refs the session's
+ * items deliver in delivery order, which a test's selection and ordering draw once at `startTest`:
+ * the session's items are checked against that sequence, and the sequence against the test, so a
+ * session of a test that selects or shuffles restores as it was. No browser module imports this
+ * file, so Schema stays out of the browser bundle.
  *
  * @module
  */
@@ -46,6 +49,17 @@ const SessionItemSchema = Schema.Struct({
 });
 
 /**
+ * The delivered sequence of the stored form (S-3, S-4): the identifier of the item ref each session
+ * item delivers, in delivery order, one entry per item. A test's selection and ordering draw it
+ * once, at `startTest`, under the session's `seed`, so it is the document's item refs in document
+ * order only when the test selects and shuffles nothing, and an item ref a selection with
+ * replacement repeats is listed once per instance. {@link encodeSession} writes it from the
+ * session's items, which hold their ref, and {@link decodeSession} reads the items back against it,
+ * so the sequence is stored rather than drawn again, and a restored session keeps it exactly.
+ */
+const SequenceSchema = Schema.Array(Schema.String);
+
+/**
  * The fields of a test session, as {@link TestSession} has them. `seed` is a string, required: the
  * host's seed or the one `startTest` drew, which every stored session holds. `outcomeRuns` is a
  * whole number, and `shuffleSeed` is left out of the stored form when the session has none.
@@ -73,19 +87,33 @@ const sessionFields = {
 };
 
 /**
- * The Schema of a test session; its type is {@link TestSession}, and its encoded form the
- * {@link StoredTestSession} the host keeps, which adds `version`. Encoding writes
- * {@link storedVersion} and decoding requires it, so the plain session carries no version.
+ * The Schema of a test session as the host stores it: {@link sessionFields} with the
+ * {@link SequenceSchema delivered sequence} and the version, `4`.
  */
-export const TestSessionSchema = Schema.Struct({
+const StoredSessionSchema = Schema.Struct({
   ...sessionFields,
+  sequence: SequenceSchema,
   version: Schema.Literal(storedVersion),
-}).pipe(
+});
+
+/**
+ * The Schema of a test session; its type is {@link TestSession}, and its encoded form the
+ * {@link StoredTestSession} the host keeps, which adds `version` and the delivered `sequence`.
+ * Encoding writes {@link storedVersion} and the sequence of the session's items, and decoding
+ * requires both and drops them, so the plain session carries neither. It checks the stored form's
+ * shape alone: {@link decodeSession} also checks the items against the sequence and the sequence
+ * against the test.
+ */
+export const TestSessionSchema = StoredSessionSchema.pipe(
   Schema.decodeTo(
     Schema.toType(Schema.Struct(sessionFields)),
     SchemaTransformation.transform({
-      decode: ({ version: _stored, ...session }) => session,
-      encode: (session) => ({ ...session, version: storedVersion }),
+      decode: ({ sequence: _sequence, version: _stored, ...session }) => session,
+      encode: (session) => ({
+        ...session,
+        sequence: session.items.map(({ ref }) => ref),
+        version: storedVersion,
+      }),
     }),
   ),
 );
@@ -97,7 +125,9 @@ export const TestSessionSchema = Schema.Struct({
  * `record` is a stored item record, its seed, template values, correct responses and defaults with
  * it, so it is server data as the record is, and so is the session's own `seed`, which keys every
  * value an item draws; an item's `saved`, `firstOutcomes` and `templateDefaults`, and the
- * session's `shuffleSeed`, are absent when there are none.
+ * session's `shuffleSeed`, are absent when there are none. Its `sequence` lists the item ref each
+ * item delivers, in delivery order: the sequence the test's selection and ordering drew at
+ * `startTest`, which {@link decodeSession} holds the items to.
  */
 export type StoredTestSession = typeof TestSessionSchema.Encoded;
 
@@ -142,20 +172,32 @@ export interface SessionTest {
      */
     readonly identifier: string;
     /**
+     * The nodes the test's feature modules read, as `Test.features` holds them: a test that holds a
+     * `qti-selection` may deliver fewer item refs than it holds, and one that holds none delivers
+     * each once. A test built by hand may leave it out, and then selects nothing.
+     */
+    readonly features?: { readonly "qti-selection"?: readonly unknown[] };
+    /**
      * The test's outcome declarations, by identifier: the outcomes a session of it holds, each of
      * its declared base type and cardinality.
      */
     readonly outcomes: ReadonlyMap<string, Pick<OutcomeDeclaration, "baseType" | "cardinality">>;
     /**
-     * The test's parts in order, each with its sections, whose item refs are the session's items
-     * in document order, and its navigation mode: a nonlinear part's items hold their template
-     * defaults from the part's start.
+     * The test's parts in order, each with its sections, whose item refs the session's items
+     * deliver, and its navigation mode: a nonlinear part's items hold their template defaults from
+     * the part's start.
      */
     readonly parts: readonly {
       readonly children: readonly SessionSection[];
       readonly identifier: string;
       readonly navigation: NavigationMode;
     }[];
+    /**
+     * The identifiers of the item refs a selection with replacement can repeat, as
+     * `Test.repeatable` holds them: the only item refs a session may deliver more than once. A test
+     * built by hand may leave it out, and then none repeats.
+     */
+    readonly repeatable?: ReadonlySet<string>;
   };
 }
 
@@ -310,29 +352,101 @@ const counted = (count: number, noun: string): string =>
  *
  * @param session The decoded session, which names its test.
  * @param test The test.
+ * @param sequence The delivered sequence the stored form carries.
  * @returns What breaks the rule, with the path to it, or none when the session meets it.
  */
-type SessionRule = (session: TestSession, test: SessionTest) => Option.Option<string>;
+type SessionRule = (
+  session: TestSession,
+  test: SessionTest,
+  sequence: readonly string[],
+) => Option.Option<string>;
 
 /**
- * The session's items are its test's item refs in document order, one per ref: the test model
- * neither selects nor reorders them, it marks a selection or an ordering.
+ * The identifier of each item ref of a test, in document order, with the index of the part that
+ * holds it. An identifier keeps its first item ref, as a search of the test finds it.
+ *
+ * @param test The test.
+ * @returns Each item ref's part index, by identifier, in document order.
  */
-const itemsRule: SessionRule = (session, test) => {
-  const refs = test.test.parts.flatMap((part) =>
-    refsIn(part.children).map((ref) => ref.identifier),
-  );
-  if (session.items.length !== refs.length) {
+const partsOfRefs = (test: SessionTest): ReadonlyMap<string, number> => {
+  const parts = new Map<string, number>();
+  for (const [index, part] of test.test.parts.entries()) {
+    for (const ref of refsIn(part.children)) {
+      if (!parts.has(ref.identifier)) {
+        parts.set(ref.identifier, index);
+      }
+    }
+  }
+
+  return parts;
+};
+
+/**
+ * The session's items are the delivered sequence the stored form carries, one item per entry, and
+ * that sequence is a delivery of the test: each entry names one of the test's item refs, the
+ * entries meet the test's parts in order, no item ref is delivered twice unless a selection with
+ * replacement can repeat it, and a test that holds no `qti-selection` delivers every item ref.
+ *
+ * Which item refs a selection drops, and in what order an ordering puts those it keeps, is drawn at
+ * `startTest` under the session's seed and stored, so these are the conditions every delivery meets
+ * and not the draw itself: the sequence is read as stored, never drawn again, so it stays what it
+ * was whatever the draw's labels later become.
+ */
+const itemsRule: SessionRule = (session, test, sequence) => {
+  if (session.items.length !== sequence.length) {
     return Option.some(
-      `items holds ${counted(session.items.length, "item")}, where the test has ${counted(refs.length, "item ref")}, one item each`,
+      `items holds ${counted(session.items.length, "item")}, where the stored sequence lists ${counted(sequence.length, "item ref")}, one item each`,
     );
   }
 
-  return Arr.findFirst(session.items, (item, index) =>
-    item.ref === refs[index]
+  const parts = partsOfRefs(test);
+  const repeatable = test.test.repeatable ?? new Set<string>();
+  const selects = (test.test.features?.["qti-selection"]?.length ?? 0) > 0;
+  const seen = new Set<string>();
+  let reached = 0;
+  const broken = Arr.findFirst(session.items, (item, index) => {
+    const listed = sequence[index];
+    const part = parts.get(item.ref);
+    const path = `items[${String(index)}].ref`;
+    if (item.ref !== listed) {
+      return Option.some(
+        `${path} is ${JSON.stringify(item.ref)}, where the stored sequence's item ${String(index + 1)} is ${JSON.stringify(listed)}`,
+      );
+    }
+
+    if (part === undefined) {
+      return Option.some(
+        `${path} is ${JSON.stringify(item.ref)}, which is no item ref of the test`,
+      );
+    }
+
+    if (part < reached) {
+      return Option.some(
+        `${path} is ${JSON.stringify(item.ref)}, an item ref of the test's part ${String(part + 1)}, after an item of its part ${String(reached + 1)}, where the items meet the test's parts in order`,
+      );
+    }
+
+    reached = part;
+    if (seen.has(item.ref) && !repeatable.has(item.ref)) {
+      return Option.some(
+        `${path} is ${JSON.stringify(item.ref)}, which an earlier item already delivers, where only an item ref under a selection with replacement is delivered twice`,
+      );
+    }
+
+    seen.add(item.ref);
+
+    return Option.none();
+  });
+
+  return Option.orElse(broken, () =>
+    selects
       ? Option.none()
-      : Option.some(
-          `items[${String(index)}].ref is ${JSON.stringify(item.ref)}, where the test's item ref ${String(index + 1)} in document order is ${JSON.stringify(refs[index])}`,
+      : Arr.findFirst([...parts.keys()], (identifier) =>
+          seen.has(identifier)
+            ? Option.none()
+            : Option.some(
+                `items delivers no item for the item ref ${JSON.stringify(identifier)}, where a test that holds no selection delivers each of its item refs`,
+              ),
         ),
   );
 };
@@ -554,19 +668,26 @@ const defaultsIssue = (
  * part evaluated them at its start, so a key missing or extra is not one the renderer wrote. An
  * item of a pending part, which has evaluated none, or of a linear part, which evaluates them when
  * the candidate meets the item, is not judged. The values are `present`'s to check when it shows
- * the item. {@link itemsRule} has already matched the items to the test's item refs.
+ * the item. {@link itemsRule} has already matched each item to an item ref of the test, which this
+ * rule finds by the item's `ref`, so an item ref delivered twice is judged by its one set of
+ * defaults at each instance.
  */
 const templateDefaultsRule: SessionRule = (session, test) => {
-  const places = test.test.parts.flatMap((part, partIndex) => {
+  const places = new Map<string, { readonly judged: boolean; readonly ref: SessionItemRef }>();
+  for (const [partIndex, part] of test.test.parts.entries()) {
     const judged =
       part.navigation === "nonlinear" &&
       Option.exists(Arr.get(session.parts, partIndex), ({ status }) => status !== "pending");
 
-    return refsIn(part.children).map((ref) => ({ judged, ref }));
-  });
+    for (const ref of refsIn(part.children)) {
+      if (!places.has(ref.identifier)) {
+        places.set(ref.identifier, { judged, ref });
+      }
+    }
+  }
 
   return Arr.findFirst(session.items, (item, index) =>
-    Option.flatMap(Arr.get(places, index), ({ judged, ref }) =>
+    Option.flatMap(Option.fromUndefinedOr(places.get(item.ref)), ({ judged, ref }) =>
       judged ? defaultsIssue(item, index, ref) : Option.none(),
     ),
   );
@@ -628,6 +749,7 @@ const sessionRules: readonly SessionRule[] = [
  * Check a decoded session against the test it belongs to.
  *
  * @param session The decoded session, which names its test.
+ * @param sequence The delivered sequence the stored form carries.
  * @param test The test.
  * @param version The version the stored session holds.
  * @returns The session, or {@link InvalidSession} at stage `decode` naming the first rule it
@@ -635,11 +757,12 @@ const sessionRules: readonly SessionRule[] = [
  */
 const fitting = (
   session: TestSession,
+  sequence: readonly string[],
   test: SessionTest,
   version: Option.Option<unknown>,
 ): Result.Result<TestSession, InvalidSession> =>
   Option.match(
-    Arr.findFirst(sessionRules, (rule) => rule(session, test)),
+    Arr.findFirst(sessionRules, (rule) => rule(session, test, sequence)),
     {
       onNone: () => Result.succeed(session),
       onSome: (issue) => Result.fail(new InvalidSession({ issue, stage: "decode", version })),
@@ -650,8 +773,13 @@ const fitting = (
  * Check a test session the host handed back.
  *
  * The session must be one the renderer wrote for this test: after it names the test and its
- * document, its items are the test's item refs in document order, one per ref, numbered from 1 in
- * order, each record's instance the session's instance, a `.` and the item's sequence index; its
+ * document, its items are the delivered sequence the stored form carries, one per entry, and that
+ * sequence is a delivery of the test (`itemsRule`: each entry an item ref of the test, the entries
+ * meeting its parts in order, an item ref repeated only where a selection with replacement can
+ * repeat it, and every item ref delivered when the test holds no selection), so a session of a
+ * test that selects or shuffles decodes as it was written, the sequence read as stored and never
+ * drawn again; the items are numbered from 1 in order, each record's instance the session's
+ * instance, a `.` and the item's sequence index; its
  * parts are the test's parts in order, ended, then at most one current, then pending, and none
  * current once the session is closed; `started`, `updated` and each item's `datestamp` are ISO
  * 8601 UTC instants, `updated` not before `started`; `position` is the index of one of its items,
@@ -682,12 +810,14 @@ export const decodeSession = (
     onNone: () =>
       Result.flatMap(
         Result.mapError(
-          Schema.decodeUnknownResult(TestSessionSchema)(input),
+          Schema.decodeUnknownResult(StoredSessionSchema)(input),
           (schemaError) =>
             new InvalidSession({ issue: schemaError.message, stage: "decode", version }),
         ),
-        (session) =>
-          Result.flatMap(belonging(session, test), (owned) => fitting(owned, test, version)),
+        ({ sequence, version: _stored, ...session }) =>
+          Result.flatMap(belonging(session, test), (owned) =>
+            fitting(owned, sequence, test, version),
+          ),
       ),
     onSome: (issue) => Result.fail(new InvalidSession({ issue, stage: "decode", version })),
   });

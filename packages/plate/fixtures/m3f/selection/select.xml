@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  identifier="select" title="Selection and ordering">
+  <qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">
+    <qti-assessment-section identifier="drawn" title="Drawn section" visible="true">
+      <qti-selection select="2"/>
+      <qti-ordering shuffle="true"/>
+      <qti-assessment-item-ref identifier="a" href="choice.xml"/>
+      <qti-assessment-item-ref identifier="b" href="choice.xml"/>
+      <qti-assessment-item-ref identifier="c" href="choice.xml"/>
+      <qti-assessment-item-ref identifier="d" href="choice.xml"/>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="plain" title="Plain section" visible="true">
+      <qti-assessment-item-ref identifier="z" href="choice.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+</qti-assessment-test>

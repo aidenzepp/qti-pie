@@ -117,9 +117,10 @@ const foundPerFile = await Promise.all(
 const found: readonly AnyModule[] = foundPerFile.flat();
 
 /**
- * The stubs: the modules of the table that are not implemented.
+ * The stubs: the modules of the table that are not implemented, each read with its node type
+ * erased, as the hubs read the table, so modules that read different node types stay one list.
  */
-const stubs = testFeatures.filter((module) => !module.implemented);
+const stubs: readonly AnyModule[] = testFeatures.filter((module) => !module.implemented);
 
 /**
  * The table with every module a stub built from its own declaration, whatever the default table
