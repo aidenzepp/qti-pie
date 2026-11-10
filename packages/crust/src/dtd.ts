@@ -318,112 +318,6 @@ export const expansionBudget = (textLength: number, expanded = 0): ExpansionBudg
 });
 
 /**
- * Count one opened replacement text against `budget`, and say why it is refused if it is.
- *
- * @param budget - The document's budget.
- * @param length - The length of the replacement text being opened.
- * @param depth - How many replacement texts are open, this one included.
- * @param name - The entity, for the refusal.
- * @param position - Where the reference that opens it is, for the refusal, or none.
- * @returns The refusal when `depth` is past `EXPANSION_DEPTH` or the budget is spent, else `None`.
- */
-const overBudget = (
-  budget: ExpansionBudget,
-  length: number,
-  depth: number,
-  name: string,
-  position: ReaderRefusal["position"],
-): Option.Option<ReaderRefusal> => {
-  budget.expanded += length + EXPANSION_REFERENCE_COST;
-  if (depth > EXPANSION_DEPTH) {
-    return Option.some(
-      new ReaderRefusal({
-        detail: `The entity "${name}" is opened ${depth} levels deep, past the limit of ${EXPANSION_DEPTH}. Declare the entity's value in fewer, flatter steps, or write the text out.`,
-        position,
-        rule: "entity-expansion",
-      }),
-    );
-  }
-
-  if (budget.expanded > budget.limit) {
-    return Option.some(
-      new ReaderRefusal({
-        detail: `The entity "${name}" brings the replacement text opened by the document's entity references to ${budget.expanded} characters, past the limit of ${budget.limit}. Declare the entity's value in fewer, flatter steps, or write the text out.`,
-        position,
-        rule: "entity-expansion",
-      }),
-    );
-  }
-
-  return Option.none();
-};
-
-/**
- * Count one opened replacement text against `budget`.
- *
- * Each call adds `length` and a fixed cost per reference to `budget.expanded`.
- *
- * @param budget - The document's budget.
- * @param length - The length of the replacement text being opened.
- * @param depth - How many replacement texts are open, this one included.
- * @param name - The entity, for the refusal.
- * @param position - Where the reference that opens it is, for the refusal, or none.
- * @returns Nothing; fails with a refusal under rule `entity-expansion` when the depth or the
- *   budget is exceeded.
- */
-export const charge = (
-  budget: ExpansionBudget,
-  length: number,
-  depth: number,
-  name: string,
-  position: ReaderRefusal["position"],
-): Effect.Effect<void, ReaderRefusal> => {
-  const refusal = overBudget(budget, length, depth, name, position);
-
-  return Option.isSome(refusal) ? Effect.fail(refusal.value) : Effect.void;
-};
-
-/**
- * What the internal subset has declared so far, and whether reading it has stopped.
- *
- * `bound` holds `&name` and `%name` for every entity declared, internal or external, because the
- * first declaration of a name is binding (XML 1.0 section 4.2). `stopped` is set at the first
- * parameter-entity reference that cannot be read (section 5.1). `externalSubset` is read with the
- * DOCTYPE's external identifier and `referencesParameters` as the subset is read, and at the
- * subset's end the two and `standalone` decide WFC Entity Declared's scope, under which every
- * attribute default is judged as the body is. `kept` lists each reference to an entity not yet
- * declared that an attribute default holds, with the attribute, so the end of the subset can refuse
- * one the subset declares after it, or one it never declares in the WFC's scope.
- */
-interface Tables {
-  readonly attlists: Map<string, Map<string, AttlistEntry>>;
-  readonly bound: Set<string>;
-  readonly budget: ExpansionBudget;
-  readonly entities: Map<string, string>;
-  /**
-   * Whether the DOCTYPE names a `SYSTEM` or `PUBLIC` identifier, read before the internal subset.
-   */
-  externalSubset: boolean;
-  readonly kept: { readonly name: string; readonly owner: DefaultOwner }[];
-  readonly parameters: Map<string, string>;
-  /**
-   * Whether the subset has referenced a parameter entity, read or not, which takes the document
-   * out of WFC Entity Declared's scope (XML 1.0 section 4.1).
-   */
-  referencesParameters: boolean;
-  readonly standalone: boolean;
-  stopped: boolean;
-}
-
-/**
- * The offset and text of a quoted literal's content, for reporting a failure inside it.
- */
-interface Literal {
-  readonly content: string;
-  readonly start: number;
-}
-
-/**
  * Find the line and column, both starting at 1 as `saxes` counts them, of `offset` in `source`.
  *
  * A column counts code points and `\r\n`, a lone `\r` and `\n` each end a line.
@@ -445,6 +339,152 @@ export const positionOf = (source: string, offset: number) => {
 };
 
 /**
+ * Where something is in the decoded source, as an offset. A refusal's line and column are found
+ * from it only when the refusal is built, because {@link positionOf} reads the source up to the
+ * offset, and finding them at every reference the expansion budget admits would cost the square of
+ * the subset's length before the budget refused anything.
+ */
+interface Spot {
+  readonly offset: number;
+  readonly source: string;
+}
+
+/**
+ * Find where `offset` is in the decoded source, or where the reference that brought a replacement
+ * text in is.
+ *
+ * @param cursor - The read position, which says whether `offset` is a position in the document.
+ * @param offset - A position in `cursor.text`; the read position by default.
+ * @returns The offset in `cursor.source`; no substitution precedes the prolog.
+ */
+const spotOf = (cursor: Cursor, offset: number = cursor.offset): Spot => ({
+  offset: Option.getOrElse(cursor.anchor, () => offset),
+  source: cursor.source,
+});
+
+/**
+ * Find the 1-based line and column of `spot`.
+ *
+ * @param spot - Where something is in the decoded source.
+ * @returns Its line and column, from {@link positionOf}.
+ */
+const positionAt = (spot: Spot) => positionOf(spot.source, spot.offset);
+
+/**
+ * Count one opened replacement text against `budget`, and say why it is refused if it is.
+ *
+ * @param budget - The document's budget.
+ * @param length - The length of the replacement text being opened.
+ * @param depth - How many replacement texts are open, this one included.
+ * @param name - The entity, for the refusal.
+ * @param at - Where the reference that opens it is, or none; its line and column are found only
+ *   for a refusal.
+ * @returns The refusal when `depth` is past `EXPANSION_DEPTH` or the budget is spent, else `None`.
+ */
+const overBudget = (
+  budget: ExpansionBudget,
+  length: number,
+  depth: number,
+  name: string,
+  at: Option.Option<Spot>,
+): Option.Option<ReaderRefusal> => {
+  budget.expanded += length + EXPANSION_REFERENCE_COST;
+  const position = () => at.pipe(Option.map(positionAt));
+  if (depth > EXPANSION_DEPTH) {
+    return Option.some(
+      new ReaderRefusal({
+        detail: `The entity "${name}" is opened ${depth} levels deep, past the limit of ${EXPANSION_DEPTH}. Declare the entity's value in fewer, flatter steps, or write the text out.`,
+        position: position(),
+        rule: "entity-expansion",
+      }),
+    );
+  }
+
+  if (budget.expanded > budget.limit) {
+    return Option.some(
+      new ReaderRefusal({
+        detail: `The entity "${name}" brings the replacement text opened by the document's entity references to ${budget.expanded} characters, past the limit of ${budget.limit}. Declare the entity's value in fewer, flatter steps, or write the text out.`,
+        position: position(),
+        rule: "entity-expansion",
+      }),
+    );
+  }
+
+  return Option.none();
+};
+
+/**
+ * Count one opened replacement text against `budget`.
+ *
+ * Each call adds `length` and a fixed cost per reference to `budget.expanded`.
+ *
+ * @param budget - The document's budget.
+ * @param length - The length of the replacement text being opened.
+ * @param depth - How many replacement texts are open, this one included.
+ * @param name - The entity, for the refusal.
+ * @param at - Where the reference that opens it is, or none; its line and column are found only
+ *   for a refusal.
+ * @returns Nothing; fails with a refusal under rule `entity-expansion` when the depth or the
+ *   budget is exceeded.
+ */
+export const charge = (
+  budget: ExpansionBudget,
+  length: number,
+  depth: number,
+  name: string,
+  at: Option.Option<Spot>,
+): Effect.Effect<void, ReaderRefusal> => {
+  const refusal = overBudget(budget, length, depth, name, at);
+
+  return Option.isSome(refusal) ? Effect.fail(refusal.value) : Effect.void;
+};
+
+/**
+ * What the internal subset has declared so far, and whether reading it has stopped.
+ *
+ * `bound` holds `&name` and `%name` for every entity declared, internal or external, because the
+ * first declaration of a name is binding (XML 1.0 section 4.2). `stopped` is set at the first
+ * parameter-entity reference that cannot be read (section 5.1). `externalSubset` is read with the
+ * DOCTYPE's external identifier and `referencesParameters` as the subset is read, and at the
+ * subset's end the two and `standalone` decide WFC Entity Declared's scope, under which every
+ * attribute default is judged as the body is. `kept` lists each reference to an entity not yet
+ * declared that an attribute default holds, with the attribute and where the reference is in the
+ * decoded source, so the end of the subset can refuse one the subset declares after it, or one it
+ * never declares in the WFC's scope, at the reference.
+ */
+interface Tables {
+  readonly attlists: Map<string, Map<string, AttlistEntry>>;
+  readonly bound: Set<string>;
+  readonly budget: ExpansionBudget;
+  readonly entities: Map<string, string>;
+  /**
+   * Whether the DOCTYPE names a `SYSTEM` or `PUBLIC` identifier, read before the internal subset.
+   */
+  externalSubset: boolean;
+  readonly kept: {
+    readonly at: Spot;
+    readonly name: string;
+    readonly owner: DefaultOwner;
+  }[];
+  readonly parameters: Map<string, string>;
+  /**
+   * Whether the subset has referenced a parameter entity, read or not, which takes the document
+   * out of WFC Entity Declared's scope (XML 1.0 section 4.1).
+   */
+  referencesParameters: boolean;
+  readonly standalone: boolean;
+  stopped: boolean;
+}
+
+/**
+ * The offset and text of a quoted literal's content, for reporting a failure inside it.
+ */
+interface Literal {
+  readonly content: string;
+  readonly start: number;
+}
+
+/**
  * Describe the text at the read position for an error message.
  *
  * @param cursor - The read position.
@@ -457,26 +497,30 @@ const found = (cursor: Cursor): string => {
 };
 
 /**
+ * Find the line and column to report for `offset`, or for the reference that brought a replacement
+ * text in.
+ *
+ * @param cursor - The read position, which says whether `offset` is a position in the document.
+ * @param offset - A position in `cursor.text`; the read position by default.
+ * @returns The 1-based line and column in `cursor.source`.
+ */
+const placeOf = (cursor: Cursor, offset: number = cursor.offset) =>
+  positionAt(spotOf(cursor, offset));
+
+/**
  * Build the well-formedness error for a failure at `offset`, or at the reference that brought a
  * replacement text in.
  *
  * @param cursor - The read position, which says whether `offset` is a position in the document.
  * @param message - What the lexer expected and what it found.
  * @param offset - Where the failure lies in `cursor.text`; the read position by default.
- * @returns An error with the line and column to report; no substitution precedes the prolog.
+ * @returns An error with the line and column {@link placeOf} gives.
  */
 const failure = (
   cursor: Cursor,
   message: string,
   offset: number = cursor.offset,
-): WellFormednessError => {
-  const where = Option.getOrElse(cursor.anchor, () => offset);
-
-  return new WellFormednessError({
-    ...positionOf(cursor.source, where),
-    message,
-  });
-};
+): WellFormednessError => new WellFormednessError({ ...placeOf(cursor, offset), message });
 
 /**
  * Read `pattern` at the read position and advance past it when it matches.
@@ -959,12 +1003,18 @@ const expandDefault = (
       if (replacement === undefined) {
         // Kept until the subset ends, when WFC Entity Declared's scope is known (section 4.1): a
         // parameter-entity reference after the list still takes the document out of it.
-        tables.kept.push({ name: entity, owner });
+        tables.kept.push({ at: spotOf(cursor, where), name: entity, owner });
 
         return [{ kind: "reference", name: entity }];
       }
 
-      yield* charge(tables.budget, replacement.length, depth + 1, entity, Option.none());
+      yield* charge(
+        tables.budget,
+        replacement.length,
+        depth + 1,
+        entity,
+        Option.some(spotOf(cursor, where)),
+      );
 
       return yield* expandDefault(
         tables,
@@ -1268,6 +1318,7 @@ const readParameterReference = Effect.fnUntraced(function* readParameterEntityRe
   Option.Option<{ name: string; replacement: string }>,
   WellFormednessError | ReaderRefusal
 > {
+  const start = cursor.offset;
   cursor.offset += "%".length;
   const name = yield* readName(cursor, "parameter-entity reference", "NCName");
   yield* expect(cursor, ";", "parameter-entity reference");
@@ -1287,7 +1338,7 @@ const readParameterReference = Effect.fnUntraced(function* readParameterEntityRe
   if (active.has(name)) {
     return yield* new ReaderRefusal({
       detail: `The parameter entity "${name}" refers to itself, which XML 1.0 forbids (well-formedness constraint "No Recursion"). Remove the reference from its replacement text.`,
-      position: Option.none(),
+      position: Option.some(placeOf(cursor, start)),
       rule: "entity-cycle",
     });
   }
@@ -1445,7 +1496,7 @@ const lexSubset: (
             used.value.replacement.length,
             active.size + 1,
             used.value.name,
-            Option.none(),
+            Option.some(spotOf(cursor, start)),
           );
           yield* lexSubset(tables, inside, new Set([...active, used.value.name]));
           if (inside.offset < inside.text.length) {
@@ -1637,13 +1688,18 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
       early.name,
       early.owner,
       undeclared._tag === "refused",
-      Option.none(),
+      Option.some(positionAt(early.at)),
     );
   }
 
   const never = tables.kept.find(({ name }) => !tables.bound.has(`&${name}`));
   if (never !== undefined && undeclared._tag === "refused") {
-    return yield* undeclaredEntity(never.name, undeclared.why, Option.none(), never.owner);
+    return yield* undeclaredEntity(
+      never.name,
+      undeclared.why,
+      Option.some(positionAt(never.at)),
+      never.owner,
+    );
   }
 
   const cycle = findCycle(tables.entities);
