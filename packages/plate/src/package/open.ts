@@ -304,7 +304,9 @@ export interface PackageContents {
    */
   readonly location: string;
   /**
-   * Every stimulus resource's stimulus, each valid and delivered alone by no stage before M3.
+   * Every stimulus resource's stimulus, each valid and delivered alone by no stage before M3, with
+   * its body and its language read, keyed by its location as the host named it: the map a host
+   * hands `redact` as its `documents`.
    */
   readonly stimuli: ReadonlyMap<string, AcceptedStimulus>;
   /**

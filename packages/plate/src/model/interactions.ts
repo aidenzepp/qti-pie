@@ -218,6 +218,7 @@ type SteppedOf<T extends ModuleTable, K extends ModuleKind> = Pick<
   | "solution"
   | "unnamed"
   | "validate"
+  | "variables"
 >;
 
 /**
@@ -306,6 +307,19 @@ const moduleAbsentValue = <K extends ModuleKind>(
   kind: K,
   interaction: ModelOf<K>,
 ): Value | undefined => stepped[kind].absentValue?.(interaction);
+
+/**
+ * Give the identifiers of the template and context variables a module kind's model node binds its
+ * configuration to, by its kind's module: none when the module does not say.
+ *
+ * @param kind The kind.
+ * @param interaction The node.
+ * @returns The module's `variables`, empty when it has none.
+ */
+const moduleVariables = <K extends ModuleKind>(
+  kind: K,
+  interaction: ModelOf<K>,
+): readonly string[] => stepped[kind].variables?.(interaction) ?? [];
 
 /**
  * Tell whether a node is one of an interaction plate parses through a module: a model node
@@ -547,6 +561,20 @@ export const countsAttempt = (
  */
 export const absentValueOf = (interaction: Interaction): Value | undefined =>
   isStubbed(interaction) ? moduleAbsentValue(interaction.kind, interaction) : undefined;
+
+/**
+ * Give the identifiers of the template and context variables an interaction binds its
+ * configuration to, which the redaction holds for its node alone: a module kind's node answers
+ * through its module's `variables` (`InteractionModule` in `#plate/interactions/contract.ts`), and
+ * every other interaction, a shipped kind, a stub or a module that leaves the member unset,
+ * answers none, so nothing is held for it. `redactItem` (`#plate/payload.ts`) reads it to fill the
+ * redacted item's `held`, and `RedactKit.held` hands the module each value back.
+ *
+ * @param interaction The interaction.
+ * @returns The identifiers, in the module's order; empty when it binds none.
+ */
+export const variablesOf = (interaction: Interaction): readonly string[] =>
+  isStubbed(interaction) ? moduleVariables(interaction.kind, interaction) : [];
 
 /**
  * The steps of one module kind's model node, each bound to it: the members of its module the hubs

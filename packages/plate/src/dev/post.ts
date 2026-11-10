@@ -20,14 +20,51 @@ import type { Responses } from "#plate/session/session.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
- * What one post carries for an item: each posted response decoded, the strings posted for each,
- * and the responses whose entries do not decode.
+ * What one post carries for an item: the comment the candidate posted with it, each posted
+ * response decoded, the strings posted for each, and the responses whose entries do not decode.
+ *
+ * The comment is none when the post holds no comment entry for the item, more than one, or one
+ * that is a file; it is no response, so it is in none of the other fields.
  */
 export interface Post {
+  readonly comment: Option.Option<string>;
   readonly decoded: Readonly<Record<string, Malformed | ResponseValue>>;
   readonly malformed: ReadonlySet<string>;
   readonly posted: Readonly<Record<string, readonly string[]>>;
 }
+
+/**
+ * Name the form entry an item's candidate comment posts under.
+ *
+ * A comment posts under its item's instance, as the item's responses do, so `partition` of
+ * `#plate/form/encoding.ts`, given the instance, calls the comment entry its own.
+ *
+ * @param instance The item instance token.
+ * @returns `<instance>.comment`.
+ */
+export const commentName = (instance: string): string => `${instance}.comment`;
+
+/**
+ * Decode the comment posted for an item.
+ *
+ * Only the entry named {@link commentName} of `instance` is read; every other entry, another
+ * item's comment included, is ignored. The text is read as it was posted, with no trimming.
+ *
+ * @param entries The posted entries.
+ * @param instance The item instance token.
+ * @returns The comment, or none when no entry is named for the item, when more than one is, or
+ *   when it is a file.
+ */
+export const decodeComment = (
+  entries: readonly Entry[],
+  instance: string,
+): Option.Option<string> => {
+  const name = commentName(instance);
+  const posted = entries.filter(([entry]) => entry === name).map(([, value]) => value);
+  const text = posted.find((value): value is string => typeof value === "string");
+
+  return posted.length === 1 ? Option.fromNullishOr(text) : Option.none();
+};
 
 /**
  * Read a post's body as form entries.
@@ -59,6 +96,9 @@ export const entriesOf = Effect.fnUntraced(function* entriesOf(
  * nothing on the page. A response no interaction binds has no posting, so the post carries nothing
  * for it: `checkResponses` treats it as NULL and `score` keeps its record value.
  *
+ * The item's comment is read from the same own entries, by `decodeComment`, and is no response:
+ * it is in none of `decoded`, `malformed` and `posted`.
+ *
  * @param document The accepted item.
  * @param instance The item instance.
  * @param entries The posted entries.
@@ -82,6 +122,7 @@ export const postOf = (
   );
 
   return {
+    comment: decodeComment(own, instance),
     decoded,
     malformed: new Set(
       Object.entries(decoded).flatMap(([response, value]) =>

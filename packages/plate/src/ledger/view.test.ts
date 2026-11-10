@@ -1071,8 +1071,10 @@ describe("ledger/view.ts verdict report", () => {
       },
       {
         accepted: acceptStimulusForTest({
+          body: [],
           document: "stimuli/stimulus.xml",
           identifier: "ST",
+          lang: Option.none(),
           title: "Stimulus",
           unsupported: [
             {
