@@ -41,6 +41,7 @@ import {
 } from "#pantry/test/gen/attribute-order.ts";
 import type { CaseEntry } from "#pantry/test/gen/attribute-order.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { domainValues } from "#pantry/qti/expression-types.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { judgedOf } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
@@ -106,12 +107,30 @@ const verdictOf = (imported: Imported) =>
     : { rule: imported.rule, verdict: imported.verdict };
 
 /**
+ * The attributes the grammar types as QTI's identifier class, the value domain an `identifier` base
+ * type's values take (`#pantry/qti/expression-types.ts` `domainValues`), each by its kind, name and
+ * version: an identifier written under another name, as a template default's `template-identifier`
+ * is.
+ */
+const identifierTyped = (() => {
+  const domains: ReadonlySet<string> = new Set(
+    domainValues.flatMap(({ baseTypes, domain }) =>
+      baseTypes.some((baseType) => baseType === "identifier") ? [domain] : [],
+    ),
+  );
+
+  return grammar.attributes.admission.rows.filter(({ domain }) => domains.has(domain));
+})();
+
+/**
  * The relations that copy an identifier attribute and check the copy with `E1_derived`, read from
  * the schema's own statements rather than named by hand: the target of each containment from
- * `Attribute` whose selection takes an `identifier` attribute and turns on the name (it takes no
- * attribute of another name), and which copies the attribute's `lexical` into a field the target's
- * `E1_derived` check reads. At grizzle 89e94c0 they are `DeclarationIdentifier`,
- * `InteractionAttribute`, `ManifestId`, `ObjectIdentifier`, `ResourceId` and `TestToken`.
+ * `Attribute` whose selection takes an `identifier` attribute or one the grammar types as an
+ * identifier ({@link identifierTyped}) and turns on the name (it takes no attribute of another
+ * name), and which copies the attribute's `lexical` into a field the target's `E1_derived` check
+ * reads. At grizzle 89e94c0 they are `DeclarationIdentifier`, `ExpressionAttribute` (a weight's
+ * `weight-identifier`), `InteractionAttribute`, `ManifestId`, `ObjectIdentifier`, `ResourceId`,
+ * `SectionIdentifier`, `TemplateDefault` and `TestToken`.
  */
 const identifierCopies: ReadonlySet<string> = (() => {
   const laws = Qti.statements.flatMap(judgedOf);
@@ -135,7 +154,10 @@ const identifierCopies: ReadonlySet<string> = (() => {
       return at !== -1 &&
         copied !== undefined &&
         derivedReads.get(law.to.relation)?.includes(copied) === true &&
-        law.from.selection({ name: "identifier" }) !== false &&
+        (law.from.selection({ name: "identifier" }) !== false ||
+          identifierTyped.some(
+            ({ kind, name, version }) => law.from.selection({ kind, name, version }) !== false,
+          )) &&
         law.from.selection({ name: "" }) === false
         ? [law.to.relation]
         : [];
@@ -162,9 +184,17 @@ const identifierCopyChecks: ReadonlySet<string> = new Set(
 );
 
 /**
- * Decide whether a package has an element whose `identifier` the identifier's value domain refuses:
- * once the import strips its leading and trailing XML whitespace (`lead` and `trail`), the piece
- * left is empty or holds a character below `!`, so it fails `identifierPattern`
+ * The kind and name of each attribute in {@link identifierTyped}, spelled `<kind> <name>`.
+ */
+const identifierNames: ReadonlySet<string> = new Set(
+  identifierTyped.map(({ kind, name }) => `${kind} ${name}`),
+);
+
+/**
+ * Decide whether a package has an element whose `identifier`, or another attribute the grammar
+ * types as an identifier on its kind ({@link identifierNames}), the identifier's value domain
+ * refuses: once the import strips its leading and trailing XML whitespace (`lead` and `trail`), the
+ * piece left is empty or holds a character below `!`, so it fails `identifierPattern`
  * (`src/qti/metadata.ts`).
  *
  * @param entries - The package's entries as the case reads them.
@@ -174,11 +204,11 @@ const breaksIdentifier = (entries: readonly CaseEntry[]): boolean =>
   entries.some(
     ({ tree }) =>
       Option.isSome(tree) &&
-      elementsOf(tree.value.root).some(({ attributes }) =>
+      elementsOf(tree.value.root).some(({ attributes, local: kind }) =>
         attributes.some(
           ({ local, namespace, value }) =>
             namespace === "" &&
-            local === "identifier" &&
+            (local === "identifier" || identifierNames.has(`${kind} ${local}`)) &&
             !/^[!-\uFFFD\u{10000}-\u{10FFFF}]+$/u.test(
               value.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, ""),
             ),
@@ -194,10 +224,13 @@ const breaksIdentifier = (entries: readonly CaseEntry[]): boolean =>
  * `attribute-lexical` or `required-attribute`. The verdict is the same. This test first drew it on
  * `ObjectIdentifier`, an item's identifier (`TEST_SEED=1234327904`, case 14), and then on
  * `TestToken`, a section's item ref with an empty identifier (`TEST_SEED=1819136236`, case 6); it
- * holds at grizzle 6995af4 and at 89e94c0 alike. It is keyed to the family, not to one relation, so
- * the next copy it reaches does not reopen the test: the refusal names one law and no other, the
- * `E1_derived` check of an identifier copy ({@link identifierCopyChecks}); an element's
- * `identifier` breaks the value domain ({@link breaksIdentifier}); and the oracle refuses the
+ * holds at grizzle 6995af4 and at 89e94c0 alike. The first seed then reached `TemplateDefault`, a
+ * test's template default whose `template-identifier` holds a space, which an identifier copy
+ * written under another name than `identifier` is ({@link identifierTyped}). It is keyed to the
+ * family, not to one relation, so the next copy it reaches does not reopen the test: the refusal
+ * names one law and no other, the `E1_derived` check of an identifier copy
+ * ({@link identifierCopyChecks}); an element's `identifier`, or another attribute typed as an
+ * identifier, breaks the value domain ({@link breaksIdentifier}); and the oracle refuses the
  * package under `attribute-lexical` or `required-attribute`, the rules that identifier breaks.
  * Every other refusal is still held to the oracle's rules, and `derived` is admitted nowhere else.
  * Remove it with issue #103.
