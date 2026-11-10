@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
-import { SupportsSchema } from "#plate/codec/supports.ts";
+import { PnpSupportsSchema, SupportsSchema } from "#plate/codec/supports.ts";
 import { readPnp } from "#plate/pnp/read.ts";
-import type { InvalidPnp, PnpSelector, PnpSupports } from "#plate/pnp/read.ts";
+import type { InvalidPnp, PnpSelector } from "#plate/pnp/read.ts";
 import { noSupports } from "#plate/supports.ts";
-import type { Supports } from "#plate/supports.ts";
+import type { PnpSupports, Supports } from "#plate/supports.ts";
 
 /**
  * The schema's namespace, the guide's two, and none: the four every PNP element may be in.
@@ -485,6 +485,22 @@ describe("readPnp", () => {
       const empty = supportsOf(yield* read(profile("")));
 
       assert.deepStrictEqual(decode(encode(empty)), empty);
+    }),
+  );
+
+  it.effect("[pnp] what readPnp reads satisfies PnpSupportsSchema, as read", () =>
+    Effect.gen(function* pnpSchema() {
+      const decode = Schema.decodeUnknownSync(PnpSupportsSchema);
+
+      for (const name of ["pnp-profile.xml", "pnp-guide-spellings.xml"]) {
+        const pnp = yield* read(fixture(name));
+
+        assert.deepStrictEqual(decode(pnp), pnp, name);
+      }
+
+      const empty = yield* read(profile(""));
+
+      assert.deepStrictEqual(decode(empty), empty);
     }),
   );
 });

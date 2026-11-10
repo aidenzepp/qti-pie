@@ -12,8 +12,9 @@
  * `results` writes a Results Reporting document.
  *
  * Supports: `render` and `redact` take a `Supports` value, which `noSupports` gives with every
- * support off and `SupportsSchema` checks when a host builds one. `readPnp` is to read one from a
- * Personal Needs and Preferences document; it is a stub until issue m4-01 fills it.
+ * support off and `SupportsSchema` checks when a host builds one. `readPnp` reads a `PnpSupports`
+ * from a Personal Needs and Preferences document: a `Supports` widened with the preferences no
+ * renderer reads yet, which `noPnpSupports` gives with none set and `PnpSupportsSchema` checks.
  *
  * `open`, `openPackage`, `configure` and `readPnp` return Effects. Every other function is plain,
  * callable with no Effect runtime: it returns its value, or a `Result` when a caller can make it
@@ -50,7 +51,7 @@ export {
   SessionMismatch,
 } from "#plate/codec/session.ts";
 
-export { SupportsSchema } from "#plate/codec/supports.ts";
+export { PnpSupportsSchema, SupportsSchema } from "#plate/codec/supports.ts";
 
 export type { Configuration } from "#plate/configuration.ts";
 
@@ -207,16 +208,37 @@ export { solution } from "#plate/solution.ts";
 
 export type {
   AdditionalTestingTime,
+  BrailleDeliveryMode,
+  BrailleGrade,
+  BraillePreferences,
+  BrailleType,
+  CalculatorType,
   CatalogSupport,
   DisplayPreferences,
   ExtensionSupport,
+  FontSize,
+  GenericFontFace,
+  HazardAvoidance,
+  InputRequirement,
+  LanguageFeature,
+  LinkIndication,
+  MathType,
+  PnpExtension,
+  PnpFeature,
+  PnpSupports,
+  PolarityColors,
   ReadingType,
+  RestrictionType,
+  SpokenPreferences,
   Supports,
   TextAppearance,
+  TextPreferences,
   ToolPreference,
+  ToolSettings,
+  TypingEcho,
 } from "#plate/supports.ts";
 
-export { catalogSupports, noSupports, toolPreferences } from "#plate/supports.ts";
+export { catalogSupports, noPnpSupports, noSupports, toolPreferences } from "#plate/supports.ts";
 
 export { open } from "#plate/validate/open.ts";
 

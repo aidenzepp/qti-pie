@@ -17,12 +17,35 @@ import { Effect, Option, Schema } from "effect";
 import { readSource } from "#plate/document/read.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import { xmlNamespace } from "#plate/document/source.ts";
-import { catalogSupports, noSupports, toolPreferences } from "#plate/supports.ts";
+import {
+  brailleDeliveryModes,
+  brailleGrades,
+  brailleTypes,
+  calculatorTypes,
+  catalogSupports,
+  genericFontFaces,
+  hazardAvoidances,
+  inputRequirementValues,
+  languageFeatures,
+  linkIndications,
+  mathTypes,
+  noSupports,
+  pnpFeatures,
+  restrictionTypes,
+  toolPreferences,
+  typingEchoes,
+} from "#plate/supports.ts";
 import type {
+  BraillePreferences,
   CatalogSupport,
   DisplayPreferences,
-  ReadingType,
+  LanguageFeature,
+  PnpExtension,
+  PnpFeature,
+  PnpSupports,
+  SpokenPreferences,
   Supports,
+  TextPreferences,
   ToolPreference,
 } from "#plate/supports.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
@@ -62,172 +85,6 @@ export class InvalidPnp extends Schema.TaggedError<InvalidPnp>()("InvalidPnp", {
 }
 
 /**
- * The `braille` feature's preferences, with the schema's defaults where the document says nothing.
- *
- * `brailleType` is `ebae`, `ueb` or an `ext:` value; the guide's `ubae` reads as `ebae` (row 12).
- */
-export interface BraillePreferences {
-  readonly brailleType: Option.Option<string>;
-  /**
-   * `refreshable` (the default), `embossed` or an `ext:` value.
-   */
-  readonly deliveryMode: string;
-  /**
-   * The grade, 1, 2 (the default) or 3.
-   */
-  readonly grade: number;
-  /**
-   * The braille's language, the element's `xml:lang`.
-   */
-  readonly language: Option.Option<string>;
-  /**
-   * `nemeth`, `ueb` or an `ext:` value.
-   */
-  readonly mathType: Option.Option<string>;
-}
-
-/**
- * The `spoken` feature's preferences, with the schema's defaults where the document says nothing.
- *
- * `restrictions` holds the `restriction-type` values as written, except that the guide's
- * `skip-chemical-equations` reads as the schema's `skip-chemistry-equations` (row 6).
- */
-export interface SpokenPreferences {
-  readonly linkIndication: Option.Option<string>;
-  /**
-   * The pitch, 0.5 by default.
-   */
-  readonly pitch: number;
-  readonly readingType: ReadingType;
-  readonly restrictions: ReadonlySet<string>;
-  /**
-   * The speech rate, 180 by default.
-   */
-  readonly speechRate: number;
-  readonly typingEcho: Option.Option<string>;
-  /**
-   * The volume, 0.5 by default.
-   */
-  readonly volume: number;
-}
-
-/**
- * A `font-size` as the document gives it: the schema's points (default 12.0) or the guide's
- * factor "relative to the base font size" (row 10). A value under 4 is a factor, any other is
- * points, since no readable text is 3 points tall and no candidate asks for text 4 times the base.
- */
-export interface FontSize {
-  readonly kind: "factor" | "points";
-  readonly value: number;
-}
-
-/**
- * The `text-appearance` feature's preferences beyond the colours {@link Supports} carries.
- *
- * `colorTheme` is the guide's `color-theme`, which the schema lacks (row 1). `letterSpacing` is
- * the number as written, in pixels (row 11). `lineSpacing`, `lineHeight` and `wordSpacing` are
- * the numbers as written.
- */
-export interface TextPreferences {
-  readonly colorTheme: Option.Option<string>;
-  /**
-   * The `font-name` values of `font-face`, in order.
-   */
-  readonly fontNames: readonly string[];
-  readonly fontSize: Option.Option<FontSize>;
-  readonly genericFontFace: Option.Option<string>;
-  readonly letterSpacing: Option.Option<number>;
-  readonly lineHeight: Option.Option<number>;
-  readonly lineSpacing: Option.Option<number>;
-  readonly uniformFontSizing: boolean;
-  readonly wordSpacing: Option.Option<number>;
-  readonly wordWrapping: boolean;
-}
-
-/**
- * The colours of `invert-display-polarity`, each as written.
- */
-export interface PolarityColors {
-  readonly background: Option.Option<string>;
-  readonly foreground: Option.Option<string>;
-}
-
-/**
- * The settings of the on-screen tools that take one: `calculator-on-screen`'s `calculator-type`
- * and `line-reader`'s `highlight-color`, each as written.
- */
-export interface ToolSettings {
-  readonly calculatorType: Option.Option<string>;
-  readonly highlightColor: Option.Option<string>;
-}
-
-/**
- * What {@link readPnp} reads: the contract's {@link Supports}, every field of it as the PNP sets
- * it, and what the PNP says that the contract has no field for. A `PnpSupports` is a `Supports`,
- * so a host passes it to `render` and `redact` as it is.
- *
- * Feature names are the schema's local names (`spell-checker-on-screen`, never the guide's
- * `spell-checker`). A feature the profile assigns and names in no set is active, the campaign's
- * default; `prohibit-set` wins over an assignment, so a prohibited feature is in `prohibited` and
- * in no other field.
- */
-export interface PnpSupports extends Supports {
-  /**
-   * The features of `activate-at-initialization-set`, or of the guide's
-   * `activate-at-initiation-set` (row 7).
-   */
-  readonly atStart: ReadonlySet<string>;
-  readonly braille: Option.Option<BraillePreferences>;
-  /**
-   * `environment`'s `breaks`.
-   */
-  readonly breaks: boolean;
-  /**
-   * Every feature the profile assigns and does not prohibit, by schema name, the features the
-   * contract has no field for (`captions`, `alternative-text`, `item-translation`,
-   * `encouragement`) included.
-   */
-  readonly features: ReadonlySet<string>;
-  /**
-   * The `hazard-avoidance` values: any of the four the schema enumerates (the guide lists two,
-   * row 4), or an `ext:` value.
-   */
-  readonly hazards: ReadonlySet<string>;
-  /**
-   * The elements of the profile that were read past, each as `{namespace}local`: every element in
-   * a namespace that is not a PNP namespace, and every PNP element no feature is named by.
-   */
-  readonly ignored: readonly string[];
-  /**
-   * The `input-requirements` values: the schema's two, the guide's `full-switch-control` and
-   * `full-touchscreen-control` (row 5), or an `ext:` value.
-   */
-  readonly inputRequirements: ReadonlySet<string>;
-  readonly invertedColors: Option.Option<PolarityColors>;
-  /**
-   * The `xml:lang` of `item-translation`, `keyword-translation` and `sign-language`, by feature.
-   * `language-of-interface` goes to `display.languageOfInterface`.
-   */
-  readonly languages: ReadonlyMap<string, string>;
-  /**
-   * Whether `long-description` is shown rather than hidden visually: the negation of its
-   * `hide-visually`, which defaults to true.
-   */
-  readonly longDescriptionVisible: boolean;
-  /**
-   * The features of `activate-as-option-set`.
-   */
-  readonly optional: ReadonlySet<string>;
-  /**
-   * The features of `prohibit-set`.
-   */
-  readonly prohibited: ReadonlySet<string>;
-  readonly spoken: Option.Option<SpokenPreferences>;
-  readonly text: Option.Option<TextPreferences>;
-  readonly toolSettings: ToolSettings;
-}
-
-/**
  * The namespaces a PNP element may be in: the schema's, the guide's two (row 3), and none.
  */
 const pnpNamespaces: ReadonlySet<string> = new Set([
@@ -258,52 +115,10 @@ const valueSpellings: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * The feature elements a profile may hold, by schema name, the three sets excluded. An `ext:`
- * value anywhere is any `ext:` followed by one or more non-space characters (row 2), so no value
- * is filtered by the schema's pattern.
+ * The contract's {@link pnpFeatures}, for lookup. An `ext:` value anywhere is any `ext:` followed
+ * by one or more non-space characters (row 2), so no value is filtered by the schema's pattern.
  */
-const featureNames: ReadonlySet<string> = new Set([
-  "additional-directions",
-  "additional-testing-time",
-  "alternative-text",
-  "answer-masking",
-  "audio-description",
-  "braille",
-  "calculator-on-screen",
-  "captions",
-  "dictionary-on-screen",
-  "encouragement",
-  "environment",
-  "glossary-on-screen",
-  "hazard-avoidance",
-  "high-contrast",
-  "homophone-checker-on-screen",
-  "input-requirements",
-  "invert-display-polarity",
-  "item-translation",
-  "keyboard-directions",
-  "keyword-emphasis",
-  "keyword-translation",
-  "language-of-interface",
-  "layout-single-column",
-  "line-reader",
-  "linguistic-guidance",
-  "long-description",
-  "magnification",
-  "note-taking-on-screen",
-  "outliner-on-screen",
-  "peer-interaction-on-screen",
-  "sign-language",
-  "simplified-graphics",
-  "simplified-language-portions",
-  "spell-checker-on-screen",
-  "spoken",
-  "tactile",
-  "text-appearance",
-  "thesaurus-on-screen",
-  "transcript",
-  "visual-organizer-on-screen",
-]);
+const featureNames: ReadonlySet<string> = new Set(pnpFeatures);
 
 /**
  * The three sets' schema names, each with the field of {@link PnpSupports} it fills.
@@ -313,15 +128,6 @@ const setNames: ReadonlyMap<string, "atStart" | "optional" | "prohibited"> = new
   ["activate-at-initialization-set", "atStart"],
   ["prohibit-set", "prohibited"],
 ]);
-
-/**
- * The features whose `xml:lang` {@link PnpSupports.languages} keeps.
- */
-const languageFeatures: readonly string[] = [
-  "item-translation",
-  "keyword-translation",
-  "sign-language",
-];
 
 /**
  * A `font-size` under this value is a factor; any other is points.
@@ -370,6 +176,61 @@ const schemaValue = (value: string): string => {
 
   return valueSpellings.get(trimmed) ?? trimmed;
 };
+
+/**
+ * Decide whether a schema name names a PNP feature.
+ *
+ * @param name The schema name.
+ * @returns Whether it is one of {@link pnpFeatures}.
+ */
+const isFeature = (name: string): name is PnpFeature => featureNames.has(name);
+
+/**
+ * Read a value as one of a vocabulary's values.
+ *
+ * @param values The vocabulary.
+ * @param value The value, in the schema's spelling.
+ * @returns The vocabulary's value, none for a value outside it.
+ */
+const memberOf = <Value extends number | string>(
+  values: readonly Value[],
+  value: number | string,
+): Option.Option<Value> => Option.fromNullishOr(values.find((member) => member === value));
+
+/**
+ * Decide whether a value is an `ext:` extension: `ext:` followed by one or more non-space
+ * characters (row 2).
+ *
+ * @param value The value.
+ * @returns Whether it is one.
+ */
+const isExtension = (value: string): value is PnpExtension => /^ext:\S+$/u.test(value);
+
+/**
+ * Read a value as one of a vocabulary's values or an `ext:` extension of it.
+ *
+ * @param values The vocabulary.
+ * @param value The value, in the schema's spelling.
+ * @returns The value, none for one that is neither.
+ */
+const extensibleOf = <Value extends string>(
+  values: readonly Value[],
+  value: string,
+): Option.Option<PnpExtension | Value> =>
+  isExtension(value) ? Option.some(value) : memberOf(values, value);
+
+/**
+ * Read values as a set of a vocabulary's values and `ext:` extensions.
+ *
+ * @param values The vocabulary.
+ * @param texts The values, in the schema's spelling.
+ * @returns The values that are one or the other.
+ */
+const extensibleSet = <Value extends string>(
+  values: readonly Value[],
+  texts: Iterable<string>,
+): ReadonlySet<PnpExtension | Value> =>
+  new Set([...texts].flatMap((text) => Option.toArray(extensibleOf(values, text))));
 
 /**
  * List an element's PNP element children.
@@ -516,7 +377,7 @@ const childNumber = (element: SourceElement, name: string): Option.Option<number
  * most features, several for `hazard-avoidance`, `input-requirements` and `language-of-interface`
  * (read as 0..* whatever the schema says of each, so a document that repeats one still reads).
  */
-type Assigned = ReadonlyMap<string, readonly SourceElement[]>;
+type Assigned = ReadonlyMap<PnpFeature, readonly SourceElement[]>;
 
 /**
  * What one pass over a profile's children finds: the features, the three sets, and the names
@@ -525,7 +386,7 @@ type Assigned = ReadonlyMap<string, readonly SourceElement[]>;
 interface Scan {
   readonly assigned: Assigned;
   readonly ignored: readonly string[];
-  readonly sets: Readonly<Record<"atStart" | "optional" | "prohibited", ReadonlySet<string>>>;
+  readonly sets: Readonly<Record<"atStart" | "optional" | "prohibited", ReadonlySet<PnpFeature>>>;
 }
 
 /**
@@ -535,12 +396,12 @@ interface Scan {
  * @returns What it holds.
  */
 const scan = (pnp: SourceElement): Scan => {
-  const assigned = new Map<string, SourceElement[]>();
+  const assigned = new Map<PnpFeature, SourceElement[]>();
   const ignored: string[] = [];
   const sets = {
-    atStart: new Set<string>(),
-    optional: new Set<string>(),
-    prohibited: new Set<string>(),
+    atStart: new Set<PnpFeature>(),
+    optional: new Set<PnpFeature>(),
+    prohibited: new Set<PnpFeature>(),
   };
 
   for (const child of pnp.children) {
@@ -554,10 +415,10 @@ const scan = (pnp: SourceElement): Scan => {
     if (!isPnp(child)) {
       ignored.push(fullName(child));
     } else if (set !== undefined) {
-      for (const member of pnpChildren(child)) {
-        sets[set].add(schemaName(member));
+      for (const member of pnpChildren(child).map(schemaName).filter(isFeature)) {
+        sets[set].add(member);
       }
-    } else if (featureNames.has(name)) {
+    } else if (isFeature(name)) {
       assigned.set(name, [...(assigned.get(name) ?? []), child]);
     } else {
       ignored.push(fullName(child));
@@ -599,11 +460,23 @@ const additionalTestingTimeOf = (element: SourceElement): Supports["additionalTe
  * @returns The preferences.
  */
 const brailleOf = (element: SourceElement): BraillePreferences => ({
-  brailleType: childText(element, "braille-type"),
-  deliveryMode: Option.getOrElse(childText(element, "delivery-mode"), () => "refreshable"),
-  grade: Option.getOrElse(childNumber(element, "grade"), () => 2),
+  brailleType: Option.flatMap(childText(element, "braille-type"), (value) =>
+    extensibleOf(brailleTypes, value),
+  ),
+  deliveryMode: Option.getOrElse(
+    Option.flatMap(childText(element, "delivery-mode"), (value) =>
+      extensibleOf(brailleDeliveryModes, value),
+    ),
+    () => "refreshable",
+  ),
+  grade: Option.getOrElse(
+    Option.flatMap(childNumber(element, "grade"), (value) => memberOf(brailleGrades, value)),
+    () => 2,
+  ),
   language: langOf(element),
-  mathType: childText(element, "math-type"),
+  mathType: Option.flatMap(childText(element, "math-type"), (value) =>
+    extensibleOf(mathTypes, value),
+  ),
 });
 
 /**
@@ -614,14 +487,18 @@ const brailleOf = (element: SourceElement): BraillePreferences => ({
  * @returns The preferences.
  */
 const spokenOf = (element: SourceElement): SpokenPreferences => ({
-  linkIndication: childText(element, "link-indication"),
+  linkIndication: Option.flatMap(childText(element, "link-indication"), (value) =>
+    memberOf(linkIndications, value),
+  ),
   pitch: Option.getOrElse(childNumber(element, "pitch"), () => 0.5),
   readingType: Option.contains(childText(element, "reading-type"), "computer-read-aloud")
     ? "computer-read-aloud"
     : "screen-reader",
-  restrictions: childTexts(element, "restriction-type"),
+  restrictions: extensibleSet(restrictionTypes, childTexts(element, "restriction-type")),
   speechRate: Option.getOrElse(childNumber(element, "speech-rate"), () => 180),
-  typingEcho: childText(element, "typing-echo"),
+  typingEcho: Option.flatMap(childText(element, "typing-echo"), (value) =>
+    memberOf(typingEchoes, value),
+  ),
   volume: Option.getOrElse(childNumber(element, "volume"), () => 0.5),
 });
 
@@ -644,7 +521,10 @@ const textPreferencesOf = (element: SourceElement): TextPreferences => {
       kind: value < fontSizeFactorLimit ? "factor" : "points",
       value,
     })),
-    genericFontFace: fontFace.pipe(Option.flatMap((face) => childText(face, "generic-font-face"))),
+    genericFontFace: fontFace.pipe(
+      Option.flatMap((face) => childText(face, "generic-font-face")),
+      Option.flatMap((value) => memberOf(genericFontFaces, value)),
+    ),
     letterSpacing: childNumber(element, "letter-spacing"),
     lineHeight: childNumber(element, "line-height"),
     lineSpacing: childNumber(element, "line-spacing"),
@@ -678,9 +558,9 @@ const magnificationOf = (element: SourceElement): Option.Option<number> =>
  */
 const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
   const features = new Set([...assigned.keys()].filter((name) => !sets.prohibited.has(name)));
-  const elementsOf = (name: string): readonly SourceElement[] =>
+  const elementsOf = (name: PnpFeature): readonly SourceElement[] =>
     features.has(name) ? (assigned.get(name) ?? []) : [];
-  const firstOf = (name: string): Option.Option<SourceElement> =>
+  const firstOf = (name: PnpFeature): Option.Option<SourceElement> =>
     Option.fromNullishOr(elementsOf(name)[0]);
   const textAppearance = firstOf("text-appearance");
   const display: DisplayPreferences = {
@@ -720,23 +600,18 @@ const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
     ),
     display,
     features,
-    hazards: new Set(
-      elementsOf("hazard-avoidance")
-        .map(textOf)
-        .filter((value) => value !== ""),
-    ),
+    hazards: extensibleSet(hazardAvoidances, elementsOf("hazard-avoidance").map(textOf)),
     ignored,
-    inputRequirements: new Set(
-      elementsOf("input-requirements")
-        .map(textOf)
-        .filter((value) => value !== ""),
+    inputRequirements: extensibleSet(
+      inputRequirementValues,
+      elementsOf("input-requirements").map(textOf),
     ),
     invertedColors: Option.map(firstOf("invert-display-polarity"), (element) => ({
       background: attributeOf(element, "background"),
       foreground: attributeOf(element, "foreground"),
     })),
     languages: new Map(
-      languageFeatures.flatMap((name): readonly (readonly [string, string])[] =>
+      languageFeatures.flatMap((name): readonly (readonly [LanguageFeature, string])[] =>
         Option.match(Option.flatMap(firstOf(name), langOf), {
           onNone: () => [],
           onSome: (lang) => [[name, lang]],
@@ -757,7 +632,9 @@ const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
     text: textAppearance.pipe(Option.map(textPreferencesOf)),
     toolSettings: {
       calculatorType: Option.flatMap(firstOf("calculator-on-screen"), (element) =>
-        attributeOf(element, "calculator-type"),
+        Option.flatMap(attributeOf(element, "calculator-type"), (value) =>
+          extensibleOf(calculatorTypes, value),
+        ),
       ),
       highlightColor: Option.flatMap(firstOf("line-reader"), (element) =>
         attributeOf(element, "highlight-color"),
@@ -933,8 +810,10 @@ const profileOf = (
  * counterparts (rows 6 to 9, 12); a `font-size` under 4 is a factor, otherwise points (row 10);
  * `letter-spacing` is pixels (row 11). A feature assigned and in no set is active; `prohibit-set`
  * wins over an assignment. An element in another namespace is ignored and counted. Nothing is
- * validated against the XSD. A field the PNP does not set takes `noSupports`' value, and the
- * result satisfies `SupportsSchema`.
+ * validated against the XSD, but a value outside its vocabulary (neither one of the contract's
+ * values nor an `ext:` extension where the vocabulary takes one), and a set member that names no
+ * feature, reads as absent, so the result keeps the contract's types. A field the PNP does not set
+ * takes `noPnpSupports`' value, and the result satisfies `PnpSupportsSchema`.
  *
  * In a bulk file, the record is chosen by `personSourcedId` and `appointmentId` (either or both);
  * with neither, a file of one record reads that record, and one of several fails.

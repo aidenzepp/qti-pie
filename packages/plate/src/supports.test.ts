@@ -1,12 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result, Schema } from "effect";
-import { SupportsSchema } from "#plate/codec/supports.ts";
+import { PnpSupportsSchema, SupportsSchema } from "#plate/codec/supports.ts";
 import { configure } from "#plate/configuration.ts";
 import { attr, doc, el, mathmlNamespace, text } from "#plate/document/source.ts";
 import { buildItem } from "#plate/model/item.ts";
 import { redact, render } from "#plate/render.ts";
-import { catalogSupports, noSupports, toolPreferences } from "#plate/supports.ts";
-import type { Supports } from "#plate/supports.ts";
+import { catalogSupports, noPnpSupports, noSupports, toolPreferences } from "#plate/supports.ts";
+import type { PnpSupports, Supports } from "#plate/supports.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
 
 /**
@@ -31,6 +31,57 @@ const everySupport: Supports = {
   readAloud: Option.some("computer-read-aloud"),
   suppressTts: true,
   tools: new Set(toolPreferences),
+};
+
+/**
+ * A PNP supports value with every PNP-only field set: {@link everySupport} widened with each
+ * preference a PNP gives beyond the contract, an `ext:` value in every extensible vocabulary.
+ */
+const everyPnpSupport: PnpSupports = {
+  ...everySupport,
+  atStart: new Set(["spoken"]),
+  braille: Option.some({
+    brailleType: Option.some("ext:sample-braille"),
+    deliveryMode: "embossed",
+    grade: 1,
+    language: Option.some("en"),
+    mathType: Option.some("nemeth"),
+  }),
+  breaks: true,
+  features: new Set(["captions", "encouragement", "spoken"]),
+  hazards: new Set(["flashing", "ext:sample-hazard"]),
+  ignored: ["{urn:example:notes}note"],
+  inputRequirements: new Set(["full-switch-control"]),
+  invertedColors: Option.some({ background: Option.some("#000000"), foreground: Option.none() }),
+  languages: new Map([["sign-language", "ase"]]),
+  longDescriptionVisible: true,
+  optional: new Set(["calculator-on-screen"]),
+  prohibited: new Set(["captions"]),
+  spoken: Option.some({
+    linkIndication: Option.some("speak-link"),
+    pitch: 0.4,
+    readingType: "computer-read-aloud",
+    restrictions: new Set(["skip-chemistry-equations", "ext:sample-restriction"]),
+    speechRate: 160,
+    typingEcho: Option.some("words"),
+    volume: 0.8,
+  }),
+  text: Option.some({
+    colorTheme: Option.some("yellow-blue"),
+    fontNames: ["Plate Sans"],
+    fontSize: Option.some({ kind: "factor", value: 1.6 }),
+    genericFontFace: Option.some("sans serif"),
+    letterSpacing: Option.some(2),
+    lineHeight: Option.none(),
+    lineSpacing: Option.some(1.5),
+    uniformFontSizing: true,
+    wordSpacing: Option.none(),
+    wordWrapping: false,
+  }),
+  toolSettings: {
+    calculatorType: Option.some("graphing"),
+    highlightColor: Option.some("#ffff00"),
+  },
 };
 
 describe("noSupports", () => {
@@ -81,6 +132,38 @@ describe("SupportsSchema", () => {
         }),
       ),
     );
+  });
+});
+
+describe("PnpSupportsSchema", () => {
+  it("decodes noPnpSupports and a value with every PNP field set, as given", () => {
+    const decode = Schema.decodeUnknownResult(PnpSupportsSchema);
+
+    assert.deepStrictEqual(decode(noPnpSupports), Result.succeed(noPnpSupports));
+    assert.deepStrictEqual(decode(everyPnpSupport), Result.succeed(everyPnpSupport));
+  });
+
+  it("refuses a misspelt hazard, a feature outside the PNP's names, and a bare `ext:`", () => {
+    const decode = Schema.decodeUnknownResult(PnpSupportsSchema);
+
+    assert.isTrue(Result.isFailure(decode({ ...everyPnpSupport, hazards: new Set(["flasing"]) })));
+    assert.isTrue(
+      Result.isFailure(decode({ ...everyPnpSupport, features: new Set(["spell-checker"]) })),
+    );
+    assert.isTrue(Result.isFailure(decode({ ...everyPnpSupport, hazards: new Set(["ext:"]) })));
+  });
+
+  it("holds noSupports' contract fields and every PNP preference off", () => {
+    const { atStart, braille, breaks, features, hazards, ignored, inputRequirements } =
+      noPnpSupports;
+
+    assert.deepStrictEqual(Schema.decodeUnknownSync(SupportsSchema)(noPnpSupports), noSupports);
+    assert.deepStrictEqual(
+      [atStart.size, features.size, hazards.size, ignored.length, inputRequirements.size],
+      [0, 0, 0, 0, 0],
+    );
+    assert.isTrue(Option.isNone(braille));
+    assert.isFalse(breaks);
   });
 });
 
