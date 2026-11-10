@@ -47,6 +47,18 @@ export const hasLease = Option.isSome(settings.leaseDatabase);
 export const leaseTestTimeoutMs = 49_000;
 
 /**
+ * The timeout, in milliseconds, for the export's page-size test
+ * (`#pantry/export/package.db.test.ts`), which exports every accepted package three times: whole,
+ * then in pages of 1 and of 7 `Node` rows, so one `documentScan.page` call per row at size 1.
+ *
+ * Measured at qti-pie 5a61bc92 on grizzle b927d999, alone on a quiet cluster, 2026-11-09:
+ * 211,019 ms. Under the served workload each page is its own call, against about 24 s for the
+ * whole export round trip before it. The value is twice the measurement, rounded up to the next
+ * 1,000, the rule `leaseTestTimeoutMs` uses. Raise it only on a new measurement recorded here.
+ */
+export const exportPageSizesTestTimeoutMs = 423_000;
+
+/**
  * The timeout, in milliseconds, for the `layer` hook that builds a probe of the author login
  * (`#pantry/test/served-members.ts` `servedProbe`). grizzle's `compileServed` compiles the login's
  * workloads with the probe's members in process, the compile `grizzle generate` runs, so the hook

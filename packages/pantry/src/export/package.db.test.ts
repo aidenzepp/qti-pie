@@ -38,7 +38,11 @@ import { importPackage } from "#pantry/import/package.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
-import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import {
+  exportPageSizesTestTimeoutMs,
+  hasLease,
+  leaseTestTimeoutMs,
+} from "#pantry/test/settings.ts";
 import { AuthorLogin } from "#pantry/db/served.ts";
 import { explainMember } from "@bjornpagen/grizzle/compile";
 
@@ -208,19 +212,22 @@ describe.skipIf(!hasLease)(
             }),
         );
 
-        it.effect("writes the same bytes whatever size its scan's pages are", () =>
-          Effect.gen(function* everyPageSize() {
-            for (const { id, name } of yield* Imported) {
-              const whole = yield* exportEntries(id);
-              for (const size of [1, 7]) {
-                assert.deepStrictEqual(
-                  yield* exportEntries(id, size),
-                  whole,
-                  `${name} at ${String(size)}`,
-                );
+        it.effect(
+          "writes the same bytes whatever size its scan's pages are",
+          () =>
+            Effect.gen(function* everyPageSize() {
+              for (const { id, name } of yield* Imported) {
+                const whole = yield* exportEntries(id);
+                for (const size of [1, 7]) {
+                  assert.deepStrictEqual(
+                    yield* exportEntries(id, size),
+                    whole,
+                    `${name} at ${String(size)}`,
+                  );
+                }
               }
-            }
-          }),
+            }),
+          exportPageSizesTestTimeoutMs,
         );
 
         it.effect(
