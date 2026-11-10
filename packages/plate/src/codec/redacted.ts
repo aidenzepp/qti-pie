@@ -185,6 +185,14 @@ interface UnsupportedJson {
 type ModuleJson = ReturnType<Modules[ModuleKind]["payloadSchema"]>["Encoded"];
 
 /**
+ * The codec of one body-placed content module's node, read from the module's own `payloadSchema`
+ * by its element, so each member of the body's union is typed by its module alone.
+ *
+ * @template E The module's element.
+ */
+type ContentCodecOf<E extends keyof BodyModules> = ReturnType<BodyModules[E]["payloadSchema"]>;
+
+/**
  * The node of a body-placed content element, in the JSON form: the module's element, the kind and
  * the encoded side of the module's `payloadSchema`, one member per module, read from the modules,
  * so a module that lands needs no line here; a stub's node is `never`, so no form holds one.
@@ -194,7 +202,7 @@ type ModuleJson = ReturnType<Modules[ModuleKind]["payloadSchema"]>["Encoded"];
 interface ContentJsonOf<E extends keyof BodyModules> {
   readonly element: E;
   readonly kind: "content";
-  readonly node: ReturnType<BodyModules[E]["payloadSchema"]>["Encoded"];
+  readonly node: ContentCodecOf<E>["Encoded"];
 }
 
 /**
@@ -462,13 +470,22 @@ const unimplementedContent = (stub: { readonly element: string }): Schema.Codec<
  * The member of {@link BodyNodeSchema} for one body-placed content module's element: the element,
  * the kind `content`, the node through the module's `payloadSchema`, and no path ({@link NoPath}).
  *
+ * The node's codec is typed by the module's element, {@link ContentCodecOf}, not by what a call on
+ * `BodyModules[E]["payloadSchema"]` resolves to: TypeScript resolves a call on a generic indexed
+ * access against its constraint, the union of every module's `payloadSchema`, which would type
+ * every member's node as the union of every module's codec and leak one module's node types into
+ * the others' members; with the codec named by `E`, a module that lands types its own member alone.
+ *
  * @template E The module's element.
  * @param module The module, by its element and its `payloadSchema`.
  * @param schemaKit The kit the module's `payloadSchema` is handed.
  * @returns The member.
  */
 const contentMember = <E extends keyof BodyModules>(
-  module: BodyModules[E] & { readonly element: E },
+  module: {
+    readonly element: E;
+    readonly payloadSchema: (schemaKit: SchemaKit) => ContentCodecOf<E>;
+  },
   schemaKit: SchemaKit,
 ) =>
   Schema.Struct({
