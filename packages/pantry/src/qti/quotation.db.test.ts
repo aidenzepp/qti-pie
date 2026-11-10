@@ -23,7 +23,7 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
-import { Author, AuthorApp } from "#pantry/test/qti.ts";
+import { Author, AuthorApp } from "#pantry/test/author.ts";
 import { Quotation, quotationMarks } from "#pantry/qti/quotation.ts";
 import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
 import type { TextEdit } from "#pantry/test/fixtures.ts";

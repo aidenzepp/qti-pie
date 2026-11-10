@@ -35,7 +35,7 @@ import {
   Pi,
   SdDecl,
 } from "#pantry/qti/chardata.ts";
-import { Author, AuthorApp } from "#pantry/test/qti.ts";
+import { Author, AuthorApp } from "#pantry/test/author.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {

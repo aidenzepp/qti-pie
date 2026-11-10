@@ -38,7 +38,7 @@ import {
   settleCommitUnknown,
 } from "#pantry/import/package.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
-import { Author, AuthorApp } from "#pantry/test/qti.ts";
+import { Author, AuthorApp } from "#pantry/test/author.ts";
 import { Package } from "#pantry/qti/package.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
