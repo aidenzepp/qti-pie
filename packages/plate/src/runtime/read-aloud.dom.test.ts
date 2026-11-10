@@ -1059,55 +1059,70 @@ describe(server.browser, () => {
       }),
     );
 
-    it.effect("[A-40c] skip-math-equations passes over the formula in silence", () =>
-      Effect.gen(function* skipsMath() {
-        const html = yield* renderedSpoken;
+    /*
+     * Section 5's rows for the formula and the instructions rubric read SSR output, which the base
+     * cannot write: m3e-05 (MathML) and m3e-01 (Rubric Block) are not on renderer/m5/main, so they
+     * wait as todos, and the rows after them prove the same engine rules on spliced markup.
+     */
+    it.todo(
+      "[A-40c] skip-math-equations passes over the formula in silence (todo: needs m3e-05 MathML on renderer/m5/main)",
+    );
 
-        for (const restriction of ["skip-math-equations", "skip-chemistry-equations"] as const) {
-          const attached = attach(html, preferences({ restrictions: new Set([restriction]) }));
+    it.todo(
+      "[A-40c] directions-only reads only prompts and instruction rubrics (todo: needs m3e-01 Rubric Block on renderer/m5/main)",
+    );
 
-          insertAfterSecond(attached.root, formula);
-          attached.controller.play();
+    it.effect(
+      "[A-40c] skip-math and skip-chemistry equations pass over a spliced math element in silence",
+      () =>
+        Effect.gen(function* skipsMath() {
+          const html = yield* renderedSpoken;
 
-          const texts = attached.fake.texts();
+          for (const restriction of ["skip-math-equations", "skip-chemistry-equations"] as const) {
+            const attached = attach(html, preferences({ restrictions: new Set([restriction]) }));
 
-          assert.deepStrictEqual(
-            texts,
-            [
-              "Read the ",
-              "style guide",
-              " before you write.",
-              "The ",
-              "quick",
-              " answer is best.",
-              "Solve ",
-              " now.",
-              "Your name: ",
-              "Describe your day in two sentences.",
-            ],
-            restriction,
-          );
+            insertAfterSecond(attached.root, formula);
+            attached.controller.play();
 
-          for (const piece of ["x", "+", "1"]) {
-            assert.notInclude(texts, piece, restriction);
+            const texts = attached.fake.texts();
+
+            assert.deepStrictEqual(
+              texts,
+              [
+                "Read the ",
+                "style guide",
+                " before you write.",
+                "The ",
+                "quick",
+                " answer is best.",
+                "Solve ",
+                " now.",
+                "Your name: ",
+                "Describe your day in two sentences.",
+              ],
+              restriction,
+            );
+
+            for (const piece of ["x", "+", "1"]) {
+              assert.notInclude(texts, piece, restriction);
+            }
+
+            detach(attached);
           }
 
-          detach(attached);
-        }
+          const unrestricted = attach(html, preferences());
 
-        const unrestricted = attach(html, preferences());
-
-        insertAfterSecond(unrestricted.root, formula);
-        unrestricted.controller.play();
-        assert.deepStrictEqual(unrestricted.fake.texts().slice(6, 11), [
-          "Solve ",
-          "x",
-          "+",
-          "1",
-          " now.",
-        ]);
-        detach(unrestricted);
-      }),
+          insertAfterSecond(unrestricted.root, formula);
+          unrestricted.controller.play();
+          assert.deepStrictEqual(unrestricted.fake.texts().slice(6, 11), [
+            "Solve ",
+            "x",
+            "+",
+            "1",
+            " now.",
+          ]);
+          detach(unrestricted);
+        }),
     );
 
     it.effect("[A-40c] word-by-word reads only the chosen word", () =>
@@ -1158,22 +1173,38 @@ describe(server.browser, () => {
       }),
     );
 
-    it.effect("[A-40c] directions-only reads only prompts and instruction rubrics", () =>
-      Effect.gen(function* directionsOnly() {
+    it.effect("[A-40c] directions-only reads only the prompt of the rendered item", () =>
+      Effect.gen(function* directionsOnlyRendered() {
         const attached = attach(
           yield* renderedSpoken,
           preferences({ restrictions: new Set(["directions-only"]) }),
         );
 
-        insertFirst(attached.root, rubrics);
         attached.controller.play();
 
-        assert.deepStrictEqual(attached.fake.texts(), [
-          "Answer in one line.",
-          "Describe your day in two sentences.",
-        ]);
+        assert.deepStrictEqual(attached.fake.texts(), ["Describe your day in two sentences."]);
         detach(attached);
       }),
+    );
+
+    it.effect(
+      "[A-40c] directions-only reads a spliced instructions rubric and the prompt, not a navigation rubric",
+      () =>
+        Effect.gen(function* directionsOnly() {
+          const attached = attach(
+            yield* renderedSpoken,
+            preferences({ restrictions: new Set(["directions-only"]) }),
+          );
+
+          insertFirst(attached.root, rubrics);
+          attached.controller.play();
+
+          assert.deepStrictEqual(attached.fake.texts(), [
+            "Answer in one line.",
+            "Describe your day in two sentences.",
+          ]);
+          detach(attached);
+        }),
     );
 
     it.effect("[A-40c] unrestricted, and an ext: restriction, read the whole item", () =>
@@ -1197,7 +1228,7 @@ describe(server.browser, () => {
     );
 
     it.effect(
-      "[A-40c] restrictions combine: word-by-word inside the passed-over formula reads nothing",
+      "[A-40c] restrictions combine: word-by-word with a spliced formula passed over, and with directions-only",
       () =>
         Effect.gen(function* combine() {
           const html = yield* renderedSpoken;
