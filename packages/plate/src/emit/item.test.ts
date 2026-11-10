@@ -36,6 +36,7 @@ const instance = "i1";
 const payloadOf = (finished: boolean, mode: RenderMode = "answering"): Payload => ({
   body: [],
   credit: Option.none(),
+  document: "items/colours.xml",
   finished,
   instance,
   lang: "en-GB",
@@ -65,7 +66,7 @@ const renders: readonly Payload[] = [
  */
 const stateWith = (overrides?: PartOverrides): Effect.Effect<EmitState> =>
   Effect.map(Effect.orDie(Effect.fromResult(resolveOverrides(overrides))), (parts) => ({
-    assetBase: "",
+    assets: new Map(),
     headingLevel: 2,
     locale: "en",
     parts,

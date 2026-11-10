@@ -6,13 +6,22 @@
  * strips spaces, tabs, newlines and control characters before it reads a scheme: `java\tscript:`
  * is a `javascript:` URL. A kept value is written back in its parsed form, never as written, so
  * the browser reads exactly what was checked. `check` applies {@link classifyUrl} to every
- * attribute {@link urlAttributes} lists, and the body emitter rebases kept values with
- * {@link formatUrl}; neither lists URL attributes of its own.
+ * attribute {@link urlAttributes} lists, and the body emitter writes kept values with
+ * {@link addressUrl}, each package path as the address the configuration's `assets` gives its file;
+ * neither lists URL attributes of its own.
+ *
+ * A package path is resolved against the item's own location, the path from the package root the
+ * host named the item by, so `media/a.png` in `items/q1.xml` names the file `items/media/a.png`
+ * ({@link assetReferenceOf}). Its address comes from `assets` alone, never from the page's base:
+ * a file with no address has no URL plate writes, so `render` fails rather than write the path
+ * relative to the page.
  *
  * @module
  * @see https://url.spec.whatwg.org/#concept-basic-url-parser
  */
-import { Option } from "effect";
+import { Option, Result } from "effect";
+import type { Brand } from "effect";
+import { appendSegments, decodeSegment } from "#plate/document/href.ts";
 
 /**
  * How a URL attribute is used, which decides what it admits.
@@ -115,8 +124,8 @@ export interface PackageUrl {
    * same place against any directory: when the bare path would read as a scheme, a host, an
    * absolute path or a fragment (`javascript:x`, `//evil.com/x`, `#q1`), it starts with `./`, and
    * the item's directory itself is `./`, never the empty value {@link classifyUrl} drops. The
-   * prefix is load-bearing: the default asset base is `""`, so the path can reach the page as the
-   * whole attribute value.
+   * prefix is load-bearing: `check` writes the path as the whole attribute value the item holds,
+   * and the emitter classifies that value again, so it must read back as the same package path.
    */
   readonly path: string;
 }
@@ -481,31 +490,97 @@ const validDescriptors = (descriptors: readonly string[]): boolean => {
 };
 
 /**
- * Write a kept URL as the attribute value, rebasing a package path onto the asset base.
+ * A file's path from the package root, as the configuration's `assets` keys the file's address:
+ * its segments joined by `/`, each the file's name as the package holds it (`items/media/a b.png`),
+ * the first not empty and none `.` or `..`.
  *
- * `check` writes each kept value with no base, so the item holds the parsed form; the body
- * emitter classifies that value again, which gives the same classification, and writes it with
- * the asset base. A fragment is written as `#<fragment>`; the emitter rewrites it to its scoped id
- * itself.
+ * It is the form an item's location takes, the path from the package root the host names the item
+ * by when it opens it (`open`'s and `openAdmitted`'s `location`), and the form
+ * {@link assetReferenceOf} resolves a package path to. The brand exists only in the type, so this
+ * browser module loads no `Brand` at run time: {@link isPackagePath} narrows a text to it, and the
+ * configuration's Schema brands each key of `assets` through that check.
+ */
+export type PackagePath = Brand.Branded<string, "PackagePath">;
+
+/**
+ * Report whether a text is a {@link PackagePath}: not empty, not starting with `/`, and holding no
+ * `.` or `..` segment.
+ *
+ * @param text The text.
+ * @returns Whether it names a file from the package root.
+ */
+export const isPackagePath = (text: string): text is PackagePath => {
+  const segments = text.split("/");
+
+  return segments[0] !== "" && segments.every((segment) => segment !== "." && segment !== "..");
+};
+
+/**
+ * A package path resolved against the item's own location: the file it names, and what is written
+ * after the file's address.
+ */
+export interface AssetReference {
+  /**
+   * The URL's query and fragment in their parsed form, from its first `?` or `#`, empty when it
+   * has neither. Only the path names a file, so they follow the file's address as written, and a
+   * media fragment such as `#t=10` still selects within the file.
+   */
+  readonly params: string;
+  /**
+   * The file's path from the package root: the directory of the item's location, then the URL's
+   * segments, each percent-decoded. It is a {@link PackagePath} whenever the location is one.
+   */
+  readonly path: string;
+}
+
+/**
+ * Resolve a kept package URL against the item's location, as RFC 3986 section 5.2 merges a
+ * relative path with its base's directory: the item's directory, then the URL's segments, each
+ * percent-decoded to the name the package holds, as `#plate/document/href.ts` names a package's
+ * documents ({@link decodeSegment}, which leaves a segment with a malformed escape as written).
+ *
+ * {@link classifyUrl} keeps only a path at or below the item's directory, with its dot segments
+ * removed, so the merge never climbs: `media/a%20b.png` in `items/q1.xml` names `items/media/a
+ * b.png`, and a leading `./` names the directory itself. The location's own segments are taken as
+ * written.
+ *
+ * @param location The item's location, its path from the package root.
+ * @param url The kept package path.
+ * @returns The file it names and its query and fragment.
+ * @see https://www.rfc-editor.org/rfc/rfc3986#section-5.2
+ */
+export const assetReferenceOf = (location: string, url: PackageUrl): AssetReference => {
+  const at = url.path.search(/[?#]/u);
+  const written = at === -1 ? url.path : url.path.slice(0, at);
+  const { segments } = appendSegments(
+    location.split("/").slice(0, -1),
+    written.split("/"),
+    decodeSegment,
+  );
+
+  return { params: at === -1 ? "" : url.path.slice(at), path: segments.join("/") };
+};
+
+/**
+ * Write a kept URL in its parsed form, the value `check` writes into the item: a package path as
+ * its path below the item's directory, a remote URL as its href, a fragment as `#<fragment>`, and
+ * a `srcset` as its candidates.
+ *
+ * The body emitter classifies that value again, which gives the same classification, and writes
+ * it to the page with {@link addressUrl}.
  *
  * @param url The kept value.
- * @param assetBase The prefix for package paths: `""` keeps them relative to the page, and a
- *   directory URL places them under it. A base without its closing `/` gets one, so an
- *   authority-only base (`https://cdn.example`) cannot read a path such as `@evil.com/x` or
- *   `:8080/x` as another host or port.
  * @returns The attribute value. A `srcset` is its candidates, each URL written the same way and
  *   followed by its descriptors, joined by `, `.
  */
-export const formatUrl = (url: KeptUrl, assetBase = ""): string => {
+export const formatUrl = (url: KeptUrl): string => {
   switch (url.kind) {
     case "fragment": {
       return `#${url.fragment}`;
     }
 
     case "package": {
-      const directory = assetBase === "" || assetBase.endsWith("/") ? assetBase : `${assetBase}/`;
-
-      return `${directory}${url.path}`;
+      return url.path;
     }
 
     case "remote": {
@@ -514,10 +589,64 @@ export const formatUrl = (url: KeptUrl, assetBase = ""): string => {
 
     case "srcset": {
       return url.candidates
-        .map((candidate) =>
-          [formatUrl(candidate.url, assetBase), ...candidate.descriptors].join(" "),
-        )
+        .map((candidate) => [formatUrl(candidate.url), ...candidate.descriptors].join(" "))
         .join(", ");
+    }
+
+    default: {
+      return url satisfies never;
+    }
+  }
+};
+
+/**
+ * Write a kept URL as the page's attribute value: a package path as the address `assets` gives the
+ * file it names ({@link assetReferenceOf}), followed by its query and fragment; a remote URL as its
+ * href; a fragment as `#<fragment>`, which the emitter rewrites to its scoped id itself; and a
+ * `srcset` candidate by candidate, each followed by its descriptors, joined by `, `.
+ *
+ * No package path is ever written relative to the page: a file `assets` gives no address fails
+ * the write. The configuration holds every address to a URL with no ASCII whitespace that neither
+ * starts nor ends with a comma, so a `srcset` candidate written with one splits back as itself.
+ *
+ * @param url The kept value.
+ * @param location The item's location, its path from the package root.
+ * @param assets The address of each file, by its path from the package root.
+ * @returns The attribute value, or the path of the first file a package path names that `assets`
+ *   gives no address.
+ */
+export const addressUrl = (
+  url: KeptUrl,
+  location: string,
+  assets: ReadonlyMap<PackagePath, string>,
+): Result.Result<string, string> => {
+  switch (url.kind) {
+    case "fragment": {
+      return Result.succeed(`#${url.fragment}`);
+    }
+
+    case "package": {
+      const { params, path } = assetReferenceOf(location, url);
+      const address = isPackagePath(path) ? assets.get(path) : undefined;
+
+      return address === undefined ? Result.fail(path) : Result.succeed(`${address}${params}`);
+    }
+
+    case "remote": {
+      return Result.succeed(url.href);
+    }
+
+    case "srcset": {
+      return Result.map(
+        Result.all(
+          url.candidates.map((candidate) =>
+            Result.map(addressUrl(candidate.url, location, assets), (written) =>
+              [written, ...candidate.descriptors].join(" "),
+            ),
+          ),
+        ),
+        (candidates) => candidates.join(", "),
+      );
     }
 
     default: {
@@ -608,3 +737,66 @@ export const classifyUrl = (context: UrlContext, value: string): ClassifiedUrl =
     }
   }
 };
+
+/**
+ * Give the package paths a classified value keeps: the value itself when it is one, and each of a
+ * `srcset`'s candidates that is one, in order.
+ *
+ * @param url The classification.
+ * @returns The package paths; none for a dropped value, a remote URL and a fragment.
+ */
+const packageUrlsOf = (url: ClassifiedUrl): readonly PackageUrl[] => {
+  switch (url.kind) {
+    case "package": {
+      return [url];
+    }
+
+    case "srcset": {
+      return url.candidates.flatMap((candidate) =>
+        candidate.url.kind === "package" ? [candidate.url] : [],
+      );
+    }
+
+    case "dropped":
+    case "fragment":
+    case "remote": {
+      return [];
+    }
+
+    default: {
+      return url satisfies never;
+    }
+  }
+};
+
+/**
+ * Give the files a URL attribute of an item body names, as `render` looks each up in the
+ * configuration's `assets`: the value classified as `check` classifies it, then each package path
+ * it keeps, a `srcset`'s candidates in order, resolved against the item's location
+ * ({@link assetReferenceOf}).
+ *
+ * A value plate drops, a remote URL, a same-document fragment and an attribute that is no URL
+ * attribute of its element name no file. Pantry's importer resolves the same references to the
+ * `ReferencePath` rows a host builds `assets` from, and a corpus differential in pantry holds the
+ * two resolutions equal, so a file this names is a file those rows name.
+ *
+ * @example
+ *   assetPaths("items/q1.xml", "img", "src", "media/a%20b.png"); // ["items/media/a b.png"]
+ *
+ * @param location The item's location, its path from the package root.
+ * @param element The body element's local name.
+ * @param attribute The attribute's local name.
+ * @param value The attribute's value as written.
+ * @returns Each file's path from the package root, in order; empty when the value names none.
+ */
+export const assetPaths = (
+  location: string,
+  element: string,
+  attribute: string,
+  value: string,
+): readonly string[] =>
+  Option.match(urlContextOf(element, attribute), {
+    onNone: () => [],
+    onSome: (context) =>
+      packageUrlsOf(classifyUrl(context, value)).map((url) => assetReferenceOf(location, url).path),
+  });

@@ -32,6 +32,8 @@ import { keptOnSuccess } from "#plate/dev/listing.ts";
 import { corpusRoot } from "#plate/document/corpus.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
+import { isPackagePath } from "#plate/model/url.ts";
+import type { PackagePath } from "#plate/model/url.ts";
 import { openPackage } from "#plate/package/open.ts";
 import type { PackageResource, PackageTest, PackageVerdict } from "#plate/package/open.ts";
 import { packageFiles } from "#plate/package/store.ts";
@@ -48,8 +50,9 @@ export interface PackageSource {
    */
   readonly id: string;
   /**
-   * The location `openPackage` names it by, which every verdict and accepted document in it
-   * carries: its directory's path under the corpus root, or `fixtures/m2` for the fixture package.
+   * The location `openPackage` names it by, which its verdict, its accepted form and each refusal
+   * of it as a whole carry, while each of its documents is named by its path in it: its
+   * directory's path under the corpus root, or `fixtures/m2` for the fixture package.
    */
   readonly location: string;
   /**
@@ -491,7 +494,7 @@ export const testIn = (entry: PackageEntry, href: string): Option.Option<Package
   const { verdict } = entry;
 
   return verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
-    ? Option.fromUndefinedOr(verdict.accepted.tests.get(`${entry.location}/${href}`))
+    ? Option.fromUndefinedOr(verdict.accepted.tests.get(href))
     : Option.none();
 };
 
@@ -504,21 +507,37 @@ export const testIn = (entry: PackageEntry, href: string): Option.Option<Package
 export const packageHref = (id: string): string => `/packages/${encodeURIComponent(id)}`;
 
 /**
- * Give the asset base of a document in a package: its directory under the package's files route,
- * each segment percent-encoded, with its closing `/`, the base `render` rebases the document's
- * package paths onto so they reach this route.
+ * Give the addresses of a package's files as `render` looks them up: each file the files route
+ * serves, a file of the accepted package's `files` of a type the route serves, keyed by its path
+ * from the package's root and addressed by that path under the files route, each segment
+ * percent-encoded.
  *
- * @param id The package's id.
- * @param document The document's path from the package's root.
- * @returns `/packages/<id>/files/<directory>/`, or `/packages/<id>/files/` for a document at the
- *   root.
+ * `openPackage` names each document by its path from the package's root, and `render` resolves an
+ * item's package URLs against it, so `resources/crows.jpg` in `items/BG011.xml` names
+ * `items/resources/crows.jpg`, the key this gives the file. A package that is not accepted serves
+ * no file, so it gives none.
+ *
+ * @param entry The package.
+ * @returns Each served file's address, by its path from the package's root.
  */
-export const packageAssetBase = (id: string, document: string): string => {
-  const directory = path.posix.dirname(document);
+export const packageAssets = (entry: PackageEntry): ReadonlyMap<PackagePath, string> => {
+  const { verdict } = entry;
+  if (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") {
+    return new Map();
+  }
 
-  return directory === "."
-    ? `${packageHref(id)}/files/`
-    : `${packageHref(id)}/files/${directory.split("/").map(encodeURIComponent).join("/")}/`;
+  return new Map(
+    [...verdict.accepted.files].flatMap((file) =>
+      assetTypes.has(path.posix.extname(file).toLowerCase()) && isPackagePath(file)
+        ? [
+            [
+              file,
+              `${packageHref(entry.id)}/files/${file.split("/").map(encodeURIComponent).join("/")}`,
+            ] as const,
+          ]
+        : [],
+    ),
+  );
 };
 
 /**
@@ -650,9 +669,8 @@ const testsPart = (entry: PackageEntry): readonly Node[] => {
     return [h("p", {}, [text(`No test starts: the package is ${verdict.verdict}.`)])];
   }
 
-  const prefix = `${entry.location}/`;
-  const tests = [...verdict.accepted.tests].map(([location, test]) => ({
-    path: location.startsWith(prefix) ? location.slice(prefix.length) : location,
+  const tests = [...verdict.accepted.tests].map(([testPath, test]) => ({
+    path: testPath,
     title: test.test.test.title,
   }));
   if (tests.length === 0) {

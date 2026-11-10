@@ -33,10 +33,10 @@ import type { Page } from "#plate/dev/frame.ts";
 import type { PackageCache, PackagesFailure } from "#plate/dev/packages.ts";
 import {
   failurePage,
-  itemAssetBase,
   itemOf,
   notePage,
   sessionHref,
+  sittingConfiguration,
   sittingOf,
 } from "#plate/dev/sitting.ts";
 import type { Sitting } from "#plate/dev/sitting.ts";
@@ -216,14 +216,13 @@ const itemPage = (
       );
       const correct = solution(document, view.record);
       const shown: Options = {
-        assetBase: itemAssetBase(sitting, document),
         instance: view.instance,
         mode,
         values: mode === "review" ? view.values : correct,
       };
       const item = yield* render(
         redact(document, view.page, view.configuration),
-        view.configuration,
+        sittingConfiguration(sitting, view.configuration),
         mode === "review" && allowed.success.solution ? { ...shown, solution: correct } : shown,
       );
       const { locale } = view.configuration;

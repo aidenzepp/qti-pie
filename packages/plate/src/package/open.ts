@@ -178,7 +178,7 @@ import type { LtiLink, UnheldRead } from "#plate/model/test.ts";
 import { isLanguageTag, isNcName, trimXmlSpace } from "#plate/model/values.ts";
 import { readManifest, resourceLom } from "#plate/package/manifest.ts";
 import type { LomGeneral, LomValues, Manifest, ManifestResource } from "#plate/package/manifest.ts";
-import { checkFiles, fileLocation, manifestFile, packageFiles } from "#plate/package/store.ts";
+import { checkFiles, manifestFile, packageFiles } from "#plate/package/store.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import {
@@ -200,9 +200,9 @@ import type { CpVersion } from "#plate/vocabulary.ts";
 export interface PackageTest {
   /**
    * The item of each of its item refs, keyed by the item ref's identifier, in document order: what
-   * `startTest` takes as its items. Each item's `document` is its location in the package,
-   * `<package location>/<path>`, which is the location `startTest` resolves the ref's `href` to,
-   * by one rule on both sides: against the test's location (RFC 3986, section 5.2), each path
+   * `startTest` takes as its items. Each item's `document` is its path in the package, which is
+   * the location `startTest` resolves the ref's `href` to, by one rule on both sides: against the
+   * test's path (RFC 3986, section 5.2), each path
    * segment's percent escapes decoded, a malformed escape left as written, then its dot segments
    * removed, and its query and fragment set aside. `openPackage` resolves an item ref through the
    * `xml:base` in scope (reading 103), but a test `check` accepts holds none above an item ref, as
@@ -226,9 +226,10 @@ export interface PackageTest {
  * What an accepted package holds, which only {@link openPackage} and {@link acceptPackageForTest}
  * brand.
  *
- * Every document is keyed by its location, the package's location, a `/` and the document's path
- * from the package's root, which is also the location its verdict and its accepted form carry as
- * `document`. A path is a file's real name, its percent escapes decoded.
+ * Every document is keyed by its path from the package's root, which is also the location its
+ * verdict and its accepted form carry as `document`, so a host addresses the files an item names
+ * by paths from that same root. A path is a file's real name, its percent escapes decoded. The
+ * package's own location stays beside them, as `location`.
  */
 export interface PackageContents {
   /**
@@ -1552,29 +1553,29 @@ const readAs = (
  * gives it, and judge each one read as a type plate judges, under the version the manifest states.
  * The manifest is never read here (reading 146).
  *
+ * Each document is read and judged at its path in the package, the location its verdict, every
+ * refusal of it and its accepted form carry.
+ *
  * @param manifest The manifest.
  * @param files The package's files, keyed by normal form.
- * @param location The package's location.
  * @returns Each document the package holds, keyed by path, in the order the manifest first names
  *   it.
  */
 const readDocuments = Effect.fnUntraced(function* readDocuments(
   manifest: Manifest,
   files: ReadonlyMap<string, Uint8Array>,
-  location: string,
 ): Effect.fn.Return<ReadonlyMap<string, Document>> {
   const documents = new Map<string, Document>();
   for (const [path, [first, ...others]] of namingTypes(manifest)) {
     const bytes = files.get(path);
     if (bytes !== undefined && first !== undefined) {
-      const documentLocation = fileLocation(location, path);
-      const source = yield* Effect.result(readSource(documentLocation, bytes));
+      const source = yield* Effect.result(readSource(path, bytes));
       const type = readAs([first, ...others], Option.some(source));
       documents.set(path, {
         source,
         type,
         verdict: judgedTypes.has(type)
-          ? Option.some(judge(documentLocation, source, manifest.version))
+          ? Option.some(judge(path, source, manifest.version))
           : Option.none(),
       });
     }
@@ -6385,7 +6386,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
   location: string,
 ): Effect.fn.Return<PackageVerdict> {
   const fileRules = checkFiles(manifest, files, location);
-  const documents = yield* readDocuments(manifest, held, location);
+  const documents = yield* readDocuments(manifest, held);
   const kinds = new Map([
     ...ltiLinkTypes.flatMap((type) =>
       pathsOfType(manifest, type).map((path) => [path, "lti-link"] as const),
@@ -6452,8 +6453,8 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
   });
   const [first, ...rest] = [
     ...(Result.isFailure(fileRules) ? fileRules.failure : []),
-    ...checkRoots(manifest, documents, fileLocation(location, manifestFile)),
-    ...checkLom(manifest, lom, documents, fileLocation(location, manifestFile)),
+    ...checkRoots(manifest, documents, manifestFile),
+    ...checkLom(manifest, lom, documents, manifestFile),
     ...(Result.isFailure(assembled) ? [assembled.failure] : []),
     ...testRefusals,
     ...sectionRefusals,
@@ -6519,7 +6520,7 @@ const readPackage = Effect.fnUntraced(function* readPackage(
 
   // `packageFiles` refuses a package without its manifest, so the empty fallback is never read.
   const bytes = held.success.get(manifestFile) ?? new Uint8Array();
-  const source = yield* Effect.result(readSource(fileLocation(location, manifestFile), bytes));
+  const source = yield* Effect.result(readSource(manifestFile, bytes));
   if (Result.isFailure(source)) {
     return refusedUnread(location, [source.failure]);
   }
@@ -6550,8 +6551,10 @@ const readPackage = Effect.fnUntraced(function* readPackage(
  * tests: then no test and no section document is judged, and one `assembly-limit` refusal stands
  * for them. Nothing but its two inputs decides the result.
  *
- * @param location The package's location as the host named it. Each file's location is it, then
- *   `/`, then the file's path, which each document's verdict and each refusal of a file carry.
+ * @param location The package's location as the host named it, which the verdict, the accepted
+ *   package and each refusal of the package as a whole carry. Each file's location is its path from
+ *   the package's root, such as `items/a.xml`, which each document's verdict, its accepted form and
+ *   each refusal of the file carry.
  * @param files The package's files keyed by their paths from its root, as the host unzipped them.
  * @returns The verdict on the package.
  */

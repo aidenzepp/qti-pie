@@ -65,9 +65,9 @@ const fixture = {
 } as const;
 
 /**
- * The fixture test's location in its package, the key of its test among the package's tests.
+ * The fixture test's path in its package, the key of its test among the package's tests.
  */
-const fixtureTest = `${fixture.location}/test.xml`;
+const fixtureTest = "test.xml";
 
 /**
  * The response every fixture item declares, and the only one each holds.

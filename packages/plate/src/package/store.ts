@@ -13,6 +13,10 @@
  * (`package-path-outside`), nor has a key with a backslash or a drive prefix (reading 138). Reading
  * each file and what its document holds belongs to the package reader.
  *
+ * A refusal of the package as a whole carries the package's location as its `document`, at the
+ * whole document; one located in the manifest carries the manifest's path in the package,
+ * `imsmanifest.xml`, as every refusal of a package's file carries that file's path.
+ *
  * @module
  * @see https://www.imsglobal.org/content/packaging/cpv1p2pd2/imscp_infov1p2pd2.html
  */
@@ -30,20 +34,6 @@ import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 export const manifestFile = "imsmanifest.xml";
 
 /**
- * Name one file of a package as a refusal's `document` names it: the package's location, then the
- * file's path from its root.
- *
- * The package reader reads the manifest at `fileLocation(location, manifestFile)`, so a refusal of
- * the manifest from `readManifest` and a `package-file-missing` from {@link checkFiles}, which is
- * located at the resource that lists the file, name one document.
- *
- * @param location The package's location, as the caller gave it.
- * @param path The file's path from the package's root, in normal form.
- * @returns The file's location.
- */
-export const fileLocation = (location: string, path: string): string => `${location}/${path}`;
-
-/**
  * The location of a refusal of a whole package, which no element of a document owns.
  */
 const wholePackage: Location = { kind: "document" };
@@ -51,7 +41,7 @@ const wholePackage: Location = { kind: "document" };
 /**
  * Construct a refusal of a package or its manifest.
  *
- * @param document The location of the package, or of its manifest.
+ * @param document The package's location, or the manifest's path in the package.
  * @param rule The rule it breaks.
  * @param location Where in that document.
  * @param detail The facts the verdict's wording reads.
@@ -211,15 +201,15 @@ export const packageFiles = <Content>(
  * A held file other than the manifest that no resource's `file` entry names is
  * `package-file-unlisted` at the whole package. A path a resource's `file` entry names that the
  * package does not hold is `package-file-missing`, once for each resource that lists it, located at
- * that resource in the manifest (`ManifestResource.location`) of the document
- * `fileLocation(location, manifestFile)`. A file the manifest names by an external link, an
- * absolute URI (reading 35) or a path that leads outside the package (reading 102), is never
- * looked for. Refusals come in that order: the keys', the manifest's absence, the unlisted files
- * in the order held, then the missing ones in the manifest's order.
+ * that resource in the manifest (`ManifestResource.location`) of the document `imsmanifest.xml`,
+ * the manifest's path in the package. A file the manifest names by an external link, an absolute
+ * URI (reading 35) or a path that leads outside the package (reading 102), is never looked for.
+ * Refusals come in that order: the keys', the manifest's absence, the unlisted files in the order
+ * held, then the missing ones in the manifest's order.
  *
  * @param manifest The package's manifest, as `readManifest` read it.
  * @param files The package's files, keyed as its reader found them.
- * @param location The package's location.
+ * @param location The package's location, which each refusal of the package as a whole carries.
  * @returns The files keyed by normal form, as {@link packageFiles} gives them, or every refusal.
  */
 export const checkFiles = <Content>(
@@ -236,13 +226,12 @@ export const checkFiles = <Content>(
   const unlisted = [...holding.files.keys()]
     .filter((path) => path !== manifestFile && !listed.has(path))
     .map((path) => refuse(location, "package-file-unlisted", wholePackage, { path }));
-  const manifestLocation = fileLocation(location, manifestFile);
   const missing = manifest.resources.flatMap((resource) =>
     [...new Set(resource.files.flatMap((file) => Option.toArray(file.path)))]
       .filter((path) => !holding.files.has(path))
       .map((path) =>
         refuse(
-          manifestLocation,
+          manifestFile,
           "package-file-missing",
           { kind: "path", path: resource.location },
           { path, resource: resource.identifier },

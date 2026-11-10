@@ -56,6 +56,7 @@ import { attribute, checkTree, inputType } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { packageConfiguration } from "#plate/test/sweep.ts";
 import { validateAgainst } from "#plate/test/xsd.ts";
 
 /**
@@ -221,9 +222,7 @@ const refusalsOf = (verdict: PackageVerdict): readonly (readonly [string, string
   verdict.verdict === "refused"
     ? verdict.refusals.map((refusal) => [
         refusal.rule,
-        refusal.document === verdict.location
-          ? "."
-          : refusal.document.slice(verdict.location.length + 1),
+        refusal.document === verdict.location ? "." : refusal.document,
       ])
     : [];
 
@@ -267,7 +266,7 @@ const deliveryOf = (
   testPath: string,
   configuration: Configuration,
 ): Delivery => {
-  const held = acceptedOf(verdict).tests.get(`${verdict.location}/${testPath}`);
+  const held = acceptedOf(verdict).tests.get(testPath);
 
   return held === undefined
     ? assert.fail(`${verdict.location} holds no test ${testPath}`)
@@ -1151,7 +1150,7 @@ describe("the M2 witness: the packages a test is delivered from", { tags: ["corp
     () =>
       Effect.gen(function* verdicts() {
         const fixture = yield* openFixture();
-        const fixtureTest = acceptedOf(fixture).tests.get(`${fixtureLocation}/test.xml`);
+        const fixtureTest = acceptedOf(fixture).tests.get("test.xml");
 
         assert.strictEqual(fixture.verdict, "accepted");
         assert.deepStrictEqual(
@@ -1168,7 +1167,7 @@ describe("the M2 witness: the packages a test is delivered from", { tags: ["corp
         );
 
         const begGuide = yield* openCorpusPackage(corpusPackages.begGuide);
-        const bgTest = acceptedOf(begGuide).tests.get(`${corpusPackages.begGuide}/BGtest.xml`);
+        const bgTest = acceptedOf(begGuide).tests.get("BGtest.xml");
 
         assert.strictEqual(begGuide.verdict, "accepted");
         assert.lengthOf([...(bgTest?.items.keys() ?? [])], 6, "BGtest.xml resolves six items");
@@ -1176,18 +1175,12 @@ describe("the M2 witness: the packages a test is delivered from", { tags: ["corp
         const caseVerdict = yield* openCorpusPackage(corpusPackages.case);
 
         assert.strictEqual(caseVerdict.verdict, "accepted");
-        assert.isTrue(
-          acceptedOf(caseVerdict).tests.has(`${corpusPackages.case}/testitems/-TX_G06SAMP_000.xml`),
-        );
+        assert.isTrue(acceptedOf(caseVerdict).tests.has("testitems/-TX_G06SAMP_000.xml"));
 
         const externalMetadata = yield* openCorpusPackage(corpusPackages.externalMetadata);
 
         assert.strictEqual(externalMetadata.verdict, "accepted");
-        assert.isTrue(
-          acceptedOf(externalMetadata).tests.has(
-            `${corpusPackages.externalMetadata}/testitems/-TX_G06SAMP_000.xml`,
-          ),
-        );
+        assert.isTrue(acceptedOf(externalMetadata).tests.has("testitems/-TX_G06SAMP_000.xml"));
 
         const minFiles = yield* openCorpusPackage(corpusPackages.minFiles);
 
@@ -1243,12 +1236,11 @@ describe("the M2 witness: a full session per mode combination, walked by keys th
     "[T-4] [T-7] [T-14] [S-0] [S-7] [keyboard] BGtest.xml, nonlinear and individual: each item answered by keys and submitted alone, Previous and an item button move between items, End part closes the test, and the scores are 1, 1, 1, 0, 1 and 0",
     () =>
       Effect.gen(function* begGuideSession() {
-        const configuration = yield* configure({ seed: hostSeed });
-        const delivery = deliveryOf(
-          yield* openCorpusPackage(corpusPackages.begGuide),
-          "BGtest.xml",
-          configuration,
-        );
+        const verdict = yield* openCorpusPackage(corpusPackages.begGuide);
+        const configuration = yield* packageConfiguration(acceptedOf(verdict), {
+          seed: hostSeed,
+        });
+        const delivery = deliveryOf(verdict, "BGtest.xml", configuration);
         const essay = "Tea & toast,\nthen the walk";
         const sittings = walk(delivery, [
           [submitItem, { RESPONSE: { choose: ["A"] } }],
@@ -1291,12 +1283,11 @@ describe("the M2 witness: a full session per mode combination, walked by keys th
     "[T-4] [T-7] [T-14] [S-0] [S-7] [keyboard] CASE, linear and individual with max-attempts 2: a wrong first attempt scores 0 and leaves the item open, the second scores 1, Next submits each later item, the last Next closes the test, and the scores are 1, 1 and 1",
     () =>
       Effect.gen(function* caseSession() {
-        const configuration = yield* configure({ seed: hostSeed });
-        const delivery = deliveryOf(
-          yield* openCorpusPackage(corpusPackages.case),
-          "testitems/-TX_G06SAMP_000.xml",
-          configuration,
-        );
+        const verdict = yield* openCorpusPackage(corpusPackages.case);
+        const configuration = yield* packageConfiguration(acceptedOf(verdict), {
+          seed: hostSeed,
+        });
+        const delivery = deliveryOf(verdict, "testitems/-TX_G06SAMP_000.xml", configuration);
         const sittings = walk(delivery, [
           [submitItem, { RESPONSE: { choose: ["A_0"] } }],
           [submitItem, { RESPONSE: { choose: ["A_2"] } }],

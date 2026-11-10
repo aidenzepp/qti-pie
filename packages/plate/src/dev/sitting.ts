@@ -1,6 +1,6 @@
 /**
  * What the dev playground's session pages and read-only views share: a stored session read back
- * with its package and test, a session item's accepted document and the asset base it renders
+ * with its package and test, a session item's accepted document and the configuration it renders
  * with, the path of a session's page, and the pages that say one thing.
  *
  * `test-page.ts` answers a session's own pages and `review-page.ts` its read-only views; both read
@@ -15,7 +15,8 @@ import { Effect, Option, Result } from "effect";
 import { decodeSession } from "#plate/codec/session.ts";
 import { page } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
-import { packageAssetBase, packageAt, testIn } from "#plate/dev/packages.ts";
+import type { Configuration } from "#plate/configuration.ts";
+import { packageAssets, packageAt, testIn } from "#plate/dev/packages.ts";
 import type { PackageCache, PackageEntry, PackagesFailure } from "#plate/dev/packages.ts";
 import type { SessionEntry, SessionStore } from "#plate/dev/store.ts";
 import { h, text } from "#plate/emit/node.ts";
@@ -112,21 +113,17 @@ export const itemOf = (
   }));
 
 /**
- * Give the asset base a sitting's item renders with: its directory under its package's files
- * route, which {@link packageAssetBase} writes.
- *
- * A package item's document is `<package location>/<path from the package's root>`, so the path
- * from the package's root is what follows the location and its `/`.
+ * Give the configuration a sitting's item renders with: the item view's, with the addresses of the
+ * files its package's files route serves as its `assets` ({@link packageAssets}).
  *
  * @param sitting The session and its test.
- * @param document The item, one of the test's items.
- * @returns The base `render` rebases the item's package paths onto.
+ * @param configuration The item view's configuration.
+ * @returns The configuration `render` takes for the sitting's items.
  */
-export const itemAssetBase = (sitting: Sitting, document: Accepted): string =>
-  packageAssetBase(
-    sitting.package.id,
-    document.document.slice(sitting.package.location.length + 1),
-  );
+export const sittingConfiguration = (
+  sitting: Sitting,
+  configuration: Configuration,
+): Configuration => ({ ...configuration, assets: packageAssets(sitting.package) });
 
 /**
  * Read a stored session with its package and test: the entry the store holds under the id, the

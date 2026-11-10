@@ -14,7 +14,7 @@ import type {
   PackageTest,
   PackageVerdict,
 } from "#plate/package/open.ts";
-import { fileLocation, manifestFile } from "#plate/package/store.ts";
+import { manifestFile } from "#plate/package/store.ts";
 import { itemRefs } from "#plate/session/item-refs.ts";
 import {
   cpuMillis,
@@ -346,7 +346,7 @@ const refusedUnder = (verdict: PackageVerdict, ...rules: readonly string[]): See
  */
 const unwrittenAt = (rule: string, attribute: string): Seen => ({
   detail: { attribute, check: "unwritten", path: "items/a.xml", reading: "148", resource: "A" },
-  document: fileLocation(location, "items/a.xml"),
+  document: "items/a.xml",
   location: { kind: "path", path: "qti-assessment-item" },
   rule,
 });
@@ -913,7 +913,7 @@ const atSection = (
   detail: Readonly<Record<string, string>>,
 ): Seen => ({
   detail,
-  document: fileLocation(location, "sections/s2.xml"),
+  document: "sections/s2.xml",
   location: { kind: "path", path: `${sectionRefChildAt(step)}/@${attribute}` },
   rule: "undeclared-variable",
 });
@@ -947,7 +947,7 @@ const greaterXml = (identifier: string): string =>
  */
 const inSection = (rule: string, step: string, detail: Readonly<Record<string, string>>): Seen => ({
   detail,
-  document: fileLocation(location, "sections/s2.xml"),
+  document: "sections/s2.xml",
   location: { kind: "path", path: sectionRefChildAt(step) },
   rule,
 });
@@ -1069,7 +1069,7 @@ const reachingFiles = (
  */
 const duplicateIn = (file: string, element: string, identifier: string): Seen => ({
   detail: { identifier },
-  document: fileLocation(location, file),
+  document: file,
   location: { kind: "path", path: `${element}/@identifier` },
   rule: "duplicate-identifier",
 });
@@ -1141,7 +1141,7 @@ const chainPackage = (length: number): ReadonlyMap<string, Uint8Array> => {
 const acceptsChain = (length: number) =>
   Effect.gen(function* chainAccepted() {
     const verdict = yield* openPackage(location, chainPackage(length));
-    const { test } = testOf(acceptedOf(verdict), fileLocation(location, "test.xml"));
+    const { test } = testOf(acceptedOf(verdict), "test.xml");
 
     assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
     assert.deepStrictEqual(
@@ -1295,7 +1295,7 @@ const deliveredAndAlone = (verdict: PackageVerdict): DeliveredAndAlone => {
 
   return {
     alone: alone.accepted,
-    delivered: testOf(acceptedOf(verdict), fileLocation(location, "test.xml")).test,
+    delivered: testOf(acceptedOf(verdict), "test.xml").test,
   };
 };
 
@@ -1473,7 +1473,7 @@ const openBranching = (partContent: string, onItem0: string, onI1 = "") =>
  */
 const branchRefused = (file: string, rule: string, target: string, reason: string): Seen => ({
   detail: { reading: "87", reason, target },
-  document: fileLocation(location, file),
+  document: file,
   location: { kind: "path", path: `${rule}/@target` },
   rule: "branch-target",
 });
@@ -1541,7 +1541,7 @@ const besideMissing = (verdict: PackageVerdict): Seen[] =>
  */
 const cycleRefused = (file: string, identifier: string, href: string, chain: string): Seen => ({
   detail: { chain, href, identifier, reading: "85" },
-  document: fileLocation(location, file),
+  document: file,
   location: { kind: "path", path: "qti-assessment-section/qti-assessment-section-ref" },
   rule: "inclusion-cycle",
 });
@@ -1557,7 +1557,7 @@ const cycleRefused = (file: string, identifier: string, href: string, chain: str
  */
 const remoteRefused = (file: string, at: string, href: string): Seen => ({
   detail: { check: "remote-section", href, reading: "170" },
-  document: fileLocation(location, file),
+  document: file,
   location: { kind: "path", path: at },
   rule: "package-path-outside",
 });
@@ -1589,7 +1589,7 @@ const unreachedCases: readonly (readonly [label: string, section: string, refusa
     [
       {
         detail: { href: "../shared/page.html", identifier: "I1", path: "shared/page.html" },
-        document: fileLocation(location, "sections/s2.xml"),
+        document: "sections/s2.xml",
         location: { kind: "path", path: sectionItemRef },
         rule: "item-ref-unresolved",
       },
@@ -1601,7 +1601,7 @@ const unreachedCases: readonly (readonly [label: string, section: string, refusa
     [
       {
         detail: { href: "https://example.com/i.xml", identifier: "I1" },
-        document: fileLocation(location, "sections/s2.xml"),
+        document: "sections/s2.xml",
         location: { kind: "path", path: sectionItemRef },
         rule: "item-ref-unresolved",
       },
@@ -1736,7 +1736,7 @@ const lomXml = `<lom xmlns="${lomNamespace}"><general>${lomTitle("a")}</general>
  */
 const pathTyped = (position: number, type: string, file: string): Seen => ({
   detail: { check: "path-type", path: file, reading: "162", type },
-  document: fileLocation(location, manifestFile),
+  document: manifestFile,
   location: { kind: "path", path: resourceAt(position) },
   rule: "resource-type-mismatch",
 });
@@ -1830,7 +1830,7 @@ const openUsageData = (usage: string, type = "qtiusagedata/xml") =>
  */
 const notQti2Root = (element: string, namespace: string): Seen => ({
   detail: { element, namespace, reading: "89" },
-  document: fileLocation(location, "usage.xml"),
+  document: "usage.xml",
   location: { kind: "path", path: `{${namespace}}${element}` },
   rule: "not-qti-root",
 });
@@ -1926,7 +1926,7 @@ const missingReference = (
   document = "items/a.xml",
 ): Seen => ({
   detail: { attribute, check: "reference", document, path: target, reading: "103" },
-  document: fileLocation(location, document),
+  document,
   location: { kind: "path", path: `${at}/@${attribute}` },
   rule: "package-file-missing",
 });
@@ -1948,7 +1948,7 @@ const itemBody = "qti-assessment-item/qti-item-body";
  */
 const missingFile = (at: string, element: string, target: string, source: string): Seen => ({
   detail: { check: "reference", document: "items/a.xml", element, path: target, source },
-  document: fileLocation(location, "items/a.xml"),
+  document: "items/a.xml",
   location: { kind: "path", path: at },
   rule: "package-file-missing",
 });
@@ -2547,7 +2547,7 @@ const basedRefAt = (position: number): string =>
  */
 const unresolvedBasedRef = (position: number, href: string, named: string): Seen => ({
   detail: { href, identifier: `I${position}`, path: named },
-  document: fileLocation(location, "tests/t.xml"),
+  document: "tests/t.xml",
   location: { kind: "path", path: basedRefAt(position) },
   rule: "item-ref-unresolved",
 });
@@ -3045,7 +3045,7 @@ const hubRefusals = (documents: number): readonly Seen[] =>
       secondPrefix: `I${index}`,
       secondVariable: "N",
     },
-    document: fileLocation(location, "test.xml"),
+    document: "test.xml",
     location: {
       kind: "path",
       path: `qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-sum/qti-variable[${index + 1}]/@identifier`,
@@ -3716,6 +3716,122 @@ const familyMembers: readonly FamilyMember[] = [
   },
 ];
 
+/**
+ * Open a reach package whose test sets its float `TOTAL` from a variable read through the reach.
+ *
+ * @param reference The variable `TOTAL` is set from.
+ * @param firstRef The first item ref's extra markup, none by default.
+ * @returns The verdict on the package.
+ */
+const setFrom = (reference: string, firstRef = "") =>
+  openPackage(
+    location,
+    reachPackage(settingTotal(`<qti-variable identifier="${reference}"/>`), firstRef),
+  );
+
+/**
+ * Open a reach package whose test's outcome processing branches on a variable read through the
+ * reach.
+ *
+ * @param reference The variable the `qti-outcome-if` reads.
+ * @returns The verdict on the package.
+ */
+const branchingOn = (reference: string) =>
+  openPackage(
+    location,
+    reachPackage(
+      `<qti-outcome-condition><qti-outcome-if><qti-variable identifier="${reference}"/>${settingTotal(oneFloat)}</qti-outcome-if></qti-outcome-condition>`,
+    ),
+  );
+
+/**
+ * The refusal of a variable the test's outcome processing sets its total from that no reading of
+ * reading 48 resolves through the reach.
+ *
+ * @param reference The variable.
+ * @returns The refusal as these tests compare it.
+ */
+const unreadAt = (reference: string): Seen => ({
+  detail: {
+    check: "reading",
+    element: "qti-variable",
+    identifier: reference,
+    reading: "48",
+  },
+  document: "test.xml",
+  location: {
+    kind: "path",
+    path: `qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-variable/@identifier`,
+  },
+  rule: "undeclared-variable",
+});
+
+/**
+ * The refusal of an item ref of `tests/test.xml` whose href names no listed item resource.
+ *
+ * @param index The item ref's position among its section's item refs, from 1.
+ * @param detail The refusal's facts.
+ * @returns The refusal as these tests compare it.
+ */
+const unresolvedRefAt = (index: number, detail: Readonly<Record<string, string>>): Seen => ({
+  detail,
+  document: "tests/test.xml",
+  location: {
+    kind: "path",
+    path: `qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref[${index}]`,
+  },
+  rule: "item-ref-unresolved",
+});
+
+/**
+ * The `document-lang` refusal of the sole resource's item, `items/a.xml`, for a language its body
+ * writes that its LOM record's languages do not list (reading 134).
+ *
+ * @param language The language the body writes.
+ * @param listed The languages the record lists, as the refusal's facts join them.
+ * @returns The refusal as these tests compare it.
+ */
+const documentLangAtSole = (language: string, listed: string): Seen => ({
+  detail: { document: "items/a.xml", language, listed, reading: "134" },
+  document: manifestFile,
+  location: { kind: "path", path: generalAt(soleResource) },
+  rule: "document-lang",
+});
+
+/**
+ * The `document-lang` refusal of `items/a.xml`, whose body states `fr`, at the general of the
+ * resource at a position, whose record lists only `en` (reading 134).
+ *
+ * @param position The resource's position in the manifest, from 1.
+ * @returns The refusal as these tests compare it.
+ */
+const frenchUnlistedAt = (position: number): Seen => ({
+  detail: { document: "items/a.xml", language: "fr", listed: "en", reading: "134" },
+  document: manifestFile,
+  location: { kind: "path", path: generalAt(resourceAt(position)) },
+  rule: "document-lang",
+});
+
+/**
+ * Open a reading package whose test holds one item ref that writes no identifier.
+ *
+ * @param content The item ref's content.
+ * @param href The item ref's `href`.
+ * @returns The verdict on the package.
+ */
+const openUnnamedRef = (content: string, href: string) =>
+  openPackage(
+    location,
+    readingPackage(
+      readingTestXml(
+        oneFloat,
+        "",
+        `<qti-assessment-item-ref href="${href}">${content}</qti-assessment-item-ref>`,
+      ),
+      { "items/a.xml": itemXml("a", "SCORE") },
+    ),
+  );
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -3725,7 +3841,7 @@ describe("package/open.ts", () => {
           const directory = corpusPackages.begGuide;
           const verdict = yield* openPackage(directory, yield* corpusPackage(directory));
           const accepted = acceptedOf(verdict);
-          const bgTest = testOf(accepted, fileLocation(directory, "BGtest.xml"));
+          const bgTest = testOf(accepted, "BGtest.xml");
 
           const refs = itemRefs(bgTest.test);
 
@@ -3750,7 +3866,7 @@ describe("package/open.ts", () => {
           );
           assert.deepStrictEqual(
             [...bgTest.items.values()].map((item) => item.document),
-            refs.map((entry) => fileLocation(directory, entry.href)),
+            refs.map((entry) => entry.href),
           );
           assert.strictEqual(accepted.version, "3.0.1");
           assert.strictEqual(accepted.location, directory);
@@ -3777,7 +3893,7 @@ describe("package/open.ts", () => {
           const directory = corpusPackages.bpig;
           const verdict = yield* openPackage(directory, yield* corpusPackage(directory));
           const manifest = yield* readCorpusFile(`${directory}/${manifestFile}`).pipe(
-            Effect.flatMap((bytes) => readSource(fileLocation(directory, manifestFile), bytes)),
+            Effect.flatMap((bytes) => readSource(manifestFile, bytes)),
             Effect.map((source) => Result.getOrThrow(readManifest(source))),
           );
           const stimulus = manifest.resources.find((entry) => entry.identifier === "Stimulus1");
@@ -3790,7 +3906,7 @@ describe("package/open.ts", () => {
               root: "qti-assessment-stimulus",
               type: "imsqti_test_xmlv3p0",
             },
-            document: fileLocation(directory, manifestFile),
+            document: manifestFile,
             location: { kind: "path", path: stimulus?.location ?? "" },
             rule: "resource-type-mismatch",
           });
@@ -3826,7 +3942,7 @@ describe("package/open.ts", () => {
                 root: "qti-assessment-item",
                 type: "imsqti_test_xmlv3p0",
               },
-              document: fileLocation(location, manifestFile),
+              document: manifestFile,
               location: { kind: "path", path: soleResource },
               rule: "resource-type-mismatch",
             },
@@ -3854,7 +3970,7 @@ describe("package/open.ts", () => {
         const beneath = Option.getOrThrow(resourceOf(verdict, "B").verdict);
         const refusal: Seen = {
           detail: { attribute: "title", element: "qti-assessment-item" },
-          document: fileLocation(location, "items/b.xml"),
+          document: "items/b.xml",
           location: { kind: "path", path: "qti-assessment-item" },
           rule: "missing-attribute",
         };
@@ -3885,7 +4001,7 @@ describe("package/open.ts", () => {
                 secondPrefix: "a.b",
                 secondVariable: "SCORE",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: {
                 kind: "path",
                 path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-variable/@identifier",
@@ -3903,12 +4019,13 @@ describe("package/open.ts", () => {
           const accepted = acceptedOf(yield* openPackage(location, dottedPackage("SCORE")));
 
           assert.deepStrictEqual(
-            [...testOf(accepted, fileLocation(location, "test.xml")).items].map(
-              ([identifier, item]) => [identifier, item.document],
-            ),
+            [...testOf(accepted, "test.xml").items].map(([identifier, item]) => [
+              identifier,
+              item.document,
+            ]),
             [
-              ["a", fileLocation(location, "items/a.xml")],
-              ["a.b", fileLocation(location, "items/ab.xml")],
+              ["a", "items/a.xml"],
+              ["a.b", "items/ab.xml"],
             ],
             "each item ref is resolved",
           );
@@ -3956,7 +4073,7 @@ describe("package/open.ts", () => {
                 identifier: "ITEM1.SCORE",
                 reading: "48",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: { kind: "path", path: `${expressionAt("qti-variable")}/@identifier` },
               rule: "undeclared-variable",
             },
@@ -3980,7 +4097,7 @@ describe("package/open.ts", () => {
                   reading: "88",
                   reference: "a.1.SCORE",
                 },
-                document: fileLocation(location, "test.xml"),
+                document: "test.xml",
                 location: { kind: "path", path: `${expressionAt("qti-variable")}/@identifier` },
                 rule: "undeclared-variable",
               },
@@ -4053,7 +4170,7 @@ describe("package/open.ts", () => {
                 identifier: "ITEM1.N",
                 reading: "48",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: { kind: "path", path: `${expressionAt("qti-index")}/@n` },
               rule: "undeclared-variable",
             },
@@ -4107,7 +4224,7 @@ describe("package/open.ts", () => {
                 secondPrefix: "a",
                 secondVariable: "b",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: { kind: "path", path: `${expressionAt("qti-variable")}/@identifier` },
               rule: "ambiguous-reference",
             },
@@ -4219,7 +4336,7 @@ describe("package/open.ts", () => {
                     expected: "outcome",
                     identifier: source,
                   },
-                  document: fileLocation(location, "test.xml"),
+                  document: "test.xml",
                   location: {
                     kind: "path",
                     path: `${itemRefChildAt("qti-variable-mapping")}/@source-identifier`,
@@ -4251,7 +4368,7 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(refusalsOf(yield* mappedTo("T")), [
             {
               detail: { identifier: "T" },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: {
                 kind: "path",
                 path: `${itemRefChildAt("qti-variable-mapping[2]")}/@target-identifier`,
@@ -4287,7 +4404,7 @@ describe("package/open.ts", () => {
                     outcomeCardinality: "single",
                     targetKind: "template",
                   },
-                  document: fileLocation(location, "test.xml"),
+                  document: "test.xml",
                   location: { kind: "path", path: firstRefChildAt("qti-template-default") },
                   rule: "expression-type",
                 },
@@ -4304,11 +4421,6 @@ describe("package/open.ts", () => {
       "[T-9] align-54 test assembly E14: refuses a float TOTAL set from ITEM1.RESPONSE, an identifier response read through the reach, as expression-type, pantry's P20, and accepts ITEM1.SCORE; a mapping target RESPONSE, typed as its float source, is no expression-type, but names the item's response RESPONSE, so it is refused as duplicate-identifier (reading 97 (\"a variable mapping's target names no other variable its item ref's item holds\"))",
       () =>
         Effect.gen(function* setThroughReach() {
-          const setFrom = (reference: string, firstRef = "") =>
-            openPackage(
-              location,
-              reachPackage(settingTotal(`<qti-variable identifier="${reference}"/>`), firstRef),
-            );
           const verdict = yield* setFrom("ITEM1.RESPONSE");
 
           assert.deepStrictEqual(refusalsOf(verdict), [
@@ -4321,7 +4433,7 @@ describe("package/open.ts", () => {
                 outcomeBaseType: "float",
                 outcomeCardinality: "single",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: {
                 kind: "path",
                 path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value",
@@ -4347,14 +4459,7 @@ describe("package/open.ts", () => {
       "[T-9] refuses a qti-outcome-if over ITEM1.SCORE, a float read through the reach, as expression-type with check condition, pantry's P21, and accepts one over ITEM1.CORRECT",
       () =>
         Effect.gen(function* conditionThroughReach() {
-          const branching = (reference: string) =>
-            openPackage(
-              location,
-              reachPackage(
-                `<qti-outcome-condition><qti-outcome-if><qti-variable identifier="${reference}"/>${settingTotal(oneFloat)}</qti-outcome-if></qti-outcome-condition>`,
-              ),
-            );
-          const verdict = yield* branching("ITEM1.SCORE");
+          const verdict = yield* branchingOn("ITEM1.SCORE");
 
           assert.deepStrictEqual(refusalsOf(verdict), [
             {
@@ -4364,7 +4469,7 @@ describe("package/open.ts", () => {
                 expressionBaseType: "float",
                 expressionCardinality: "single",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: {
                 kind: "path",
                 path: "qti-assessment-test/qti-outcome-processing/qti-outcome-condition/qti-outcome-if",
@@ -4373,7 +4478,7 @@ describe("package/open.ts", () => {
             },
           ]);
           assert.isTrue(acceptedAlone(verdict), "the test alone is accepted");
-          acceptedOf(yield* branching("ITEM1.CORRECT"));
+          acceptedOf(yield* branchingOn("ITEM1.CORRECT"));
         }),
     );
 
@@ -4434,7 +4539,7 @@ describe("package/open.ts", () => {
                     expectedBaseType: "integer",
                     identifier: reference,
                   },
-                  document: fileLocation(location, "test.xml"),
+                  document: "test.xml",
                   location: { kind: "path", path: expressionAt("qti-round-to") },
                   rule: "expression-type",
                 },
@@ -4466,7 +4571,7 @@ describe("package/open.ts", () => {
                 outcomeBaseType: "float",
                 outcomeCardinality: "single",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: {
                 kind: "path",
                 path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value",
@@ -4495,7 +4600,7 @@ describe("package/open.ts", () => {
                     expected: "template",
                     identifier: target,
                   },
-                  document: fileLocation(location, "test.xml"),
+                  document: "test.xml",
                   location: {
                     kind: "path",
                     path: `${firstRefChildAt("qti-template-default")}/@template-identifier`,
@@ -4526,7 +4631,7 @@ describe("package/open.ts", () => {
                 identifier: "ITEM9.RESPONSE",
                 reading: "48",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: { kind: "path", path: `${expressionAt("qti-map-response")}/@identifier` },
               rule: "undeclared-variable",
             },
@@ -4562,7 +4667,7 @@ describe("package/open.ts", () => {
                     identifier: reference,
                     prefix: "ITEM1",
                   },
-                  document: fileLocation(location, "test.xml"),
+                  document: "test.xml",
                   location: { kind: "path", path: expressionAt(element) },
                   rule: "template-requirements",
                 },
@@ -4593,7 +4698,7 @@ describe("package/open.ts", () => {
               [
                 {
                   detail: { element, expected: "response", identifier: reference, prefix: "ITEM1" },
-                  document: fileLocation(location, "test.xml"),
+                  document: "test.xml",
                   location: { kind: "path", path: `${expressionAt(element)}/@identifier` },
                   rule: "undeclared-variable",
                 },
@@ -4640,7 +4745,7 @@ describe("package/open.ts", () => {
                 identifier: "ITEM1.MAPPED_POINT",
                 prefix: "ITEM1",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: { kind: "path", path: expressionAt("qti-map-response-point") },
               rule: "template-requirements",
             },
@@ -4676,7 +4781,7 @@ describe("package/open.ts", () => {
               [
                 {
                   detail: { element, expected: "response", identifier: reference, prefix },
-                  document: fileLocation(location, "test.xml"),
+                  document: "test.xml",
                   location: { kind: "path", path: `${expressionAt(element)}/@identifier` },
                   rule: "undeclared-variable",
                 },
@@ -4697,7 +4802,7 @@ describe("package/open.ts", () => {
             '<qti-map-response identifier="ITEM1.duration"/>',
           );
           const at = {
-            document: fileLocation(location, "test.xml"),
+            document: "test.xml",
             location: { kind: "path", path: `${expressionAt("qti-map-response")}/@identifier` },
             rule: "undeclared-variable",
           } as const;
@@ -4744,7 +4849,7 @@ describe("package/open.ts", () => {
                     element,
                     identifier,
                   },
-                  document: fileLocation(location, "items/a.xml"),
+                  document: "items/a.xml",
                   location: {
                     kind: "path",
                     path: `qti-assessment-item/qti-response-processing/qti-set-outcome-value/${element}`,
@@ -4777,7 +4882,7 @@ describe("package/open.ts", () => {
                     identifier: reference,
                     prefix: "ITEM1",
                   },
-                  document: fileLocation(location, "test.xml"),
+                  document: "test.xml",
                   location: { kind: "path", path: `${nullTestedAt("qti-correct")}/@identifier` },
                   rule: "undeclared-variable",
                 },
@@ -4805,7 +4910,7 @@ describe("package/open.ts", () => {
                   identifier: "ITEM9.RESPONSE",
                   reading: "48",
                 },
-                document: fileLocation(location, "test.xml"),
+                document: "test.xml",
                 location: { kind: "path", path: `${nullTestedAt("qti-correct")}/@identifier` },
                 rule: "undeclared-variable",
               },
@@ -4842,7 +4947,7 @@ describe("package/open.ts", () => {
                 identifier: "ITEM1.numAttempts",
                 prefix: "ITEM1",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: { kind: "path", path: `${expressionAt("qti-map-response")}/@identifier` },
               rule: "undeclared-variable",
             },
@@ -4932,7 +5037,7 @@ describe("package/open.ts", () => {
                       reading: "112",
                       reference,
                     },
-                    document: fileLocation(location, "test.xml"),
+                    document: "test.xml",
                     location: { kind: "path", path: `${ruleAt(element)}/@identifier` },
                     rule: "undeclared-variable",
                   },
@@ -4963,7 +5068,7 @@ describe("package/open.ts", () => {
                 reading: "112",
                 reference: "ITEM1.X.SCORE",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: {
                 kind: "path",
                 path: `${ruleAt("qti-set-outcome-value")}/@identifier`,
@@ -5028,16 +5133,12 @@ describe("package/open.ts", () => {
               }),
             ),
           );
-          const { items } = testOf(accepted, fileLocation(location, "tests/test.xml"));
+          const { items } = testOf(accepted, "tests/test.xml");
 
           assert.deepStrictEqual([...items.keys()], ["a", "b", "c"]);
           assert.deepStrictEqual(
             [...items.values()].map((item) => item.document),
-            [
-              fileLocation(location, "items/a b.xml"),
-              fileLocation(location, "items/a b.xml"),
-              fileLocation(location, "items/a b.xml"),
-            ],
+            ["items/a b.xml", "items/a b.xml", "items/a b.xml"],
           );
           assert.deepStrictEqual([...accepted.files], []);
         }),
@@ -5047,7 +5148,7 @@ describe("package/open.ts", () => {
       `[T-9] accepts I1.SCORE and S2.duration that a section document in the reach holds, its item ref resolved from its own path, with the test's processing marked by name and its items its own (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))`,
       () =>
         Effect.gen(function* reachedReads() {
-          const testPath = fileLocation(location, "test.xml");
+          const testPath = "test.xml";
           const cases = [
             ["I1.SCORE", settingTotal(variableXml("I1.SCORE"))],
             [
@@ -5121,24 +5222,9 @@ describe("package/open.ts", () => {
       `[T-9] refuses I9.SCORE once, and I1.SCORE past a section ref whose href names no section resource, as a section document in the reach adds only what it holds (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))`,
       () =>
         Effect.gen(function* reachedOnly() {
-          const unread = (reference: string): Seen => ({
-            detail: {
-              check: "reading",
-              element: "qti-variable",
-              identifier: reference,
-              reading: "48",
-            },
-            document: fileLocation(location, "test.xml"),
-            location: {
-              kind: "path",
-              path: `qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-variable/@identifier`,
-            },
-            rule: "undeclared-variable",
-          });
-
           assert.deepStrictEqual(
             refusalsOf(yield* openReferring(settingTotal(variableXml("I9.SCORE")))),
-            [unread("I9.SCORE")],
+            [unreadAt("I9.SCORE")],
           );
           assert.deepStrictEqual(
             refusalsOf(
@@ -5154,7 +5240,7 @@ describe("package/open.ts", () => {
               ),
             ),
             [
-              unread("I1.SCORE"),
+              unreadAt("I1.SCORE"),
               missingReference(
                 "qti-assessment-test/qti-test-part/qti-assessment-section-ref",
                 "href",
@@ -5203,17 +5289,9 @@ describe("package/open.ts", () => {
               refusal.detail["chain"],
             ]),
             [
-              ["undeclared-variable", fileLocation(location, "sections/s2.xml"), undefined],
-              [
-                "inclusion-cycle",
-                fileLocation(location, "sections/s2.xml"),
-                "test.xml sections/s2.xml sections/s2.xml",
-              ],
-              [
-                "inclusion-cycle",
-                fileLocation(location, "sections/s2.xml"),
-                "test2.xml sections/s2.xml sections/s2.xml",
-              ],
+              ["undeclared-variable", "sections/s2.xml", undefined],
+              ["inclusion-cycle", "sections/s2.xml", "test.xml sections/s2.xml sections/s2.xml"],
+              ["inclusion-cycle", "sections/s2.xml", "test2.xml sections/s2.xml sections/s2.xml"],
             ],
           );
         }),
@@ -5451,7 +5529,7 @@ describe("package/open.ts", () => {
                   "qti-gt",
                   "1",
                   expressionBaseType,
-                  fileLocation(location, "sections/s2.xml"),
+                  "sections/s2.xml",
                   { kind: "path", path: sectionRefChildAt("qti-pre-condition/qti-gt") },
                 ],
               ],
@@ -5545,7 +5623,7 @@ describe("package/open.ts", () => {
 
           assert.deepStrictEqual(refusalsOf(verdict), [
             undeclaredNope,
-            { ...undeclaredNope, document: fileLocation(location, "sections/s3.xml") },
+            { ...undeclaredNope, document: "sections/s3.xml" },
           ]);
         }),
     );
@@ -5579,7 +5657,7 @@ describe("package/open.ts", () => {
             "ITEM1.SCORE",
             "112",
             undefined,
-            fileLocation(location, "test.xml"),
+            "test.xml",
             { kind: "path", path: `${ruleAt("qti-lookup-outcome-value")}/@identifier` },
           ];
 
@@ -5595,7 +5673,7 @@ describe("package/open.ts", () => {
                 "ITEM1.SCORE",
                 "28",
                 undefined,
-                fileLocation(location, "test.xml"),
+                "test.xml",
                 { kind: "path", path: ruleAt("qti-lookup-outcome-value") },
               ],
             ],
@@ -5622,7 +5700,7 @@ describe("package/open.ts", () => {
                 expectedBaseType: "string",
                 identifier: "ITEM2.N",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: { kind: "path", path: nullTestedAt("qti-pattern-match") },
               rule: "expression-type",
             },
@@ -5650,19 +5728,9 @@ describe("package/open.ts", () => {
             ),
           }),
         );
-        const unresolvedRef = (index: number, detail: Readonly<Record<string, string>>): Seen => ({
-          detail,
-          document: fileLocation(location, "tests/test.xml"),
-          location: {
-            kind: "path",
-            path: `qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref[${index}]`,
-          },
-          rule: "item-ref-unresolved",
-        });
-
         assert.deepStrictEqual(refusalsOf(verdict), [
-          unresolvedRef(2, { href: "items/b.xml", identifier: "b", path: "tests/items/b.xml" }),
-          unresolvedRef(3, { href: "https://example.org/c.xml", identifier: "c" }),
+          unresolvedRefAt(2, { href: "items/b.xml", identifier: "b", path: "tests/items/b.xml" }),
+          unresolvedRefAt(3, { href: "https://example.org/c.xml", identifier: "c" }),
           missingReference(
             "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref[2]",
             "href",
@@ -5696,7 +5764,7 @@ describe("package/open.ts", () => {
           const accepted = acceptedOf(verdict);
 
           assert.deepStrictEqual(documentKind(resourceOf(verdict, "Q")), Option.some("item"));
-          assert.isTrue(accepted.items.has(fileLocation(location, "items/q.html")));
+          assert.isTrue(accepted.items.has("items/q.html"));
           assert.lengthOf(accepted.stimuli, 1);
           assert.deepStrictEqual([...accepted.files].toSorted(), [
             "items/img.png",
@@ -5753,10 +5821,7 @@ describe("package/open.ts", () => {
           const accepted = acceptedOf(verdict);
 
           assert.isTrue(Option.isNone(resourceOf(verdict, "H").path));
-          assert.deepStrictEqual(
-            [...accepted.items.keys()],
-            [fileLocation(location, "items/a.xml")],
-          );
+          assert.deepStrictEqual([...accepted.items.keys()], ["items/a.xml"]);
           assert.deepStrictEqual([...accepted.files], ["items/a.png"]);
         }),
     );
@@ -5784,7 +5849,7 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(refusalsOf(yield* packageTyped("imsqti_item_xmlv3p0")), [
             {
               detail: { check: "document-entry", path: remote, reading: "102" },
-              document: fileLocation(location, manifestFile),
+              document: manifestFile,
               location: { kind: "path", path: `${resourceAt(1)}/@href` },
               rule: "package-path-outside",
             },
@@ -5794,10 +5859,7 @@ describe("package/open.ts", () => {
           const accepted = acceptedOf(verdict);
 
           assert.isTrue(Option.isNone(resourceOf(verdict, "R").path));
-          assert.deepStrictEqual(
-            [...accepted.items.keys()],
-            [fileLocation(location, "items/a.xml")],
-          );
+          assert.deepStrictEqual([...accepted.items.keys()], ["items/a.xml"]);
           assert.deepStrictEqual([...accepted.files].toSorted(), [
             "items/a.png",
             "items/r.png",
@@ -5824,39 +5886,37 @@ describe("package/open.ts", () => {
       "refuses an item none of whose LOM identifier entries is its identifier as lom-identifier, at the LOM identifier (reading 62, \"an item's or test's identifier and title are those its package's LOM metadata gives it\")",
       () =>
         Effect.gen(function* lomIdentifier() {
-          const open = (general: string) =>
-            openPackage(
-              location,
-              packageOf({
-                "items/a.xml": itemXml("a"),
-                [manifestFile]: manifestXml(
-                  describedXml("A", "imsqti_item_xmlv3p0", "items/a.xml", general),
-                ),
-              }),
-            );
           const facts = { identifier: "a", path: "items/a.xml", reading: "62", resource: "A" };
 
-          assert.deepStrictEqual(refusalsOf(yield* open(lomIdentifiers("other"))), [
-            {
-              detail: { ...facts, metadata: "other" },
-              document: fileLocation(location, manifestFile),
-              location: { kind: "path", path: `${generalAt(soleResource)}/${lomStep}identifier` },
-              rule: "lom-identifier",
-            },
-          ]);
-          assert.deepStrictEqual(refusalsOf(yield* open(lomIdentifiers(" x\n y ", "b"))), [
-            {
-              detail: { ...facts, metadata: "x y", others: "1" },
-              document: fileLocation(location, manifestFile),
-              location: {
-                kind: "path",
-                path: `${generalAt(soleResource)}/${lomStep}identifier[1]`,
-              },
-              rule: "lom-identifier",
-            },
-          ]);
           assert.deepStrictEqual(
-            documentVerdict(resourceOf(yield* open(lomIdentifiers("other")), "A")),
+            refusalsOf(yield* openDescribed(itemXml("a"), lomIdentifiers("other"))),
+            [
+              {
+                detail: { ...facts, metadata: "other" },
+                document: manifestFile,
+                location: { kind: "path", path: `${generalAt(soleResource)}/${lomStep}identifier` },
+                rule: "lom-identifier",
+              },
+            ],
+          );
+          assert.deepStrictEqual(
+            refusalsOf(yield* openDescribed(itemXml("a"), lomIdentifiers(" x\n y ", "b"))),
+            [
+              {
+                detail: { ...facts, metadata: "x y", others: "1" },
+                document: manifestFile,
+                location: {
+                  kind: "path",
+                  path: `${generalAt(soleResource)}/${lomStep}identifier[1]`,
+                },
+                rule: "lom-identifier",
+              },
+            ],
+          );
+          assert.deepStrictEqual(
+            documentVerdict(
+              resourceOf(yield* openDescribed(itemXml("a"), lomIdentifiers("other")), "A"),
+            ),
             Option.some("accepted"),
           );
         }),
@@ -5887,7 +5947,7 @@ describe("package/open.ts", () => {
                 resource: "T",
                 title: "T",
               },
-              document: fileLocation(location, manifestFile),
+              document: manifestFile,
               location: { kind: "path", path: `${generalAt(resourceAt(1))}/${lomStep}title` },
               rule: "lom-title",
             },
@@ -5899,7 +5959,7 @@ describe("package/open.ts", () => {
                 resource: "A",
                 title: "a",
               },
-              document: fileLocation(location, manifestFile),
+              document: manifestFile,
               location: { kind: "path", path: `${generalAt(resourceAt(2))}/${lomStep}title` },
               rule: "lom-title",
             },
@@ -5957,7 +6017,7 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(unlocated(yield* openCorpusPackage(metaData)), [
             {
               detail: { ...metaDataItem, identifier: "choice", metadata: "qti_v2_item_01" },
-              document: fileLocation(metaData, manifestFile),
+              document: manifestFile,
               rule: "lom-identifier",
             },
             {
@@ -5966,7 +6026,7 @@ describe("package/open.ts", () => {
                 metadata: "Metadata Example Item #1",
                 title: "Unattended Luggage",
               },
-              document: fileLocation(metaData, manifestFile),
+              document: manifestFile,
               rule: "lom-title",
             },
           ]);
@@ -5979,7 +6039,7 @@ describe("package/open.ts", () => {
                 resource: "A_403910368",
                 title: "films - to watch (Simple Present)",
               },
-              document: fileLocation(caseWithOutcome, manifestFile),
+              document: manifestFile,
               rule: "lom-title",
             },
           ]);
@@ -5991,33 +6051,31 @@ describe("package/open.ts", () => {
       "align-54 LOM languages D2: a title that matches only once its spaces collapse is refused lom-title, and one that matches once a tab reads as a space is not",
       () =>
         Effect.gen(function* lomTitleSpaces() {
-          const open = (title: string, string: string) =>
-            openPackage(
-              location,
-              packageOf({
-                "items/a.xml": titledItemXml(title),
-                [manifestFile]: manifestXml(
-                  describedXml("A", "imsqti_item_xmlv3p0", "items/a.xml", lomTitle(string)),
-                ),
-              }),
-            );
-
-          assert.deepStrictEqual(refusalsOf(yield* open("Item A", " Item  A ")), [
-            {
-              detail: {
-                metadata: "Item A",
-                path: "items/a.xml",
-                reading: "62",
-                resource: "A",
-                title: "Item A",
+          assert.deepStrictEqual(
+            refusalsOf(yield* openDescribed(titledItemXml("Item A"), lomTitle(" Item  A "))),
+            [
+              {
+                detail: {
+                  metadata: "Item A",
+                  path: "items/a.xml",
+                  reading: "62",
+                  resource: "A",
+                  title: "Item A",
+                },
+                document: manifestFile,
+                location: { kind: "path", path: `${generalAt(soleResource)}/${lomStep}title` },
+                rule: "lom-title",
               },
-              document: fileLocation(location, manifestFile),
-              location: { kind: "path", path: `${generalAt(soleResource)}/${lomStep}title` },
-              rule: "lom-title",
-            },
-          ]);
-          assert.lengthOf(acceptedOf(yield* open("Item&#9;A", "Item A")).items, 1);
-          assert.lengthOf(acceptedOf(yield* open("Item A", "Item&#10;A")).items, 1);
+            ],
+          );
+          assert.lengthOf(
+            acceptedOf(yield* openDescribed(titledItemXml("Item&#9;A"), lomTitle("Item A"))).items,
+            1,
+          );
+          assert.lengthOf(
+            acceptedOf(yield* openDescribed(titledItemXml("Item A"), lomTitle("Item&#10;A"))).items,
+            1,
+          );
         }),
     );
 
@@ -6051,7 +6109,7 @@ describe("package/open.ts", () => {
                 resource: "A",
                 title: "Item A",
               },
-              document: fileLocation(location, manifestFile),
+              document: manifestFile,
               location: { kind: "path", path: `${generalAt(soleResource)}/${lomStep}title` },
               rule: "lom-title",
             },
@@ -6127,14 +6185,8 @@ describe("package/open.ts", () => {
       "align-54 LOM languages E34: an item writing xml:lang en whose record lists no language is refused document-lang at the general, and one listed only padded, or a body element's language not listed, is refused once for each language",
       () =>
         Effect.gen(function* documentLang() {
-          const refusal = (language: string, listed: string): Seen => ({
-            detail: { document: "items/a.xml", language, listed, reading: "134" },
-            document: fileLocation(location, manifestFile),
-            location: { kind: "path", path: generalAt(soleResource) },
-            rule: "document-lang",
-          });
           const cases = [
-            [' xml:lang="en"', lomTitle("a"), [refusal("en", "")]],
+            [' xml:lang="en"', lomTitle("a"), [documentLangAtSole("en", "")]],
             [
               ' xml:lang=" en "',
               `${lomTitle("a")}<language> en </language><language>EN</language>`,
@@ -6143,7 +6195,7 @@ describe("package/open.ts", () => {
             [
               ' xml:lang="en"',
               `${lomTitle("a")}<language> en </language><language>de</language>`,
-              [refusal("en", " en  de")],
+              [documentLangAtSole("en", " en  de")],
             ],
             [' xml:lang=""', lomTitle("a"), []],
             ["", lomTitle("a"), []],
@@ -6164,7 +6216,7 @@ describe("package/open.ts", () => {
             }),
           );
 
-          assert.deepStrictEqual(refusalsOf(bodyLanguages), [refusal("fr", "EN")]);
+          assert.deepStrictEqual(refusalsOf(bodyLanguages), [documentLangAtSole("fr", "EN")]);
         }),
     );
 
@@ -6187,7 +6239,7 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(refusalsOf(verdict), [
             {
               detail: { document: "test.xml", language: "en", listed: "de", reading: "134" },
-              document: fileLocation(location, manifestFile),
+              document: manifestFile,
               location: { kind: "path", path: generalAt(resourceAt(1)) },
               rule: "document-lang",
             },
@@ -6232,7 +6284,7 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(refusalsOf(verdict), [
             {
               detail: { document: "items/a.xml", language: "de", listed: "en", reading: "134" },
-              document: fileLocation(location, manifestFile),
+              document: manifestFile,
               location: { kind: "path", path: generalAt(soleResource) },
               rule: "document-lang",
             },
@@ -6274,7 +6326,7 @@ describe("package/open.ts", () => {
               resourceXml("CUSTOM", "imsqti_item_xmlv3p0", "items/custom.xml"),
             ),
           });
-          const document = fileLocation(location, "items/custom.xml");
+          const document = "items/custom.xml";
           const verdict = yield* openPackage(location, files);
           const alone = yield* openDocument(
             document,
@@ -6392,7 +6444,7 @@ describe("package/open.ts", () => {
                   root: "qti-assessment-item",
                   type: "imsqti_outcomes_xmlv3p0",
                 },
-                document: fileLocation(location, manifestFile),
+                document: manifestFile,
                 location: { kind: "path", path: resourceAt(2) },
                 rule: "resource-type-mismatch",
               },
@@ -6419,7 +6471,7 @@ describe("package/open.ts", () => {
             assert.deepStrictEqual(refusalsOf(verdict), [
               {
                 detail: { check: "manifest-document", path: manifestFile, reading: "146", type },
-                document: fileLocation(location, manifestFile),
+                document: manifestFile,
                 location: { kind: "path", path: resourceAt(2) },
                 rule: "resource-type-mismatch",
               },
@@ -6518,7 +6570,7 @@ describe("package/open.ts", () => {
             [
               {
                 detail: { href: "../items/b.xml", identifier: "b", path: "items/b.xml" },
-                document: fileLocation(location, "tests/t.xml"),
+                document: "tests/t.xml",
                 location: { kind: "path", path: `${ref}[2]` },
                 rule: "item-ref-unresolved",
               },
@@ -6536,7 +6588,7 @@ describe("package/open.ts", () => {
             "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref";
           const undeclaredBase: Seen = {
             detail: { attribute: "xml:base", element: "qti-test-part", reading: "90" },
-            document: fileLocation(location, "tests/t.xml"),
+            document: "tests/t.xml",
             location: { kind: "path", path: "qti-assessment-test/qti-test-part/@xml:base" },
             rule: "unknown-attribute",
           };
@@ -6555,7 +6607,7 @@ describe("package/open.ts", () => {
                   href: index === 1 ? "a.xml" : "b.xml",
                   identifier: index === 1 ? "a" : "b",
                 },
-                document: fileLocation(location, "tests/t.xml"),
+                document: "tests/t.xml",
                 location: { kind: "path" as const, path: `${ref}[${index}]` },
                 rule: "item-ref-unresolved",
               })),
@@ -6630,7 +6682,7 @@ describe("package/open.ts", () => {
           const entry = "qti-assessment-item/qti-catalog-info/qti-catalog/qti-card/qti-card-entry";
           const undeclaredBase: Seen = {
             detail: { attribute: "xml:base", element: "qti-card-entry", reading: "90" },
-            document: fileLocation(location, "items/a.xml"),
+            document: "items/a.xml",
             location: { kind: "path", path: `${entry}/@xml:base` },
             rule: "unknown-attribute",
           };
@@ -6703,7 +6755,7 @@ describe("package/open.ts", () => {
                 reading: "62",
                 resource: "T",
               },
-              document: fileLocation(location, manifestFile),
+              document: manifestFile,
               location: { kind: "path", path: `${generalAt(resourceAt(2))}/${lomStep}identifier` },
               rule: "lom-identifier",
             },
@@ -6717,12 +6769,6 @@ describe("package/open.ts", () => {
       "align-54 r11 LOM languages once finding 13c: two resources naming one item whose body states fr are each refused document-lang at their own general, the second from the language forms the first read, and a third naming it with no LOM record is not judged (reading 134)",
       () =>
         Effect.gen(function* sharedForms() {
-          const refusal = (position: number): Seen => ({
-            detail: { document: "items/a.xml", language: "fr", listed: "en", reading: "134" },
-            document: fileLocation(location, manifestFile),
-            location: { kind: "path", path: generalAt(resourceAt(position)) },
-            rule: "document-lang",
-          });
           const verdict = yield* openPackage(
             location,
             packageOf({
@@ -6745,7 +6791,7 @@ describe("package/open.ts", () => {
             }),
           );
 
-          assert.deepStrictEqual(refusalsOf(verdict), [refusal(1), refusal(3)]);
+          assert.deepStrictEqual(refusalsOf(verdict), [frenchUnlistedAt(1), frenchUnlistedAt(3)]);
         }),
     );
 
@@ -6993,7 +7039,7 @@ describe("package/open.ts", () => {
               secondPrefix: "I0",
               secondVariable: "SCORE",
             },
-            document: fileLocation(location, "sections/u.xml"),
+            document: "sections/u.xml",
             location: {
               kind: "path",
               path: "qti-assessment-section/qti-assessment-item-ref/qti-pre-condition/qti-gt/qti-variable/@identifier",
@@ -7168,7 +7214,7 @@ describe("package/open.ts", () => {
           const verdict = yield* openPackage(location, cyclingPackage(hostileCyclingDocuments));
           const expected = new Map(
             Array.from({ length: hostileCyclingDocuments }, (_, index) => [
-              fileLocation(location, cyclingAt(index)),
+              cyclingAt(index),
               boundedAs(cyclingChain(index)),
             ]),
           );
@@ -7313,7 +7359,7 @@ describe("package/open.ts", () => {
               secondPrefix: "I0",
               secondVariable: "SCORE",
             },
-            document: fileLocation(location, "sections/u.xml"),
+            document: "sections/u.xml",
             location: {
               kind: "path",
               path: "qti-assessment-section/qti-assessment-item-ref/qti-pre-condition/qti-gt/qti-variable/@identifier",
@@ -7693,7 +7739,7 @@ describe("package/open.ts", () => {
               label,
             );
             assert.deepStrictEqual(
-              [...testOf(acceptedOf(verdict), fileLocation(location, "test.xml")).items.keys()],
+              [...testOf(acceptedOf(verdict), "test.xml").items.keys()],
               ["ITEM1"],
               label,
             );
@@ -7852,7 +7898,7 @@ describe("package/open.ts", () => {
                   reading: "88",
                   reference: "lti.1.SCORE",
                 },
-                document: fileLocation(location, "test.xml"),
+                document: "test.xml",
                 location: { kind: "path", path: `${expressionAt("qti-variable")}/@identifier` },
                 rule: "undeclared-variable",
               },
@@ -7883,7 +7929,7 @@ describe("package/open.ts", () => {
                   expected: "template",
                   identifier: "T",
                 },
-                document: fileLocation(location, "test.xml"),
+                document: "test.xml",
                 location: {
                   kind: "path",
                   path: `${ltiRefPath}/qti-template-default/@template-identifier`,
@@ -7912,7 +7958,7 @@ describe("package/open.ts", () => {
             [
               {
                 detail: { identifier: "S2" },
-                document: fileLocation(location, "test.xml"),
+                document: "test.xml",
                 location: {
                   kind: "path",
                   path: `${ltiRefPath}/qti-variable-mapping[2]/@target-identifier`,
@@ -7921,7 +7967,7 @@ describe("package/open.ts", () => {
               },
               {
                 detail: { identifier: "duration", reading: "97" },
-                document: fileLocation(location, "test.xml"),
+                document: "test.xml",
                 location: {
                   kind: "path",
                   path: `${ltiRefPath}/qti-variable-mapping[3]/@target-identifier`,
@@ -7951,7 +7997,7 @@ describe("package/open.ts", () => {
               [
                 {
                   detail: { identifier: target, reading: "97" },
-                  document: fileLocation(location, "test.xml"),
+                  document: "test.xml",
                   location: {
                     kind: "path",
                     path: `${ltiRefPath}/qti-variable-mapping/@target-identifier`,
@@ -8058,7 +8104,7 @@ describe("package/open.ts", () => {
                   secondPrefix: "I1",
                   secondVariable: "SCORE",
                 },
-                document: fileLocation(location, "test.xml"),
+                document: "test.xml",
                 location: {
                   kind: "path",
                   path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-variable/@identifier",
@@ -8124,7 +8170,7 @@ describe("package/open.ts", () => {
                 secondPrefix: "I39",
                 secondVariable: "SCORE",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: {
                 kind: "path",
                 path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-variable/@identifier",
@@ -8154,7 +8200,7 @@ describe("package/open.ts", () => {
                   secondPrefix: "I0",
                   secondVariable: "SCORE",
                 },
-                document: fileLocation(location, "sections/u.xml"),
+                document: "sections/u.xml",
                 location: {
                   kind: "path",
                   path: "qti-assessment-section/qti-assessment-item-ref/qti-pre-condition/qti-gt/qti-variable/@identifier",
@@ -8237,7 +8283,7 @@ describe("package/open.ts", () => {
                   element: "qti-assessment-section-ref",
                   reading: "90",
                 },
-                document: fileLocation(location, "test.xml"),
+                document: "test.xml",
                 location: { kind: "path", path: `${testSectionRefPath}/@xml:base` },
                 rule: "unknown-attribute",
               },
@@ -8296,7 +8342,7 @@ describe("package/open.ts", () => {
             [
               {
                 detail: { href: "../items/none.xml", identifier: "I1", path: "items/none.xml" },
-                document: fileLocation(location, "sections/s2.xml"),
+                document: "sections/s2.xml",
                 location: { kind: "path", path: itemRef },
                 rule: "item-ref-unresolved",
               },
@@ -8366,7 +8412,7 @@ describe("package/open.ts", () => {
               [
                 {
                   detail: { identifier: target, reading: "97" },
-                  document: fileLocation(location, "test.xml"),
+                  document: "test.xml",
                   location: {
                     kind: "path",
                     path: `${itemRefChildAt("qti-variable-mapping")}/@target-identifier`,
@@ -8396,20 +8442,7 @@ describe("package/open.ts", () => {
       'align-54 test assembly E41b: an item ref that writes no identifier is judged like any other: one whose href names no item is refused as item-ref-unresolved with check unwritten, and one whose href names an item has its mappings checked; the missing identifier is left to the test\'s own verdict (reading 155 ("the laws over what an item ref names judge every item ref, whether or not it ... write[s] an identifier"))',
       () =>
         Effect.gen(function* unnamedItemRef() {
-          const unnamed = (content: string, href: string) =>
-            openPackage(
-              location,
-              readingPackage(
-                readingTestXml(
-                  oneFloat,
-                  "",
-                  `<qti-assessment-item-ref href="${href}">${content}</qti-assessment-item-ref>`,
-                ),
-                { "items/a.xml": itemXml("a", "SCORE") },
-              ),
-            );
-
-          assert.deepStrictEqual(besideMissing(yield* unnamed("", "items/none.xml")), [
+          assert.deepStrictEqual(besideMissing(yield* openUnnamedRef("", "items/none.xml")), [
             {
               detail: {
                 attribute: "identifier",
@@ -8418,7 +8451,7 @@ describe("package/open.ts", () => {
                 path: "items/none.xml",
                 reading: "155",
               },
-              document: fileLocation(location, "test.xml"),
+              document: "test.xml",
               location: {
                 kind: "path",
                 path: "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref",
@@ -8434,7 +8467,7 @@ describe("package/open.ts", () => {
           ]);
           assert.deepStrictEqual(
             besideMissing(
-              yield* unnamed(
+              yield* openUnnamedRef(
                 '<qti-variable-mapping source-identifier="NOPE" target-identifier="X"/>',
                 "items/a.xml",
               ),
@@ -8447,7 +8480,7 @@ describe("package/open.ts", () => {
                   expected: "outcome",
                   identifier: "NOPE",
                 },
-                document: fileLocation(location, "test.xml"),
+                document: "test.xml",
                 location: {
                   kind: "path",
                   path: `${itemRefChildAt("qti-variable-mapping")}/@source-identifier`,
@@ -8599,8 +8632,7 @@ const sitesOf = (verdict: PackageVerdict): (readonly [string, string, string])[]
  * @param at The attribute's path.
  * @returns The site, as {@link sitesOf} gives it.
  */
-const atTest = (rule: string, at: string) =>
-  [rule, fileLocation(location, "test.xml"), at] as const;
+const atTest = (rule: string, at: string) => [rule, "test.xml", at] as const;
 
 describe("openPackage, align-54 r11 reading 152 names nothing: a structure identifier that is no NCName names nothing across a test's reach, so no law but its value domain judges it (reading 152 as amended)", () => {
   it.effect.each(namelessForms)(
@@ -8626,7 +8658,7 @@ describe("openPackage, align-54 r11 reading 152 names nothing: a structure ident
               ),
               [
                 "attribute-type",
-                fileLocation(location, "sections/s.xml"),
+                "sections/s.xml",
                 "qti-assessment-section/qti-assessment-item-ref/@identifier",
               ],
             ],
@@ -8635,11 +8667,7 @@ describe("openPackage, align-54 r11 reading 152 names nothing: a structure ident
                 "attribute-type",
                 "qti-assessment-test/qti-test-part/qti-assessment-section/@identifier",
               ),
-              [
-                "attribute-type",
-                fileLocation(location, "sections/s.xml"),
-                "qti-assessment-section/@identifier",
-              ],
+              ["attribute-type", "sections/s.xml", "qti-assessment-section/@identifier"],
             ],
           ],
         );

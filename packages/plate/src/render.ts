@@ -9,15 +9,16 @@
  * passes none. `render` prints everything or nothing: it writes at most the configuration's
  * `outputBudget` characters of HTML, and an item with a printed variable or a parameter whose text
  * passed its bound, or whose printed text passed the budget `redact` ran under, prints nothing;
- * either way it returns {@link OutputTooLarge} and none of the page, never a part of it. This is a
- * browser module: it value-imports from `effect` only `Option`, `Array`, `pipe`, `Data` and
- * `Result`.
+ * either way it returns {@link OutputTooLarge} and none of the page, never a part of it. An item
+ * that names a file of its package the configuration's `assets` gives no address prints nothing
+ * too, and returns {@link AssetMissing}. This is a browser module: it value-imports from `effect`
+ * only `Option`, `Array`, `pipe`, `Data` and `Result`.
  *
  * @module
  */
 import { Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { emitBody, emitModalFeedback } from "#plate/emit/body.ts";
+import { emitBody, emitModalFeedback, missingAsset } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { emitItem, emitStatus } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
@@ -49,13 +50,13 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * The author's inputs to one {@link render}, each optional.
  *
  * `parts` replaces parts through the swap invariant. `instance` is the instance token (see
- * {@link checkInstance}), drawn as a lowercase UUID when absent. `assetBase` overrides the
- * configuration's. `names`, `values` and `posted` are keyed by response identifier: the name a
- * response's controls post under (`entryName(instance, response)` when absent), the value they show
- * (NULL when absent), and the strings a refused post sent, which the controls show instead of
- * `values` when `messages` is not empty. A record value restores its `stringValue`, the text it was
- * typed as, into the string control bound to it, and a record without one leaves that control
- * empty; restored text counts toward the output budget as any other. `messages` are a refused
+ * {@link checkInstance}), drawn as a lowercase UUID when absent. `names`, `values` and `posted`
+ * are keyed by response identifier: the name a response's controls post under
+ * (`entryName(instance, response)` when absent), the value they show (NULL when absent), and the
+ * strings a refused post sent, which the controls show instead of `values` when `messages` is not
+ * empty. A record value restores its `stringValue`, the text it was typed as, into the string
+ * control bound to it, and a record without one leaves that control empty; restored text counts
+ * toward the output budget as any other. `messages` are a refused
  * post's validation messages: each marks its response's controls invalid, and the first invalid
  * Control takes `autofocus`. `disabled` disables every control. `mode` is the state the item is
  * shown in, `answering` when absent, which the Root's `data-mode` names: `review` and `solution`
@@ -69,7 +70,6 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * `permits` gives `solution` for the item; any other mode reads none of it.
  */
 export interface Options {
-  readonly assetBase?: string;
   readonly disabled?: boolean;
   readonly instance?: string;
   readonly messages?: readonly ValidationMessage[];
@@ -180,6 +180,30 @@ export class OutputTooLarge extends Data.TaggedError("OutputTooLarge")<{
           ? `Item ${JSON.stringify(this.item)} would print more than ${String(bound)} characters for the variable ${JSON.stringify(identifier)}, so render wrote none of it. Shorten that variable's value, or the width or precision in its printed variable's format, so its text fits.`
           : `Item ${JSON.stringify(this.item)} prints more than ${String(bound)} characters of variables, the output budget redact ran under, by the variable ${JSON.stringify(identifier)}, so redact stopped printing there and render wrote none of it. Raise outputBudget, up to 536,870,888, in the configuration you pass to both redact and render, if the host can hold that much text.`,
     });
+  }
+}
+
+/**
+ * An item `render` cannot print in full because a package URL of it names a file the
+ * configuration's `assets` gives no address, returned through a `Result`, never thrown.
+ *
+ * `path` is that file's path from the package root, the package URL resolved against the item's
+ * location as `assetPaths` resolves it; `item` is the redacted item's `identifier` and `document`
+ * its location. `render` never writes a package path relative to the page, since the page is
+ * not the package, so it writes none of the item. A host that builds `assets` from the same
+ * package rows that hold each of the item's references to a file of the package never meets it:
+ * when it does, the map and the package disagree.
+ */
+export class AssetMissing extends Data.TaggedError("AssetMissing")<{
+  readonly document: string;
+  readonly item: string;
+  readonly path: string;
+}> {
+  /**
+   * The item, the file it names, that nothing was written, and what to change.
+   */
+  override get message(): string {
+    return `Item ${JSON.stringify(this.item)} at ${JSON.stringify(this.document)} names the file ${JSON.stringify(this.path)}, which the configuration's assets give no address, so render wrote none of the item. Add the file's address to assets under ${JSON.stringify(this.path)}, or correct the item's reference so that it names a file of its package.`;
   }
 }
 
@@ -323,14 +347,13 @@ const viewOf = (instance: string, configuration: Configuration, options: Options
 /**
  * Build the emit state of one render.
  *
- * @param configuration The configuration, which gives the locale, the heading level and the asset
- *   base.
+ * @param configuration The configuration, which gives the assets, the locale and the heading
+ *   level.
  * @param parts The resolved part overrides.
- * @param assetBase The author's asset base, which overrides the configuration's.
  * @returns The emit state.
  */
-const stateOf = (configuration: Configuration, parts: Resolved, assetBase?: string): EmitState => ({
-  assetBase: assetBase ?? configuration.assetBase,
+const stateOf = (configuration: Configuration, parts: Resolved): EmitState => ({
+  assets: configuration.assets,
   headingLevel: configuration.headingLevel,
   locale: configuration.locale,
   parts,
@@ -378,13 +401,21 @@ const interactionRenderer =
  * form, submit control, title or record. Given the same instance, configuration and inputs, it
  * gives the same HTML, and it returns the instance it used.
  *
+ * Each package URL of the item, a path inside its package, is written as the address the
+ * configuration's `assets` gives the file it names: the URL resolved against the redacted item's
+ * `document`, its location, the path from the package root the host opened it by, so `media/a.png`
+ * in `items/q1.xml` names `items/media/a.png`, followed by the URL's query and fragment. A path is
+ * never written relative to the page.
+ *
  * It prints everything or nothing. First, an item whose `unprinted` names a printed variable or a
  * parameter whose text passed its bound, 1,000,000 or the budget `redact` ran under, fails
  * {@link OutputTooLarge} naming the bound, which limit it is and the variable, before anything is
- * built. Then it counts the characters of HTML as it writes them, as a string's `length` counts
- * them, and stops at the first chunk that would pass the configuration's `outputBudget`: HTML of
- * exactly `outputBudget` characters is returned, and one more fails {@link OutputTooLarge} with
- * none of the page built or returned.
+ * built. Then an item one of whose package URLs, in its body or a modal feedback it shows, names a
+ * file `assets` gives no address fails {@link AssetMissing} naming the first such file, before
+ * anything is emitted. Then it counts the characters of HTML as it writes them, as a string's
+ * `length` counts them, and stops at the first chunk that would pass the configuration's
+ * `outputBudget`: HTML of exactly `outputBudget` characters is returned, and one more fails
+ * {@link OutputTooLarge} with none of the page built or returned.
  *
  * @example
  *   const rendered = render(redact(accepted, undefined, configuration), configuration, {
@@ -393,11 +424,12 @@ const interactionRenderer =
  *   // Result.succeed({ html: '<qti-assessment-item id="q1-item" …>…</qti-assessment-item>', instance: "q1" })
  *
  * @param item The item `redact` gave.
- * @param configuration The configuration, which gives the locale, the heading level, the asset
- *   base, the seed and the output budget.
+ * @param configuration The configuration, which gives the assets, the locale, the heading level,
+ *   the seed and the output budget.
  * @param options The author's inputs, none by default.
  * @returns The Root's HTML and the instance token it used, or {@link UnknownPart} for an override
  *   the part table lacks, {@link InvalidInstance} for an instance token that breaks a requirement,
+ *   {@link AssetMissing} for a package URL whose file `assets` gives no address,
  *   {@link PartSwapRefused} for a replacement that breaks the swap invariant, or
  *   {@link OutputTooLarge} for an item with a text past its bound, or HTML that would pass the
  *   configuration's `outputBudget`.
@@ -406,7 +438,10 @@ export const render = (
   item: Redacted,
   configuration: Configuration,
   options: Options = {},
-): Result.Result<Rendered, InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart> =>
+): Result.Result<
+  Rendered,
+  AssetMissing | InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart
+> =>
   Result.gen(function* renderItem() {
     if (Option.isSome(item.unprinted)) {
       const { bound, identifier, limit } = item.unprinted.value;
@@ -424,8 +459,15 @@ export const render = (
     const instance = yield* options.instance === undefined
       ? Result.succeed(drawInstance())
       : checkedInstance(options.instance, "options.instance");
-    const state = stateOf(configuration, parts, options.assetBase);
+    const state = stateOf(configuration, parts);
     const built = payload(item, viewOf(instance, configuration, options));
+    const missing = missingAsset(built, state);
+    if (Option.isSome(missing)) {
+      return yield* Result.fail(
+        new AssetMissing({ document: item.document, item: item.identifier, path: missing.value }),
+      );
+    }
+
     const body = yield* emitBody(built, state, interactionRenderer(built, state));
     const feedback = yield* emitModalFeedback(built, state);
     const root = yield* emitItem(built, state, [...body, ...feedback]);

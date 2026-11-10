@@ -7,13 +7,7 @@ import { corpusRoot, readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
 import { readManifest } from "#plate/package/manifest.ts";
 import type { Manifest, ManifestHref, ManifestResource } from "#plate/package/manifest.ts";
-import {
-  checkFiles,
-  fileLocation,
-  manifestFile,
-  normalisePath,
-  packageFiles,
-} from "#plate/package/store.ts";
+import { checkFiles, manifestFile, normalisePath, packageFiles } from "#plate/package/store.ts";
 import type { Location, Refusal } from "#plate/validate/refusal.ts";
 import { manifestNamespace } from "#plate/vocabulary.ts";
 
@@ -176,7 +170,7 @@ const corpusFiles = (directory: string) =>
  */
 const corpusManifest = (directory: string) =>
   readCorpusFile(`${directory}/${manifestFile}`).pipe(
-    Effect.flatMap((bytes) => readSource(fileLocation(directory, manifestFile), bytes)),
+    Effect.flatMap((bytes) => readSource(manifestFile, bytes)),
     Effect.map((source) => {
       const manifest = readManifest(source);
       assert.isTrue(Result.isSuccess(manifest), `${directory}'s manifest is read`);
@@ -184,6 +178,21 @@ const corpusManifest = (directory: string) =>
       return Result.getOrThrow(manifest);
     }),
   );
+
+/**
+ * The refusal of `shared.css`, which a resource lists and the package does not hold, at that
+ * resource.
+ *
+ * @param identifier The resource's identifier.
+ * @param index The resource's position among the manifest's resources, from 1.
+ * @returns The refusal as these tests compare it.
+ */
+const sharedMissing = (identifier: string, index: number): Seen => ({
+  detail: { path: "shared.css", resource: identifier },
+  document: manifestFile,
+  location: { kind: "path", path: `${cp}manifest/${cp}resources/${cp}resource[${index}]` },
+  rule: "package-file-missing",
+});
 
 describe("package/store.ts", () => {
   describe("normalisePath", () => {
@@ -307,7 +316,7 @@ describe("package/store.ts", () => {
           });
           const missing = (identifier: string): Seen => ({
             detail: { path: "modules/lib/raphael.js", resource: identifier },
-            document: fileLocation(directory, manifestFile),
+            document: manifestFile,
             location: locationOf(identifier),
             rule: "package-file-missing",
           });
@@ -400,18 +409,12 @@ describe("package/store.ts", () => {
         resource("a", 1, [relative("items/a.xml"), relative("shared.css"), relative("shared.css")]),
         resource("b", 2, [relative("items/b.xml"), relative("shared.css")]),
       );
-      const missing = (identifier: string, index: number): Seen => ({
-        detail: { path: "shared.css", resource: identifier },
-        document: fileLocation(location, manifestFile),
-        location: { kind: "path", path: `${cp}manifest/${cp}resources/${cp}resource[${index}]` },
-        rule: "package-file-missing",
-      });
 
       assert.deepStrictEqual(
         refusalsOf(
           checkFiles(manifest, held(manifestFile, "items/a.xml", "items/b.xml"), location),
         ),
-        [missing("a", 1), missing("b", 2)],
+        [sharedMissing("a", 1), sharedMissing("b", 2)],
       );
     });
   });

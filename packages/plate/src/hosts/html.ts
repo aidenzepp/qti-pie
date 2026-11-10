@@ -5,7 +5,9 @@
  * The page links plate's sheet and holds the host's own `form method="post"` and submit button
  * around `render(redact(…))`. A post is decoded, checked with `checkResponses` and scored with
  * `score`, and the page comes back with the Status part above the form. The host is stateless: it
- * keeps no record, so each post is scored as a first attempt, and it sets no attempt limit.
+ * keeps no record, so each post is scored as a first attempt, and it sets no attempt limit. It
+ * serves none of the item's files, so its configuration's `assets` is empty, and an item that names
+ * a file of its package fails `render` with `AssetMissing`, which its 500 page reports.
  *
  * It keeps the duty the README states for a form that holds a Choice: the form carries
  * `autocomplete="off"` and every page it answers sends `Cache-Control: no-store`, so a browser

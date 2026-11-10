@@ -416,7 +416,7 @@ const deliver = (packages: PackageCache, steps: typeof sitting = sitting) =>
     }
 
     const test =
-      verdict.accepted.tests.get(`${fixture.location}/${fixture.test}`) ??
+      verdict.accepted.tests.get(fixture.test) ??
       assert.fail("The fixture package holds no test.xml.");
     const start = (id: string): TestSession =>
       Result.getOrElse(

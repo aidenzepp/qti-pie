@@ -10,7 +10,7 @@ import { pageHeaders, pageHtml } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
 import {
   openDirectory,
-  packageAssetBase,
+  packageAssets,
   packageCache,
   packageHref,
   packageIds,
@@ -524,9 +524,9 @@ describe("dev/packages.ts", () => {
         Effect.gen(function* files() {
           const crows = "items/resources/crows.jpg";
           const served = yield* request(fileTarget(ids.begGuide, crows));
-          const based = yield* request(
-            `${packageAssetBase(ids.begGuide, "items/BG011.xml")}resources/crows.jpg`,
-          );
+          const begGuide = yield* entryOf(ids.begGuide);
+          const addressed = [...packageAssets(begGuide)].find(([file]) => file === crows);
+          const based = yield* request(addressed?.[1] ?? assert.fail(`${crows} has no address`));
           const bytes = yield* Effect.promise(() =>
             readFile(
               path.join(

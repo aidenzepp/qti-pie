@@ -301,6 +301,7 @@ const blankLabel: InlineChoicePayload = { ...picker, label: Option.some([said(" 
 const pageOf = (mode: RenderMode = "answering", finished = false): Payload => ({
   body: [],
   credit: Option.none(),
+  document: "items/fruits.xml",
   finished,
   instance,
   lang: "en",
@@ -332,7 +333,7 @@ const inMode = (interaction: InlineChoicePayload, mode: RenderMode): InlineChoic
 const stateOf = (overrides: PartOverrides = {}): Effect.Effect<EmitState> =>
   Effect.fromResult(resolveOverrides(overrides)).pipe(
     Effect.orDie,
-    Effect.map((parts): EmitState => ({ assetBase: "", headingLevel: 2, locale: "en", parts })),
+    Effect.map((parts): EmitState => ({ assets: new Map(), headingLevel: 2, locale: "en", parts })),
   );
 
 /**

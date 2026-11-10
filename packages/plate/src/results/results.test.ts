@@ -21,7 +21,7 @@ import { fresh, startingValue } from "#plate/model/record.ts";
 import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import { openPackage } from "#plate/package/open.ts";
-import { fileLocation, manifestFile } from "#plate/package/store.ts";
+import { manifestFile } from "#plate/package/store.ts";
 import { redact, render } from "#plate/render.ts";
 import { results } from "#plate/results/results.ts";
 import type { ResultContext, ResultsInput } from "#plate/results/results.ts";
@@ -2498,9 +2498,7 @@ describe("results, the default normal-minimum of a QTI 3.0.1 outcome (reading 14
               assert.strictEqual(verdict.verdict, "accepted", version);
 
               const held =
-                verdict.verdict === "accepted"
-                  ? verdict.accepted.tests.get(fileLocation(minimumLocation, "test.xml"))
-                  : undefined;
+                verdict.verdict === "accepted" ? verdict.accepted.tests.get("test.xml") : undefined;
               if (held === undefined) {
                 return assert.fail(`The ${version} package holds no accepted test.`);
               }

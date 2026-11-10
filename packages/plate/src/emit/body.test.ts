@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { emitBody, emitNodes, htmlSubset } from "#plate/emit/body.ts";
+import { emitBody, emitNodes, htmlSubset, missingAsset } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -12,6 +12,7 @@ import { renderChoice } from "#plate/interactions/choice.ts";
 import { renderExtendedText } from "#plate/interactions/extended-text.ts";
 import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { message } from "#plate/messages.ts";
+import type { PackagePath } from "#plate/model/url.ts";
 import type {
   ChoicePayload,
   ElementPayload,
@@ -25,6 +26,7 @@ import type {
   TextPayload,
 } from "#plate/payload.ts";
 import { checkTree } from "#plate/test/accessibility.ts";
+import { assetsOf } from "#plate/test/fixtures.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
 
@@ -32,6 +34,22 @@ import { roundTrips } from "#plate/test/round-trip.ts";
  * The item instance key every test payload carries.
  */
 const instance = "i1";
+
+/**
+ * The location every test payload carries, its path from the package root, which each package URL
+ * resolves against: `resources/crows.jpg` names `items/resources/crows.jpg`.
+ */
+const location = "items/q1.xml";
+
+/**
+ * The addresses of the files the BG011-shaped body names, which {@link emit} renders with.
+ */
+const bg011Assets = assetsOf([
+  ["items/resources/crows.jpg", "https://cdn.example/sha256/crows"],
+  ["items/resources/crow_movie.mp4", "https://cdn.example/sha256/movie-mp4"],
+  ["items/resources/crow_movie.ogg", "https://cdn.example/sha256/movie-ogg"],
+  ["items/resources/subtitles_en.vtt", "https://cdn.example/sha256/subtitles"],
+]);
 
 /**
  * Build a body element's payload.
@@ -81,6 +99,7 @@ const farTimeoutMs = 60_000;
 const payloadOf = (body: readonly PayloadNode[]): Payload => ({
   body,
   credit: Option.none(),
+  document: location,
   finished: false,
   instance,
   lang: "en",
@@ -104,17 +123,18 @@ const notice = (feature: string): NoticePayload => ({ feature, kind: "notice" })
  * Give the emit state.
  *
  * @param headingLevel The configured heading level.
- * @param assetBase The base package paths are rebased onto, `""` by default.
+ * @param assets The address of each file, by its path from the package root, the BG011-shaped
+ *   body's files by default.
  * @param overrides The part overrides, none by default.
  * @returns The emit state.
  */
 const stateAt = (
   headingLevel: number,
-  assetBase = "",
+  assets: ReadonlyMap<PackagePath, string> = bg011Assets,
   overrides: PartOverrides = {},
 ): Effect.Effect<EmitState> =>
   Effect.map(Effect.orDie(Effect.fromResult(resolveOverrides(overrides))), (parts) => ({
-    assetBase,
+    assets,
     headingLevel,
     locale: "en",
     parts,
@@ -182,17 +202,18 @@ const emit = (
   );
 
 /**
- * Emit a body at heading level 2 with package paths rebased onto an asset base.
+ * Emit a body at heading level 2 with each package path written as the address assets give its
+ * file.
  *
  * @param body The body's payload nodes.
- * @param assetBase The asset base.
+ * @param assets The address of each file, by its path from the package root.
  * @returns The emitted nodes.
  */
 const emitAt = (
   body: readonly PayloadNode[],
-  assetBase: string,
+  assets: ReadonlyMap<PackagePath, string>,
 ): Effect.Effect<readonly Node[], unknown> =>
-  Effect.flatMap(stateAt(2, assetBase), (state) =>
+  Effect.flatMap(stateAt(2, assets), (state) =>
     Effect.fromResult(emitBody(payloadOf(body), state, stub)),
   );
 
@@ -352,7 +373,7 @@ const emittedRow = (cell: string): Element => h("tr", {}, [h("td", {}, [text(cel
 describe("emitBody", () => {
   it("returns a Result, a plain function callable with no Effect runtime", () => {
     const state: EmitState = {
-      assetBase: "",
+      assets: new Map(),
       headingLevel: 2,
       locale: "en",
       parts: Result.getOrThrow(resolveOverrides()),
@@ -771,7 +792,7 @@ describe("emitBody", () => {
 
   it.effect("[Q-31] the Notice goes through its part replacement", () =>
     Effect.gen(function* swappedNotice() {
-      const state = yield* stateAt(2, "", {
+      const state = yield* stateAt(2, new Map(), {
         // The replacement writes no props of its own; applyPart writes the Notice's over it (I1).
         item: { notice: (_props, children) => h("strong", { class: "notice" }, children) },
       });
@@ -880,63 +901,76 @@ describe("emitBody, URLs", () => {
       }),
   );
 
-  it.effect("[I-8] a package-relative src resolves against the asset base", () =>
-    Effect.gen(function* rebased() {
-      const body = [
-        el("img", { alt: "Crows", src: "resources/crows.jpg" }),
-        el("video", { controls: "controls", poster: "poster%20one.png" }, [
-          el("source", { src: "movie.mp4", type: "video/mp4" }),
-          el("track", { kind: "subtitles", src: "subtitles_en.vtt", srclang: "en" }),
-        ]),
-        el("object", { data: "orkney1.svg", type: "image/svg+xml" }, [txt("Orkney")]),
-      ];
-      const expected = [
-        "https://cdn.example/pkg/resources/crows.jpg",
-        "https://cdn.example/pkg/poster%20one.png",
-        "https://cdn.example/pkg/movie.mp4",
-        "https://cdn.example/pkg/subtitles_en.vtt",
-        "https://cdn.example/pkg/orkney1.svg",
-      ];
-
-      assert.deepStrictEqual(
-        fetchedUrlsIn(yield* emitAt(body, "https://cdn.example/pkg/")),
-        expected,
-      );
-      assert.deepStrictEqual(
-        fetchedUrlsIn(yield* emitAt(body, "https://cdn.example/pkg")),
-        expected,
-      );
-      assert.deepStrictEqual(fetchedUrlsIn(yield* emit(body)), [
-        "resources/crows.jpg",
-        "poster%20one.png",
-        "movie.mp4",
-        "subtitles_en.vtt",
-        "orkney1.svg",
-      ]);
-    }),
-  );
-
   it.effect(
-    "[I-8] a remote http or https URL stays as check wrote it, whatever the asset base",
+    "[I-8] a package-relative src, poster and data are each written as the address assets give the file it names from the item's location",
     () =>
-      Effect.gen(function* remote() {
-        const nodes = yield* emitAt(
-          [
-            el("img", { alt: "x", src: "http://example.org/a.png" }),
-            el("a", { href: "https://example.org/page?q=1#top" }, [txt("page")]),
-          ],
-          "https://cdn.example/pkg/",
-        );
+      Effect.gen(function* addressed() {
+        const body = [
+          el("img", { alt: "Crows", src: "resources/crows.jpg" }),
+          el("video", { controls: "controls", poster: "poster%20one.png" }, [
+            el("source", { src: "movie.mp4#t=10", type: "video/mp4" }),
+            el("track", { kind: "subtitles", src: "subtitles_en.vtt", srclang: "en" }),
+          ]),
+          el("object", { data: "orkney1.svg", type: "image/svg+xml" }, [txt("Orkney")]),
+        ];
+        const assets = assetsOf([
+          ["items/resources/crows.jpg", "https://cdn.example/sha256/1"],
+          ["items/poster one.png", "https://cdn.example/sha256/2"],
+          ["items/movie.mp4", "https://cdn.example/sha256/3"],
+          ["items/subtitles_en.vtt", "https://cdn.example/sha256/4"],
+          ["items/orkney1.svg", "https://cdn.example/sha256/5"],
+        ]);
 
-        assert.deepStrictEqual(
-          elementsIn(nodes).map(({ attrs }) => attrs["src"] ?? attrs["href"]),
-          ["http://example.org/a.png", "https://example.org/page?q=1#top"],
-        );
+        assert.deepStrictEqual(fetchedUrlsIn(yield* emitAt(body, assets)), [
+          "https://cdn.example/sha256/1",
+          "https://cdn.example/sha256/2",
+          "https://cdn.example/sha256/3#t=10",
+          "https://cdn.example/sha256/4",
+          "https://cdn.example/sha256/5",
+        ]);
       }),
   );
 
   it.effect(
-    "[I-8] each package candidate of a srcset is rebased, remote ones and descriptors kept",
+    "[I-8] a package path whose file has no address is never written, relative to the page or otherwise",
+    () =>
+      Effect.gen(function* unaddressed() {
+        const nodes = yield* emitAt(
+          [
+            el("img", { alt: "Crows", src: "resources/crows.jpg" }),
+            el("object", { data: "orkney1.svg", type: "image/svg+xml" }, [txt("Orkney")]),
+            el("a", { href: "passage.html" }, [txt("passage")]),
+          ],
+          new Map(),
+        );
+
+        assert.deepStrictEqual(nodes, [
+          h("img", { alt: "Crows" }),
+          h("object", { type: "image/svg+xml" }, [text("Orkney")]),
+          h("a", {}, [text("passage")]),
+        ]);
+      }),
+  );
+
+  it.effect("[I-8] a remote http or https URL stays as check wrote it, whatever assets hold", () =>
+    Effect.gen(function* remote() {
+      const nodes = yield* emitAt(
+        [
+          el("img", { alt: "x", src: "http://example.org/a.png" }),
+          el("a", { href: "https://example.org/page?q=1#top" }, [txt("page")]),
+        ],
+        new Map(),
+      );
+
+      assert.deepStrictEqual(
+        elementsIn(nodes).map(({ attrs }) => attrs["src"] ?? attrs["href"]),
+        ["http://example.org/a.png", "https://example.org/page?q=1#top"],
+      );
+    }),
+  );
+
+  it.effect(
+    "[I-8] each package candidate of a srcset is written as its file's address, remote ones and descriptors kept",
     () =>
       Effect.gen(function* srcset() {
         const nodes = yield* emitAt(
@@ -949,13 +983,13 @@ describe("emitBody, URLs", () => {
               el("img", { alt: "x", src: "small.png" }),
             ]),
           ],
-          "https://cdn.example/pkg/",
+          assetsOf([["items/small.png", "https://cdn.example/sha256/small"]]),
         );
         const source = elementsIn(nodes).find((element) => element.tag === "source");
 
         assert.strictEqual(
           source?.attrs["srcset"],
-          "https://cdn.example/pkg/small.png 1x, https://cdn.other/big.png 2x",
+          "https://cdn.example/sha256/small 1x, https://cdn.other/big.png 2x",
         );
       }),
   );
@@ -971,7 +1005,7 @@ describe("emitBody, URLs", () => {
             el("a", { href: "#" }, [txt("top")]),
           ]),
         ],
-        "https://cdn.example/pkg/",
+        new Map(),
       );
       const [target, , back, quote, top] = elementsIn(nodes);
 
@@ -1288,5 +1322,149 @@ describe("emitBody, render time", () => {
         );
       }),
     growthTimeoutMs,
+  );
+});
+
+/**
+ * Build an `img` whose `src` is a value as `check` wrote it.
+ *
+ * @param src The `src`.
+ * @returns The element payload.
+ */
+const image = (src: string): ElementPayload => el("img", { alt: "x", src });
+
+/**
+ * An Extended Text bound to `ESSAY`, unnamed, with a Prompt that holds an image of `prompt.png`.
+ */
+const essay: ExtendedTextPayload = {
+  autofocus: false,
+  base: 10,
+  baseType: "string",
+  cardinality: "single",
+  class: "",
+  editable: true,
+  expectedLines: Option.none(),
+  formName: entryName(instance, "ESSAY"),
+  format: "plain",
+  invalid: false,
+  kind: "extended-text",
+  messageIds: [],
+  n: 1,
+  name: { ariaLabel: Option.none(), ariaLabelledby: Option.none(), unnamed: Option.none() },
+  notice: Option.none(),
+  placeholder: Option.none(),
+  prompt: Option.some([image("prompt.png")]),
+  response: "ESSAY",
+  restores: [""],
+};
+
+/**
+ * Find the first file with no address that a payload's package URLs name, under assets.
+ *
+ * @param payload The payload.
+ * @param assets The address of each file, by its path from the package root.
+ * @returns The file's path, or none.
+ */
+const missingUnder = (
+  payload: Payload,
+  assets: ReadonlyMap<PackagePath, string>,
+): Effect.Effect<Option.Option<string>> =>
+  Effect.map(stateAt(2, assets), (state) => missingAsset(payload, state));
+
+describe("missingAsset", () => {
+  it.effect(
+    "[I-8] finds none when assets address every package URL, and needs no address for a remote URL, a fragment or a dropped value",
+    () =>
+      Effect.gen(function* everyAddressed() {
+        const payload = payloadOf([
+          el("p", {}, [
+            image("resources/crows.jpg"),
+            image("https://example.org/a.png"),
+            el("a", { href: "#q1" }, [txt("back")]),
+            el("a", { href: "../outside.html" }, [txt("outside")]),
+            // oxlint-disable-next-line eslint/no-script-url -- the value is test input the emitter must drop, never a URL this code navigates to.
+            image("javascript:alert(1)"),
+          ]),
+        ]);
+
+        assert.deepStrictEqual(yield* missingUnder(payload, bg011Assets), Option.none());
+      }),
+  );
+
+  it.effect(
+    "[I-8] finds the first file with no address in document order, at any depth, resolved from the item's location",
+    () =>
+      Effect.gen(function* firstMissing() {
+        const payload = payloadOf([
+          el("p", {}, [
+            image("resources/crows.jpg"),
+            el("span", {}, [el("a", { href: "media/a%20b.html" }, [txt("a")])]),
+          ]),
+          image("later.png"),
+        ]);
+
+        assert.deepStrictEqual(
+          yield* missingUnder(payload, bg011Assets),
+          Option.some("items/media/a b.html"),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-8] finds a file named in a Choice's Prompt or choice content, an Inline Choice's Label or choice content, an Extended Text's Prompt, a modal feedback or a srcset candidate",
+    () =>
+      Effect.gen(function* everyPlace() {
+        const cases: readonly (readonly [string, Payload, string])[] = [
+          [
+            "a Choice's Prompt",
+            payloadOf([{ ...choice, prompt: Option.some([image("prompt.png")]) }]),
+            "items/prompt.png",
+          ],
+          [
+            "a Choice's choice content",
+            payloadOf([{ ...choice, choices: [{ content: [image("red.png")], identifier: "A" }] }]),
+            "items/red.png",
+          ],
+          [
+            "an Inline Choice's Label",
+            payloadOf([{ ...inlineChoice, label: Option.some([image("label.png")]) }]),
+            "items/label.png",
+          ],
+          [
+            "an Inline Choice's choice content",
+            payloadOf([
+              { ...inlineChoice, choices: [{ content: [image("red.png")], identifier: "R" }] },
+            ]),
+            "items/red.png",
+          ],
+          ["an Extended Text's Prompt", payloadOf([essay]), "items/prompt.png"],
+          [
+            "a modal feedback",
+            {
+              ...payloadOf([]),
+              modalFeedback: [{ content: [image("feedback.png")], title: Option.none() }],
+            },
+            "items/feedback.png",
+          ],
+          [
+            "a srcset candidate",
+            payloadOf([
+              el("picture", {}, [
+                el("source", { srcset: "resources/crows.jpg 1x, big.png 2x", type: "image/png" }),
+                image("resources/crows.jpg"),
+              ]),
+            ]),
+            "items/big.png",
+          ],
+        ];
+
+        for (const [place, payload, file] of cases) {
+          assert.deepStrictEqual(
+            yield* missingUnder(payload, bg011Assets),
+            Option.some(file),
+            place,
+          );
+        }
+      }),
   );
 });

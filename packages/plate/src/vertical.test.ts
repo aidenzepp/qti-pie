@@ -36,6 +36,7 @@ import { checkTree, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml, roundTrips } from "#plate/test/round-trip.ts";
+import { corpusConfiguration } from "#plate/test/sweep.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -341,7 +342,7 @@ const statesOf = (posted: readonly string[]): readonly (readonly [string, Option
  * @returns Nothing; each check is an assertion.
  */
 const checkRenders = Effect.fnUntraced(function* checkRenders(fixture: Rendering) {
-  const configuration: Configuration = yield* configure({});
+  const configuration: Configuration = yield* corpusConfiguration();
   const { accepted, source } = yield* acceptFixture(fixture.location);
   const redacted = redact(accepted);
   const written = json(redacted);
@@ -418,7 +419,7 @@ const complete = Effect.fnUntraced(function* complete(
   keys: readonly Key[],
   host = "",
 ) {
-  const configuration: Configuration = yield* configure({});
+  const configuration: Configuration = yield* corpusConfiguration();
   const redacted = redact(accepted);
   const rendered = yield* Effect.fromResult(render(redacted, configuration, { instance }));
   const form = rootOf(`<form>${rendered.html}${host}${submit}</form>`);

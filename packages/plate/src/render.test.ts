@@ -22,7 +22,14 @@ import type {
 import type { RedactRecord } from "#plate/model/record.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
-import { InvalidInstance, OutputTooLarge, redact, render, renderStatus } from "#plate/render.ts";
+import {
+  AssetMissing,
+  InvalidInstance,
+  OutputTooLarge,
+  redact,
+  render,
+  renderStatus,
+} from "#plate/render.ts";
 import type { Options, Rendered } from "#plate/render.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
@@ -449,9 +456,15 @@ const rootOf = (rendered: Rendered): Element => {
 };
 
 /**
- * The default configuration.
+ * The address of the one file {@link redacted}'s item names, `images/france.png` in
+ * `items/capital.xml`, as `configure` reads `assets`.
  */
-const defaults: Effect.Effect<Configuration, unknown> = configure({});
+const franceAssets = [["items/images/france.png", "https://cdn.example/sha256/france"]] as const;
+
+/**
+ * The default configuration, with the address of {@link redacted}'s image, so `render` writes it.
+ */
+const defaults: Effect.Effect<Configuration, unknown> = configure({ assets: franceAssets });
 
 /**
  * Collect every element at or below some nodes, in document order.
@@ -743,10 +756,12 @@ describe("render", () => {
   );
 
   it.effect(
-    "[Q-2] [Q-20] shows values, takes names and disabled, and prefers options.assetBase",
+    "[Q-2] [Q-20] shows values, takes names and disabled, and writes the image as the address the configuration's assets give its file",
     () =>
       Effect.gen(function* readsOptions() {
-        const configuration = yield* configure({ assetBase: "https://config.example/" });
+        const configuration = yield* configure({
+          assets: [["items/images/france.png", "https://config.example/sha256/france"]],
+        });
         const shown = elementsIn(
           yield* Effect.fromResult(
             render(redacted, configuration, {
@@ -770,13 +785,12 @@ describe("render", () => {
         );
         assert.deepStrictEqual(
           shown.filter((element) => element.tag === "img").map((image) => image.attrs["src"]),
-          ["https://config.example/images/france.png"],
+          ["https://config.example/sha256/france"],
         );
 
         const named = elementsIn(
           yield* Effect.fromResult(
             render(redacted, configuration, {
-              assetBase: "https://option.example/assets/",
               disabled: true,
               instance,
               names: { RESPONSE: "capital" },
@@ -790,8 +804,40 @@ describe("render", () => {
         assert.strictEqual(named[0]?.attrs["data-disabled"], "");
         assert.deepStrictEqual(
           named.filter((element) => element.tag === "img").map((image) => image.attrs["src"]),
-          ["https://option.example/assets/images/france.png"],
+          ["https://config.example/sha256/france"],
         );
+      }),
+  );
+
+  it.effect(
+    "[I-8] fails AssetMissing, naming the item, its location and the file, when the configuration's assets give the item's image no address, and writes none of the page",
+    () =>
+      Effect.gen(function* missing() {
+        const configurations = [
+          yield* configure({}),
+          yield* configure({
+            assets: [["images/france.png", "https://cdn.example/sha256/france"]],
+          }),
+          yield* configure({
+            assets: [["items/images/France.png", "https://cdn.example/sha256/france"]],
+          }),
+        ];
+
+        for (const configuration of configurations) {
+          const error = Option.getOrUndefined(
+            Result.getFailure(render(redacted, configuration, { instance })),
+          );
+
+          assert.instanceOf(error, AssetMissing, error?.message);
+          if (error instanceof AssetMissing) {
+            assert.deepStrictEqual(
+              { document: error.document, item: error.item, path: error.path },
+              { document: "items/capital.xml", item: "capital", path: "items/images/france.png" },
+            );
+            assert.include(error.message, '"items/images/france.png"');
+            assert.include(error.message, "render wrote none of the item");
+          }
+        }
       }),
   );
 });
@@ -1409,11 +1455,15 @@ describe("render, the output budget", () => {
           render(redacted, yield* defaults, { instance }),
         )).html;
         const exact = yield* Effect.fromResult(
-          render(redacted, yield* configure({ outputBudget: length }), { instance }),
+          render(redacted, yield* configure({ assets: franceAssets, outputBudget: length }), {
+            instance,
+          }),
         );
-        const under = render(redacted, yield* configure({ outputBudget: length - 1 }), {
-          instance,
-        });
+        const under = render(
+          redacted,
+          yield* configure({ assets: franceAssets, outputBudget: length - 1 }),
+          { instance },
+        );
 
         assert.strictEqual(exact.html.length, length);
         assert.deepStrictEqual(

@@ -2225,13 +2225,14 @@ describe("payload", () => {
     );
   });
 
-  it("[I-0] carries the view's instance, the title, and the locale as lang when the item has none", () => {
+  it("[I-0] carries the view's instance, the title, the item's location, and the locale as lang when the item has none", () => {
     const built = payload(redacted, answering);
     const welsh = payload(redactItem({ ...item, lang: Option.some("cy") }), answering);
 
     assert.deepStrictEqual(Object.keys(built).toSorted(), [
       "body",
       "credit",
+      "document",
       "finished",
       "instance",
       "lang",
@@ -2242,6 +2243,7 @@ describe("payload", () => {
       "title",
     ]);
     assert.strictEqual(built.instance, instance);
+    assert.strictEqual(built.document, redacted.document);
     assert.strictEqual(built.title, "Capitals");
     assert.strictEqual(built.mode, "answering");
     assert.strictEqual(built.lang, "en");

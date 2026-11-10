@@ -31,6 +31,7 @@ import type {
   View,
 } from "#plate/payload.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
+import { assetsOf } from "#plate/test/fixtures.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
 import { checkResponses } from "#plate/responses.ts";
@@ -209,12 +210,17 @@ const choiceIn = (built: Payload): ChoicePayload => {
 };
 
 /**
- * The emit state of every render here, with no part overrides.
+ * The emit state of every render here, with no part overrides, and an address for each swatch
+ * image the choices show.
  */
 const emitState: Effect.Effect<EmitState> = Effect.fromResult(resolveOverrides()).pipe(
   Effect.orDie,
   Effect.map((parts): EmitState => ({
-    assetBase: "",
+    assets: assetsOf([
+      ["items/images/blue.png", "https://cdn.example/sha256/blue"],
+      ["items/images/green.png", "https://cdn.example/sha256/green"],
+      ["items/images/red.png", "https://cdn.example/sha256/red"],
+    ]),
     headingLevel: 2,
     locale: "en",
     parts,

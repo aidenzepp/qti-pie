@@ -11,6 +11,34 @@ const refused = [
   { field: "maxAttempts", input: { maxAttempts: -1 } },
   { field: "outputBudget", input: { outputBudget: 0 } },
   { field: "outputBudget", input: { outputBudget: 536_870_889 } },
+  { field: "assets", input: { assets: [["/items/a.png", "https://cdn.example/a"]] } },
+  { field: "assets", input: { assets: [["", "https://cdn.example/a"]] } },
+  { field: "assets", input: { assets: [["items/../a.png", "https://cdn.example/a"]] } },
+  { field: "assets", input: { assets: [["./items/a.png", "https://cdn.example/a"]] } },
+  { field: "assets", input: { assets: [["items/a.png", "https://cdn.example/a b"]] } },
+  { field: "assets", input: { assets: [["items/a.png", ",https://cdn.example/a"]] } },
+  { field: "assets", input: { assets: [["items/a.png", "https://cdn.example/a,"]] } },
+  { field: "assets", input: { assets: [["items/a.png", "https://cdn.example/a\n"]] } },
+  {
+    field: "assets",
+    input: {
+      assets: [
+        ["items/a.png", "https://cdn.example/a"],
+        ["items/a.png", "https://cdn.example/b"],
+      ],
+    },
+  },
+  {
+    field: "assets",
+    input: {
+      assets: [
+        ["items/a.png", "https://cdn.example/a"],
+        ["items/a.png", "https://cdn.example/a"],
+      ],
+    },
+  },
+  { field: "assets", input: { assets: [["items/a.png"]] } },
+  { field: "assets", input: { assets: new Map([["items/a.png", "https://cdn.example/a"]]) } },
 ] as const;
 
 describe("configure", () => {
@@ -20,7 +48,7 @@ describe("configure", () => {
         allowComment: false,
         allowReview: true,
         allowSkipping: true,
-        assetBase: "",
+        assets: new Map(),
         headingLevel: 2,
         locale: "en",
         maxAttempts: 1,
@@ -95,6 +123,27 @@ describe("configure", () => {
       assert.strictEqual(configuration.outputBudget, 1000);
       assert.strictEqual(configuration.showFeedback, true);
     }),
+  );
+
+  it.effect(
+    "decodes assets written as [path, address] entries into the map from each path to its address, keeping a space in a name and an address's query and fragment",
+    () =>
+      Effect.gen(function* assetEntries() {
+        const { assets } = yield* configure({
+          assets: [
+            ["items/media/a b.png", "https://cdn.example/sha256/9f86"],
+            ["items/q1.xml", "/packages/p/files/items/q1.xml?x=1#y"],
+          ],
+        });
+
+        assert.deepStrictEqual(
+          [...assets],
+          [
+            ["items/media/a b.png", "https://cdn.example/sha256/9f86"],
+            ["items/q1.xml", "/packages/p/files/items/q1.xml?x=1#y"],
+          ],
+        );
+      }),
   );
 
   it.effect("refuses an input that is not an object, naming no field", () =>

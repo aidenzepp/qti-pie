@@ -1,13 +1,75 @@
 /**
- * The renderer's configuration: the settings a host chooses once, decoded and defaulted by one
- * Schema, and {@link configure}, which reads them.
+ * The renderer's configuration: the settings a host chooses and the addresses of the files its
+ * items name, decoded and defaulted by one Schema, and {@link configure}, which reads them.
  *
  * @module
  */
 import type { SchemaIssue } from "effect";
-import { Config, ConfigProvider, Effect, Match, Option, Schema } from "effect";
+import {
+  Config,
+  ConfigProvider,
+  Effect,
+  Match,
+  Option,
+  Schema,
+  SchemaTransformation,
+} from "effect";
 import { locales } from "#plate/messages.ts";
+import { isPackagePath } from "#plate/model/url.ts";
 import { defaultOutputBudget, maximumOutputBudget } from "#plate/output-budget.ts";
+
+/**
+ * A key of the configuration's `assets` as a Schema: a file's path from the package root, a
+ * `PackagePath` (`#plate/model/url.ts`), branded through {@link isPackagePath}.
+ */
+const PackagePathSchema = Schema.String.check(
+  Schema.makeFilter((text: string) =>
+    isPackagePath(text)
+      ? undefined
+      : 'a path from the package root must not be empty, start with "/" or hold a "." or ".." segment',
+  ),
+).pipe(Schema.brand("PackagePath"));
+
+/**
+ * An address of the configuration's `assets`: a URL with no ASCII whitespace that neither starts
+ * nor ends with a comma, so it is one URL wherever the emitter writes it, a `srcset` candidate
+ * included, which the HTML `srcset` parser splits at whitespace and strips of edge commas.
+ *
+ * @see https://html.spec.whatwg.org/multipage/images.html#parse-a-srcset-attribute
+ */
+const Address = Schema.String.check(
+  Schema.isPattern(/^[^\t\n\f\r ,](?:[^\t\n\f\r ]*[^\t\n\f\r ,])?$/u),
+);
+
+/**
+ * One file's entry in the configuration's `assets` as a host writes it: its path from the package
+ * root, then its address.
+ */
+const AssetEntry = Schema.Tuple([PackagePathSchema, Address]);
+
+/**
+ * The configuration's `assets` as a Schema: written as an array of entries, each a file's path and
+ * its address, which `ConfigProvider.fromUnknown` reads as any other array, and decoded to the map
+ * from each path to its address. Two entries of one path are refused, so the map holds each file
+ * once and never by whichever entry came last.
+ */
+const Assets = Schema.Array(AssetEntry)
+  .check(
+    Schema.makeFilter((entries: readonly (typeof AssetEntry.Type)[]) =>
+      new Set(entries.map(([path]) => path)).size === entries.length
+        ? undefined
+        : "each file's path may appear in one entry only",
+    ),
+  )
+  .pipe(
+    Schema.decodeTo(
+      Schema.toType(Schema.ReadonlyMap(PackagePathSchema, Address)),
+      SchemaTransformation.transform({
+        decode: (entries): ReadonlyMap<typeof PackagePathSchema.Type, string> => new Map(entries),
+        encode: (assets) => [...assets],
+      }),
+    ),
+  );
 
 /**
  * The Schema of the renderer's configuration, which owns every field's constraint and default.
@@ -16,8 +78,13 @@ import { defaultOutputBudget, maximumOutputBudget } from "#plate/output-budget.t
  * whole default configuration. The seven session-control fields are QTI's
  * `qti-item-session-control` settings; `maxAttempts` 0 means unlimited. `headingLevel` is the level
  * the item's shallowest heading takes, every other heading keeping its distance from it, capped at
- * `h6`; it starts at 2 because the host owns `h1`. `assetBase` `""` resolves asset URLs relative to
- * the package. `outputBudget` bounds the characters of HTML one `render` returns, counted as a
+ * `h6`; it starts at 2 because the host owns `h1`. `assets` maps each file an item's package URLs
+ * may name, by its path from the package root, to its address, the URL `render` writes in its
+ * place: `render` resolves each package URL against the item's location, the path from the package
+ * root the host opened it by, so `media/a.png` in `items/q1.xml` names `items/media/a.png`, and it
+ * fails `AssetMissing` for a file `assets` gives no address, never writing a path relative to the
+ * page. It is empty by default, and `configure` reads it as an array of `[path, address]` entries,
+ * each path once. `outputBudget` bounds the characters of HTML one `render` returns, counted as a
  * string's `length` counts them (UTF-16 code units), and is 16,777,216 (16 MiB of ASCII) by
  * default; past it `render` fails. `redact` takes the same budget as its last argument and stops
  * printing an item's printed variables once their text passes it, so `render` fails then too. Its
@@ -37,7 +104,7 @@ export const Configuration = Schema.Struct({
   allowComment: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   allowReview: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
   allowSkipping: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
-  assetBase: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
+  assets: Assets.pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   headingLevel: Schema.Int.check(Schema.isBetween({ maximum: 6, minimum: 2 })).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(2)),
   ),
@@ -71,7 +138,8 @@ const allowedValues: Readonly<Record<Field, string>> = {
   allowComment: "true or false",
   allowReview: "true or false",
   allowSkipping: "true or false",
-  assetBase: "a string, the base the package's asset URLs resolve against",
+  assets:
+    'an array of [path, address] entries: each path a file\'s path from the package root, such as "items/media/a.png", in one entry only, and each address a URL with no whitespace that neither starts nor ends with a comma, such as "https://cdn.example/sha256/9f86…"',
   headingLevel: "an integer from 2 to 6",
   locale: `a supported locale: ${locales.map((locale) => `"${locale}"`).join(", ")}`,
   maxAttempts: "an integer of at least 0, where 0 means unlimited",

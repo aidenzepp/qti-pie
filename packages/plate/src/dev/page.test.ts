@@ -2228,7 +2228,6 @@ describe("dev/page.ts: template processing", { tags: ["corpus"] }, () => {
             const opened = yield* get(seeded(seed), itemTarget(templateDigging));
             const expected = yield* Effect.fromResult(
               render(redact(accepted, record), configuration, {
-                assetBase: "/assets/QTI3_BPIG_Examples/items/",
                 disabled: false,
                 instance: sittingInstance,
               }),

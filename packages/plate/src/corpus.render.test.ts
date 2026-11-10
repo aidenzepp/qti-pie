@@ -1,7 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Option, Result } from "effect";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
-import { configure } from "#plate/index.ts";
 import type { Accepted, Configuration, Element, Node, Verdict } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
 import type {
@@ -22,6 +21,7 @@ import { attribute, checkTree, textOf } from "#plate/test/accessibility.ts";
 import { parseHtml, roundTrips } from "#plate/test/round-trip.ts";
 import {
   acceptedOf,
+  corpusConfiguration,
   openCorpus,
   recordStates,
   sweepInstance,
@@ -724,7 +724,7 @@ describe("the verdict and render sweep over the corpus", { tags: ["corpus"] }, (
     () =>
       Effect.gen(function* everyRender() {
         const members = yield* openCorpus;
-        const renderings = renderingsOf(members, yield* configure({}));
+        const renderings = renderingsOf(members, yield* corpusConfiguration());
         const counted = verdictsOf(members).filter(
           ([, verdict]) => verdict.kind === "item" && acceptingVerdicts.has(verdict.verdict),
         );
@@ -744,7 +744,7 @@ describe("the verdict and render sweep over the corpus", { tags: ["corpus"] }, (
     "[I-7] [I-8] every accepted item's three states pass checkTree at base level 2",
     () =>
       Effect.gen(function* everyTree() {
-        const renderings = renderingsOf(yield* openCorpus, yield* configure({}));
+        const renderings = renderingsOf(yield* openCorpus, yield* corpusConfiguration());
 
         assert.deepStrictEqual(statesProblems(renderings, treeProblems), []);
       }),
@@ -755,7 +755,7 @@ describe("the verdict and render sweep over the corpus", { tags: ["corpus"] }, (
     "[Q-12] each accepted item with an Inline Choice holds, in its three states, a Control whose options are its Placeholder and its choices",
     () =>
       Effect.gen(function* everyInlineChoice() {
-        const renderings = renderingsOf(yield* openCorpus, yield* configure({})).filter(
+        const renderings = renderingsOf(yield* openCorpus, yield* corpusConfiguration()).filter(
           (rendering) => inlineChoicesOf(rendering.accepted.item.body).length > 0,
         );
 
@@ -769,7 +769,7 @@ describe("the verdict and render sweep over the corpus", { tags: ["corpus"] }, (
     "[I-5] each item whose template processing runs renders in three states under begin's record for each sweep seed and with no record, round-trips, shows exactly its notice-shown features as notices, passes checkTree at base level 2, and under a record shows none of its printed variables, template blocks and template inlines as a notice",
     () =>
       Effect.gen(function* templatedRenders() {
-        const renderings = renderingsOf(yield* openCorpus, yield* configure({})).filter(
+        const renderings = renderingsOf(yield* openCorpus, yield* corpusConfiguration()).filter(
           (rendering) => templated(rendering.accepted),
         );
         const files = new Set(renderings.map((rendering) => rendering.location));

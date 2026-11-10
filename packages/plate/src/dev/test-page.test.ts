@@ -679,7 +679,7 @@ const storedSession = Effect.fnUntraced(function* storedSession(bench: Bench, id
   const { verdict } = Option.getOrElse(found, () => assert.fail(`No package ${sitting.id}.`));
   const test =
     verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
-      ? (verdict.accepted.tests.get(`${entry.packageLocation}/${entry.testHref}`) ??
+      ? (verdict.accepted.tests.get(entry.testHref) ??
         assert.fail(`The package holds no test ${entry.testHref}.`))
       : assert.fail(`The package ${sitting.id} is ${verdict.verdict}.`);
   const session = Result.getOrElse(decodeSession(entry.session, test.test), (failure) =>

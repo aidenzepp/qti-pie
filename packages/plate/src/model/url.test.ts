@@ -1,14 +1,19 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Option, Result } from "effect";
 import {
+  addressUrl,
+  assetPaths,
+  assetReferenceOf,
   classifyUrl,
   formatUrl,
   invalidUrlFeature,
+  isPackagePath,
   outsidePackageFeature,
   schemeFeature,
   urlAttributes,
   urlContextOf,
 } from "#plate/model/url.ts";
+import { assetsOf } from "#plate/test/fixtures.ts";
 import type {
   ClassifiedUrl,
   DroppedUrl,
@@ -384,64 +389,190 @@ describe("classifyUrl, srcset", () => {
 });
 
 describe("formatUrl", () => {
-  it("rebases a package path onto the asset base and leaves the rest as parsed", () => {
+  it("writes a kept value in its parsed form, a package path as its path below the item's directory", () => {
     assert.strictEqual(formatUrl(inPackage("images/a%20b.png")), "images/a%20b.png");
-    assert.strictEqual(
-      formatUrl(inPackage("images/a%20b.png"), "/assets/items/"),
-      "/assets/items/images/a%20b.png",
-    );
-    assert.strictEqual(
-      formatUrl(remote("https://example.com/x"), "/assets/items/"),
-      "https://example.com/x",
-    );
-    assert.strictEqual(formatUrl({ fragment: "q1", kind: "fragment" }, "/assets/items/"), "#q1");
+    assert.strictEqual(formatUrl(inPackage("./@evil.com/x")), "./@evil.com/x");
+    assert.strictEqual(formatUrl(remote("https://example.com/x")), "https://example.com/x");
+    assert.strictEqual(formatUrl({ fragment: "q1", kind: "fragment" }), "#q1");
   });
 
-  it("adds the / an asset base lacks, so a package path stays on the base's host and port", () => {
-    const cases = [
-      ["https://cdn.example", "@evil.com/x", "https://cdn.example/@evil.com/x"],
-      ["https://cdn.example", ":8080/x", "https://cdn.example/:8080/x"],
-      ["//cdn.example", "@evil.com/x", "//cdn.example/@evil.com/x"],
-      ["//cdn.example", ":8080/x", "//cdn.example/:8080/x"],
-    ] as const;
-    for (const [assetBase, value, expected] of cases) {
-      const kept = classifyUrl("resource", value);
-      assert.strictEqual(kept.kind, "package", value);
-      if (kept.kind === "package") {
-        const written = formatUrl(kept, assetBase);
-        assert.strictEqual(written, expected, `${value} under ${assetBase}`);
-        assert.strictEqual(
-          new URL(written, "https://page.example/item").host,
-          "cdn.example",
-          `${value} under ${assetBase}`,
-        );
-      }
-    }
-    assert.strictEqual(
-      formatUrl(inPackage("images/a.png"), "https://cdn.example"),
-      "https://cdn.example/images/a.png",
-    );
-  });
-
-  it("leaves an empty asset base, and one that ends in /, as it is", () => {
-    assert.strictEqual(formatUrl(inPackage("images/a.png"), ""), "images/a.png");
-    assert.strictEqual(
-      formatUrl(inPackage("images/a.png"), "https://cdn.example/"),
-      "https://cdn.example/images/a.png",
-    );
-    assert.strictEqual(
-      formatUrl(inPackage("images/a.png"), "/assets/items/"),
-      "/assets/items/images/a.png",
-    );
-  });
-
-  it("writes a srcset candidate by candidate, rebasing each package path", () => {
+  it("writes a srcset candidate by candidate, each followed by its descriptors", () => {
     const kept = classifyUrl("srcset", "small.png 1x, https://example.com/large.png 2x");
     assert.strictEqual(kept.kind, "srcset");
     if (kept.kind === "srcset") {
-      assert.strictEqual(
-        formatUrl(kept, "/assets/items/"),
-        "/assets/items/small.png 1x, https://example.com/large.png 2x",
+      assert.strictEqual(formatUrl(kept), "small.png 1x, https://example.com/large.png 2x");
+    }
+  });
+});
+
+describe("isPackagePath", () => {
+  it("holds for a path from the package root, a space or a % in a name included", () => {
+    for (const path of ["a.png", "items/media/a b.png", "items/%41.png", "items/a..b/c.png"]) {
+      assert.isTrue(isPackagePath(path), path);
+    }
+  });
+
+  it("fails for an empty path, a rooted one, and one with a . or .. segment", () => {
+    for (const path of ["", "/a.png", "./a.png", "items/./a.png", "items/../a.png", "..", "a/.."]) {
+      assert.isFalse(isPackagePath(path), path);
+    }
+  });
+});
+
+describe("assetReferenceOf", () => {
+  it("resolves a package path against the item's directory, each segment percent-decoded, its query and fragment apart", () => {
+    const cases = [
+      ["items/q1.xml", "media/a%20b.png", "items/media/a b.png", ""],
+      ["items/q1.xml", "media/%C3%A9.png", "items/media/é.png", ""],
+      ["items/q1.xml", "asl/item123.mp4#t=00:00:16.0", "items/asl/item123.mp4", "#t=00:00:16.0"],
+      ["items/q1.xml", "a.png?v=1#x", "items/a.png", "?v=1#x"],
+      ["items/q1.xml", "./@evil.com/x", "items/@evil.com/x", ""],
+      ["items/q1.xml", "./javascript:x", "items/javascript:x", ""],
+      ["items/q1.xml", "./", "items/", ""],
+      ["items/deep/q1.xml", "../x.png", "items/x.png", ""],
+      ["q1.xml", "media/a.png", "media/a.png", ""],
+      ["items/q1.xml", "a%ZZ.png", "items/a%ZZ.png", ""],
+    ] as const;
+    for (const [location, path, file, params] of cases) {
+      assert.deepStrictEqual(
+        assetReferenceOf(location, inPackage(path)),
+        { params, path: file },
+        `${path} in ${location}`,
+      );
+    }
+  });
+
+  it("resolves the value check writes for a reference to the file the reference names", () => {
+    const cases = [
+      ["media/a b.png", "items/media/a b.png"],
+      ["./media/./a.png", "items/media/a.png"],
+      ["media/sub/../a.png", "items/media/a.png"],
+      ["media/%2e%2e/a.png", "items/a.png"],
+      ["@evil.com/x", "items/@evil.com/x"],
+      [":8080/x", "items/:8080/x"],
+      ["https:evil.com/x", "items/evil.com/x"],
+    ] as const;
+    for (const [value, file] of cases) {
+      const kept = classifyUrl("resource", value);
+      assert.strictEqual(kept.kind, "package", value);
+      if (kept.kind === "package") {
+        assert.strictEqual(assetReferenceOf("items/q1.xml", kept).path, file, value);
+      }
+    }
+  });
+});
+
+describe("addressUrl", () => {
+  /**
+   * The addresses the cases write, by file.
+   */
+  const assets = assetsOf([
+    ["items/media/a b.png", "https://cdn.example/sha256/1"],
+    ["items/@evil.com/x", "https://cdn.example/sha256/2"],
+    ["items/small.png", "https://cdn.example/sha256/3"],
+    ["items/asl/item123.mp4", "https://cdn.example/sha256/4"],
+  ]);
+
+  it("writes a package path as its file's address, then its query and fragment, never on the page's base", () => {
+    assert.deepStrictEqual(
+      addressUrl(inPackage("media/a%20b.png"), "items/q1.xml", assets),
+      Result.succeed("https://cdn.example/sha256/1"),
+    );
+    assert.deepStrictEqual(
+      addressUrl(inPackage("asl/item123.mp4#t=00:00:01,00:00:10.0"), "items/q1.xml", assets),
+      Result.succeed("https://cdn.example/sha256/4#t=00:00:01,00:00:10.0"),
+    );
+    assert.deepStrictEqual(
+      addressUrl(inPackage("./@evil.com/x"), "items/q1.xml", assets),
+      Result.succeed("https://cdn.example/sha256/2"),
+    );
+  });
+
+  it("fails with the file's path when assets give the file no address, whatever the page could resolve", () => {
+    assert.deepStrictEqual(
+      addressUrl(inPackage("media/c.png"), "items/q1.xml", assets),
+      Result.fail("items/media/c.png"),
+    );
+    assert.deepStrictEqual(
+      addressUrl(inPackage("a%20b.png"), "items/media/q1.xml", new Map()),
+      Result.fail("items/media/a b.png"),
+    );
+  });
+
+  it("fails for a location whose path is no PackagePath, since no key of assets can be one", () => {
+    const beside = assetsOf([["items/a.png", "https://cdn.example/sha256/5"]]);
+    assert.deepStrictEqual(
+      addressUrl(inPackage("a.png"), "items/q1.xml", beside),
+      Result.succeed("https://cdn.example/sha256/5"),
+    );
+    assert.deepStrictEqual(
+      addressUrl(inPackage("a.png"), "/items/q1.xml", beside),
+      Result.fail("/items/a.png"),
+    );
+    assert.deepStrictEqual(
+      addressUrl(inPackage("a.png"), "../items/q1.xml", beside),
+      Result.fail("../items/a.png"),
+    );
+  });
+
+  it("writes a remote URL and a fragment as parsed, and needs no address for either", () => {
+    assert.deepStrictEqual(
+      addressUrl(remote("https://example.com/x"), "items/q1.xml", new Map()),
+      Result.succeed("https://example.com/x"),
+    );
+    assert.deepStrictEqual(
+      addressUrl({ fragment: "q1", kind: "fragment" }, "items/q1.xml", new Map()),
+      Result.succeed("#q1"),
+    );
+  });
+
+  it("writes a srcset candidate by candidate, each package path as its address, and fails at its first file with no address", () => {
+    const kept = classifyUrl("srcset", "small.png 1x, https://example.com/large.png 2x");
+    const missing = classifyUrl("srcset", "small.png 1x, medium.png 2x, large.png 3x");
+    assert.strictEqual(kept.kind, "srcset");
+    assert.strictEqual(missing.kind, "srcset");
+    if (kept.kind === "srcset" && missing.kind === "srcset") {
+      assert.deepStrictEqual(
+        addressUrl(kept, "items/q1.xml", assets),
+        Result.succeed("https://cdn.example/sha256/3 1x, https://example.com/large.png 2x"),
+      );
+      assert.deepStrictEqual(
+        addressUrl(missing, "items/q1.xml", assets),
+        Result.fail("items/medium.png"),
+      );
+    }
+  });
+});
+
+describe("assetPaths", () => {
+  it("names each file a URL attribute's package paths name, a srcset's in order, and none for any other value", () => {
+    const cases = [
+      ["img", "src", "media/a%20b.png", ["items/media/a b.png"]],
+      ["object", "data", "media/graph.svg#v", ["items/media/graph.svg"]],
+      ["video", "poster", "./poster.png", ["items/poster.png"]],
+      ["a", "href", "passage.html", ["items/passage.html"]],
+      [
+        "source",
+        "srcset",
+        "a.png 1x, https://r.example/b.png 2x, c.png 3x",
+        ["items/a.png", "items/c.png"],
+      ],
+      ["img", "src", "../shared/a.png", []],
+      ["img", "src", "/a.png", []],
+      ["img", "src", "https://r.example/a.png", []],
+      ["object", "data", "https://r.example/a.svg", []],
+      ["a", "href", "#q1", []],
+      // oxlint-disable-next-line eslint/no-script-url -- the value is test input plate must drop, never a URL this code navigates to.
+      ["img", "src", "javascript:alert(1)", []],
+      ["img", "src", " ", []],
+      ["img", "alt", "a.png", []],
+      ["p", "src", "a.png", []],
+    ] as const;
+    for (const [element, attribute, value, files] of cases) {
+      assert.deepStrictEqual(
+        assetPaths("items/q1.xml", element, attribute, value),
+        files,
+        `${element}@${attribute}="${value}"`,
       );
     }
   });

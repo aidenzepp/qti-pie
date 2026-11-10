@@ -1909,6 +1909,7 @@ describe("the public surface", () => {
       const surface = yield* Effect.promise(() => import("#plate/index.ts"));
 
       assert.deepStrictEqual(Object.keys(surface).toSorted(), [
+        "AssetMissing",
         "IntentRefused",
         "InvalidConfiguration",
         "InvalidInstance",
@@ -1939,6 +1940,7 @@ describe("the public surface", () => {
         "acceptedItem",
         "advance",
         "allowedIntents",
+        "assetPaths",
         "begin",
         "checkInstance",
         "checkResponses",

@@ -13,8 +13,10 @@
  *
  * URL attributes are `url.ts`'s, and so is every decision about them: `check` has already dropped
  * each refused value, placed its notice, and written each kept value in its parsed form. The walk
- * classifies a value again only to write it, rebasing a package path onto the asset base and
- * scoping a same-document `#id` as the id it names.
+ * classifies a value again only to write it, a package path as the address the emit state's
+ * `assets` gives the file it names from the payload's `document`, and a same-document `#id` scoped
+ * as the id it names. {@link missingAsset} finds a package path with no address before the walk
+ * runs, so `render` fails on one and the walk never meets it.
  *
  * The walk does not trust the payload it reads: `render` may run in a browser on a `Redacted` that
  * crossed the network as JSON and lost its type. So it emits only the XSD's HTML subset,
@@ -35,8 +37,8 @@ import type { Position, Resolved } from "#plate/emit/parts.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
-import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
-import type { KeptUrl, UrlContext } from "#plate/model/url.ts";
+import { addressUrl, classifyUrl, urlContextOf } from "#plate/model/url.ts";
+import type { KeptUrl, PackagePath, UrlContext } from "#plate/model/url.ts";
 import type {
   AttributePayload,
   ElementPayload,
@@ -391,7 +393,14 @@ const blank = /^[\t\n\f\r ]*$/u;
  * stand.
  */
 interface Walk {
-  readonly assetBase: string;
+  /**
+   * The address of each file, by its path from the package root, the emit state's.
+   */
+  readonly assets: ReadonlyMap<PackagePath, string>;
+  /**
+   * The item's location, the payload's, which each package URL resolves against.
+   */
+  readonly document: string;
   /**
    * The amount added to an authored heading's level, from {@link headingOffsetOf}.
    */
@@ -443,13 +452,16 @@ const scopedFragment = (url: KeptUrl, instance: string): KeptUrl =>
  * Write a URL attribute's value as it renders, through `url.ts` alone.
  *
  * `check` has written every value it kept in its parsed form, so classifying it again gives the
- * same classification; it is done only so {@link formatUrl} can rebase a package path onto the
- * asset base. A value `url.ts` refuses, which only a payload `check` did not secure can hold, is
- * never written; `check` places the notice for each one it drops, so none is added here.
+ * same classification; it is done only so `addressUrl` can write a package path as its file's
+ * address. A value `url.ts` refuses, which only a payload `check` did not secure can hold, is never
+ * written; `check` places the notice for each one it drops, so none is added here. A package path
+ * whose file has no address is never written either, so no path reaches the page relative to it:
+ * `render` refuses such an item through {@link missingAsset} before the walk, so only a caller of
+ * the emitter that skips that check meets one.
  *
  * @param context The attribute's context, from `urlContextOf`.
  * @param value The value as the payload holds it.
- * @param walk What the walk carries: the asset base and the item instance key.
+ * @param walk What the walk carries: the assets, the item's location and its instance key.
  * @returns The value to write, or none when the attribute is dropped.
  */
 const urlFor = (context: UrlContext, value: string, walk: Walk): Option.Option<string> => {
@@ -457,7 +469,7 @@ const urlFor = (context: UrlContext, value: string, walk: Walk): Option.Option<s
 
   return url.kind === "dropped"
     ? Option.none()
-    : Option.some(formatUrl(scopedFragment(url, walk.instance), walk.assetBase));
+    : Result.getSuccess(addressUrl(scopedFragment(url, walk.instance), walk.document, walk.assets));
 };
 
 /**
@@ -817,8 +829,8 @@ const headingOffsetOf = (payload: Payload, headingLevel: number): number =>
  *
  * @param payload The payload, which gives the item instance key and the body the heading offset is
  *   read from.
- * @param state The emit state, which gives the locale, the heading level, the asset base and the
- *   part overrides.
+ * @param state The emit state, which gives the assets, the locale, the heading level and the part
+ *   overrides.
  * @param renderInteraction The render function for an interaction among the nodes.
  * @param position Where the nodes stand. At a phrasing position nothing below them stands at a
  *   flow position either, since the walk cannot see whether a `p` is open above.
@@ -830,7 +842,8 @@ const walkOf = (
   renderInteraction: RenderInteraction,
   position: Position,
 ): Walk => ({
-  assetBase: state.assetBase,
+  assets: state.assets,
+  document: payload.document,
   headingOffset: headingOffsetOf(payload, state.headingLevel),
   instance: payload.instance,
   locale: state.locale,
@@ -934,3 +947,126 @@ export const emitModalFeedback = (
     ),
   );
 };
+
+/**
+ * Find the first file a package URL among payload nodes names that has no address: in each
+ * element's URL attributes and below it, in each interaction's Prompt, Label and choices' content,
+ * at any depth, in document order.
+ *
+ * It reads every node the payload holds, a superset of those the walk writes: an Inline Choice's
+ * choice content, which the walk writes as option text, and anything below an element the second
+ * line drops are read too. So when it finds none, the walk writes an address for every package URL
+ * it meets.
+ *
+ * @param nodes The payload nodes.
+ * @param document The item's location, which each package URL resolves against.
+ * @param assets The address of each file, by its path from the package root.
+ * @returns The file's path from the package root, or none when every file has an address.
+ */
+const missingIn = (
+  nodes: readonly PayloadNode[],
+  document: string,
+  assets: ReadonlyMap<PackagePath, string>,
+): Option.Option<string> => {
+  for (const node of nodes) {
+    // oxlint-disable-next-line eslint/no-use-before-define -- `missingIn` and `missingAt` are mutually recursive, as elements nest; the call runs only after both are defined.
+    const missing = missingAt(node, document, assets);
+    if (Option.isSome(missing)) {
+      return missing;
+    }
+  }
+
+  return Option.none();
+};
+
+/**
+ * Find the first file a package URL in one payload node, or below it, names that has no address.
+ *
+ * @param node The payload node.
+ * @param document The item's location.
+ * @param assets The address of each file, by its path from the package root.
+ * @returns The file's path from the package root, or none.
+ */
+const missingAt = (
+  node: PayloadNode,
+  document: string,
+  assets: ReadonlyMap<PackagePath, string>,
+): Option.Option<string> => {
+  switch (node.kind) {
+    case "element": {
+      for (const { name, value } of node.attributes) {
+        const missing = Option.flatMap(urlContextOf(node.tag, name), (context) => {
+          const url = classifyUrl(context, value);
+
+          return url.kind === "dropped"
+            ? Option.none()
+            : Result.getFailure(addressUrl(url, document, assets));
+        });
+        if (Option.isSome(missing)) {
+          return missing;
+        }
+      }
+
+      return missingIn(node.children, document, assets);
+    }
+    case "choice": {
+      return missingIn(
+        [
+          ...Option.getOrElse(node.prompt, () => []),
+          ...node.choices.flatMap(({ content }) => content),
+        ],
+        document,
+        assets,
+      );
+    }
+    case "extended-text": {
+      return missingIn(
+        Option.getOrElse(node.prompt, () => []),
+        document,
+        assets,
+      );
+    }
+    case "inline-choice": {
+      return missingIn(
+        [
+          ...Option.getOrElse(node.label, () => []),
+          ...node.choices.flatMap(({ content }) => content),
+        ],
+        document,
+        assets,
+      );
+    }
+    case "notice":
+    case "text":
+    case "text-entry": {
+      return Option.none();
+    }
+    default: {
+      // Only a payload that lost its type on the way here holds another kind.
+      node satisfies never;
+
+      return Option.none();
+    }
+  }
+};
+
+/**
+ * Find the first file a package URL of the item names that the emit state's `assets` gives no
+ * address: in its body, then in each modal feedback it shows, in document order, each package URL
+ * resolved against the payload's `document` as the walk resolves it (`addressUrl`).
+ *
+ * `render` calls it before it emits anything and fails `AssetMissing` on the file it gives, so a
+ * page never holds a package path, relative to the page or otherwise, and holds no part of an item
+ * one of whose files has no address.
+ *
+ * @param payload The payload, whose body and modal feedback hold every node the emitter writes.
+ * @param state The emit state, which gives the assets.
+ * @returns The file's path from the package root, or none when every file the item names has an
+ *   address.
+ */
+export const missingAsset = (payload: Payload, state: EmitState): Option.Option<string> =>
+  missingIn(
+    [...payload.body, ...payload.modalFeedback.flatMap((feedback) => feedback.content)],
+    payload.document,
+    state.assets,
+  );

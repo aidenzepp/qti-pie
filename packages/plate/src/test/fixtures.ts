@@ -1,5 +1,6 @@
 /**
- * Fixtures the tests share: single values built by hand, and a hand-built item.
+ * Fixtures the tests share: single values built by hand, a hand-built item, and a configuration's
+ * `assets` built by hand.
  *
  * Test support only: nothing under `src/` outside `src/test/` and test files imports it.
  *
@@ -7,7 +8,24 @@
  */
 import { Option } from "effect";
 import type { Item } from "#plate/model/item.ts";
+import { isPackagePath } from "#plate/model/url.ts";
+import type { PackagePath } from "#plate/model/url.ts";
 import type { Value } from "#plate/model/values.ts";
+
+/**
+ * Build the addresses a configuration's `assets` holds, as `configure` would decode them from the
+ * same entries, for a test that builds an emit state or a configuration by hand.
+ *
+ * @param entries Each file's path from the package root and its address.
+ * @returns The map from each path to its address, leaving out an entry whose path is no
+ *   `PackagePath`, which `configure` refuses.
+ */
+export const assetsOf = (
+  entries: readonly (readonly [string, string])[],
+): ReadonlyMap<PackagePath, string> =>
+  new Map(
+    entries.flatMap(([path, address]) => (isPackagePath(path) ? [[path, address] as const] : [])),
+  );
 
 /**
  * Construct a single integer value.

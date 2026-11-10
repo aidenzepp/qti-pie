@@ -6,7 +6,7 @@ import type { ChoiceInteraction, InlineChoiceInteraction, Item } from "#plate/mo
 import type { ItemRef, Section, Test } from "#plate/model/test.ts";
 import { openPackage } from "#plate/package/open.ts";
 import type { PackageVerdict } from "#plate/package/open.ts";
-import { fileLocation, manifestFile } from "#plate/package/store.ts";
+import { manifestFile } from "#plate/package/store.ts";
 import { open } from "#plate/validate/open.ts";
 import type { Location, Refusal, RefusalRule } from "#plate/validate/refusal.ts";
 import { acceptedItem, unsupportedFeatures } from "#plate/validate/verdict.ts";
@@ -667,7 +667,7 @@ const misplacedMappings = (verdict: PackageVerdict) =>
  */
 const atMapping: readonly { document: string; location: Location; rule: RefusalRule }[] = [
   {
-    document: fileLocation(packageLocation, "i1.xml"),
+    document: "i1.xml",
     location: { kind: "path", path: "qti-assessment-item/qti-response-declaration/qti-mapping" },
     rule: "misplaced-element",
   },

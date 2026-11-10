@@ -66,6 +66,26 @@ Put that HTML inside your own form. When the form posts back, `partition` picks 
 entries, and `decode` reads each response that `postings` lists, in the base its interaction
 declares. `score` scores the responses. The [playground](#playground) does the whole round trip.
 
+An item names its images, media and other files by their paths inside its package, such as
+`media/stars/1.svg`. `render` writes each one as the address that the configuration's `assets`
+gives the file, and never as a path relative to the page. Open the item by its path from the
+package root, as the first argument of `open` or `openAdmitted`, and give `configure` each file's
+path from the same root with its address:
+
+```ts
+const configuration = await Effect.runPromise(
+  configure({ assets: [["items/media/stars/1.svg", "https://cdn.example/sha256/9f86…"]] }),
+);
+```
+
+`render` resolves `media/stars/1.svg` in `items/stars-01.xml` to `items/media/stars/1.svg`, decoding
+each percent escape, so `a%20b.png` names `a b.png`. A query or a fragment, such as a video's
+`#t=10`, follows the address. When a file the item names has no address, `render` fails with
+`AssetMissing`, which names the file, and writes none of the item. A path that climbs above the
+item's own folder, such as `../shared/a.png`, is dropped as `url-outside-package`. `assetPaths`
+lists the files a URL attribute names, as `render` resolves them. A path appears in `assets` once,
+and an address is a URL with no whitespace that neither starts nor ends with a comma.
+
 Where a content store checks each document with `open` when it admits it, serve it after with
 `openAdmitted` in place of `open`, imported from `@qti-pie/plate`. It judges the bytes with none of
 `open`'s checks, and secures the item by the securing tables, so the serving process never loads
@@ -107,7 +127,11 @@ if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsuppo
 ```
 
 Store `stored` where only your server reads it, and hand it to `decodeSession` on the next
-request. [Navigation](#navigation) moves the session on.
+request. [Navigation](#navigation) moves the session on. `openPackage` names each document by its
+path in the package, such as `items/a.xml`, the root `assets` keys its files from, so
+`media/a.png` in that item is `items/media/a.png` in `assets`. Each refusal of a file carries that
+path as its `document`, and a refusal of the whole package carries the package's location, which
+the verdict also gives as `location`.
 
 ## Functions
 
@@ -119,7 +143,8 @@ request. [Navigation](#navigation) moves the session on.
 | `configure` | Decodes the host's settings into a `Configuration` |
 | `begin` | Starts an item's stored record, running its template processing |
 | `redact` | Copies an accepted item without its correct responses, processing or template rules, with its template values from the record |
-| `render` | Writes an item as HTML |
+| `render` | Writes an item as HTML, each file it names as the address `assets` gives it |
+| `assetPaths` | Lists the files a URL attribute of an item body names, as `render` resolves them against the item's path |
 | `renderStatus` | Writes the Status part, which shows the result after a submit |
 | `partition`, `postings`, `decode` | Turn a posted form's entries into responses, each a `ResponseValue`: a `Value`, or a `RecordValue` for a `record` response |
 | `checkResponses` | Validates responses without scoring them |
@@ -624,9 +649,9 @@ What the page gets:
   between. It carries none, and the card stays neutral, when the item declares no `MAXSCORE`, when
   either outcome is not a single float or holds NULL or a value that is not finite, when m <= 0,
   when `SCORE` carries `external-scored`, and when either outcome's `view` leaves out `candidate`.
-  A swapped part keeps it, as it keeps `aria-label`. The default theme draws it as a 4px edge and a
-  mark, a green ✓, an amber ◐ or a red ✗, with no words; the feedback's own text says how the answer
-  did.
+  A swapped part keeps it, as it keeps `aria-label`. The default theme draws it as a 1.5px outline
+  in the credit's colour and a mark, a green ✓, an amber ◐ or a red ✗, with no words; the
+  feedback's own text says how the answer did.
 - An interaction inside hidden feedback, which only an adaptive item may hold, is hidden too, as
   inside hidden template content: `postings` lists none for its response, `checkResponses` ignores
   it, and `score` keeps the record's value whatever is posted. A notice inside hidden feedback is
@@ -1183,8 +1208,8 @@ this split. A host that sends the accepted item to the browser sends what `redac
   resource lists, because plate cannot tell which one is its document. A QTI document listed in
   any other way stays in `files`, because plate does not read a file to tell what it is. Serve
   only the files `files` holds, from another origin or under the CSP `sandbox` directive, since
-  some are live documents. Refuse an asset path that leaves the package once it is
-  percent-decoded.
+  some are live documents, and give `assets` the address you serve each one at. Refuse an asset
+  path that leaves the package once it is percent-decoded.
 
 ## Hosts
 
@@ -1266,7 +1291,9 @@ $ pnpm --filter @qti-pie/plate serve
 Then open `http://localhost:5190`. The playground, [`src/dev/page.ts`](src/dev/page.ts), lists every
 document in
 [1EdTech's QTI 3 examples](https://github.com/1EdTech/qti-examples/tree/0a92fbbb6d2e620a1f7fad19977be4c418246bc0)
-by its verdict, renders the items `open` accepts inside its own form, and scores what you submit. Its
+by its verdict, renders the items `open` accepts inside its own form, and scores what you submit.
+It gives `assets` the address of each file it serves for an item, under `/assets/` for a document
+opened alone and under the package's `files` route in a test session. Its
 Verdicts page shows every verdict, and its Ledger page shows the last [ledger](#conformance-ledger).
 It listens on `127.0.0.1` only. `PLATE_DEV_PORT` picks another port. `PLATE_CORPUS_DIR` names the
 directory that holds the extracted examples, and when that directory is missing, the page shows

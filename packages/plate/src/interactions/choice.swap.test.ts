@@ -142,7 +142,7 @@ const renderSwapped = (
   Effect.fromResult(resolveOverrides({ "choice-interaction": replacements })).pipe(
     Effect.orDie,
     Effect.flatMap((parts) => {
-      const state: EmitState = { assetBase: "", headingLevel: 2, locale: "en", parts };
+      const state: EmitState = { assets: new Map(), headingLevel: 2, locale: "en", parts };
 
       return Effect.fromResult(renderChoice(choice, built, state));
     }),

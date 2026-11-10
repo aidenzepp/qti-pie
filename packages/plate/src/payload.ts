@@ -57,6 +57,7 @@ import type {
 } from "#plate/model/item.ts";
 import { outcomeDefaults, outcomeStart, unrunTemplateProcessing } from "#plate/model/record.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
+import type { PackagePath } from "#plate/model/url.ts";
 import { format, isNull, isRecordValue, match, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, ResponseValue, Single, Value } from "#plate/model/values.ts";
 import { clampOutputBudget, defaultOutputBudget } from "#plate/output-budget.ts";
@@ -133,11 +134,16 @@ export interface View {
 }
 
 /**
- * What the emitter needs beyond the payload: the locale, the base heading level, the base
- * package-relative URLs resolve against, and the resolved part overrides.
+ * What the emitter needs beyond the payload: the address of each file the item's package URLs may
+ * name, the locale, the base heading level, and the resolved part overrides.
  */
 export interface EmitState {
-  readonly assetBase: string;
+  /**
+   * The address of each file, by its path from the package root: the configuration's `assets`,
+   * which the emitter writes in place of each package URL resolved against the payload's
+   * `document`.
+   */
+  readonly assets: ReadonlyMap<PackagePath, string>;
   readonly headingLevel: number;
   readonly locale: Locale;
   readonly parts: Resolved;
@@ -486,6 +492,11 @@ export interface Payload {
    * redacted item's ({@link RedactedFields.credit}).
    */
   readonly credit: Option.Option<Credit>;
+  /**
+   * The redacted item's location, its path from the package root as the host named it, which each
+   * package URL of the item resolves against.
+   */
+  readonly document: string;
   readonly finished: boolean;
   /**
    * The item instance key, which scopes every id and entry name.
@@ -2788,6 +2799,7 @@ export const payload = (redacted: Redacted, view: View): Payload => {
   return {
     body: copyNodes(redacted.body, build),
     credit: redacted.credit,
+    document: redacted.document,
     finished: view.finished,
     instance: view.instance,
     lang: Option.getOrElse(redacted.lang, () => view.locale),

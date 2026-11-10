@@ -445,8 +445,7 @@ const fixtureCorrect = Effect.fn("fixtureCorrect")(function* fixtureCorrect(
   }
 
   const test =
-    verdict.accepted.tests.get(`${fixture.location}/${fixture.test}`) ??
-    assert.fail("the fixture package holds its test");
+    verdict.accepted.tests.get(fixture.test) ?? assert.fail("the fixture package holds its test");
   const item = test.items.get(fixtureRefs[n]) ?? assert.fail(`the test holds ${fixtureRefs[n]}`);
   const declaration =
     item.item.responses.get(response) ?? assert.fail(`${fixtureRefs[n]} declares ${response}`);

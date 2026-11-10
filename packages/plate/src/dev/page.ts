@@ -17,8 +17,10 @@
  * stylesheet, its own sheet and the host CSS of the theme its theme box last accepted, which it
  * keeps with a dark flag in memory until it restarts. Every page links the three sheets, carries
  * `class="dark"` on `html` while the flag is on, and ends with the theme box, the playground's own
- * form beside the item's. It reads the corpus through `readCorpusFile` and the ledger from
- * `PLATE_LEDGER_DIR`, and opens no port: `scripts/serve.ts` is the listener.
+ * form beside the item's. Each item page's configuration addresses, in its `assets`, every file
+ * `/assets/*` serves for the item, so the item's images and media name the playground's own route.
+ * It reads the corpus through `readCorpusFile` and the ledger from `PLATE_LEDGER_DIR`, and opens no
+ * port: `scripts/serve.ts` is the listener.
  *
  * The item form's action names the Status region as its fragment, so the page after a submit opens
  * at the result.
@@ -33,7 +35,7 @@
  * @module
  */
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown. */
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Config, ConfigProvider, Effect, Option, Ref, Result, Schema } from "effect";
@@ -70,8 +72,8 @@ import { routeSessions, sessionPath } from "#plate/dev/test-page.ts";
 import type { SessionPlayground } from "#plate/dev/test-page.ts";
 import { emptyTheme, parseTheme, themeCss } from "#plate/dev/theme.ts";
 import type { ThemeRefused } from "#plate/dev/theme.ts";
-import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
-import { readCorpusFile } from "#plate/document/corpus.ts";
+import type { CorpusMissing } from "#plate/document/corpus.ts";
+import { CorpusFileUnreadable, corpusRoot, readCorpusFile } from "#plate/document/corpus.ts";
 import { text } from "#plate/emit/node.ts";
 import { scopedId } from "#plate/emit/parts.ts";
 import {
@@ -103,6 +105,8 @@ import { ledgerDirectory } from "#plate/ledger/directory.ts";
 import { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml, verdictTable } from "#plate/ledger/view.ts";
 import { message, numeral } from "#plate/messages.ts";
+import { isPackagePath } from "#plate/model/url.ts";
+import type { PackagePath } from "#plate/model/url.ts";
 import type { PackageTest } from "#plate/package/open.ts";
 import { drawInstance } from "#plate/seed.ts";
 import { current } from "#plate/session/start.ts";
@@ -117,7 +121,8 @@ export type Handler = (request: Request) => Promise<Response>;
 /**
  * The settings of one playground, each optional.
  *
- * `configuration` is the input `configure` decodes, every default when absent; `seed` is the seed
+ * `configuration` is the input `configure` decodes, every default when absent, with no `assets`:
+ * the playground addresses each item's files itself, from the files it serves; `seed` is the seed
  * every sitting's record begins under, given to `begin` as it is, and when absent `begin` draws one
  * for each sitting (a fixed seed is guessable, so it is for tests); it also keys a test session's
  * processing, given to `startTest` as the context's `seed`, and when absent `startTest` draws one
@@ -135,7 +140,7 @@ export type Handler = (request: Request) => Promise<Response>;
  * share one only between handlers over the same root.
  */
 export interface PlaygroundSettings {
-  readonly configuration?: Partial<Configuration>;
+  readonly configuration?: Partial<Omit<Configuration, "assets">>;
   readonly newInstance?: () => string;
   readonly packages?: PackageCache;
   readonly provider?: ConfigProvider.ConfigProvider;
@@ -272,7 +277,7 @@ type HostFailure = Config.ConfigError | CorpusFileUnreadable | CorpusMissing | I
  */
 interface Playground {
   readonly appearance: Ref.Ref<Appearance>;
-  readonly configuration: Partial<Configuration>;
+  readonly configuration: Partial<Omit<Configuration, "assets">>;
   readonly host: Effect.Effect<HtmlHost, HostFailure>;
   readonly newInstance: () => string;
   readonly packages: PackageCache;
@@ -372,8 +377,8 @@ const itemTarget = (corpusPath: string, instance?: string): string =>
 
 /**
  * Read the corpus path of an `/assets/*` request through {@link servedFilePath}, which decodes each
- * segment of the request path on its own, so the path cannot climb out of the directory an item's
- * asset base names.
+ * segment of the request path on its own, so the path cannot climb out of the directory of the
+ * item whose page names it.
  *
  * `check`'s URL pass leaves a segment such as `..%2Fx` literal in the URL it writes, inside the
  * package as a URL (rule `723e580c`), so the route that serves package files must decode it and
@@ -387,19 +392,51 @@ const assetPath = (pathname: string): Option.Option<string> =>
   servedFilePath(pathname.slice("/assets/".length).split("/"));
 
 /**
- * Give the asset base of an item: its package directory under `/assets/`, each segment
- * percent-encoded, with its closing `/`.
+ * Give the addresses of the files an item's page may name, as `render` looks them up: each file
+ * `/assets/*` serves for the item, a file at any depth under the item's directory of a type the
+ * route serves, keyed by its corpus path and addressed by that path under `/assets/`, each segment
+ * percent-encoded.
+ *
+ * The playground opens an item by its corpus path, its location, so `render` resolves the item's
+ * package URLs against it and `images/a.png` in `QTI3_BPIG_Examples/items/q.xml` names
+ * `QTI3_BPIG_Examples/items/images/a.png`, the key this gives the file. plate keeps only a URL at
+ * or below the item's directory, so the files under it are every file the item can name. The map
+ * is read from the corpus on each page, so it holds the files as they are when the page is built.
  *
  * @param corpusPath The item document's corpus path.
- * @returns The base `render` rebases package paths onto.
+ * @returns Each served file's address, by its corpus path; {@link CorpusMissing} when the corpus
+ *   root does not exist, {@link CorpusFileUnreadable} when the item's directory cannot be listed,
+ *   and a `ConfigError` when neither `PLATE_CORPUS_DIR` nor `HOME` is set.
  */
-const assetBaseOf = (corpusPath: string): string => {
+const itemAssets = Effect.fn("playground.itemAssets")(function* itemAssets(
+  corpusPath: string,
+): Effect.fn.Return<ReadonlyMap<PackagePath, string>, OpenFailure> {
+  const root = yield* corpusRoot;
   const directory = path.posix.dirname(corpusPath);
+  const entries = yield* Effect.tryPromise({
+    catch: (cause) =>
+      new CorpusFileUnreadable({
+        detail: `${cause instanceof Error ? cause.message : String(cause)}; make the item's directory under the corpus root ${root} readable`,
+        path: directory,
+      }),
+    try: () => readdir(path.join(root, directory), { recursive: true, withFileTypes: true }),
+  });
 
-  return directory === "."
-    ? "/assets/"
-    : `/assets/${directory.split("/").map(encodeURIComponent).join("/")}/`;
-};
+  return new Map(
+    entries.flatMap((entry) => {
+      const file = path
+        .relative(root, path.join(entry.parentPath, entry.name))
+        .split(path.sep)
+        .join("/");
+
+      return entry.isFile() &&
+        assetTypes.has(path.posix.extname(file).toLowerCase()) &&
+        isPackagePath(file)
+        ? [[file, `/assets/${file.split("/").map(encodeURIComponent).join("/")}`] as const]
+        : [];
+    }),
+  );
+});
 
 /**
  * Report whether an asset lies in the package directory of an item the playground holds open.
@@ -672,7 +709,6 @@ const itemPage = (
       });
       const item = yield* render(redacted, configuration, {
         ...view.options,
-        assetBase: assetBaseOf(session.path),
         disabled: view.disabled,
         instance: session.instance,
       });
@@ -1029,7 +1065,7 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
       return itemPage(
         accepted.value,
         { instance, path: corpusPath, record: begun.success },
-        configuration,
+        { ...configuration, assets: yield* itemAssets(corpusPath) },
         {
           disabled: false,
           options: {},
@@ -1061,7 +1097,7 @@ const submit = Effect.fn("playground.submit")(function* submit(
   playground: Playground,
   request: Request,
   target: { readonly instance: string; readonly path: string },
-): Effect.fn.Return<Page, InvalidConfiguration> {
+): Effect.fn.Return<Page, InvalidConfiguration | OpenFailure> {
   const held = Option.filter(
     playground.sessions.get(target.instance),
     (sitting) => sitting.path === target.path,
@@ -1075,7 +1111,10 @@ const submit = Effect.fn("playground.submit")(function* submit(
   }
 
   const session = held.value;
-  const configuration = yield* configure(playground.configuration);
+  const configuration = {
+    ...(yield* configure(playground.configuration)),
+    assets: yield* itemAssets(target.path),
+  };
   const opened = { instance: target.instance, session };
   const finished = configuration.maxAttempts > 0 && session.attempts >= configuration.maxAttempts;
   if (finished && Option.isSome(session.last)) {

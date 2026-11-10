@@ -50,10 +50,10 @@ import type { Post } from "#plate/dev/post.ts";
 import {
   failurePage,
   home,
-  itemAssetBase,
   itemOf,
   notePage,
   sessionHref,
+  sittingConfiguration,
   sittingOf,
 } from "#plate/dev/sitting.ts";
 import type { Sitting } from "#plate/dev/sitting.ts";
@@ -376,13 +376,8 @@ const itemPage = (sitting: Sitting, view: ItemView, shown: Shown): Page => {
       });
       const item = yield* render(
         redact(document, view.page, view.configuration),
-        view.configuration,
-        {
-          ...shown.options,
-          assetBase: itemAssetBase(sitting, document),
-          disabled: view.disabled,
-          instance: view.instance,
-        },
+        sittingConfiguration(sitting, view.configuration),
+        { ...shown.options, disabled: view.disabled, instance: view.instance },
       );
       const form = h(
         "form",

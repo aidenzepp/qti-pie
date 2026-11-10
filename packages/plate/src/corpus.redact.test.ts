@@ -34,6 +34,7 @@ import { templateShows } from "#plate/payload.ts";
 import type { RedactedFields } from "#plate/payload.ts";
 import {
   acceptedOf,
+  corpusConfiguration,
   noRecord,
   openCorpus,
   recordStates,
@@ -507,7 +508,7 @@ const subjectOf = (
  */
 const corpusSubjects = Effect.gen(function* corpusSubjects() {
   const members = yield* openCorpus;
-  const configuration = yield* configure({});
+  const configuration = yield* corpusConfiguration();
   const made = members.flatMap((member) => Option.toArray(subjectOf(member, configuration)));
 
   return {
@@ -524,7 +525,7 @@ const corpusSubjects = Effect.gen(function* corpusSubjects() {
  */
 const templatedSubjects = Effect.gen(function* templatedSubjects() {
   const members = yield* openCorpus;
-  const configuration = yield* configure({});
+  const configuration = yield* corpusConfiguration();
   const swept = members.filter((member) => Option.exists(acceptedOf(member), templated));
   const made = swept.flatMap((member) =>
     Option.toArray(acceptedOf(member)).flatMap((accepted) =>

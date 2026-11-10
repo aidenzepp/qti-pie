@@ -441,8 +441,8 @@ const located = (scheme: string | undefined, authority: string | undefined, path
  * accepted starts with the items the package resolved for it. The `href`'s query and fragment are
  * set aside.
  *
- * A package names each document by the package's location, a `/` and the file's real name, and
- * resolves a relative `href` against the test's real name with only the `href`'s segments decoded
+ * A package names each document by its path in the package, the file's real name, and resolves a
+ * relative `href` against the test's real name with only the `href`'s segments decoded
  * ({@link appendedPath}). So the test document's location is taken as written, whatever its
  * segments hold, and `items/a%20b.xml` names the file `items/a b.xml` beside it. An `href` that
  * starts with `/` keeps the test document's scheme and authority and replaces its path, its
@@ -1348,7 +1348,7 @@ export const readingBase: Configuration = {
   allowComment: false,
   allowReview: true,
   allowSkipping: true,
-  assetBase: "",
+  assets: new Map(),
   headingLevel: 2,
   locale: "en",
   maxAttempts: 1,

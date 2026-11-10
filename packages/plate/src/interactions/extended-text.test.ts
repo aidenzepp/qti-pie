@@ -267,7 +267,7 @@ const extendedTextIn = (built: Payload, index = 0): ExtendedTextPayload => {
 const emitState: Effect.Effect<EmitState> = Effect.fromResult(resolveOverrides()).pipe(
   Effect.orDie,
   Effect.map((parts): EmitState => ({
-    assetBase: "",
+    assets: new Map(),
     headingLevel: 2,
     locale: "en",
     parts,

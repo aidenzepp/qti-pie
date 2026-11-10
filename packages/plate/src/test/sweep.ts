@@ -1,6 +1,8 @@
 /**
- * The corpus sweeps' shared support: every corpus member opened once per test file, the HTML of an
- * accepted item's three render states, and the records a templated item is redacted under.
+ * The corpus sweeps' shared support: every corpus member opened once per test file, the address of
+ * every corpus file and the configuration that holds them, the configuration that addresses an
+ * accepted package's files, the HTML of an accepted item's three render states, and the records a
+ * templated item is redacted under.
  *
  * Test support, outside the core: nothing under `src/index.ts`'s closure imports it
  * (`src/boundary.test.ts`). It reads the corpus through `corpusDocuments` and `readCorpusFile`, so
@@ -8,16 +10,25 @@
  *
  * @module
  */
+import { readdir } from "node:fs/promises";
+import path from "node:path";
 import type { Config } from "effect";
 import { Effect, Exit, Option, Result } from "effect";
 import { decodeRecord } from "#plate/codec/record.ts";
-import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
-import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
-import { begin, redact, render } from "#plate/index.ts";
+import {
+  CorpusFileUnreadable,
+  corpusDocuments,
+  corpusRoot,
+  readCorpusFile,
+} from "#plate/document/corpus.ts";
+import type { CorpusMissing } from "#plate/document/corpus.ts";
+import { begin, configure, redact, render } from "#plate/index.ts";
 import type {
   Accepted,
+  AssetMissing,
   Configuration,
   EngineFailure,
+  InvalidConfiguration,
   InvalidInstance,
   InvalidRecord,
   Options,
@@ -28,6 +39,7 @@ import type {
   Verdict,
 } from "#plate/index.ts";
 import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
+import type { AcceptedPackage } from "#plate/package/index.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -87,6 +99,81 @@ export const openCorpus: Effect.Effect<
     ),
   ),
 );
+
+/**
+ * The address of every regular file under the corpus root, by its corpus path, as `configure`
+ * reads `assets`: its path under `/assets/`, each segment percent-encoded, as the playground serves
+ * it.
+ *
+ * A corpus test that opens a document alone opens it by its corpus path, so its package URLs
+ * resolve to corpus paths, and every file of the corpus an item names has an address here. A
+ * package's documents are named by their paths in the package, so a package's sessions take
+ * {@link packageConfiguration} instead. Symbolic links are
+ * not followed, as `corpusDocuments` follows none. It runs once per test file, as
+ * {@link openCorpus} does.
+ */
+export const corpusAssets: Effect.Effect<
+  readonly (readonly [string, string])[],
+  CorpusFileUnreadable | Config.ConfigError
+> = Effect.runSync(
+  Effect.cached(
+    Effect.gen(function* corpusAssets() {
+      const root = yield* corpusRoot;
+      const entries = yield* Effect.tryPromise({
+        catch: (cause) =>
+          new CorpusFileUnreadable({
+            detail: `${cause instanceof Error ? cause.message : String(cause)}; make every directory under the corpus root ${root} readable`,
+            path: ".",
+          }),
+        try: () => readdir(root, { recursive: true, withFileTypes: true }),
+      });
+
+      return entries
+        .filter((entry) => entry.isFile())
+        .map((entry) =>
+          path.relative(root, path.join(entry.parentPath, entry.name)).split(path.sep).join("/"),
+        )
+        .toSorted()
+        .map((file): readonly [string, string] => [
+          file,
+          `/assets/${file.split("/").map(encodeURIComponent).join("/")}`,
+        ]);
+    }),
+  ),
+);
+
+/**
+ * Decode a configuration whose `assets` address every corpus file ({@link corpusAssets}), with the
+ * other fields the input gives.
+ *
+ * @param input The other fields, as `configure` takes them; every default when absent.
+ * @returns The configuration, or the corpus's or the input's failure.
+ */
+export const corpusConfiguration = (
+  input: Partial<Omit<Configuration, "assets">> = {},
+): Effect.Effect<Configuration, CorpusFileUnreadable | Config.ConfigError | InvalidConfiguration> =>
+  corpusAssets.pipe(Effect.flatMap((assets) => configure({ ...input, assets })));
+
+/**
+ * Decode a configuration whose `assets` address every file an accepted package may serve, its
+ * `files`, by its path from the package's root, as `openPackage` names the package's documents,
+ * each under `/assets/` with each segment percent-encoded, with the other fields the input gives.
+ *
+ * @param accepted The accepted package.
+ * @param input The other fields, as `configure` takes them; every default when absent.
+ * @returns The configuration, or the input's failure.
+ */
+export const packageConfiguration = (
+  accepted: AcceptedPackage,
+  input: Partial<Omit<Configuration, "assets">> = {},
+): Effect.Effect<Configuration, InvalidConfiguration> =>
+  configure({
+    ...input,
+    assets: [...accepted.files].map((file): readonly [string, string] => [
+      file,
+      `/assets/${file.split("/").map(encodeURIComponent).join("/")}`,
+    ]),
+  });
 
 /**
  * Give a member's accepted document, when `open` accepted it with either accepting verdict.
@@ -166,7 +253,7 @@ export const threeStates = (
   record?: RedactRecord,
 ): Result.Result<
   readonly RenderState[],
-  InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart
+  AssetMissing | InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart
 > => {
   const redacted = redact(accepted, record);
   const responses = redacted.responses.map((response) => response.identifier);

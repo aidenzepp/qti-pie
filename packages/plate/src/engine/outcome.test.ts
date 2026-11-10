@@ -31,7 +31,7 @@ import { absentControl, buildTest } from "#plate/model/test.ts";
 import type { ItemRef, OutcomeProcessing, Section, Test, TestPart } from "#plate/model/test.ts";
 import type { ModelledBaseType, RecordValue, Value } from "#plate/model/values.ts";
 import { openPackage } from "#plate/package/open.ts";
-import { fileLocation, manifestFile } from "#plate/package/store.ts";
+import { manifestFile } from "#plate/package/store.ts";
 import type { SessionItem } from "#plate/session/session.ts";
 import { startTest } from "#plate/session/start.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
@@ -1387,9 +1387,7 @@ describe("runOutcomes over a package's items, by its version (reading 149)", () 
               assert.strictEqual(verdict.verdict, "accepted", version);
 
               const held =
-                verdict.verdict === "accepted"
-                  ? verdict.accepted.tests.get(fileLocation(minimumLocation, "test.xml"))
-                  : undefined;
+                verdict.verdict === "accepted" ? verdict.accepted.tests.get("test.xml") : undefined;
               if (held === undefined) {
                 return assert.fail(`The ${version} package holds no accepted test.`);
               }

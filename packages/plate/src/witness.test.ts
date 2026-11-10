@@ -31,6 +31,7 @@ import { attribute, checkTree, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { corpusConfiguration } from "#plate/test/sweep.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 import { choicesItem, choicesProbe, xhtmlItem, xhtmlProbe } from "#scripts/walk-corpus.ts";
@@ -658,7 +659,7 @@ describe("the M1-R witness: each feature through the composition an author build
     "[Q-2] [I-9b] [keyboard] a shuffled corpus Choice posts the presented choice and scores it by identifier: ChoiceA, presented second, scores 1",
     () =>
       Effect.gen(function* presentedChoice() {
-        const configuration = yield* configure({ seed });
+        const configuration = yield* corpusConfiguration({ seed });
         const opened = yield* openCorpus(fixedItem);
         const page = yield* firstPage(opened, configuration);
 

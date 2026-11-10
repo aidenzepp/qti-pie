@@ -5,7 +5,9 @@
  * This is the serving entry. Items: `openAdmitted` opens a document the host's content store has
  * already admitted, `begin` starts an item's stored record, `redact` and `render` show an item,
  * `checkResponses` and `score` take its answers, `solution` gives its correct responses and
- * `restore` reads its stored record back. Tests: `itemRefs` lists a test's item refs; `startTest`,
+ * `restore` reads its stored record back, and `assetPaths` names the package files an item body's
+ * URL attribute names, as `render` looks each up in the configuration's `assets`. Tests: `itemRefs`
+ * lists a test's item refs; `startTest`,
  * `current`, `itemView`, `permits`, `allowedIntents` and `advance` run a test session, which
  * `encodeSession` and `decodeSession` store; `navigationState` and the intent helpers
  * (`intentName`, `encodeIntent`, `decodeIntent`) are the navigation API, and `renderNavigation`
@@ -99,6 +101,10 @@ export {
 
 export { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
 
+export type { PackagePath } from "#plate/model/url.ts";
+
+export { assetPaths } from "#plate/model/url.ts";
+
 export type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 
 export type {
@@ -117,7 +123,14 @@ export { postings } from "#plate/payload.ts";
 
 export type { Options, Rendered } from "#plate/render.ts";
 
-export { InvalidInstance, OutputTooLarge, redact, render, renderStatus } from "#plate/render.ts";
+export {
+  AssetMissing,
+  InvalidInstance,
+  OutputTooLarge,
+  redact,
+  render,
+  renderStatus,
+} from "#plate/render.ts";
 
 export { checkResponses } from "#plate/responses.ts";
 

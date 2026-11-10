@@ -175,7 +175,7 @@ const judging: Configuration = {
   allowComment: false,
   allowReview: true,
   allowSkipping: true,
-  assetBase: "",
+  assets: new Map(),
   headingLevel: 2,
   locale: "en",
   maxAttempts: 1,

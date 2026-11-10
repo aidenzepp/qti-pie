@@ -10,6 +10,37 @@ These entries list the surface of M1 and M2, what M3 adds to it, and each change
 reads the specification. plate is not published, and each of its entry points is unstable until
 M3.
 
+### Package files addressed through `assets` (2026-11-09)
+
+- `Configuration.assetBase` and `render`'s `assetBase` option are gone, with nothing in their
+  place that prefixes a path. The configuration's `assets` maps each file an item may name, by its
+  path from the package root, a `PackagePath`, to its address. `configure` reads it as an array of
+  `[path, address]` entries and refuses a path given twice, a path that is empty, starts with `/`
+  or holds a `.` or `..` segment, and an address with whitespace or a comma at either end. It is
+  empty by default.
+- `render` resolves every package URL it writes, `src`, `data`, `poster`, each `srcset` candidate,
+  `href`, `cite` and `longdesc`, against the redacted item's `document`, the location the host
+  passed to `open` or `openAdmitted`, each percent escape decoded, so `media/a%20b.png` in
+  `items/q1.xml` names `items/media/a b.png`. It writes the file's address, then the URL's query
+  and fragment. A path that climbs above the item's own folder is still dropped as
+  `url-outside-package`.
+- A package URL whose file `assets` gives no address fails the render with `AssetMissing`, which
+  names the item, its location and the file, and none of the item is written. plate never writes a
+  package path relative to the page.
+- `assetPaths(location, element, attribute, value)` gives the files a URL attribute names, as
+  `render` resolves them. pantry's corpus differential holds it equal to the importer's
+  resolution, which a host's `assets` come from.
+- `openPackage` names each document by its path in the package, `items/a.xml`, no longer by the
+  package's location, a `/` and the path, so `assets` keys an item's files from the package root
+  whatever opened it. Each document's verdict, its accepted form (`Accepted.document`, the keys of
+  `items`, `tests` and `stimuli`) and each refusal of the document or of the manifest
+  (`imsmanifest.xml`) carry that path as `document`. A refusal of the package as a whole,
+  `package-path-outside`, `package-manifest-missing`, `package-file-unlisted` and
+  `assembly-limit`, still carries the package's location, which the verdict and the accepted
+  package keep as `location`.
+- The playground addresses each item's files from the files it serves: `/assets/*` for a document
+  opened alone, and the package's `files` route in a test session.
+
 ### Right and wrong answers in review (2026-11-09)
 
 - `render`'s options gain `solution`, the item's correct responses as `solution(accepted, record)`
