@@ -136,6 +136,15 @@ export type Binding = ValueBinding | RecordBinding;
  */
 export interface DecodeOptions {
   /**
+   * The value no entry decodes to in place of NULL, for a value binding: the `absentValue` of the
+   * interaction module that binds the response (`InteractionModule` in
+   * `#plate/interactions/contract.ts`), which `postings` in `#plate/payload.ts` puts in the
+   * response's posting. Absent means NULL. It applies only when the form posted no entry named for
+   * the binding: one empty entry is a response the form did post, and stays NULL. A record binding
+   * ignores it, as it ignores `base`.
+   */
+  readonly absent?: Value;
+  /**
    * The number base an integer is written in, Text Entry's `base`, an integer from 2 to 36; 10
    * when absent. In any other base no text is an integer.
    */
@@ -751,11 +760,28 @@ const readBinding = (
 };
 
 /**
+ * Tell whether a form posted any entry for a value binding: one under the binding's name, or, for
+ * a point binding, under either of its two coordinate names ({@link pointEntryNames}). An empty
+ * entry counts: the form posted for the response.
+ *
+ * @param entries The posted entries.
+ * @param binding The response's binding.
+ * @returns Whether an entry is named for the binding.
+ */
+const postedFor = (entries: readonly Entry[], binding: ValueBinding): boolean => {
+  const names: readonly string[] = isPoint(binding.baseType)
+    ? pointEntryNames(binding.name)
+    : [binding.name];
+
+  return entries.some(([name]) => names.includes(name));
+};
+
+/**
  * Decode posted entries under a binding of either kind, as {@link decode} does.
  *
  * @param entries The posted entries.
  * @param binding The response's binding.
- * @param options The number base of an integer.
+ * @param options The number base of an integer, and the value no entry takes for a value binding.
  * @returns A record for a record binding, a value of the binding's base type for the other, or
  *   {@link Malformed}.
  */
@@ -763,11 +789,20 @@ const decodeResponse = (
   entries: readonly Entry[],
   binding: Binding,
   options: DecodeOptions = {},
-): Result.Result<ResponseValue, Malformed> =>
-  Result.mapError(
+): Result.Result<ResponseValue, Malformed> => {
+  if (
+    options.absent !== undefined &&
+    binding.cardinality !== "record" &&
+    !postedFor(entries, binding)
+  ) {
+    return Result.succeed(options.absent);
+  }
+
+  return Result.mapError(
     readBinding(entries, binding, options.base ?? 10),
     (reason) => new Malformed({ entry: binding.name, reason }),
   );
+};
 
 /**
  * {@link decode}'s signatures: its result follows its binding.
@@ -804,7 +839,10 @@ interface Decode {
  *
  * Only the entries named for the binding are read. Text holding a character outside XML 1.0's
  * `Char` production is refused, so a decoded value is one a result can hold. No entry, or one empty
- * entry, is NULL. A number is trimmed, then read as an integer in `base` or as a decimal with an
+ * entry, is NULL, except that no entry at all under a value binding is the `absent` option's value
+ * when the caller gives one ({@link DecodeOptions}): the value the interaction's module says its
+ * response takes when the form posted nothing for it, End Attempt's `false` among them. A number
+ * is trimmed, then read as an integer in `base` or as a decimal with an
  * optional exponent. A posted integer is exact at any size, in every base from 2 to 36, and in a
  * base other than 2, 8, 10 or 16 it is read in time subquadratic in its digits. A posted float
  * follows the value model's lexical rules, as content does, so a decimal beyond the largest double
@@ -833,7 +871,8 @@ interface Decode {
  *
  * @param entries The posted entries.
  * @param binding The response's binding.
- * @param options The number base of an integer, which a record binding ignores.
+ * @param options The number base of an integer, and the value no entry takes, which a record
+ *   binding ignores.
  * @returns A value of the binding's base type for a {@link ValueBinding}, a record for a
  *   {@link RecordBinding}, or {@link Malformed}: `file` for a file, `single-many` for two entries
  *   of a `single` or a record, `character` for text holding a character XML cannot carry, and
