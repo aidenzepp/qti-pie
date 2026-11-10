@@ -10,6 +10,7 @@ import type { Controller } from "#plate/runtime/contract.dom.ts";
  * registry reached it, and does nothing else; its teardown removes the mark. Issue m3d-12 fills it.
  */
 export const controller: Controller<"match"> = {
+  implemented: false,
   kind: "match",
   upgrade: (root) => {
     root.dataset["runtime"] = "stub";

@@ -73,9 +73,14 @@ describe(server.browser, () => {
         const upgraded = upgrade(container);
 
         assert.deepStrictEqual(upgraded.controllers, [{ kind, root }], kind);
-        assert.strictEqual(root.dataset["runtime"], "stub", kind);
+        assert.strictEqual(
+          root.dataset["runtime"],
+          controllerModules[kind].controller.implemented ? undefined : "stub",
+          kind,
+        );
 
         upgraded.teardown();
+        assert.isUndefined(root.dataset["runtime"], kind);
         container.remove();
       }
     });

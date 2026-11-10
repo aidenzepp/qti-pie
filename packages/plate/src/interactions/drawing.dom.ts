@@ -11,6 +11,7 @@ import type { Controller } from "#plate/runtime/contract.dom.ts";
  * it.
  */
 export const controller: Controller<"drawing"> = {
+  implemented: false,
   kind: "drawing",
   upgrade: (root) => {
     root.dataset["runtime"] = "stub";

@@ -12,6 +12,7 @@ import type { Controller } from "#plate/runtime/contract.dom.ts";
  * teardown removes the mark. Issue pci-04 fills it.
  */
 export const controller: Controller<"portable-custom"> = {
+  implemented: false,
   kind: "portable-custom",
   upgrade: (root) => {
     root.dataset["runtime"] = "stub";

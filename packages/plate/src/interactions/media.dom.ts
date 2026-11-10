@@ -10,6 +10,7 @@ import type { Controller } from "#plate/runtime/contract.dom.ts";
  * registry reached it, and does nothing else; its teardown removes the mark. Issue ei-03 fills it.
  */
 export const controller: Controller<"media"> = {
+  implemented: false,
   kind: "media",
   upgrade: (root) => {
     root.dataset["runtime"] = "stub";

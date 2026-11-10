@@ -12,6 +12,7 @@ import type { Controller } from "#plate/runtime/contract.dom.ts";
  * fills it.
  */
 export const controller: Controller<"hottext"> = {
+  implemented: false,
   kind: "hottext",
   upgrade: (root) => {
     root.dataset["runtime"] = "stub";
