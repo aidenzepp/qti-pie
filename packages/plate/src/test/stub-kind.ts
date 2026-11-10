@@ -36,6 +36,8 @@
  *
  * @module
  */
+import { Data } from "effect";
+
 import type { ModuleInteraction, ModuleKind } from "#plate/interactions/contract.ts";
 import type { ModelOf } from "#plate/model/interactions.ts";
 import { containerKinds, modules } from "#plate/model/interactions.ts";
@@ -144,8 +146,24 @@ const bareStub = stubOrder.find(isBareStub);
  */
 export const hasStub = bareStub !== undefined;
 
+/**
+ * Every kind of {@link stubOrder} has landed, so the module has no stub kind to export: a defect
+ * of the branch, not of a caller, thrown at load and never returned. It is a tagged class, as every
+ * failure in this package is (`src/browser.test.ts` refuses a bare `Error` in any non-test module,
+ * this helper included), and has no field: {@link noBareStub} already names the rows to delete.
+ */
+class NoBareStub extends Data.TaggedError("NoBareStub") {
+  /**
+   * The rows to delete, as {@link noBareStub} names them.
+   */
+  // oxlint-disable-next-line eslint/class-methods-use-this -- A field would be an own property of the error, and this one has none: its message is the module-level constant.
+  override get message(): string {
+    return noBareStub;
+  }
+}
+
 if (bareStub === undefined) {
-  throw new Error(noBareStub);
+  throw new NoBareStub();
 }
 
 /**
