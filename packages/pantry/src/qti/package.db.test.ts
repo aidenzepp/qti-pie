@@ -694,13 +694,12 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                   fact: {
                     document: stray,
                     kind: codeOf(NodeKind.handles, "cp:dependency"),
-                    // The identifierref as written, beside `ref`, its collapsed value (gr2-4:
-                    // identifierrefs compare collapsed).
+                    // The identifierref as written; PostgreSQL generates `ref`, its collapsed value
+                    // (gr2-4: identifierrefs compare collapsed), so the row states no `ref`.
                     lexical: "nowhere",
                     nearest: stray,
                     node: strayOther,
                     package: stray,
-                    ref: "nowhere",
                     resource: stray,
                     start: 4,
                     version: codeOf(SchemaVersion.handles, "3.0.1"),

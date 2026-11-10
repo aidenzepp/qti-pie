@@ -1418,7 +1418,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
     );
 
     it.effect(
-      "accepts one choice or hottext of a name, a declaration alone and a stimulus's choice named as a built-in, and refuses two choices or hottexts of one name, of one class or two, by Choice identifier key, and a choice or a hottext named as a declaration of its document or, in an item, as a built-in variable, by Choice not variable",
+      "accepts one choice or hottext of a name, a declaration alone and a stimulus's choice named as a built-in, and refuses two choices or hottexts of one name and of two classes by Choice identifier key, and a choice or a hottext named as a declaration of its document or, in an item, as a built-in variable, by Choice not variable",
       () =>
         // Oracle: PostgreSQL, reading 104's two rules over queries (`src/qti/queries.ts`; README,
         // "Rules over queries"), each a deferred constraint trigger on `Choice` and `Hottext`,
@@ -1429,8 +1429,10 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         // variable"), 23503, a declaration read by its `DeclarationIdentifier` whatever its
         // cardinality spells (spec reading 159), and in an item the built-ins (§2.2.2).
         // Bound: one choice; one hottext; a declaration named A alone; a stimulus's choice named
-        // numAttempts, accepted; two simple choices, a gap and a gap text, a choice and a hottext
-        // and two hottexts of one name, by the key; a choice and a hottext named as an outcome
+        // numAttempts, accepted; a gap and a gap text, and a choice and a hottext, of one name, by
+        // the key; two of one class meet their class's own key first, a UNIQUE that PostgreSQL
+        // checks as the row is inserted, before any trigger, so the per-class keys' test above
+        // holds them; a choice and a hottext named as an outcome
         // declaration with no cardinality, and an item's choice named numAttempts, by the
         // containment.
         Effect.gen(function* nameRules() {
@@ -1457,7 +1459,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               [choiceStated(0, "numAttempts")],
               undefined,
             ],
-            ["two simple choices", item, [choiceStated(0, "A"), choiceStated(1, "A")], key],
             [
               "a gap and a gap text",
               item,
@@ -1465,7 +1466,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               key,
             ],
             ["a choice and a hottext", item, [choiceStated(0, "A"), hottextStated(1, "A")], key],
-            ["two hottexts", item, [hottextStated(0, "H"), hottextStated(1, "H")], key],
             [
               "a choice named as a declaration",
               item,
