@@ -26,24 +26,47 @@ import type {
 export type Entry = readonly [name: string, value: string | Blob];
 
 /**
- * The base types a phase-1 interaction posts: Choice's `identifier`, and Text Entry's and
- * Extended Text's `string`, `integer` and `float`.
+ * The base types whose value is a pair of identifiers, posted as the two identifiers separated by a
+ * space, the source first: `directedPair` (Gap Match, Match, Graphic Gap Match) and `pair`
+ * (Associate, Graphic Associate). Each value of a `multiple` or `ordered` response is one entry, as
+ * any other base type's is.
  */
-const postedBaseTypes = ["identifier", "string", "integer", "float"] as const;
+const pairBaseTypes = ["directedPair", "pair"] as const;
 
 /**
- * A base type a phase-1 interaction posts.
+ * A base type whose value is a pair of identifiers.
+ */
+export type PairBaseType = (typeof pairBaseTypes)[number];
+
+/**
+ * The base types an interaction posts: Choice's `identifier`, Text Entry's and Extended Text's
+ * `string`, `integer` and `float`, and the {@link PairBaseType}s of the interactions that put
+ * identifiers into targets.
+ */
+const postedBaseTypes = ["identifier", "string", "integer", "float", ...pairBaseTypes] as const;
+
+/**
+ * A base type an interaction posts.
  */
 export type PostedBaseType = (typeof postedBaseTypes)[number];
 
 /**
- * Report whether a phase-1 interaction can post values of a base type.
+ * Report whether an interaction can post values of a base type.
  *
  * @param baseType A declaration's base type.
  * @returns Whether `baseType` is a {@link PostedBaseType}.
  */
 export const isPosted = (baseType: string): baseType is PostedBaseType =>
   postedBaseTypes.some((name) => name === baseType);
+
+/**
+ * Report whether a posted base type is a pair of identifiers.
+ *
+ * @param baseType A posted base type.
+ * @returns Whether `baseType` is a {@link PairBaseType}.
+ */
+const isPair = (baseType: PostedBaseType): baseType is PairBaseType =>
+  pairBaseTypes.some((name) => name === baseType);
 
 /**
  * How a response of a base type travels through the form: the entry name it posts under, from
@@ -120,7 +143,7 @@ const remedies = {
     "holds a character XML cannot carry: a control character other than tab, line feed and carriage return, U+FFFE, U+FFFF or a lone surrogate; post the text without it",
   file: "is a file, but this response takes text; post text, not a file",
   identifier:
-    "is not an identifier; post a choice's identifier, an NCName such as choiceA, as the form gives it",
+    "is not an identifier, or for a pair response not two identifiers separated by a space; post an NCName such as choiceA, or a pair such as choiceA gapB, as the form gives it",
   number:
     "is not a number; post digits in the interaction's base with an optional sign, or a finite decimal such as 2.5 or 1E3",
   "single-many": "was posted more than once, but its response takes one value; post it once",
@@ -340,7 +363,8 @@ const notANumber = (): MalformedReason => "number";
  * first, so blank text is no value too. An integer is read exactly in `base`, then its decimal
  * digits take the value model's one path, so a posted integer is the value the same digits are in
  * content. A float is the value model's reading of the text; it is non-finite only for `INF`,
- * `-INF` and `NaN`, which a posted form refuses.
+ * `-INF` and `NaN`, which a posted form refuses. A pair is the value model's reading of the text as
+ * written, two identifiers separated by white space, with no outer white space.
  *
  * @param baseType The binding's base type.
  * @param text The posted string.
@@ -365,7 +389,7 @@ const readPosted = (
     return Result.succeedSome({ baseType, value: lexical.replaceAll(/\r\n?/gu, "\n") });
   }
 
-  if (baseType === "identifier") {
+  if (baseType === "identifier" || isPair(baseType)) {
     return parseLexical(baseType, lexical).pipe(
       Result.mapError((): MalformedReason => "identifier"),
       Result.map(Option.some),

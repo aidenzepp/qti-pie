@@ -1029,6 +1029,57 @@
 /* end item-live */
 
 /* begin gap-match-interaction (issue m3d-03) */
+
+/* The Gap Match Root: a block, holding the Prompt, the word bank and the gapped content. */
+:where([data-slot="gap-match-interaction"]) {
+  display: block;
+}
+
+/* The Choices: the word bank, in a wrapping row, with no list marker. */
+:where([data-slot="gap-match-interaction-choices"]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 0.5rem 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+/* A Choice: a chip on the card's surface, so a dark host theme reads. */
+:where([data-slot="gap-match-interaction-choice"]) {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--input, oklch(0.922 0 0));
+  border-radius: calc(var(--radius, 0.625rem) * 0.8);
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/* A Gap: a blank in the author's sentence, wide enough to show it is there while it is empty. */
+:where([data-slot="gap-match-interaction-gap"]) {
+  display: inline-block;
+  box-sizing: border-box;
+  min-inline-size: 5em;
+  min-block-size: 1.75em;
+  margin-inline: 0.25em;
+  padding: 0 0.5rem;
+  border: 1px dashed var(--muted-foreground, oklch(0.556 0 0));
+  border-radius: calc(var(--radius, 0.625rem) * 0.8);
+  vertical-align: middle;
+  text-align: center;
+}
+
+/*
+ * A Gap that holds a choice: a solid edge on the card's surface. The empty Gap's dashed edge above
+ * is the muted foreground, a 3:1 boundary against the page (WCAG 1.4.11), so it shows where it is.
+ */
+:where(
+  [data-slot="gap-match-interaction-gap"]:has([data-slot="gap-match-interaction-gap-choice"])
+) {
+  border-style: solid;
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
 /* end gap-match-interaction */
 
 /* begin graphic-gap-match-interaction (issue m3d-05) */

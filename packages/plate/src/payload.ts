@@ -2332,8 +2332,10 @@ export interface Posting {
 
 /**
  * Give the binding a response travels through the form under: a `RecordBinding` for a record
- * response, a `ValueBinding` for a response of a base type a phase-1 interaction posts, and
- * none for a response of any other base type, which no Control posts.
+ * response, a `ValueBinding` for a response of a base type an interaction posts (`isPosted`: the
+ * identifier, string, integer and float of the shipped kinds, and the `pair` and `directedPair` of
+ * the interactions that put identifiers into targets), and none for a response of any other base
+ * type, which no Control posts.
  *
  * @param response The response's binding as the page knows it.
  * @param name The entry name its Controls post under.
@@ -2440,8 +2442,9 @@ export const postingsIn = (
  *
  * @param redacted The item, through `redact`.
  * @param instance The instance token the render used, one `checkInstance` passes.
- * @returns The postings: a response no interaction binds, or of a base type no phase-1
- *   interaction posts, has none.
+ * @returns The postings: a response no interaction binds, or of a base type no interaction posts
+ *   (`isPosted`), has none. A pair response's values decode one per posted entry, as the pair's two
+ *   identifiers separated by a space.
  */
 export const postings = (redacted: Redacted, instance: string): readonly Posting[] =>
   postingsIn(redacted, instance);
