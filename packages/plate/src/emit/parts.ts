@@ -42,7 +42,8 @@ interface ShippedPartsOf {
     | "next"
     | "previous"
     | "root"
-    | "submit";
+    | "submit"
+    | "time";
   "text-entry-interaction": "control" | "root";
 }
 
@@ -850,6 +851,15 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     merged: ["disabled", "data-intent"],
     part: "end",
     tagClass: "button",
+  },
+  {
+    defaults: {},
+    element: "div",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["hidden", "role"],
+    part: "time",
+    tagClass: "flow-container",
   },
 ];
 

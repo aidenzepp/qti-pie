@@ -101,6 +101,7 @@ const specRows = [
   ["test-navigation", "itemButton", "test-navigation-item-button", "button"],
   ["test-navigation", "submit", "test-navigation-submit", "button"],
   ["test-navigation", "end", "test-navigation-end", "button"],
+  ["test-navigation", "time", "test-navigation-time", "div"],
 ] as const;
 
 /**
@@ -141,8 +142,8 @@ const interactionModules: readonly { readonly implemented: boolean; readonly own
 ];
 
 /**
- * The navigation parts, in their order: the Root, the five buttons, the item list and its
- * items.
+ * The navigation parts, in their order: the Root, the five buttons, the item list and its items,
+ * and the Time part, which issue m3f-01 fills.
  */
 const navigationParts = [
   "root",
@@ -153,6 +154,7 @@ const navigationParts = [
   "itemButton",
   "submit",
   "end",
+  "time",
 ] as const;
 
 /**
@@ -363,6 +365,7 @@ describe("the test-navigation rows", () => {
       "data-intent",
       "aria-current",
     ]);
+    assert.deepStrictEqual(rowFor("test-navigation", "time").merged, ["hidden", "role"]);
     assert.deepStrictEqual(rowFor("test-navigation", "items").merged, []);
     assert.deepStrictEqual(rowFor("test-navigation", "item").merged, []);
   });
