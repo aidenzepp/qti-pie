@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A hand-written AfA PNP 3.0 profile in the schema's spellings that exercises the three sets: two features on from the start, one the candidate may turn on, and one tool prohibited. -->
+<access-for-all-pnp xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <captions/>
+  <glossary-on-screen/>
+  <spell-checker-on-screen/>
+  <activate-at-initialization-set>
+    <captions/>
+    <glossary-on-screen/>
+  </activate-at-initialization-set>
+  <activate-as-option-set>
+    <transcript/>
+  </activate-as-option-set>
+  <prohibit-set>
+    <spell-checker-on-screen/>
+  </prohibit-set>
+</access-for-all-pnp>
