@@ -16,12 +16,13 @@
  * hashes to its pin. It writes only under {@link cacheDirectory} and touches no database.
  *
  * The downloads follow the XSD fetcher's, `#pantry/vocab/derive/fetch-xsds.ts`, and share its
- * limits and its account of a failed request.
+ * limits, its check of a cached file against its pin, its write into place and its account of a
+ * failed request.
  *
  * @see {@link https://github.com/aidenzepp/qti-pie/issues/98 | qti-pie#98, a script that fills the spec caches}
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Layer, Option, Path, Result, Schema } from "effect";
+import { Console, Effect, FileSystem, Layer, Path, Result, Schema } from "effect";
 import { Command } from "effect/cli";
 import { Digest } from "effect/crypto";
 import { HttpClient } from "effect/http";
@@ -30,9 +31,11 @@ import type { FetchedSource, Rendering, SpecPins } from "#pantry/test/spec-cache
 import { renderText } from "#pantry/test/spec-cache/render.ts";
 import {
   concurrency,
+  downloadBytes,
   downloadClient,
-  downloadTimeout,
   fetchPinned,
+  heldAgainstPin,
+  placeFile,
   reasonOf,
 } from "#pantry/vocab/derive/fetch-xsds.ts";
 import type { FetchReport, Settled, XsdPins } from "#pantry/vocab/derive/fetch-xsds.ts";
@@ -298,26 +301,6 @@ export class SpecRenderIncomplete extends Schema.TaggedError<SpecRenderIncomplet
 }
 
 /**
- * Read a cached file, if the cache holds one.
- *
- * @param destination - The file's path.
- * @returns Its bytes, or none when there is no file at the path; any other file system failure.
- */
-const cachedBytes = Effect.fn("test.specCache.cachedBytes")(function* cachedBytes(
-  destination: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-
-  return yield* fs.readFile(destination).pipe(
-    Effect.map(Option.some),
-    Effect.catchIf(
-      (error) => error.reason._tag === "NotFound",
-      () => Effect.succeedNone,
-    ),
-  );
-});
-
-/**
  * Settle one source: keep the cached file when it hashes to the pin, and otherwise download it and
  * write it when the download does.
  *
@@ -339,21 +322,17 @@ const settle = Effect.fn("test.specCache.fetchSpec")(function* settle(
 
   yield* Effect.annotateCurrentSpan({ path, url });
 
-  const fs = yield* FileSystem.FileSystem;
   const paths = yield* Path.Path;
   const digest = yield* Digest.Digest;
   const destination = paths.join(directory, path);
-  const cached = yield* cachedBytes(destination);
-  const staleCopy = Option.isSome(cached);
+  const held = yield* heldAgainstPin(destination, sha256);
 
-  if (staleCopy && (yield* digest.digestHex(Digest.sha256, cached.value)) === sha256) {
+  if (held === "pinned") {
     return "present" satisfies Settled;
   }
 
-  const bytes = yield* client.get(url).pipe(
-    Effect.flatMap((response) => response.arrayBuffer),
-    Effect.map((buffer) => new Uint8Array(buffer)),
-    Effect.timeout(downloadTimeout),
+  const staleCopy = held === "stale";
+  const bytes = yield* downloadBytes(client, url).pipe(
     Effect.mapError(
       (error) => new SpecDownloadFailed({ path, reason: reasonOf(error), staleCopy, url }),
     ),
@@ -364,9 +343,7 @@ const settle = Effect.fn("test.specCache.fetchSpec")(function* settle(
     return yield* new SpecPublishedChanged({ actual, expected: sha256, path, staleCopy, url });
   }
 
-  yield* fs.makeDirectory(paths.dirname(destination), { recursive: true });
-  yield* fs.writeFile(scratch, bytes);
-  yield* fs.rename(scratch, destination);
+  yield* placeFile(bytes, scratch, destination);
 
   return staleCopy ? ("replaced" satisfies Settled) : ("fetched" satisfies Settled);
 });
@@ -397,13 +374,13 @@ const derive = Effect.fn("test.specCache.deriveRendering")(function* derive(
   const paths = yield* Path.Path;
   const digest = yield* Digest.Digest;
   const destination = paths.join(directory, path);
-  const cached = yield* cachedBytes(destination);
-  const staleCopy = Option.isSome(cached);
+  const held = yield* heldAgainstPin(destination, sha256);
 
-  if (staleCopy && (yield* digest.digestHex(Digest.sha256, cached.value)) === sha256) {
+  if (held === "pinned") {
     return "present" satisfies Rendered;
   }
 
+  const staleCopy = held === "stale";
   const text = renderText(yield* fs.readFileString(paths.join(directory, from)));
 
   if (Result.isFailure(text)) {
@@ -419,9 +396,7 @@ const derive = Effect.fn("test.specCache.deriveRendering")(function* derive(
     return yield* new SpecRenderingChanged({ actual, expected: sha256, from, path, staleCopy });
   }
 
-  yield* fs.makeDirectory(paths.dirname(destination), { recursive: true });
-  yield* fs.writeFile(scratch, bytes);
-  yield* fs.rename(scratch, destination);
+  yield* placeFile(bytes, scratch, destination);
 
   return staleCopy ? ("replaced" satisfies Rendered) : ("derived" satisfies Rendered);
 });
