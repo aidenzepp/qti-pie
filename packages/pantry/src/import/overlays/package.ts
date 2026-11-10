@@ -1091,7 +1091,6 @@ export interface ReferenceRows {
 }
 
 /**
- * /**
  * The whitespace class each kind of the text census reads its text under, by kind.
  */
 const textWhiteSpaces: ReadonlyMap<string, WhiteSpace> = new Map(
