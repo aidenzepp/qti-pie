@@ -33,8 +33,13 @@ import { integerOf } from "#plate/engine/numbers.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
 import { entryName, isPosted, recordText } from "#plate/form/encoding.ts";
-import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
-import type { ModuleKind, RedactKit } from "#plate/interactions/contract.ts";
+import type { Binding, DecodeOptions, ModuleBinding } from "#plate/form/encoding.ts";
+import type {
+  InteractionModule,
+  ModuleEntry,
+  ModuleKind,
+  RedactKit,
+} from "#plate/interactions/contract.ts";
 import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
@@ -44,10 +49,18 @@ import {
   isInteraction,
   isStubbed,
   mapRegions,
+  modules,
   regionsOf,
   stubSteps,
 } from "#plate/model/interactions.ts";
-import type { PayloadOf } from "#plate/model/interactions.ts";
+import type {
+  ModelOf,
+  ModelOfIn,
+  ModuleTable,
+  Modules,
+  PayloadOf,
+  PayloadOfIn,
+} from "#plate/model/interactions.ts";
 import type {
   BodyElement,
   BodyNode,
@@ -2366,6 +2379,12 @@ export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): Readonly
  * through its `absentValue` (`InteractionModule` in `#plate/interactions/contract.ts`), which the
  * posting carries as `options.absent` and `decode` gives for no entry: End Attempt's `false`,
  * once issue ei-02 lands it.
+ *
+ * A response bound by an interaction whose module declares `entry` (`InteractionModule` in
+ * `#plate/interactions/contract.ts`) posts one entry holding the module's own text, whatever its
+ * base type and cardinality, under a `ModuleBinding` (`#plate/form/encoding.ts`) over the first
+ * such interaction's entry in document order, which `decode` routes to the module; the module is
+ * consulted before the base type, so a module posts a value of a base type no control posts.
  */
 export interface Posting {
   readonly binding: Binding;
@@ -2402,6 +2421,75 @@ const formBinding = (response: ResponseBinding, name: string): Option.Option<Bin
 
   return isPosted(baseType) ? Option.some({ baseType, cardinality, name }) : Option.none();
 };
+
+/**
+ * Each module kind's `entry` member in a table, typed by its kind's model node: what
+ * {@link postingsIn} reads of a module beyond the steps `stubSteps` binds. A table assigned to its
+ * own `EntriesIn` is the check that every module's `entry` takes its own node, as `SteppedIn` in
+ * `#plate/model/interactions.ts` checks the steps.
+ *
+ * @template T The table.
+ */
+type EntriesIn<T extends ModuleTable> = {
+  readonly [K in ModuleKind]: Pick<
+    InteractionModule<K, ModelOfIn<T, K>, PayloadOfIn<T, K>>,
+    "entry"
+  >;
+};
+
+/**
+ * `modules` as {@link EntriesIn} of itself.
+ */
+const moduleEntries: EntriesIn<Modules> = modules;
+
+/**
+ * Give how a module kind's model node reads its posted text, by its kind's module: none when the
+ * module does not say.
+ *
+ * @param kind The kind.
+ * @param interaction The node.
+ * @returns The module's `entry` of the node, `undefined` when it has none.
+ */
+const moduleEntry = <K extends ModuleKind>(
+  kind: K,
+  interaction: ModelOf<K>,
+): ModuleEntry | undefined => moduleEntries[kind].entry?.(interaction);
+
+/**
+ * Give how an interaction reads the posted text of the response it binds, when its module reads
+ * its own: a module kind's node answers through its module's `entry`, and every other
+ * interaction, a shipped kind, a stub or a module that leaves the member unset, answers none, so
+ * its response posts under the lexical forms.
+ *
+ * @param interaction The interaction.
+ * @returns The module's entry, or none.
+ */
+const entryOf = (interaction: Interaction): Option.Option<ModuleEntry> =>
+  isStubbed(interaction)
+    ? Option.fromUndefinedOr(moduleEntry(interaction.kind, interaction))
+    : Option.none();
+
+/**
+ * Give the binding a response travels through the form under when an interaction's module reads
+ * its posted text: one entry, under the module's `decode` and `encode`, of the declared
+ * cardinality.
+ *
+ * @param response The response's binding as the page knows it.
+ * @param entry The module's entry.
+ * @param name The entry name its control posts under.
+ * @returns The module binding.
+ */
+const moduleBinding = (
+  response: ResponseBinding,
+  entry: ModuleEntry,
+  name: string,
+): ModuleBinding => ({
+  cardinality: response.cardinality,
+  decode: entry.decode,
+  encode: entry.encode,
+  kind: "module",
+  name,
+});
 
 /**
  * Give the number base an interaction's posted text is read in: a Text Entry's or an Extended
@@ -2456,7 +2544,11 @@ export const postingsIn = (
   return redaction.responses.flatMap((response): readonly Posting[] => {
     const { identifier } = response;
     const bound = byResponse.get(identifier) ?? [];
-    const binding = formBinding(response, entryName(instance, identifier));
+    const name = entryName(instance, identifier);
+    const binding: Option.Option<Binding> = Option.orElse(
+      Option.map(Arr.findFirst(bound, entryOf), (entry) => moduleBinding(response, entry, name)),
+      () => formBinding(response, name),
+    );
     if (Option.isNone(binding) || bound.length === 0) {
       return [];
     }
@@ -2495,10 +2587,12 @@ export const postingsIn = (
  * @param redacted The item, through `redact`.
  * @param instance The instance token the render used, one `checkInstance` passes.
  * @returns The postings: a response no interaction binds, or of a base type no interaction posts
- *   (`isPosted`), has none. A pair response's values decode one per posted entry, as the pair's two
- *   identifiers separated by a space. A point response's values decode one per pair of posted
- *   entries, `<name>.x` and `<name>.y`, and a boolean response's from the one entry holding `true`
- *   or `false` ({@link Posting}).
+ *   (`isPosted`) and no module reads through its `entry`, has none. A pair response's values
+ *   decode one per posted entry, as the pair's two identifiers separated by a space. A point
+ *   response's values decode one per pair of posted entries, `<name>.x` and `<name>.y`, and a
+ *   boolean response's from the one entry holding `true` or `false` ({@link Posting}). A response
+ *   an interaction whose module declares `entry` binds decodes through that module from its one
+ *   entry, whatever its base type.
  */
 export const postings = (redacted: Redacted, instance: string): readonly Posting[] =>
   postingsIn(redacted, instance);

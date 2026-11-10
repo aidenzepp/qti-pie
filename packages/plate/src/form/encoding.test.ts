@@ -15,10 +15,12 @@ import type {
   Binding,
   Entry,
   Malformed,
+  ModuleBinding,
   RecordBinding,
   ValueBinding,
 } from "#plate/form/encoding.ts";
-import { format, modelledBaseTypes } from "#plate/model/values.ts";
+import type { ModuleEntry } from "#plate/interactions/contract.ts";
+import { format, isRecordValue, modelledBaseTypes } from "#plate/model/values.ts";
 import type {
   RecordField,
   RecordValue,
@@ -266,6 +268,14 @@ const decodeRecord = (bound: RecordBinding) => decode([], bound);
 const decodeValue = (bound: ValueBinding) => decode([], bound);
 
 /**
+ * Decode no entries under a module binding.
+ *
+ * @param bound A module binding.
+ * @returns What `decode` gives.
+ */
+const decodeModule = (bound: ModuleBinding) => decode([], bound);
+
+/**
  * Decode posted values under the record binding of the response `RESPONSE`.
  *
  * @param values The posted values, in order.
@@ -284,6 +294,79 @@ const resultsFollow: readonly [
   Equals<ReturnType<typeof decodeRecord>, Result.Result<RecordValue, Malformed>>,
   Equals<ReturnType<typeof decodeValue>, Result.Result<Value, Malformed>>,
 ] = [true, true, true];
+
+/**
+ * `decode`'s result for a `ModuleBinding` is either kind of value, since the module declares the
+ * type; `tsc` refuses this line when it parts.
+ */
+const moduleResultFollows: Equals<
+  ReturnType<typeof decodeModule>,
+  Result.Result<ResponseValue, Malformed>
+> = true;
+
+/**
+ * The one text the toy module reads: `{"n":<integer>}`.
+ */
+const toyText = /^\{"n":(?<n>-?\d+)\}$/u;
+
+/**
+ * What the toy module's `decode` says of a text it does not read: what to post instead.
+ */
+const toyDetail = 'post {"n":<integer>}, as the toy control gives it';
+
+/**
+ * The single integer the toy module reads a text as.
+ *
+ * @param n The integer.
+ * @returns The value.
+ */
+const toyInteger = (n: bigint): Value => ({
+  baseType: "integer",
+  cardinality: "single",
+  values: [{ baseType: "integer", value: n }],
+});
+
+/**
+ * The NULL of the toy module's declared type, a single integer.
+ */
+const nullInteger: Value = { baseType: "integer", cardinality: "single", values: [] };
+
+/**
+ * A module's entry in the shape pci-05's will have: `decode` reads `{"n":<integer>}` as a single
+ * integer and empty text, which the form posts for no entry, as its NULL, and refuses any other
+ * text with {@link toyDetail}; `encode` writes that JSON, and empty text for NULL.
+ */
+const toyEntry: ModuleEntry = {
+  decode: (text) => {
+    if (text === "") {
+      return Result.succeed(nullInteger);
+    }
+
+    const n = toyText.exec(text)?.groups?.["n"];
+
+    return n === undefined ? Result.fail(toyDetail) : Result.succeed(toyInteger(BigInt(n)));
+  },
+  encode: (encoded) => {
+    const [first] = isRecordValue(encoded) ? [] : encoded.values;
+
+    return first === undefined ? "" : `{"n":${format(first)}}`;
+  },
+};
+
+/**
+ * Construct the module binding of the response `RESPONSE` over {@link toyEntry}, named for
+ * {@link instance}.
+ *
+ * @param cardinality The declared cardinality, `single` by default.
+ * @returns The binding.
+ */
+const moduleBinding = (cardinality: ModuleBinding["cardinality"] = "single"): ModuleBinding => ({
+  cardinality,
+  decode: toyEntry.decode,
+  encode: toyEntry.encode,
+  kind: "module",
+  name: entryName(instance, "RESPONSE"),
+});
 
 /**
  * Encode a value under a binding and decode the entries back.
@@ -1157,6 +1240,90 @@ describe("a record binding", () => {
       );
       assert.deepStrictEqual(fieldOf(decoded, "stringValue"), fieldOf(answer, "stringValue"));
     }),
+  );
+});
+
+describe("a module binding", () => {
+  it("[W0-PCIJSON] decode routes a module binding to the module's decode", () => {
+    assert.isTrue(moduleResultFollows);
+    assert.deepStrictEqual(
+      Result.getSuccess(decode(posted('{"n":7}'), moduleBinding(), {})),
+      Option.some(toyInteger(7n)),
+    );
+  });
+
+  it.effect(
+    "[W0-PCIJSON] a module's refusal is Malformed with the reason module and the module's detail",
+    () =>
+      Effect.gen(function* moduleRefusal() {
+        const refused = yield* Effect.flip(
+          Effect.fromResult(decode(posted("oops"), moduleBinding(), {})),
+        );
+
+        assert.strictEqual(refused._tag, "Malformed");
+        assert.strictEqual(refused.reason, "module");
+        assert.strictEqual(refused.detail, toyDetail);
+        assert.strictEqual(refused.entry, entryName(instance, "RESPONSE"));
+      }),
+  );
+
+  it.effect("[W0-PCIJSON] no entry under a module binding is NULL, or the absent option", () =>
+    Effect.gen(function* moduleAbsent() {
+      const three = toyInteger(3n);
+
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode([], moduleBinding(), {})),
+        nullInteger,
+      );
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode([], moduleBinding(), { absent: three })),
+        three,
+      );
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode(posted(""), moduleBinding(), { absent: three })),
+        nullInteger,
+      );
+    }),
+  );
+
+  it.effect(
+    "[W0-PCIJSON] two entries under a single module binding are single-many, and a Blob is file",
+    () =>
+      Effect.gen(function* moduleShared() {
+        const many = yield* Effect.flip(
+          Effect.fromResult(decode(posted('{"n":1}', '{"n":2}'), moduleBinding())),
+        );
+        assert.strictEqual(many.reason, "single-many");
+
+        const manyOfMultiple = yield* Effect.flip(
+          Effect.fromResult(decode(posted('{"n":1}', '{"n":2}'), moduleBinding("multiple"))),
+        );
+        assert.strictEqual(manyOfMultiple.reason, "single-many");
+
+        const file = yield* Effect.flip(
+          Effect.fromResult(decode(posted(new Blob(["1"])), moduleBinding())),
+        );
+        assert.strictEqual(file.reason, "file");
+      }),
+  );
+
+  it.effect(
+    "[W0-PCIJSON] encode writes a module binding's value through the module's encode, and decode reads it back",
+    () =>
+      Effect.gen(function* moduleRoundTrip() {
+        const seven = toyInteger(7n);
+
+        assert.deepStrictEqual(encode(seven, moduleBinding()), posted('{"n":7}'));
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(encode(seven, moduleBinding()), moduleBinding())),
+          seven,
+        );
+        assert.deepStrictEqual(encode(nullInteger, moduleBinding()), posted(""));
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(encode(nullInteger, moduleBinding()), moduleBinding())),
+          nullInteger,
+        );
+      }),
   );
 });
 

@@ -362,6 +362,34 @@ export interface BoundResponse {
 }
 
 /**
+ * How a module reads and writes the one form entry its control posts for a response, when its
+ * posted text is the module's own rather than one of the lexical forms `decode` in
+ * `#plate/form/encoding.ts` reads: a Portable Custom Interaction posts Appendix C JSON for a value
+ * of any declared base type and cardinality in one entry. `decode` and `encode` round-trip, as they
+ * do for every binding: `decode(encode(value))` is `value`, and `encode(decode(text))` posts what
+ * the control would. The form hands `decode` empty text when it posted no entry for the response,
+ * so empty text is the NULL of the declared type, as one empty entry is NULL under every binding;
+ * `encode` writes it for NULL.
+ */
+export interface ModuleEntry {
+  /**
+   * Read the one posted text into the declared value; the failure is the detail in words.
+   *
+   * @param text The posted text, empty when the form posted no entry or an empty one.
+   * @returns The value, NULL for empty text, or what the text should have been, which `Malformed`
+   *   (`#plate/form/encoding.ts`) appends to its `module` reason's message.
+   */
+  readonly decode: (text: string) => Result.Result<ResponseValue, string>;
+  /**
+   * Write the text the control posts for a value.
+   *
+   * @param value The value, NULL included.
+   * @returns The text, which `decode` reads back to `value`.
+   */
+  readonly encode: (value: ResponseValue) => string;
+}
+
+/**
  * One region of an interaction's own content as its module gives it: a `Region` of
  * `#plate/model/interactions.ts` without its owner, which `regionsOf` adds.
  */
@@ -503,6 +531,22 @@ export interface InteractionModule<
    * The interaction's QTI element name, which the body walk dispatches on.
    */
   readonly element: `qti-${string}-interaction`;
+  /**
+   * How the module reads its own posted text ({@link ModuleEntry}), for a module whose control
+   * posts one entry in a form of its own rather than the lexical forms. `postingsIn`
+   * (`#plate/payload.ts`) asks the first interaction in document order that binds the response, as
+   * `absentValueOf` (`#plate/model/interactions.ts`) is asked, and gives the response a
+   * `ModuleBinding` over it (`#plate/form/encoding.ts`), which `decode` routes to the entry's
+   * `decode` with the one posted text and `encode` to its `encode`, so a host that decodes through
+   * the postings gets the module's value without naming the kind. Absent means the response posts
+   * under the lexical forms of its base type, as today; every shipped kind and every stub leaves
+   * it unset. Portable Custom Interaction (issue pci-05) is the first module to set it: its
+   * `decode` parses the posted JSON and hands it to `fromPciJson` with the declaration.
+   *
+   * @param interaction The model node.
+   * @returns How to read and write the response's one posted text.
+   */
+  readonly entry?: (interaction: I) => ModuleEntry;
   /**
    * The kind's Appendix A identifier.
    */
