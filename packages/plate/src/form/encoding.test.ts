@@ -10,6 +10,7 @@ import {
   isXmlText,
   partition,
   pointEntryNames,
+  postedStrings,
 } from "#plate/form/encoding.ts";
 import type {
   Binding,
@@ -1241,5 +1242,67 @@ describe("partition", () => {
       host: [host, dotted],
       own: [own],
     });
+  });
+});
+
+describe("postedStrings", () => {
+  it("[W0-HOSTS] postedStrings gives a point binding's coordinates in posted order, x then y for each value", () => {
+    const name = entryName(instance, "P");
+    const [x, y] = pointEntryNames(name);
+    const point: ValueBinding = { baseType: "point", cardinality: "multiple", name };
+
+    assert.deepStrictEqual(
+      postedStrings(
+        [
+          [x, "12"],
+          [y, "7"],
+          [x, "3"],
+          [y, "40"],
+          [entryName(instance, "Q"), "z"],
+        ],
+        point,
+      ),
+      ["12", "7", "3", "40"],
+    );
+    assert.deepStrictEqual(
+      postedStrings(
+        [
+          [y, "7"],
+          [name, "3 4"],
+          [x, new Blob(["12"])],
+          [x, "12"],
+        ],
+        point,
+      ),
+      ["7", "12"],
+      "a hand-built post comes back in the order it was posted, and a Blob and the bare name are not a point's",
+    );
+    assert.deepStrictEqual(postedStrings([], point), []);
+  });
+
+  it("[W0-HOSTS] postedStrings gives a value binding's own entries and drops a Blob and the other names", () => {
+    const name = entryName(instance, "RESPONSE");
+    const text: ValueBinding = { baseType: "string", cardinality: "single", name };
+
+    assert.deepStrictEqual(
+      postedStrings(
+        [
+          [name, "a"],
+          [`${name}.x`, "9"],
+          ["host", "b"],
+          [name, new Blob(["f"])],
+        ],
+        text,
+      ),
+      ["a"],
+    );
+  });
+
+  it("[W0-HOSTS] postedStrings gives a record binding's text", () => {
+    const name = entryName(instance, "RESPONSE");
+
+    assert.deepStrictEqual(postedStrings([[name, "1.5"]], { cardinality: "record", name }), [
+      "1.5",
+    ]);
   });
 });

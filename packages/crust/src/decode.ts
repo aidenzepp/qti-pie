@@ -2,6 +2,7 @@
 import { Effect, Option } from "effect";
 import { classify } from "#crust/charset.ts";
 import type { EncoderClass } from "#crust/charset.ts";
+import { positionOf } from "#crust/dtd.ts";
 import { ReaderRefusal } from "#crust/errors.ts";
 
 /**
@@ -178,9 +179,17 @@ const declaredEncoding = (units: Units): Option.Option<string> => {
 
 /**
  * Builds the refusal for bytes the label's decoder could not accept.
+ *
+ * @param rule - The rule the bytes break.
+ * @param detail - What in the input broke it.
+ * @param position - Where in the decoded text it broke, or none for the document as a whole.
+ * @returns The refusal.
  */
-const refuse = (rule: ReaderRefusal["rule"], detail: string): ReaderRefusal =>
-  new ReaderRefusal({ detail, rule });
+const refuse = (
+  rule: ReaderRefusal["rule"],
+  detail: string,
+  position: ReaderRefusal["position"],
+): ReaderRefusal => new ReaderRefusal({ detail, position, rule });
 
 /**
  * Decode `body` with the named `TextDecoder` encoding, failing on any malformed sequence.
@@ -209,6 +218,7 @@ const decodeStrictly = (
         refuse(
           "unsupported-encoding",
           `No decoder here recognizes the encoding "${label}". Re-save the document as UTF-8, or declare an encoding this reader can decode.`,
+          Option.none(),
         ),
       try: () => new TextDecoder(name, { fatal: true, ignoreBOM: true }),
     });
@@ -217,6 +227,7 @@ const decodeStrictly = (
       return yield* refuse(
         "unsupported-encoding",
         `The encoding "${label}" is decoded as "${decoder.encoding}" by the decoder that serves that label, so some bytes would read as characters the author did not write. Re-save the document as UTF-8.`,
+        Option.none(),
       );
     }
 
@@ -225,6 +236,7 @@ const decodeStrictly = (
         refuse(
           "decode",
           `The document is read as ${label}, but its bytes are not valid in that encoding. Fix the bytes that are not valid ${label}, or re-save the document as UTF-8.`,
+          Option.none(),
         ),
       try: () => decoder.decode(body),
     });
@@ -238,20 +250,28 @@ const decodeStrictly = (
  * never through a `TextDecoder`: the WHATWG table maps `ISO-8859-1` to `windows-1252`, which turns
  * bytes 0x80 to 0x9F into printable characters where ISO-8859-1 and XML 1.0 section 4.3.3 give the
  * C1 controls U+0080 to U+009F. `ascii` admits only bytes below 0x80 and then reads them the same
- * way. A `decode-only` label goes to `TextDecoder` under its own name.
+ * way; it refuses the first byte at or above 0x80 at its line and column in the bytes before it,
+ * which are all ASCII and so read as text. A `decode-only` label goes to `TextDecoder` under its
+ * own name.
  */
 const asciiDecoders: Readonly<Record<"ascii" | "decode-only" | "latin1" | "utf8", BodyDecoder>> = {
   ascii: (body, label) => {
     const byte = body.find((value) => value >= 0x80);
 
-    return byte === undefined
-      ? Effect.succeed(latin1Text(body))
-      : Effect.fail(
-          refuse(
-            "decode",
-            `The document is read as ${label}, which holds only bytes below 0x80, but the byte at offset ${body.indexOf(byte)} is 0x${byte.toString(16).toUpperCase()}. Re-save the document as UTF-8, or declare the encoding it was written in.`,
-          ),
-        );
+    if (byte === undefined) {
+      return Effect.succeed(latin1Text(body));
+    }
+
+    const offset = body.indexOf(byte);
+    const before = latin1Text(body.subarray(0, offset));
+
+    return Effect.fail(
+      refuse(
+        "decode",
+        `The document is read as ${label}, which holds only bytes below 0x80, but the byte at offset ${offset} is 0x${byte.toString(16).toUpperCase()}. Re-save the document as UTF-8, or declare the encoding it was written in.`,
+        Option.some(positionOf(before, before.length)),
+      ),
+    );
   },
   "decode-only": (body, label) => decodeStrictly(label.toLowerCase(), label, body),
   latin1: (body) => Effect.succeed(latin1Text(body)),
@@ -395,6 +415,7 @@ const mismatch = (row: Decodable, label: string, declared: boolean): ReaderRefus
   refuse(
     "encoding-mismatch",
     `The document begins with ${row.opening}, which only ${row.named} begins with (XML 1.0 Appendix F), but ${declared ? `its declaration names ${label}` : `it declares no encoding, which makes it ${label} (XML 1.0 section 4.3.3)`}. Declare the encoding the bytes are in, or re-save the document in ${label}.`,
+    Option.none(),
   );
 
 /**
@@ -432,7 +453,8 @@ const decodeRow = (row: Decodable, body: Uint8Array): Effect.Effect<Decoded, Rea
  * `decode.test.ts` holds this to every lone surrogate.
  *
  * @param decoded - The label and the decoded text.
- * @returns `decoded` itself; a `nul` refusal naming the first U+0000's offset.
+ * @returns `decoded` itself; a `nul` refusal naming the first U+0000's offset, positioned at its
+ *   line and column in the decoded text.
  * @see {@link https://encoding.spec.whatwg.org/#concept-encoding-process | Encoding Standard, process an item}
  */
 const requireXmlCharacters = (decoded: Decoded): Effect.Effect<Decoded, ReaderRefusal> => {
@@ -444,6 +466,7 @@ const requireXmlCharacters = (decoded: Decoded): Effect.Effect<Decoded, ReaderRe
         refuse(
           "nul",
           `The decoded text holds U+0000 at offset ${offset}, a character XML 1.0 forbids anywhere in a document. Remove it from the source.`,
+          Option.some(positionOf(decoded.text, offset)),
         ),
       );
 };
@@ -465,6 +488,7 @@ export const decodeBy = (table: readonly Row[]) =>
       return yield* refuse(
         "unsupported-encoding",
         `The document begins with the bytes of ${row.family} (XML 1.0 Appendix F), an encoding this reader cannot decode. Re-save the document as UTF-8.`,
+        Option.none(),
       );
     }
 

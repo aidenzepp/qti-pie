@@ -33,13 +33,18 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import type { Report } from "#pantry/export/compare.ts";
 import { compareWithRecord, exportEntries, exportPackage } from "#pantry/export/package.ts";
-import { documentScan, documentsOf } from "#pantry/export/scan.ts";
+
 import { importPackage } from "#pantry/import/package.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
-import { loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
+import { loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import {
+  exportPageSizesTestTimeoutMs,
+  hasLease,
+  leaseTestTimeoutMs,
+} from "#pantry/test/settings.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
+import { explainMember } from "@bjornpagen/grizzle/compile";
 
 /**
  * The directory every export is made under: the package's gitignored `work/`.
@@ -73,15 +78,16 @@ const accepted = [
 
 /**
  * The statements one page of `documentScan` runs in its flight: one for the `Node` rows, one for
- * each of the seven attachments on a node (comment, instruction, doctype, foreign element name,
- * `Document` row, attributes, namespace declarations), one for the XML declaration on the
- * `Document` row, one for each of the two on the declaration (encoding, standalone), and one for
+ * each of the nine attachments on a node (comment, instruction, doctype, an element's named type,
+ * a foreign element's named type, foreign element name, `Document` row, attributes, namespace
+ * declarations), one for the XML declaration on the `Document` row, one for each of the two on the
+ * declaration (encoding, standalone), and one for
  * each of the two on an attribute (entity references, open name). An attachment over exact parents
  * is pipelined, its own statement in the parent's flight and snapshot (the engine's
  * `lower/shapes/attach/index.ts`, `chooseAttachment`), so the count is the scan's shape and no
  * row's.
  */
-const scanStatements = 13;
+const scanStatements = 15;
 
 /**
  * The plan node types that make a statement recursive: a recursive CTE's union and its working
@@ -159,10 +165,11 @@ const TestLayer = Layer.effect(
 ).pipe(Layer.provideMerge(Layer.mergeAll(AuthorAppLayer, NodeServices.layer)));
 
 /**
- * The timeout, in milliseconds, of the hook that builds {@link TestLayer}: the author layer's own
- * budget, and a lease write's for the imports it runs.
+ * The timeout, in milliseconds, of the hook that builds {@link TestLayer}: the author layer's load,
+ * which compiles nothing, and the imports it runs, each a lease write, given twice a lease test's
+ * budget. A measurement of the hook on the lease is owed after the repin.
  */
-const importHookTimeoutMs = authorLayerHookTimeoutMs + leaseTestTimeoutMs;
+const importHookTimeoutMs = 2 * leaseTestTimeoutMs;
 
 /**
  * Import a fixture of `simple`'s shape and export it.
@@ -205,19 +212,22 @@ describe.skipIf(!hasLease)(
             }),
         );
 
-        it.effect("writes the same bytes whatever size its scan's pages are", () =>
-          Effect.gen(function* everyPageSize() {
-            for (const { id, name } of yield* Imported) {
-              const whole = yield* exportEntries(id);
-              for (const size of [1, 7]) {
-                assert.deepStrictEqual(
-                  yield* exportEntries(id, size),
-                  whole,
-                  `${name} at ${String(size)}`,
-                );
+        it.effect(
+          "writes the same bytes whatever size its scan's pages are",
+          () =>
+            Effect.gen(function* everyPageSize() {
+              for (const { id, name } of yield* Imported) {
+                const whole = yield* exportEntries(id);
+                for (const size of [1, 7]) {
+                  assert.deepStrictEqual(
+                    yield* exportEntries(id, size),
+                    whole,
+                    `${name} at ${String(size)}`,
+                  );
+                }
               }
-            }
-          }),
+            }),
+          exportPageSizesTestTimeoutMs,
         );
 
         it.effect(
@@ -263,12 +273,12 @@ describe.skipIf(!hasLease)(
             // key's order; `db.explain`'s plans carry each node's type, not its index.
             // Bound: every document of the accepted packages.
             Effect.gen(function* planAudit() {
-              const db = yield* Db.open(AuthorApp.roles.author, {});
+              const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
               const client = yield* loginSession;
               const key = yield* rowsOf<{ readonly name: string }>(
                 client,
                 `SELECT c.conname AS name FROM pg_catalog.pg_constraint c
-                  WHERE c.conrelid = 'qti.node'::regclass AND c.contype = 'u'
+                  WHERE c.conrelid = '${qtiSchema}.node'::regclass AND c.contype = 'u'
                     AND pg_catalog.obj_description(c.oid, 'pg_constraint') = 'key Node(document, start)'`,
               );
               const byDocument = yield* rowsOf<{
@@ -284,7 +294,7 @@ describe.skipIf(!hasLease)(
                                ORDER BY k.o) AS columns
                    FROM pg_catalog.pg_index x
                    JOIN pg_catalog.pg_class i ON i.oid = x.indexrelid
-                  WHERE x.indrelid = 'qti.node'::regclass`,
+                  WHERE x.indrelid = '${qtiSchema}.node'::regclass`,
               ).pipe(Effect.map((rows) => rows.filter(({ columns }) => columns[0] === "document")));
 
               assert.lengthOf(key, 1, "the key Node(document, start)");
@@ -298,11 +308,17 @@ describe.skipIf(!hasLease)(
               }
 
               for (const { id, name } of yield* Imported) {
-                const documents = yield* (yield* db.execute(documentsOf, { package: id })).collect;
+                const documents = yield* (yield* db.workload.documentsOf.execute({ package: id }))
+                  .collect;
 
                 assert.isAbove(documents.length, 0, name);
                 for (const { node, path: entry } of documents) {
-                  const plans = yield* db.explain(documentScan, { document: node });
+                  const plans = yield* explainMember(
+                    (yield* AuthorLogin).roles.author,
+                    "documentScan",
+                    { kind: "params", params: { document: node } },
+                    {},
+                  );
                   const [scan] = plans;
                   const where = `${name} ${entry}`;
 
@@ -314,8 +330,9 @@ describe.skipIf(!hasLease)(
                     assert.isTrue(readsByIndex(types), `${where}: ${types.join(" > ")}`);
                   }
 
-                  const starts = (yield* (yield* db.execute(documentScan, { document: node }))
-                    .collect).map(({ start }) => start);
+                  const starts = (yield* (yield* db.workload.documentScan.execute({
+                    document: node,
+                  })).collect).map(({ start }) => start);
                   assert.isTrue(
                     starts.every((start, at) => at === 0 || (starts[at - 1] ?? start) < start),
                     `${where}: the scan's rows in start order`,

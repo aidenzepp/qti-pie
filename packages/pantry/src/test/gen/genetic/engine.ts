@@ -53,15 +53,17 @@ export interface Edited<G> {
  * - `judge` judges one generation of candidates at once, one judgment per candidate in their order,
  *   so a judge that pays a start-up cost per call (a validator's schema compile) pays it once per
  *   generation.
- * - `signatureOf` keys a disagreement by its class, so a run keeps the first candidate of each.
+ * - `signatureOf` keys a disagreement by its class, so a run keeps the first candidate of each: two
+ *   disagreements are one class exactly when their keys are one map key, a string's text or an
+ *   object's identity.
  * - `familyOf` names the feature set a feature belongs to, for its residual.
  */
-export interface Problem<G, F extends string, D, E, R> {
+export interface Problem<G, F extends string, D, E, R, K = string> {
   readonly familyOf: (feature: F) => string;
   readonly judge: (genomes: readonly G[]) => Effect.Effect<readonly Judgment<F, D>[], E, R>;
   readonly mutate: (parent: G, mate: G) => Gen<Option.Option<Edited<G>>>;
   readonly seeds: readonly G[];
-  readonly signatureOf: (disagreement: D) => string;
+  readonly signatureOf: (disagreement: D) => K;
 }
 
 /**
@@ -103,10 +105,10 @@ export interface Residual {
  * population it ended with, each feature with the candidates that showed it, and the residual of
  * each feature family.
  */
-export interface Evolved<G, F extends string, D> {
+export interface Evolved<G, F extends string, D, K = string> {
   readonly evaluated: number;
   readonly features: ReadonlyMap<F, number>;
-  readonly found: ReadonlyMap<string, Found<G, D>>;
+  readonly found: ReadonlyMap<K, Found<G, D>>;
   readonly population: number;
   readonly residual: readonly Residual[];
 }
@@ -266,15 +268,15 @@ export const residualsOf = <F extends string>(
  * @param seed - The run's seed: every choice of the run is drawn from it.
  * @returns What the run found; the judge's error fails it.
  */
-export const evolve = Effect.fnUntraced(function* evolve<G, F extends string, D, E, R>(
-  problem: Problem<G, F, D, E, R>,
+export const evolve = Effect.fnUntraced(function* evolve<G, F extends string, D, E, R, K = string>(
+  problem: Problem<G, F, D, E, R, K>,
   budget: Budget,
   seed: number,
-): Effect.fn.Return<Evolved<G, F, D>, E, R> {
+): Effect.fn.Return<Evolved<G, F, D, K>, E, R> {
   const chooser = randomChooser(wordsOf(seed));
   const draw = <A>(generator: Gen<A>): A => generate(generator, chooser).value;
   const counts = new Map<F, number>();
-  const found = new Map<string, Found<G, D>>();
+  const found = new Map<K, Found<G, D>>();
   const members: Member<G, F>[] = [];
   let evaluated = 0;
   const judged = Effect.fnUntraced(function* judged(

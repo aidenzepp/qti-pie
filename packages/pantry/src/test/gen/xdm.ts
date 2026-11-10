@@ -44,12 +44,14 @@ import type { Swarm } from "@grizzle/testing/swarm";
 import { flags } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import type { ComposedGrammar, Kind } from "#pantry/grammar/compose.ts";
+import { followPairsOf } from "#pantry/grammar/content.ts";
 import { foreignKinds, isForeignKind, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { ForeignKind } from "#pantry/grammar/kinds.ts";
 import { expandedNameOf, typeHandle } from "#pantry/grammar/xsi.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
-import { closedName, flatten, handlePrefixes, handlePrefixOf, none } from "#pantry/model/xdm.ts";
+import { closedName, flatten, handlePrefixes, handlePrefixOf } from "#pantry/model/xdm.ts";
+import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import type {
   ClosedName,
@@ -236,7 +238,7 @@ export interface Index {
     kind: ForeignKind,
   ) => Option.Option<Arr.NonEmptyReadonlyArray<ExpandedName>>;
   /**
-   * Each (version, element kind)'s declared type, `none` for an anonymous one, and the names its
+   * Each (version, element kind)'s declared type, none for an anonymous one, and the names its
    * `xsi:type` may be drawn with, each with the governing type it gives the element: for a kind of
    * a vocabulary the types `XsiType` admits; for a foreign kind `xs:anyType`, each built-in simple
    * type that governs a foreign element, and a name no schema defines, which leaves it to lax
@@ -244,7 +246,7 @@ export interface Index {
    */
   readonly governing: ReadonlyMap<
     string,
-    { readonly declared: string; readonly named: readonly Typing[] }
+    { readonly declared: Option.Option<string>; readonly named: readonly Typing[] }
   >;
   /**
    * The (version, kind, type) of every governor, keyed `version kind type`: an element of the kind
@@ -434,8 +436,8 @@ const pushAt = <K, T>(map: Map<K, T[]>, key: K, value: T): void => {
 };
 
 /**
- * Gather each (version, parent)'s content automaton from the grammar's `Follow`, `Last` and
- * `Symbol`: each model's and each shared model's maps read once, and each family's automaton over
+ * Gather each (version, parent)'s content automaton from the grammar's `Follow`, `Last` and symbol
+ * sets: each model's and each shared model's maps read once, and each family's automaton over
  * its model's, with finishing costs of its own.
  *
  * @param grammar - The composed grammar.
@@ -444,7 +446,7 @@ const pushAt = <K, T>(map: Map<K, T[]>, key: K, value: T): void => {
 const automataOf = (grammar: ComposedGrammar): ReadonlyMap<string, Automaton> => {
   const follow = new Map<string, Map<number, Set<number>>>();
   const into = new Map<string, Map<number, number[]>>();
-  for (const row of grammar.content.follow.rows) {
+  for (const row of followPairsOf(grammar.content)) {
     const from = Number(row.from);
     const to = Number(row.to);
     const own = follow.get(row.model) ?? new Map<number, Set<number>>();
@@ -462,7 +464,7 @@ const automataOf = (grammar: ComposedGrammar): ReadonlyMap<string, Automaton> =>
   }
 
   const shared = new Map<string, Map<string, number[]>>();
-  for (const row of grammar.content.symbol.rows) {
+  for (const row of symbolRowsOf(grammar.content.symbolSetOf, grammar.content.symbolMember)) {
     const own = shared.get(row.model) ?? new Map<string, number[]>();
     shared.set(row.model, own);
     pushAt(own, row.kind, Number(row.position));
@@ -548,7 +550,10 @@ const finishOf = (
  */
 const childrenOf = (grammar: ComposedGrammar): ReadonlyMap<string, readonly Candidate[]> => {
   const children = new Map<string, Candidate[]>();
-  for (const { child, parent, position, version } of grammar.admission.rows) {
+  for (const { child, parent, position, version } of admittedOf(
+    grammar.content.contentModelOf,
+    grammar.content.admissionIn,
+  )) {
     // A foreign element only a strict wildcard holds stands only with an xsi:type its document's
     // schema set resolves (spec reading 81, `StrictlyHeld`). A foreign element's xsi:type is drawn
     // with no regard to the wildcard that holds it, a name no schema defines among them, so none
@@ -720,11 +725,11 @@ const reachOf = (
 
 /**
  * A name an `xsi:type` is drawn with, and the governing type it gives the element: the type's
- * handle, or `none` for a name that resolves to no type, which a foreign element is laxly assessed
+ * handle, or none for a name that resolves to no type, which a foreign element is laxly assessed
  * under.
  */
 interface Typing {
-  readonly governs: string;
+  readonly governs: Option.Option<string>;
   readonly name: ExpandedName;
 }
 
@@ -733,19 +738,22 @@ interface Typing {
  * no schema of the composition targets, so it resolves and names nothing, and the element stays
  * laxly assessed (spec reading 60).
  */
-const unknownType: Typing = { governs: none, name: { local: "NoSuchType", namespace: "urn:w" } };
+const unknownType: Typing = {
+  governs: Option.none(),
+  name: { local: "NoSuchType", namespace: "urn:w" },
+};
 
 /**
  * Read a governing type's handle back as the name an `xsi:type` writes it with.
  *
  * @param governs - The type's `TypeName` handle (`typeHandle`).
- * @returns The typing, none for no named type and for a type in no namespace, whose QName would
- *   need the default namespace undeclared.
+ * @returns The typing, none for a type in no namespace, whose QName would need the default
+ *   namespace undeclared.
  */
 const typingOf = (governs: string): Option.Option<Typing> =>
   expandedNameOf(governs).pipe(
     Option.filter(({ namespace }) => namespace !== ""),
-    Option.map((name) => ({ governs, name })),
+    Option.map((name) => ({ governs: Option.some(governs), name })),
   );
 
 /**
@@ -754,19 +762,22 @@ const typingOf = (governs: string): Option.Option<Typing> =>
  * @param index - The index.
  * @param version - The version.
  * @param kind - The element's kind.
- * @param governs - Its governing type.
+ * @param governs - Its governing type, none where no named type governs it.
  * @returns The key of its closed names and open classes.
  */
 const attributeKeyOf = (
   index: Pick<Index, "governors">,
   version: string,
   kind: string,
-  governs: string,
-): string => {
-  const governed = `${keyOf(version, kind)} ${governs}`;
-
-  return index.governors.has(governed) ? governed : keyOf(version, kind);
-};
+  governs: Option.Option<string>,
+): string =>
+  Option.match(
+    governs.pipe(
+      Option.map((type) => `${keyOf(version, kind)} ${type}`),
+      Option.filter((governed) => index.governors.has(governed)),
+    ),
+    { onNone: () => keyOf(version, kind), onSome: (governed) => governed },
+  );
 
 /**
  * Read each (version, element kind)'s declared type and the named types its `xsi:type` may name
@@ -1326,7 +1337,7 @@ const attributesOf =
     parent: Kind,
   ): Gen<{
     readonly attributes: readonly XdmAttribute<Composed>[];
-    readonly governs: string;
+    readonly governs: Option.Option<string>;
     readonly needed: readonly XdmNamespace[];
   }> =>
   (source) => {
@@ -1341,7 +1352,7 @@ const attributesOf =
         ? Option.some(source.draw(element(named)))
         : Option.none<Typing>();
     const governs = Option.match(typed, {
-      onNone: () => governing?.declared ?? none,
+      onNone: () => Option.flatMap(Option.fromNullishOr(governing), ({ declared }) => declared),
       onSome: (typing) => typing.governs,
     });
     const key = attributeKeyOf(context.index, context.version, kind, governs);
@@ -1891,7 +1902,9 @@ const foreignOf =
       namespace: name.namespace,
       number: entry.start,
       scope: declared.scope,
-      simple: context.index.governors.has(`${keyOf(context.version, kind)} ${governs}`),
+      simple: Option.exists(governs, (type) =>
+        context.index.governors.has(`${keyOf(context.version, kind)} ${type}`),
+      ),
     };
     const children = source.draw(familyUnder(context, owner, site.depth, completing));
     close(context, entry);

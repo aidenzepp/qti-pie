@@ -33,10 +33,12 @@ import {
   attributeRows,
   AttributeSlot,
   GoverningOf,
+  KindGovernor,
   KindNamespace,
   NodeKind,
 } from "#pantry/grammar/install.ts";
 import { Attribute, Idref, OpenAttributeName } from "#pantry/qti/attributes.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   assertVerdict,
@@ -46,6 +48,7 @@ import {
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -88,13 +91,10 @@ const kind = "qti-hotspot-choice";
 const version = "3.0.1";
 
 /**
- * The governing type a hotspot choice under its own governor holds: the `GoverningOf` row whose
- * governor is the kind.
+ * The hotspot choice as its attributes' element, under its own governor: its kind's, as under its
+ * declared type.
  */
-const governs =
-  GoverningOf.rows.find(
-    (row) => row.kind === kind && row.governor === kind && row.version === version,
-  )?.governs ?? assert.fail(`GoverningOf holds ${kind} under its own governor`);
+const hotspotHost = { governor: kind, kind } as const;
 
 /**
  * The slot of a name a governor admits in a version.
@@ -145,8 +145,8 @@ const ownerCount = (family: string, count: number) => ({
  * @param fields.lexical - The lexical form.
  * @param place - Its slot, its element, and the slots before it.
  * @param place.at - Its slot.
- * @param place.host - Its element's kind and governing type, which governs it: the hotspot choice
- *   under its declared type by default.
+ * @param place.host - Its element's kind and governor: the hotspot choice under its own governor by
+ *   default.
  * @param place.was - The slots of the closed names before it.
  * @param place.rest - Any other field the case sets.
  * @returns The fact.
@@ -155,12 +155,12 @@ const attributeOf = (
   { lexical, name }: { readonly lexical: string; readonly name: string },
   {
     at = 0,
-    host = { governs, kind },
+    host = hotspotHost,
     rest = {},
     was = [],
   }: {
     readonly at?: number;
-    readonly host?: { readonly governs: string; readonly kind: string };
+    readonly host?: { readonly governor: string; readonly kind: string };
     readonly rest?: Stated["fact"];
     readonly was?: readonly number[];
   } = {},
@@ -175,7 +175,7 @@ const attributeOf = (
       attrsWas: slotBits(...was),
       document: strayNode,
       documentType,
-      governs: host.governs,
+      governor: host.governor,
       id: `00000000-0000-4000-8000-0000000001${String(at).padStart(2, "0")}`,
       idrefText: "",
       kind: host.kind,
@@ -210,19 +210,13 @@ const secondOfTwo = (
 });
 
 /**
- * Read the governing type a kind's elements hold under the kind's own governor in the cases'
- * version: the host of a case on another kind than the hotspot choice.
+ * A kind's elements under the kind's own governor (`KindGovernor`), as under its declared type or
+ * no named type: the host of a case on another kind than the hotspot choice.
  *
  * @param of - The kind.
- * @returns The kind and its governing type.
+ * @returns The kind and its governor.
  */
-const hostOf = (of: string) => ({
-  governs:
-    GoverningOf.rows.find(
-      (row) => row.kind === of && row.governor === of && row.version === version,
-    )?.governs ?? assert.fail(`GoverningOf holds ${of} under its own governor`),
-  kind: of,
-});
+const hostOf = (of: string) => ({ governor: of, kind: of });
 
 /**
  * A fact with some of its fields replaced: a case's corruption of a control.
@@ -259,8 +253,16 @@ const idrefPiece = (at: number, fields: Readonly<Record<string, string>>): State
 });
 
 /**
+ * The governor of a foreign element no named type governs: its kind's own (`KindGovernor`), as the
+ * importer writes it (`#pantry/import/fold.ts` `governorOf`).
+ */
+const foreignGovernor =
+  KindGovernor.rows.find((row) => row.kind === "foreign-element")?.governor ??
+  assert.fail("KindGovernor holds foreign-element");
+
+/**
  * An open name of an attribute that counts one, which no case writes: a name in no namespace on a
- * foreign element of version 3.0.1 governed by none, unless the case sets otherwise.
+ * foreign element of version 3.0.1 governed by its kind, unless the case sets otherwise.
  *
  * @param fields - Its class and whatever else the case sets.
  * @param attribute - Its attribute.
@@ -274,7 +276,7 @@ const openNameOf = (
     at: 0n,
     attribute,
     elementNamespace: "urn:element",
-    governs: "none",
+    governor: foreignGovernor,
     kind: "foreign-element",
     local: "a",
     node: strayNode,
@@ -287,8 +289,9 @@ const openNameOf = (
 });
 
 /**
- * The fields a closed element's open name copies from it: its namespace and its declared type as
- * the importer writes it, read from `KindNamespace` and `GoverningOf` at 3.0.1, never `none`.
+ * The fields a closed element's open name copies from it: its namespace and the governor its
+ * declared type gives, as the importer writes them, read from `KindNamespace` and `GoverningOf` at
+ * 3.0.1.
  *
  * @param element - The element's kind.
  * @returns The fields.
@@ -297,8 +300,8 @@ const on = (element: string): Stated["fact"] => ({
   elementNamespace:
     KindNamespace.rows.find((row) => row.kind === element)?.namespace ??
     assert.fail(`KindNamespace holds ${element}`),
-  governs:
-    GoverningOf.rows.find((row) => row.kind === element && row.version === "3.0.1")?.governs ??
+  governor:
+    GoverningOf.rows.find((row) => row.kind === element && row.version === "3.0.1")?.governor ??
     assert.fail(`GoverningOf holds ${element} at 3.0.1`),
   kind: element,
 });
@@ -340,7 +343,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
               withFields(admitted, { attrsAfter: slotBits(), name: unadmitted, slot: slotBits() }),
             ]),
           ),
-          "al_1_admission",
+          checkConstraintOf(Qti, Attribute.name, "AL1_admission"),
           true,
           `${unadmitted} on ${kind}`,
         );
@@ -353,7 +356,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
               withFields(admitted, { attrsAfter: slotBits(wrongSlot), slot: slotBits(wrongSlot) }),
             ]),
           ),
-          "e_1_derived",
+          checkConstraintOf(Qti, Attribute.name, "E1_derived"),
           true,
           "identifier holding shape's slot",
         );
@@ -363,7 +366,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
             client,
             statedInserts([secondOfTwo({ lexical: "H2", name: "identifier" }, [identifier])]),
           ),
-          "al_2_distinct",
+          checkConstraintOf(Qti, Attribute.name, "AL2_distinct"),
           true,
           "identifier repeated",
         );
@@ -406,7 +409,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
         for (const openName of [0n, 2n]) {
           assertVerdict(
             yield* judged(client, statedInserts([withFields(data, { openName })])),
-            "al_4_open_names",
+            checkConstraintOf(Qti, Attribute.name, "AL4_open_names"),
             true,
             `data-* with ${String(openName)} open names`,
           );
@@ -414,7 +417,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
 
         assertVerdict(
           yield* judged(client, statedInserts([withFields(admitted, { openName: 1n })])),
-          "al_4_open_names",
+          checkConstraintOf(Qti, Attribute.name, "AL4_open_names"),
           true,
           "a closed name with an open name",
         );
@@ -430,6 +433,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
       // Bound: every (kind, name) the two versions' grammars admit differently, up to 8.
       Effect.gen(function* versionDifferences() {
         const client = yield* loginSession;
+        const admission = checkConstraintOf(Qti, Attribute.name, "AL1_admission");
         const kinds: ReadonlySet<string> = new Set(NodeKind.handles);
         const admittedIn = (at: string) =>
           new Set(
@@ -468,7 +472,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
                     attrsWas: slotBits(),
                     document: strayNode,
                     documentType,
-                    governs: governing.governs,
+                    governor: governing.governor,
                     id: "00000000-0000-4000-8000-000000000200",
                     idrefText: "",
                     kind: governor,
@@ -486,13 +490,9 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
             const label = `${name} on ${governor} in ${at}`;
 
             if (row === undefined) {
-              assertVerdict(refused, "al_1_admission", true, label);
+              assertVerdict(refused, admission, true, label);
             } else {
-              assert.notStrictEqual(
-                Option.getOrUndefined(refused)?.constraint,
-                "al_1_admission",
-                label,
-              );
+              assert.notStrictEqual(Option.getOrUndefined(refused)?.constraint, admission, label);
             }
           }
         }
@@ -527,7 +527,12 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           if (valid) {
             assertNoRowLawRefuses(refused, `${name} ${value}`);
           } else {
-            assertVerdict(refused, "value_domain", true, `${name} ${value}`);
+            assertVerdict(
+              refused,
+              checkConstraintOf(Qti, Attribute.name, "value_domain"),
+              true,
+              `${name} ${value}`,
+            );
           }
         }
       }).pipe(Effect.scoped),
@@ -556,27 +561,27 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           string,
           string,
           string,
-          { readonly governs: string; readonly kind: string },
+          { readonly governor: string; readonly kind: string },
           boolean,
         ])[] = [
-          ["identifier", "H1", "", "", { governs, kind }, true],
-          ["identifier", "H1", "x", "attribute_prefix", { governs, kind }, false],
-          ["data-*", "v", "", "", { governs, kind }, true],
-          ["data-*", "v", "x", "attribute_prefix", { governs, kind }, false],
-          ["xml:lang", "en", "xml", "", { governs, kind }, true],
-          ["xml:lang", "en", "", "attribute_prefix", { governs, kind }, false],
-          ["xml:lang", "en", "x", "attribute_prefix", { governs, kind }, false],
-          ["xsi:schemaLocation", "urn:a b", "xsi", "", { governs, kind }, true],
-          ["xsi:schemaLocation", "urn:a b", "zs", "", { governs, kind }, true],
-          ["xsi:schemaLocation", "urn:a b", "", "attribute_prefix", { governs, kind }, false],
-          ["xsi:schemaLocation", "urn:a b", "xml", "attribute_prefix", { governs, kind }, false],
-          ["xsi:schemaLocation", "urn:a b", "xmlns", "attribute_prefix", { governs, kind }, false],
+          ["identifier", "H1", "", "", hotspotHost, true],
+          ["identifier", "H1", "x", "Attribute_prefix", hotspotHost, false],
+          ["data-*", "v", "", "", hotspotHost, true],
+          ["data-*", "v", "x", "Attribute_prefix", hotspotHost, false],
+          ["xml:lang", "en", "xml", "", hotspotHost, true],
+          ["xml:lang", "en", "", "Attribute_prefix", hotspotHost, false],
+          ["xml:lang", "en", "x", "Attribute_prefix", hotspotHost, false],
+          ["xsi:schemaLocation", "urn:a b", "xsi", "", hotspotHost, true],
+          ["xsi:schemaLocation", "urn:a b", "zs", "", hotspotHost, true],
+          ["xsi:schemaLocation", "urn:a b", "", "Attribute_prefix", hotspotHost, false],
+          ["xsi:schemaLocation", "urn:a b", "xml", "Attribute_prefix", hotspotHost, false],
+          ["xsi:schemaLocation", "urn:a b", "xmlns", "Attribute_prefix", hotspotHost, false],
           ["xlink:href", "a.xml", "xl", "", lom, true],
-          ["xlink:href", "a.xml", "", "attribute_prefix", lom, false],
+          ["xlink:href", "a.xml", "", "Attribute_prefix", lom, false],
           ["foreign", "1", "f", "", foreign, true],
-          ["foreign", "1", "", "attribute_prefix", foreign, false],
+          ["foreign", "1", "", "Attribute_prefix", foreign, false],
           ["own-namespace", "1", "o", "", foreign, true],
-          ["own-namespace", "1", "", "attribute_prefix", foreign, false],
+          ["own-namespace", "1", "", "Attribute_prefix", foreign, false],
           ["xlink:type", "simple", "xlink", "", lom, true],
           ["xlink:type", " locator ", "xlink", "", lom, true],
           ["xlink:type", "bogus", "xlink", "value_domain", lom, false],
@@ -587,7 +592,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           ["view", "", "", "value_domain", rubric, false],
           ["view", "  ", "", "value_domain", rubric, false],
         ];
-        for (const [name, lexical, prefix, constraint, host, valid] of cases) {
+        for (const [name, lexical, prefix, check, host, valid] of cases) {
           const label = `${name}=${JSON.stringify(lexical)} written with ${JSON.stringify(prefix)} on ${host.kind}`;
           const refused = yield* judged(
             client,
@@ -597,7 +602,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           if (valid) {
             assertNoRowLawRefuses(refused, label);
           } else {
-            assertVerdict(refused, constraint, true, label);
+            assertVerdict(refused, checkConstraintOf(Qti, Attribute.name, check), true, label);
           }
         }
       }).pipe(Effect.scoped),
@@ -627,7 +632,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
               { ...controls, fact: { ...controls.fact, idrefText: "a", idrefs: 1n } },
             ]),
           ),
-          "e_1_derived",
+          checkConstraintOf(Qti, Attribute.name, "E1_derived"),
           true,
           "tokens short of the lexical form",
         );
@@ -641,7 +646,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
               ),
             ]),
           ),
-          "e_1_derived",
+          checkConstraintOf(Qti, Attribute.name, "E1_derived"),
           true,
           "an identifier, of no IDREF domain, with tokens",
         );
@@ -667,7 +672,12 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
             idrefPiece(1, { before: "", piecesAfter: "ab", piecesWas: "a", token: "b" }),
           ],
         ] as const) {
-          assertVerdict(yield* judged(client, statedInserts([stated])), "e_1_derived", true, label);
+          assertVerdict(
+            yield* judged(client, statedInserts([stated])),
+            checkConstraintOf(Qti, stated.relation.name, "E1_derived"),
+            true,
+            label,
+          );
         }
 
         assertVerdict(
@@ -737,7 +747,12 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           if (valid) {
             assertNoRowLawRefuses(refused, label);
           } else {
-            assertVerdict(refused, "foreign_attribute_class", true, label);
+            assertVerdict(
+              refused,
+              checkConstraintOf(Qti, OpenAttributeName.name, "Foreign_attribute_class"),
+              true,
+              label,
+            );
           }
         }
 
