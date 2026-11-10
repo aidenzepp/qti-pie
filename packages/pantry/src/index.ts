@@ -8,7 +8,7 @@
  * after, `authorRole` and `authorLogin` give the author role and the `author_app` login over it,
  * and `singleCdn` builds the refuse-only `Cdn` level over a base, its options decoded with the
  * `CdnOptions` schema (there is no `CdnOptions` type: read it as `typeof CdnOptions.Type`). The
- * published relations (`Package`, `Document`, `TestDocument`, `Named`, `Section`,
+ * published relations (`Package`, `Document`, `TestDocument`, `Named`, `Section`, `TestFlag`,
  * `SectionSelection`, `SectionMember`, `ItemRefDocument`, `DeclarationIdentifier` and the
  * `BaseType` roster) are the ones an app's own level references, and `publishedRelations` records
  * each one's key and published fields, whose rows `PublishedRow` types; every other relation and

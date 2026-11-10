@@ -29,9 +29,14 @@ type ByStep = readonly (readonly [step: Step, entries: readonly string[]])[];
  * row builders and the export's unshred and zip, once S10 takes out the parts §2.3 keeps:
  * `ingest`, `changeSetOf` with the row type, and the reads. `model/folds.ts`, which §2.1 does not
  * list, is here with the rest of the XDM model: the import's builders and the law oracle both
- * fold with it.
+ * fold with it. The public import and export programs (`api/import.ts`, with its verdict, and
+ * `api/export.ts`) are here with the XML programs they wrap, and so is `index.ts`, the single entry
+ * that re-exports them, as `cli.ts` is the command line's.
  */
 const xmlSide = [
+  "api/export.ts",
+  "api/import.ts",
+  "api/verdict.ts",
   "cli.ts",
   "cli/*.ts",
   "export/compare.ts",
@@ -47,6 +52,7 @@ const xmlSide = [
   "import/roster.ts",
   "import/rules.ts",
   "import/write.ts",
+  "index.ts",
   "model/*.ts",
   "package/read.ts",
   "package/record.ts",
@@ -57,17 +63,25 @@ const xmlSide = [
  * The PostgreSQL side, what pantry keeps (§2.3) at today's paths, as globs relative to `src`: the
  * schema, its roles and logins, the grammar's generators and installed constants, the inventory
  * data and its offline derivers, the database layer, the scan and its paging, and the refusal
- * report with its law catalog and the committed law-name dictionary (`vocab/law-names.json`).
+ * report with its law catalog and the committed law-name dictionary (`vocab/law-names.json`). The
+ * listing queries and the published relations (`api/list.ts`, `api/published.ts`,
+ * `export/listing.ts`), the reading of a refusal by a level above Qti (`import/above.ts`) and the
+ * single-CDN level (`levels/`) read only this side.
  *
  * `xml/oracle.ts` is the grammar's own `xmllint` harness, which only tests reach and which imports
  * no module of pantry's.
  */
 const databaseSide = [
+  "api/list.ts",
+  "api/published.ts",
   "db/*.ts",
+  "export/listing.ts",
   "export/pages.ts",
   "export/scan.ts",
   "grammar/*.ts",
+  "import/above.ts",
   "import/refusal.ts",
+  "levels/*.ts",
   "package/refusal-origin.ts",
   "qti/*.ts",
   "vocab/*.json",
@@ -163,9 +177,23 @@ const crossings: ByStep = [
   // export's reads, with the same login and role, out of `export/package.ts`, behind the scan; and
   // crust's reader types out of `vocab/open.ts`, with shred's reader. The plan places neither
   // `export/pages.ts`'s assembly nor `qti/attributes.ts`'s `handlePrefixes`: S10 owes each a side.
+  // The public programs (pantry-api's goal 1, the single entry of decision 495's D3) cross where
+  // the programs they wrap do: `api/export.ts` and `api/import.ts` take the served login
+  // (`ServedAuthorLogin`, decision 496's M2) and the author role's type, the export pages a
+  // document's scan with `export/pages.ts`, and the import, its verdict and `import/package.ts`
+  // read a refusal by a level above Qti from `import/above.ts` (decision 499), the verdict with the
+  // reader's refusal origin beside its rules (decision 495's D4).
   [
     "S10",
     [
+      "api/export.ts: #pantry/db/served.ts",
+      "api/export.ts: #pantry/export/pages.ts",
+      "api/export.ts: #pantry/qti/roles.ts",
+      "api/import.ts: #pantry/db/served.ts",
+      "api/import.ts: #pantry/import/above.ts",
+      "api/import.ts: #pantry/qti/roles.ts",
+      "api/verdict.ts: #pantry/import/above.ts",
+      "api/verdict.ts: #pantry/package/refusal-origin.ts",
       "cli/output.ts: #pantry/package/refusal-origin.ts",
       "cli/refused.ts: #pantry/package/refusal-origin.ts",
       "export/package.ts: #pantry/db/served.ts",
@@ -175,6 +203,7 @@ const crossings: ByStep = [
       "export/pages.ts: #pantry/model/xdm.ts",
       "export/render.ts: #pantry/export/pages.ts",
       "import/package.ts: #pantry/db/served.ts",
+      "import/package.ts: #pantry/import/above.ts",
       "import/package.ts: #pantry/import/refusal.ts",
       "import/package.ts: #pantry/qti/roles.ts",
       "import/refusal.ts: #pantry/import/rules.ts",
@@ -190,7 +219,12 @@ const crossings: ByStep = [
   // than `grammar/install.ts`, goes through one of them. S10's split of `grammar/content.ts`,
   // `grammar/domains.ts`, `grammar/kinds.ts` and `vocab/open.ts` takes some of them out sooner,
   // where only shred's readers were read, and so would a split of `vocab/data-ssml.ts`, whose JSON
-  // reader only the data-ssml overlay runs beside the schema's table of members.
+  // reader only the data-ssml overlay runs beside the schema's table of members. `index.ts`, the
+  // single entry (decision 495's D3), re-exports the PostgreSQL side's public parts beside the XML
+  // side's, pantry-api's goal 1: the author role and login builders (D1), the served login
+  // (decision 496's M2), the listing queries and the published relations (decision 503), the
+  // export's row counts and the single-CDN level (D2). At S11 it splits with filling, and filling's
+  // part reads pantry through its `exports`.
   [
     "S11",
     [
@@ -244,6 +278,13 @@ const crossings: ByStep = [
       "import/write.ts: #pantry/qti/attributes.ts",
       "import/write.ts: #pantry/qti/chardata.ts",
       "import/write.ts: #pantry/qti/node.ts",
+      "index.ts: #pantry/api/list.ts",
+      "index.ts: #pantry/api/published.ts",
+      "index.ts: #pantry/db/served.ts",
+      "index.ts: #pantry/export/pages.ts",
+      "index.ts: #pantry/levels/cdn.ts",
+      "index.ts: #pantry/qti/logins.ts",
+      "index.ts: #pantry/qti/roles.ts",
       "model/assemble.ts: #pantry/grammar/kinds.ts",
       "model/assemble.ts: #pantry/vocab/open.ts",
       "model/composed.ts: #pantry/grammar/attributes.ts",
