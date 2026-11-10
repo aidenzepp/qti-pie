@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lom xmlns="http://ltsc.ieee.org/xsd/LOM">
+  <general>
+    <identifier>
+      <catalog>bank</catalog>
+      <entry>bank-one</entry>
+    </identifier>
+    <title>
+      <string language="en">Freezing point</string>
+    </title>
+    <language>en</language>
+  </general>
+</lom>
