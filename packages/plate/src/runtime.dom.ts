@@ -9,6 +9,20 @@
  *
  * @module
  */
+import { controller as associate } from "#plate/interactions/associate.dom.ts";
+import { controller as drawing } from "#plate/interactions/drawing.dom.ts";
+import { controller as gapMatch } from "#plate/interactions/gap-match.dom.ts";
+import { controller as graphicAssociate } from "#plate/interactions/graphic-associate.dom.ts";
+import { controller as graphicGapMatch } from "#plate/interactions/graphic-gap-match.dom.ts";
+import { controller as graphicOrder } from "#plate/interactions/graphic-order.dom.ts";
+import { controller as hotspot } from "#plate/interactions/hotspot.dom.ts";
+import { controller as hottext } from "#plate/interactions/hottext.dom.ts";
+import { controller as match } from "#plate/interactions/match.dom.ts";
+import { controller as media } from "#plate/interactions/media.dom.ts";
+import { controller as order } from "#plate/interactions/order.dom.ts";
+import { controller as portableCustom } from "#plate/interactions/portable-custom.dom.ts";
+import { controller as positionObject } from "#plate/interactions/position-object.dom.ts";
+import { controller as selectPoint } from "#plate/interactions/select-point.dom.ts";
 import { upgradeWith } from "#plate/runtime/contract.dom.ts";
 import type { Registry, Upgraded } from "#plate/runtime/contract.dom.ts";
 
@@ -23,10 +37,26 @@ export type {
 } from "#plate/runtime/contract.dom.ts";
 
 /**
- * The controllers the runtime attaches, by kind: closed, so a host cannot add one. No interaction's
- * controller has landed, so every kind stays as the SSR rendered it.
+ * The controllers the runtime attaches, by kind: closed, so a host cannot add one, and complete,
+ * one controller for every runtime kind, each from its own module `interactions/<kind>.dom.ts`, so
+ * an interaction's issue fills its module and never this table.
  */
-const registry: Registry = {};
+const registry = {
+  associate,
+  drawing,
+  "gap-match": gapMatch,
+  "graphic-associate": graphicAssociate,
+  "graphic-gap-match": graphicGapMatch,
+  "graphic-order": graphicOrder,
+  hotspot,
+  hottext,
+  match,
+  media,
+  order,
+  "portable-custom": portableCustom,
+  "position-object": positionObject,
+  "select-point": selectPoint,
+} satisfies Required<Registry>;
 
 /**
  * Upgrade every rendered interaction under a node: attach its kind's controller to each interaction
