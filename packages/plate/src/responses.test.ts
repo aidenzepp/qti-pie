@@ -6,7 +6,7 @@ import type { ModuleEntry } from "#plate/interactions/contract.ts";
 import { message } from "#plate/messages.ts";
 import type { ModelOf, Modules } from "#plate/model/interactions.ts";
 import type { ExtendedTextInteraction, Item, TextEntryInteraction } from "#plate/model/item.ts";
-import { nullOf } from "#plate/model/values.ts";
+import { format, nullOf } from "#plate/model/values.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
@@ -367,10 +367,11 @@ const toyEntry: ModuleEntry = {
       ? Result.fail('post {"n":<integer>}, as the toy control gives it')
       : Result.succeed(toyInteger(BigInt(n)));
   },
-  encode: (encoded) =>
-    encoded.cardinality === "record" || encoded.values.length === 0
-      ? ""
-      : `{"n":${String(encoded.values[0]?.value)}}`,
+  encode: (encoded) => {
+    const first = encoded.cardinality === "record" ? undefined : encoded.values[0];
+
+    return first === undefined ? "" : `{"n":${format(first)}}`;
+  },
 };
 
 /**

@@ -17,6 +17,7 @@ import {
   sameRecord,
 } from "#plate/model/values.ts";
 import type {
+  FileValue,
   ModelledBaseType,
   RecordField,
   RecordValue,
@@ -79,6 +80,11 @@ const recordExported: Equals<plate.RecordValue, RecordValue> = true;
 const responseExported: Equals<plate.ResponseValue, ResponseValue> = true;
 
 /**
+ * The package's `FileValue` is this module's; `tsc` refuses this line when they part.
+ */
+const fileExported: Equals<plate.FileValue, FileValue> = true;
+
+/**
  * Construct a record for a test.
  *
  * @param fields Its fields, in written order.
@@ -101,6 +107,10 @@ const field = (identifier: string, single: Single): RecordField => ({ identifier
 describe("the record types", () => {
   it("[T-14] record types exported: RecordValue and ResponseValue are the package's own", () => {
     assert.isTrue(recordExported && responseExported);
+  });
+
+  it("[W0-AY] FileValue is exported from the package as this module's own", () => {
+    assert.isTrue(fileExported);
   });
 });
 
@@ -508,6 +518,7 @@ describe("format", () => {
         ["point", "-3 +07", "-3 7"],
         ["duration", "90.50", "90.5"],
         ["uri", "https://example.org/a b", "https://example.org/a b"],
+        ["file", "photo.png", "photo.png"],
       ];
       for (const [baseType, lexical, written] of cases) {
         const single = yield* Effect.fromResult(parseLexical(baseType, lexical));
@@ -518,6 +529,59 @@ describe("format", () => {
         );
       }
     }),
+  );
+
+  it.effect(
+    "[W0-AY] writes a file as its name, reads a name as a file with no bytes, and refuses an empty name",
+    () =>
+      Effect.gen(function* fileForm() {
+        const photo: Single = {
+          baseType: "file",
+          value: { name: "photo.png", size: 4, type: "image/png" },
+        };
+        assert.strictEqual(format(photo), "photo.png");
+        assert.deepStrictEqual(yield* Effect.fromResult(parseLexical("file", "photo.png")), {
+          baseType: "file",
+          value: { name: "photo.png", size: 0, type: "" },
+        });
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(parseElementText("file", "  photo.png\n")),
+          Option.some<Single>({
+            baseType: "file",
+            value: { name: "photo.png", size: 0, type: "" },
+          }),
+        );
+
+        const empty = yield* Effect.flip(Effect.fromResult(parseLexical("file", "")));
+        assert.strictEqual(empty._tag, "InvalidValue");
+        assert.strictEqual(empty.baseType, "file");
+
+        const same = value("file", "single", [photo]);
+        assert.isTrue(match(same, value("file", "single", [{ ...photo }])));
+        assert.isFalse(
+          match(
+            same,
+            value("file", "single", [{ baseType: "file", value: { ...photo.value, size: 5 } }]),
+          ),
+        );
+        assert.isFalse(
+          match(
+            same,
+            value("file", "single", [
+              { baseType: "file", value: { ...photo.value, type: "image/jpeg" } },
+            ]),
+          ),
+        );
+        assert.isFalse(
+          match(
+            same,
+            value("file", "single", [
+              { baseType: "file", value: { ...photo.value, name: "other.png" } },
+            ]),
+          ),
+        );
+        assert.isTrue(isNull(nullOf("file", "multiple")));
+      }),
   );
 });
 
@@ -673,7 +737,7 @@ describe("readIeeeDouble", () => {
 });
 
 describe("isModelled", () => {
-  it("holds every base type but file", () => {
+  it("[W0-AY] holds every base type, file included", () => {
     const modelled = [
       "identifier",
       "boolean",
@@ -685,11 +749,12 @@ describe("isModelled", () => {
       "directedPair",
       "duration",
       "uri",
+      "file",
     ];
     for (const baseType of modelled) {
       assert.isTrue(isModelled(baseType), baseType);
     }
-    for (const baseType of ["file", "record"]) {
+    for (const baseType of ["record", "any", ""]) {
       assert.isFalse(isModelled(baseType), baseType);
     }
   });
