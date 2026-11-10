@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="branching" title="A walk that branches">
+  <qti-outcome-declaration identifier="STOP" cardinality="single" base-type="boolean"/>
+  <qti-test-part identifier="P1" navigation-mode="linear" submission-mode="individual">
+    <qti-assessment-section identifier="A" title="Section A" visible="true">
+      <qti-assessment-item-ref identifier="a1" href="choice.xml">
+        <qti-branch-rule target="b1">
+          <qti-gt>
+            <qti-variable identifier="a1.SCORE"/>
+            <qti-base-value base-type="float">0</qti-base-value>
+          </qti-gt>
+        </qti-branch-rule>
+      </qti-assessment-item-ref>
+      <qti-assessment-item-ref identifier="a2" href="choice.xml">
+        <qti-pre-condition>
+          <qti-equal tolerance-mode="exact">
+            <qti-variable identifier="a1.SCORE"/>
+            <qti-base-value base-type="float">0</qti-base-value>
+          </qti-equal>
+        </qti-pre-condition>
+      </qti-assessment-item-ref>
+      <qti-assessment-item-ref identifier="a3" href="choice.xml"/>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="B" title="Section B" visible="true">
+      <qti-branch-rule target="EXIT_TESTPART">
+        <qti-variable identifier="STOP"/>
+      </qti-branch-rule>
+      <qti-assessment-item-ref identifier="b1" href="choice.xml"/>
+      <qti-assessment-item-ref identifier="b2" href="choice.xml">
+        <qti-pre-condition>
+          <qti-base-value base-type="boolean">true</qti-base-value>
+        </qti-pre-condition>
+        <qti-pre-condition>
+          <qti-gt>
+            <qti-variable identifier="a3.SCORE"/>
+            <qti-base-value base-type="float">0</qti-base-value>
+          </qti-gt>
+        </qti-pre-condition>
+      </qti-assessment-item-ref>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="C" title="Section C" visible="true">
+      <qti-assessment-item-ref identifier="c1" href="choice.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+  <qti-test-part identifier="P2" navigation-mode="linear" submission-mode="individual">
+    <qti-pre-condition>
+      <qti-gt>
+        <qti-variable identifier="a1.SCORE"/>
+        <qti-base-value base-type="float">0</qti-base-value>
+      </qti-gt>
+    </qti-pre-condition>
+    <qti-assessment-section identifier="D" title="Section D" visible="true">
+      <qti-assessment-item-ref identifier="d1" href="choice.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+  <qti-outcome-processing>
+    <qti-set-outcome-value identifier="STOP">
+      <qti-gt>
+        <qti-variable identifier="b1.SCORE"/>
+        <qti-base-value base-type="float">0</qti-base-value>
+      </qti-gt>
+    </qti-set-outcome-value>
+  </qti-outcome-processing>
+</qti-assessment-test>
