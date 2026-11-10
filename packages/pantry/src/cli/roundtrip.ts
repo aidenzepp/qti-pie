@@ -87,8 +87,7 @@ export const RoundtripData = Schema.Union([RoundtripReport, RoundtripPreview]);
  * so the stored documents are scanned once. An entry is `byte-identical` when its bytes come back
  * exactly, `canonical-equal` when an XML entry's bytes differ but its canonical forms agree, and
  * otherwise differs, `at` saying where: `missing` for an entry the export lacks, `extra` for one
- * only the export writes, `repeated` for a path either side holds twice, or the first differing
- * byte.
+ * only the export writes, or the first differing byte.
  *
  * An export already at `work/export/<name>` needs `--yes`, which replaces it, and the old one goes
  * only once the new export is written and compared.

@@ -14,7 +14,7 @@ import type { DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime"
 import { Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import type { PlatformError } from "effect";
 import { AuthorLogin } from "#pantry/db/served.ts";
-import { compareRecord } from "#pantry/export/compare.ts";
+import { byPath, compareRecord } from "#pantry/export/compare.ts";
 import type { Report } from "#pantry/export/compare.ts";
 import { addRow, emptyScan, scannedRows } from "#pantry/export/pages.ts";
 import type { DocumentRowCount } from "#pantry/export/pages.ts";
@@ -140,8 +140,8 @@ export const compareExported = Effect.fn("export.compareExported")(function* com
   const record = yield* (yield* db.workload.entriesOf.execute({ package: packageId })).collect;
 
   return yield* compareRecord(
-    record.map(({ content, path }) => ({ bytes: content, path })),
-    exported,
+    new Map(record.map(({ content, path }) => [path, content])),
+    byPath(exported),
   );
 });
 

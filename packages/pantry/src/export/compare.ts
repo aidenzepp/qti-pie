@@ -7,8 +7,7 @@
  * sides is equal when its Canonical XML 1.0 forms, comments kept, are (`canonical-equal`), which is
  * what an export of a rebuilt document promises; an entry that is not XML on either side has its
  * bytes as its canonical form, so it differs. The record and the export are each a set of entries
- * keyed by path, so an entry only the export writes, and a path either side holds twice, differ
- * too.
+ * keyed by path ({@link Entries}), so an entry only the export writes differs too.
  */
 import { Array as Arr, Effect, Option } from "effect";
 import type { FileSystem, PlatformError } from "effect";
@@ -23,9 +22,9 @@ import { readXml } from "@qti-pie/crust/read.ts";
  *
  * `byte-identical` is an entry whose bytes the export wrote back exactly, and `canonical-equal` an
  * XML entry whose bytes differ but whose canonical forms agree. `differs` says where in `at`:
- * `missing` for an entry the export lacks, `extra` for one only the export writes, `repeated` for a
- * path either side holds twice, otherwise `byte <offset>` and, for an XML entry, `, line <n>` with
- * both canonical lines, `ends` for a side whose form has no line `<n>`.
+ * `missing` for an entry the export lacks, `extra` for one only the export writes, otherwise `byte
+ * <offset>` and, for an XML entry, `, line <n>` with both canonical lines, `ends` for a side whose
+ * form has no line `<n>`.
  */
 export type Outcome =
   | { kind: "canonical-equal" }
@@ -37,6 +36,24 @@ export type Outcome =
  * order, then one per path only the export writes, in the export's order.
  */
 export type Report = readonly { path: string; outcome: Outcome }[];
+
+/**
+ * A package's entries, a set keyed by path: each path's bytes, in listing order. A path is the key
+ * of a package's entries, so neither side of a comparison holds one twice: the record is the
+ * `Entry` family, keyed by package and path (`#pantry/qti/package.ts`, "Entry family"), the export
+ * writes one entry per entry of the record, a directory holds one file at a path, and a zip that
+ * holds two entries with one name is refused before it is read (`#pantry/package/zip.ts`).
+ */
+export type Entries = ReadonlyMap<string, Uint8Array>;
+
+/**
+ * Key a package's entries by path, as {@link Entries} holds them.
+ *
+ * @param entries - The entries, in listing order, each path once.
+ * @returns Each path's bytes, in that order.
+ */
+export const byPath = (entries: readonly ZipEntry[]): Entries =>
+  new Map(entries.map(({ bytes, path }) => [path, bytes]));
 
 /**
  * What can stop a comparison of two package directories or zips: a directory that is not a package,
@@ -142,59 +159,23 @@ const compareEntry = Effect.fnUntraced(function* compareEntry(
 });
 
 /**
- * A list of entries keyed by path: each path's bytes, and the paths the list holds more than once.
- */
-interface Keyed {
-  readonly bytes: ReadonlyMap<string, Uint8Array>;
-  readonly repeated: ReadonlySet<string>;
-}
-
-/**
- * Key a list of entries by path, keeping the first of a repeated path and naming it repeated.
- *
- * @param entries - The entries, in their order.
- * @returns The entries by path, in first-occurrence order, and the repeated paths.
- */
-const keyedByPath = (entries: readonly ZipEntry[]): Keyed => {
-  const bytes = new Map<string, Uint8Array>();
-  const repeated = new Set<string>();
-  for (const { bytes: content, path } of entries) {
-    if (bytes.has(path)) {
-      repeated.add(path);
-    } else {
-      bytes.set(path, content);
-    }
-  }
-
-  return { bytes, repeated };
-};
-
-/**
  * Compare an export with the record of the package it was made from.
  *
  * Each path of the record is looked up in the export: a path the export lacks differs at
  * `missing`, and any other is compared by {@link compareEntry}. Then each path only the export
- * writes differs at `extra`. A path either side holds twice differs at `repeated` and is compared
- * no further, so the report is one outcome per path.
+ * writes differs at `extra`, so the report is one outcome per path.
  *
  * @param record - The entries the import read, in listing order: the `Entry` family's bytes.
  * @param exported - The entries the export wrote, in the order it wrote them.
  * @returns One outcome per path, the record's paths first.
  */
 export const compareRecord = Effect.fn("compare.compareRecord")(function* compareRecord(
-  record: readonly ZipEntry[],
-  exported: readonly ZipEntry[],
+  record: Entries,
+  exported: Entries,
 ): Effect.fn.Return<Report> {
-  const recorded = keyedByPath(record);
-  const written = keyedByPath(exported);
   const report: { path: string; outcome: Outcome }[] = [];
-  for (const [path, bytes] of recorded.bytes) {
-    const counterpart = written.bytes.get(path);
-    if (recorded.repeated.has(path) || written.repeated.has(path)) {
-      report.push({ outcome: { at: "repeated", kind: "differs" }, path });
-      continue;
-    }
-
+  for (const [path, bytes] of record) {
+    const counterpart = exported.get(path);
     const outcome: Outcome =
       counterpart === undefined
         ? { at: "missing", kind: "differs" }
@@ -202,12 +183,9 @@ export const compareRecord = Effect.fn("compare.compareRecord")(function* compar
     report.push({ outcome, path });
   }
 
-  for (const path of written.bytes.keys()) {
-    if (!recorded.bytes.has(path)) {
-      report.push({
-        outcome: { at: written.repeated.has(path) ? "repeated" : "extra", kind: "differs" },
-        path,
-      });
+  for (const path of exported.keys()) {
+    if (!record.has(path)) {
+      report.push({ outcome: { at: "extra", kind: "differs" }, path });
     }
   }
 
@@ -237,7 +215,10 @@ export const comparePackage = Effect.fn("compare.comparePackage")(function* comp
 ): Effect.fn.Return<Report, CompareError, FileSystem.FileSystem> {
   yield* Effect.annotateCurrentSpan({ exportDir, sourceDir });
 
-  return yield* compareRecord(yield* readEntries(sourceDir), yield* readEntries(exportDir));
+  return yield* compareRecord(
+    byPath(yield* readEntries(sourceDir)),
+    byPath(yield* readEntries(exportDir)),
+  );
 });
 
 /**

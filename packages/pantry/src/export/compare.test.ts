@@ -5,8 +5,8 @@ import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, FileSystem, Formatter, Layer } from "effect";
-import { compareRecord, comparePackage, renderReport } from "#pantry/export/compare.ts";
+import { Duration, Effect, FileSystem, Formatter, Layer } from "effect";
+import { byPath, compareRecord, comparePackage, renderReport } from "#pantry/export/compare.ts";
 import type { Outcome } from "#pantry/export/compare.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { writeZip } from "#pantry/package/zip.ts";
@@ -67,8 +67,6 @@ type Source = (typeof fixtures)[number] | "svg.zip";
  * - `replacedByXml`: a non-XML entry written as the package's manifest, which differs at the first
  *   byte the two do not share;
  * - `missing`: the entry left out of the export, which differs at `missing`;
- * - `repeated`: the entry written twice, and `recordRepeated`: the entry read twice, each of which
- *   differs at `repeated`;
  * - `extra`: an entry the record does not hold written beside the rest, which differs at `extra`.
  */
 type Variant =
@@ -80,8 +78,6 @@ type Variant =
   | "truncated"
   | "replacedByXml"
   | "missing"
-  | "repeated"
-  | "recordRepeated"
   | "extra";
 
 /**
@@ -168,7 +164,7 @@ const differenceOf = (left: Uint8Array, right: Uint8Array): number => {
  * @param entry - The entry as read.
  * @param variant - The variant.
  * @param manifest - The package's manifest bytes, which `replacedByXml` writes.
- * @returns The entries written at the entry's path: none, one or two.
+ * @returns The entries written at the entry's path: none or one.
  */
 const editedOf = (entry: ZipEntry, variant: Variant, manifest: Uint8Array): readonly ZipEntry[] => {
   const middle = Math.floor(entry.bytes.length / 2);
@@ -195,11 +191,7 @@ const editedOf = (entry: ZipEntry, variant: Variant, manifest: Uint8Array): read
     case "missing": {
       return [];
     }
-    case "repeated": {
-      return [entry, entry];
-    }
     case "same":
-    case "recordRepeated":
     case "extra": {
       return [entry];
     }
@@ -214,23 +206,20 @@ const editedOf = (entry: ZipEntry, variant: Variant, manifest: Uint8Array): read
  *
  * @param read - The package's entries as read.
  * @param edited - The case.
- * @returns The record the comparison reads, holding the edited entry twice under
- *   `recordRepeated`, and the entries the case's export writes.
+ * @returns The record the comparison reads, the package as read, and the entries the case's
+ *   export writes, each keyed by path.
  */
 const variantOf = (read: readonly ZipEntry[], edited: CompareCase) => {
   const manifest =
     read.find((entry) => entry.path === "imsmanifest.xml")?.bytes ?? new Uint8Array();
-  const record = read.flatMap((entry) =>
-    entry.path === edited.path && edited.variant === "recordRepeated" ? [entry, entry] : [entry],
-  );
-  const exported = [
+  const exported = byPath([
     ...read.flatMap((entry) =>
       entry.path === edited.path ? editedOf(entry, edited.variant, manifest) : [entry],
     ),
     ...(edited.variant === "extra" ? [{ bytes: Uint8Array.of(1, 2, 3), path: extraPath }] : []),
-  ];
+  ]);
 
-  return { exported, manifest, record };
+  return { exported, manifest, record: byPath(read) };
 };
 
 /**
@@ -295,12 +284,8 @@ const expectedOf = Effect.fnUntraced(function* expectedOf(
       return differsAt(`byte ${String(differenceOf(entry, manifest))}`);
     }
     case "missing":
-    case "repeated":
     case "extra": {
       return differsAt(edited.variant);
-    }
-    case "recordRepeated": {
-      return differsAt("repeated");
     }
     default: {
       return edited.variant satisfies never;
@@ -323,8 +308,6 @@ const entryVariants = (entry: string): readonly Variant[] => [
     ? (["truncated"] as const)
     : (["flippedByte", "flippedNextByte", "replacedByXml"] as const)),
   "missing",
-  "repeated",
-  "recordRepeated",
 ];
 
 /**
@@ -396,8 +379,6 @@ layer(TestLayer, { excludeTestServices: true })("export/compare.ts", (it) => {
                 "truncated",
                 "replacedByXml",
                 "missing",
-                "repeated",
-                "recordRepeated",
                 "extra",
                 "xml",
                 "binary",
@@ -421,7 +402,7 @@ layer(TestLayer, { excludeTestServices: true })("export/compare.ts", (it) => {
                 const read = records.get(edited.source) ?? [];
                 const { exported, manifest, record } = variantOf(read, edited);
                 const report = yield* compareRecord(record, exported);
-                const paths = Arr.dedupe(read.map((entry) => entry.path));
+                const paths = read.map((entry) => entry.path);
                 const expected = edited.variant === "extra" ? [...paths, extraPath] : paths;
                 const entry = read.find((item) => item.path === edited.path)?.bytes;
                 const holds = yield* expectedOf(entry ?? new Uint8Array(), edited, manifest);
