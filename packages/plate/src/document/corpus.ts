@@ -60,7 +60,7 @@ export class CorpusMissing extends Schema.TaggedError<CorpusMissing>()("CorpusMi
    */
   override get message(): string {
     return [
-      `no corpus directory at ${this.root}.`,
+      `No corpus directory at ${this.root}.`,
       "Extract the 1EdTech QTI 3 examples once (phase 1 spec §10.2), or set PLATE_CORPUS_DIR to the directory that holds them:",
       this.command,
     ].join("\n");
@@ -79,10 +79,11 @@ export class CorpusFileUnreadable extends Schema.TaggedError<CorpusFileUnreadabl
   { detail: Schema.String, path: Schema.String },
 ) {
   /**
-   * The path asked for and why it cannot be read, in one line.
+   * The path asked for, why it cannot be read, and the two repairs: name a file inside the corpus
+   * root, or point `PLATE_CORPUS_DIR` at the directory that holds the corpus.
    */
   override get message(): string {
-    return `cannot read corpus file ${this.path}: ${this.detail}`;
+    return `Cannot read corpus file ${this.path}: ${this.detail}. Name a file inside the corpus root, or set PLATE_CORPUS_DIR to the directory that holds the corpus.`;
   }
 }
 
@@ -124,7 +125,7 @@ export const readCorpusFile = Effect.fn("readCorpusFile")(function* readCorpusFi
 
   if (fromRoot === ".." || fromRoot.startsWith(`..${path.sep}`) || path.isAbsolute(fromRoot)) {
     return yield* new CorpusFileUnreadable({
-      detail: `it resolves to ${file}, outside the corpus root ${root}; name a path inside the root`,
+      detail: `it resolves to ${file}, outside the corpus root ${root}`,
       path: relative,
     });
   }
@@ -134,7 +135,7 @@ export const readCorpusFile = Effect.fn("readCorpusFile")(function* readCorpusFi
   return yield* Effect.tryPromise({
     catch: (cause) =>
       new CorpusFileUnreadable({
-        detail: `${cause instanceof Error ? cause.message : String(cause)}; name a file the corpus root ${root} holds`,
+        detail: `${cause instanceof Error ? cause.message : String(cause)}; the corpus root is ${root}`,
         path: relative,
       }),
     try: () => readFile(file),

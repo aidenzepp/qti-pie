@@ -158,7 +158,15 @@ export interface Manifest {
 export class ManifestDefect extends Data.TaggedError("ManifestDefect")<{
   readonly attribute: string;
   readonly element: string;
-}> {}
+}> {
+  /**
+   * The element and the attribute it lacks, why no manifest should reach this, and that it is the
+   * renderer's to fix.
+   */
+  override get message(): string {
+    return `The manifest element ${this.element} has no ${this.attribute} attribute, which its profile requires, yet the manifest walk accepted it. The walk refuses a missing attribute first, as missing-attribute, so this is a renderer defect; report it with the manifest.`;
+  }
+}
 
 /**
  * The QTI tables the manifest walk passes `checkStructure`: none. Neither profile imports QTI's
