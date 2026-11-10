@@ -18114,1007 +18114,1007 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"area_mapping\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"area_mapping\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"area_mapping_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"area_mapping_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"aria_element\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"aria_element\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"aria_range\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"aria_range\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"aria_value\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"aria_value\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"assembled_catalog\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"assembled_catalog\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"assembled_id\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"assembled_id\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"assembled_lang\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"assembled_lang\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"assembled_name\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"assembled_name\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"assembled_reference\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"assembled_reference\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"assessment_object\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"assessment_object\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"attribute\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"attribute\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"attribute_entity\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"attribute_entity\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"binding\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"binding\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"binding_base_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"binding_base_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"binding_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"binding_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"binding_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"binding_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"binding_name\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"binding_name\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"body_xml_lang\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"body_xml_lang\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"bound_variable\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"bound_variable\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"branch_resolution\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"branch_resolution\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"branch_rule\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"branch_rule\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"branch_shuffle\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"branch_shuffle\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"branch_target\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"branch_target\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"card_support\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"card_support\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"catalog_id\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"catalog_id\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"catalog_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"catalog_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"catalog_scope\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"catalog_scope\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"catalog_target\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"catalog_target\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"cell_headers\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"cell_headers\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"cell_leaf\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"cell_leaf\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"choice\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"choice\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"choice_interaction\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"choice_interaction\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"choice_variable_name\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"choice_variable_name\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"cn_attribute\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"cn_attribute\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"cn_count\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"cn_count\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"cn_part_text\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"cn_part_text\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"cn_slot\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"cn_slot\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"comment\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"comment\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"context_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"context_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"context_ref_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"context_ref_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"count_bound\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"count_bound\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"count_range\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"count_range\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"data_ssml\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"data_ssml\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"data_ssml_member\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"data_ssml_member\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"data_ssml_property\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"data_ssml_property\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"declaration_base_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"declaration_base_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"declaration_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"declaration_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"declaration_identifier\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"declaration_identifier\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"declaration_name\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"declaration_name\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"default_entry\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"default_entry\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"dependency\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"dependency\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"dependency_target\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"dependency_target\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"doctype\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"doctype\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"document\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"document\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"document_id\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"document_id\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"document_lang\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"document_lang\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"element_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"element_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"encoding_decl\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"encoding_decl\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"entry\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"entry\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"expression\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"expression\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"expression_attribute\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"expression_attribute\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"feedback_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"feedback_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"feedback_ref_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"feedback_ref_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"feedback_ref_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"feedback_ref_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"field_value\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"field_value\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"file\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"file\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"file_href\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"file_href\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"fragment_value\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"fragment_value\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"gap_interaction\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"gap_interaction\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"header_token\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"header_token\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"hotspot\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"hotspot\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"hottext\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"hottext\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"id_binding\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"id_binding\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"identity_text\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"identity_text\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"idref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"idref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"idref_target\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"idref_target\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"inclusion\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"inclusion\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"instance\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"instance\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"instance_name\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"instance_name\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"interaction\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"interaction\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"interaction_attribute\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"interaction_attribute\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"item_mode\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"item_mode\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"item_ref_document\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"item_ref_document\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"item_ref_href\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"item_ref_href\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"item_ref_target\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"item_ref_target\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"label_use\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"label_use\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"least_count\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"least_count\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"literal\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"literal\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"literal_typed\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"literal_typed\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lom_entry\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lom_entry\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lom_general\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lom_general\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lom_language\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lom_language\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lom_record\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lom_record\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lom_resource_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lom_resource_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lom_resource_type_source\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lom_resource_type_source\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lom_string\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lom_string\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lom_string_language\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lom_string_language\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lom_title\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lom_title\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lom_title_string\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lom_title_string\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lookup_table\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lookup_table\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lookup_table_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lookup_table_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lookup_value\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lookup_value\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"lookup_value_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"lookup_value_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"manifest_id\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"manifest_id\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"manifest_id_space\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"manifest_id_space\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"map_key\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"map_key\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"map_key_items\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"map_key_items\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"map_key_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"map_key_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"mapping\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"mapping\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"mapping_base_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"mapping_base_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"mapping_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"mapping_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"mapping_item_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"mapping_item_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"mapping_item_ref_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"mapping_item_ref_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"mapping_source_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"mapping_source_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"mastery_ceiling\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"mastery_ceiling\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"mastery_floor\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"mastery_floor\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"mastery_value\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"mastery_value\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"math_action\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"math_action\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"math_align_group\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"math_align_group\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"math_align_scope\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"math_align_scope\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"math_apply\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"math_apply\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"math_argument\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"math_argument\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"math_cell\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"math_cell\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"math_cn\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"math_cn\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"math_dir\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"math_dir\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"math_qualifier\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"math_qualifier\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"math_rank\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"math_rank\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"most_count\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"most_count\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"named\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"named\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"namespace\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"namespace\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"node\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"node\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"normal_maximum\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"normal_maximum\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"normal_minimum\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"normal_minimum\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"object_identifier\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"object_identifier\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"object_lang\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"object_lang\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"object_title\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"object_title\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"open_attribute_name\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"open_attribute_name\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"open_element_name\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"open_element_name\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"open_element_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"open_element_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"operand\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"operand\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"package\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"package\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"pci_module_form\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"pci_module_form\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"pi\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"pi\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_binding\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_binding\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_binding_base_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_binding_base_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_binding_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_binding_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_binding_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_binding_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_body_xml_lang\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_body_xml_lang\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_catalog_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_catalog_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_choice\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_choice\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_document\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_document\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_hottext\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_hottext\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_id\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_id\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_idref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_idref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_math_rank\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_math_rank\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_reference\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_reference\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_share_target\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_share_target\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_variable_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_variable_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_variable_ref_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_variable_ref_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_xml_lang\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"placed_xml_lang\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"printed_variable_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"printed_variable_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"printed_variable_ref_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"printed_variable_ref_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"processing\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"processing\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"processing_template\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"processing_template\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"quotation\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"quotation\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"reading\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"reading\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"reading_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"reading_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"reading_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"reading_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"record_field\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"record_field\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"record_field_name\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"record_field_name\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"reference\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"reference\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"reference_document\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"reference_document\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"reference_path\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"reference_path\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"reference_segment\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"reference_segment\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"referring_document\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"referring_document\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"resource\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"resource\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"resource_document\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"resource_document\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"resource_file\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"resource_file\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"resource_href\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"resource_href\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"resource_id\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"resource_id\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"resource_lom_language_set\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"resource_lom_language_set\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"resource_typed\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"resource_typed\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"rounding\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"rounding\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"rounding_figures\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"rounding_figures\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"rounding_mode\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"rounding_mode\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"rounding_mode_figures\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"rounding_mode_figures\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"sd_decl\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"sd_decl\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_context_name\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_context_name\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_context_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_context_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_context_ref_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_context_ref_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_feedback_name\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_feedback_name\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_feedback_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_feedback_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_feedback_ref_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_feedback_ref_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_feedback_ref_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_feedback_ref_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_identifier\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_identifier\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_member\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_member\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_ordering\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_ordering\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_printed_name\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_printed_name\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_printed_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_printed_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_printed_ref_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_printed_ref_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_scope\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_scope\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_selection\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_selection\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_template_name\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_template_name\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_template_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_template_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_template_ref_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_template_ref_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"section_template_ref_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"section_template_ref_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"share_fragment\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"share_fragment\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"share_target\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"share_target\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"site\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"site\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"site_path\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"site_path\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"site_target\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"site_target\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"slider\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"slider\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"ssml_attribute\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"ssml_attribute\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"ssml_scope\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"ssml_scope\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"statistic_date\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"statistic_date\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"stimulus_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"stimulus_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"table_header\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"table_header\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"table_scope\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"table_scope\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"template_default\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"template_default\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"template_default_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"template_default_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"template_default_target\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"template_default_target\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"template_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"template_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"template_ref_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"template_ref_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"template_ref_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"template_ref_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"test_document\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"test_document\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"test_flag\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"test_flag\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"test_reference\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"test_reference\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"test_token\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"test_token\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"text_idref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"text_idref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"text_reference\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"text_reference\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"text_reference_path\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"text_reference_path\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"tolerance\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"tolerance\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"tolerance_token\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"tolerance_token\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"typed_value\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"typed_value\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"usage_base_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"usage_base_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"usage_value\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"usage_value\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"usage_value_base_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"usage_value_base_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"value\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"value\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"value_base_type\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"value_base_type\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"value_set\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"value_set\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"value_set_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"value_set_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"variable_mapping\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"variable_mapping\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"variable_ref\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"variable_ref\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"variable_ref_cardinality\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"variable_ref_cardinality\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"variable_ref_declaration\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"variable_ref_declaration\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"variable_ref_table\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"variable_ref_table\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"xml_decl\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"xml_decl\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"xml_lang\" TO \"qti_queries__author\""
+						"statement": "GRANT SELECT, INSERT ON TABLE \"qti\".\"xml_lang\" TO \"qti_queries__author\""
 					},
 					{
 						"kind": "statement",
@@ -35567,7 +35567,7 @@
 		"schema": "qti",
 		"schemaName": "Qti",
 		"source": "f9ad291b6fb76264456bfb9f9a7ac9ab3581ddbfc7f2181a3b6e22961ea38b1b",
-		"target": "85e6012c54b53e22bc388a915a578079bab255ddf6097b0b63ce114ba3ac7bce"
+		"target": "8ed2eff537dfff6e947774ce6f9dcd3291d97408e076883af924129ba4d307d3"
 	},
-	"seal": "2f75b5e857657949ca7e8aec73135cc700b028f09a6e3fcff77d19fc1fd59fde"
+	"seal": "ab2e283879555678888beab59796e26e439411f927ca2adfb2b038473ceb3a1d"
 }

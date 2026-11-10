@@ -1019,507 +1019,507 @@ GRANT USAGE ON DOMAIN "qti"."__attribute_slot_bits_112_aecznthxg5", "qti"."__fla
 
 GRANT SELECT ON TABLE "qti_queries__author"."area_mapping", "qti_queries__author"."area_mapping_cardinality", "qti_queries__author"."aria_element", "qti_queries__author"."aria_range", "qti_queries__author"."aria_value", "qti_queries__author"."assembled_catalog", "qti_queries__author"."assembled_id", "qti_queries__author"."assembled_lang", "qti_queries__author"."assembled_name", "qti_queries__author"."assembled_reference", "qti_queries__author"."assessment_object", "qti_queries__author"."attribute", "qti_queries__author"."attribute_entity", "qti_queries__author"."binding", "qti_queries__author"."binding_base_type", "qti_queries__author"."binding_cardinality", "qti_queries__author"."binding_declaration", "qti_queries__author"."binding_name", "qti_queries__author"."body_xml_lang", "qti_queries__author"."bound_variable", "qti_queries__author"."branch_resolution", "qti_queries__author"."branch_rule", "qti_queries__author"."branch_shuffle", "qti_queries__author"."branch_target", "qti_queries__author"."card_support", "qti_queries__author"."catalog_id", "qti_queries__author"."catalog_ref", "qti_queries__author"."catalog_scope", "qti_queries__author"."catalog_target", "qti_queries__author"."cell_headers", "qti_queries__author"."cell_leaf", "qti_queries__author"."choice", "qti_queries__author"."choice_interaction", "qti_queries__author"."choice_variable_name", "qti_queries__author"."cn_attribute", "qti_queries__author"."cn_count", "qti_queries__author"."cn_part_text", "qti_queries__author"."cn_slot", "qti_queries__author"."comment", "qti_queries__author"."context_ref", "qti_queries__author"."context_ref_declaration", "qti_queries__author"."count_bound", "qti_queries__author"."count_range", "qti_queries__author"."data_ssml", "qti_queries__author"."data_ssml_member", "qti_queries__author"."data_ssml_property", "qti_queries__author"."declaration", "qti_queries__author"."declaration_base_type", "qti_queries__author"."declaration_cardinality", "qti_queries__author"."declaration_identifier", "qti_queries__author"."declaration_name", "qti_queries__author"."default_entry", "qti_queries__author"."dependency", "qti_queries__author"."dependency_target", "qti_queries__author"."doctype", "qti_queries__author"."document", "qti_queries__author"."document_id", "qti_queries__author"."document_lang", "qti_queries__author"."element_type", "qti_queries__author"."encoding_decl", "qti_queries__author"."entry", "qti_queries__author"."expression", "qti_queries__author"."expression_attribute", "qti_queries__author"."feedback_ref", "qti_queries__author"."feedback_ref_cardinality", "qti_queries__author"."feedback_ref_declaration", "qti_queries__author"."field_value", "qti_queries__author"."file", "qti_queries__author"."file_href", "qti_queries__author"."fragment_value", "qti_queries__author"."gap_interaction", "qti_queries__author"."header_token", "qti_queries__author"."hotspot", "qti_queries__author"."hottext", "qti_queries__author"."id_binding", "qti_queries__author"."identity_text", "qti_queries__author"."idref", "qti_queries__author"."idref_target", "qti_queries__author"."inclusion", "qti_queries__author"."instance", "qti_queries__author"."instance_name", "qti_queries__author"."interaction", "qti_queries__author"."interaction_attribute", "qti_queries__author"."item_mode", "qti_queries__author"."item_ref_document", "qti_queries__author"."item_ref_href", "qti_queries__author"."item_ref_target", "qti_queries__author"."label_use", "qti_queries__author"."least_count", "qti_queries__author"."literal", "qti_queries__author"."literal_typed", "qti_queries__author"."lom_entry", "qti_queries__author"."lom_general", "qti_queries__author"."lom_language", "qti_queries__author"."lom_record", "qti_queries__author"."lom_resource_type", "qti_queries__author"."lom_resource_type_source", "qti_queries__author"."lom_string", "qti_queries__author"."lom_string_language", "qti_queries__author"."lom_title", "qti_queries__author"."lom_title_string", "qti_queries__author"."lookup_table", "qti_queries__author"."lookup_table_cardinality", "qti_queries__author"."lookup_value", "qti_queries__author"."lookup_value_type", "qti_queries__author"."manifest_id", "qti_queries__author"."manifest_id_space", "qti_queries__author"."map_key", "qti_queries__author"."map_key_items", "qti_queries__author"."map_key_type", "qti_queries__author"."mapping", "qti_queries__author"."mapping_base_type", "qti_queries__author"."mapping_cardinality", "qti_queries__author"."mapping_item_ref", "qti_queries__author"."mapping_item_ref_type", "qti_queries__author"."mapping_source_declaration", "qti_queries__author"."mastery_ceiling", "qti_queries__author"."mastery_floor", "qti_queries__author"."mastery_value", "qti_queries__author"."math_action", "qti_queries__author"."math_align_group", "qti_queries__author"."math_align_scope", "qti_queries__author"."math_apply", "qti_queries__author"."math_argument", "qti_queries__author"."math_cell", "qti_queries__author"."math_cn", "qti_queries__author"."math_dir", "qti_queries__author"."math_qualifier", "qti_queries__author"."math_rank", "qti_queries__author"."most_count", "qti_queries__author"."named", "qti_queries__author"."namespace", "qti_queries__author"."node", "qti_queries__author"."normal_maximum", "qti_queries__author"."normal_minimum", "qti_queries__author"."object_identifier", "qti_queries__author"."object_lang", "qti_queries__author"."object_title", "qti_queries__author"."open_attribute_name", "qti_queries__author"."open_element_name", "qti_queries__author"."open_element_type", "qti_queries__author"."operand", "qti_queries__author"."package", "qti_queries__author"."pci_module_form", "qti_queries__author"."pi", "qti_queries__author"."placed_binding", "qti_queries__author"."placed_binding_base_type", "qti_queries__author"."placed_binding_cardinality", "qti_queries__author"."placed_binding_declaration", "qti_queries__author"."placed_body_xml_lang", "qti_queries__author"."placed_catalog_ref", "qti_queries__author"."placed_choice", "qti_queries__author"."placed_document", "qti_queries__author"."placed_hottext", "qti_queries__author"."placed_id", "qti_queries__author"."placed_idref", "qti_queries__author"."placed_math_rank", "qti_queries__author"."placed_reference", "qti_queries__author"."placed_share_target", "qti_queries__author"."placed_variable_ref", "qti_queries__author"."placed_variable_ref_declaration", "qti_queries__author"."placed_xml_lang", "qti_queries__author"."printed_variable_ref", "qti_queries__author"."printed_variable_ref_declaration", "qti_queries__author"."processing", "qti_queries__author"."processing_template", "qti_queries__author"."quotation", "qti_queries__author"."reading", "qti_queries__author"."reading_cardinality", "qti_queries__author"."reading_declaration", "qti_queries__author"."record_field", "qti_queries__author"."record_field_name", "qti_queries__author"."reference", "qti_queries__author"."reference_document", "qti_queries__author"."reference_path", "qti_queries__author"."reference_segment", "qti_queries__author"."referring_document", "qti_queries__author"."resource", "qti_queries__author"."resource_document", "qti_queries__author"."resource_file", "qti_queries__author"."resource_href", "qti_queries__author"."resource_id", "qti_queries__author"."resource_lom_language_set", "qti_queries__author"."resource_typed", "qti_queries__author"."rounding", "qti_queries__author"."rounding_figures", "qti_queries__author"."rounding_mode", "qti_queries__author"."rounding_mode_figures", "qti_queries__author"."sd_decl", "qti_queries__author"."section", "qti_queries__author"."section_context_name", "qti_queries__author"."section_context_ref", "qti_queries__author"."section_context_ref_declaration", "qti_queries__author"."section_feedback_name", "qti_queries__author"."section_feedback_ref", "qti_queries__author"."section_feedback_ref_cardinality", "qti_queries__author"."section_feedback_ref_declaration", "qti_queries__author"."section_identifier", "qti_queries__author"."section_member", "qti_queries__author"."section_ordering", "qti_queries__author"."section_printed_name", "qti_queries__author"."section_printed_ref", "qti_queries__author"."section_printed_ref_declaration", "qti_queries__author"."section_scope", "qti_queries__author"."section_selection", "qti_queries__author"."section_template_name", "qti_queries__author"."section_template_ref", "qti_queries__author"."section_template_ref_cardinality", "qti_queries__author"."section_template_ref_declaration", "qti_queries__author"."share_fragment", "qti_queries__author"."share_target", "qti_queries__author"."site", "qti_queries__author"."site_path", "qti_queries__author"."site_target", "qti_queries__author"."slider", "qti_queries__author"."ssml_attribute", "qti_queries__author"."ssml_scope", "qti_queries__author"."statistic_date", "qti_queries__author"."stimulus_ref", "qti_queries__author"."table_header", "qti_queries__author"."table_scope", "qti_queries__author"."template_default", "qti_queries__author"."template_default_cardinality", "qti_queries__author"."template_default_target", "qti_queries__author"."template_ref", "qti_queries__author"."template_ref_cardinality", "qti_queries__author"."template_ref_declaration", "qti_queries__author"."test_document", "qti_queries__author"."test_flag", "qti_queries__author"."test_reference", "qti_queries__author"."test_token", "qti_queries__author"."text_idref", "qti_queries__author"."text_reference", "qti_queries__author"."text_reference_path", "qti_queries__author"."tolerance", "qti_queries__author"."tolerance_token", "qti_queries__author"."typed_value", "qti_queries__author"."usage_base_type", "qti_queries__author"."usage_value", "qti_queries__author"."usage_value_base_type", "qti_queries__author"."value", "qti_queries__author"."value_base_type", "qti_queries__author"."value_set", "qti_queries__author"."value_set_cardinality", "qti_queries__author"."variable_mapping", "qti_queries__author"."variable_ref", "qti_queries__author"."variable_ref_cardinality", "qti_queries__author"."variable_ref_declaration", "qti_queries__author"."variable_ref_table", "qti_queries__author"."xml_decl", "qti_queries__author"."xml_lang" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."area_mapping" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."area_mapping" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."area_mapping_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."area_mapping_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."aria_element" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."aria_element" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."aria_range" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."aria_range" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."aria_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."aria_value" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."assembled_catalog" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."assembled_catalog" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."assembled_id" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."assembled_id" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."assembled_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."assembled_lang" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."assembled_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."assembled_name" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."assembled_reference" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."assembled_reference" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."assessment_object" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."assessment_object" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."attribute" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."attribute" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."attribute_entity" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."attribute_entity" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."binding" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."binding" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."binding_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."binding_base_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."binding_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."binding_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."binding_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."binding_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."binding_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."binding_name" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."body_xml_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."body_xml_lang" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."bound_variable" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."bound_variable" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."branch_resolution" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."branch_resolution" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."branch_rule" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."branch_rule" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."branch_shuffle" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."branch_shuffle" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."branch_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."branch_target" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."card_support" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."card_support" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."catalog_id" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."catalog_id" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."catalog_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."catalog_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."catalog_scope" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."catalog_scope" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."catalog_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."catalog_target" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."cell_headers" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."cell_headers" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."cell_leaf" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."cell_leaf" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."choice" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."choice" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."choice_interaction" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."choice_interaction" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."choice_variable_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."choice_variable_name" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."cn_attribute" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."cn_attribute" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."cn_count" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."cn_count" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."cn_part_text" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."cn_part_text" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."cn_slot" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."cn_slot" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."comment" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."comment" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."context_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."context_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."context_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."context_ref_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."count_bound" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."count_bound" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."count_range" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."count_range" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."data_ssml" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."data_ssml" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."data_ssml_member" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."data_ssml_member" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."data_ssml_property" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."data_ssml_property" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."declaration_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."declaration_base_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."declaration_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."declaration_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."declaration_identifier" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."declaration_identifier" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."declaration_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."declaration_name" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."default_entry" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."default_entry" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."dependency" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."dependency" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."dependency_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."dependency_target" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."doctype" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."doctype" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."document" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."document_id" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."document_id" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."document_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."document_lang" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."element_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."element_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."encoding_decl" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."encoding_decl" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."entry" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."entry" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."expression" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."expression" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."expression_attribute" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."expression_attribute" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."feedback_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."feedback_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."feedback_ref_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."feedback_ref_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."feedback_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."feedback_ref_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."field_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."field_value" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."file" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."file" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."file_href" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."file_href" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."fragment_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."fragment_value" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."gap_interaction" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."gap_interaction" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."header_token" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."header_token" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."hotspot" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."hotspot" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."hottext" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."hottext" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."id_binding" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."id_binding" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."identity_text" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."identity_text" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."idref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."idref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."idref_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."idref_target" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."inclusion" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."inclusion" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."instance" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."instance" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."instance_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."instance_name" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."interaction" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."interaction" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."interaction_attribute" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."interaction_attribute" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."item_mode" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."item_mode" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."item_ref_document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."item_ref_document" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."item_ref_href" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."item_ref_href" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."item_ref_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."item_ref_target" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."label_use" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."label_use" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."least_count" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."least_count" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."literal" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."literal" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."literal_typed" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."literal_typed" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lom_entry" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_entry" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lom_general" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_general" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lom_language" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_language" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lom_record" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_record" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lom_resource_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_resource_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lom_resource_type_source" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_resource_type_source" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lom_string" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_string" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lom_string_language" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_string_language" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lom_title" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_title" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lom_title_string" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_title_string" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lookup_table" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lookup_table" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lookup_table_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lookup_table_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lookup_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lookup_value" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."lookup_value_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lookup_value_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."manifest_id" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."manifest_id" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."manifest_id_space" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."manifest_id_space" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."map_key" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."map_key" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."map_key_items" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."map_key_items" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."map_key_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."map_key_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."mapping" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mapping" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."mapping_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mapping_base_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."mapping_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mapping_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."mapping_item_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mapping_item_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."mapping_item_ref_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mapping_item_ref_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."mapping_source_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mapping_source_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."mastery_ceiling" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mastery_ceiling" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."mastery_floor" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mastery_floor" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."mastery_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mastery_value" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."math_action" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_action" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."math_align_group" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_align_group" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."math_align_scope" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_align_scope" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."math_apply" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_apply" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."math_argument" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_argument" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."math_cell" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_cell" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."math_cn" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_cn" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."math_dir" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_dir" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."math_qualifier" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_qualifier" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."math_rank" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_rank" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."most_count" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."most_count" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."named" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."named" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."namespace" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."namespace" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."node" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."node" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."normal_maximum" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."normal_maximum" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."normal_minimum" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."normal_minimum" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."object_identifier" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."object_identifier" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."object_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."object_lang" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."object_title" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."object_title" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."open_attribute_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."open_attribute_name" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."open_element_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."open_element_name" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."open_element_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."open_element_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."operand" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."operand" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."package" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."package" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."pci_module_form" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."pci_module_form" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."pi" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."pi" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_binding" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_binding" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_binding_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_binding_base_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_binding_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_binding_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_binding_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_binding_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_body_xml_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_body_xml_lang" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_catalog_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_catalog_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_choice" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_choice" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_document" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_hottext" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_hottext" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_id" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_id" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_idref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_idref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_math_rank" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_math_rank" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_reference" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_reference" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_share_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_share_target" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_variable_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_variable_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_variable_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_variable_ref_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."placed_xml_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_xml_lang" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."printed_variable_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."printed_variable_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."printed_variable_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."printed_variable_ref_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."processing" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."processing" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."processing_template" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."processing_template" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."quotation" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."quotation" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."reading" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reading" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."reading_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reading_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."reading_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reading_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."record_field" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."record_field" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."record_field_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."record_field_name" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."reference" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reference" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."reference_document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reference_document" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."reference_path" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reference_path" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."reference_segment" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reference_segment" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."referring_document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."referring_document" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."resource" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."resource_document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource_document" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."resource_file" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource_file" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."resource_href" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource_href" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."resource_id" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource_id" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."resource_lom_language_set" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource_lom_language_set" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."resource_typed" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource_typed" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."rounding" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."rounding" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."rounding_figures" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."rounding_figures" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."rounding_mode" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."rounding_mode" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."rounding_mode_figures" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."rounding_mode_figures" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."sd_decl" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."sd_decl" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_context_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_context_name" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_context_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_context_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_context_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_context_ref_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_feedback_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_feedback_name" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_feedback_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_feedback_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_feedback_ref_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_feedback_ref_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_feedback_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_feedback_ref_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_identifier" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_identifier" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_member" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_member" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_ordering" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_ordering" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_printed_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_printed_name" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_printed_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_printed_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_printed_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_printed_ref_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_scope" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_scope" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_selection" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_selection" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_template_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_template_name" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_template_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_template_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_template_ref_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_template_ref_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section_template_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_template_ref_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."share_fragment" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."share_fragment" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."share_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."share_target" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."site" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."site" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."site_path" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."site_path" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."site_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."site_target" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."slider" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."slider" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."ssml_attribute" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."ssml_attribute" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."ssml_scope" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."ssml_scope" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."statistic_date" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."statistic_date" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."stimulus_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."stimulus_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."table_header" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."table_header" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."table_scope" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."table_scope" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."template_default" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."template_default" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."template_default_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."template_default_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."template_default_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."template_default_target" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."template_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."template_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."template_ref_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."template_ref_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."template_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."template_ref_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."test_document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."test_document" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."test_flag" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."test_flag" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."test_reference" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."test_reference" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."test_token" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."test_token" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."text_idref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."text_idref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."text_reference" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."text_reference" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."text_reference_path" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."text_reference_path" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."tolerance" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."tolerance" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."tolerance_token" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."tolerance_token" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."typed_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."typed_value" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."usage_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."usage_base_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."usage_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."usage_value" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."usage_value_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."usage_value_base_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."value" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."value_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."value_base_type" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."value_set" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."value_set" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."value_set_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."value_set_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."variable_mapping" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."variable_mapping" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."variable_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."variable_ref" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."variable_ref_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."variable_ref_cardinality" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."variable_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."variable_ref_declaration" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."variable_ref_table" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."variable_ref_table" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."xml_decl" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."xml_decl" TO "qti_queries__author";
 
-GRANT SELECT, INSERT, DELETE ON TABLE "qti"."xml_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."xml_lang" TO "qti_queries__author";
 
 GRANT EXECUTE ON FUNCTION "qti"."__refuse"("pg_catalog"."text", "pg_catalog"."text", "pg_catalog"."text") TO "qti_queries__author";
 

@@ -7,8 +7,9 @@
  *   names the handle of its code in `NodeKind`.
  *
  * That `Author` holds every relation whole (G6) and that no relation is `mutable` are facts of the
- * declarations, checked in `schema.test.ts`. The installation's lack of a policy and of an UPDATE
- * grant follows from them in grizzle, which tests that derivation itself.
+ * declarations, checked in `schema.test.ts`. The installation's lack of a policy, and of an UPDATE
+ * or a DELETE grant, follows from them and from the role's insert list (`#pantry/qti/roles.ts`) in
+ * grizzle, which tests that derivation itself.
  */
 import { Db } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
