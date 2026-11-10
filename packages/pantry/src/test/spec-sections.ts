@@ -15,8 +15,8 @@
  * A source cites a section of a specification in three forms ({@link citationsOf}): a URL of the
  * specification, its fragment a heading's anchor, or an anchor inside a section, which belongs to
  * the heading before it; a `§` number inside the parenthetical that follows such a URL, up to a
- * nested URL; and a line of the specification's cached text, `info.txt:8468` (and `:N` after it,
- * `info.txt:67012 and :67066`), which stands in the section of the last heading at or before it
+ * nested URL; and a line of the specification's cached text, `info.txt:4656` (and `:N` after it,
+ * `info.txt:74346 and :74420`), which stands in the section of the last heading at or before it
  * ({@link specSections}). A `§` a source writes anywhere else names no specification this module
  * can tell apart from the many others the sources cite (XML 1.0, RFC 3986, the plan), so an
  * information-model citation carries its URL or its line; nor is a line of a text this module does
@@ -65,7 +65,7 @@ export const specDocuments: readonly SpecDocument[] = [
     htmlSha256: "6cf0658f86de0731e28a35917bb088c866b3a6982f98c611e128ba419c1dbc5c",
     name: "the QTI 3.0 information model",
     text: "anyuri-specs/qti/info.txt",
-    textSha256: "637cc83c2f011bfd6d0217c9848c74713ad867fe71cf7d047deb74d860ab9165",
+    textSha256: "a3e8e38e19af9c865172553edec17d20a7b063493ebc15f075dc130834d4bf3c",
     url: "https://www.imsglobal.org/spec/qti/v3p0/info",
   },
   {
@@ -73,7 +73,7 @@ export const specDocuments: readonly SpecDocument[] = [
     htmlSha256: "dde409f5d4266480457edbad98e8cf6e1bc7c831ff6be2fbc348038642f0b3c6",
     name: "the QTI 3.0.1 information model",
     text: "qti301/info301.txt",
-    textSha256: "b28c4a921c1e2d399826178e59974d0a3b7252cd8f632dde0860ac473a0e326f",
+    textSha256: "bc654efa8bb0c9ceb54058f51cb0c0713740198b072c1db5f61924eb2a269a63",
     url: "https://www.imsglobal.org/sites/default/files/spec/qti/v3/info/imsqti_asi_v3p0p1_infomodel_v1p0.html",
   },
   {
@@ -81,7 +81,7 @@ export const specDocuments: readonly SpecDocument[] = [
     htmlSha256: "2fd34e2f2fb3cc709d047a8f53aacdfce1d55517a8349aa88cbdafaed0d070cc",
     name: "the QTI 3.0 XML binding",
     text: "anyuri-specs/qti/bind.txt",
-    textSha256: "d5a1afdfea4ead2c0cf5df827f22c564d1f72e3f180bb119eec76fecc8d57c6e",
+    textSha256: "6ae52db3f77e11553f2467ecc650381ebc6b0377ccbb8a4f92624834796e0c1f",
     url: "https://www.imsglobal.org/spec/qti/v3p0/bind",
   },
   {
@@ -97,7 +97,7 @@ export const specDocuments: readonly SpecDocument[] = [
     htmlSha256: "6e5d9d9d3e832ff4e79bd80aab92fcbabbefafe08d7d2bc5c2d16975e570310d",
     name: "the QTI 3.0 usage data binding",
     text: "pm-ud/ud-bind.txt",
-    textSha256: "2af6fe67b2e4403a59ecafbb3275c2d1485ab89138cdcc24d312597cfb005082",
+    textSha256: "3a993bee11e80f69e92d55b46d9ecfbe473c579466f7629702e5b2fb71b7a258",
     url: "https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html",
   },
 ];
