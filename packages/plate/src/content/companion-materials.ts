@@ -29,6 +29,14 @@ const notImplemented = (): never => {
  * The Companion Materials module, a stub.
  */
 export const companionMaterialsModule: ItemContentModule<typeof element, never> = {
+  /**
+   * Companion Materials's payload copy: not implemented; issue m5-07 fills it.
+   */
+  /**
+   * No content: a stub has no payload node, so the heading shift reads none.
+   */
+  content: () => [],
+  copy: notImplemented,
   element,
   feature: ["I-13"],
   /**
@@ -41,9 +49,14 @@ export const companionMaterialsModule: ItemContentModule<typeof element, never> 
    * element it does not read, until issue m5-07 reads the element.
    */
   parse: (_source, context) => context.mark(element),
+  /**
+   * Refuse the element in a redacted item, as the codec refused every node of it before: the model
+   * holds none until issue m5-07 reads the element.
+   */
+  payloadSchema: ({ unimplementedContent }) => unimplementedContent({ element }),
   placement: "item",
   /**
-   * Companion Materials's payload copy: not implemented; issue m5-07 fills it.
+   * Companion Materials's redaction: not implemented; issue m5-07 fills it.
    */
   redact: notImplemented,
   /**

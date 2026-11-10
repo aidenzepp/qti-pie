@@ -4,10 +4,10 @@ import { decodeRecord } from "#plate/codec/record.ts";
 import { readSource } from "#plate/document/read.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { score, solution } from "#plate/index.ts";
+import { checkResponses, score, solution } from "#plate/index.ts";
 import type { Accepted, StoredRecord } from "#plate/index.ts";
 import type { SolutionRecord } from "#plate/model/record.ts";
-import { splitResponses } from "#plate/score.ts";
+import { splitResponses, tierA } from "#plate/score.ts";
 import { isNull, trimXmlSpace } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 import { acceptedOf, begunUnder, openCorpus, sweepSeeds, templated } from "#plate/test/sweep.ts";
@@ -335,6 +335,31 @@ const isExcused = (swept: Swept): boolean =>
 type Numeric = Extract<Single, { readonly baseType: "float" | "integer" }>;
 
 /**
+ * Report whether the limits of an item's own interactions refuse the responses it declares correct
+ * under a run's record, as `score` checks any response (tier (a)), each limit read as its
+ * interaction reads it: an attribute the item leaves unwritten at the default its schema gives.
+ * An item can write a correct response past its own limit: `jumble-gapMatch.xml` and
+ * `multi-input.xml` of the 1EdTech examples declare three pairs correct and write no
+ * `max-associations`, whose default in `GapMatchInteractionDType` is 1. Such an item is read as it
+ * is written: `score` refuses its correct responses as it refuses any response outside a limit,
+ * and no ordering of them against no response applies.
+ *
+ * @param swept The item.
+ * @param run The run, whose record the limits are read under.
+ * @returns Whether `checkResponses` gives any message for the run's correct responses.
+ */
+const refusesCorrect = (swept: Swept, run: Run): boolean =>
+  checkResponses(
+    swept.accepted,
+    run.correct,
+    tierA,
+    run.record.pipe(
+      Option.flatMap((stored) => Result.getSuccess(decodeRecord(stored))),
+      Option.getOrUndefined,
+    ),
+  ).length > 0;
+
+/**
  * Score one attempt of an item from one of its runs' records and read an outcome as a single
  * number.
  *
@@ -384,8 +409,9 @@ const atLeast = (left: Numeric, right: Numeric): boolean => {
 
 /**
  * Report whether property 3 orders an item under one of its runs: its processing runs, every
- * response the model holds has a correct response under the run's record, and its `SCORE` is
- * declared a single integer or float.
+ * response the model holds has a correct response under the run's record, its own limits accept
+ * those correct responses ({@link refusesCorrect}), and its `SCORE` is declared a single integer
+ * or float.
  *
  * @param swept The item.
  * @param run The run.
@@ -398,6 +424,7 @@ const isOrdered = (swept: Swept, run: Run): boolean => {
   return (
     Option.isSome(item.processing) &&
     [...item.responses.keys()].every((identifier) => Object.hasOwn(run.correct, identifier)) &&
+    !refusesCorrect(swept, run) &&
     Option.isSome(declared) &&
     declared.value.cardinality === "single" &&
     (declared.value.baseType === "float" || declared.value.baseType === "integer")
@@ -407,10 +434,11 @@ const isOrdered = (swept: Swept, run: Run): boolean => {
 /**
  * Score each item under each of its runs with no response and with its correct responses, and
  * give each failure, naming the item, the seed of the run's record where it has one, and the
- * responses.
+ * responses. Correct responses that the item's own limits refuse ({@link refusesCorrect}) must be
+ * refused by `score` with `ResponsesRefused`; every other attempt must score.
  *
  * @param items The items, whose processing runs.
- * @returns Every failure, empty when every attempt scores.
+ * @returns Every failure, empty when every attempt scores as the limits read.
  */
 const scoringProblems = (items: readonly Swept[]): readonly string[] =>
   items.flatMap((swept) =>
@@ -421,8 +449,18 @@ const scoringProblems = (items: readonly Swept[]): readonly string[] =>
           [["no response", {}] as const, ["its correct responses", run.correct] as const].flatMap(
             ([what, responses]) =>
               Result.match(score(swept.accepted, responses, Option.getOrUndefined(run.record)), {
-                onFailure: (error) => [`${run.where}: ${what} fails with ${error._tag}`],
-                onSuccess: () => [],
+                onFailure: (error) =>
+                  error._tag === "ResponsesRefused" &&
+                  what === "its correct responses" &&
+                  refusesCorrect(swept, run)
+                    ? []
+                    : [`${run.where}: ${what} fails with ${error._tag}`],
+                onSuccess: () =>
+                  what === "its correct responses" && refusesCorrect(swept, run)
+                    ? [
+                        `${run.where}: ${what} are outside a limit of the item and score accepts them`,
+                      ]
+                    : [],
               }),
           ),
         ),
