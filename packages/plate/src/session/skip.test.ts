@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
-import { modules } from "#plate/model/interactions.ts";
+import { containerKinds, modules } from "#plate/model/interactions.ts";
 import { IntentRefused, advance } from "#plate/session/advance.ts";
 import type { AdvanceFailure } from "#plate/session/advance.ts";
 import type { TestSession } from "#plate/session/session.ts";
@@ -81,15 +81,23 @@ const stubDeclaration = declarationOf({ baseType: stubBaseType, cardinality: stu
 /**
  * An item whose only response an interaction of {@link stubKind} binds, which plate shows as a
  * notice while its module is a stub: no rendered control can post it. The kind is derived in
- * `#plate/test/stub-kind.ts`, so the fixture changes with the table of modules; while no module of
- * the stub order is a stub there is no such item to show, and the [T-4] stub-notice test is not
- * registered.
+ * `#plate/test/stub-kind.ts`, so the fixture changes with the table of modules; while no kind of
+ * the stub order is a bare stub there is no such item to show, and the [T-4] stub-notice test is
+ * skipped.
  */
 const stubItem = itemXml(
   "held",
   stubDeclaration,
   `<${stubElement} response-identifier="RESPONSE"/>`,
 );
+
+/**
+ * The title of the [T-4] stub-notice test: the reason it is skipped joins it while no kind of the
+ * stub order is a bare stub, a stub whose module declares no container.
+ */
+const stubNoticeTitle = hasStub
+  ? "[T-4] lets next and submit-item pass an item whose only response a stub interaction, shown as a notice, binds"
+  : "[T-4] lets next and submit-item pass an item whose only response a stub interaction, shown as a notice, binds (skipped: no kind of the stub order is a stub that stands bare in an item body)";
 
 /**
  * An item that declares a response no interaction binds: a passage to read.
@@ -247,27 +255,23 @@ const proceeds = (given: Delivery, configuration: Configuration): void => {
 };
 
 describe("the skip test under allow-skipping false", () => {
-  // Registered only while the table of modules holds a stub of the stub order (`hasStub`): its
-  // premise, an item whose only response a notice binds, is gone when the last one lands, and
-  // this data branch over the suite's shape drops the test then, with no edit.
-  if (hasStub) {
-    it.effect(
-      "[T-4] lets next and submit-item pass an item whose only response a stub interaction, shown as a notice, binds",
-      () =>
-        Effect.gen(function* stubNotice() {
-          const given = yield* delivery(stubItem);
-          const configuration = yield* configure({});
-          const { item } = heldOf(given);
+  // Skipped, with its reason in the title, while no kind of the stub order is a bare stub
+  // (`hasStub`): its premise, an item whose only response a notice binds, has no item to stand on
+  // then.
+  it.effect.skipIf(!hasStub)(stubNoticeTitle, () =>
+    Effect.gen(function* stubNotice() {
+      const given = yield* delivery(stubItem);
+      const configuration = yield* configure({});
+      const { item } = heldOf(given);
 
-          assert.isTrue(item.responses.has("RESPONSE"));
-          assert.deepStrictEqual(
-            item.unsupported.map(({ shown }) => shown),
-            ["notice"],
-          );
-          proceeds(given, configuration);
-        }),
-    );
-  }
+      assert.isTrue(item.responses.has("RESPONSE"));
+      assert.deepStrictEqual(
+        item.unsupported.map(({ shown }) => shown),
+        ["notice"],
+      );
+      proceeds(given, configuration);
+    }),
+  );
 
   it.effect(
     "[T-4] lets next and submit-item pass an item whose declared response no interaction binds",
@@ -300,11 +304,14 @@ describe("the skip test under allow-skipping false", () => {
 
 describe("the stub kind the shared pins name", () => {
   it("[W0-AQ.1] the derived stub kind is select-point while every module is a stub", () => {
-    const stubs = stubOrder.filter((kind) => !modules[kind].implemented);
+    const stubs = stubOrder.filter(
+      (kind) => !modules[kind].implemented && !containerKinds.has(kind),
+    );
 
     assert.strictEqual(hasStub, stubs.length > 0);
     assert.strictEqual(stubKind, stubs[0] ?? stubOrder.at(-1));
     assert.strictEqual(modules[stubKind].implemented, !hasStub);
+    assert.strictEqual(containerKinds.has(stubKind), false);
 
     if (stubs.length === stubOrder.length) {
       assert.isTrue(hasStub);

@@ -1,21 +1,34 @@
 /**
  * The stub kind the shared pins name, derived from the table of modules: the first kind of
- * {@link stubOrder} whose module is a stub, so the pins name the kind planned to land last for as
- * long as it is a stub, and the next kind of the order the day it lands first. A test whose point
- * is that an interaction a stub module shows as a notice leaves the rest of the item standing names
+ * {@link stubOrder} that is a bare stub, so the pins name the kind planned to land last for as long
+ * as it is one, and the next bare stub kind of the order the day it lands. A test whose point is
+ * that an interaction a stub module shows as a notice leaves the rest of the item standing names
  * its kind here, so a module that lands meets no such test by name; a test whose point is one
  * kind's own behaviour derives its expectation from that module's `implemented` flag instead.
  *
+ * A kind is a bare stub when its module is a stub (`implemented: false`) and declares no container
+ * (`containerKinds` in `#plate/model/interactions.ts`). A kind whose interactions live only inside
+ * a container element cannot stand bare in an item body, so its stub cannot be the item a pin
+ * builds: Position Object's `qti-position-object-interaction` is a child of
+ * `qti-position-object-stage` alone, `open` refuses it in a body as an unknown element under every
+ * declaration, and inside the stage the notice names the stage, not the interaction. Position
+ * Object is therefore never the stub kind. Its stub declares no container yet (its module gets the
+ * stage when it lands), so `containerKinds` does not name it and the rule alone would not skip it:
+ * it is kept out of {@link stubOrder}, and the rule skips any kind of the order that declares a
+ * container.
+ *
  * Three files are taught the branch, and no other file names a kind by hand: this one, which
- * derives {@link stubKind} and {@link hasStub}; `src/session/skip.test.ts`, which registers its
- * stub-notice test only while {@link hasStub}; and `src/styles.markup.test.ts`, which includes its
- * stub witness row only while {@link hasStub}. When every kind of the order is implemented,
- * {@link stubKind} is the last kind of the order and {@link hasStub} is false. The five importers
- * of this file (`src/engine/attempt.test.ts`, `src/model/item.test.ts`, `src/payload.test.ts`,
- * `src/validate/verdict.test.ts` and `src/vertical.test.ts`) read {@link stubKind},
- * {@link stubElement}, {@link stubBaseType} and {@link stubCardinality} and not {@link hasStub}:
- * their tests whose premise is that a stub shows as a notice have no premise then, and the merge
- * that lands the last stub deletes them.
+ * derives {@link stubKind} and {@link hasStub}; `src/session/skip.test.ts`, which skips its
+ * stub-notice test, with the reason in the title, while {@link hasStub} is false; and
+ * `src/styles.markup.test.ts`, which includes its stub witness row only while {@link hasStub}. When
+ * no kind of the order is a bare stub, {@link stubKind} is the last kind of the order and
+ * {@link hasStub} is false. The five importers of this file (`src/engine/attempt.test.ts`,
+ * `src/model/item.test.ts`, `src/payload.test.ts`, `src/validate/verdict.test.ts` and
+ * `src/vertical.test.ts`) read {@link stubKind}, {@link stubElement}, {@link stubBaseType} and
+ * {@link stubCardinality} and not {@link hasStub}: their tests whose premise is that a stub shows as
+ * a notice have no premise then, and the merge that lands the last bare stub deletes them.
+ * `src/vertical.test.ts` reads {@link stubKind} alone and pairs it with its Select Point fixture, so
+ * it follows the kind only while Select Point is the stub kind.
  *
  * Test support only: nothing under `src/` outside `src/test/` and test files imports it.
  *
@@ -23,31 +36,46 @@
  */
 import type { ModuleKind } from "#plate/interactions/contract.ts";
 import { Array as Arr } from "effect";
-import { modules } from "#plate/model/interactions.ts";
+import { containerKinds, modules } from "#plate/model/interactions.ts";
 
 /**
- * The kinds the shared pins may name, the kind planned to land last first. Each has a row in
- * {@link stubDeclarations}, and a kind belongs here only while `src/session/skip.test.ts`, which
- * opens the bare element of every kind of the order under its declaration, finds that element
- * accepted: a kind whose bare element `open` refuses fails that test, so it is not admitted.
- *
- * Position Object is not admitted. QTI 3.0 allows `qti-position-object-interaction` only inside a
- * `qti-position-object-stage`, so `open` refuses the bare element in an item body as an unknown
- * element under every declaration; inside a stage the item opens, but its notice names the stage
- * and not the interaction, which is not the element {@link stubElement} names.
+ * The kinds the shared pins may name, Select Point first because it is planned to land last, then
+ * the others by the issue that lands each, the later issue first (the issue ids in
+ * `docs/cloud-agents.md`). Each has a row in {@link stubDeclarations}. A kind belongs here only
+ * while two things hold. `src/session/skip.test.ts`, which opens the bare element of every kind of
+ * the order under its declaration, finds that element accepted as one notice. And the importers
+ * that follow the kind stay green when it is the pinned one: Order, Associate, Match and Hot Text
+ * open as one notice, but `src/validate/verdict.test.ts` puts an `img` inside the stub element to
+ * pin the URL pass's mark, and their content models refuse that child, so none is admitted. Nor is
+ * a kind `open` refuses or opens with more than the one notice: Slider, Media and Portable Custom
+ * need attributes or children beyond `response-identifier`, End Attempt is refused directly in an
+ * item body, Drawing and Upload declare the `file` base type, which the reader marks as
+ * unsupported beside the notice, and Position Object only stands inside its container.
  */
-export const stubOrder = ["select-point"] as const satisfies readonly ModuleKind[];
+export const stubOrder = [
+  "select-point",
+  "graphic-order",
+  "graphic-associate",
+  "hotspot",
+  "graphic-gap-match",
+] as const satisfies readonly ModuleKind[];
 
 /**
  * What a fixture declares so that the bare element of each kind of {@link stubOrder} binds: the
- * `RESPONSE` declaration's base type and cardinality. Select Point's is `multiple` of `point`,
- * because the binding rule checks the element's choice count (`max-choices`, unwritten, which
- * Select Point reads as `0`) against the declaration before any module reads the element. A
- * `single` declaration needs `max-choices="1"` on the element, where `multiple` binds the bare
- * element, so a fixture carries nothing of the kind but its name. QTI 3.0 fixes the base type of
- * each kind and no module's contract carries it, so a row changes beside its kind.
+ * `RESPONSE` declaration's base type and cardinality, the base type QTI 3.0 gives the kind and the
+ * cardinality its bare element binds under. The binding rule checks the element's choice count
+ * (`max-choices` or `max-associations`, unwritten) against the declaration before any module reads
+ * the element. Select Point's count reads `0` unwritten, so it declares `multiple`: a `single`
+ * declaration needs `max-choices="1"` on the element, where `multiple` binds the bare element, so
+ * a fixture carries nothing of the kind but its name. The other kinds read `1` unwritten and
+ * declare `single`, except Graphic Order, which is ordered. No module's contract carries a base
+ * type, so a row changes beside its kind.
  */
 export const stubDeclarations = {
+  "graphic-associate": { baseType: "pair", cardinality: "single" },
+  "graphic-gap-match": { baseType: "directedPair", cardinality: "single" },
+  "graphic-order": { baseType: "identifier", cardinality: "ordered" },
+  hotspot: { baseType: "identifier", cardinality: "single" },
   "select-point": { baseType: "point", cardinality: "multiple" },
 } as const satisfies {
   readonly [K in (typeof stubOrder)[number]]: {
@@ -57,19 +85,24 @@ export const stubDeclarations = {
 };
 
 /**
- * The stub kind: the first kind of {@link stubOrder} whose module in the table of modules has
- * `implemented: false`, or the last kind of the order when every module of it is implemented, which
- * {@link hasStub} reports.
+ * The first kind of {@link stubOrder} that is a bare stub: its module in the table of modules has
+ * `implemented: false` and declares no container, none when every kind of the order is implemented
+ * or declares one.
  */
-export const stubKind =
-  stubOrder.find((kind) => !modules[kind].implemented) ?? Arr.lastNonEmpty(stubOrder);
+const bareStub = stubOrder.find((kind) => !modules[kind].implemented && !containerKinds.has(kind));
 
 /**
- * Whether the table of modules holds a stub of a kind of {@link stubOrder}: false once every one
- * of them is implemented, when {@link stubKind} names an implemented module and a test whose
- * premise is a stub shown as a notice has nothing to stand on.
+ * The stub kind: the first bare stub of {@link stubOrder}, or the last kind of the order when it
+ * holds none, which {@link hasStub} reports.
  */
-export const hasStub = !modules[stubKind].implemented;
+export const stubKind = bareStub ?? Arr.lastNonEmpty(stubOrder);
+
+/**
+ * Whether the order holds a bare stub: false once every kind of {@link stubOrder} is implemented or
+ * declares a container, when {@link stubKind} names a module a notice no longer stands for and a
+ * test whose premise is a stub shown as a notice has nothing to stand on.
+ */
+export const hasStub = bareStub !== undefined;
 
 /**
  * The QTI element of {@link stubKind}, read from its module in the table of modules, so a fixture

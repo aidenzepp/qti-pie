@@ -434,14 +434,26 @@ const expectedVerdict = (item: Authored): "accepted" | "accepted-with-unsupporte
     : "accepted";
 
 /**
+ * A correct-response value of each base type a row of `stubDeclarations` gives, which the stub
+ * witness writes under its declaration. The stub's element is never read for its choices, so the
+ * identifiers name nothing.
+ */
+const correctOf: Readonly<Record<typeof stubBaseType, string>> = {
+  directedPair: "a b",
+  identifier: "a",
+  pair: "a b",
+  point: "120 80",
+};
+
+/**
  * The stub witness: an item of the stub kind `#plate/test/stub-kind.ts` derives from the table of
  * modules, which plate shows as an item Notice, so the stylesheet's compounds that name one keep an
  * element to match after Order lands and its row's verdict turns `accepted`. Its element, its
  * declaration and its name all come from that file, so the row follows the stub kind with no edit.
- * The declaration is `multiple` cardinality of `point`, because the binding rule reads the
- * element's `max-choices` (unwritten, `0`) against the declaration before any module does, so the
- * bare element binds. The correct response is one `point` value, the shape the `match_correct`
- * template requires of every declaration. {@link authored} includes the row only while
+ * The declaration is the one the stub kind's row of `stubDeclarations` gives, so the bare element
+ * binds. The correct response is one value of its base type, the shape the `match_correct` template
+ * requires of every declaration: `correctOf` holds a value per base type, and a base type a later
+ * row adds fails to compile here until it has one. {@link authored} includes the row only while
  * {@link hasStub}: when no stub remains, no authored item can show an item Notice, and the
  * `[Q-12]` compound test finds no element for the stylesheet's Notice compounds, which whoever
  * lands the last core settles.
@@ -451,7 +463,7 @@ const stubWitness: Authored = {
     `witness-${stubKind}`,
     `<qti-response-declaration base-type="${stubBaseType}" cardinality="${stubCardinality}" identifier="RESPONSE">
   <qti-correct-response>
-   <qti-value>120 80</qti-value>
+   <qti-value>${correctOf[stubBaseType]}</qti-value>
   </qti-correct-response>
  </qti-response-declaration>`,
     `<p>Mark where the spider waits on its web.</p>
@@ -465,9 +477,9 @@ const stubWitness: Authored = {
 /**
  * The items the witness renders: both Choice cardinalities, prompt shapes and orientations, a Text
  * Entry inside a `p`, an Extended Text with a prompt, an Inline Choice with a Label and one
- * without, and two interactions whose modules are stubs, so the stylesheet's Notice rules keep an
- * element to match until the last stub lands. Each interaction carries every class the stylesheet
- * styles for it, and a body element every body class.
+ * without, and, while a bare stub remains, one interaction whose module is a stub, so the
+ * stylesheet's Notice rules keep an element to match until the last stub lands. Each interaction
+ * carries every class the stylesheet styles for it, and a body element every body class.
  */
 const authored: readonly Authored[] = [
   {
