@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
-import { rowFor } from "#plate/emit/parts.ts";
+import { partForSlot, rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
 import { isPosted } from "#plate/form/encoding.ts";
 import {
@@ -25,6 +25,7 @@ import type {
   ValidationMessage,
   Verdict,
 } from "#plate/index.ts";
+import { modules } from "#plate/model/interactions.ts";
 import { renderNavigation } from "#plate/navigation.ts";
 import type { NavigationOptions, NavigationState } from "#plate/navigation.ts";
 import { compounds, scanSheet } from "#plate/test/css.ts";
@@ -172,11 +173,38 @@ const matchable = (sheet: Sheet): readonly SheetCompound[] =>
   );
 
 /**
+ * The owners of the interaction modules, read from the table of modules. The witness renders the
+ * four shipped kinds and the chrome; each module's markup is witnessed by its own tests, which
+ * render its fixture, so a compound that names a module's part by marker counts as named.
+ */
+const moduleOwners: ReadonlySet<string> = new Set(
+  Object.values(modules).map((module) => module.owner),
+);
+
+/**
+ * Tell whether a compound names a part of an interaction module by its marker: a `data-slot` test
+ * for `=` whose value `partForSlot` finds under an owner of the table of modules.
+ *
+ * @param compound The compound.
+ * @returns Whether it names a module's part.
+ */
+const namesModulePart = (compound: Compound): boolean =>
+  compound.attributes.some(
+    (test) =>
+      test.name === "data-slot" &&
+      Option.contains(test.operator, "=") &&
+      Option.exists(test.value, (slot) =>
+        Option.exists(partForSlot(slot), ({ interaction }) => moduleOwners.has(interaction)),
+      ),
+  );
+
+/**
  * Find the compounds of a sheet that no element of the trees has.
  *
  * Every compound of every selector counts, descending into the selectors of `:where`, `:is` and
  * `:has` and skipping `:not`'s. Combinators, pseudo-classes and pseudo-elements are not matched,
- * and a compound that names nothing else (`:where(…)` itself, a bare `::before`) matches.
+ * and a compound that names nothing else (`:where(…)` itself, a bare `::before`) matches, as does
+ * one that names a part of an interaction module ({@link namesModulePart}).
  *
  * @param sheet The scanned sheet.
  * @param trees The markup the sheet styles.
@@ -186,7 +214,8 @@ const unmatched = (sheet: Sheet, trees: readonly Node[]): readonly SheetCompound
   const elements = elementsOf(trees);
 
   return matchable(sheet).filter(
-    ({ compound }) => !elements.some((element) => has(element, compound)),
+    ({ compound }) =>
+      !namesModulePart(compound) && !elements.some((element) => has(element, compound)),
   );
 };
 

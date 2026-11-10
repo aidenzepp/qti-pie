@@ -44,16 +44,14 @@ import {
   xsBooleanOf,
   xsInt,
 } from "#plate/model/attributes.ts";
-import { catalogInfoModule } from "#plate/content/catalog-info.ts";
-import { companionMaterialsModule } from "#plate/content/companion-materials.ts";
-import { feedbackBlockModule } from "#plate/content/feedback-block.ts";
-import { feedbackInlineModule } from "#plate/content/feedback-inline.ts";
-import { mathmlModule } from "#plate/content/mathml.ts";
-import { modalFeedbackModule } from "#plate/content/modal-feedback.ts";
-import { rubricModule } from "#plate/content/rubric.ts";
-import { stimulusRefModule } from "#plate/content/stimulus-ref.ts";
-import { stylesheetModule } from "#plate/content/stylesheet.ts";
-import type { ItemContent, ItemNodes, ItemParseContext } from "#plate/content/contract.ts";
+import type { CatalogReference, ItemParseContext, NodeOf } from "#plate/content/contract.ts";
+import { bodyModuleFor, itemModuleFor, parseBodyContent } from "#plate/content/modules.ts";
+import type {
+  ContentNode,
+  ItemContentElement,
+  ItemModules,
+  ItemNodesHeld,
+} from "#plate/content/modules.ts";
 import { associateModule } from "#plate/interactions/associate.ts";
 import { drawingModule } from "#plate/interactions/drawing.ts";
 import { endAttemptModule } from "#plate/interactions/end-attempt.ts";
@@ -744,11 +742,13 @@ export type Interaction =
 
 /**
  * A node of the item body: an element, a text, an interaction, a printed variable, a template
- * block or inline, or a notice.
+ * block or inline, a notice, or the node of a body-placed content element (`ContentNode` in
+ * `#plate/content/modules.ts`, one member per content module, each as its module declares it).
  */
 export type BodyNode =
   | BodyElement
   | BodyText
+  | ContentNode
   | Interaction
   | PrintedVariable
   | TemplateContent
@@ -810,7 +810,7 @@ export interface Item {
    * element's in document order ({@link ItemContent}). Absent when they read none, as every module
    * that is still a stub reads none, so an item built by hand may leave it out.
    */
-  readonly content?: ItemContent<ItemPlacedModule>;
+  readonly content?: ItemNodesHeld;
   /**
    * The document's location as the host named it.
    */
@@ -873,6 +873,11 @@ interface Build extends ModelWalk {
    * {@link record} finds a repeat without scanning the features recorded so far.
    */
   readonly recorded: Map<string, Set<string>>;
+  /**
+   * Every `data-catalog-idref` an element of the item body carries, in document order, which the
+   * item root's walk hands the catalog module (`ItemParseContext.catalogReferences`).
+   */
+  readonly references: CatalogReference[];
   /**
    * The record responses the model holds, keyed by identifier, filled as their declarations are
    * read. The declarations precede the item body, so a text interaction bound to one finds it here.
@@ -2531,49 +2536,16 @@ const stubNode = (
 };
 
 /**
- * The nine content modules, each read by the walk its placement names.
- */
-const contentModules = [
-  rubricModule,
-  feedbackInlineModule,
-  feedbackBlockModule,
-  modalFeedbackModule,
-  companionMaterialsModule,
-  stylesheetModule,
-  catalogInfoModule,
-  stimulusRefModule,
-  mathmlModule,
-] as const;
-
-/**
- * One of the nine content modules.
- */
-type AnyContentModule = (typeof contentModules)[number];
-
-/**
- * The content modules of the elements the body walk reads: those placed in the item body.
- */
-const bodyContent = contentModules.filter(
-  (module): module is Extract<AnyContentModule, { readonly placement: "body" }> =>
-    module.placement === "body",
-);
-
-/**
- * One of the content modules of the elements placed directly under the item root.
- */
-type ItemPlacedModule = Extract<AnyContentModule, { readonly placement: "item" }>;
-
-/**
  * The element of an item-placed content module.
  */
-type ItemElement = keyof ItemNodes<ItemPlacedModule>;
+type ItemElement = ItemContentElement;
 
 /**
  * The model node the module of the item-placed element K reads, `never` while it is a stub.
  *
  * @template K The element.
  */
-type ItemNode<K extends ItemElement> = ItemNodes<ItemPlacedModule>[K];
+type ItemNode<K extends ItemElement> = NodeOf<ItemModules[K]>;
 
 /**
  * One node an item-placed content module read, beside the element it was read from.
@@ -2591,16 +2563,10 @@ interface ItemPartNode<K extends ItemElement> {
 type ItemContentBuild = { [K in ItemElement]?: ItemNode<K>[] };
 
 /**
- * The content modules of the elements the item root's walk reads: those placed directly under the
- * item root.
- */
-const itemContent = contentModules.filter(
-  (module): module is ItemPlacedModule => module.placement === "item",
-);
-
-/**
- * Read a body element a content module reads, by its module's `parse`, which the element's notice,
- * path and kit are handed to.
+ * Read a body element a content module reads, by its module's `parse` after its `normalise`, which
+ * the element's notice, path and kit are handed to (`parseBodyContent` in
+ * `#plate/content/modules.ts`). The context is built for the element as the document holds it, so
+ * its path is the element's whatever `normalise` gives.
  *
  * @param build The build.
  * @param element The element.
@@ -2609,16 +2575,10 @@ const itemContent = contentModules.filter(
 const contentNode = (
   build: Build,
   element: SourceElement,
-): Option.Option<Result.Result<BodyNode, Refusal>> => {
-  const module = bodyContent.find(
-    (candidate) => candidate.namespace === element.namespace && candidate.element === element.local,
+): Option.Option<Result.Result<BodyNode, Refusal>> =>
+  Option.map(bodyModuleFor(element), (module) =>
+    parseBodyContent(module, element, contextOf(build, element)),
   );
-  if (module === undefined) {
-    return Option.none();
-  }
-
-  return Option.some(module.parse(element, contextOf(build, element)));
-};
 
 /**
  * Read an item root child by the `parse` of the item-placed content module that reads it.
@@ -2648,9 +2608,9 @@ const parseItemPart = <K extends ItemElement>(
 
 /**
  * Read an item root child the root's walk has no branch of its own for: by its content module's
- * `parse`, which the element's path and the way to record its mark are handed to, when an
- * item-placed module reads it; otherwise as the mark keyed by its name, when the model does not
- * read it.
+ * `parse` after its `normalise`, which the element's path, the way to record its mark and the
+ * body's catalog references are handed to, when an item-placed module reads it; otherwise as the
+ * mark keyed by its name, when the model does not read it.
  *
  * @param build The build.
  * @param part The child, its own marks recorded.
@@ -2662,17 +2622,21 @@ const itemPart = (
   part: SourceElement,
 ): Result.Result<Option.Option<ItemPartNode<ItemElement>>, Refusal> => {
   const path = pathOf(build, part);
-  const module = itemContent.find(
-    (candidate) => candidate.namespace === part.namespace && candidate.element === part.local,
-  );
-  if (module !== undefined) {
+  const module = itemModuleFor(part);
+  if (Option.isSome(module)) {
     const mark = (feature: string): Result.Result<Option.Option<never>> => {
       record(build, { feature, path, shown: "mark" });
 
       return Result.succeed(Option.none());
     };
+    const { normalise } = module.value;
 
-    return parseItemPart(module, part, { mark, path });
+    return parseItemPart(module.value, normalise === undefined ? part : normalise(part), {
+      catalogReferences: build.references,
+      mark,
+      path,
+      read: readerKitOf(build, part),
+    });
   }
 
   if (!readElements.has(part.local)) {
@@ -2772,6 +2736,11 @@ const bodyNode = (
 
   return Result.gen(function* bodyElement() {
     markElement(build, child, true);
+    for (const attribute of child.attributes) {
+      if (attribute.namespace === "" && attribute.local === "data-catalog-idref") {
+        build.references.push({ idref: attribute.value, path: pathOf(build, child) });
+      }
+    }
 
     const children = yield* bodyNodes(build, child, own);
 
@@ -4146,6 +4115,7 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
       paths: pathsOf(source),
       recorded: new Map(),
       records: new Map(),
+      references: [],
       unsupported: [],
     };
     const { records } = build;
@@ -4353,6 +4323,7 @@ export const parseContextOf = (source: SourceDocument, element: SourceElement): 
     paths: pathsOf(source),
     recorded: new Map(),
     records: new Map(),
+    references: [],
     unsupported: [],
   };
 

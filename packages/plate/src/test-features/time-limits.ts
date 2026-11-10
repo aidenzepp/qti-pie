@@ -3,8 +3,10 @@
  * `qti-time-limits` to its `parse`, which records the mark `qti-time-limits`, and its hooks have no
  * effect, so a timed test runs untimed, as it did. Issue m3f-01 fills the module: `gate` ends the
  * time allowed and holds a candidate to `min-time`, {@link timeStateOf} reads the time in force
- * into the navigation, and {@link timePart} renders the test chrome's `time` part from it. Issue
- * m4-03 then extends the state by the candidate's additional testing time.
+ * into the navigation, and {@link timePart} renders the test chrome's `time` part from it. Two
+ * hooks wait for the issues after it, each with no effect until its issue fills it: issue m4-03
+ * extends every `max-time` by the candidate's additional testing time ({@link extendedMaxTime}),
+ * and issue m4-08 pauses and resumes the clock for a break ({@link pauseTime}, {@link resumeTime}).
  *
  * This is a browser module, reached from the session and the emitter: it value-imports from
  * `effect` only `Option`.
@@ -16,6 +18,7 @@ import type { Attributes, Node } from "#plate/emit/node.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { Test } from "#plate/model/test.ts";
 import type { TestSession } from "#plate/session/session.ts";
+import type { AdditionalTestingTime } from "#plate/supports.ts";
 import { stub } from "#plate/test-features/contract.ts";
 import type { TestFeatureModule } from "#plate/test-features/contract.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
@@ -72,6 +75,44 @@ export const timeLimitsModule: TestFeatureModule<"qti-time-limits", never> = stu
  */
 export const timeStateOf = (_test: Test, _session: TestSession): Option.Option<TimeState> =>
   Option.none();
+
+/**
+ * Give the seconds a `max-time` allows a candidate, given the additional testing time they are
+ * allowed (A-6, `Supports.additionalTestingTime`): the hook issue m4-03 fills, so that it changes
+ * only how the time allowed is computed and no session function's signature. Until then it has no
+ * effect: every extension leaves the `max-time` as written. `min-time` never passes through it.
+ *
+ * @param maxTime The seconds a `max-time` in force writes.
+ * @param _extension The candidate's additional testing time; none for a candidate allowed none.
+ * @returns The seconds allowed, or none for a limit the extension lifts; until issue m4-03, the
+ *   `max-time` unchanged.
+ */
+export const extendedMaxTime = (
+  maxTime: number,
+  _extension: Option.Option<AdditionalTestingTime>,
+): Option.Option<number> => Option.some(maxTime);
+
+/**
+ * Pause the clock of a session at a time, for a candidate's break (A-11): the hook issue m4-08
+ * fills, after which no `max-time` runs until {@link resumeTime} and the session holds the break.
+ * Until then it has no effect: the clock runs on, and the session is given back as it was.
+ *
+ * @param session The session.
+ * @param _at When the break starts.
+ * @returns The session; until issue m4-08, the same session.
+ */
+export const pauseTime = (session: TestSession, _at: Date): TestSession => session;
+
+/**
+ * Resume the clock of a session at a time, ending the break {@link pauseTime} started: the hook
+ * issue m4-08 fills, after which the time on the break is not counted against any `max-time`.
+ * Until then it has no effect, and the session is given back as it was.
+ *
+ * @param session The session.
+ * @param _at When the break ends.
+ * @returns The session; until issue m4-08, the same session.
+ */
+export const resumeTime = (session: TestSession, _at: Date): TestSession => session;
 
 /**
  * Tell whether the navigation Root holds the `time` part when the author names no order: only
