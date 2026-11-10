@@ -69,23 +69,6 @@ const packageDirectory = path.resolve(import.meta.dirname, "..", "..");
 const configDirectory = path.join(packageDirectory, "work", "cdn-origin-compile");
 
 /**
- * How long reading the level's laws may take: `lawsOf` compiles `Qti`'s law model and the level's.
- * Measurement owed: it ran 113.6 s and 83.7 s on 2026-11-10, at load averages of 22.5 to 66.2,
- * never at 60 or more throughout, so no busy measurement stands yet; its number is the sibling
- * rule's (`cdn-foreign.test.ts`), over twice either run.
- */
-const lawsTimeoutMs = 600_000;
-
-/**
- * How long grizzle's check of the installation may take: it compiles every statement of `Qti` and
- * of the level, and every program of the author's login.
- * Measurement owed: it ran 67.6 s and 158.9 s on 2026-11-10, at load averages of 22.5 to 66.2,
- * never at 60 or more throughout, so no busy measurement stands yet; its number is the sibling
- * rule's (`cdn-foreign.test.ts`), over twice either run.
- */
-const compileTimeoutMs = 360_000;
-
-/**
  * The laws a level states that a lower level does not.
  *
  * @param laws - The level's laws.
@@ -199,7 +182,11 @@ describe("levels/cdn-origin.ts, the laws", () => {
         );
       }
     },
-    lawsTimeoutMs,
+    // How long reading the level's laws may take: `lawsOf` compiles `Qti`'s law model and the
+    // level's. Measurement owed (`exempt` of `src/test/timeouts.test.ts`): on 2026-11-10 it ran
+    // 113.6 s, 83.7 s and 117.1 s at load averages of 22.5 to 66.2, and 259.1 s at 32 to 84, never
+    // at 60 or more throughout; 600_000, the sibling rule's, is over twice the slowest.
+    600_000,
   );
 
   it.effect(
@@ -228,7 +215,12 @@ describe("levels/cdn-origin.ts, the laws", () => {
           );
         }),
       ),
-    compileTimeoutMs,
+    // How long grizzle's check of the installation may take: it compiles every statement of `Qti`
+    // and of the level, and every program of the author's login. Measurement owed (`exempt` of
+    // `src/test/timeouts.test.ts`): on 2026-11-10 it ran 67.6 s, 158.9 s and 57.2 s at load
+    // averages of 22.5 to 66.2, and 118.5 s at 43 to 84, never at 60 or more throughout; 360_000,
+    // the sibling rule's, is over twice the slowest.
+    360_000,
   );
 });
 

@@ -133,6 +133,10 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "pantry/src/import/overlays/id-names.oracle.test.ts",
     "measurement owed: its 97-case exhaust ran 31.5 s at a load average of 21 to 34 in FIX-IDNCNAME's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
+  [
+    "pantry/src/levels/cdn-origin.test.ts",
+    "measurement owed: its laws case ran 113.6 s, 83.7 s and 117.1 s at load averages of 22.5 to 66.2 and 259.1 s at 32 to 84, and its compile case 67.6 s, 158.9 s and 57.2 s at 22.5 to 66.2 and 118.5 s at 43 to 84, in pa1-15's and pa1-15.2's runs of 2026-11-10, never at 60 or more throughout; the load average stood at 12.85 12.06 12.44 when the wait stopped (decision 490); its 600_000 and 360_000 stay in place until they are remeasured at a load average of at least 60",
+  ],
 ]);
 
 /**
