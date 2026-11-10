@@ -378,7 +378,7 @@ describe("the Hotspot module", () => {
             "data-shape": "default",
             fill: "none",
             height: "100%",
-            "pointer-events": "none",
+            "pointer-events": "visible",
             width: "100%",
             x: "0",
             y: "0",
@@ -571,5 +571,77 @@ describe("the Hotspot module", () => {
         "the redacted body holds the Hotspot's payload node",
       );
     }),
+  );
+
+  it.effect(
+    "[Q-10] the default hotspot's shape takes pointer events, and each Choice carries its shape as data-area",
+    () =>
+      Effect.gen(function* stacked() {
+        const multiple = yield* rendered("hotspot.xml");
+        const single = yield* rendered("hotspot-single.xml");
+        const shapes = partsIn(multiple.tree, "outline").map(shapeOf);
+
+        assert.deepStrictEqual(
+          partsIn(multiple.tree, "choice").map((choice) => choice.attrs["data-area"]),
+          ["rect", "circle", "poly", "default"],
+        );
+        assert.deepStrictEqual(
+          partsIn(single.tree, "choice").map((choice) => choice.attrs["data-area"]),
+          ["rect", "circle", "poly"],
+        );
+        assert.deepStrictEqual(shapes[3], {
+          attrs: {
+            "data-shape": "default",
+            fill: "none",
+            height: "100%",
+            "pointer-events": "visible",
+            width: "100%",
+            x: "0",
+            y: "0",
+          },
+          tag: "rect",
+        });
+        assert.deepStrictEqual(
+          shapes.slice(0, 3).map(({ attrs }) => attrs["pointer-events"]),
+          ["visiblePainted", "visiblePainted", "visiblePainted"],
+        );
+        for (const { tree } of [multiple, single]) {
+          for (const element of elementsIn(tree)) {
+            assert.notStrictEqual(element.attrs["pointer-events"], "none", element.tag);
+            assert.isUndefined(element.attrs["style"], element.tag);
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-10] the stacking changes no outline, control or label: passes checkTree and round-trips with data-area",
+    () =>
+      Effect.gen(function* unchanged() {
+        const checking: readonly (readonly [string, Value, string])[] = [
+          ["hotspot.xml", identifiers("multiple", "D"), "D"],
+          ["hotspot-single.xml", identifiers("single", "SQUARE"), "SQUARE"],
+        ];
+
+        for (const [file, checked, identifier] of checking) {
+          const accepted = yield* accept(file);
+          const tree = renderTree(redact(accepted), yield* configure({}), {
+            values: { [response]: checked },
+          });
+
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], file);
+          assert.isTrue(roundTrips(tree), file);
+          assert.deepStrictEqual(checkedIn(tree), [identifier], file);
+          assert.lengthOf(
+            partsIn(tree, "outline").map(shapeOf),
+            partsIn(tree, "choice").length,
+            file,
+          );
+          for (const choice of partsIn(tree, "choice")) {
+            assert.lengthOf(partsIn(choice, "control"), 1, file);
+            assert.lengthOf(partsIn(choice, "label"), 1, file);
+          }
+        }
+      }),
   );
 });

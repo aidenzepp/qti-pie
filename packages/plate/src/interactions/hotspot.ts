@@ -23,8 +23,11 @@
  *
  * - "A default hotspot is the last hotspot choice of its interaction, and a graphic gap match
  *   interaction has none." The structure check refuses a default hotspot that is not last; the
- *   render draws it as the last Choice, a rectangle over the whole image that takes no pointer
- *   event ({@link wholeImage}), so an area listed before it hides it where they overlap.
+ *   render draws it as the last Choice, a rectangle over the whole image ({@link wholeImage}). Each
+ *   Choice carries its hotspot's shape as `data-area`, and the stylesheet lays the `default` Choice
+ *   under the others, so an area listed before it lies above it and hides it where they overlap,
+ *   and a click where no other area is drawn reaches the default's rectangle: the default hotspot
+ *   is selectable without script (Q-10, issue m3d-07b, GitHub issue #194).
  * - "An area's `coords` that do not fit its shape are read as the HTML Standard's image-map
  *   processing reads an `area`'s." An area with fewer coordinates than its shape needs holds no
  *   point ({@link areaHolds}), so its Choice renders its Control and Label with no Outline;
@@ -269,7 +272,7 @@ const parts = {
     defaults: {},
     element: "label",
     listOwner: false,
-    merged: ["for"],
+    merged: ["data-area", "for"],
     tagClass: "any",
   },
   choices: {
@@ -419,12 +422,18 @@ const numbersOf = (
 const hit = { "pointer-events": "visiblePainted" } as const;
 
 /**
- * The rectangle over the whole image, the `default` hotspot's area. It is drawn last and so lies
- * over every other area, and the stylesheet, which keys on part markers alone, has no rule to lay
- * it under them; so it takes no pointer event and no fill, by its own presentation attributes: the
- * areas before it stay clickable where they overlap it, as "the one listed first hides the later
- * ones", and the default hotspot is reached by its Control, in the tab order, until issue m3d-08
- * hit-tests the pointer. Its stroke still shows its state.
+ * The rectangle over the whole image, the `default` hotspot's area. It is drawn last, and its
+ * Choice carries `data-area="default"`, which the stylesheet lays under every other Choice by
+ * `z-index`: so the areas listed before it lie above it and stay clickable where they overlap it,
+ * as "the one listed first hides the later ones", and a click where no other area is drawn reaches
+ * this rectangle, which activates its `label` and so toggles its Control, with no script (Q-10,
+ * issue m3d-07b, GitHub issue #194). It takes no fill, so the default area draws no veil over the
+ * whole image, and its stroke still shows its state.
+ *
+ * Its `pointer-events` is `visible` and not {@link hit}'s `visiblePainted`: in SVG, `visiblePainted`
+ * hits a shape's interior only where the interior is painted, and this interior is not, so such a
+ * rectangle would take no click; `visible` hits the interior and the perimeter whatever the `fill`
+ * and the `stroke` are.
  *
  * @returns The SVG element.
  */
@@ -433,7 +442,7 @@ const wholeImage = (): Element =>
     "data-shape": "default",
     fill: "none",
     height: "100%",
-    "pointer-events": "none",
+    "pointer-events": "visible",
     width: "100%",
     x: "0",
     y: "0",
@@ -572,7 +581,8 @@ interface Connected {
  *   the author's `aria-label` and `aria-labelledby`.
  * - Prompt: the marker and its id.
  * - Image, Choices: the marker.
- * - Choice: the marker and `for` → its Control.
+ * - Choice: the marker, `data-area` (its hotspot's shape, which the stylesheet reads to lay the
+ *   `default` Choice under the others) and `for` → its Control.
  * - Control: a radio when one choice can be posted (`max-choices` 1, or a single response), else a
  *   checkbox; its id, the payload's `formName`, its value; `checked` from the restore; `disabled`
  *   when finished or not answering; `aria-labelledby` → its Label; `autofocus` on the first when
@@ -604,7 +614,7 @@ const connect = (interaction: HotspotPayload, payload: Payload): Connected => {
       const labelId = scopedId(instance, interaction.response, "label", index);
 
       return {
-        choice: { "data-slot": rows.choice.slot, for: controlId },
+        choice: { "data-area": choice.shape, "data-slot": rows.choice.slot, for: controlId },
         control: {
           "aria-labelledby": labelId,
           ...when(interaction.autofocus && index === 0, { autofocus: true }),
