@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <title>Four plots of a garden</title>
+  <rect x="0" y="0" width="400" height="300" fill="#e8f2e8"/>
+  <rect x="40" y="40" width="120" height="80" fill="#8cc08c" stroke="#2d5a2d" stroke-width="2"/>
+  <circle cx="300" cy="90" r="50" fill="#c8a86b" stroke="#6b4e1f" stroke-width="2"/>
+  <polygon points="60,260 140,180 220,260" fill="#7fa7d9" stroke="#2b4c7e" stroke-width="2"/>
+  <path d="M 250 200 L 380 200 L 380 280 L 250 280 Z" fill="none" stroke="#2d5a2d" stroke-width="2" stroke-dasharray="6 4"/>
+</svg>
