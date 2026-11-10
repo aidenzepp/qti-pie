@@ -122,10 +122,11 @@ const directedKinds = ["m:mrow", "m:mstyle"] as const;
  * One `m:maction`, keyed by its node.
  *
  * - **the host's:** `elements` and `elementChildren`, the node's own element rank and element count,
- *   which `nodeCounts` proves; `selectionLexical` and `selectionWritten`, the lexical form of the
- *   `selection` attribute and whether the node writes one, which the attribute proves; and
- *   `selectionText`, the form collapsed, and `selection`, its integer (1 where none is written, 0
- *   where it is no integer or a negative one), which `E1_derived` proves.
+ *   which `nodeCounts` proves; and `selectionLexical` and `selectionWritten`, the lexical form of
+ *   the `selection` attribute and whether the node writes one, which the attribute proves, an
+ *   unwritten one empty (`E1_derived`);
+ * - **the database's:** `selection`, the form's integer, collapsed (`Compute.collapse`) and read in
+ *   {@link integerForm}: 1 where none is written, 0 where it is no integer or a negative one.
  *
  * Its fields are declared in key order, which the lint's `sort-keys` holds and which is column
  * order.
@@ -136,13 +137,28 @@ export const MathAction = relation.generated(
     elementChildren: natural,
     elements: natural,
     node: uuid,
-    selection: natural,
     selectionLexical: keyText,
     selectionWritten: pg.boolean,
   },
   ["node"],
   (m) => ({
-    selectionText: generated(keyText, Compute.cast(Compute.collapse(m.selectionLexical), keyText)),
+    selection: generated(
+      natural,
+      Compute.cond(
+        Compute.eq(m.selectionWritten, false),
+        Compute.literal(natural, 1n),
+        Compute.when(
+          Compute.matches(Compute.collapse(m.selectionLexical), integerForm),
+          (text) =>
+            Compute.when(
+              Compute.nonnegative(Compute.cast(text, pg.bigint)),
+              (value) => Compute.cast(value, natural),
+              Compute.literal(natural, 0n),
+            ),
+          Compute.literal(natural, 0n),
+        ),
+      ),
+    ),
   }),
 );
 
@@ -375,28 +391,7 @@ export const alignLaws = [
   ),
   contained(on(writtenSelections, "node"), on(selectionAttributes, "node")),
   check("E1_derived", MathAction, (m) =>
-    m.and(
-      m.or(
-        m.and(m.eq(m.selectionWritten, false), m.eq(m.selectionLexical, ""), m.eq(m.selection, 1n)),
-        m.and(
-          m.eq(m.selectionWritten, true),
-          m.or(
-            m.and(m.eq(Compute.startsWith(m.selectionText, "-"), true), m.eq(m.selection, 0n)),
-            m.and(
-              m.eq(Compute.startsWith(m.selectionText, "-"), false),
-              m.eq(
-                Compute.base(m.selection),
-                Compute.when(
-                  Compute.matches(m.selectionText, integerForm),
-                  (text) => Compute.cast(text, pg.bigint),
-                  0n,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
+    m.or(m.eq(m.selectionWritten, true), m.eq(m.selectionLexical, "")),
   ),
   check("MathML_maction_selection", MathAction, (m) =>
     m.and(m.gt(m.elementChildren, 0n), m.ge(m.selection, 1n), m.le(m.selection, m.elementChildren)),

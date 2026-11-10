@@ -165,7 +165,10 @@ const dirLexicalOf = (lexical: string | undefined): string =>
   directionOf(lexical) === undefined ? "" : (lexical ?? "");
 
 /**
- * Read a `selection`'s lexical form as the integer `MathAction.selection` holds.
+ * Read a `selection`'s lexical form as the integer the database generates as
+ * `MathAction.selection`, for the copy each of the action's children holds (`chosen`) and the state
+ * the child derives from it, which the host folds (a fold stepped by its parent's choice, grizzle's
+ * ask #12) and the database holds to the generated selection.
  *
  * @param lexical - The attribute's lexical form, none where the action writes none.
  * @returns 1 where none is written, the integer where the collapsed form is one and is not negative
@@ -287,7 +290,6 @@ const actionOf = (reading: Reading, node: NodeRow<Composed>): Addition<typeof Ma
     elementChildren: foldAt(reading.folds, node.id).elementChildren,
     elements: foldAt(reading.folds, node.id).elements,
     node: node.id,
-    selection: selectionOf(lexical),
     selectionLexical: lexical ?? "",
     selectionWritten: lexical !== undefined,
   };

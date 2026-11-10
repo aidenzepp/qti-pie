@@ -219,6 +219,20 @@ const readSelection = (lexical: string) =>
     ids,
   ).MathAction.get(idOf(2));
 
+/**
+ * Read the selection the importer copies to an `maction`'s child, its `chosen`, of an `maction` in
+ * a cell over one `mi` that writes a `selection`. The database derives the action's own
+ * `selection` (`MathAction`, a generated field) and holds every child's copy to it.
+ *
+ * @param lexical - The `selection`'s lexical form.
+ * @returns The `mi`'s `chosen` (node 4: 0 document, 1 math, 2 mtd, 3 maction, 4 mi).
+ */
+const chosenUnder = (lexical: string) =>
+  rowsOf(
+    cellOf([elementOf("m:maction", [elementOf("m:mi")], [attributeOf("selection", lexical)])]),
+    ids,
+  ).MathAlignScope.get(idOf(4))?.chosen;
+
 describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () => {
   it("closes a group under an mfrac's mrow: the mfrac is the first to stop it", () => {
     // Nodes: 0 document, 1 math, 2 mtd, 3 mfrac, 4 mrow, 5 maligngroup, 6 mi.
@@ -463,7 +477,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     assert.strictEqual(leavesOf(rows, 2)[0]?.groups, 0n);
   });
 
-  it("gives an maction its selection, 1 where unwritten, and its counts", () => {
+  it("gives an maction its selection's lexical form, empty where unwritten, and its counts", () => {
     // Nodes: 0 document, 1 math, 2 maction (selection 2), 3 mi, 4 mi.
     const chosen = documentOf(
       elementOf("m:math", [
@@ -480,7 +494,6 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
       elementChildren: 2n,
       elements: 1n,
       node: idOf(2),
-      selection: 2n,
       selectionLexical: "2",
       selectionWritten: true,
     });
@@ -494,30 +507,30 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
       elementChildren: 2n,
       elements: 1n,
       node: idOf(2),
-      selection: 1n,
       selectionLexical: "",
       selectionWritten: false,
     });
   });
 
-  it("reads a selection by its collapsed form: spaces drop, a non-integer is 0", () => {
-    // Nodes: 0 document, 1 math, 2 maction, 3 mi.
-    assert.strictEqual(readSelection(" 3 ")?.selection, 3n);
+  it("copies a selection to the action's child by its collapsed form: spaces drop, a non-integer is 0", () => {
+    // Oracle: the database's generated `MathAction.selection` as `src/qti/mathml-align.ts` states
+    // it, the collapsed form read in `integerForm`, 0 for a non-integer, which the child's copy is
+    // held to.
+    assert.strictEqual(chosenUnder(" 3 "), 3n);
     assert.strictEqual(readSelection(" 3 ")?.selectionLexical, " 3 ");
-    assert.strictEqual(readSelection("x")?.selection, 0n);
-    assert.strictEqual(readSelection("1.5")?.selection, 0n);
-    assert.strictEqual(readSelection("")?.selection, 0n);
-    assert.strictEqual(readSelection("99999999999999999999")?.selection, 0n);
+    assert.strictEqual(chosenUnder("x"), 0n);
+    assert.strictEqual(chosenUnder("1.5"), 0n);
+    assert.strictEqual(chosenUnder(""), 0n);
+    assert.strictEqual(chosenUnder("99999999999999999999"), 0n);
   });
 
-  it("reads a negative selection as 0, the natural column's floor", () => {
-    // Nodes: 0 document, 1 math, 2 maction, 3 mi.
-    assert.strictEqual(readSelection("-1")?.selection, 0n);
-    assert.strictEqual(readSelection(" -7 ")?.selection, 0n);
-    assert.strictEqual(readSelection("-9223372036854775808")?.selection, 0n);
-    assert.strictEqual(readSelection("-0")?.selection, 0n);
-    assert.strictEqual(readSelection("+0")?.selection, 0n);
-    assert.strictEqual(readSelection("+2")?.selection, 2n);
+  it("copies a negative selection to the action's child as 0, the natural column's floor", () => {
+    assert.strictEqual(chosenUnder("-1"), 0n);
+    assert.strictEqual(chosenUnder(" -7 "), 0n);
+    assert.strictEqual(chosenUnder("-9223372036854775808"), 0n);
+    assert.strictEqual(chosenUnder("-0"), 0n);
+    assert.strictEqual(chosenUnder("+0"), 0n);
+    assert.strictEqual(chosenUnder("+2"), 2n);
     assert.strictEqual(readSelection("-1")?.selectionLexical, "-1");
   });
 

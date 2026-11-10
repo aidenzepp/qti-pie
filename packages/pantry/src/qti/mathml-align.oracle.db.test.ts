@@ -11,9 +11,9 @@
  *   (`#pantry/test/oracle.ts`) predicts the same law and rule with no database. An accepted one
  *   commits, as the oracle predicts.
  * - **Direct rows:** a `MathAction` row that writes `selection="-1"` (F4, the leased witness of
- *   `repair-sn-3`) is refused by `MathML_maction_selection` and not by `E1_derived`, whose
- *   derivation of the selection it satisfies; a `MathAlignScope` row whose state contradicts what
- *   its parent passes is refused by `E1_derived`.
+ *   `repair-sn-3`) is refused by `MathML_maction_selection` and not by `E1_derived`, since the
+ *   database generates its selection as 0; a `MathAlignScope` row whose state contradicts what its
+ *   parent passes is refused by `E1_derived`.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -176,21 +176,18 @@ const selectionCheck = "math_ml_maction_selection";
 
 /**
  * The facts of an `m:maction` that writes a `selection` over two element children: the lexical
- * form, its collapsed text and the integer `E1_derived` derives from them.
+ * form, from which PostgreSQL generates the integer (`MathAction.selection`, 0 for a negative one).
  *
  * @param lexical - The attribute's form as written.
- * @param selection - The integer the form reads as, 0 for a negative one.
  * @returns The facts; every field is lawful but the selection's range.
  */
-const action = (lexical: string, selection: bigint): readonly Stated[] => [
+const action = (lexical: string): readonly Stated[] => [
   {
     fact: {
       elementChildren: 2n,
       elements: 0n,
       node: actionNode,
-      selection,
       selectionLexical: lexical,
-      selectionText: lexical,
       selectionWritten: true,
     },
     relation: MathAction,
@@ -303,21 +300,21 @@ describe.skipIf(!hasLease)(
         "refuses an maction that writes selection=-1 by MathML_maction_selection, not by E1_derived, and accepts a selection of 2 over two children",
         () =>
           // Oracle: MathML 3 §3.7.1.1 ("If the value specified is out of range, it is an error"),
-          // F4 of repair-sn-3: a negative selection is derived as 0 by `E1_derived`, which this row
-          // satisfies, so only the range check refuses it.
+          // F4 of repair-sn-3: a negative selection is generated as 0 (`MathAction.selection`), so
+          // only the range check refuses it.
           // Bound: a selection of -1 over two children, whose derivation is lawful; a selection of 2
           // over two children, the last child.
           Effect.gen(function* negativeSelection() {
             const client = yield* loginSession;
 
             assertVerdict(
-              yield* judged(client, statedInserts(action("-1", 0n))),
+              yield* judged(client, statedInserts(action("-1"))),
               selectionCheck,
               true,
               "selection -1 over two children",
             );
             assertVerdict(
-              yield* judged(client, statedInserts(action("2", 2n))),
+              yield* judged(client, statedInserts(action("2"))),
               selectionCheck,
               false,
               "selection 2 over two children",
