@@ -11,9 +11,12 @@
  * linear part, as QTI's information model gives them; once any `max-time` in force has run out no
  * `min-time` holds (the reading "where both cannot hold, `max-time` wins"). `allow-late-submission`
  * true takes a submission past `max-time`, which stays detectable through the item's `duration`
- * and the navigation's `time`. At `max-time` with `allow-late-submission` false the `time` part
- * announces the expiry and nothing more: the gate's contract can only refuse an intent or redirect
- * a move, so it can neither lock input nor submit at expiry.
+ * and the navigation's `time`. At `max-time` with `allow-late-submission` false (reading D19,
+ * issue m3f-01b), `gate` answers the first intent of any kind with `expire`, naming the widest
+ * scope in force whose time has run out and which the session does not yet list in `expired`, and
+ * the session hub carries the expiry out in the intent's place: the request's responses are not
+ * saved, the scope's items are submitted with the responses they hold and locked, and the scope is
+ * left. The `time` part announces the expiry.
  *
  * Two hooks wait for the issues after it, each with no effect until its issue fills it: issue m4-03
  * extends every `max-time` by the candidate's additional testing time ({@link extendedMaxTime}),
@@ -33,7 +36,12 @@ import type { ItemRef, Section, SectionChild, Test, TestPart } from "#plate/mode
 import { elapsedSeconds } from "#plate/session/elapsed.ts";
 import type { SessionItem, TestSession } from "#plate/session/session.ts";
 import type { AdditionalTestingTime } from "#plate/supports.ts";
-import type { GateContext, GateVerdict, TestFeatureModule } from "#plate/test-features/contract.ts";
+import type {
+  GateContext,
+  GateVerdict,
+  TestFeatureModule,
+  TimedScope,
+} from "#plate/test-features/contract.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
 
 /**
@@ -331,6 +339,33 @@ const expired = (scopes: readonly Scope[]): boolean =>
   scopes.some((scope) => Option.exists(maxTimeLeft(scope), (left) => left === 0));
 
 /**
+ * Give the scope a request now expires (reading D19, issue m3f-01b): the outermost scope in force
+ * whose `max-time` has run out, whose `allow-late-submission` is false, and which the session does
+ * not yet list in `expired`. A wider scope's expiry locks and submits every item of the scopes
+ * inside it, and the hub carries out one scope per request, so when several run out together the
+ * widest decides; a scope the session lists has been carried out, so the next one inward, if any,
+ * is the one left to expire.
+ *
+ * @param standing Where the session stands.
+ * @param session The session, whose `expired` lists the scopes already carried out.
+ * @returns The scope, none while no such scope is in force.
+ */
+const expiringScope = (standing: Standing, session: TestSession): Option.Option<TimedScope> =>
+  Option.map(
+    Option.fromUndefinedOr(
+      standing.scopes.find(
+        (scope) =>
+          Option.exists(maxTimeLeft(scope), (left) => left === 0) &&
+          Option.exists(scope.limits, (limits) => !limits.allowLateSubmission) &&
+          !session.expired.some(
+            (each) => each.kind === scope.kind && each.identifier === scope.identifier,
+          ),
+      ),
+    ),
+    ({ identifier, kind }) => ({ identifier, kind }),
+  );
+
+/**
  * Tell whether a scope's `min-time` applies in a part: an item ref's and a section's only in a
  * linear part, a part's and the test's always.
  *
@@ -418,8 +453,8 @@ const heldScopes = (standing: Standing, kind: GateContext["intent"]["kind"]): re
 };
 
 /**
- * The intents a `min-time` can hold back: the gate lets `go` and `previous` through without
- * reading the session, so a read of every `go` target, as `allowedIntents` makes, costs nothing.
+ * The intents a `min-time` can hold back. A `go` or `previous` the part's modes take never leaves
+ * a scope whose `min-time` holds the candidate, so the gate only ever expires one.
  */
 const heldKinds: ReadonlySet<GateContext["intent"]["kind"]> = new Set([
   "end-part",
@@ -448,11 +483,15 @@ const timeAt = (session: TestSession, now: Option.Option<Date>): Date =>
   Option.getOrElse(now, () => new Date(session.updated));
 
 /**
- * The Time Limits module (T-2, S-2, T-6, I-16), issue m3f-01: its `parse` reads `min-time`,
- * `max-time` and `allow-late-submission` with the element's path, and its `gate` refuses, under
- * the rule `min-time`, the intents that would leave a scope whose `min-time` still holds the
- * candidate while no `max-time` in force has run out. It places nothing, orders nothing and lets
- * every place be entered: a scope whose time has run out answers the next intent through `gate`.
+ * The Time Limits module (T-2, S-2, T-6, I-16), issues m3f-01 and m3f-01b: its `parse` reads
+ * `min-time`, `max-time` and `allow-late-submission` with the element's path. Its `gate` answers an
+ * intent of any kind, a move included, with `{ kind: "expire", scope }` once a scope in force has
+ * run past its `max-time` with `allow-late-submission` false and the session does not yet list it
+ * in `expired`, naming the widest such scope, which the session hub then expires in the intent's
+ * place. Otherwise it refuses, under the rule `min-time`, the intents that would leave a scope
+ * whose `min-time` still holds the candidate while no `max-time` in force has run out. It places
+ * nothing, orders nothing and lets every place be entered: a scope whose time has run out answers
+ * the next intent through `gate`.
  */
 export const timeLimitsModule: TestFeatureModule<"qti-time-limits", TimeLimitsNode> = {
   deliver: (context) => context.test,
@@ -460,24 +499,32 @@ export const timeLimitsModule: TestFeatureModule<"qti-time-limits", TimeLimitsNo
   enter: () => Option.none(),
   feature: ["T-2", "S-2", "T-6", "I-16"],
   gate: ({ intent, now, session, test }) => {
-    if (session.status === "closed" || !heldKinds.has(intent.kind) || !timed(test)) {
+    if (session.status === "closed" || !timed(test)) {
       return Option.none();
     }
 
-    return Option.flatMap(standingOf(test, session, timeAt(session, now)), (standing) => {
-      if (expired(standing.scopes)) {
-        return Option.none();
-      }
-
-      for (const scope of heldScopes(standing, intent.kind)) {
-        const left = minTimeLeftOf(scope);
-        if (Option.isSome(left)) {
-          return Option.some(heldBy(scope, left.value));
+    return Option.flatMap(
+      standingOf(test, session, timeAt(session, now)),
+      (standing): Option.Option<GateVerdict> => {
+        const ending = expiringScope(standing, session);
+        if (Option.isSome(ending)) {
+          return Option.some({ kind: "expire", scope: ending.value });
         }
-      }
 
-      return Option.none();
-    });
+        if (!heldKinds.has(intent.kind) || expired(standing.scopes)) {
+          return Option.none();
+        }
+
+        for (const scope of heldScopes(standing, intent.kind)) {
+          const left = minTimeLeftOf(scope);
+          if (Option.isSome(left)) {
+            return Option.some(heldBy(scope, left.value));
+          }
+        }
+
+        return Option.none();
+      },
+    );
   },
   implemented: true,
   issue: "m3f-01",
