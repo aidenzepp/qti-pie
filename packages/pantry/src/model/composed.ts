@@ -1,13 +1,13 @@
 /**
  * The composed grammar as the model reads it: the handle types of every roster `compose` generates
  * ({@link Composed}), and the one projection of the grammar each model function reads a document
- * through: shred's ({@link shredGrammarOf}), the folds' ({@link foldGrammarOf}) and unshred's names
- * ({@link namesOf}).
+ * through: shred's ({@link shredGrammarOf}) and the folds' ({@link foldGrammarOf}). Unshred's names
+ * need no grammar: they are the vocabulary rosters' (`#pantry/model/names.ts`).
  *
  * Each projection reads the grammar's closed relations as they are and computes no step of its
  * own, so the importer, the export and every test read a document through the same relations.
  */
-import { Array as Arr, Option, Result } from "effect";
+import { Option, Result } from "effect";
 import { admissionOf, textDomainOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
 import { placedStep, placementOf } from "#pantry/grammar/content.ts";
@@ -18,9 +18,7 @@ import { typeHandle } from "#pantry/grammar/xsi.ts";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import type { FoldGrammar } from "#pantry/model/folds.ts";
 import type { ShredGrammar } from "#pantry/model/shred.ts";
-import type { XdmNames } from "#pantry/model/unshred.ts";
-import { handlePrefixes } from "#pantry/model/xdm.ts";
-import type { ClosedName, ElementKind, ExpandedName, XdmVocabulary } from "#pantry/model/xdm.ts";
+import type { ClosedName, ElementKind, XdmVocabulary } from "#pantry/model/xdm.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 
 /**
@@ -159,48 +157,3 @@ export const foldGrammarOf = (grammar: ComposedGrammar): FoldGrammar<Composed> =
             ),
     }),
 });
-
-/**
- * Name the attribute a closed handle spells: a handle that begins with a prefix of
- * {@link handlePrefixes} names an attribute in that prefix's namespace, and any other handle one
- * in no namespace. The prefix it is written with is the tree's own (`XdmClosedName.prefix`).
- *
- * @param handle - The handle.
- * @returns The local name and namespace name it is written and read with.
- */
-const attributeNameOf = (handle: string): ExpandedName =>
-  Option.getOrElse(
-    Arr.findFirst(handlePrefixes, ({ prefix }) => handle.startsWith(`${prefix}:`)).pipe(
-      Option.map(({ namespace, prefix }) => ({
-        local: handle.slice(prefix.length + 1),
-        namespace,
-      })),
-    ),
-    () => ({ local: handle, namespace: "" }),
-  );
-
-/**
- * Read the composed grammar's names as unshred writes a tree under them: each element kind's
- * `ElementName` row, and each closed handle's own spelling.
- *
- * @param grammar - The composed grammar.
- * @returns The names. Naming a kind `ElementName` holds no row for is a defect of the grammar,
- *   whose element kinds are exactly that relation's key set.
- */
-export const namesOf = (grammar: ComposedGrammar): XdmNames<Composed> => {
-  const elements: ReadonlyMap<string, ExpandedName> = new Map(
-    grammar.kinds.elementName.rows.map(({ kind, local, namespace }) => [
-      kind,
-      { local, namespace },
-    ]),
-  );
-
-  return {
-    attribute: attributeNameOf,
-    element: (kind) =>
-      Option.getOrThrowWith(
-        Option.fromNullishOr(elements.get(kind)),
-        () => new Error(`The grammar's ElementName holds no row for the element kind ${kind}.`),
-      ),
-  };
-};

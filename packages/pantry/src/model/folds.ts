@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * Host folds: every field of the document layer the host writes, computed from a document and the
  * grammar's closed relations (plan §1.3 and §1.5, fin.md §4.3, §4.5a and §16).
@@ -63,7 +62,7 @@ import { Option, Result, Schema } from "effect";
 import { step as enter } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry, AncestrySets } from "#pantry/grammar/ancestry.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
-import { documentFamily, flatten, none } from "#pantry/model/xdm.ts";
+import { documentFamily, flatten } from "#pantry/model/xdm.ts";
 import type {
   AttributeRow,
   FlatRows,
@@ -105,7 +104,7 @@ export interface ChildKey<V extends XdmVocabulary> {
  * is a governor of its kind, else `AttributeAdmission`'s (spec reading 84).
  */
 export interface AttributeKey<V extends XdmVocabulary> {
-  readonly governs: string;
+  readonly governs: Option.Option<string>;
   readonly kind: XdmKind<V>;
   readonly name: NameHandle<V>;
   readonly version: V["version"];
@@ -337,9 +336,9 @@ export interface FoldedAttribute<V extends XdmVocabulary> extends AttributeRow<V
   readonly document: NodeId;
   /**
    * The owner's governing type, which with its kind decides the attribute's position and domain
-   * (spec reading 84).
+   * (spec reading 84), none where no named type governs it.
    */
-  readonly governs: string;
+  readonly governs: Option.Option<string>;
   readonly kind: XdmKind<V>;
   readonly version: V["version"];
 }
@@ -582,18 +581,25 @@ export interface Ends {
  *
  * A code point past U+FFFF is two UTF-16 code units, a surrogate pair, and XML's `Char` holds no
  * lone surrogate, so the last code point is the pair that starts two units from the end where one
- * does, and the last unit otherwise.
+ * does, and the last unit otherwise: where the characters are shorter than two units, no code point
+ * starts two units from the end.
  *
  * @param chars - The node's characters.
  * @returns Its first and last code points.
  */
 export const endsOf = (chars: string): Ends => {
   const head = chars.codePointAt(0);
-  const pair = chars.codePointAt(chars.length - 2) ?? 0;
+  const pair = Option.filter(
+    Option.fromUndefinedOr(chars.codePointAt(chars.length - 2)),
+    (point) => point > 0xff_ff,
+  );
 
   return {
     first: head === undefined ? "" : String.fromCodePoint(head),
-    last: pair > 0xff_ff ? String.fromCodePoint(pair) : chars.slice(-1),
+    last: Option.match(pair, {
+      onNone: () => chars.slice(-1),
+      onSome: (point) => String.fromCodePoint(point),
+    }),
   };
 };
 
@@ -764,7 +770,7 @@ export const fold = <V extends XdmVocabulary>(
       sentinelOf(grammar, {
         at: 0n,
         end: BigInt(rows.nodes.length),
-        governs: none,
+        governs: Option.none(),
         id: self,
         kind: document._tag,
         parent: self,
