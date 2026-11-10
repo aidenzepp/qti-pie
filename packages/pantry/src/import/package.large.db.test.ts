@@ -130,8 +130,12 @@ describe.skipIf(!hasLease)(
               bytesMaxLength.value,
               "a bulk entry is one bytes value",
             );
-            assert.isAbove(recordBytes, messageMaxBytes.value, "the record fits one Bind message");
-            assert.isBelow(recordBytes, flightMaxBytes.value, "the record is past one flight");
+            assert.isAbove(
+              recordBytes,
+              messageMaxBytes.value,
+              "the record is past one Bind message",
+            );
+            assert.isBelow(recordBytes, flightMaxBytes.value, "the record fits one flight");
 
             const source = yield* scopedPackage(entries);
             const [importElapsed, id] = yield* Effect.timed(importDir(source));

@@ -213,8 +213,8 @@ const lomTitled = (resource: Element): boolean =>
  * Name the stated limit a package falls under: the first of these, in this order, that holds.
  *
  * 1. `a record file whose root is a cp:manifest`: the oracle raises "RootOfType" at a document whose
- *    root is a `cp:manifest` and which the package manifest lists as `resourcemetadata/xml`
- *    (decision 449);
+ *    root is a `cp:manifest` and which the package manifest lists as `resourcemetadata/xml`, by an
+ *    href that names it in normal form (decision 449);
  * 2. `a forbidden ancestor`: the oracle raises "N5 admitted" (decision 452's kin);
  * 3. `an inclusion cycle`: the oracle raises "Inclusion cycle" (decision 451's kin);
  * 4. `xml:base on a cp:resource`: the package manifest writes `xml:base` on a `cp:resource` (reading
@@ -253,7 +253,7 @@ export const limitOf = (breaches: readonly Breach[], genome: Genome): Option.Opt
       resources.some(
         (resource) =>
           attributeValue(resource, "type") === "resourcemetadata/xml" &&
-          resolvedPath(manifestPath, attributeValue(resource, "href") ?? "") === path,
+          resolvedPath(manifestPath, normalHref(attributeValue(resource, "href") ?? "")) === path,
       )
     );
   };
@@ -455,12 +455,25 @@ export const recordsClassOf = (
 };
 
 /**
- * Whether a disagreement is of a class one of `signatures` records, under any stated limit or
- * under none: its plain signature is recorded. A fixed entry's cause shows again under a limit too.
+ * Drop a signature's stated limit.
  *
- * @param signatures - The plain classes recorded.
+ * @param signature - The signature.
+ * @returns The signature of its class without the limit it falls under.
+ */
+const withoutLimit = (signature: Signature): Signature => {
+  const { limit: _limit, ...plain } = signature;
+
+  return plain;
+};
+
+/**
+ * Whether a disagreement is of a class one of `signatures` records, under any stated limit or
+ * under none: the plain signatures of both are one class. A fixed entry's cause shows again under a
+ * limit too, and an entry keyed by a limit records its plain class all the same.
+ *
+ * @param signatures - The classes recorded, each with or without a stated limit.
  * @param disagreement - The disagreement.
- * @returns Whether its plain class is among them.
+ * @returns Whether its plain class is among their plain classes.
  */
 export const recordsPlainClassOf = (
   signatures: readonly Signature[],
@@ -468,7 +481,7 @@ export const recordsPlainClassOf = (
 ): boolean => {
   const signature = plainSignatureOf(disagreement);
 
-  return signatures.some((recorded) => sameSignature(recorded, signature));
+  return signatures.some((recorded) => sameSignature(withoutLimit(recorded), signature));
 };
 
 /**

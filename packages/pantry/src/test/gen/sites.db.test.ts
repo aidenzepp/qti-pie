@@ -62,10 +62,19 @@ const importJudged = (box: SiteBox) =>
       assert.fail(`${literal} failed with ${refused.message}`);
     }
 
-    assert.isTrue(
-      refused.rules.some((rule) => rules.has(rule)),
-      `${literal} was refused under ${refused.rules.join(", ")}, and its cases' rules are ${[...rules].join(", ")}: ${refused.message}`,
-    );
+    if (rules.size === 1) {
+      assert.deepStrictEqual(
+        [...new Set(refused.rules)],
+        [...rules],
+        `${literal} was refused under ${refused.rules.join(", ")}, and its cases' one rule is ${[...rules].join(", ")}, alone: ${refused.message}`,
+      );
+    } else {
+      assert.isTrue(
+        refused.rules.some((rule) => rules.has(rule)),
+        `${literal} was refused under ${refused.rules.join(", ")}, and its cases' rules are ${[...rules].join(", ")}: ${refused.message}`,
+      );
+    }
+
     assert.isTrue(
       verdict.kind === "refused" && refused.rules.some((rule) => verdict.rules.has(rule)),
       `${literal} was refused under ${refused.rules.join(", ")}, none of which the law oracle names`,

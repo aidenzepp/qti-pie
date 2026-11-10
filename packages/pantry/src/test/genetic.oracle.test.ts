@@ -17,8 +17,9 @@
  *   keyed by the stated limit it falls under (`#pantry/test/gen/genetic/judge.ts` `limitOf`), so
  *   the fixed entry keeps guarding the cause it closed;
  * - Each known and fixed entry's signature is a class some package can show: a law the host judges
- *   (grizzle's `sameLaw` holds it one of them, its selections included), or a uuid field it holds
- *   to the mint, since a law no statement states, or a field a later commit removed, can never
+ *   (grizzle's `sameLaw` holds it one of them, its selections included, and an oracle-only law is
+ *   one some judged law bears the name of), or a uuid field it holds to the mint, since a law no
+ *   statement states, a law the host never judges, or a field a later commit removed, can never
  *   show, and a fixed entry keyed by it guards nothing;
  * - Each planted value-domain case (`#pantry/test/gen/genetic/planted.ts`) lies inside its domain's
  *   lexical space and outside its facets, which the oracle refuses and today's database does not,
@@ -63,7 +64,7 @@ import {
   shownDisagreement,
   shownSignature,
 } from "#pantry/test/gen/genetic/judge.ts";
-import type { Feature, Signature } from "#pantry/test/gen/genetic/judge.ts";
+import type { Disagreement, Feature, Signature } from "#pantry/test/gen/genetic/judge.ts";
 import { fixed, known, knownEntries } from "#pantry/test/gen/genetic/known.ts";
 import { plantedCases } from "#pantry/test/gen/genetic/planted.ts";
 import {
@@ -74,6 +75,7 @@ import {
   shownResidual,
 } from "#pantry/test/gen/genetic/search.ts";
 import type { Isolating } from "#pantry/test/gen/genetic/search.ts";
+import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { settings } from "#pantry/test/settings.ts";
 import { laws } from "#pantry/test/installed-laws.ts";
@@ -115,6 +117,104 @@ const knownList = [
   ...known.map((entry) => ({ entry, shows: true })),
   ...fixed.map((entry) => ({ entry, shows: false })),
 ];
+
+/**
+ * Whether a disagreement shows an entry's class as the replay below reads it: a known entry's as it
+ * is keyed, stated limit included, and a fixed entry's under its plain signature, so under any
+ * stated limit or none, whether or not the entry is keyed by one.
+ *
+ * @param signature - The entry's signature.
+ * @param shows - Whether the entry is a known one, which must show its class, and not a fixed one.
+ * @param disagreement - The disagreement.
+ * @returns Whether the disagreement is of the entry's class.
+ */
+const showsClass = (signature: Signature, shows: boolean, disagreement: Disagreement): boolean =>
+  shows
+    ? recordsClassOf([signature], disagreement)
+    : recordsPlainClassOf([signature], disagreement);
+
+/**
+ * The disagreement of a signature's class: one whose signature {@link signatureOf} reads as it,
+ * with the stated limit it carries, and whose other fields are empty.
+ *
+ * @param signature - The signature.
+ * @returns A disagreement of its class.
+ */
+const disagreementOf = (signature: Signature): Disagreement => {
+  const limited = signature.limit === undefined ? {} : { limit: signature.limit };
+  switch (signature.kind) {
+    case "import-died":
+    case "oracle-died": {
+      return { detail: signature.detail, kind: signature.kind, ...limited };
+    }
+    case "dangling-uuid": {
+      return {
+        field: signature.field,
+        kind: signature.kind,
+        relation: signature.relation,
+        value: "",
+        ...limited,
+      };
+    }
+    case "codec-rule": {
+      return {
+        importRule: signature.importRule,
+        kind: signature.kind,
+        oracleRule: signature.oracleRule,
+        ...limited,
+      };
+    }
+    case "codec-import-only": {
+      return {
+        importRule: signature.importRule,
+        kind: signature.kind,
+        oracleRules: "",
+        ...limited,
+      };
+    }
+    case "codec-oracle-only": {
+      return { kind: signature.kind, oracleRule: signature.oracleRule, ...limited };
+    }
+    case "import-only-law": {
+      return {
+        broken: signature.law,
+        kind: signature.kind,
+        law: signature.law.kind,
+        rule: "",
+        witness: "",
+        ...limited,
+      };
+    }
+    case "oracle-only-law": {
+      return { keys: "", kind: signature.kind, law: signature.law, rule: "", ...limited };
+    }
+    case "noise-moved": {
+      return {
+        after: "",
+        before: "",
+        kind: signature.kind,
+        noise: signature.noise,
+        salt: 0,
+        side: signature.side,
+        ...limited,
+      };
+    }
+    case "lone-refusal": {
+      return {
+        importRule: signature.importRule,
+        kind: signature.kind,
+        law: signature.law,
+        laws: signature.law,
+        rule: "",
+        witness: signature.witness,
+        ...limited,
+      };
+    }
+    default: {
+      return signature satisfies never;
+    }
+  }
+};
 
 /**
  * A manifest whose one resource holds `child`, which the import's rows bound only where the
@@ -162,10 +262,21 @@ const filledCases = [
 const keyTextBound: Signature = { kind: "oracle-only-law", law: "Key text bound" };
 
 /**
+ * The names of the laws the host judges ({@link judgedLaws}), each as `Qti` names its law.
+ */
+const judgedNames: ReadonlySet<string> = new Set(
+  judgedLaws.flatMap((law) => Option.toArray(schemaLawNameOf(law))),
+);
+
+/**
  * Whether some package can show a signature's class: for a law the rows break, a law the host
  * judges, which grizzle's `sameLaw` holds one of {@link judgedLaws}, its selections included; for
- * a dangling uuid, a uuid field the host holds to the mint. Any other class names a law by its
- * name, which the type keeps to the law table, or a rule or a noise, which nothing removes.
+ * a law the oracle alone raises, a law some judged law bears the name of, since the disagreement
+ * needs the host to hold every statement of the law, and the host never holds a law it does not
+ * judge (a law stated only over queries, or a check over one, is never judged); for a dangling
+ * uuid, a uuid field the host holds to the mint. A class that names a law by its name carries a
+ * name the type keeps to the law table; a rule, or a noise and the side it moved, is no law of the
+ * host's to judge, so nothing bounds it, and a package a noise moves shows it.
  *
  * @param signature - The signature.
  * @returns Whether it can show.
@@ -176,6 +287,9 @@ const canShow = (signature: Signature): boolean => {
       return judgedLaws.some(
         (law) => law.kind === signature.law.kind && sameLaw(law, signature.law),
       );
+    }
+    case "oracle-only-law": {
+      return judgedNames.has(signature.law);
     }
     case "dangling-uuid": {
       return Option.exists(Option.fromUndefinedOr(uuidFields.get(signature.relation)), (fields) =>
@@ -188,8 +302,7 @@ const canShow = (signature: Signature): boolean => {
     case "import-died":
     case "lone-refusal":
     case "noise-moved":
-    case "oracle-died":
-    case "oracle-only-law": {
+    case "oracle-died": {
       return true;
     }
     default: {
@@ -203,7 +316,9 @@ const canShow = (signature: Signature): boolean => {
  * kept, each naming a relation or a field `Qti` no longer has, and the containment of a
  * declaration's cardinality in its attribute with its selections dropped, which the text keys this
  * file once held wrote for two laws `Qti` states, its `base-type` and its `cardinality`
- * attribute's, and no law of `Qti` is: the guard below must refuse each.
+ * attribute's, and no law of `Qti` is; and two laws the oracle raises that the host never judges,
+ * `LomObjectTitle`, stated only over queries, and `Set type`, a check over one, which a fixed entry
+ * once guarded: the guard below must refuse each.
  */
 const unshowable: readonly Signature[] = [
   { field: "declaration", kind: "dangling-uuid", relation: "VariableRef" },
@@ -258,6 +373,8 @@ const unshowable: readonly Signature[] = [
       },
     },
   },
+  { kind: "oracle-only-law", law: "LomObjectTitle" },
+  { kind: "oracle-only-law", law: "Set type" },
 ];
 
 /**
@@ -369,9 +486,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     // plain signature or under any stated limit.
                     assert.strictEqual(
                       disagreements.some((disagreement) =>
-                        shows
-                          ? recordsClassOf([entry.signature], disagreement)
-                          : recordsPlainClassOf([entry.signature], disagreement),
+                        showsClass(entry.signature, shows, disagreement),
                       ),
                       shows,
                       shows
@@ -432,6 +547,58 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           }).pipe(Effect.scoped),
         ),
       testTimeoutMs,
+    );
+
+    it.effect(
+      "replays a fixed entry by its plain class, whatever stated limit its key carries",
+      () =>
+        // Oracle: the replay's two readings of a signature, `recordsClassOf` as keyed and
+        // `recordsPlainClassOf` by plain class. Bound: a fixed signature keyed by a limit, against
+        // its class under that limit, under another and under none, and against another law.
+        Effect.sync(() => {
+          const plain: Signature = { kind: "oracle-only-law", law: "Key text bound" };
+          const keyed: Signature = { ...plain, limit: "an inclusion cycle" };
+
+          assert.isTrue(showsClass(keyed, false, disagreementOf(keyed)), "under its own limit");
+          assert.isTrue(
+            showsClass(keyed, false, disagreementOf({ ...plain, limit: "a forbidden ancestor" })),
+            "under another limit",
+          );
+          assert.isTrue(showsClass(keyed, false, disagreementOf(plain)), "under no limit");
+          assert.isFalse(
+            showsClass(
+              keyed,
+              false,
+              disagreementOf({
+                kind: "oracle-only-law",
+                law: "Section identifier target",
+                limit: "an inclusion cycle",
+              }),
+            ),
+            "another law under its limit",
+          );
+          assert.isFalse(
+            showsClass(keyed, true, disagreementOf(plain)),
+            "a known entry is keyed by its limit",
+          );
+        }),
+    );
+
+    it.effect("replays each known and fixed entry's own class as a class it records", () =>
+      // Oracle: the replay's reading of a signature against the disagreement of that signature
+      // (`disagreementOf`), which an entry must recognize, or its replay can never fail. Bound:
+      // every known and fixed entry.
+      Effect.sync(() => {
+        assert.deepStrictEqual(
+          knownList.flatMap(({ entry, shows }) =>
+            showsClass(entry.signature, shows, disagreementOf(entry.signature))
+              ? []
+              : [shownSignature(entry.signature)],
+          ),
+          [],
+          "the replay does not recognize these entries' own class, so a known entry is always stale and a fixed one guards nothing",
+        );
+      }),
     );
 
     it.effect("keys no signature in both the known and the fixed table", () =>

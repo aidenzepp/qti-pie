@@ -75,11 +75,19 @@ describe.skipIf(!hasLease)(
               if (day) {
                 assert.strictEqual(outcome._tag, "Success", lexical);
               } else {
-                assert.isTrue(
-                  outcome._tag === "Failure" &&
-                    outcome.failure instanceof ImportRefused &&
-                    outcome.failure.rules.includes("attribute-lexical"),
-                  `${lexical}: ${outcome._tag === "Failure" ? outcome.failure.message : "accepted"}`,
+                if (outcome._tag !== "Failure") {
+                  assert.fail(`${lexical}: accepted`);
+                }
+
+                const refused = outcome.failure;
+                if (!(refused instanceof ImportRefused)) {
+                  assert.fail(`${lexical}: failed with ${refused.message}`);
+                }
+
+                assert.deepStrictEqual(
+                  [...new Set(refused.rules)],
+                  ["attribute-lexical"],
+                  `${lexical}: ${refused.message}`,
                 );
               }
             }),
