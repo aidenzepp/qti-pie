@@ -18,6 +18,7 @@ import type { Value } from "#plate/model/values.ts";
 import type { RenderMode } from "#plate/payload.ts";
 import { redact, render } from "#plate/render.ts";
 import { upgrade } from "#plate/runtime.dom.ts";
+import type { RuntimeKind, Upgraded } from "#plate/runtime.dom.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -203,6 +204,27 @@ const upgraded = (page: Page) => {
 };
 
 /**
+ * The interaction roots an upgrade attached a controller to, in document order. The runtime also
+ * upgrades the item Root through its content controller (`#plate/content/root.dom.ts`) and reports
+ * it after the interactions, so a case about the Associate reads the interaction entries alone.
+ *
+ * @param result The upgrade.
+ * @returns The roots of its interaction entries.
+ */
+const interactionRoots = (result: Upgraded): readonly HTMLElement[] =>
+  result.controllers.flatMap((entry) => ("kind" in entry ? [entry.root] : []));
+
+/**
+ * The kinds of the interactions an upgrade attached a controller to, in document order, the item
+ * Root's entry left out as {@link interactionRoots} leaves it out.
+ *
+ * @param result The upgrade.
+ * @returns The kind of each interaction entry.
+ */
+const interactionKinds = (result: Upgraded): readonly RuntimeKind[] =>
+  result.controllers.flatMap((entry) => ("kind" in entry ? [entry.kind] : []));
+
+/**
  * Render the fixture, or an edit of it, mount it and upgrade it.
  *
  * @param showing What the case passes `render` beyond the item.
@@ -332,7 +354,7 @@ const staysInert = async (showing: Showing): Promise<void> => {
   const page = await started(showing);
   const before = page.root.outerHTML;
 
-  assert.strictEqual(page.upgrade.controllers.length, 1);
+  assert.strictEqual(interactionRoots(page.upgrade).length, 1);
   assert.strictEqual(pairTexts(page).length, 1);
 
   clickChoices(page, ["A", "C", "D"]);
@@ -354,10 +376,7 @@ describe(server.browser, () => {
 
       assert.isTrue(controller.implemented);
       assert.strictEqual(controller.kind, "associate");
-      assert.deepStrictEqual(
-        page.upgrade.controllers.map(({ kind }) => kind),
-        ["associate"],
-      );
+      assert.deepStrictEqual(interactionKinds(page.upgrade), ["associate"]);
       assert.isUndefined(page.root.dataset["runtime"]);
 
       page.upgrade.teardown();
@@ -596,10 +615,7 @@ describe(server.browser, () => {
       await frames();
       document.removeEventListener("focusin", record);
 
-      assert.deepStrictEqual(
-        result.controllers.map(({ root }) => root),
-        [page.root],
-      );
+      assert.deepStrictEqual(interactionRoots(result), [page.root]);
       assert.strictEqual(document.activeElement, active);
       assert.deepStrictEqual(focused, []);
       assert.strictEqual(page.live.textContent, "");
@@ -718,7 +734,7 @@ describe(server.browser, () => {
       const active = document.activeElement;
       const result = upgraded(bare);
 
-      assert.strictEqual(result.controllers.length, 2);
+      assert.strictEqual(interactionRoots(result).length, 2);
       assert.strictEqual(await heard(bare), "");
       assert.strictEqual(document.activeElement, active);
 
