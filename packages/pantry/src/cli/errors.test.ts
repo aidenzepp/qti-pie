@@ -274,32 +274,6 @@ describe("describeFailure, a refused import", () => {
     }
   });
 
-  it("a level above Qti refusing the package exits 1 as import-refused, never as a defect of qti", () => {
-    // Oracle: the refusal's tag, `RefusedAbove`, which takes `ImportRefused`'s kind and exit code
-    // (decision 483) and is no named defect, so its help is the import-refused kind's. Bound: one
-    // refusal of one level's check; residual: its message, which `above.test.ts` covers.
-    const refused = Option.getOrThrow(
-      aboveRefusalOf(
-        [
-          {
-            kind: "above",
-            law: { kind: "check", name: "CdnOrigin", relation: "CdnUrl" },
-            level: "Cdn",
-          },
-        ],
-        { kind: "unreported" },
-      ),
-    );
-
-    assert.deepStrictEqual(describeFailure(refused), {
-      exitCode: 1,
-      help: kindHelp["import-refused"],
-      kind: "import-refused",
-    });
-    assert.strictEqual(kindExitCode["import-refused"], 1);
-    assert.isTrue(Option.isNone(namedFailureOf(refused)));
-  });
-
   it.effect(
     "a refused verdict of a level above Qti fails as RefusedByLevel, with ImportRefused's kind and exit code",
     () =>
