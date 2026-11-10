@@ -23,8 +23,8 @@
  *
  * - "A default hotspot is the last hotspot choice of its interaction, and a graphic gap match
  *   interaction has none." The structure check refuses a default hotspot that is not last; the
- *   render draws it as the last Choice, a rectangle over the whole image laid under every other
- *   Choice, so an area listed before it hides it where they overlap.
+ *   render draws it as the last Choice, a rectangle over the whole image that takes no pointer
+ *   event ({@link wholeImage}), so an area listed before it hides it where they overlap.
  * - "An area's `coords` that do not fit its shape are read as the HTML Standard's image-map
  *   processing reads an `area`'s." An area with fewer coordinates than its shape needs holds no
  *   point ({@link areaHolds}), so its Choice renders its Control and Label with no Outline;
@@ -269,7 +269,7 @@ const parts = {
     defaults: {},
     element: "label",
     listOwner: false,
-    merged: ["for", "data-shape"],
+    merged: ["for"],
     tagClass: "any",
   },
   choices: {
@@ -411,12 +411,33 @@ const numbersOf = (
 };
 
 /**
- * The rectangle over the whole image, the `default` hotspot's area.
+ * The presentation attribute every drawn shape carries: it takes pointer events where its Choice,
+ * its Outline and every other box over the image take none, so a click on the area, and only
+ * there, reaches the label. A presentation attribute is not a `style` attribute, so the
+ * playground's policy admits it.
+ */
+const hit = { "pointer-events": "visiblePainted" } as const;
+
+/**
+ * The rectangle over the whole image, the `default` hotspot's area. It is drawn last and so lies
+ * over every other area, and the stylesheet, which keys on part markers alone, has no rule to lay
+ * it under them; so it takes no pointer event and no fill, by its own presentation attributes: the
+ * areas before it stay clickable where they overlap it, as "the one listed first hides the later
+ * ones", and the default hotspot is reached by its Control, in the tab order, until issue m3d-08
+ * hit-tests the pointer. Its stroke still shows its state.
  *
  * @returns The SVG element.
  */
 const wholeImage = (): Element =>
-  h("rect", { "data-shape": "default", height: "100%", width: "100%", x: "0", y: "0" });
+  h("rect", {
+    "data-shape": "default",
+    fill: "none",
+    height: "100%",
+    "pointer-events": "none",
+    width: "100%",
+    x: "0",
+    y: "0",
+  });
 
 /**
  * Report whether an area of a geometry holds any point at all, by testing the point its
@@ -449,6 +470,7 @@ const drawn = (geometry: Exclude<AreaShape, "default">, coords: readonly number[
       const [left = 0, top = 0, right = 0, bottom = 0] = coords;
 
       return h("rect", {
+        ...hit,
         "data-shape": "rect",
         height: String(Math.abs(bottom - top)),
         width: String(Math.abs(right - left)),
@@ -459,12 +481,19 @@ const drawn = (geometry: Exclude<AreaShape, "default">, coords: readonly number[
     case "circle": {
       const [cx = 0, cy = 0, r = 0] = coords;
 
-      return h("circle", { cx: String(cx), cy: String(cy), "data-shape": "circle", r: String(r) });
+      return h("circle", {
+        ...hit,
+        cx: String(cx),
+        cy: String(cy),
+        "data-shape": "circle",
+        r: String(r),
+      });
     }
     case "ellipse": {
       const [cx = 0, cy = 0, rx = 0, ry = 0] = coords;
 
       return h("ellipse", {
+        ...hit,
         cx: String(cx),
         cy: String(cy),
         "data-shape": "ellipse",
@@ -478,7 +507,7 @@ const drawn = (geometry: Exclude<AreaShape, "default">, coords: readonly number[
         points.push(`${String(coords[index] ?? 0)},${String(coords[index + 1] ?? 0)}`);
       }
 
-      return h("polygon", { "data-shape": "poly", points: points.join(" ") });
+      return h("polygon", { ...hit, "data-shape": "poly", points: points.join(" ") });
     }
     default: {
       return geometry satisfies never;
@@ -543,8 +572,7 @@ interface Connected {
  *   the author's `aria-label` and `aria-labelledby`.
  * - Prompt: the marker and its id.
  * - Image, Choices: the marker.
- * - Choice: the marker, `for` → its Control, and `data-shape` → the hotspot's shape, so the
- *   stylesheet lays the default hotspot under the others.
+ * - Choice: the marker and `for` → its Control.
  * - Control: a radio when one choice can be posted (`max-choices` 1, or a single response), else a
  *   checkbox; its id, the payload's `formName`, its value; `checked` from the restore; `disabled`
  *   when finished or not answering; `aria-labelledby` → its Label; `autofocus` on the first when
@@ -576,7 +604,7 @@ const connect = (interaction: HotspotPayload, payload: Payload): Connected => {
       const labelId = scopedId(instance, interaction.response, "label", index);
 
       return {
-        choice: { "data-shape": choice.shape, "data-slot": rows.choice.slot, for: controlId },
+        choice: { "data-slot": rows.choice.slot, for: controlId },
         control: {
           "aria-labelledby": labelId,
           ...when(interaction.autofocus && index === 0, { autofocus: true }),

@@ -1100,53 +1100,40 @@
   line-height: 0;
 }
 
-:where([data-slot="hotspot-interaction-image"] > img),
-:where([data-slot="hotspot-interaction-image"] > picture > img),
-:where([data-slot="hotspot-interaction-image"] > object) {
-  display: block;
-  max-width: 100%;
-  height: auto;
-}
-
 /*
- * Each Choice, a label laid over the whole image, takes no pointer event itself: only its drawn
- * shape does, so a click on the area activates the label and toggles its Control, and a click
- * outside every area reaches nothing. The default hotspot, last in document order, lies under the
- * others, so an area listed before it hides it where they overlap.
+ * Each Choice, a label laid over the whole image, takes no pointer event itself, and neither does
+ * its Outline: only the drawn shape does, by its own presentation attribute, so a click on the
+ * area activates the label and toggles its Control, and a click outside every area reaches
+ * nothing. The default hotspot's shape, which would otherwise lie over every other, takes none
+ * either (its own presentation attribute); the sheet keys on part markers alone, so no rule can
+ * lay it under the others.
  */
 :where([data-slot="hotspot-interaction-choice"]) {
   position: absolute;
   inset: 0;
-  z-index: 1;
   pointer-events: none;
   line-height: normal;
 }
 
-:where([data-slot="hotspot-interaction-choice"][data-shape="default"]) {
-  z-index: 0;
-}
-
+/*
+ * The Outline: the svg fills its Choice, and the shape inside it paints by the properties it
+ * inherits from here, since the sheet keys on part markers alone.
+ */
 :where([data-slot="hotspot-interaction-outline"]) {
   display: block;
   width: 100%;
   height: 100%;
   overflow: visible;
   pointer-events: none;
-}
-
-:where([data-slot="hotspot-interaction-outline"] > *) {
-  pointer-events: auto;
-  cursor: pointer;
   fill: color-mix(in oklab, var(--primary, oklch(0.205 0 0)) 12%, transparent);
   stroke: var(--primary, oklch(0.205 0 0));
   stroke-width: 2px;
-  vector-effect: non-scaling-stroke;
 }
 
 /*
  * The Hotspot Control, hidden from sight only, as the Choice Control is: it stays focusable,
  * named and in the form, so never display: none or visibility: hidden. Its states show on the
- * shape beside it.
+ * shape beside it, through its Choice.
  */
 :where([data-slot="hotspot-interaction-control"]) {
   position: absolute;
@@ -1169,28 +1156,35 @@
 
 /* A selected hotspot's shape. */
 :where(
-  [data-slot="hotspot-interaction-control"]:checked ~ [data-slot="hotspot-interaction-outline"] > *
+  [data-slot="hotspot-interaction-choice"]:has([data-slot="hotspot-interaction-control"]:checked)
+    [data-slot="hotspot-interaction-outline"]
 ) {
   fill: color-mix(in oklab, var(--primary, oklch(0.205 0 0)) 45%, transparent);
   stroke-width: 3px;
 }
 
-/* Focus on a hotspot, by its Control: shadcn's ring, drawn as the shape's stroke. */
+/*
+ * Focus on a hotspot, by its Control: shadcn's 3px ring at half strength around the image, as
+ * the Choice row takes it, and the ring's colour as the focused shape's stroke.
+ */
 :where(
-  [data-slot="hotspot-interaction-control"]:focus-visible
-    ~ [data-slot="hotspot-interaction-outline"]
-    > *
+  [data-slot="hotspot-interaction-choice"]:has(
+    [data-slot="hotspot-interaction-control"]:focus-visible
+  )
 ) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
   stroke: var(--ring, oklch(0.708 0 0));
   stroke-width: 4px;
 }
 
-/* A hotspot whose Control is disabled takes no pointer and dims. */
+/* A hotspot whose Control is disabled dims; a click on its shape toggles nothing. */
 :where(
-  [data-slot="hotspot-interaction-control"]:disabled ~ [data-slot="hotspot-interaction-outline"] > *
+  [data-slot="hotspot-interaction-choice"]:has([data-slot="hotspot-interaction-control"]:disabled)
+    [data-slot="hotspot-interaction-outline"]
 ) {
-  pointer-events: none;
-  cursor: default;
   opacity: 0.6;
 }
 
