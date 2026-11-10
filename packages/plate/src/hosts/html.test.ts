@@ -152,6 +152,18 @@ const textEntryName = (elements: readonly Element[]): string => {
 };
 
 /**
+ * Read which of a page's Choice Controls are checked.
+ *
+ * @param elements The page's elements.
+ * @returns Each Choice Control's `value` with whether it carries `checked`, in document order.
+ */
+const choiceStates = (elements: readonly Element[]): readonly (readonly [unknown, boolean])[] =>
+  slotted(elements, rowFor("choice-interaction", "control").slot).map((control) => [
+    control.attrs["value"],
+    control.attrs["checked"] !== undefined,
+  ]);
+
+/**
  * Construct the post a browser sends for the page's form.
  *
  * @param entries The form's entries, in order.
@@ -163,6 +175,22 @@ const formPost = (entries: readonly (readonly [string, string])[]): Request =>
     headers: { "content-type": "application/x-www-form-urlencoded" },
     method: "POST",
   });
+
+/**
+ * Construct the post a browser sends for a page whose form is `multipart/form-data`. The request
+ * writes its own `content-type`, with the boundary.
+ *
+ * @param entries The form's entries, in order.
+ * @returns A POST to the page, its body multipart.
+ */
+const multipartPost = (entries: readonly (readonly [string, string])[]): Request => {
+  const body = new FormData();
+  for (const [name, value] of entries) {
+    body.append(name, value);
+  }
+
+  return new Request(`${origin}/`, { body, method: "POST" });
+};
 
 describe("the plain-HTML host", () => {
   it.effect(
@@ -252,6 +280,139 @@ describe("the plain-HTML host", () => {
           elements.filter((element) => element.tag === "form"),
           1,
         );
+      }),
+    { tags: ["corpus"] },
+  );
+
+  it.effect(
+    "[W0-HOSTS] a multipart/form-data POST of the correct answer scores 1, with no script",
+    () =>
+      Effect.gen(function* postCorrectMultipart() {
+        const { locale } = yield* configure({});
+        const handler = yield* hostOf();
+        const page = yield* pageOf(yield* Effect.promise(() => handler(new Request(`${origin}/`))));
+        const response = yield* Effect.promise(() =>
+          handler(multipartPost([[controlName(page.elements, "true"), "true"]])),
+        );
+        const { elements, html } = yield* pageOf(response);
+        const [status, ...otherStatuses] = slotted(elements, rowFor("item", "status").slot);
+
+        assert.strictEqual(response.status, 200);
+        assert.notInclude(html.toLowerCase(), "<script");
+        assert.lengthOf(otherStatuses, 0);
+        assert.include(
+          textOf(status ?? assert.fail("the page holds no Status part")),
+          message(locale, "score", { score: "1" }),
+        );
+      }),
+    { tags: ["corpus"] },
+  );
+
+  it.effect(
+    "[W0-HOSTS] a multipart POST of two answers to the single response is refused with the Status messages and the form again",
+    () =>
+      Effect.gen(function* postTwoMultipart() {
+        const { locale } = yield* configure({});
+        const handler = yield* hostOf();
+        const page = yield* pageOf(yield* Effect.promise(() => handler(new Request(`${origin}/`))));
+        const name = controlName(page.elements, "true");
+        const response = yield* Effect.promise(() =>
+          handler(
+            multipartPost([
+              [name, "true"],
+              [name, "false"],
+            ]),
+          ),
+        );
+        const { elements } = yield* pageOf(response);
+        const [status] = slotted(elements, rowFor("item", "status").slot);
+
+        assert.strictEqual(response.status, 200);
+        assert.include(
+          textOf(status ?? assert.fail("the page holds no Status part")),
+          message(locale, "notAccepted"),
+        );
+        assert.lengthOf(slotted(elements, rowFor("item", "message").slot), 1);
+        assert.lengthOf(
+          elements.filter((element) => element.tag === "form"),
+          1,
+        );
+      }),
+    { tags: ["corpus"] },
+  );
+
+  it.effect("[W0-HOSTS] a multipart body that is not multipart answers 400", () =>
+    Effect.gen(function* unreadableMultipart() {
+      const configuration = yield* configure({});
+      const handler = itemHost(acceptForTest(answerItem), configuration);
+      const response = yield* Effect.promise(() =>
+        handler(
+          new Request(`${origin}/`, {
+            body: "not a form",
+            headers: { "content-type": "multipart/form-data; boundary=x" },
+            method: "POST",
+          }),
+        ),
+      );
+
+      assert.strictEqual(response.status, 400);
+      assert.lengthOf(
+        elementsOf(parseHtml(yield* Effect.promise(() => response.text()))).filter(
+          (element) => element.tag === "form",
+        ),
+        0,
+      );
+    }),
+  );
+
+  it.effect("[W0-HOSTS] a POST of another content type still answers 415", () =>
+    Effect.gen(function* otherTypes() {
+      const configuration = yield* configure({});
+      const handler = itemHost(acceptForTest(answerItem), configuration);
+      const statuses = yield* Effect.promise(() =>
+        Promise.all(
+          ["text/plain", "application/json", "multipart/mixed; boundary=x"].map((type) =>
+            handler(
+              new Request(`${origin}/`, {
+                body: "a",
+                headers: { "content-type": type },
+                method: "POST",
+              }),
+            ).then(({ status }) => status),
+          ),
+        ),
+      );
+
+      assert.deepStrictEqual(statuses, [415, 415, 415]);
+    }),
+  );
+
+  it.effect(
+    "[W0-HOSTS] the host's posted strings come through postedStrings: a refused form-urlencoded post shows the posted choices checked",
+    () =>
+      Effect.gen(function* refusedShowsPosted() {
+        const handler = yield* hostOf();
+        const page = yield* pageOf(yield* Effect.promise(() => handler(new Request(`${origin}/`))));
+        const name = controlName(page.elements, "true");
+        const refused = yield* pageOf(
+          yield* Effect.promise(() =>
+            handler(
+              formPost([
+                [name, "true"],
+                [name, "false"],
+              ]),
+            ),
+          ),
+        );
+
+        assert.deepStrictEqual(choiceStates(page.elements), [
+          ["true", false],
+          ["false", false],
+        ]);
+        assert.deepStrictEqual(choiceStates(refused.elements), [
+          ["true", true],
+          ["false", true],
+        ]);
       }),
     { tags: ["corpus"] },
   );
