@@ -41,8 +41,8 @@ import type {
   ValueSet,
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
-import { normalMinimumDefaults } from "#pantry/qti/declarations.ts";
-import { valueBaseOf } from "#pantry/qti/expression-types.ts";
+import { normalMinimumDefaults } from "#pantry/vocab/terms/declarations.ts";
+import { valueBaseOf } from "#pantry/vocab/terms/expression-types.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
@@ -226,8 +226,8 @@ const namedPiecesOf = (lexical: string): Option.Option<Pieces> =>
  * @returns The handle it spells, none where it is unwritten or spells none, which its value domain
  *   refuses alone.
  */
-export const spelledBaseTypeOf = (lexical: string | undefined): Option.Option<BaseTypeHandle> =>
-  lexical !== undefined && spelledBaseTypes.has(lexical) ? Option.some(lexical) : Option.none();
+export const spelledBaseTypeOf = (lexical: Option.Option<string>): Option.Option<BaseTypeHandle> =>
+  lexical.pipe(Option.filter((spelled) => spelledBaseTypes.has(spelled)));
 
 /**
  * Read the code a `cardinality` spells (C17): its lexical form, where that is one of
@@ -238,16 +238,16 @@ export const spelledBaseTypeOf = (lexical: string | undefined): Option.Option<Ba
  * @returns The handle it spells, none where it is unwritten or spells none, which AL3 or its value
  *   domain refuses alone.
  */
-const spelledCardinalityOf = (lexical: string | undefined): Option.Option<CardinalityHandle> =>
-  lexical !== undefined && spelledCardinalities.has(lexical) ? Option.some(lexical) : Option.none();
+const spelledCardinalityOf = (lexical: Option.Option<string>): Option.Option<CardinalityHandle> =>
+  lexical.pipe(Option.filter((spelled) => spelledCardinalities.has(spelled)));
 
 /**
  * The lexical forms of the three attributes a declaration's rows read, each none where unwritten.
  */
 export interface DeclarationLexicals {
-  readonly baseType: string | undefined;
-  readonly cardinality: string | undefined;
-  readonly identifier: string | undefined;
+  readonly baseType: Option.Option<string>;
+  readonly cardinality: Option.Option<string>;
+  readonly identifier: Option.Option<string>;
 }
 
 /**
@@ -295,8 +295,10 @@ export const typedDeclarationOf = ({
 }: DeclarationLexicals): TypedDeclaration => ({
   baseType: spelledBaseTypeOf(baseType),
   cardinality: spelledCardinalityOf(cardinality),
-  name: Option.flatMap(Option.fromUndefinedOr(identifier), (lexical) =>
-    Option.map(namedPiecesOf(lexical), (pieces) => ({ lexical, pieces })),
+  name: identifier.pipe(
+    Option.flatMap((lexical) =>
+      Option.map(namedPiecesOf(lexical), (pieces) => ({ lexical, pieces })),
+    ),
   ),
 });
 
@@ -323,7 +325,7 @@ export const typedCountOf = (typed: Option.Option<string>): bigint =>
  */
 export const declarationOf = (
   kind: string,
-  attribute: (name: string) => string | undefined,
+  attribute: (name: string) => Option.Option<string>,
 ): Option.Option<TypedDeclaration & { readonly declarationKind: DeclarationKindHandle }> =>
   Option.map(Option.fromUndefinedOr(declarationKinds.get(kind)), (declarationKind) => ({
     ...typedDeclarationOf({
@@ -425,8 +427,8 @@ interface Reading {
  * @param name - The attribute's name.
  * @returns Its lexical form, none where the node does not write it.
  */
-const valueOf = (reading: Reading, node: NodeRow<Composed>, name: string): string | undefined =>
-  reading.attributes.get(node.id)?.get(name);
+const valueOf = (reading: Reading, node: NodeRow<Composed>, name: string): Option.Option<string> =>
+  Option.fromUndefinedOr(reading.attributes.get(node.id)?.get(name));
 
 /**
  * Read a node's parent's kind, as `Declaration.parentKind` copies it from `Node`.
@@ -478,7 +480,7 @@ const minimumOf = (
   reading: Reading,
   node: NodeRow<Composed>,
 ): Option.Option<{ readonly lexical: string; readonly written: boolean }> =>
-  Option.match(Option.fromUndefinedOr(valueOf(reading, node, "normal-minimum")), {
+  Option.match(valueOf(reading, node, "normal-minimum"), {
     onNone: () =>
       Option.map(Option.fromUndefinedOr(normalMinimumDefaults.get(node.version)), (lexical) => ({
         lexical,
@@ -497,10 +499,9 @@ const minimumOf = (
  * @param node - The declaration's node.
  */
 const addScale = (reading: Reading, node: NodeRow<Composed>): void => {
-  const written = (name: string) => Option.fromUndefinedOr(valueOf(reading, node, name));
-  const mastery = written("mastery-value");
+  const mastery = valueOf(reading, node, "mastery-value");
   const minimum = minimumOf(reading, node);
-  const maximum = written("normal-maximum");
+  const maximum = valueOf(reading, node, "normal-maximum");
   for (const lexical of Option.toArray(mastery)) {
     reading.rows.MasteryValue.set(node.id, { lexical, node: node.id });
   }
@@ -705,17 +706,19 @@ const addValue = (
     }
   }
 
-  if (fieldIdentifier !== undefined && fieldBaseType !== undefined) {
+  for (const [identifierLexical, baseTypeLexical] of Option.toArray(
+    Option.all([fieldIdentifier, fieldBaseType]),
+  )) {
     reading.rows.RecordField.set(node.id, {
       ...tupleOf(reading, node),
-      baseTypeLexical: fieldBaseType,
-      identifierLexical: fieldIdentifier,
+      baseTypeLexical,
+      identifierLexical,
     });
-    for (const { lead, name, trail } of Option.toArray(namedPiecesOf(fieldIdentifier))) {
+    for (const { lead, name, trail } of Option.toArray(namedPiecesOf(identifierLexical))) {
       reading.rows.RecordFieldName.set(node.id, {
         identifier: name,
         identifierLead: lead,
-        identifierLexical: fieldIdentifier,
+        identifierLexical,
         identifierTrail: trail,
         node: node.id,
         parent: node.parent,

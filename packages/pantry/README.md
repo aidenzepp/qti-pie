@@ -8,8 +8,9 @@ Store QTI 3.0 packages in a strict PostgreSQL model, and export them unchanged.
 
 pantry imports a QTI 3.0 package, a directory or a `.zip` file, into a local PostgreSQL database, and exports it back
 to files. It exists first to put [grizzle](../../vendor/README.md) through a large, real data model, so delivery is
-out of scope. It is pre-release, it is not a library (its `package.json` exports nothing), and it reads XML through
-[crust](../crust/README.md).
+out of scope. It is pre-release, and it reads XML through [crust](../crust/README.md). Its `package.json` exports only
+what an install outside this workspace composes: the `Qti` schema built for a policy, the author role and login, the
+connections, and the export's document scan with its rows-to-XML step.
 
 ## Install
 
@@ -51,6 +52,17 @@ An item ref may name an LTI link instead of an item. pantry accepts it and does 
 item-prefixed names that pass through it, because the package declares nothing the tool reports (spec reading 110).
 
 `scripts/db.sh reset` drops the database and this package's roles, then creates and migrates again.
+
+## Optional settings
+
+- `GR8DES_PG_PASSWORD_COMMAND` names an executable that prints a role's password. Every connection attempt runs it,
+  without a shell, with the role's name as its one argument, in place of `GR8DES_PG_MIGRATION_PASSWORD` and the logins'
+  password files.
+- `GR8DES_QTI_INSTALL` names a single-CDN install's folder: its `policy.json`, exactly `{ "cdn": "https://<host>/" }`,
+  and the `migrations/qti/snapshot.json` its own grizzle config generated. `import` and `export` then build `Qti`
+  with the policy, whose laws the database alone judges: every address a player fetches is on the origin, no address
+  is a `data:` one, no `style` holds `url(`, `@import`, `image-set(`, `src(` or a CSS escape, and no foreign markup is kept. `grizzle.config.ts` installs this package's own
+  `Qti` whatever the setting says.
 
 ## Development
 

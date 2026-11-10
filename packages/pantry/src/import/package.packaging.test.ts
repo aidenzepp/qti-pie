@@ -11,11 +11,11 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { previewPackage } from "#pantry/import/preview.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { importAgreesWithOracle, packagingFixtures } from "#pantry/test/oracle-verdict.ts";
 import { danglingIncludeName, materializeProcessing } from "#pantry/test/processing-fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 describe.skipIf(!hasLease)(
   "import/package.packaging.test.ts, on the lease",
@@ -52,10 +52,12 @@ describe.skipIf(!hasLease)(
           Effect.gen(function* includeTarget() {
             const refused = yield* Effect.flip(importPackage(yield* dir));
 
-            assert.include(
-              rules,
-              refused instanceof ImportRefused ? refused.rule : refused._tag,
-              name,
+            const named = refused instanceof ImportRefused ? refused.rules : [refused._tag];
+            const expected: readonly string[] = rules;
+
+            assert.isTrue(
+              named.some((rule) => expected.includes(rule)),
+              `${name}: refused under ${named.join(", ")}, none of ${rules.join(", ")}`,
             );
           }),
         );

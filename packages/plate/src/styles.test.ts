@@ -51,16 +51,19 @@ const moduleOwners: ReadonlySet<string> = new Set(
 );
 
 /**
- * The state attributes the interaction modules' parts carry, read from the table of modules beside
- * their markers: each `data-*` attribute a part row merges, which a rule may test as it may test
- * `data-mode`. A module that lands, and the block it adds to the stylesheet, change no line here.
+ * The state attributes the parts carry, read beside their markers: each `data-*` attribute a part
+ * row merges, of an interaction module's parts (from the table of modules) and of the part table's
+ * own rows (the item Root's `data-magnification`, among others), which a rule may test as it may
+ * test `data-mode`. A module that lands, and the block it adds to the stylesheet, change no line
+ * here.
  */
 const moduleAttributes: ReadonlySet<string> = new Set(
-  Object.values(modules).flatMap((module): readonly string[] =>
-    Object.values<PartSpec>(module.parts).flatMap((part) =>
-      part.merged.filter((name) => name.startsWith("data-")),
+  [
+    ...Object.values(modules).flatMap((module): readonly string[] =>
+      Object.values<PartSpec>(module.parts).flatMap((part) => part.merged),
     ),
-  ),
+    ...partTable.flatMap((row) => row.merged),
+  ].filter((name) => name.startsWith("data-")),
 );
 
 /**
@@ -129,8 +132,9 @@ const selectPlaceStates: ReadonlySet<string> = new Set([
  * The only attribute names a selector may test: `data-slot`, the part marker; `data-mode` and
  * `data-disabled`, the Root's state; `aria-invalid` and `type` on a Control; `data-orientation`,
  * the authored orientation on the Choice Root; `aria-current`, which the current item's button
- * carries; `readonly`, which a text Control carries in review and solution;
- * `data-magnification`, the Root's magnification step (issue m3e-09b); and the
+ * carries; `open`, the `dialog` state a modal feedback's Root carries while it is shown;
+ * `readonly`, which a text Control carries in review and solution; `data-magnification`, the
+ * Root's magnification step (issue m3e-09b); and the
  * {@link selectPlaceStates}.
  */
 const attributeNames: ReadonlySet<string> = new Set([
@@ -141,6 +145,7 @@ const attributeNames: ReadonlySet<string> = new Set([
   "data-mode",
   "data-orientation",
   "data-slot",
+  "open",
   "readonly",
   "type",
   ...selectPlaceStates,
@@ -711,13 +716,31 @@ const weightedSelectors = (sheet: Sheet): readonly string[] =>
     );
 
 /**
+ * The owners of the content slots, whose parts the part table carries (issues m5-01, m5-02, m5-04,
+ * m5-06, m5-07, m5-11 and m3e-01): each content module is a stub, so its block of the sheet is
+ * empty until its issue fills it.
+ */
+const contentOwners: ReadonlySet<string> = new Set([
+  "alt-text",
+  "companion-materials",
+  "feedback-block",
+  "feedback-inline",
+  "modal-feedback",
+  "rubric",
+  "test-feedback",
+  "test-stylesheet",
+]);
+
+/**
  * The markers of parts the part table carries ahead of the issue that renders and styles them: no
- * rule of the sheet names one until its issue fills its delimited block.
+ * rule of the sheet names one until its issue fills its delimited block. They are the Choice's
+ * mask parts, the navigation's Time part and each part of a content slot.
  */
 const prewiredSlots: ReadonlySet<string> = new Set([
   "choice-interaction-mask",
   "choice-interaction-mask-toggle",
   "test-navigation-time",
+  ...partTable.filter((row) => contentOwners.has(row.interaction)).map((row) => row.slot),
 ]);
 
 /**
@@ -2133,6 +2156,40 @@ describe("styles.css predicates, on negative controls", () => {
 
         assert.deepStrictEqual(strayNames(admitted), []);
         assert.deepStrictEqual(strayNames(stray), ["attribute aria-grabbed"]);
+      }),
+  );
+
+  it.effect(
+    "[W0-CONTENT-PARTS] the sheet test admits a rule keyed on a content marker, on open, and on the root's magnification marker",
+    () =>
+      Effect.gen(function* contentMarkers() {
+        const modal = `:where([data-slot="${rowFor("modal-feedback", "root").slot}"][open])`;
+        const inline = `:where([data-slot="${rowFor("feedback-inline", "root").slot}"])`;
+        const magnified = `:where([data-slot="${marker.item}"][data-magnification])`;
+        const sheet = yield* scanSheet(
+          `${modal} {\n  opacity: 0.5;\n}\n\n${inline} {\n  opacity: 0.5;\n}\n\n${magnified} {\n  opacity: 0.5;\n}\n`,
+        );
+
+        assert.deepStrictEqual(strayNames(sheet), []);
+      }),
+  );
+
+  it.effect(
+    "[W0-CONTENT-PARTS] the sheet test still refuses dialog and section as type selectors and a non-part marker",
+    () =>
+      Effect.gen(function* closedLists() {
+        const dialog = `:where(dialog[data-slot="${rowFor("modal-feedback", "root").slot}"])`;
+        const section = `:where(section[data-slot="${rowFor("test-feedback", "root").slot}"])`;
+        const popup = `:where([data-slot="feedback-popup"])`;
+        const sheet = yield* scanSheet(
+          `${dialog} {\n  opacity: 0.5;\n}\n\n${section} {\n  opacity: 0.5;\n}\n\n${popup} {\n  opacity: 0.5;\n}\n`,
+        );
+
+        assert.deepStrictEqual(strayNames(sheet), [
+          "type dialog",
+          "type section",
+          "marker feedback-popup",
+        ]);
       }),
   );
 

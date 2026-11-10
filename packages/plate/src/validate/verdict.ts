@@ -7,14 +7,13 @@
  * item prose rules, the test prose rules, a stimulus's rules, the catalog rules and the refusals
  * its QTI version decides together, then leaves unchecked what it cannot judge. Every verdict
  * carries the kind of its document's root. On an item it accepts it secures the source before it
- * builds the item: it removes every attribute only a wildcard admits (E3), but for the `data-*`
- * parameters of the elements that declare them ({@link dataParameterElements}), and passes every
- * URL attribute through `url.ts`, keeping each value in its parsed form or dropping it with a
- * notice beside its element. Its {@link Accepted} is the only input `redact` and `score` take. On a
- * test it builds the test model, the {@link AcceptedTest} a session starts from; a section or a
- * stimulus is accepted and marked, delivered by neither M2 nor M1. A refusal is a verdict, never a
- * failure, so `check` is a plain function; each builder returns a `Result`, which it reads with no
- * Effect runtime.
+ * builds the item: it removes every attribute only a wildcard admits (E3), except an author
+ * `data-*` that is not plate's own (decision D24), and passes every URL attribute through `url.ts`,
+ * keeping each value in its parsed form or dropping it with a notice beside its element. Its
+ * {@link Accepted} is the only input `redact` and `score` take. On a test it builds the test model,
+ * the {@link AcceptedTest} a session starts from; a section or a stimulus is accepted and marked,
+ * delivered by neither M2 nor M1. A refusal is a verdict, never a failure, so `check` is a plain
+ * function; each builder returns a `Result`, which it reads with no Effect runtime.
  *
  * @module
  */
@@ -73,7 +72,7 @@ import {
 import { checkTestRules } from "#plate/validate/test-rules.ts";
 import { checkVersion } from "#plate/validate/versions.ts";
 import type { ContentTable, Tables } from "#plate/validate/xsd.ts";
-import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
+import { cpVersions, isAuthorData, manifestNamespace } from "#plate/vocabulary.ts";
 import type { CpVersion, TestMark } from "#plate/vocabulary.ts";
 
 /**
@@ -368,34 +367,6 @@ const isKeptEverywhere = (attribute: SourceAttribute): boolean =>
   isAllowance(attribute) || isInstanceAttribute(attribute) || isLangOrBase(attribute);
 
 /**
- * The QTI elements whose wildcard `data-*` attributes carry parameters a reader declares, which E3
- * keeps as written: a `qti-card-entry`'s align with a candidate's PNP (`data-reading-type`,
- * `data-braille-type`; QTI information model section 5.27, read by the catalog module), and a
- * `qti-portable-custom-interaction`'s are its module's configuration. Elsewhere a `data-*` only a
- * wildcard admits is removed and marked, until the gate's table of author `data-*` attributes
- * (the operator's ruling: they pass through except plate's reserved names) subsumes this list.
- * The structural walk has judged each name by then (reading 13) and admitted it on these elements,
- * which the Schematron's extension lists cover (reading 90).
- */
-const dataParameterElements: ReadonlySet<string> = new Set([
-  "qti-card-entry",
-  "qti-portable-custom-interaction",
-]);
-
-/**
- * Report whether an attribute is a `data-*` parameter E3 keeps on its element: a `data-` attribute
- * in no namespace on an element of {@link dataParameterElements}.
- *
- * @param element The QTI-namespace element.
- * @param attribute The attribute.
- * @returns Whether it stays as written.
- */
-const isDataParameter = (element: SourceElement, attribute: SourceAttribute): boolean =>
-  dataParameterElements.has(element.local) &&
-  attribute.namespace === "" &&
-  attribute.local.startsWith("data-");
-
-/**
  * Report whether an element's table declares an attribute by its exact namespace and local name,
  * a prohibited declaration not counting.
  *
@@ -415,10 +386,15 @@ const declares = (table: ContentTable, namespace: string, local: string): boolea
 /**
  * Report whether E3 keeps an attribute of a QTI-namespace element.
  *
- * It keeps an allowance and an attribute the table that governs the element declares by name.
- * Reading 10 accepts both `aria-keyshorts` and `aria-keyshortcuts` where the table declares
- * `aria-keyshorts` (the empty elements), so `aria-keyshortcuts` is kept there too. Names compare
- * exactly, as XML's do.
+ * It keeps an allowance, an attribute the table that governs the element declares by name, and an
+ * author `data-*` (decision D24, {@link isAuthorData}): a name in the reading's form that plate
+ * does not reserve, on any element a wildcard lets carry one. A reserved name the XSD does not
+ * declare (`data-slot`, `data-mode`, anything under `data-qti-`) is removed and marked as before,
+ * so an author's attribute never reaches plate's own marker; `data-ssml`,
+ * `data-qti-suppress-tts` and `data-catalog-idref` are the XSD's own (decision D22) and the table
+ * keeps them first. Reading 10 accepts both `aria-keyshorts` and `aria-keyshortcuts` where the
+ * table declares `aria-keyshorts` (the empty elements), so `aria-keyshortcuts` is kept there too.
+ * Names compare exactly, as XML's do.
  *
  * @param table The table that governs the element, none when the XSD declares no element of its
  *   name.
@@ -427,6 +403,7 @@ const declares = (table: ContentTable, namespace: string, local: string): boolea
  */
 const isKept = (table: Option.Option<ContentTable>, attribute: SourceAttribute): boolean =>
   isKeptEverywhere(attribute) ||
+  (attribute.namespace === "" && isAuthorData(attribute.local)) ||
   Option.exists(
     table,
     (declared) =>
@@ -437,9 +414,8 @@ const isKept = (table: Option.Option<ContentTable>, attribute: SourceAttribute):
   );
 
 /**
- * Secure one element's attributes: remove each one only a wildcard admits (E3), but for a `data-*`
- * parameter of an element that declares them ({@link isDataParameter}), and pass each URL
- * attribute through `url.ts`.
+ * Secure one element's attributes: remove each one only a wildcard admits (E3; {@link isKept}
+ * names what stays, an author `data-*` among it), and pass each URL attribute through `url.ts`.
  *
  * An element the structural walk checked is read by the table that governs it, so an attribute a
  * valid `xsi:type`'s type declares is kept (AD-9); any other QTI-namespace element by its name's
@@ -470,7 +446,7 @@ const secureAttributes = (
   );
   const kept: SourceAttribute[] = [];
   for (const attribute of element.attributes) {
-    if (!isKept(table, attribute) && !isDataParameter(element, attribute)) {
+    if (!isKept(table, attribute)) {
       marks.push({ feature: `attribute:${attributeName(attribute)}`, path, shown: "mark" });
       continue;
     }
@@ -1067,14 +1043,15 @@ const checkStimulusRules = (source: SourceDocument, tables: Tables): readonly Re
  *    whatever its form), or a root other than an item, a test, a section or a stimulus, is
  *    `unchecked`, with every reason. It is never rendered.
  * 4. An item: each attribute only a wildcard admitted is removed and marked `attribute:<name>` (E3),
- *    but for a `data-*` parameter of a `qti-card-entry` or a `qti-portable-custom-interaction`,
- *    which stays as written ({@link isDataParameter}), and each URL attribute goes through
- *    `url.ts`: a kept value is written in its parsed form, and a dropped one goes, with its notice
- *    beside its element. The item is built from the secured source, and in a QTI 3.0.1 document
- *    each outcome that writes no `normal-minimum` has 0.0 (reading 149). A refusal of the builder,
- *    such as `value-type` or `count-range`, makes the document `refused`. Otherwise it is
- *    `accepted-with-unsupported` when anything is unsupported, the builder's
- *    `variable:<identifier>` marks included, and `accepted` when nothing is.
+ *    except an author `data-*` in the reading's form whose name plate does not reserve (decision
+ *    D24, `reservedDataNames`), which stays; a reserved name the XSD does not declare is still
+ *    removed and marked, never refused. Each URL attribute goes through `url.ts`: a kept value is
+ *    written in its parsed form, and a dropped one goes, with its notice beside its element. The
+ *    item is built from the secured source, and in a QTI 3.0.1 document each outcome that writes no
+ *    `normal-minimum` has 0.0 (reading 149). A refusal of the builder, such as `value-type` or
+ *    `count-range`, makes the document `refused`. Otherwise it is `accepted-with-unsupported` when
+ *    anything is unsupported, the builder's `variable:<identifier>` marks included, and `accepted`
+ *    when nothing is.
  * 5. A test: the test model is built, its own outcomes defaulted as an item's are. A refusal of the
  *    builder makes the document `refused`; otherwise it is `accepted-with-unsupported` when the
  *    test holds a feature M2 marks and `accepted` when it holds none.

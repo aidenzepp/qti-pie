@@ -12,8 +12,8 @@
  * - `content:character`, per (version, kind): whether character data may stand among its children,
  *   against `Admission`'s `text` child;
  * - `content:automaton`, per (version, kind) with element content: order, required particles,
- *   at-most-once and exclusive choice, which the operator's ruling of 2026-11-05 gives one owner,
- *   the Glushkov automaton (`Follow` and `Last`);
+ *   at-most-once and exclusive choice, which Bjorn's ruling of 2026-11-05 gives one owner, the
+ *   Glushkov automaton (`Follow` and `Last`);
  * - `content:count`, per particle whose bound lies in 2…n: the count law `Counted`, which the
  *   automaton relaxes;
  * - `content:count-beyond`, per `Counted` row the XSD's particle does not state as a total: a
@@ -31,11 +31,11 @@
  *   readings 90 and 10);
  * - `text:domain`, per simple-content (version, kind): `TextDomain`'s row;
  * - `reading`, per spec reading of `docs/spec-readings.md`, with the status the alignment audit gives
- *   it after the operator's rulings.
+ *   it after Bjorn's rulings.
  *
  * A status is `G` (the grammar states the rule), `reading` (it departs from the XSD by a recorded
  * spec reading), `R` (a ruled gap: reading 2's recorded MathML limits and reading 50), `P` (a named
- * slice owns it and nothing states it yet), `RG` (a representation gap the operator has not ruled),
+ * slice owns it and nothing states it yet), `RG` (a representation gap Bjorn has not ruled),
  * `U` (nothing owns it: XSD-invalid content is accepted) or `X` (contradicted: the grammar refuses
  * XSD-valid content, or states a rule with no reading behind it). The value domains' lexical spaces
  * beyond their enumerations are `lexical.oracle.test.ts`'s, against `xmllint`.
@@ -45,6 +45,7 @@ import { readingRefusals, readingSpellings, readingUses } from "#pantry/grammar/
 import type { Use, ValueDomain } from "#pantry/grammar/attributes.ts";
 import { coveredBy } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
+import { followPairsOf } from "#pantry/grammar/content.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -64,6 +65,7 @@ import type {
 import { globalKinds } from "#pantry/vocab/inventory/vocabularies.ts";
 import { namespaceClassesUnder, vocabularyNamespaces } from "#pantry/vocab/namespaces.ts";
 import { foreignRoots } from "#pantry/vocab/open.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * A rule's status, as the alignment audit's §2 defines it.
@@ -99,7 +101,7 @@ export interface Rule {
 }
 
 /**
- * A spec reading's entry: its status after the operator's rulings of 2026-11-05 and the slice or
+ * A spec reading's entry: its status after Bjorn's rulings of 2026-11-05 and the slice or
  * relation that owns it, from the alignment audit's Matrix B (§7).
  */
 interface ReadingEntry {
@@ -268,7 +270,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     48,
     {
       owner:
-        "PE's RG4 (`src/qti/expressions.ts`): `ReferenceSegment`'s pieces, `Reading`'s readings counted exactly, `NameLookup`, `VariableLookup` and `MappingLookup` (M2), and the key and the containment over the resolving readings (M3); the oracle's Prefixed reference",
+        "PE's RG4 (`src/qti/expressions.ts`): `ReferenceSegment`'s pieces, `Reading`'s readings counted exactly, its scope and source read through `FoundName`, `DeclaredReading` and `MappedReading` (M2, `src/qti/queries.ts`), and the key and the containment over the resolving readings (M3); the oracle's Prefixed reference",
       status: "G",
     },
   ],
@@ -283,7 +285,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     56,
     {
       owner:
-        "G5's typed `xs:double` values (Q5.08): `Compute.cast` over `doubleForm` for `Mastery_range` (`src/qti/declarations.ts`) and for an interaction's bounds (`src/qti/interactions.ts`), and `MapKeyFloat`'s `value` (`src/qti/mapping.ts`), each rounding the decimal once as XML Schema's mapping does; the stated limit: a float map key outside grizzle's `double precision` form (`floatKeyPattern`) has no typed value and is distinct by its spelling (the float map key row of `docs/grizzle-findings.md`)",
+        "G5's typed `xs:double` values (Q5.08): `Compute.cast` over `doubleForm` for `Mastery_range` (`src/qti/declarations.ts`) and for an interaction's bounds (`src/qti/interactions.ts`), and the query `MapKeyFloat`'s `value` (`src/qti/queries.ts`), each rounding the decimal once as XML Schema's mapping does; the stated limit: a float map key outside grizzle's `double precision` form (`floatKeyPattern`) has no typed value and is distinct by its spelling (the float map key row of `docs/grizzle-findings.md`)",
       status: "G",
     },
   ],
@@ -310,7 +312,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     62,
     {
       owner:
-        "LomObjectIdentifier, LomObjectTitle, over the resource's own records, each a `lom:lom` of its `cp:metadata` (`resourceRecords` and `resourceGenerals`, `src/qti/metadata.ts`); the oracle's lom-identifier and lom-title over the same records, held by the cases `src/test/lom-records.ts` builds, a file's record naming another",
+        "LomObjectIdentifier, LomObjectTitle, over the resource's own records, each a `lom:lom` of its `cp:metadata` (`namingRecords`, `src/qti/queries.ts`); the oracle's lom-identifier and lom-title over the same records, held by the cases `src/test/lom-records.ts` builds, a file's record naming another",
       status: "G",
     },
   ],
@@ -416,7 +418,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   [
     84,
     {
-      owner: "Q5.05's AttributeGrammar keyed by the governing type; Q5.03's `Node.governs`",
+      owner: "Q5.05's AttributeGrammar keyed by the governing type; Q5.03's `Node.governor`",
       status: "P",
     },
   ],
@@ -441,7 +443,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     88,
     {
       owner:
-        "PE's numbered `Reading` (`src/qti/expressions.ts`): its item ref's `InstanceName.replaced` through `NameLookup`, and a number of at least 1; the oracle's Prefixed reference",
+        "PE's numbered `Reading` (`src/qti/expressions.ts`): its item ref's `InstanceName.replaced` through `FoundName` (`src/qti/queries.ts`), and a number of at least 1; the oracle's Prefixed reference",
       status: "G",
     },
   ],
@@ -467,7 +469,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     93,
     {
       owner:
-        "P2 and P3 over `ResourceHref` and `NamedHref` (`src/qti/package.ts`): a document-typed resource names the document at its href, and every document but the manifest is one a resource names; the importer reads documents through `namedDocuments` (`src/import/overlays/package.ts`)",
+        "P2 and P3 over the query `TypedHref` (`src/qti/queries.ts`): a document-typed resource names the document at its href, and every document but the manifest is one a resource names; the importer reads documents through `namedDocuments` (`src/import/overlays/package.ts`)",
       status: "G",
     },
   ],
@@ -499,7 +501,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     97,
     {
       owner:
-        "Q5.13's `VariableMapping` (`src/qti/tests.ts`): the key (item ref, target) and `Variable_mapping_target`, no session variable; PE's `MappingSource` (`src/qti/expressions.ts`): no other variable of the item, through `ItemRefDocument` and `VariableLookup`",
+        "Q5.13's `VariableMapping` (`src/qti/tests.ts`): the key (item ref, target) and `Variable_mapping_target`, no session variable; PE's `MappingSource` (`src/qti/expressions.ts`): no other variable of the item, through `ItemRefDocument` and `DeclaredTarget` (`src/qti/queries.ts`)",
       status: "G",
     },
   ],
@@ -507,7 +509,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     98,
     {
       owner:
-        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over the lexical key (readings 160 and 165 narrow it: a key's identity is the key as written, whatever its matching), and `key(mapping, value)` over each typed relation, `MapKeyInteger`, `MapKeyFloat` (reading 154), `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`; for matching, `E1_derived` sets `folded` for a string key whose entry is not `case-sensitive=\"true\"` and `matched` to its ASCII lowercase (`Compute.lowerAscii`, grizzle offering no Unicode fold) and otherwise to the key as written; the oracle's `Map key` (`mapKeyValueOf`, `src/test/oracle.ts`)",
+        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over the lexical key (readings 160 and 165 narrow it: a key's identity is the key as written, whatever its matching), and a key over each typed key's query (`src/qti/queries.ts`), `MapKeyInteger`, `MapKeyFloat` (reading 154), `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`, the last three over the two-item keys' split, `MapKeyItems`; for matching, `E1_derived` sets `folded` for a string key whose entry is not `case-sensitive=\"true\"` and `matched` to its ASCII lowercase (`Compute.lowerAscii`, grizzle offering no Unicode fold) and otherwise to the key as written; the oracle's `Map key` (`mapKeyValueOf`, `src/test/oracle.ts`)",
       status: "G",
     },
   ],
@@ -579,7 +581,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     107,
     {
       owner:
-        "PE's `MappingSource` and `MappingLookup` (`src/qti/expressions.ts`): a mapped name and its source both resolve; the oracle's Variable mapping source and Prefixed reference",
+        "PE's `MappingSource` (`src/qti/expressions.ts`) and `MappedReading` (`src/qti/queries.ts`): a mapped name and its source both resolve; the oracle's Variable mapping source and Prefixed reference",
       status: "G",
     },
   ],
@@ -659,7 +661,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     117,
     {
       owner:
-        "IN's document context (`Document.context`, `contextNearest`, `src/qti/chardata.ts`, through `nodeContext`; `SiteTarget`'s fold and `Fragment_context`, `src/qti/tests.ts`), `PlacedBinding`, `PlacedChoice`, `PlacedHottext`, `ChoiceVariableName`'s placed counts and the section references' fragment placements (`SectionScope`, `SectionTemplateRef`, `SectionContextRef`, `src/qti/interactions.ts`) `IdrefTarget`, `PlacedId`, `AssembledId`, `PlacedIdref`, `PlacedXmlLang`, `AssembledLang` and `PlacedGeneralLang` (`src/qti/identity.ts`), `PlacedVariableRef` and `PlacedReferenceType` (`src/qti/expressions.ts`; a rule fragment's placed references are typed in the item for Condition type and Mapped response) and `CatalogTarget`, `PlacedCatalogRef` and `AssembledCatalog` (`src/qti/catalog.ts`), `PlacedMathRank` and `PlacedShareTarget` (`src/qti/mathml-share.ts`), ranked per assembly by `placedShareRowsOf`, under Q5.13's `Instance`; the importer's `contextsOf` (`src/import/context.ts`); the oracle's in-place splice (`inPlaceBreaches`), Fragment context and Document lang over the merged item, and its catalog resolution over the assembly (`Assembly.catalogs`); the laws it lists are known under-refusals",
+        "IN's document context (`Document.context`, `contextNearest`, `src/qti/chardata.ts`, through its document node's fixed target; `SiteTarget`'s fold and `Fragment_context`, `src/qti/tests.ts`), `PlacedBinding`, `PlacedChoice`, `PlacedHottext`, `ChoiceVariableName`'s placed counts and the section references' fragment placements (`SectionScope`, `SectionTemplateRef`, `SectionContextRef`, `src/qti/interactions.ts`) `IdrefTarget`, `PlacedId`, `AssembledId`, `PlacedIdref`, `PlacedXmlLang` and `AssembledLang` (`src/qti/identity.ts`), `PlacedVariableRef` (`src/qti/expressions.ts`) and `PlacedReferenceType` (`src/qti/queries.ts`; a rule fragment's placed references are typed in the item for Condition type and Mapped response) and `CatalogTarget`, `PlacedCatalogRef` and `AssembledCatalog` (`src/qti/catalog.ts`), `PlacedMathRank` and `PlacedShareTarget` (`src/qti/mathml-share.ts`), ranked per assembly by `placedShareRowsOf`, under Q5.13's `Instance`; the importer's `contextsOf` (`src/import/context.ts`); the oracle's in-place splice (`inPlaceBreaches`), Fragment context and Document lang over the merged item, and its catalog resolution over the assembly (`Assembly.catalogs`); the laws it lists are known under-refusals",
       status: "G",
     },
   ],
@@ -794,7 +796,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     134,
     {
       owner:
-        "R26 `document-lang` (identity.ts `GeneralLang`'s `value`, `lowerAscii(collapse(lang))`, and `LomLanguage`'s `tag`, `lowerAscii(lang)`; `documentLang`); the oracle's Document lang",
+        "R26 `document-lang` (identity.ts `DocumentLang`'s and `AssembledLang`'s generated `value`, `lowerAscii(collapse(lang))`, and `LomLanguage`'s `tag`, `lowerAscii(lang)`; `DescribedLang` and `DescribedAssembledLang`, `src/qti/queries.ts`); the oracle's Document lang",
       status: "G",
     },
   ],
@@ -874,7 +876,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     144,
     {
       owner:
-        "the grammar's `DoubleBound` and `BoundFacet` (`src/grammar/domains.ts`, `src/grammar/install.ts`: a double's or a float's one lower bound, its pattern the lexical space less NaN); the import's `DoubleValue` and `TextDoubleValue` (`src/qti/attributes.ts`, read by `doubleOf` in `src/import/write.ts`) under laws Double value and Double bound (rule `attribute-lexical`); the oracle's Double bound, held by `src/qti/double-bound.oracle.test.ts` against XML Schema's value bound",
+        "the grammar's `DoubleBound` and `BoundFacet` (`src/grammar/domains.ts`, `src/grammar/install.ts`: a double's or a float's one lower bound, its pattern the lexical space less NaN); the schema's `Double_bound` checks on `Attribute` and `Node` (`src/qti/attributes.ts`), the value grizzle's `Compute.parseDouble` of the collapsed form, under law Double bound (rule `attribute-lexical`); the oracle's Double bound, held by `src/qti/double-bound.oracle.test.ts` against XML Schema's value bound",
       status: "G",
     },
   ],
@@ -890,7 +892,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     146,
     {
       owner:
-        "the import's listing, one document per path with the manifest's `none` first (`listDocuments`, `src/import/program.ts`), under \"Document entry\"'s key over `Document`'s (package, path) and its containment of each document-typed href in a document of its type (`src/qti/package.ts`); the oracle's listing and its `typesAt` from the manifest's `none` (`judge`, `packageBreaches`, `src/test/oracle.ts`), held by `src/import/manifest-document.oracle.test.ts`",
+        "the import's listing, one document per path with the manifest's `manifest` first (`listDocuments`, `src/import/program.ts`), under \"Document entry\"'s key over `Document`'s (package, path) and its containment of each document-typed href in a resource's document of its type (`ResourceDocument`, `src/qti/package.ts`); the oracle's listing and its `typesAt` from the manifest's `manifest` (`judge`, `packageBreaches`, `src/test/oracle.ts`), held by `src/import/manifest-document.oracle.test.ts`",
       status: "G",
     },
   ],
@@ -906,7 +908,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     148,
     {
       owner:
-        "the import's `ObjectIdentifier` and `ObjectTitle`, each copied from its attribute and none without it, beside the `AssessmentObject` every item and test root has, and `LomObjectIdentifier` and `LomObjectTitle` written only for a witness that names the document (`objectRowsOf`, `identifierRowOf`, `titleRowOf`, `src/import/overlays/metadata.ts`; `src/qti/metadata.ts`); the oracle's lom-identifier over the root's identifier, none where unwritten (`packageBreaches`, `src/test/oracle.ts`), and lom-title over its title, none where unwritten (`lomTitleLawsOf`, `src/test/oracle-laws/documents.ts`); held by `src/import/overlays/object-attributes.oracle.test.ts`",
+        "the import's `ObjectIdentifier` and `ObjectTitle`, each copied from its attribute and none without it, beside the `AssessmentObject` every item and test root has, the rows the database's `MatchedIdentifier` and `MatchedTitle` match a record's entries and strings against (`objectRowsOf`, `src/import/overlays/metadata.ts`; `src/qti/metadata.ts`; `src/qti/queries.ts`); the oracle's lom-identifier over the root's identifier, none where unwritten (`packageBreaches`, `src/test/oracle.ts`), and lom-title over its title, none where unwritten (`lomTitleLawsOf`, `src/test/oracle-laws/documents.ts`); held by `src/import/overlays/object-attributes.oracle.test.ts`",
       status: "G",
     },
   ],
@@ -930,7 +932,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     151,
     {
       owner:
-        "the import's `LomObjectTitle` check, under which an object's `xml:lang` compared form that is no language tag (`languageTagPattern`, `src/qti/metadata.ts`, over the grammar's `languageTag`) states no language, and its witness search (`inLanguage`, `src/import/overlays/metadata.ts`); the oracle's lom-title over the root's `xml:lang` as its own AL1 reading reads it, none where it states none (`statedLanguage`, `lomTitleLawsOf`, `src/test/oracle-laws/documents.ts`); held by `src/import/overlays/object-lang.oracle.test.ts`",
+        "the database's `MatchedTitle` (`src/qti/queries.ts`), under which an object's `xml:lang` compared form that is no language tag (`languageTagPattern`, `src/qti/metadata.ts`, over the grammar's `languageTag`) states no language; the oracle's lom-title over the root's `xml:lang` as its own AL1 reading reads it, none where it states none (`statedLanguage`, `lomTitleLawsOf`, `src/test/oracle-laws/documents.ts`); held by `src/import/overlays/object-lang.oracle.test.ts`",
       status: "G",
     },
   ],
@@ -938,7 +940,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     152,
     {
       owner:
-        "the grammar's one NCName, `ncNamePattern` and its host reading `isNcName` (`src/grammar/domains.ts`), read by the schema's sources of the content references and bindings (`referenceReadOf`, `printedReference`, `sectionFeedbackSource`, `fragmentReferenceOf`, `namedBinding`, `src/qti/interactions.ts`), of the processing references (`namePattern`, `bareReference`, `bracedReference`, `src/qti/expressions.ts`), of the declaration and field names (`identifiers`, `namedFields`, `src/qti/declarations.ts`), of the dependency identifierrefs (`namingDependencyRefs`, `src/qti/package.ts`) and of the structure identifiers (`namingIdentifiers`, `src/qti/tests.ts`), and by the import's readers (`referencesOf`, `sectionNamesOf`, `nameOf`, `src/import/overlays/interactions.ts`; `spelledBy`, `src/import/overlays/expressions.ts`; `namedPiecesOf`, `src/import/overlays/declarations.ts`; `rowsOf`, `src/import/overlays/package.ts`; `namedOf`, `src/import/overlays/tests.ts`); the oracle's bare reference and typed values (`referenced`, `typedValueOf`, `src/test/oracle.ts`); held by `src/import/overlays/reference-names.oracle.test.ts`",
+        "the grammar's one NCName, `ncNamePattern` and its host reading `isNcName` (`src/grammar/domains.ts`), read by the schema's sources of the content references and bindings (`referenceReadOf`, `printedReference`, `sectionReferenceOf`, `namedBinding`, `src/qti/interactions.ts`), of the processing references (`namePattern`, `bareReference`, `bracedReference`, `src/qti/expressions.ts`), of the declaration and field names (`identifiers`, `namedFields`, `src/qti/declarations.ts`), of the dependency identifierrefs (`namingDependencyRefs`, `src/qti/package.ts`) and of the structure identifiers (`namingIdentifiers`, `src/qti/tests.ts`), and by the import's readers (`referencesOf`, `sectionNamesOf`, `nameOf`, `src/import/overlays/interactions.ts`; `spelledBy`, `src/import/overlays/expressions.ts`; `namedPiecesOf`, `src/import/overlays/declarations.ts`; `rowsOf`, `src/import/overlays/package.ts`; `namedOf`, `src/import/overlays/tests.ts`); the oracle's bare reference and typed values (`referenced`, `typedValueOf`, `src/test/oracle.ts`); held by `src/import/overlays/reference-names.oracle.test.ts`",
       status: "G",
     },
   ],
@@ -954,7 +956,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     154,
     {
       owner:
-        "`MapKeyFloat` (`src/qti/mapping.ts`), its `value` generated by grizzle's `Compute.parseDouble` over `FloatKey`, `xs:double`'s lexical space (`doublePattern`, `src/qti/operators.ts`), mirrored with every float key of it (`floatKeys`, and the import's test in `src/import/overlays/mapping.ts`), under its `key(mapping, value)` (Map key); the oracle's `mapKeyValueOf` over `numberOf` (`src/test/oracle.ts`); held by `src/import/overlays/float-keys.oracle.test.ts` against an exact reference",
+        "the query `MapKeyFloat` (`src/qti/queries.ts`), its `value` grizzle's `Compute.parseDouble` of every float key in `xs:double`'s lexical space (`doublePattern`, `src/qti/operators.ts`), read from its `MapKeyType` row, the import writing no typed float row (`src/import/overlays/mapping.ts`) and `Typed_attribute_value` refusing a key outside the space, under the key over the query's `(mapping, value)` (Map key); the oracle's `mapKeyValueOf` over `numberOf` (`src/test/oracle.ts`); held by `src/import/overlays/float-keys.oracle.test.ts` against an exact reference",
       status: "G",
     },
   ],
@@ -978,7 +980,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     157,
     {
       owner:
-        "the import's `DeclarationIdentifier`, a declaration's name as a row of its own beside its `Declaration`, which every reference by name targets through `declarationIdentifierRef` and every row that hangs from a declaration copies without it through `declarationRef` (`src/qti/declarations.ts`; `typedDeclarationOf`, `src/import/overlays/declarations.ts`), so a declaration whose identifier names nothing keeps its rows, values, mapping, map keys and tables (`declarationsOf` and `declarationTablesOf`, `src/import/overlays/expressions.ts`; `declarationOf`, read by `src/import/overlays/mapping.ts`); the oracle's declaration laws over every declaration, named or not, and its names by their typed value (`declarationLawsOf`, `src/test/oracle-laws/documents.ts`; `overlayBreaches`, `src/test/oracle.ts`); held by `src/import/overlays/unnamed-declarations.oracle.test.ts`",
+        "the import's `DeclarationIdentifier`, a declaration's name as a row of its own beside its `Declaration`, which every reference by name targets through `declarationIdentifierRef` and every row that hangs from a declaration copies without it through `declarationRef` (`src/qti/declarations.ts`; `typedDeclarationOf`, `src/import/overlays/declarations.ts`), so a declaration whose identifier names nothing keeps its rows, values, mapping, map keys and tables (`declarationsOf`, `src/import/overlays/expressions.ts`; `declarationOf`, read by `src/import/overlays/mapping.ts`); the oracle's declaration laws over every declaration, named or not, and its names by their typed value (`declarationLawsOf`, `src/test/oracle-laws/documents.ts`; `overlayBreaches`, `src/test/oracle.ts`); held by `src/import/overlays/unnamed-declarations.oracle.test.ts`",
       status: "G",
     },
   ],
@@ -1002,7 +1004,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     160,
     {
       owner:
-        "the schema's two Map key keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over every mapping's keys as written, whatever its declaration's base type spells, and `key(mapping, value)` over `MapKeyInteger`, `MapKeyFloat`, `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`, which hang from `MapKeyType`, only where the declaration has a base type; the oracle's mapping law, which reads a key as written where the base type spells nothing and by `mapKeyValueOf` where it spells a code (`src/test/oracle.ts`); held by `src/test/unspelled-declarations.oracle.test.ts`",
+        "the schema's two Map key keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over every mapping's keys as written, whatever its declaration's base type spells, and a key over each of the queries `MapKeyInteger`, `MapKeyFloat`, `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair` (`src/qti/queries.ts`), which read `MapKeyType`, only where the declaration has a base type; the oracle's mapping law, which reads a key as written where the base type spells nothing and by `mapKeyValueOf` where it spells a code (`src/test/oracle.ts`); held by `src/test/unspelled-declarations.oracle.test.ts`",
       status: "G",
     },
   ],
@@ -1098,7 +1100,47 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     172,
     {
       owner:
-        "no row: `BindingFit` holds none of the order interaction (`typedFits`, `src/grammar/facets.ts`) and `RecordBindingFit` none, so it is one of `anyTypeKinds` and binds a response of any type (`src/qti/interactions.ts`), judged only by Binding declared and Binding unique; the law oracle's Binding unique, over every interaction (`src/test/oracle.ts`); held by `src/grammar/expression.test.ts` (the binding sentences), `src/qti/interactions.oracle.test.ts` (`anyTypeKinds`) and `src/test/laws.oracle.test.ts` (an order interaction binding a single string response and a record, the graphic order interaction refused; Binding unique over choice, order and custom interactions)",
+        "no row: `BindingFit` holds none of the order interaction (`typedFits`, `src/grammar/facets.ts`) and `RecordBindingFit` none, so it is one of `anyTypeKinds` and binds a response of any type (`src/qti/interactions.ts`), judged only by Binding declared and Binding unique; the law oracle's Binding unique, over every interaction (`src/test/oracle.ts`); held by `src/grammar/expression.test.ts` (the binding sentences), `src/qti/interactions.oracle.test.ts` (`anyTypeKinds`), `src/import/refusal.sources.test.ts` (every law source normative, with no exception) and `src/test/laws.oracle.test.ts` (an order interaction binding a single string response and a record, the graphic order interaction refused; Binding unique over choice, order and custom interactions)",
+      status: "G",
+    },
+  ],
+  [
+    173,
+    {
+      owner:
+        "the import's `Section.loose`, true exactly where the section's `visible` flag, a row of its own (`TestFlag`), reads false and `keepTogether` is false, with no `Section.visible` (\"Test overlay\" and `E1_derived`, `src/qti/tests.ts`; `sectionsOf`, `src/import/overlays/tests.ts`), so a section that writes no `visible` is refused by AL3 alone; the law oracle's section scope, loose only where `visible` is written and reads false (`testDocumentOf`, `src/test/oracle-laws/assembly.ts`); held by `src/import/overlays/section-visibility.oracle.test.ts`",
+      status: "G",
+    },
+  ],
+  [
+    174,
+    {
+      owner:
+        "the schema's stated `xml:lang` forms, `statedLanguagePattern` over the grammar's one `languageTag`, read by R26's rules over queries (`DescribedLang`, `DescribedAssembledLang`, `src/qti/queries.ts`); the oracle's Document lang (`documentLangBreaches`, `languageTagForm`, `src/test/oracle.ts`); held by `src/import/overlays/document-lang.oracle.test.ts`",
+      status: "G",
+    },
+  ],
+  [
+    175,
+    {
+      owner:
+        "the import's `ReadingDeclaration`, a resolving declared or mapped reading's declaration as a row of its own, justified by `declarationIdentifierRef` or by its mapping's `MappingSourceDeclaration`, a mapped reading's forced in under \"Variable mapping source\", with \"Variable kind\" judging a built-in reading by its scope's root (`readsAllowedBuiltIn`); and `VariableRefTable`, a declared reference's table claim as a row of its own, forced in under \"Mapped response\" and \"Lookup type\" (`src/qti/expressions.ts`; `readingOf` and `referenceDeclarationsOf`, `src/import/overlays/expressions.ts`); the law oracle's reading kinds, a mapped name's its source's declaration's or none (`readingsOf`, `src/test/oracle-laws/tests.ts`), and its references' tables and kinds, none where they have none (`referenceBreachesOf`, `src/test/oracle-laws/expressions.ts`); held by `src/import/overlays/reading-declarations.oracle.test.ts`",
+      status: "G",
+    },
+  ],
+  [
+    176,
+    {
+      owner:
+        "the `DocumentType` roster, `manifest` then the resource types, and `ResourceDocumentType` (`src/grammar/install.ts`); `Node.documentType`, `Attribute.documentType`, `Site.documentType` and `Document.documentType`, and the type of a resource's document as a row of its own, `ResourceDocument`, under \"RootOfType\", \"Document entry\" and `E1_derived` (`src/qti/package.ts`); the manifest attributes' selections (`attributesOf`, `src/qti/package.ts`), `recordDocumentTypes` (`src/qti/metadata.ts`) and the identifier copy-backs (`src/qti/identity.ts`) at `manifest`; the import's listing and `documentRowsOf` (`src/import/program.ts`, `src/import/write.ts`); the law oracle's `documentTypeOf` and `typesAt` (`src/test/oracle.ts`)",
+      status: "G",
+    },
+  ],
+  [
+    177,
+    {
+      owner:
+        'law "Data SSML" over `DataSsml`, `DataSsmlMember` and `DataSsmlProperty`, its `Data_SSML` checks over the table of the schema (`src/qti/data-ssml.ts`) and the rule over `RequiredSsmlProperty` (`src/qti/queries.ts`); the import\'s reading of the value into rows, judging nothing (`dataSsmlOf`, `src/vocab/data-ssml.ts`; `src/import/overlays/data-ssml.ts`); the law oracle\'s "Data SSML" over a document\'s rows (`dataSsmlBreachOf`, `src/test/oracle-laws/data-ssml.ts`; `src/test/oracle.ts`); held by `src/vocab/data-ssml.test.ts` and `src/test/oracle-laws/data-ssml.oracle.test.ts`, against the law restated over the rows (`src/test/data-ssml-law.ts`)',
       status: "G",
     },
   ],
@@ -1380,14 +1422,14 @@ interface Index {
  */
 const indexOf = (grammar: ComposedGrammar): Index => {
   const children = new Map<string, Set<string>>();
-  for (const row of grammar.admission.rows) {
+  for (const row of admittedOf(grammar.content.contentModelOf, grammar.content.admissionIn)) {
     const key = `${row.version} ${row.parent}`;
     children.set(key, (children.get(key) ?? new Set()).add(row.child));
   }
 
   // The content models whose automata state a row, every model but that of no model.
   const stated = new Set(
-    [...grammar.content.follow.rows, ...grammar.content.last.rows].map(({ model }) => model),
+    [...followPairsOf(grammar.content), ...grammar.content.last.rows].map(({ model }) => model),
   );
 
   return {

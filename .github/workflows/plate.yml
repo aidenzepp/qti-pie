@@ -1,6 +1,8 @@
 # Per-PR checks for the cloud fan-out's area branches (renderer/*/main) and its
-# gate branch (gate/cloud-fanout), run off the laptop. It runs only on pull
-# requests into those branches; main is unchanged and has no workflow here.
+# gate branch (gate/cloud-fanout), run off the laptop: pnpm check, plate's unit
+# suite, and plate's browser suite in Chromium and WebKit. Not run here: the
+# corpus-witness cmp and the drain gate. It runs only on pull requests into
+# those branches; pull requests into main run main.yml, which repeats this job's setup steps.
 name: plate
 
 on:
@@ -44,4 +46,24 @@ jobs:
       - run: pnpm --filter @qti-pie/plate test
         env:
           # Plate's time bounds are readings of a laptop; the runner is slower (src/test/timing.ts).
+          PLATE_TIMING_SCALE: "3"
+      # The installed playwright-core's version (the lockfile's, after the frozen install): the browsers cache's key.
+      - id: playwright
+        run: echo "version=$(node -p "require('./packages/plate/node_modules/playwright-core/package.json').version")" >> "$GITHUB_OUTPUT"
+      # Playwright's browsers, kept between runs under the version that downloaded them, where test:browser reads them.
+      - id: browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/gr8des/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      # Chromium's headless shell and WebKit, on a cache miss only (plate's `browsers` script, into the path above).
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter @qti-pie/plate run browsers
+      # The engines' system libraries, every run: the cache holds the browsers, not the runner's apt packages.
+      - run: pnpm --filter @qti-pie/plate exec playwright-core install-deps chromium webkit
+      # The browser suite: the Node-driven files and the in-page files, in Chromium and WebKit headless.
+      - run: pnpm --filter @qti-pie/plate run test:browser
+        timeout-minutes: 15
+        env:
+          # The same slower-runner scale as the unit suite.
           PLATE_TIMING_SCALE: "3"

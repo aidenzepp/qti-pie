@@ -15,6 +15,7 @@ import { acceptForTest } from "#plate/validate/verdict.ts";
  */
 const everySupport: Supports = {
   additionalTestingTime: Option.some({ factor: 1.5, kind: "multiplier" }),
+  alternativeText: true,
   answerMasking: true,
   braille: Option.some({
     brailleType: Option.some("ext:sample-braille"),
@@ -24,13 +25,27 @@ const everySupport: Supports = {
     mathType: Option.some("nemeth"),
   }),
   breaks: true,
+  captions: true,
   catalog: new Set([...catalogSupports, "ext:sample-support"]),
   display: {
     invertDisplayPolarity: true,
+    invertedColors: Option.some({ background: Option.some("#000000"), foreground: Option.none() }),
     keywordEmphasis: true,
     languageOfInterface: Option.some("es"),
     layoutSingleColumn: true,
     magnification: Option.some(2),
+    text: Option.some({
+      colorTheme: Option.some("yellow-blue"),
+      fontNames: ["Plate Sans"],
+      fontSize: Option.some({ kind: "factor", value: 1.6 }),
+      genericFontFace: Option.some("sans serif"),
+      letterSpacing: Option.some(2),
+      lineHeight: Option.none(),
+      lineSpacing: Option.some(1.5),
+      uniformFontSizing: true,
+      wordSpacing: Option.none(),
+      wordWrapping: false,
+    }),
     textAppearance: Option.some({
       backgroundColor: Option.some("#000000"),
       fontColor: Option.some("#ffffff"),
@@ -55,7 +70,6 @@ const everyPnpSupport: PnpSupports = {
   hazards: new Set(["flashing", "ext:sample-hazard"]),
   ignored: ["{urn:example:notes}note"],
   inputRequirements: new Set(["full-switch-control"]),
-  invertedColors: Option.some({ background: Option.some("#000000"), foreground: Option.none() }),
   languages: new Map([["item-translation", "fr"]]),
   optional: new Set(["calculator-on-screen"]),
   prohibited: new Set(["captions"]),
@@ -68,23 +82,21 @@ const everyPnpSupport: PnpSupports = {
     typingEcho: Option.some("words"),
     volume: 0.8,
   }),
-  text: Option.some({
-    colorTheme: Option.some("yellow-blue"),
-    fontNames: ["Plate Sans"],
-    fontSize: Option.some({ kind: "factor", value: 1.6 }),
-    genericFontFace: Option.some("sans serif"),
-    letterSpacing: Option.some(2),
-    lineHeight: Option.none(),
-    lineSpacing: Option.some(1.5),
-    uniformFontSizing: true,
-    wordSpacing: Option.none(),
-    wordWrapping: false,
-  }),
   toolSettings: {
     calculatorType: Option.some("graphing"),
     highlightColor: Option.some("#ffff00"),
   },
 };
+
+/**
+ * Copy a supports value without one of its fields, as a host's untyped code might build it.
+ *
+ * @param supports The value to copy.
+ * @param field The field to leave out.
+ * @returns The copy, which no longer satisfies `Supports`.
+ */
+const withoutField = (supports: Supports, field: keyof Supports): Partial<Supports> =>
+  Object.fromEntries(Object.entries(supports).filter(([key]) => key !== field));
 
 describe("noSupports", () => {
   it("names the fifteen predefined catalog supports", () => {
@@ -100,9 +112,11 @@ describe("noSupports", () => {
     assert.strictEqual(noSupports.catalog.size, 0);
     assert.strictEqual(noSupports.tools.size, 0);
     assert.isTrue(Option.isNone(noSupports.additionalTestingTime));
+    assert.isFalse(noSupports.alternativeText);
     assert.isFalse(noSupports.answerMasking);
     assert.isTrue(Option.isNone(noSupports.braille));
     assert.isFalse(noSupports.breaks);
+    assert.isFalse(noSupports.captions);
     assert.isTrue(Option.isNone(noSupports.keywordTranslationLanguage));
     assert.isFalse(noSupports.longDescriptionVisible);
     assert.isTrue(Option.isNone(noSupports.readAloud));
@@ -110,12 +124,27 @@ describe("noSupports", () => {
     assert.isFalse(noSupports.suppressTts);
     assert.deepStrictEqual(noSupports.display, {
       invertDisplayPolarity: false,
+      invertedColors: Option.none(),
       keywordEmphasis: false,
       languageOfInterface: Option.none(),
       layoutSingleColumn: false,
       magnification: Option.none(),
+      text: Option.none(),
       textAppearance: Option.none(),
     });
+  });
+
+  it("[W0-SUPPORTS-FIELDS] noSupports has captions and alternativeText off and no text preferences or polarity colours", () => {
+    assert.strictEqual(noSupports.captions, false);
+    assert.strictEqual(noSupports.alternativeText, false);
+    assert.isTrue(Option.isNone(noSupports.display.text));
+    assert.isTrue(Option.isNone(noSupports.display.invertedColors));
+    assert.isFalse("text" in noPnpSupports);
+    assert.isFalse("invertedColors" in noPnpSupports);
+    assert.strictEqual(noPnpSupports.captions, false);
+    assert.strictEqual(noPnpSupports.alternativeText, false);
+    assert.isTrue(Option.isNone(noPnpSupports.display.text));
+    assert.isTrue(Option.isNone(noPnpSupports.display.invertedColors));
   });
 });
 
@@ -130,6 +159,7 @@ describe("SupportsSchema", () => {
   it("decodes the PNP preferences a renderer reads, as given", () => {
     const preferences: Supports = {
       ...noSupports,
+      alternativeText: true,
       braille: Option.some({
         brailleType: Option.some("ueb"),
         deliveryMode: "refreshable",
@@ -138,6 +168,7 @@ describe("SupportsSchema", () => {
         mathType: Option.none(),
       }),
       breaks: true,
+      captions: true,
       keywordTranslationLanguage: Option.some("es"),
       longDescriptionVisible: true,
       signLanguage: Option.some("ase"),
@@ -162,6 +193,49 @@ describe("SupportsSchema", () => {
       ),
     );
   });
+
+  it("[W0-SUPPORTS-FIELDS] SupportsSchema round-trips the four new fields set", () => {
+    const supports: Supports = {
+      ...noSupports,
+      alternativeText: true,
+      captions: true,
+      display: {
+        ...noSupports.display,
+        invertedColors: Option.some({
+          background: Option.some("#000"),
+          foreground: Option.some("#fff"),
+        }),
+        text: Option.some({
+          colorTheme: Option.none(),
+          fontNames: ["Atkinson"],
+          fontSize: Option.some({ kind: "points", value: 14 }),
+          genericFontFace: Option.none(),
+          letterSpacing: Option.none(),
+          lineHeight: Option.none(),
+          lineSpacing: Option.none(),
+          uniformFontSizing: false,
+          wordSpacing: Option.none(),
+          wordWrapping: false,
+        }),
+      },
+    };
+    const encoded = Schema.encodeUnknownSync(SupportsSchema)(supports);
+    const decoded = Schema.decodeUnknownSync(SupportsSchema)(encoded);
+
+    assert.deepStrictEqual(decoded, supports);
+    assert.isTrue(decoded.captions);
+    assert.isTrue(decoded.alternativeText);
+    assert.isTrue(Option.isSome(decoded.display.text));
+    assert.isTrue(Option.isSome(decoded.display.invertedColors));
+  });
+
+  it("[W0-SUPPORTS-FIELDS] SupportsSchema refuses a value missing the new booleans", () => {
+    const decode = Schema.decodeUnknownResult(SupportsSchema);
+
+    assert.isTrue(Result.isSuccess(decode(noSupports)));
+    assert.isTrue(Result.isFailure(decode(withoutField(noSupports, "captions"))));
+    assert.isTrue(Result.isFailure(decode(withoutField(noSupports, "alternativeText"))));
+  });
 });
 
 describe("PnpSupportsSchema", () => {
@@ -182,10 +256,25 @@ describe("PnpSupportsSchema", () => {
     assert.isTrue(Result.isFailure(decode({ ...everyPnpSupport, hazards: new Set(["ext:"]) })));
   });
 
+  it("[W0-SUPPORTS-FIELDS] PnpSupportsSchema decodes noPnpSupports and refuses a stray text key (dropped by default, an error under onExcessProperty)", () => {
+    const decode = Schema.decodeUnknownResult(PnpSupportsSchema);
+    const stray = { ...noPnpSupports, text: everySupport.display.text };
+    const dropped = Schema.decodeUnknownSync(PnpSupportsSchema)(stray);
+
+    assert.deepStrictEqual(decode(noPnpSupports), Result.succeed(noPnpSupports));
+    assert.isTrue(Result.isFailure(decode(stray, { onExcessProperty: "error" })));
+    assert.isFalse("text" in dropped);
+    assert.deepStrictEqual(dropped, noPnpSupports);
+  });
+
   it("holds noSupports' contract fields and every PNP preference off", () => {
     const { atStart, features, hazards, ignored, inputRequirements, languages } = noPnpSupports;
 
     assert.deepStrictEqual(Schema.decodeUnknownSync(SupportsSchema)(noPnpSupports), noSupports);
+    assert.isFalse(noPnpSupports.alternativeText);
+    assert.isFalse(noPnpSupports.captions);
+    assert.isTrue(Option.isNone(noPnpSupports.display.invertedColors));
+    assert.isTrue(Option.isNone(noPnpSupports.display.text));
     assert.deepStrictEqual(
       [
         atStart.size,

@@ -46,6 +46,7 @@ import { ssmlModule } from "#plate/content/ssml.ts";
 import { stimulusRefModule } from "#plate/content/stimulus-ref.ts";
 import { stylesheetModule } from "#plate/content/stylesheet.ts";
 import type { SourceElement } from "#plate/document/source.ts";
+import type { AttachAnswer, ReferencingElement } from "#plate/emit/body.ts";
 import type { Element } from "#plate/emit/node.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import type { ParseContext } from "#plate/interactions/contract.ts";
@@ -217,7 +218,7 @@ type SteppedBody<E extends BodyContentElement> = Pick<
  */
 type SteppedItem<E extends ItemContentElement> = Pick<
   ItemContentModule<E, NodeOf<ItemModules[E]>, PayloadOf<ItemModules[E]>, unknown>,
-  "content" | "copy" | "normalise" | "parse" | "redact" | "render"
+  "attach" | "content" | "copy" | "normalise" | "parse" | "redact" | "render"
 >;
 
 /**
@@ -626,6 +627,94 @@ export const renderItemContent = (
         ),
         (rendered) => rendered.flat(),
       );
+
+/**
+ * The answer that attaches nothing: what {@link attachedBy} gives when no module answers, and the
+ * answer the fold starts from.
+ */
+const unattached: AttachAnswer = { attributes: {}, nodes: [], place: "after-element" };
+
+/**
+ * Fold one module's attach answer into the answers before it: its attributes over theirs, its
+ * nodes after theirs, and `after-block` once any answer says so.
+ *
+ * @param folded The answers so far.
+ * @param answer The next module's answer.
+ * @returns The fold.
+ */
+const foldAnswer = (folded: AttachAnswer, answer: AttachAnswer): AttachAnswer => ({
+  attributes: { ...folded.attributes, ...answer.attributes },
+  nodes: [...folded.nodes, ...answer.nodes],
+  place:
+    folded.place === "after-block" || answer.place === "after-block"
+      ? "after-block"
+      : "after-element",
+});
+
+/**
+ * Ask the item-placed module of one element what it attaches beside a referencing element, when it
+ * declares `attach` and the payload holds a node of its element.
+ *
+ * @template E The element.
+ * @param element The element.
+ * @param content The payload's content.
+ * @param reference The referencing element.
+ * @param state The render's emit state.
+ * @param kit The render kit.
+ * @returns The module's answer, or none when it does not attach or holds no node.
+ */
+const attachedByElement = <E extends ItemContentElement>(
+  element: E,
+  content: { readonly [X in E]?: readonly PayloadOf<ItemModules[X]>[] },
+  reference: ReferencingElement,
+  state: EmitState,
+  kit: ContentRenderKit,
+): Option.Option<Result.Result<AttachAnswer, PartSwapRefused>> => {
+  const { attach } = steppedItem[element];
+  const nodes = content[element];
+
+  return attach === undefined || nodes === undefined || nodes.length === 0
+    ? Option.none()
+    : Option.some(attach(reference, state, kit));
+};
+
+/**
+ * Answer the emitter's attachment hook for a body element that references a catalog
+ * (`RenderInteraction.attach` in `#plate/emit/body.ts`): every item-placed module that declares
+ * `attach` and whose nodes the payload holds is asked, in the modules' order, and the answers are
+ * folded ({@link foldAnswer}): attributes merged in order, a later module's value winning, nodes
+ * concatenated, `place` `after-block` when any answer says so. No such module, or every answer
+ * empty, gives the empty answer, which changes no HTML.
+ *
+ * @param content The payload's content, absent when it holds none.
+ * @param reference The referencing element: the catalog's idref and the element's id.
+ * @param state The render's emit state.
+ * @param kit The render kit.
+ * @returns The folded answer, or the first refusal of a part swap.
+ */
+export const attachedBy = (
+  content: ItemPayloadsHeld | undefined,
+  reference: ReferencingElement,
+  state: EmitState,
+  kit: ContentRenderKit,
+): Result.Result<AttachAnswer, PartSwapRefused> => {
+  if (content === undefined) {
+    return Result.succeed(unattached);
+  }
+
+  const answers = Object.values(itemModules).flatMap((module) =>
+    Option.toArray(attachedByElement(module.element, content, reference, state, kit)),
+  );
+
+  return Result.map(Result.all(answers), (folded) => {
+    let answer = unattached;
+    for (const next of folded) {
+      answer = foldAnswer(answer, next);
+    }
+
+    return answer;
+  });
+};
 
 /**
  * Judge an island of a namespace outside QTI's for the verdict, through the `check` of the module

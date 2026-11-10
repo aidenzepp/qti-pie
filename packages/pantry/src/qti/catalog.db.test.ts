@@ -33,7 +33,6 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
@@ -46,7 +45,8 @@ import {
 } from "#pantry/test/fixtures.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { asi, item, manifestOf } from "#pantry/test/probe.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * Replace the one occurrence of a passage in a text.
@@ -325,7 +325,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the catalog laws, judged by PostgreSQL through the importer", (it) => {
       for (const { files, laws, name, rule } of refusals) {
         it.effect(`refuses ${name} under ${rule}, as the law oracle predicts`, () =>
@@ -347,7 +346,7 @@ describe.skipIf(!hasLease)(
               assert.isTrue(refused instanceof ImportRefused, `${name}: ${refused._tag}`);
 
               if (refused instanceof ImportRefused) {
-                assert.strictEqual(refused.rule, rule, `${name}: ${refused.detail}`);
+                assert.strictEqual(refused.rules[0], rule, `${name}: ${refused.detail}`);
                 assert.strictEqual(refused.origin._tag, "Database", name);
                 assert.isTrue(
                   refused.origin._tag === "Database" &&
@@ -386,7 +385,6 @@ describe.skipIf(!hasLease)(
 
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the phase-9 fixtures, round-tripped and refused through the importer", (it) => {
       for (const name of [...catalogNames, ...companionNames]) {
         it.effect(`${name}: imports, exports and compares equal with its source`, () =>
@@ -430,7 +428,7 @@ describe.skipIf(!hasLease)(
             assert.isTrue(refused instanceof ImportRefused, `${name}: ${refused._tag}`);
 
             if (refused instanceof ImportRefused) {
-              assert.include(rules, refused.rule, `${name}: ${refused.detail}`);
+              assert.include(rules, refused.rules[0], `${name}: ${refused.detail}`);
             }
           }),
         );
