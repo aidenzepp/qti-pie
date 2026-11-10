@@ -166,7 +166,7 @@ describe("qti/declarations.ts, declared", () => {
 
     // §2.2.2.3 says SCORE and MAXSCORE of items ("Items that declare ... SCORE MUST be a float",
     // "MAXSCORE MUST be a float") and PASSED of "Items or tests": a test's SCORE or MAXSCORE of
-    // another base type is lawful (info.txt:8478, :8480, :8482).
+    // another base type is lawful (info.txt:4663, :4664, :4665).
     assert.sameDeepMembers(
       reservedBaseTypes.map(({ baseType, identifier, root }) => [identifier, baseType, root]),
       [
