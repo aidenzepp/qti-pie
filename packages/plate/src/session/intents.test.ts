@@ -255,6 +255,22 @@ describe("allowedIntents", () => {
     }),
   );
 
+  it.effect(
+    "[W0-BE] lists the same intents with the items as without them: every module decides a move from the session",
+    () =>
+      Effect.gen(function* withItems() {
+        const given = yield* delivery("NI", "nonlinear", "individual");
+        const configuration = yield* configure({});
+        const session = sessionAfter(given, configuration, [{ kind: "next" }]);
+
+        assert.deepStrictEqual(
+          allowedIntents(given.test, session, given.items),
+          allowedIntents(given.test, session),
+        );
+        assert.include(allowedNow(given.test, session), "submit-item");
+      }),
+  );
+
   it.effect("fails with UnknownItemRef for a session of another test", () =>
     Effect.gen(function* otherTest() {
       const given = yield* delivery("NO", "nonlinear", "individual");
