@@ -12,14 +12,18 @@
  * Each of the other kinds is a stub module beside this file: `implemented` is false, its `parts`
  * holds no row, its `parse` gives the notice an unknown QTI interaction element gives, so the
  * verdicts and the HTML stay what they were, and its `payloadSchema` refuses its kind, as the
- * redacted codec refused it before. A stub's other members throw {@link NotImplemented}. No hub
- * reaches them: the model holds no node of a stub's kind, since its `parse` gives the notice, and
- * the redacted codec refuses one, so no step past `parse` ever runs for it. The modules form no
- * registry a host can reach: the body walk names each element in one switch, and every hub
- * delegates a module's kind through `#plate/model/interactions.ts`, its `stubSteps` for a model
- * node and its `renderModule` for a payload node. A module that lands fills only its own file: its
- * payload node reaches the payload as a `ModulePayload` (`#plate/payload.ts`), its JSON form
- * through its `payloadSchema`, and each of its parts through {@link partRow}.
+ * redacted codec refused it before. A stub's `regions`, `replaceRegions` and `content` give the
+ * trivial value (no region, the node itself, no content), and its other members throw
+ * {@link NotImplemented}. No hub reaches them: the model holds no node of a stub's kind, since its
+ * `parse` gives the notice, and the redacted codec refuses one, so no step past `parse` ever runs
+ * for it. The modules form no registry a host can reach: the body walk names each element in one
+ * switch, and every hub delegates a module's kind through `#plate/model/interactions.ts`, its
+ * `stubSteps` for a model node, its `regionsOf` and `mapRegions` for the content a node holds, and
+ * its `renderModule` and `moduleContent` for a payload node. A module that lands fills only its own
+ * file: its payload node reaches the payload as a `ModulePayload` (`#plate/payload.ts`), its JSON
+ * form through its `payloadSchema`, each of its parts through {@link partRow}, and its parts reach
+ * a host's overrides and the `data-slot` lookup through the names `#plate/model/interactions.ts`
+ * hands the part table as it loads.
  *
  * @module
  */
@@ -34,9 +38,10 @@ import type { InteractionKey, PartKey, PartRow } from "#plate/emit/parts.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import type { Malformed } from "#plate/form/encoding.ts";
 import type { Locale } from "#plate/messages.ts";
-import type { Interaction, StubbedInteraction, Unsupported } from "#plate/model/item.ts";
+import type { Region } from "#plate/model/interactions.ts";
+import type { BodyNode, Interaction, StubbedInteraction, Unsupported } from "#plate/model/item.ts";
 import type { ResponseValue, Value } from "#plate/model/values.ts";
-import type { EmitState, Payload, ValidationMessage } from "#plate/payload.ts";
+import type { EmitState, Payload, PayloadNode, ValidationMessage } from "#plate/payload.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 
 /**
@@ -148,6 +153,12 @@ export interface BoundResponse {
 }
 
 /**
+ * One region of an interaction's own content as its module gives it: a `Region` of
+ * `#plate/model/interactions.ts` without its owner, which `regionsOf` adds.
+ */
+export type OwnRegion = Omit<Region, "owner">;
+
+/**
  * One interaction kind's module.
  *
  * @template K The kind, as the item model names it.
@@ -173,6 +184,13 @@ export interface InteractionModule<
    * Compute every attribute of every part once, as `renderInlineChoice`'s connect function does.
    */
   readonly connect: (interaction: P, payload: Payload, locale: Locale) => Connected;
+  /**
+   * The payload nodes the render writes as content through `emitNodes`, in document order, as a
+   * Prompt's nodes are written: the hubs that read what the emitter writes (the heading levels
+   * the heading shift is read from) read them through this. None for a stub, which has no payload
+   * node.
+   */
+  readonly content: (interaction: P) => readonly PayloadNode[];
   /**
    * How many Controls the interaction renders, which numbers the Controls the renderer names.
    */
@@ -224,6 +242,12 @@ export interface InteractionModule<
    */
   readonly redact: (interaction: I) => P;
   /**
+   * The regions of the model node's own content, in document order, as `regionsOf` gives them:
+   * its Prompt and every other content it holds, each with the choice whose content it is. None
+   * for a stub, whose model node no hub ever holds.
+   */
+  readonly regions: (interaction: I) => readonly OwnRegion[];
+  /**
    * Render the payload node: its Root, every part placed through the embedder's replacement.
    */
   readonly render: (
@@ -231,6 +255,12 @@ export interface InteractionModule<
     payload: Payload,
     state: EmitState,
   ) => Result.Result<Element, PartSwapRefused>;
+  /**
+   * Rebuild the model node with the content of each of its {@link InteractionModule.regions}
+   * replaced, as `mapRegions` does: `contents` holds one entry per region, in the order `regions`
+   * gives them. The node itself for a stub.
+   */
+  readonly replaceRegions: (interaction: I, contents: readonly (readonly BodyNode[])[]) => I;
   /**
    * The value the interaction shows for a stored response.
    */

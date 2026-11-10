@@ -53,6 +53,10 @@ export const graphicOrderModule: InteractionModule<
    */
   connect: notImplemented,
   /**
+   * No content: a stub has no payload node, so no hub asks.
+   */
+  content: () => [],
+  /**
    * How many Controls Graphic Order renders: not implemented; issue ei-10 fills it.
    */
   controls: notImplemented,
@@ -87,9 +91,17 @@ export const graphicOrderModule: InteractionModule<
    */
   redact: notImplemented,
   /**
+   * No region: the model holds no node of this kind until the module lands.
+   */
+  regions: () => [],
+  /**
    * Graphic Order's render function: not implemented; issue ei-10 fills it.
    */
   render: notImplemented,
+  /**
+   * The node itself, as it has no region.
+   */
+  replaceRegions: (interaction) => interaction,
   /**
    * The value Graphic Order shows for a stored response: not implemented; issue ei-10 fills it.
    */

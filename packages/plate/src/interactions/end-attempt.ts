@@ -48,6 +48,10 @@ export const endAttemptModule: InteractionModule<"end-attempt", EndAttemptIntera
    */
   connect: notImplemented,
   /**
+   * No content: a stub has no payload node, so no hub asks.
+   */
+  content: () => [],
+  /**
    * How many Controls End Attempt renders: not implemented; issue ei-02 fills it.
    */
   controls: notImplemented,
@@ -82,9 +86,17 @@ export const endAttemptModule: InteractionModule<"end-attempt", EndAttemptIntera
    */
   redact: notImplemented,
   /**
+   * No region: the model holds no node of this kind until the module lands.
+   */
+  regions: () => [],
+  /**
    * End Attempt's render function: not implemented; issue ei-02 fills it.
    */
   render: notImplemented,
+  /**
+   * The node itself, as it has no region.
+   */
+  replaceRegions: (interaction) => interaction,
   /**
    * The value End Attempt shows for a stored response: not implemented; issue ei-02 fills it.
    */

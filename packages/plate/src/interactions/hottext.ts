@@ -48,6 +48,10 @@ export const hottextModule: InteractionModule<"hottext", HottextInteraction, nev
    */
   connect: notImplemented,
   /**
+   * No content: a stub has no payload node, so no hub asks.
+   */
+  content: () => [],
+  /**
    * How many Controls Hot Text renders: not implemented; issue m3d-09 fills it.
    */
   controls: notImplemented,
@@ -82,9 +86,17 @@ export const hottextModule: InteractionModule<"hottext", HottextInteraction, nev
    */
   redact: notImplemented,
   /**
+   * No region: the model holds no node of this kind until the module lands.
+   */
+  regions: () => [],
+  /**
    * Hot Text's render function: not implemented; issue m3d-09 fills it.
    */
   render: notImplemented,
+  /**
+   * The node itself, as it has no region.
+   */
+  replaceRegions: (interaction) => interaction,
   /**
    * The value Hot Text shows for a stored response: not implemented; issue m3d-09 fills it.
    */

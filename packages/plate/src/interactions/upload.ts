@@ -48,6 +48,10 @@ export const uploadModule: InteractionModule<"upload", UploadInteraction, never>
    */
   connect: notImplemented,
   /**
+   * No content: a stub has no payload node, so no hub asks.
+   */
+  content: () => [],
+  /**
    * How many Controls Upload renders: not implemented; issue ei-01 fills it.
    */
   controls: notImplemented,
@@ -82,9 +86,17 @@ export const uploadModule: InteractionModule<"upload", UploadInteraction, never>
    */
   redact: notImplemented,
   /**
+   * No region: the model holds no node of this kind until the module lands.
+   */
+  regions: () => [],
+  /**
    * Upload's render function: not implemented; issue ei-01 fills it.
    */
   render: notImplemented,
+  /**
+   * The node itself, as it has no region.
+   */
+  replaceRegions: (interaction) => interaction,
   /**
    * The value Upload shows for a stored response: not implemented; issue ei-01 fills it.
    */

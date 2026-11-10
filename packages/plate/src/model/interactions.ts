@@ -5,14 +5,16 @@
  *
  * {@link regionsOf} is the one place that knows which content each interaction kind holds: every
  * walk of the body that enters an interaction enters it through the regions this gives, each with
- * its owner, so no walk keeps its own table of the kinds. {@link stubSteps} is the one place that
- * hands a module kind's model node to its module, and {@link renderModule} the one that hands its
- * payload node to its module's render, so each hub delegates a module's kind in one line, and a
- * module that lands changes neither.
+ * its owner, so no walk keeps its own table of the kinds; a module kind's regions are its module's.
+ * {@link stubSteps} is the one place that hands a module kind's model node to its module, and
+ * {@link renderModule} and {@link moduleContent} the ones that hand its payload node to its
+ * module's render and content, so each hub delegates a module's kind in one line, and a module that
+ * lands changes neither. As it loads, it hands the part table every module's part names
+ * (`adoptModuleParts` in `#plate/emit/parts.ts`), which cannot import the modules itself.
  *
  * It lives apart from the item model because the model builder value-imports the Effect runtime,
- * and its callers are browser modules: this module value-imports only `Option` and the interaction
- * modules, which value-import only `Data` and the part table.
+ * and its callers are browser modules: this module value-imports only `Option`, the part table and
+ * the interaction modules, which value-import only `Data` and the part table.
  *
  * @module
  */
@@ -38,12 +40,26 @@ import { selectPointModule } from "#plate/interactions/select-point.ts";
 import { sliderModule } from "#plate/interactions/slider.ts";
 import { uploadModule } from "#plate/interactions/upload.ts";
 import type { Element } from "#plate/emit/node.ts";
+import { adoptModuleParts } from "#plate/emit/parts.ts";
+import type { InteractionKey, PartKey, PartName } from "#plate/emit/parts.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { isModuleKind } from "#plate/interactions/contract.ts";
-import type { BoundResponse, InteractionModule, ModuleKind } from "#plate/interactions/contract.ts";
+import type {
+  BoundResponse,
+  InteractionModule,
+  ModuleKind,
+  OwnRegion,
+  PartSpec,
+} from "#plate/interactions/contract.ts";
 import type { BodyNode, Interaction, SimpleChoice, StubbedInteraction } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
-import type { EmitState, ModulePayloadOf, Payload, ValidationMessage } from "#plate/payload.ts";
+import type {
+  EmitState,
+  ModulePayloadOf,
+  Payload,
+  PayloadNode,
+  ValidationMessage,
+} from "#plate/payload.ts";
 
 /**
  * One region of an interaction: content it holds of its own, with the owner it sits in.
@@ -128,7 +144,17 @@ export type PayloadOf<K extends ModuleKind> = Extract<
  */
 type Stepped<K extends ModuleKind> = Pick<
   InteractionModule<K, ModelOf<K>, PayloadOf<K>>,
-  "bindings" | "controls" | "nullValue" | "redact" | "render" | "sequence" | "unnamed" | "validate"
+  | "bindings"
+  | "content"
+  | "controls"
+  | "nullValue"
+  | "redact"
+  | "regions"
+  | "render"
+  | "replaceRegions"
+  | "sequence"
+  | "unnamed"
+  | "validate"
 >;
 
 /**
@@ -141,6 +167,49 @@ type SteppedModules = { readonly [K in ModuleKind]: Stepped<K> };
  * {@link modules} as {@link SteppedModules}.
  */
 const stepped: SteppedModules = modules;
+
+/**
+ * Name each of a module's parts by its owner and its key. It reads any module alike, so the table
+ * of modules is read in one pass whatever parts each module that lands declares.
+ *
+ * @param module The module, by its owner and its parts, each keyed by a part key.
+ * @returns One name per key of its `parts`, in their order; none for a stub.
+ */
+const partNamesOf = (module: {
+  readonly owner: InteractionKey;
+  readonly parts: Readonly<Partial<Record<PartKey, PartSpec>>>;
+}): readonly PartName[] =>
+  Object.keys(module.parts)
+    .filter((part): part is PartKey => Object.hasOwn(module.parts, part))
+    .map((part) => ({ interaction: module.owner, part }));
+
+adoptModuleParts(Object.values(modules).flatMap(partNamesOf));
+
+/**
+ * Give the regions of a module kind's model node, by its kind's module.
+ *
+ * @param kind The kind.
+ * @param interaction The node.
+ * @returns Its module's regions of it, without the owner.
+ */
+const moduleRegions = <K extends ModuleKind>(
+  kind: K,
+  interaction: ModelOf<K>,
+): readonly OwnRegion[] => stepped[kind].regions(interaction);
+
+/**
+ * Rebuild a module kind's model node with its regions' content replaced, by its kind's module.
+ *
+ * @param kind The kind.
+ * @param interaction The node.
+ * @param contents The content of each region, in the order {@link moduleRegions} gives them.
+ * @returns The node rebuilt.
+ */
+const replaceModuleRegions = <K extends ModuleKind>(
+  kind: K,
+  interaction: ModelOf<K>,
+  contents: readonly (readonly BodyNode[])[],
+): ModelOf<K> => stepped[kind].replaceRegions(interaction, contents);
 
 /**
  * Tell whether a node is one of an interaction plate parses through a module: a model node
@@ -198,15 +267,18 @@ const choiceRegions = (
 /**
  * Give the regions of an interaction, first in the document first: a Choice's Prompt then its
  * choices' content; an Extended Text's Prompt; an Inline Choice's Label then its choices' content,
- * which is written as text; nothing of a Text Entry's; and the Prompt of a stubbed kind's
- * placeholder ({@link isStubbed}).
+ * which is written as text; nothing of a Text Entry's; and a module kind's ({@link isStubbed}) as
+ * its module's `regions` gives them, none for a stub.
  *
  * @param interaction The interaction.
  * @returns Its regions, each with the interaction as its owner.
  */
 export const regionsOf = (interaction: Interaction): readonly Region[] => {
   if (isStubbed(interaction)) {
-    return leading(interaction, "prompt", interaction.prompt);
+    return moduleRegions(interaction.kind, interaction).map((region) => ({
+      ...region,
+      owner: interaction,
+    }));
   }
 
   switch (interaction.kind) {
@@ -237,7 +309,8 @@ export const regionsOf = (interaction: Interaction): readonly Region[] => {
 /**
  * Rebuild an interaction with the content of each of its regions ({@link regionsOf}) replaced,
  * calling `map` on the regions in document order, so a `map` that gathers what it finds gathers it
- * in that order. A region's choice keeps every field but its content.
+ * in that order. A region's choice keeps every field but its content. A module kind's node is
+ * rebuilt by its module's `replaceRegions`.
  *
  * @param interaction The interaction.
  * @param map The content each region is replaced by.
@@ -256,7 +329,11 @@ export const mapRegions = (
     original.map((choice, index) => ({ ...choice, content: contents[index] ?? choice.content }));
 
   if (isStubbed(interaction)) {
-    return { ...interaction, prompt: lead("prompt") };
+    return replaceModuleRegions(
+      interaction.kind,
+      interaction,
+      mapped.map((entry) => entry.nodes),
+    );
   }
 
   switch (interaction.kind) {
@@ -463,3 +540,14 @@ export const renderModule = <K extends ModuleKind>(
   state: EmitState,
 ): Result.Result<Element, PartSwapRefused> =>
   stepped[interaction.kind].render(interaction.payload, payload, state);
+
+/**
+ * Give the payload nodes a module kind's payload node writes as content, through its module's
+ * `content`, so a hub that reads what the emitter writes reads them.
+ *
+ * @param interaction The payload node, as the payload holds it.
+ * @returns The nodes its module's render writes as content, in document order.
+ */
+export const moduleContent = <K extends ModuleKind>(
+  interaction: ModulePayloadOf<K>,
+): readonly PayloadNode[] => stepped[interaction.kind].content(interaction.payload);

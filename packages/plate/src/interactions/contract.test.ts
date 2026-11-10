@@ -1,9 +1,11 @@
 import { assert, describe, it, vi } from "@effect/vitest";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option, Result, pipe } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
+import { h } from "#plate/emit/node.ts";
+import type { Attributes, PartFunction } from "#plate/emit/node.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import { associateModule } from "#plate/interactions/associate.ts";
@@ -26,13 +28,14 @@ import { selectPointModule } from "#plate/interactions/select-point.ts";
 import { sliderModule } from "#plate/interactions/slider.ts";
 import { uploadModule } from "#plate/interactions/upload.ts";
 import type {
+  BodyNode,
   GapMatchInteraction,
   StubInteraction,
   StubbedInteraction,
   Unsupported,
 } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
-import type { EmitState, Payload } from "#plate/payload.ts";
+import type { EmitState, Payload, PayloadNode } from "#plate/payload.ts";
 
 /**
  * What every stub step is handed beside its kind's placeholder node.
@@ -323,16 +326,41 @@ describe("the stub interaction modules", () => {
 });
 
 /**
- * The payload node of {@link landedGapMatch}: what its `redact` copies of the model node.
+ * One gap text of {@link landedGapMatch}'s model node: content it holds beyond its Prompt.
+ */
+interface LandedGapText {
+  readonly content: readonly BodyNode[];
+  readonly identifier: string;
+}
+
+/**
+ * The model node of {@link landedGapMatch}: Gap Match's, with its gap texts, content beyond the
+ * Prompt that only the module knows.
+ */
+interface LandedModel extends GapMatchInteraction {
+  readonly gapTexts: readonly LandedGapText[];
+}
+
+/**
+ * The payload node of {@link landedGapMatch}: what its `redact` copies of the model node, and the
+ * content its render writes through `emitNodes`.
  */
 interface LandedPayload {
   readonly class: string;
+  readonly content: readonly PayloadNode[];
   readonly response: string;
 }
 
 /**
- * The parts of {@link landedGapMatch}: a Root, and a part whose key is in camel case, so its
- * marker shows the kebab case `partRow` derives.
+ * The content {@link landedGapMatch}'s payload node holds: a heading, as a Prompt holds one.
+ */
+const landedContent: readonly PayloadNode[] = [
+  { attributes: [], children: [{ kind: "text", text: "Gaps" }], kind: "element", tag: "h2" },
+];
+
+/**
+ * The parts of {@link landedGapMatch} that `partRow` places: a Root, and a part whose key is in
+ * camel case, so its marker shows the kebab case `partRow` derives.
  */
 const landedParts = {
   itemButton: {
@@ -353,19 +381,35 @@ const landedParts = {
 } as const satisfies { readonly [Q in "itemButton" | "root"]: PartSpec };
 
 /**
- * A Gap Match module as one that has landed would be: implemented, with its own payload node, its
- * own JSON form and its own parts, in this file only. The test registers it in place of the stub
- * through `vi.doMock`, so no hub is edited for it.
+ * Every part of {@link landedGapMatch}: {@link landedParts} and a Gap, a part no shipped kind has,
+ * which a host overrides by `parts["gap-match-interaction"].gap`.
+ */
+const landedAllParts = {
+  ...landedParts,
+  gap: {
+    defaults: {},
+    element: "span",
+    listOwner: false,
+    merged: [],
+    tagClass: "phrasing-container",
+  },
+} as const satisfies { readonly [Q in "gap" | "itemButton" | "root"]: PartSpec };
+
+/**
+ * A Gap Match module as one that has landed would be: implemented, with its own model node, payload
+ * node, JSON form and parts, in this file only. The test registers it in place of the stub through
+ * `vi.doMock`, so no hub is edited for it.
  */
 const landedGapMatch: InteractionModule<
   "gap-match",
-  GapMatchInteraction,
+  LandedModel,
   LandedPayload,
-  "itemButton" | "root",
+  "gap" | "itemButton" | "root",
   unknown
 > = {
   bindings: (interaction) => [{ base: Option.none(), response: interaction.response }],
   connect: () => ({}),
+  content: (interaction) => interaction.content,
   controls: () => 1,
   element: "qti-gap-match-interaction",
   feature: "Q-6",
@@ -374,18 +418,37 @@ const landedGapMatch: InteractionModule<
   nullValue: () => ({ baseType: "identifier", cardinality: "single", values: [] }),
   owner: "gap-match-interaction",
   parse: (_source, context) => context.notice("qti-gap-match-interaction"),
-  parts: landedParts,
+  parts: landedAllParts,
   payloadSchema: ({ BodyNodes, NoPath, OptionalText, Schema }) =>
     Schema.Struct({
       ariaLabel: OptionalText,
       ariaLabelledby: OptionalText,
       class: Schema.String,
+      gapTexts: Schema.Array(Schema.Struct({ content: BodyNodes, identifier: Schema.String })),
       kind: Schema.Literal("gap-match"),
       path: NoPath,
       prompt: Schema.OptionFromOptionalKey(BodyNodes),
       response: Schema.String,
     }),
-  redact: (interaction) => ({ class: interaction.class, response: interaction.response }),
+  redact: (interaction) => ({
+    class: interaction.class,
+    content: landedContent,
+    response: interaction.response,
+  }),
+  regions: (interaction) => [
+    ...Option.match(interaction.prompt, {
+      onNone: () => [],
+      onSome: (nodes) => [
+        { choice: Option.none(), nodes, part: "prompt" as const, written: "nodes" as const },
+      ],
+    }),
+    ...interaction.gapTexts.map((gapText) => ({
+      choice: Option.some(gapText.identifier),
+      nodes: gapText.content,
+      part: "choice" as const,
+      written: "nodes" as const,
+    })),
+  ],
   render: (interaction) => {
     const row = partRow({ owner: "gap-match-interaction", parts: landedParts }, "root");
 
@@ -395,6 +458,23 @@ const landedGapMatch: InteractionModule<
       [],
     );
   },
+  replaceRegions: (interaction, contents) => {
+    const [first, ...rest] = contents;
+    const prompt = pipe(
+      interaction.prompt,
+      Option.map((nodes) => first ?? nodes),
+    );
+    const gaps = Option.isSome(interaction.prompt) ? rest : contents;
+
+    return {
+      ...interaction,
+      gapTexts: interaction.gapTexts.map((gapText, index) => ({
+        ...gapText,
+        content: gaps[index] ?? gapText.content,
+      })),
+      prompt,
+    };
+  },
   restore: (_interaction, stored) => stored,
   sequence: () => Option.none(),
   solution: (_interaction, correct) => correct,
@@ -403,12 +483,38 @@ const landedGapMatch: InteractionModule<
 };
 
 /**
+ * Run an effect with {@link landedGapMatch} registered in place of the Gap Match stub, every module
+ * it imports loaded afresh, and the stub restored after.
+ *
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withLanded = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock("#plate/interactions/gap-match.ts", () => ({ gapMatchModule: landedGapMatch }));
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock("#plate/interactions/gap-match.ts");
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
  * The JSON form of a redacted item whose body holds one Gap Match, as a host hands it over.
  */
 const landedJson = {
   body: [
     { kind: "text", text: "Fill the gaps: " },
-    { class: "gaps", kind: "gap-match", response: "RESPONSE" },
+    {
+      class: "gaps",
+      gapTexts: [{ content: [{ kind: "text", text: "cat" }], identifier: "G1" }],
+      kind: "gap-match",
+      response: "RESPONSE",
+    },
   ],
   document: "item.xml",
   identifier: "landed",
@@ -417,42 +523,184 @@ const landedJson = {
   title: "Landed",
 };
 
+/**
+ * A host's replacement for a part: the part as a `span`.
+ *
+ * @param props The part's attributes.
+ * @param children The part's children.
+ * @returns The `span`.
+ */
+const replacement: PartFunction<Attributes> = (props, children) => h("span", props, children);
+
+/**
+ * Give a text node of the model.
+ *
+ * @param value The text.
+ * @returns The node.
+ */
+const textNode = (value: string): BodyNode => ({ kind: "text", text: value });
+
 describe("a module that lands", () => {
   it.effect(
     "renders through render(), its node surviving encodeRedacted and decodeRedacted, with no hub edit",
     () =>
-      Effect.gen(function* landed() {
-        vi.resetModules();
-        vi.doMock("#plate/interactions/gap-match.ts", () => ({ gapMatchModule: landedGapMatch }));
+      withLanded(
+        Effect.gen(function* landed() {
+          const codec = yield* Effect.promise(() => import("#plate/codec/redacted.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const configuration = yield* configure({});
+          const decoded = yield* Effect.fromResult(codec.decodeRedacted(landedJson));
+          const encoded = yield* Effect.fromResult(codec.encodeRedacted(decoded));
 
+          assert.deepStrictEqual<unknown>(encoded, landedJson);
+
+          const again = yield* Effect.fromResult(
+            // oxlint-disable-next-line unicorn/prefer-structured-clone -- the round trip is the JSON a host sends to a page, which a structured clone does not take.
+            codec.decodeRedacted(JSON.parse(JSON.stringify(encoded))),
+          );
+          const { html } = yield* Effect.fromResult(
+            plate.render(again, configuration, { instance: "q1" }),
+          );
+
+          assert.include(html, "Fill the gaps: ");
+          assert.match(html, /<div [^>]*data-slot="gap-match-interaction"[^>]*>/u);
+          assert.include(html, 'data-response="RESPONSE"');
+          assert.include(html, 'class="gaps"');
+        }),
+      ),
+  );
+
+  it.effect(
+    "takes a host's override of its own part and names the part by its marker, with no part-table edit",
+    () =>
+      withLanded(
+        Effect.gen(function* overridden() {
+          yield* Effect.promise(() => import("#plate/model/interactions.ts"));
+
+          const parts = yield* Effect.promise(() => import("#plate/emit/parts.ts"));
+          const resolved = yield* Effect.fromResult(
+            parts.resolveOverrides({ "gap-match-interaction": { gap: replacement } }),
+          );
+          const named = parts.partForSlot("gap-match-interaction-gap");
+
+          assert.deepStrictEqual<unknown>(
+            named,
+            Option.some({ interaction: "gap-match-interaction", part: "gap" }),
+          );
+          assert.strictEqual(
+            Option.getOrUndefined(
+              pipe(
+                named,
+                Option.flatMap(({ interaction, part }) =>
+                  resolved.replacementFor(interaction, part),
+                ),
+              ),
+            ),
+            replacement,
+          );
+          assert.deepStrictEqual(
+            Result.map(
+              parts.resolveOverrides({ "gap-match-interaction": { gaps: replacement } }),
+              () => "resolved",
+            ),
+            Result.fail(
+              new parts.UnknownPart({
+                interaction: "gap-match-interaction",
+                part: Option.some("gaps"),
+              }),
+            ),
+          );
+        }),
+      ),
+  );
+
+  it.effect("gives and maps the regions of its own content beyond the Prompt", () =>
+    withLanded(
+      Effect.gen(function* regions() {
+        const interactions = yield* Effect.promise(() => import("#plate/model/interactions.ts"));
+        const node: LandedModel = {
+          ariaLabel: Option.none(),
+          ariaLabelledby: Option.none(),
+          class: "",
+          gapTexts: [
+            { content: [textNode("cat")], identifier: "G1" },
+            { content: [textNode("dog")], identifier: "G2" },
+          ],
+          kind: "gap-match",
+          path: "qti-assessment-item/qti-item-body/qti-gap-match-interaction",
+          prompt: Option.some([textNode("Fill")]),
+          response: "RESPONSE",
+        };
+        const found = interactions.regionsOf(node);
+
+        assert.deepStrictEqual(
+          found.map(({ choice, nodes, part, written }) => ({ choice, nodes, part, written })),
+          [
+            { choice: Option.none(), nodes: [textNode("Fill")], part: "prompt", written: "nodes" },
+            {
+              choice: Option.some("G1"),
+              nodes: [textNode("cat")],
+              part: "choice",
+              written: "nodes",
+            },
+            {
+              choice: Option.some("G2"),
+              nodes: [textNode("dog")],
+              part: "choice",
+              written: "nodes",
+            },
+          ],
+        );
+        assert.isTrue(found.every((region) => region.owner === node));
+
+        const seen: string[] = [];
+        const mapped = interactions.mapRegions(node, (region) => {
+          seen.push(Option.getOrElse(region.choice, () => region.part));
+
+          return region.nodes.map((inner) =>
+            inner.kind === "text" ? textNode(inner.text.toUpperCase()) : inner,
+          );
+        });
+
+        assert.deepStrictEqual(seen, ["prompt", "G1", "G2"]);
+        assert.deepStrictEqual(
+          interactions.regionsOf(mapped).map((region) => region.nodes),
+          [[textNode("FILL")], [textNode("CAT")], [textNode("DOG")]],
+        );
+      }),
+    ),
+  );
+
+  it.effect("counts the headings of its payload's content in the item's heading shift", () =>
+    withLanded(
+      Effect.gen(function* headings() {
         const codec = yield* Effect.promise(() => import("#plate/codec/redacted.ts"));
         const plate = yield* Effect.promise(() => import("#plate/render.ts"));
         const configuration = yield* configure({});
-        const decoded = yield* Effect.fromResult(codec.decodeRedacted(landedJson));
-        const encoded = yield* Effect.fromResult(codec.encodeRedacted(decoded));
-
-        assert.deepStrictEqual<unknown>(encoded, landedJson);
-
-        const again = yield* Effect.fromResult(
-          // oxlint-disable-next-line unicorn/prefer-structured-clone -- the round trip is the JSON a host sends to a page, which a structured clone does not take.
-          codec.decodeRedacted(JSON.parse(JSON.stringify(encoded))),
+        const decoded = yield* Effect.fromResult(
+          codec.decodeRedacted({
+            ...landedJson,
+            body: [
+              ...landedJson.body,
+              {
+                attributes: [],
+                children: [{ kind: "text", text: "Below" }],
+                kind: "element",
+                tag: "h3",
+              },
+            ],
+          }),
         );
         const { html } = yield* Effect.fromResult(
-          plate.render(again, configuration, { instance: "q1" }),
+          plate.render(decoded, configuration, { instance: "q1" }),
         );
 
-        assert.include(html, "Fill the gaps: ");
-        assert.match(html, /<div [^>]*data-slot="gap-match-interaction"[^>]*>/u);
-        assert.include(html, 'data-response="RESPONSE"');
-        assert.include(html, 'class="gaps"');
-      }).pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
-            vi.doUnmock("#plate/interactions/gap-match.ts");
-            vi.resetModules();
-          }),
-        ),
-      ),
+        // The module's content holds an h2, the item's shallowest heading, which lands at the
+        // configured level 2, so the h3 keeps its level; read without it, the h3 would land at 2.
+        assert.strictEqual(configuration.headingLevel, 2);
+        assert.match(html, /<h3[^>]*>Below<\/h3>/u);
+      }),
+    ),
   );
 
   it("gives each part's row from its spec, with the owner, the part and the marker derived", () => {

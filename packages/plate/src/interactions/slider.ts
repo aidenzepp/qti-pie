@@ -48,6 +48,10 @@ export const sliderModule: InteractionModule<"slider", SliderInteraction, never>
    */
   connect: notImplemented,
   /**
+   * No content: a stub has no payload node, so no hub asks.
+   */
+  content: () => [],
+  /**
    * How many Controls Slider renders: not implemented; issue ei-16 fills it.
    */
   controls: notImplemented,
@@ -82,9 +86,17 @@ export const sliderModule: InteractionModule<"slider", SliderInteraction, never>
    */
   redact: notImplemented,
   /**
+   * No region: the model holds no node of this kind until the module lands.
+   */
+  regions: () => [],
+  /**
    * Slider's render function: not implemented; issue ei-16 fills it.
    */
   render: notImplemented,
+  /**
+   * The node itself, as it has no region.
+   */
+  replaceRegions: (interaction) => interaction,
   /**
    * The value Slider shows for a stored response: not implemented; issue ei-16 fills it.
    */

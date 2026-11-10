@@ -48,6 +48,10 @@ export const gapMatchModule: InteractionModule<"gap-match", GapMatchInteraction,
    */
   connect: notImplemented,
   /**
+   * No content: a stub has no payload node, so no hub asks.
+   */
+  content: () => [],
+  /**
    * How many Controls Gap Match renders: not implemented; issue m3d-03 fills it.
    */
   controls: notImplemented,
@@ -82,9 +86,17 @@ export const gapMatchModule: InteractionModule<"gap-match", GapMatchInteraction,
    */
   redact: notImplemented,
   /**
+   * No region: the model holds no node of this kind until the module lands.
+   */
+  regions: () => [],
+  /**
    * Gap Match's render function: not implemented; issue m3d-03 fills it.
    */
   render: notImplemented,
+  /**
+   * The node itself, as it has no region.
+   */
+  replaceRegions: (interaction) => interaction,
   /**
    * The value Gap Match shows for a stored response: not implemented; issue m3d-03 fills it.
    */

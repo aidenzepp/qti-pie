@@ -37,6 +37,7 @@ import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { isModuleKind } from "#plate/interactions/contract.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
+import { moduleContent } from "#plate/model/interactions.ts";
 import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
 import type { ModuleKind } from "#plate/interactions/contract.ts";
 import type { KeptUrl, UrlContext } from "#plate/model/url.ts";
@@ -776,9 +777,10 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
 /**
  * Collect the levels of the headings the emitter writes among payload nodes, in document order: a
  * heading the HTML subset keeps, below elements it keeps, and in an interaction's Prompt, choice
- * content or Inline Choice Label, which {@link emitNodes} writes with the same shift. An Inline
- * Choice's choice content is written as option text, never as nodes, so it gives none. A heading
- * below an element outside {@link htmlSubset} is dropped with that element, so it is left out.
+ * content or Inline Choice Label, or a module kind's content (`moduleContent`), which
+ * {@link emitNodes} writes with the same shift. An Inline Choice's choice content is written as
+ * option text, never as nodes, so it gives none. A heading below an element outside
+ * {@link htmlSubset} is dropped with that element, so it is left out.
  *
  * @param nodes The payload nodes.
  * @returns Each written heading's authored level, 1 to 6.
@@ -786,9 +788,7 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
 const headingLevelsIn = (nodes: readonly PayloadNode[]): readonly number[] =>
   nodes.flatMap((node): readonly number[] => {
     if (isModulePayload(node)) {
-      // A module's payload node is read by its module alone, so its own content is not read here:
-      // no module renders one yet, and the first whose content can hold a heading reads it here.
-      return [];
+      return headingLevelsIn(moduleContent(node));
     }
 
     switch (node.kind) {
