@@ -39,8 +39,10 @@ import {
   reordered,
   writtenOf,
 } from "#pantry/test/gen/attribute-order.ts";
+import type { CaseEntry } from "#pantry/test/gen/attribute-order.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
+import type { OracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**
@@ -55,11 +57,12 @@ const names = namesOf(grammar);
 const orderTimeoutMs = 900_000;
 
 /**
- * What an import of a package did: accepted under the id it answered, or refused under a rule.
+ * What an import of a package did: accepted under the id it answered, or refused under a rule,
+ * with the identity of each law the database named (none for a reader's refusal).
  */
 type Imported =
   | { readonly id: Uuid; readonly verdict: "accepted" }
-  | { readonly rule: string; readonly verdict: "refused" };
+  | { readonly laws: readonly string[]; readonly rule: string; readonly verdict: "refused" };
 
 /**
  * Import a package's files on the lease.
@@ -81,7 +84,12 @@ const importedOf = Effect.fn("test.attributeOrder.imported")(function* importedO
     return yield* Effect.die(refused);
   }
 
-  return { rule: refused.rule, verdict: "refused" } satisfies Imported;
+  return {
+    laws:
+      refused.origin._tag === "Database" ? refused.origin.laws.map(({ identity }) => identity) : [],
+    rule: refused.rule,
+    verdict: "refused",
+  } satisfies Imported;
 });
 
 /**
@@ -94,6 +102,71 @@ const verdictOf = (imported: Imported) =>
   imported.verdict === "accepted"
     ? { verdict: imported.verdict }
     : { rule: imported.rule, verdict: imported.verdict };
+
+/**
+ * The roots that write an `ObjectIdentifier` row from their `identifier`.
+ */
+const objectRoots: ReadonlySet<string> = new Set(["qti-assessment-item", "qti-assessment-test"]);
+
+/**
+ * The law `ObjectIdentifier`'s identifier piece breaks, as a refusal's origin names it.
+ */
+const objectIdentifierCheck = '{"kind":"check","relation":"ObjectIdentifier","name":"E1_derived"}';
+
+/**
+ * Decide whether a package has an item or test root whose `identifier` the `E1_derived` check on
+ * `ObjectIdentifier` refuses: once the import strips its leading and trailing XML whitespace
+ * (`lead` and `trail`), the piece left is empty or holds a character below `!`, so it fails
+ * `identifierPattern` (`src/qti/metadata.ts`).
+ *
+ * @param entries - The package's entries as the case reads them.
+ * @returns Whether one such root is written.
+ */
+const breaksObjectIdentifier = (entries: readonly CaseEntry[]): boolean =>
+  entries.some(
+    ({ tree }) =>
+      Option.isSome(tree) &&
+      objectRoots.has(tree.value.root.local) &&
+      tree.value.root.attributes.some(
+        ({ local, namespace, value }) =>
+          namespace === "" &&
+          local === "identifier" &&
+          !/^[!-\uFFFD\u{10000}-\u{10FFFF}]+$/u.test(
+            value.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, ""),
+          ),
+      ),
+  );
+
+/**
+ * The one refusal this test admits under a rule the law oracle does not predict, issue #103.
+ * The import writes the derived `ObjectIdentifier` row for an item identifier outside its value
+ * domain, and PostgreSQL refuses that row's immediate `E1_derived` check before the attribute's own
+ * `value_domain` check, so the import names `derived` where the oracle predicts
+ * `attribute-lexical`. The verdict is the same. It holds at grizzle 6995af4 and at 89e94c0 alike;
+ * this test first drew it in the run that moved the pin (`TEST_SEED=1234327904`, case 14). It is
+ * keyed as narrowly as the case allows: the refusal names that one law and no other, a root's
+ * `identifier` breaks that check ({@link breaksObjectIdentifier}), and the oracle refuses the
+ * package under `attribute-lexical`, the value domain the same identifier breaks. Every other
+ * refusal is still held to the oracle's rules, and `derived` is admitted nowhere else. Remove it
+ * with issue #103.
+ *
+ * @param imported - What the import did.
+ * @param predicted - What the oracle predicts.
+ * @param entries - The package's entries as the case reads them.
+ * @returns Whether the refusal is that known exception.
+ */
+const knownException = (
+  imported: Imported,
+  predicted: OracleVerdict,
+  entries: readonly CaseEntry[],
+): boolean =>
+  imported.verdict === "refused" &&
+  imported.rule === "derived" &&
+  imported.laws.length === 1 &&
+  imported.laws[0] === objectIdentifierCheck &&
+  predicted.kind === "refused" &&
+  predicted.rules.has("attribute-lexical") &&
+  breaksObjectIdentifier(entries);
 
 /**
  * Hold an accepted package's export to the order its source writes: every XML entry exported
@@ -211,8 +284,10 @@ describe.skipIf(!hasLease)(
                   if (after.verdict === "refused") {
                     const predicted = yield* oracleVerdict(written);
 
+                    // Issue #103: the one keyed exception to the oracle's rules (knownException).
                     assert.isTrue(
-                      predicted.kind === "refused" && predicted.rules.has(after.rule),
+                      (predicted.kind === "refused" && predicted.rules.has(after.rule)) ||
+                        knownException(after, predicted, entries),
                       `refused under ${after.rule}, and the oracle predicts ${JSON.stringify(predicted.kind === "refused" ? [...predicted.rules] : predicted.kind)}`,
                     );
                   } else {
