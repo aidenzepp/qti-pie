@@ -1222,7 +1222,7 @@ export const derivationRowsOf = (
  * The documents one version's schemas are read from, each with its file and the lines of its start
  * tags: each entry document's pin with its documents in reading order, and SSML's two files.
  */
-export interface WorldDocuments {
+interface WorldDocuments {
   readonly sets: readonly (readonly [SourcePath, readonly Placed[]])[];
   readonly ssml: readonly [base: Placed, core: Placed];
 }
@@ -1234,24 +1234,21 @@ export interface WorldDocuments {
  * @param version - The version.
  * @returns The documents.
  */
-export const loadWorldDocuments = Effect.fn("vocab.loadWorldDocuments")(
-  function* loadWorldDocuments(version: SchemaVersion) {
-    const sets: (readonly [SourcePath, readonly Placed[]])[] = [];
+const loadWorldDocuments = Effect.fn("vocab.loadWorldDocuments")(function* loadWorldDocuments(
+  version: SchemaVersion,
+) {
+  const sets: (readonly [SourcePath, readonly Placed[]])[] = [];
 
-    for (const source of worldSources[version]) {
-      sets.push([source, [...(yield* loadSchemaSet(source)).placed.values()]]);
-    }
+  for (const source of worldSources[version]) {
+    sets.push([source, [...(yield* loadSchemaSet(source)).placed.values()]]);
+  }
 
-    const [base, core] = yield* Effect.all(
-      [readPlaced(ssmlSources[0]), readPlaced(ssmlSources[1])],
-      {
-        concurrency: 2,
-      },
-    );
+  const [base, core] = yield* Effect.all([readPlaced(ssmlSources[0]), readPlaced(ssmlSources[1])], {
+    concurrency: 2,
+  });
 
-    return { sets, ssml: [base, core] } satisfies WorldDocuments;
-  },
-);
+  return { sets, ssml: [base, core] } satisfies WorldDocuments;
+});
 
 /**
  * Index where every element of some documents is stated, joining each tree's elements to its
@@ -1294,7 +1291,7 @@ const sourcesIn = (placed: readonly Placed[]): Result.Result<SourceOf, XsdReadin
  * @returns The schemas by namespace, every document with its schema, and each namespace's entry
  *   document, the one its schema is read from.
  */
-export const worldOf = (
+const worldOf = (
   read: WorldDocuments,
 ): Result.Result<
   {

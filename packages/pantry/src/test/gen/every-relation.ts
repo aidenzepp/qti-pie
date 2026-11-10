@@ -48,9 +48,6 @@
  *   element, and a precondition, each resolved under its placement;
  * - **the usage data** holds a dated statistic with a typed value;
  * - **an image**, which two elements of the item reference, and its card's file.
- *
- * A {@link Bulk} adds identical binary entries, listed by a web content resource, so the package
- * passes one statement's transport bounds (`#pantry/import/package.large.db.test.ts`).
  */
 import { int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
@@ -86,15 +83,6 @@ export const memberCounts: Gen<MemberCounts> = (source) => ({
   hotspots: source.draw(int(1, 2)),
   hottexts: source.draw(int(1, 2)),
 });
-
-/**
- * Identical binary entries a package carries beside its documents: `entries` files under `bulk/`,
- * each holding `bytes`, the one array every entry shares.
- */
-export interface Bulk {
-  readonly bytes: Uint8Array;
-  readonly entries: number;
-}
 
 /**
  * A package as its entries: a keyed set from each entry's path, `/`-separated below the package's
@@ -607,101 +595,81 @@ const lomOf = (record: {
 ];
 
 /**
- * The paths of a bulk's entries.
- *
- * @param bulk - The bulk, none for none.
- * @returns Each entry's path, in order.
+ * The manifest's text: every document and the image listed by its resource, with each item's and
+ * the test's LOM record, and the dependencies.
  */
-const bulkPaths = (bulk: Bulk | undefined): readonly string[] =>
-  Array.from({ length: bulk?.entries ?? 0 }, (_, at) => `bulk/${String(at)}.bin`);
-
-/**
- * Write the manifest: every document and the image listed by its resource, with each item's and
- * the test's LOM record, the dependencies, and a web content resource listing the bulk, if any.
- *
- * @param bulk - The bulk the package carries, none for none.
- * @returns Its text.
- */
-const manifestOf = (bulk: Bulk | undefined): string =>
-  [
-    declaration,
-    '<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="every-relation-manifest">',
-    "  <metadata>",
-    "    <schema>QTI Package</schema>",
-    "    <schemaversion>3.0.0</schemaversion>",
-    "    <imsmd:lom>",
-    "      <imsmd:general>",
-    '        <imsmd:title><imsmd:string language="en">Every relation</imsmd:string></imsmd:title>',
-    "        <imsmd:language>en</imsmd:language>",
-    "      </imsmd:general>",
-    "      <imsmd:educational>",
-    "        <imsmd:learningResourceType>",
-    "          <imsmd:source>LOMv1.0</imsmd:source>",
-    "          <imsmd:value>exercise</imsmd:value>",
-    "        </imsmd:learningResourceType>",
-    "      </imsmd:educational>",
-    "    </imsmd:lom>",
-    "  </metadata>",
-    "  <organizations/>",
-    "  <resources>",
-    `    <resource identifier="item1-res" type="imsqti_item_xmlv3p0" href="${paths.item}">`,
-    "      <metadata>",
-    "        <imsqti:qtiMetadata>",
-    "          <imsqti:interactionType>choiceInteraction</imsqti:interactionType>",
-    "        </imsqti:qtiMetadata>",
-    ...lomOf({ identifier: "item1", language: "en", title: "Every relation" }),
-    "      </metadata>",
-    `      <file href="${paths.item}"/>`,
-    `      <file href="${paths.image}"/>`,
-    '      <dependency identifierref="stimulus1-res"/>',
-    "    </resource>",
-    `    <resource identifier="item2-res" type="imsqti_item_xmlv3p0" href="${paths.templated}">`,
-    "      <metadata>",
-    ...lomOf({ identifier: "item2", language: "en", title: "Templated" }),
-    "      </metadata>",
-    `      <file href="${paths.templated}"/>`,
-    '      <dependency identifierref="fragment-res"/>',
-    "    </resource>",
-    `    <resource identifier="fragment-res" type="imsqti_fragment_xmlv3p0" href="${paths.fragment}">`,
-    `      <file href="${paths.fragment}"/>`,
-    "    </resource>",
-    `    <resource identifier="item3-res" type="imsqti_item_xmlv3p0" href="${paths.ruled}">`,
-    `      <file href="${paths.ruled}"/>`,
-    '      <dependency identifierref="rules-res"/>',
-    "    </resource>",
-    `    <resource identifier="rules-res" type="imsqti_fragment_xmlv3p0" href="${paths.rules}">`,
-    `      <file href="${paths.rules}"/>`,
-    "    </resource>",
-    `    <resource identifier="stimulus1-res" type="imsqti_stimulus_xmlv3p0" href="${paths.stimulus}">`,
-    `      <file href="${paths.stimulus}"/>`,
-    "    </resource>",
-    `    <resource identifier="section-res" type="imsqti_section_xmlv3p0" href="${paths.section}">`,
-    `      <file href="${paths.section}"/>`,
-    '      <dependency identifierref="item2-res"/>',
-    "    </resource>",
-    `    <resource identifier="test-res" type="imsqti_test_xmlv3p0" href="${paths.test}">`,
-    "      <metadata>",
-    ...lomOf({ identifier: "test1", title: "Every relation test" }),
-    "      </metadata>",
-    `      <file href="${paths.test}"/>`,
-    '      <dependency identifierref="item1-res"/>',
-    '      <dependency identifierref="item2-res"/>',
-    '      <dependency identifierref="section-res"/>',
-    "    </resource>",
-    `    <resource identifier="usage-res" type="qtiusagedata/xml" href="${paths.usage}">`,
-    `      <file href="${paths.usage}"/>`,
-    "    </resource>",
-    ...(bulk === undefined
-      ? []
-      : [
-          '    <resource identifier="bulk-res" type="webcontent">',
-          ...bulkPaths(bulk).map((path) => `      <file href="${path}"/>`),
-          "    </resource>",
-        ]),
-    "  </resources>",
-    "</manifest>",
-    "",
-  ].join("\n");
+const manifest = [
+  declaration,
+  '<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="every-relation-manifest">',
+  "  <metadata>",
+  "    <schema>QTI Package</schema>",
+  "    <schemaversion>3.0.0</schemaversion>",
+  "    <imsmd:lom>",
+  "      <imsmd:general>",
+  '        <imsmd:title><imsmd:string language="en">Every relation</imsmd:string></imsmd:title>',
+  "        <imsmd:language>en</imsmd:language>",
+  "      </imsmd:general>",
+  "      <imsmd:educational>",
+  "        <imsmd:learningResourceType>",
+  "          <imsmd:source>LOMv1.0</imsmd:source>",
+  "          <imsmd:value>exercise</imsmd:value>",
+  "        </imsmd:learningResourceType>",
+  "      </imsmd:educational>",
+  "    </imsmd:lom>",
+  "  </metadata>",
+  "  <organizations/>",
+  "  <resources>",
+  `    <resource identifier="item1-res" type="imsqti_item_xmlv3p0" href="${paths.item}">`,
+  "      <metadata>",
+  "        <imsqti:qtiMetadata>",
+  "          <imsqti:interactionType>choiceInteraction</imsqti:interactionType>",
+  "        </imsqti:qtiMetadata>",
+  ...lomOf({ identifier: "item1", language: "en", title: "Every relation" }),
+  "      </metadata>",
+  `      <file href="${paths.item}"/>`,
+  `      <file href="${paths.image}"/>`,
+  '      <dependency identifierref="stimulus1-res"/>',
+  "    </resource>",
+  `    <resource identifier="item2-res" type="imsqti_item_xmlv3p0" href="${paths.templated}">`,
+  "      <metadata>",
+  ...lomOf({ identifier: "item2", language: "en", title: "Templated" }),
+  "      </metadata>",
+  `      <file href="${paths.templated}"/>`,
+  '      <dependency identifierref="fragment-res"/>',
+  "    </resource>",
+  `    <resource identifier="fragment-res" type="imsqti_fragment_xmlv3p0" href="${paths.fragment}">`,
+  `      <file href="${paths.fragment}"/>`,
+  "    </resource>",
+  `    <resource identifier="item3-res" type="imsqti_item_xmlv3p0" href="${paths.ruled}">`,
+  `      <file href="${paths.ruled}"/>`,
+  '      <dependency identifierref="rules-res"/>',
+  "    </resource>",
+  `    <resource identifier="rules-res" type="imsqti_fragment_xmlv3p0" href="${paths.rules}">`,
+  `      <file href="${paths.rules}"/>`,
+  "    </resource>",
+  `    <resource identifier="stimulus1-res" type="imsqti_stimulus_xmlv3p0" href="${paths.stimulus}">`,
+  `      <file href="${paths.stimulus}"/>`,
+  "    </resource>",
+  `    <resource identifier="section-res" type="imsqti_section_xmlv3p0" href="${paths.section}">`,
+  `      <file href="${paths.section}"/>`,
+  '      <dependency identifierref="item2-res"/>',
+  "    </resource>",
+  `    <resource identifier="test-res" type="imsqti_test_xmlv3p0" href="${paths.test}">`,
+  "      <metadata>",
+  ...lomOf({ identifier: "test1", title: "Every relation test" }),
+  "      </metadata>",
+  `      <file href="${paths.test}"/>`,
+  '      <dependency identifierref="item1-res"/>',
+  '      <dependency identifierref="item2-res"/>',
+  '      <dependency identifierref="section-res"/>',
+  "    </resource>",
+  `    <resource identifier="usage-res" type="qtiusagedata/xml" href="${paths.usage}">`,
+  `      <file href="${paths.usage}"/>`,
+  "    </resource>",
+  "  </resources>",
+  "</manifest>",
+  "",
+].join("\n");
 
 /**
  * Collect entries into a keyed set by path.
@@ -727,18 +695,17 @@ const keyedByPath = (entries: readonly (readonly [string, Uint8Array])[]): Packa
 };
 
 /**
- * Build the every-relation package of member counts: its documents, its image and its bulk, each
- * entry once by path, every document UTF-8.
+ * Build the every-relation package of member counts: its documents and its image, each entry once
+ * by path, every document UTF-8.
  *
  * @param members - The counts it is drawn by.
- * @param bulk - Identical binary entries it carries beside its documents, none for none.
  * @returns The package's entries.
  */
-export const everyRelationPackage = (members: MemberCounts, bulk?: Bulk): PackageEntries => {
+export const everyRelationPackage = (members: MemberCounts): PackageEntries => {
   const text = new TextEncoder();
 
   return keyedByPath([
-    [manifestPath, text.encode(manifestOf(bulk))],
+    [manifestPath, text.encode(manifest)],
     [paths.item, text.encode(itemOf(members))],
     [paths.templated, text.encode(templatedItem)],
     [paths.fragment, text.encode(fragment)],
@@ -749,7 +716,6 @@ export const everyRelationPackage = (members: MemberCounts, bulk?: Bulk): Packag
     [paths.test, text.encode(test)],
     [paths.usage, text.encode(usage)],
     [paths.image, pixel],
-    ...bulkPaths(bulk).map((path): readonly [string, Uint8Array] => [path, bulk?.bytes ?? pixel]),
   ]);
 };
 
@@ -757,7 +723,7 @@ export const everyRelationPackage = (members: MemberCounts, bulk?: Bulk): Packag
  * Write a package's entries under a directory, making the directories their paths name.
  *
  * An entry whose bytes are the very array of an entry written before is a hard link to that file,
- * so a bulk of identical entries costs its bytes on disk once.
+ * so identical entries cost their bytes on disk once.
  *
  * @param entries - The package's entries.
  * @param dir - The package's directory, created when absent.
