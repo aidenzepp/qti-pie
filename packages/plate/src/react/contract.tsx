@@ -239,7 +239,9 @@ export type Posted =
 
 /**
  * How `TestProvider` reaches the server helper: a page asks for the current view and posts an
- * intent with the item's form. Issue m3g-06 fills it.
+ * intent with the item's form. `fetchTransport` is the transport that speaks the wire
+ * {@link CreateTestServer} answers, over `fetch` to the URL the server is mounted at; a host with
+ * another channel gives its own. Issue m3g-06 fills it.
  */
 export interface TestTransport {
   /**
@@ -312,9 +314,9 @@ export interface TestSessionStore {
 }
 
 /**
- * What `createTestServer` takes: the accepted test and items, the configuration, and the host's
- * session store. It runs on the server only, since the accepted test and items never reach a page.
- * Issue m3g-06 fills it.
+ * What `createTestServer` takes: the accepted test and items, the configuration, the host's
+ * session store, how the host names a request's session, and the clock. It runs on the server
+ * only, since the accepted test and items never reach a page. Issue m3g-06 fills it.
  */
 export interface TestServerOptions {
   readonly configuration: Configuration;
@@ -322,14 +324,45 @@ export interface TestServerOptions {
    * The test's items, keyed by item ref identifier, as `startTest` takes them.
    */
   readonly items: ReadonlyMap<string, Accepted>;
+  /**
+   * The clock: the `now` of every transition the server runs. By default `() => new Date()`.
+   */
+  readonly now?: () => Date;
+  /**
+   * Name the session a request belongs to: the host reads it from a cookie, a path segment or
+   * wherever it keeps it, and the server uses the name as the {@link TestSessionStore} key. A
+   * request for a session the store lacks starts one, with
+   * `startTest(test, items, configuration, { instance: <that name>, now: now() })`, so the name
+   * must meet `startTest`'s instance requirements: ASCII letters, digits, `_`, `.`, `:` and `-`,
+   * not ending in `-` and holding no `--`.
+   *
+   * @param request The request.
+   * @returns The session's name.
+   */
+  readonly sessionOf: (request: Request) => string;
   readonly store: TestSessionStore;
   readonly test: AcceptedTest;
 }
 
 /**
  * Make the server side of `TestProvider`'s transport: a Fetch handler over `startTest`,
- * `itemView`, `advance` and `results`, answering {@link TestTransport}'s requests. The type of
- * `createTestServer`; issue m3g-06 fills it.
+ * `itemView`, `advance` and `results`, answering {@link TestTransport}'s requests for the session
+ * {@link TestServerOptions.sessionOf} names. The type of `createTestServer`; issue m3g-06 fills
+ * it.
+ *
+ * The wire, which `fetchTransport` speaks:
+ *
+ * - `GET` answers the current view as {@link ItemViewPayload} JSON while the session is open, and `{
+ *   "kind": "finished" }`, the finished member of {@link Posted}, once it is closed. The contract
+ *   has no finished shape of its own for a view, so the `GET` answer borrows {@link Posted}'s;
+ *   {@link TestTransport.view} stays typed to the open answer.
+ * - `POST` takes the current item's form entries, as the browser encodes them, plus the intent entry:
+ *   named `intentName(instance)`, that is `<instance>.intent` for the session's instance, holding
+ *   `encodeIntent(intent)`. It answers {@link Posted} JSON: the next view, or the test's end. A
+ *   refused intent, or a form whose entries are malformed, answers `422` with the
+ *   {@link ItemViewPayload} the refusal leaves, the item re-rendered with its messages in
+ *   `status`.
+ * - Any other method answers `405`.
  */
 export type CreateTestServer = (
   options: TestServerOptions,
