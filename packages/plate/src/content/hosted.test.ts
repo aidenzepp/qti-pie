@@ -9,6 +9,7 @@ import type {
   BodyContentModule,
   CatalogReference,
   ContentNodeOf,
+  FeedbackFacts,
   ItemContentModule,
 } from "#plate/content/contract.ts";
 import { bodyModules, itemModules } from "#plate/content/modules.ts";
@@ -35,6 +36,7 @@ import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { ReferencingElement } from "#plate/emit/body.ts";
 import { h, text as outputText } from "#plate/emit/node.ts";
 import type { BodyNode } from "#plate/model/item.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
 import type { PayloadNode } from "#plate/payload.ts";
 import { catalogSupports, noSupports } from "#plate/supports.ts";
 import type { Supports } from "#plate/supports.ts";
@@ -208,6 +210,36 @@ const landedModal: ItemContentModule<
     Result.map(kit.nodes(payload.nodes), (nodes) =>
       h("dialog", { "data-outcome": payload.outcome }, nodes),
     ),
+};
+
+/**
+ * The feedback facts {@link feedbackProbe} was handed, one entry per `redact` it ran, in order.
+ */
+const probed: FeedbackFacts[] = [];
+
+/**
+ * A Modal Feedback module that decides by the kit's feedback facts, as the module that lands it
+ * will: it keeps its node only when the attempt was processed and the host lets feedback show, and
+ * withholds the content it holds otherwise. It records the facts it was handed in {@link probed}.
+ */
+const feedbackProbe: ItemContentModule<
+  "qti-modal-feedback",
+  LandedModal,
+  LandedModalPayload,
+  LandedModalJson
+> = {
+  ...landedModal,
+  redact: (node, kit) => {
+    probed.push(kit.feedback);
+
+    if (kit.feedback.processed && kit.feedback.shown) {
+      return Option.some({ ...node, content: kit.nodes(node.content) });
+    }
+
+    kit.withhold(node.content);
+
+    return Option.none();
+  },
 };
 
 /**
@@ -869,6 +901,88 @@ describe("a module whose node a body element docks", () => {
         }),
         fakeLanded,
       ),
+  );
+});
+
+/**
+ * What a test registers to put {@link feedbackProbe} in place of the Modal Feedback stub.
+ */
+const probing: readonly Mock[] = [
+  {
+    exports: { modalFeedbackModule: feedbackProbe },
+    specifier: "#plate/content/modal-feedback.ts",
+  },
+];
+
+/**
+ * A record of the given attempt count, which holds no outcome or template value.
+ *
+ * @param numAttempts How many attempts it counts as processed.
+ * @returns The record.
+ */
+const attempted = (numAttempts: number): RedactRecord => ({
+  numAttempts,
+  outcomes: {},
+  templates: {},
+});
+
+describe("a content module that reads the feedback facts", () => {
+  it.effect(
+    "[W0-BC] a content module reads whether the attempt was processed and whether feedback may show",
+    () =>
+      withLanded(
+        Effect.gen(function* facts() {
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const built = yield* Effect.fromResult(model.buildItem(landedDocument));
+
+          probed.length = 0;
+
+          const bare = payload.redactItem(built);
+          const shown = payload.redactItem(built, attempted(1));
+          const hidden = payload.redactItem(
+            built,
+            attempted(1),
+            undefined,
+            noSupports,
+            defaultView,
+            false,
+          );
+
+          assert.isFalse("content" in bare);
+          assert.deepStrictEqual(Object.keys(shown.content ?? {}), ["qti-modal-feedback"]);
+          assert.isFalse("content" in hidden);
+          assert.deepStrictEqual(probed, [
+            { processed: false, shown: true },
+            { processed: true, shown: true },
+            { processed: true, shown: false },
+          ]);
+        }),
+        probing,
+      ),
+  );
+
+  it.effect("[W0-BC] redactItem with no record tells the module no attempt was processed", () =>
+    withLanded(
+      Effect.gen(function* unprocessed() {
+        const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+        const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+        const built = yield* Effect.fromResult(model.buildItem(landedDocument));
+        const running = { ...built, templateProcessing: Option.some([]) };
+
+        probed.length = 0;
+        payload.redactItem(built);
+        payload.redactItem(built, attempted(0));
+        payload.redactItem(running);
+
+        assert.deepStrictEqual(probed, [
+          { processed: false, shown: true },
+          { processed: false, shown: true },
+          { processed: false, shown: true },
+        ]);
+      }),
+      probing,
+    ),
   );
 });
 

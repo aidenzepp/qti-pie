@@ -1228,6 +1228,7 @@ const pathsBytes = new TextEncoder().encode(
  * the Choice's second choice, `B`.
  */
 const pathsRecord: RedactRecord = {
+  numAttempts: 0,
   outcomes: {},
   templates: {
     VISIBLE: {

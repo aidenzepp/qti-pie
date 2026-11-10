@@ -144,6 +144,7 @@ const declared = {
  */
 const redactKit: ContentRedactKit = {
   documents: new Map(),
+  feedback: { processed: false, shown: true },
   nodes: (nodes) => nodes,
   record: Option.none(),
   supports: noSupports,

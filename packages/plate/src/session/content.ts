@@ -154,7 +154,11 @@ const kitOf = (
   outcomes: TestSession["outcomes"],
 ): TestContentRenderKit => ({
   nodes: (nodes) => {
-    const printed = printNodes(nodes, Option.some({ outcomes, templates: {} }), configuration);
+    const printed = printNodes(
+      nodes,
+      Option.some({ numAttempts: 0, outcomes, templates: {} }),
+      configuration,
+    );
     const copied = copyBodyNodes(printed, instance);
 
     return emitNodes(

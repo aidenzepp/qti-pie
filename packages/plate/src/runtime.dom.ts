@@ -9,6 +9,7 @@
  *
  * @module
  */
+import { controller as modalFeedback } from "#plate/content/modal-feedback.dom.ts";
 import { controller as itemRoot } from "#plate/content/root.dom.ts";
 import { controller as associate } from "#plate/interactions/associate.dom.ts";
 import { controller as drawing } from "#plate/interactions/drawing.dom.ts";
@@ -51,7 +52,7 @@ export type {
  */
 const registry = {
   associate,
-  content: { item: itemRoot },
+  content: { item: itemRoot, "modal-feedback": modalFeedback },
   drawing,
   "gap-match": gapMatch,
   "graphic-associate": graphicAssociate,

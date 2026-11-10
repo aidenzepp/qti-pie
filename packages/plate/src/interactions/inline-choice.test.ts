@@ -924,7 +924,7 @@ describe("checkResponses", () => {
         const configuration = yield* configure({});
         const accepted = acceptForTest(templatedOf(templatedFruits));
         const hiding = visibleAs("C");
-        const redacted = redactItem(accepted.item, { outcomes: {}, ...hiding });
+        const redacted = redactItem(accepted.item, { numAttempts: 0, outcomes: {}, ...hiding });
         const shown = payload(redacted, {
           finished: false,
           instance,

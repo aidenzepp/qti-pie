@@ -105,12 +105,12 @@ export interface Options {
 
 /**
  * The author's further inputs to one {@link redact}, each optional: `documents`, the stimulus
- * documents the host opened, which the module that reads a stimulus reference (`m3e-02`'s) looks
- * a reference's `href` up in; `feedback`, declared by gate-bc; `supports`, the accessibility
- * supports the host enabled for the candidate, `noSupports` when absent, which decide what catalog
- * content the redacted item holds; and `view`, the view the item is shown to, the candidate's when
- * absent, which decides which rubric blocks it holds: each content module's `redact` decides by
- * them, so content a view or a support does not show never reaches the page.
+ * documents the host opened, which the module that reads a stimulus reference (`m3e-02`'s) looks a
+ * reference's `href` up in; `feedback`, whether the host lets feedback show; `supports`, the
+ * accessibility supports the host enabled for the candidate, `noSupports` when absent, which decide
+ * what catalog content the redacted item holds; and `view`, the view the item is shown to, the
+ * candidate's when absent, which decides which rubric blocks it holds: each content module's
+ * `redact` decides by both, so content a view or a support does not show never reaches the page.
  */
 export interface RedactOptions {
   /**
@@ -122,8 +122,9 @@ export interface RedactOptions {
    */
   readonly documents?: ReadonlyMap<string, AcceptedStimulus>;
   /**
-   * Declared by gate-bc, whose redaction reads it; this gate unit passes it on and reads nothing of
-   * it.
+   * Whether the host lets feedback show, true when absent, which each feedback module's `redact`
+   * decides by beside whether the record counts an attempt processed. A host in a test session
+   * passes `feedbackShown(view)` (`#plate/session/feedback.ts`) and never derives it by hand.
    */
   readonly feedback?: boolean;
   readonly supports?: Supports;

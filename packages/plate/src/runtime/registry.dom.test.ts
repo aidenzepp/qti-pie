@@ -1,7 +1,8 @@
 /**
  * The runtime's closed registry, in each engine's page: `upgrade` attaches one controller to a root
  * of every runtime kind, and each kind's controller module exports that controller alone. The item
- * Root has a controller of its own, from the registry's content slots, upgraded once per Root.
+ * Root has a controller of its own, from the registry's content slots, upgraded once per Root. A
+ * content module's controller attaches to the root of its slot the same way.
  *
  * Every case sits under a `describe` named by the engine (`server.browser`), as in
  * `src/test/page.dom.test.ts`.
@@ -9,6 +10,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { server } from "vite-plus/test/browser/context";
+import * as modalFeedback from "#plate/content/modal-feedback.dom.ts";
 import * as itemRoot from "#plate/content/root.dom.ts";
 import * as associate from "#plate/interactions/associate.dom.ts";
 import * as drawing from "#plate/interactions/drawing.dom.ts";
@@ -60,7 +62,14 @@ const controllerModules = {
  */
 const contentModules = {
   item: itemRoot,
+  "modal-feedback": modalFeedback,
 } satisfies { readonly [S in ContentSlot]: { readonly controller: ContentController<S> } };
+
+/**
+ * The content slots whose root sits inside an item, beside its interactions: every slot but the
+ * item Root, which is the item itself and has its own cases below.
+ */
+const nestedContentSlots = contentRuntimeSlots.filter((slot) => slot !== "item");
 
 /**
  * Put one item holding one interaction root of a kind at the end of the page's body.
@@ -142,6 +151,79 @@ describe(server.browser, () => {
         assert.isUndefined(root.dataset["runtime"], kind);
         assert.isUndefined(item.dataset["runtime"], kind);
         container.remove();
+      }
+    });
+
+    it("[W0-BC] the runtime finds a content root by slot and marks a stub", () => {
+      for (const slot of nestedContentSlots) {
+        const container = document.createElement("div");
+
+        container.innerHTML = `<div data-slot="item"><div data-slot="item-live" aria-live="polite" aria-atomic="true"></div><div data-slot="gap-match-interaction"></div><div data-slot="${slot}"></div></div>`;
+        document.body.append(container);
+
+        const itemRootElement = container.querySelector<HTMLElement>('[data-slot="item"]');
+        const interaction = container.querySelector<HTMLElement>(
+          '[data-slot="gap-match-interaction"]',
+        );
+        const content = container.querySelector<HTMLElement>(`[data-slot="${slot}"]`);
+
+        assert.isNotNull(itemRootElement, slot);
+        assert.isNotNull(interaction, slot);
+        assert.isNotNull(content, slot);
+
+        const upgraded = upgrade(container);
+
+        assert.deepStrictEqual(
+          upgraded.controllers,
+          [
+            { kind: "gap-match", root: interaction },
+            { root: itemRootElement, slot: "item" },
+            { root: content, slot },
+          ],
+          slot,
+        );
+        assert.strictEqual(
+          content.dataset["runtime"],
+          contentModules[slot].controller.implemented ? undefined : "stub",
+          slot,
+        );
+
+        upgraded.teardown();
+        container.remove();
+      }
+    });
+
+    it("[W0-BC] teardown removes the content stub's mark and a second upgrade re-attaches it", () => {
+      for (const slot of nestedContentSlots) {
+        const container = document.createElement("div");
+
+        container.innerHTML = `<div data-slot="item"><div data-slot="item-live" aria-live="polite" aria-atomic="true"></div><div data-slot="gap-match-interaction"></div><div data-slot="${slot}"></div></div>`;
+        document.body.append(container);
+
+        const first = upgrade(container);
+
+        assert.lengthOf(first.controllers, 3, slot);
+        assert.isAbove(container.querySelectorAll("[data-runtime]").length, 0, slot);
+
+        first.teardown();
+        assert.lengthOf(container.querySelectorAll("[data-runtime]"), 0, slot);
+
+        const second = upgrade(container);
+
+        assert.deepStrictEqual(second.controllers, first.controllers, slot);
+
+        second.teardown();
+        assert.lengthOf(container.querySelectorAll("[data-runtime]"), 0, slot);
+        container.remove();
+      }
+    });
+
+    it("[runtime] every content slot's module exports a controller of its slot and no other name", () => {
+      assert.sameMembers(Object.keys(contentModules), [...contentRuntimeSlots]);
+
+      for (const [slot, module] of Object.entries(contentModules)) {
+        assert.deepStrictEqual(Object.keys(module), ["controller"], slot);
+        assert.strictEqual(module.controller.slot, slot, slot);
       }
     });
 
@@ -230,7 +312,7 @@ describe(server.browser, () => {
       assert.lengthOf(nested.querySelectorAll("[data-runtime]"), 0);
 
       const torn: HTMLElement[] = [];
-      const announcer: ContentController = {
+      const announcer: ContentController<"item"> = {
         implemented: true,
         slot: "item",
         upgrade: (element, live) => {

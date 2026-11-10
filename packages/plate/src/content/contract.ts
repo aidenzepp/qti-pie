@@ -114,12 +114,31 @@ export interface ItemParseContext {
 }
 
 /**
+ * The two facts a feedback module decides by, beside the record's outcome values: whether the
+ * item's attempt has been processed, and whether the host lets feedback show now.
+ */
+export interface FeedbackFacts {
+  /**
+   * Whether response processing has run for the item: the record counts at least one attempt
+   * (`record.numAttempts > 0`). False when the item is shown with no record, or whose record counts
+   * none, so no outcome value it holds is the result of an attempt.
+   */
+  readonly processed: boolean;
+  /**
+   * The host's permission to show feedback: true outside a test; in a test, true while the item
+   * has attempts left, and the item's `show-feedback` once it is closed (`feedbackShown` in
+   * `#plate/session/feedback.ts`). True when the host passes none.
+   */
+  readonly shown: boolean;
+}
+
+/**
  * What the redaction hands a module's `redact`: the walk over body nodes the redaction makes of
  * every content it keeps, which prints the printed variables, settles the template content and
  * reaches the notices of the nodes it is handed, and the facts of this render the module decides
- * by: the supports the host enabled, the view the item is shown to and the attempt's record. A
- * module keeps, prunes or drops its node by them, so a scorer's rubric, a dormant catalog card or
- * a feedback whose outcome does not show never reaches the page.
+ * by: the supports the host enabled, the view the item is shown to, the attempt's record and the
+ * feedback facts. A module keeps, prunes or drops its node by them, so a scorer's rubric, a dormant
+ * catalog card or a feedback whose outcome does not show never reaches the page.
  */
 export interface ContentRedactKit {
   /**
@@ -138,6 +157,16 @@ export interface ContentRedactKit {
    * @returns The nodes the page is given in their place.
    */
   readonly nodes: (nodes: readonly BodyNode[]) => readonly BodyNode[];
+  /**
+   * Whether the attempt was processed and whether the host lets feedback show, the two facts the
+   * feedback modules, modal feedback (`m5-01`) and inline and block feedback (`m5-02`), decide by.
+   * Both apply two rules: feedback follows response processing, so an item whose attempt has not
+   * been processed shows none; and in a test, once the item is closed (its last attempt processed,
+   * its part ended or the test closed), feedback shows only under the item's `show-feedback`.
+   * Whether a feedback whose outcome value does not match is absent from the payload stays the
+   * module's own answer: `Option.none()` withholds it, as for any node.
+   */
+  readonly feedback: FeedbackFacts;
   /**
    * The attempt's template values and outcome values, as the redaction prints by them; none when
    * the item is shown with no record, or its template processing does not run.

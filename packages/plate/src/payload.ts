@@ -1610,19 +1610,35 @@ const printedText = (node: PrintedVariable, record: RedactRecord): Option.Option
   );
 
 /**
+ * The record a structure walk, {@link redactStructure} or {@link hiddenOnlyResponses}, reads: a
+ * {@link RedactRecord} whose `numAttempts` may be absent, and reads as 0 then. The walks decide
+ * which interactions, choices and responses the page shows and print no text, and no content
+ * module binds a response, so the attempt count changes none of what they read. A caller that holds
+ * only the outcomes and the template values, as `checkResponses` and a session's skip rule do,
+ * passes them as they are.
+ */
+export type StructureRecord = Omit<RedactRecord, "numAttempts"> &
+  Partial<Pick<RedactRecord, "numAttempts">>;
+
+/**
  * Give the values a redaction prints from: the record given; or, with none, for an item whose
  * template processing does not run, the values its first attempt starts with (H3): each template
  * variable at its declared default, else NULL, and none where the item has a template processing
- * the engine does not run; and each outcome at its starting value ({@link outcomeDefaults}). An
- * item whose template processing runs has no such values without its record.
+ * the engine does not run; each outcome at its starting value ({@link outcomeDefaults}); and no
+ * attempt processed. An item whose template processing runs has no such values without its record.
  *
  * @param item The item.
- * @param record The record, if any.
+ * @param record The record, if any: its attempt count, 0 when it holds none, and the outcomes and
+ *   template values it prints by, and nothing else of it.
  * @returns The values, or none for an item whose template processing runs and no record.
  */
-const printingOf = (item: Item, record?: RedactRecord): Option.Option<RedactRecord> => {
+const printingOf = (item: Item, record?: StructureRecord): Option.Option<RedactRecord> => {
   if (record !== undefined) {
-    return Option.some(record);
+    return Option.some({
+      numAttempts: record.numAttempts ?? 0,
+      outcomes: record.outcomes,
+      templates: record.templates,
+    });
   }
 
   if (Option.isSome(item.templateProcessing)) {
@@ -1640,7 +1656,7 @@ const printingOf = (item: Item, record?: RedactRecord): Option.Option<RedactReco
         ]),
       );
 
-  return Option.some({ outcomes: outcomeDefaults(item), templates });
+  return Option.some({ numAttempts: 0, outcomes: outcomeDefaults(item), templates });
 };
 
 /**
@@ -1859,6 +1875,8 @@ const expandedParameter = (
  * @param view The view the item is shown to, which each content module's `redact` decides by.
  * @param documents The stimulus documents the host handed, keyed by location, which each content
  *   module's `redact` reads through its kit; empty when it handed none.
+ * @param feedback Whether the host lets feedback show, which a content module's `redact` reads as
+ *   the kit's `feedback.shown`; true when absent.
  * @returns The body, every printed variable its text (nothing under `"structure"`) or its notice,
  *   every template block and inline its content, nothing or its notice, and every `param-variable`
  *   parameter its value (as written under `"structure"`) or its notice; the features shown as
@@ -1872,6 +1890,7 @@ const printBody = (
   supports: Supports,
   view: OutcomeView,
   documents: ReadonlyMap<string, AcceptedStimulus>,
+  feedback = true,
 ): RedactedBody => {
   const listed = item.unsupported.filter((entry) => entry.shown === "notice");
   const listedAt = new Map<string, number[]>();
@@ -2015,13 +2034,18 @@ const printBody = (
   /**
    * Give the kit a content module's `redact` decides by: the walk over the nodes it keeps, as the
    * page sees them, the walk over the nodes it withholds, as content the page does not see, the
-   * stimulus documents the host handed, the record, the supports and the view.
+   * stimulus documents the host handed, the record, the supports, the view and the feedback facts:
+   * whether the record counts an attempt processed, and whether the host lets feedback show.
    *
    * @param seen Whether the page sees the module's node.
    * @returns The kit.
    */
   const contentKit = (seen: boolean): ContentRedactKit => ({
     documents,
+    feedback: {
+      processed: Option.exists(printing, (held) => held.numAttempts > 0),
+      shown: feedback,
+    },
     // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and the kit are mutually recursive, as a content node holds body nodes; the kit's walks run only after both are defined.
     nodes: (nodes) => nodesOf(nodes, seen),
     record: printing,
@@ -2418,9 +2442,10 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
  *   module's `redact` decides by: what catalog content the copy holds, among the rest.
  * @param view The view the item is shown to, the candidate's when absent, which each content
  *   module's `redact` decides by: which rubric blocks the copy holds, among the rest.
- * @param _feedback Declared by gate-bc as `feedback`, whose redaction reads it; this gate unit
- *   holds its position and reads nothing of it, so the name carries the underscore the unused
- *   parameter check asks for until gate-bc reads it.
+ * @param feedback Whether the host lets feedback show, true when absent, which each content
+ *   module's `redact` reads as the kit's `feedback.shown`, beside `feedback.processed`, whether the
+ *   record counts an attempt processed. A host in a test session derives it with `feedbackShown`
+ *   (`#plate/session/feedback.ts`) and never by hand.
  * @param documents The stimulus documents the host handed, keyed by the document's location as
  *   the host named it (`AcceptedStimulus.document`); empty when it handed none. Each content
  *   module's `redact` reads them through its kit (`ContentRedactKit.documents`): the module that
@@ -2435,7 +2460,7 @@ export const redactItem = (
   limits?: Pick<Configuration, "outputBudget">,
   supports: Supports = noSupports,
   view: OutcomeView = defaultView,
-  _feedback = true,
+  feedback = true,
   documents: ReadonlyMap<string, AcceptedStimulus> = noDocuments,
 ): Redacted => {
   const { body, content, held, hiddenOnly, notices, unprinted } = printBody(
@@ -2445,6 +2470,7 @@ export const redactItem = (
     supports,
     view,
     documents,
+    feedback,
   );
 
   return brandRedacted({
@@ -2497,7 +2523,8 @@ export interface RedactedStructure {
  * It is for plate's own callers that read only what the page shows, such as `checkResponses`,
  * `results` and a session's skip rule; `src/index.ts` does not export it. It reads the item as the
  * candidate sees it with no support enabled, as {@link hiddenOnlyResponses} does: no content
- * module binds a response, so the supports and the view change none of what it reads.
+ * module binds a response, so the supports, the view and the feedback facts change none of what it
+ * reads.
  *
  * @example
  *   interactionsIn(redactStructure(item, record).body);
@@ -2505,10 +2532,11 @@ export interface RedactedStructure {
  *
  * @param item The item.
  * @param record The template values and outcome values of the attempt shown, as `redactItem` takes
- *   them; none to read the item as it reads with no record.
+ *   them, its attempt count optional ({@link StructureRecord}); none to read the item as it reads
+ *   with no record.
  * @returns The item's structure as the page is shown it, with no printed text.
  */
-export const redactStructure = (item: Item, record?: RedactRecord): RedactedStructure => {
+export const redactStructure = (item: Item, record?: StructureRecord): RedactedStructure => {
   const { body, hiddenOnly, notices } = printBody(
     item,
     printingOf(item, record),
@@ -2540,10 +2568,11 @@ export const redactStructure = (item: Item, record?: RedactRecord): RedactedStru
  *
  * @param item The item.
  * @param record The template values and outcome values of the attempt shown, as `redactItem` takes
- *   them; none to read the item as it reads with no record.
+ *   them, its attempt count optional ({@link StructureRecord}); none to read the item as it reads
+ *   with no record.
  * @returns The responses, in the order the walk first meets them.
  */
-export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): ReadonlySet<string> =>
+export const hiddenOnlyResponses = (item: Item, record?: StructureRecord): ReadonlySet<string> =>
   printBody(item, printingOf(item, record), structureOnly, noSupports, defaultView, noDocuments)
     .hiddenOnly;
 

@@ -1,6 +1,7 @@
 import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
+import { defaultView } from "#plate/content/contract.ts";
 import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -59,6 +60,7 @@ import type {
   View,
 } from "#plate/payload.ts";
 import { redact, render } from "#plate/render.ts";
+import { noSupports } from "#plate/supports.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { stubElement, stubKind } from "#plate/test/stub-kind.ts";
@@ -850,6 +852,23 @@ describe("redactItem", () => {
     assert.strictEqual(copied.document, "items/capitals.xml");
     assert.strictEqual(copied.identifier, "capitals");
   });
+
+  it("[W0-BC] redactItem's output is unchanged for every module that does not read feedback", () => {
+    const attempted: RedactRecord = { ...fresh(item, instance), numAttempts: 1 };
+
+    for (const given of [undefined, attempted]) {
+      const defaulted = redactItem(item, given);
+
+      assert.deepStrictEqual(
+        redactItem(item, given, undefined, noSupports, defaultView, true),
+        defaulted,
+      );
+      assert.deepStrictEqual(
+        redactItem(item, given, undefined, noSupports, defaultView, false),
+        defaulted,
+      );
+    }
+  });
 });
 
 /**
@@ -1042,7 +1061,7 @@ describe("redactItem on printed variables", () => {
       Option.none(),
     );
     const accepted = Option.getOrThrow(acceptedItem(verdict));
-    const withheld = redact(accepted, { outcomes: {}, templates: {} });
+    const withheld = redact(accepted, { numAttempts: 0, outcomes: {}, templates: {} });
     const link = `${bodyPath}/p/a`;
 
     assert.deepStrictEqual(accepted.unsupported, [
@@ -1516,6 +1535,7 @@ const choicesShown = (redaction: Redacted): readonly string[] => {
  * @returns The record's part `redact` reads.
  */
 const holding = (templates: Readonly<Record<string, Value>>): RedactRecord => ({
+  numAttempts: 0,
   outcomes: {},
   templates,
 });
@@ -4811,6 +4831,7 @@ const holder: Item = {
  * is 7.
  */
 const holderRecord: RedactRecord = {
+  numAttempts: 0,
   outcomes: { SCORE: floatValue(7) },
   templates: { HELD: identifierValue("beacon"), OTHER: identifierValue("unbound") },
 };
@@ -4896,6 +4917,7 @@ describe("redactItem holds a module node's bound template values", () => {
           const plate = yield* Effect.promise(() => import("#plate/render.ts"));
           const configuration = yield* configure({});
           const redaction = payloads.redactItem(holder, {
+            numAttempts: 0,
             outcomes: { OTHER_HELD: floatValue(3), SCORE: floatValue(7) },
             templates: { HELD: identifierValue("beacon") },
           });
@@ -4996,7 +5018,11 @@ describe("redactItem holds a module node's bound template values", () => {
 
 describe("the printer of test content", () => {
   it("[W0-BF] printNodes prints a test outcome and leaves redactItem equal", () => {
-    const record: RedactRecord = { outcomes: { X: floatValue(2.675) }, templates: {} };
+    const record: RedactRecord = {
+      numAttempts: 0,
+      outcomes: { X: floatValue(2.675) },
+      templates: {},
+    };
     const path = `${bodyPath}/p`;
     const placed: BodyNode = {
       attributes: [],
@@ -5013,7 +5039,10 @@ describe("the printer of test content", () => {
     ]);
     assert.deepStrictEqual(printNodes([placed], Option.some(record)), onItem(record));
 
-    const withheld = printNodes([placed], Option.some({ outcomes: {}, templates: {} }));
+    const withheld = printNodes(
+      [placed],
+      Option.some({ numAttempts: 0, outcomes: {}, templates: {} }),
+    );
 
     assert.deepStrictEqual(withheld, [
       {
@@ -5027,7 +5056,7 @@ describe("the printer of test content", () => {
         tag: "p",
       },
     ]);
-    assert.deepStrictEqual(withheld, onItem({ outcomes: {}, templates: {} }));
+    assert.deepStrictEqual(withheld, onItem({ numAttempts: 0, outcomes: {}, templates: {} }));
 
     const limits = { outputBudget: 3 };
 

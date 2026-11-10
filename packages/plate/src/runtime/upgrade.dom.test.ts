@@ -19,6 +19,7 @@ import { redact, render } from "#plate/render.ts";
 import { upgrade } from "#plate/runtime.dom.ts";
 import { liveRegionOf } from "#plate/runtime/announce.dom.ts";
 import {
+  contentRuntimeSlots,
   interactionRootSelector,
   runtimeKindOf,
   runtimeKinds,
@@ -237,6 +238,32 @@ describe(server.browser, () => {
             container.remove();
           }
         }),
+    );
+
+    it.effect("[W0-BC] every rendered fixture item has no content root but its item Root", () =>
+      Effect.gen(function* fixturesHoldNoContentRoot() {
+        const contentRootSelector = contentRuntimeSlots
+          .filter((slot) => slot !== "item")
+          .map((slot) => `[data-slot="${slot}"]`)
+          .join(",");
+
+        assert.isAbove(everyFixtureItem.length, 0);
+
+        for (const path of everyFixtureItem) {
+          const container = mount(yield* renderedFixture(path));
+          const upgraded = upgrade(container);
+
+          assert.isNull(container.querySelector(contentRootSelector), path);
+          assert.deepStrictEqual(
+            upgraded.controllers.filter((entry) => "slot" in entry && entry.slot !== "item"),
+            [],
+            path,
+          );
+
+          upgraded.teardown();
+          container.remove();
+        }
+      }),
     );
 
     it("reads a runtime kind from an interaction root's marker only", () => {
