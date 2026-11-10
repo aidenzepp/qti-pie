@@ -304,15 +304,61 @@ const clickAt = (item: Mounted, x: number, y: number) =>
   });
 
 /**
- * Press Tab until a control has focus, from wherever the page's focus is, and fail the case when it
- * does not get there.
+ * Find the key press that moves focus to the next control of any kind in this engine: Tab, or
+ * Option-Tab where the engine, as WebKit on macOS does by default, makes Tab skip radios and
+ * checkboxes.
+ *
+ * It presses Tab once from a button and reads where focus lands, as `nextControlKey` does for the
+ * Node-driven browser tests (`src/test/browsers.ts`), and as the in-page cases of
+ * `answer-masking.dom.test.ts` do. Its probe buttons are the test's own and leave with it.
+ *
+ * @returns The `userEvent.keyboard` text that moves to the next control.
+ */
+const nextControlKey = Effect.acquireUseRelease(
+  Effect.sync(() => {
+    const container = document.createElement("div");
+
+    container.innerHTML =
+      '<button type="button">first</button><button type="button">second</button>';
+    document.body.append(container);
+
+    return container;
+  }),
+  (container) =>
+    Effect.gen(function* probe() {
+      const [first, second] = container.querySelectorAll("button");
+
+      first?.focus();
+      yield* Effect.promise(() => userEvent.tab());
+
+      return document.activeElement === second ? "{Tab}" : "{Alt>}{Tab}{/Alt}";
+    }),
+  (container) =>
+    Effect.sync(() => {
+      container.remove();
+    }),
+);
+
+/**
+ * Press a run of keys on the page's focused element.
+ *
+ * @param keys The `userEvent.keyboard` text.
+ * @returns Completion once the keys are pressed.
+ */
+const press = (keys: string) => Effect.promise(() => userEvent.keyboard(keys));
+
+/**
+ * Press the key that moves to the next control until a control has focus, from wherever the page's
+ * focus is, and fail the case when it does not get there.
  *
  * @param control The control to reach.
+ * @param key The `userEvent.keyboard` text that moves to the next control,
+ *   {@link nextControlKey}'s.
  */
-const tabTo = (control: HTMLElement) =>
+const tabTo = (control: HTMLElement, key: string) =>
   Effect.gen(function* tabbing() {
     for (let tabs = 0; tabs < 8 && document.activeElement !== control; tabs += 1) {
-      yield* Effect.promise(() => userEvent.tab());
+      yield* press(key);
     }
 
     assert.strictEqual(document.activeElement, control);
@@ -522,6 +568,7 @@ describe(server.browser, () => {
       "[Q-10] the keyboard path is the native one and the controller does not change it",
       () =>
         Effect.gen(function* keyboardIsNative() {
+          const key = yield* nextControlKey;
           const xml = yield* fileText(fixture);
           const single = yield* fileText(singleFixture);
 
@@ -530,12 +577,12 @@ describe(server.browser, () => {
               yield* withItem(xml, {}, (item) =>
                 Effect.gen(function* checkboxes() {
                   item.begin();
-                  yield* tabTo(item.control("A"));
+                  yield* tabTo(item.control("A"), key);
 
                   const reached: Element[] = [item.control("A")];
 
                   for (let tabs = 0; tabs < 3; tabs += 1) {
-                    yield* Effect.promise(() => userEvent.tab());
+                    yield* press(key);
                     reached.push(document.activeElement ?? document.body);
                   }
 
@@ -544,9 +591,9 @@ describe(server.browser, () => {
                     ["A", "B", "C", "D"].map((identifier) => item.control(identifier)),
                   );
 
-                  yield* Effect.promise(() => userEvent.keyboard(" "));
+                  yield* press(" ");
                   assert.deepStrictEqual(checked(item), ["D"]);
-                  yield* Effect.promise(() => userEvent.keyboard(" "));
+                  yield* press(" ");
                   assert.deepStrictEqual(checked(item), []);
                 }),
               );
@@ -554,17 +601,17 @@ describe(server.browser, () => {
               yield* withItem(single, {}, (item) =>
                 Effect.gen(function* radios() {
                   item.begin();
-                  yield* tabTo(item.control("SQUARE"));
+                  yield* tabTo(item.control("SQUARE"), key);
 
-                  yield* Effect.promise(() => userEvent.keyboard("{ArrowDown}"));
+                  yield* press("{ArrowDown}");
                   assert.strictEqual(document.activeElement, item.control("ROUND"));
                   assert.deepStrictEqual(checked(item), ["ROUND"]);
 
-                  yield* Effect.promise(() => userEvent.keyboard("{ArrowDown}"));
+                  yield* press("{ArrowDown}");
                   assert.strictEqual(document.activeElement, item.control("TRIANGLE"));
                   assert.deepStrictEqual(checked(item), ["TRIANGLE"]);
 
-                  yield* Effect.promise(() => userEvent.keyboard("{ArrowUp}"));
+                  yield* press("{ArrowUp}");
                   assert.strictEqual(document.activeElement, item.control("ROUND"));
                   assert.deepStrictEqual(checked(item), ["ROUND"]);
                 }),
@@ -819,21 +866,22 @@ describe(server.browser, () => {
 
     it.effect("[Q-10] a checkbox chosen by keyboard past max-choices is refused too", () =>
       Effect.gen(function* keyboardPastTheLimit() {
+        const key = yield* nextControlKey;
         const xml = yield* fileText(fixture);
 
         yield* withSheet(
           withItem(xml, {}, (item) =>
             Effect.gen(function* drive() {
               item.begin();
-              yield* tabTo(item.control("A"));
-              yield* Effect.promise(() => userEvent.keyboard(" "));
-              yield* Effect.promise(() => userEvent.tab());
-              yield* Effect.promise(() => userEvent.keyboard(" "));
+              yield* tabTo(item.control("A"), key);
+              yield* press(" ");
+              yield* press(key);
+              yield* press(" ");
               assert.deepStrictEqual(checked(item), ["A", "B"]);
 
-              yield* Effect.promise(() => userEvent.tab());
+              yield* press(key);
               assert.strictEqual(document.activeElement, item.control("C"));
-              yield* Effect.promise(() => userEvent.keyboard(" "));
+              yield* press(" ");
 
               assert.deepStrictEqual(checked(item), ["A", "B"]);
               assert.strictEqual(yield* heard(item), atMostTwo);
