@@ -22,12 +22,28 @@ import {
   splitTokens,
 } from "#plate/emit/parts.ts";
 import type { PartRow } from "#plate/emit/parts.ts";
+import { associateModule } from "#plate/interactions/associate.ts";
+import { drawingModule } from "#plate/interactions/drawing.ts";
+import { endAttemptModule } from "#plate/interactions/end-attempt.ts";
+import { gapMatchModule } from "#plate/interactions/gap-match.ts";
+import { graphicAssociateModule } from "#plate/interactions/graphic-associate.ts";
+import { graphicGapMatchModule } from "#plate/interactions/graphic-gap-match.ts";
+import { graphicOrderModule } from "#plate/interactions/graphic-order.ts";
+import { hotspotModule } from "#plate/interactions/hotspot.ts";
+import { hottextModule } from "#plate/interactions/hottext.ts";
+import { matchModule } from "#plate/interactions/match.ts";
+import { mediaModule } from "#plate/interactions/media.ts";
+import { orderModule } from "#plate/interactions/order.ts";
+import { portableCustomModule } from "#plate/interactions/portable-custom.ts";
+import { positionObjectModule } from "#plate/interactions/position-object.ts";
+import { selectPointModule } from "#plate/interactions/select-point.ts";
+import { sliderModule } from "#plate/interactions/slider.ts";
+import { uploadModule } from "#plate/interactions/upload.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
   InlineChoiceInteraction,
-  Interaction,
   Item,
   ResponseDeclaration,
   TextEntryInteraction,
@@ -45,6 +61,7 @@ import { parseHtml } from "#plate/test/round-trip.ts";
 const specRows = [
   ["item", "root", "item", "qti-assessment-item"],
   ["item", "status", "item-status", "section"],
+  ["item", "live", "item-live", "div"],
   ["item", "statusHeading", "item-status-heading", "h1"],
   ["item", "messages", "item-messages", "ul"],
   ["item", "message", "item-message", "li"],
@@ -85,6 +102,43 @@ const specRows = [
   ["test-navigation", "submit", "test-navigation-submit", "button"],
   ["test-navigation", "end", "test-navigation-end", "button"],
 ] as const;
+
+/**
+ * The four interactions plate renders, which the merged column's fixtures place in a body.
+ */
+type ShippedInteraction =
+  | ChoiceInteraction
+  | ExtendedTextInteraction
+  | InlineChoiceInteraction
+  | TextEntryInteraction;
+
+/**
+ * Every interaction module by its part-table owner and whether it is implemented: the four plate
+ * renders, whose rows the table holds, and each stub module beside the contract.
+ */
+const interactionModules: readonly { readonly implemented: boolean; readonly owner: string }[] = [
+  { implemented: true, owner: "choice-interaction" },
+  { implemented: true, owner: "extended-text-interaction" },
+  { implemented: true, owner: "inline-choice-interaction" },
+  { implemented: true, owner: "text-entry-interaction" },
+  associateModule,
+  drawingModule,
+  endAttemptModule,
+  gapMatchModule,
+  graphicAssociateModule,
+  graphicGapMatchModule,
+  graphicOrderModule,
+  hotspotModule,
+  hottextModule,
+  matchModule,
+  mediaModule,
+  orderModule,
+  portableCustomModule,
+  positionObjectModule,
+  selectPointModule,
+  sliderModule,
+  uploadModule,
+];
 
 /**
  * The navigation parts, in their order: the Root, the five buttons, the item list and its
@@ -155,6 +209,7 @@ describe("partTable", () => {
     assert.deepStrictEqual(item, [
       "root",
       "status",
+      "live",
       "statusHeading",
       "messages",
       "message",
@@ -215,6 +270,38 @@ describe("partTable", () => {
       "aria-describedby",
       "autofocus",
     ]);
+  });
+});
+
+describe("the interaction modules", () => {
+  it("give the table rows for each implemented module, and none for a stub", () => {
+    const owners: ReadonlySet<string> = new Set(partTable.map((row) => row.interaction));
+    const implemented = interactionModules.filter((module) => module.implemented);
+
+    assert.deepStrictEqual(
+      implemented.map((module) => module.owner),
+      [
+        "choice-interaction",
+        "extended-text-interaction",
+        "inline-choice-interaction",
+        "text-entry-interaction",
+      ],
+    );
+    for (const module of interactionModules) {
+      assert.strictEqual(owners.has(module.owner), module.implemented, module.owner);
+    }
+  });
+
+  it("checks each implemented module's rows as rendered: the merged column renders every row", () => {
+    const checked = new Set(
+      interactionModules.filter((module) => module.implemented).map((module) => module.owner),
+    );
+
+    for (const row of partTable) {
+      if (row.interaction.endsWith("-interaction")) {
+        assert.isTrue(checked.has(row.interaction), row.slot);
+      }
+    }
   });
 });
 
@@ -784,7 +871,7 @@ const unnamedInlineChoice: InlineChoiceInteraction = {
  * @param interaction The interaction.
  * @returns The body node that holds it.
  */
-const placed = (interaction: Interaction): BodyNode => {
+const placed = (interaction: ShippedInteraction): BodyNode => {
   switch (interaction.kind) {
     case "text-entry": {
       return {
@@ -832,7 +919,7 @@ const placed = (interaction: Interaction): BodyNode => {
  * @returns The response's base type and cardinality.
  */
 const bindingOf = (
-  interaction: Interaction,
+  interaction: ShippedInteraction,
 ): Pick<ResponseDeclaration, "baseType" | "cardinality"> => {
   switch (interaction.kind) {
     case "choice": {
@@ -863,7 +950,7 @@ const bindingOf = (
  * @param interaction The interaction.
  * @returns The item.
  */
-const itemOf = (interaction: Interaction): Item => ({
+const itemOf = (interaction: ShippedInteraction): Item => ({
   body: [
     {
       attributes: [{ name: "id", value: "intro" }],

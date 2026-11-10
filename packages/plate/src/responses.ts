@@ -17,7 +17,7 @@ import { validateChoice } from "#plate/interactions/choice.ts";
 import { validateExtendedText } from "#plate/interactions/extended-text.ts";
 import { validateInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { validateTextEntry } from "#plate/interactions/text-entry.ts";
-import { interactionsIn } from "#plate/model/interactions.ts";
+import { interactionsIn, isStubbed, stubSteps } from "#plate/model/interactions.ts";
 import type { Interaction, Item } from "#plate/model/item.ts";
 import type { ResponsesRecord } from "#plate/model/record.ts";
 import { isRecordValue, nullOf } from "#plate/model/values.ts";
@@ -34,6 +34,10 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * @returns Its NULL.
  */
 const ownNull = (interaction: Interaction): Value => {
+  if (isStubbed(interaction)) {
+    return stubSteps(interaction).nullValue();
+  }
+
   switch (interaction.kind) {
     case "choice": {
       return nullOf("identifier", interaction.cardinality);
@@ -95,6 +99,10 @@ const validate = (
   input: Value | Malformed,
   configuration: Configuration,
 ): readonly ValidationMessage[] => {
+  if (isStubbed(interaction)) {
+    return stubSteps(interaction).validate(input, configuration);
+  }
+
   switch (interaction.kind) {
     case "choice": {
       return validateChoice(interaction, input, configuration);

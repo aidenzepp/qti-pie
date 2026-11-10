@@ -9,6 +9,7 @@ import type {
 } from "#plate/codec/redacted.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
+import { isStubbed } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -581,6 +582,14 @@ const spanChain = (spans: number, innermost: readonly BodyNodeJson[]): BodyNodeJ
  */
 const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
   nodes.map((node): BodyNode => {
+    if (isStubbed(node)) {
+      return {
+        ...node,
+        path: "",
+        prompt: node.prompt.pipe(Option.map((prompt) => withoutPaths(prompt))),
+      };
+    }
+
     switch (node.kind) {
       case "element": {
         return { ...node, children: withoutPaths(node.children), path: "" };
@@ -655,6 +664,10 @@ const pathless = (redacted: Redacted): Redacted =>
  */
 const pathsOf = (nodes: readonly BodyNode[]): readonly string[] =>
   nodes.flatMap((node): readonly string[] => {
+    if (isStubbed(node)) {
+      return [node.path, ...Option.toArray(node.prompt).flatMap((prompt) => pathsOf(prompt))];
+    }
+
     switch (node.kind) {
       case "element": {
         return [node.path, ...pathsOf(node.children)];

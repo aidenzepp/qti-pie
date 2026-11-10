@@ -1,11 +1,28 @@
 import { Data, Option, Result } from "effect";
 import type { Attributes, Element, Node, PartFunction } from "#plate/emit/node.ts";
+import type { associateModule } from "#plate/interactions/associate.ts";
+import type { drawingModule } from "#plate/interactions/drawing.ts";
+import type { endAttemptModule } from "#plate/interactions/end-attempt.ts";
+import type { gapMatchModule } from "#plate/interactions/gap-match.ts";
+import type { graphicAssociateModule } from "#plate/interactions/graphic-associate.ts";
+import type { graphicGapMatchModule } from "#plate/interactions/graphic-gap-match.ts";
+import type { graphicOrderModule } from "#plate/interactions/graphic-order.ts";
+import type { hotspotModule } from "#plate/interactions/hotspot.ts";
+import type { hottextModule } from "#plate/interactions/hottext.ts";
+import type { matchModule } from "#plate/interactions/match.ts";
+import type { mediaModule } from "#plate/interactions/media.ts";
+import type { orderModule } from "#plate/interactions/order.ts";
+import type { portableCustomModule } from "#plate/interactions/portable-custom.ts";
+import type { positionObjectModule } from "#plate/interactions/position-object.ts";
+import type { selectPointModule } from "#plate/interactions/select-point.ts";
+import type { sliderModule } from "#plate/interactions/slider.ts";
+import type { uploadModule } from "#plate/interactions/upload.ts";
 
 /**
- * The part keys of each interaction, of the item chrome and of the test chrome, a part's name with
- * a lower-case first letter.
+ * The part keys of the four interactions plate renders, of the item chrome and of the test chrome,
+ * a part's name with a lower-case first letter.
  */
-interface PartsOf {
+interface ShippedPartsOf {
   "choice-interaction":
     | "choice"
     | "choices"
@@ -16,7 +33,7 @@ interface PartsOf {
     | "root";
   "extended-text-interaction": "control" | "prompt" | "root";
   "inline-choice-interaction": "control" | "label" | "option" | "placeholder" | "root";
-  item: "message" | "messages" | "notice" | "root" | "status" | "statusHeading";
+  item: "live" | "message" | "messages" | "notice" | "root" | "status" | "statusHeading";
   "test-navigation":
     | "end"
     | "item"
@@ -28,6 +45,42 @@ interface PartsOf {
     | "submit";
   "text-entry-interaction": "control" | "root";
 }
+
+/**
+ * The stub interaction modules beside `#plate/interactions/contract.ts`, by type only, so this
+ * module imports none of them at run time and no module that imports it forms a cycle.
+ */
+type StubModule =
+  | typeof associateModule
+  | typeof drawingModule
+  | typeof endAttemptModule
+  | typeof gapMatchModule
+  | typeof graphicAssociateModule
+  | typeof graphicGapMatchModule
+  | typeof graphicOrderModule
+  | typeof hotspotModule
+  | typeof hottextModule
+  | typeof matchModule
+  | typeof mediaModule
+  | typeof orderModule
+  | typeof portableCustomModule
+  | typeof positionObjectModule
+  | typeof selectPointModule
+  | typeof sliderModule
+  | typeof uploadModule;
+
+/**
+ * The part keys of each stub interaction module, by its owner: the keys of its `parts`, none while
+ * it is a stub.
+ */
+type StubPartsOf = { readonly [M in StubModule as M["owner"]]: keyof M["parts"] & string };
+
+/**
+ * The part keys of each interaction, of the item chrome and of the test chrome: the shipped
+ * interactions' and the chrome's ({@link ShippedPartsOf}) and each stub module's
+ * ({@link StubPartsOf}), so a module's parts are typed from the module itself.
+ */
+type PartsOf = ShippedPartsOf & StubPartsOf;
 
 /**
  * The owner of a group of parts: the item chrome, one of the interactions plate renders, or the
@@ -475,6 +528,15 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     listOwner: false,
     merged: ["id", "role", "aria-labelledby", "tabindex", "autofocus"],
     part: "status",
+    tagClass: "flow-container",
+  },
+  {
+    defaults: {},
+    element: "div",
+    interaction: "item",
+    listOwner: false,
+    merged: ["role", "aria-live", "aria-atomic"],
+    part: "live",
     tagClass: "flow-container",
   },
   {

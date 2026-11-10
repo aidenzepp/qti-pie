@@ -33,7 +33,13 @@ import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
 import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
-import { interactionsIn } from "#plate/model/interactions.ts";
+import {
+  interactionsIn,
+  isInteraction,
+  isStubbed,
+  regionsOf,
+  stubSteps,
+} from "#plate/model/interactions.ts";
 import type {
   BodyElement,
   BodyNode,
@@ -586,17 +592,24 @@ interface Build {
 }
 
 /**
- * Collect the ids the author gave the elements of body nodes, in document order: the `id` of
- * every element, below elements, in Prompts and Labels and in a Choice's choice content, the places
- * the emitter writes as elements, so each one is an id an element of the rendered item carries. An
- * Inline Choice's choice content gives none: each of its choices is written as the one text of an
- * `option`, so an id inside one is never emitted.
+ * Collect the ids the author gave the elements of body nodes, in document order: the `id` of every
+ * element, below elements, and in every interaction region the emitter writes as elements ({@link
+ * regionsOf}): Prompts and Labels and a Choice's choice content, the places it writes, so each one
+ * is an id an element of the rendered item carries. An Inline Choice's choice content gives none:
+ * each of its choices is written as the one text of an `option`, so an id inside one is never
+ * emitted.
  *
  * @param nodes The body nodes.
  * @returns The ids, unscoped.
  */
 const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
   nodes.flatMap((node): readonly string[] => {
+    if (isInteraction(node)) {
+      return regionsOf(node).flatMap((region) =>
+        region.written === "nodes" ? authoredIdsIn(region.nodes) : [],
+      );
+    }
+
     switch (node.kind) {
       case "element": {
         return [
@@ -604,24 +617,11 @@ const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
           ...authoredIdsIn(node.children),
         ];
       }
-      case "choice": {
-        return [
-          ...authoredIdsIn(Option.getOrElse(node.prompt, () => [])),
-          ...node.choices.flatMap((choice) => authoredIdsIn(choice.content)),
-        ];
-      }
-      case "extended-text": {
-        return authoredIdsIn(Option.getOrElse(node.prompt, () => []));
-      }
-      case "inline-choice": {
-        return authoredIdsIn(Option.getOrElse(node.label, () => []));
-      }
       case "template-block":
       case "template-inline": {
         return authoredIdsIn(node.content);
       }
       case "printed-variable":
-      case "text-entry":
       case "text":
       case "unsupported": {
         return [];
@@ -647,6 +647,10 @@ const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
 const isUnnamed = (interaction: Interaction, ids: ReadonlySet<string>): boolean => {
   const unauthored =
     Option.isNone(authorsLabel(interaction)) && Option.isNone(resolvedLabelledby(interaction, ids));
+  if (isStubbed(interaction)) {
+    return stubSteps(interaction).unnamed(unauthored);
+  }
+
   switch (interaction.kind) {
     case "choice": {
       return false;
@@ -1088,6 +1092,10 @@ const controlCount = (
   interaction: Interaction,
   build: Pick<Build, "posted" | "values">,
 ): number => {
+  if (isStubbed(interaction)) {
+    return stubSteps(interaction).controls();
+  }
+
   switch (interaction.kind) {
     case "extended-text": {
       return controlsOf(interaction, entriesOf(interaction, build).length).n;
@@ -1194,6 +1202,10 @@ type Printer = (bound: number) => Option.Option<string>;
  *   inline becomes its notice.
  */
 const copyNode = (node: BodyNode, build: Build): PayloadNode => {
+  if (isStubbed(node)) {
+    return stubSteps(node).redact();
+  }
+
   switch (node.kind) {
     case "element": {
       return {
@@ -1740,6 +1752,13 @@ const printBody = (
    */
   const nodesOf = (nodes: readonly BodyNode[], seen: boolean): readonly BodyNode[] =>
     nodes.flatMap((node): readonly BodyNode[] => {
+      if (isStubbed(node)) {
+        reach(node.path, () => true, seen);
+        bind([node.response], seen);
+
+        return [{ ...node, prompt: node.prompt.pipe(Option.map((lead) => nodesOf(lead, seen))) }];
+      }
+
       switch (node.kind) {
         case "element": {
           const parameter = expandedParameter(item, printing, node);
@@ -2189,6 +2208,10 @@ const formBinding = (response: ResponseBinding, name: string): Option.Option<Bin
  * @returns Its base, or none.
  */
 const baseOf = (interaction: Interaction): Option.Option<number> => {
+  if (isStubbed(interaction)) {
+    return Option.flatMap(Arr.head(stubSteps(interaction).bindings()), (bound) => bound.base);
+  }
+
   switch (interaction.kind) {
     case "extended-text":
     case "text-entry": {

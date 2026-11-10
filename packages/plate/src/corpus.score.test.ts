@@ -6,6 +6,7 @@ import { qtiNamespace } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { score, solution } from "#plate/index.ts";
 import type { Accepted, StoredRecord } from "#plate/index.ts";
+import { isStubbed } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -175,6 +176,10 @@ const builtInOf = (source: SourceDocument): Option.Option<BuiltIn> => {
  */
 const interactionsOf = (nodes: readonly BodyNode[]): readonly Bound[] =>
   nodes.flatMap((node): readonly Bound[] => {
+    if (isStubbed(node)) {
+      return [];
+    }
+
     switch (node.kind) {
       case "element": {
         return interactionsOf(node.children);

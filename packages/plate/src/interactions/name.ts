@@ -29,6 +29,7 @@ import type { Attributes } from "#plate/emit/node.ts";
 import { authoredIdrefs, splitTokens } from "#plate/emit/parts.ts";
 import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
+import { isStubbed } from "#plate/model/interactions.ts";
 import type { BodyAttribute, BodyNode } from "#plate/model/item.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
 import type { AttributePayload, PayloadNode, TextName } from "#plate/payload.ts";
@@ -71,6 +72,11 @@ const attributeOf = (
  */
 export const givesText = (nodes: readonly (BodyNode | PayloadNode)[]): boolean =>
   nodes.some((node) => {
+    if (isStubbed(node)) {
+      // No content holds an interaction: the emitter refuses one there (`nestedInteraction`).
+      return false;
+    }
+
     switch (node.kind) {
       case "text": {
         return isWritten(node.text);

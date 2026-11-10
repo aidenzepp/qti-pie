@@ -21,6 +21,7 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { isStubbed } from "#plate/model/interactions.ts";
 import type { BodyElement, BodyNode, InlineChoiceInteraction, Item } from "#plate/model/item.ts";
 import type { Test } from "#plate/model/test.ts";
 import { InvalidValue } from "#plate/model/values.ts";
@@ -300,6 +301,10 @@ const namesOf = (element: BodyElement): readonly string[] =>
  */
 const outline = (nodes: readonly BodyNode[]): readonly unknown[] =>
   nodes.map((node) => {
+    if (isStubbed(node)) {
+      return node.kind;
+    }
+
     switch (node.kind) {
       case "element": {
         return { [node.tag]: outline(node.children) };

@@ -34,12 +34,12 @@ import type {
   SourceElement,
   Visit,
 } from "#plate/document/source.ts";
+import { isInteraction, mapRegions } from "#plate/model/interactions.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type {
   BodyNode,
   Item,
   OutcomeDeclaration,
-  SimpleChoice,
   Unsupported,
   UnsupportedFeature,
 } from "#plate/model/item.ts";
@@ -578,52 +578,6 @@ const placeNodes = (
 };
 
 /**
- * The parts of a Choice or an Inline Choice with their URL notices placed: its Prompt or Label,
- * its choices, and the notices lifted out of them.
- */
-interface PlacedChoiceParts {
-  readonly choices: readonly SimpleChoice[];
-  readonly lead: Option.Option<readonly BodyNode[]>;
-  readonly lifted: readonly Unsupported[];
-}
-
-/**
- * Place the URL notices inside the parts of a Choice or an Inline Choice: its Prompt or Label
- * first, then each choice's content in document order.
- *
- * @param lead The content of the Choice's Prompt or the Inline Choice's Label, none when it has
- *   none.
- * @param choices The choices.
- * @param drops The dropped URLs' features, by element path.
- * @param placed The paths whose notices are in the body, added to as they are placed.
- * @param inMedia Whether a media element encloses the interaction.
- * @returns The Prompt or Label and the choices with their notices, and the notices lifted out of
- *   them, the Prompt's or Label's first.
- */
-const placeChoiceParts = (
-  lead: Option.Option<readonly BodyNode[]>,
-  choices: readonly SimpleChoice[],
-  drops: ReadonlyMap<string, readonly string[]>,
-  placed: Set<string>,
-  inMedia: boolean,
-): PlacedChoiceParts => {
-  const leading = lead.pipe(Option.map((nodes) => placeNodes(nodes, drops, placed, inMedia)));
-  const entries = choices.map((choice) => ({
-    choice,
-    placed: placeNodes(choice.content, drops, placed, inMedia),
-  }));
-
-  return {
-    choices: entries.map((entry) => ({ ...entry.choice, content: entry.placed.nodes })),
-    lead: leading.pipe(Option.map((result) => result.nodes)),
-    lifted: [
-      ...Option.match(leading, { onNone: () => [], onSome: (result) => result.lifted }),
-      ...entries.flatMap((entry) => entry.placed.lifted),
-    ],
-  };
-};
-
-/**
  * Place the URL notices of one body node and of its subtree.
  *
  * A notice follows its element as its next sibling. A link the drop leaves bare, with no element
@@ -643,6 +597,18 @@ const placeNode = (
   placed: Set<string>,
   inMedia: boolean,
 ): Placed => {
+  if (isInteraction(node)) {
+    const lifted: Unsupported[] = [];
+    const rebuilt = mapRegions(node, (region) => {
+      const inner = placeNodes(region.nodes, drops, placed, inMedia);
+      lifted.push(...inner.lifted);
+
+      return inner.nodes;
+    });
+
+    return { lifted, nodes: [rebuilt] };
+  }
+
   switch (node.kind) {
     case "element": {
       const media = mediaElements.has(node.tag);
@@ -664,35 +630,6 @@ const placeNode = (
       return { lifted: inner.lifted, nodes: [element, ...own] };
     }
 
-    case "choice": {
-      const parts = placeChoiceParts(node.prompt, node.choices, drops, placed, inMedia);
-
-      return {
-        lifted: parts.lifted,
-        nodes: [{ ...node, choices: parts.choices, prompt: parts.lead }],
-      };
-    }
-
-    case "extended-text": {
-      const prompt = node.prompt.pipe(
-        Option.map((nodes) => placeNodes(nodes, drops, placed, inMedia)),
-      );
-
-      return {
-        lifted: Option.match(prompt, { onNone: () => [], onSome: (result) => result.lifted }),
-        nodes: [{ ...node, prompt: prompt.pipe(Option.map((result) => result.nodes)) }],
-      };
-    }
-
-    case "inline-choice": {
-      const parts = placeChoiceParts(node.label, node.choices, drops, placed, inMedia);
-
-      return {
-        lifted: parts.lifted,
-        nodes: [{ ...node, choices: parts.choices, label: parts.lead }],
-      };
-    }
-
     case "template-block":
     case "template-inline": {
       const inner = placeNodes(node.content, drops, placed, inMedia);
@@ -702,7 +639,6 @@ const placeNode = (
 
     case "printed-variable":
     case "text":
-    case "text-entry":
     case "unsupported": {
       return { lifted: [], nodes: [node] };
     }

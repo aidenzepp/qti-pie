@@ -8,7 +8,7 @@ import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
 import type { ValueBinding } from "#plate/form/encoding.ts";
 import { encodeRedacted } from "#plate/codec/redacted.ts";
-import { interactionsIn as bodyInteractions } from "#plate/model/interactions.ts";
+import { interactionsIn as bodyInteractions, isStubbed } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -705,6 +705,10 @@ const unpromptedOf = (maxStrings: Option.Option<bigint>, minStrings: bigint): Re
  * @returns The node, changed.
  */
 const referencingNode = (node: BodyNode, ids: string): BodyNode => {
+  if (isStubbed(node)) {
+    return node;
+  }
+
   switch (node.kind) {
     case "choice": {
       return {
