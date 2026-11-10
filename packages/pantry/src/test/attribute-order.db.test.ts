@@ -169,6 +169,58 @@ const knownException = (
   breaksObjectIdentifier(entries);
 
 /**
+ * The law on `Expression` an operand count outside its operator's breaks (rule `P2`), as a
+ * refusal's origin names it.
+ */
+const arityCheck = '{"kind":"check","relation":"Expression","name":"Arity"}';
+
+/**
+ * The law on `Expression` an operand that does not fit its operator breaks (rule `P23`), as a
+ * refusal's origin names it.
+ */
+const operandFitCheck = '{"kind":"check","relation":"Expression","name":"Operand_fit"}';
+
+/**
+ * The one pair of refusals this test admits under different rules, issue #104. A package with two
+ * broken `Expression` rows, one breaking `Operand_fit` alone (rule `P23`) and one breaking `Arity`
+ * and `Operand_fit` (rule `P2`), is refused under the rule of whichever row PostgreSQL checks
+ * first, and that varies from import to import of the same bytes; the reordering does not move
+ * it. This test first drew it at the re-pin to grizzle 89e94c0 (`TEST_SEED=1819136236`, case 6),
+ * and it holds at 6995af4 too. It is keyed as narrowly as the case allows: both imports refuse, one
+ * under `P2` and one under `P23`, each names only those two `Expression` checks and `Operand_fit`
+ * among them, the `P23` side names `Operand_fit` alone, and the oracle predicts both rules. Every
+ * other pair of imports must still name the same rule. Remove it with issue #104.
+ *
+ * @param before - What the import of the package as read did.
+ * @param after - What the import of the reordered package did.
+ * @param predicted - What the oracle predicts of the reordered package.
+ * @returns Whether the two refusals are that known exception.
+ */
+const firstRuleVaries = (before: Imported, after: Imported, predicted: OracleVerdict): boolean => {
+  if (before.verdict !== "refused" || after.verdict !== "refused") {
+    return false;
+  }
+
+  const sides = [before, after];
+  const ruled = (rule: string) => sides.find((side) => side.rule === rule);
+  const p23 = ruled("P23");
+
+  return (
+    ruled("P2") !== undefined &&
+    p23 !== undefined &&
+    sides.every(
+      ({ laws }) =>
+        laws.includes(operandFitCheck) &&
+        laws.every((law) => law === arityCheck || law === operandFitCheck),
+    ) &&
+    p23.laws.length === 1 &&
+    predicted.kind === "refused" &&
+    predicted.rules.has("P2") &&
+    predicted.rules.has("P23")
+  );
+};
+
+/**
  * Hold an accepted package's export to the order its source writes: every XML entry exported
  * with each element's declarations, then its attributes, each in the order the source writes
  * them, and canonically equal to the source.
@@ -280,9 +332,13 @@ describe.skipIf(!hasLease)(
                     c.note("moved");
                   }
 
-                  assert.deepStrictEqual(verdictOf(after), verdictOf(before));
                   if (after.verdict === "refused") {
                     const predicted = yield* oracleVerdict(written);
+
+                    // Issue #104: the one keyed pair of refusals under two rules (firstRuleVaries).
+                    if (!firstRuleVaries(before, after, predicted)) {
+                      assert.deepStrictEqual(verdictOf(after), verdictOf(before));
+                    }
 
                     // Issue #103: the one keyed exception to the oracle's rules (knownException).
                     assert.isTrue(
@@ -291,6 +347,7 @@ describe.skipIf(!hasLease)(
                       `refused under ${after.rule}, and the oracle predicts ${JSON.stringify(predicted.kind === "refused" ? [...predicted.rules] : predicted.kind)}`,
                     );
                   } else {
+                    assert.deepStrictEqual(verdictOf(after), verdictOf(before));
                     yield* exportHolds(
                       after.id,
                       new Map(
