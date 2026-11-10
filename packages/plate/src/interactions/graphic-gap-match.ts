@@ -79,6 +79,12 @@ export const graphicGapMatchModule: InteractionModule<
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Graphic Gap Match's feature, as the codec refused it
+   * before: the model holds no node of it until issue m3d-05 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) =>
+    unimplemented({ element, feature, kind: "graphic-gap-match" }),
+  /**
    * Graphic Gap Match's payload copy: not implemented; issue m3d-05 fills it.
    */
   redact: notImplemented,

@@ -73,6 +73,11 @@ export const mediaModule: InteractionModule<"media", MediaInteraction, never> = 
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Media's feature, as the codec refused it before:
+   * the model holds no node of it until issue ei-03 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) => unimplemented({ element, feature, kind: "media" }),
+  /**
    * Media's payload copy: not implemented; issue ei-03 fills it.
    */
   redact: notImplemented,

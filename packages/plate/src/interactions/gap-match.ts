@@ -73,6 +73,11 @@ export const gapMatchModule: InteractionModule<"gap-match", GapMatchInteraction,
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Gap Match's feature, as the codec refused it before:
+   * the model holds no node of it until issue m3d-03 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) => unimplemented({ element, feature, kind: "gap-match" }),
+  /**
    * Gap Match's payload copy: not implemented; issue m3d-03 fills it.
    */
   redact: notImplemented,

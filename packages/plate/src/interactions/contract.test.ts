@@ -1,13 +1,14 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
+import { applyPart } from "#plate/emit/swap.ts";
 import { associateModule } from "#plate/interactions/associate.ts";
-import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule, ParseContext } from "#plate/interactions/contract.ts";
+import { NotImplemented, partRow } from "#plate/interactions/contract.ts";
+import type { InteractionModule, ParseContext, PartSpec } from "#plate/interactions/contract.ts";
 import { drawingModule } from "#plate/interactions/drawing.ts";
 import { endAttemptModule } from "#plate/interactions/end-attempt.ts";
 import { gapMatchModule } from "#plate/interactions/gap-match.ts";
@@ -24,7 +25,12 @@ import { positionObjectModule } from "#plate/interactions/position-object.ts";
 import { selectPointModule } from "#plate/interactions/select-point.ts";
 import { sliderModule } from "#plate/interactions/slider.ts";
 import { uploadModule } from "#plate/interactions/upload.ts";
-import type { StubInteraction, StubbedInteraction, Unsupported } from "#plate/model/item.ts";
+import type {
+  GapMatchInteraction,
+  StubInteraction,
+  StubbedInteraction,
+  Unsupported,
+} from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { EmitState, Payload } from "#plate/payload.ts";
 
@@ -314,4 +320,179 @@ describe("the stub interaction modules", () => {
       }
     }),
   );
+});
+
+/**
+ * The payload node of {@link landedGapMatch}: what its `redact` copies of the model node.
+ */
+interface LandedPayload {
+  readonly class: string;
+  readonly response: string;
+}
+
+/**
+ * The parts of {@link landedGapMatch}: a Root, and a part whose key is in camel case, so its
+ * marker shows the kebab case `partRow` derives.
+ */
+const landedParts = {
+  itemButton: {
+    defaults: { type: "button" },
+    element: "button",
+    listOwner: false,
+    merged: [],
+    tagClass: "button",
+  },
+  root: {
+    defaults: {},
+    element: "div",
+    legendOwner: true,
+    listOwner: false,
+    merged: ["class"],
+    tagClass: "flow-container",
+  },
+} as const satisfies { readonly [Q in "itemButton" | "root"]: PartSpec };
+
+/**
+ * A Gap Match module as one that has landed would be: implemented, with its own payload node, its
+ * own JSON form and its own parts, in this file only. The test registers it in place of the stub
+ * through `vi.doMock`, so no hub is edited for it.
+ */
+const landedGapMatch: InteractionModule<
+  "gap-match",
+  GapMatchInteraction,
+  LandedPayload,
+  "itemButton" | "root",
+  unknown
+> = {
+  bindings: (interaction) => [{ base: Option.none(), response: interaction.response }],
+  connect: () => ({}),
+  controls: () => 1,
+  element: "qti-gap-match-interaction",
+  feature: "Q-6",
+  implemented: true,
+  kind: "gap-match",
+  nullValue: () => ({ baseType: "identifier", cardinality: "single", values: [] }),
+  owner: "gap-match-interaction",
+  parse: (_source, context) => context.notice("qti-gap-match-interaction"),
+  parts: landedParts,
+  payloadSchema: ({ BodyNodes, NoPath, OptionalText, Schema }) =>
+    Schema.Struct({
+      ariaLabel: OptionalText,
+      ariaLabelledby: OptionalText,
+      class: Schema.String,
+      kind: Schema.Literal("gap-match"),
+      path: NoPath,
+      prompt: Schema.OptionFromOptionalKey(BodyNodes),
+      response: Schema.String,
+    }),
+  redact: (interaction) => ({ class: interaction.class, response: interaction.response }),
+  render: (interaction) => {
+    const row = partRow({ owner: "gap-match-interaction", parts: landedParts }, "root");
+
+    return applyPart(
+      row,
+      { class: interaction.class, "data-response": interaction.response, "data-slot": row.slot },
+      [],
+    );
+  },
+  restore: (_interaction, stored) => stored,
+  sequence: () => Option.none(),
+  solution: (_interaction, correct) => correct,
+  unnamed: () => false,
+  validate: () => [],
+};
+
+/**
+ * The JSON form of a redacted item whose body holds one Gap Match, as a host hands it over.
+ */
+const landedJson = {
+  body: [
+    { kind: "text", text: "Fill the gaps: " },
+    { class: "gaps", kind: "gap-match", response: "RESPONSE" },
+  ],
+  document: "item.xml",
+  identifier: "landed",
+  notices: [],
+  responses: [{ baseType: "identifier", cardinality: "single", identifier: "RESPONSE" }],
+  title: "Landed",
+};
+
+describe("a module that lands", () => {
+  it.effect(
+    "renders through render(), its node surviving encodeRedacted and decodeRedacted, with no hub edit",
+    () =>
+      Effect.gen(function* landed() {
+        vi.resetModules();
+        vi.doMock("#plate/interactions/gap-match.ts", () => ({ gapMatchModule: landedGapMatch }));
+
+        const codec = yield* Effect.promise(() => import("#plate/codec/redacted.ts"));
+        const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+        const configuration = yield* configure({});
+        const decoded = yield* Effect.fromResult(codec.decodeRedacted(landedJson));
+        const encoded = yield* Effect.fromResult(codec.encodeRedacted(decoded));
+
+        assert.deepStrictEqual<unknown>(encoded, landedJson);
+
+        const again = yield* Effect.fromResult(
+          // oxlint-disable-next-line unicorn/prefer-structured-clone -- the round trip is the JSON a host sends to a page, which a structured clone does not take.
+          codec.decodeRedacted(JSON.parse(JSON.stringify(encoded))),
+        );
+        const { html } = yield* Effect.fromResult(
+          plate.render(again, configuration, { instance: "q1" }),
+        );
+
+        assert.include(html, "Fill the gaps: ");
+        assert.match(html, /<div [^>]*data-slot="gap-match-interaction"[^>]*>/u);
+        assert.include(html, 'data-response="RESPONSE"');
+        assert.include(html, 'class="gaps"');
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            vi.doUnmock("#plate/interactions/gap-match.ts");
+            vi.resetModules();
+          }),
+        ),
+      ),
+  );
+
+  it("gives each part's row from its spec, with the owner, the part and the marker derived", () => {
+    const module = { owner: "gap-match-interaction" as const, parts: landedParts };
+
+    assert.deepStrictEqual(partRow(module, "root"), {
+      defaults: {},
+      element: "div",
+      interaction: "gap-match-interaction",
+      legendOwner: true,
+      listOwner: false,
+      merged: ["class"],
+      part: "root",
+      slot: "gap-match-interaction",
+      tagClass: "flow-container",
+    });
+    assert.deepStrictEqual(partRow(module, "itemButton"), {
+      defaults: { type: "button" },
+      element: "button",
+      interaction: "gap-match-interaction",
+      legendOwner: false,
+      listOwner: false,
+      merged: [],
+      part: "itemButton",
+      slot: "gap-match-interaction-item-button",
+      tagClass: "button",
+    });
+    assert.deepStrictEqual(
+      partRow(module, "itemButton", { element: "span", tagClass: "phrasing-container" }),
+      {
+        defaults: { type: "button" },
+        element: "span",
+        interaction: "gap-match-interaction",
+        legendOwner: false,
+        listOwner: false,
+        merged: [],
+        part: "itemButton",
+        slot: "gap-match-interaction-item-button",
+        tagClass: "phrasing-container",
+      },
+    );
+  });
 });

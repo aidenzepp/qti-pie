@@ -73,6 +73,11 @@ export const endAttemptModule: InteractionModule<"end-attempt", EndAttemptIntera
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming End Attempt's feature, as the codec refused it
+   * before: the model holds no node of it until issue ei-02 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) => unimplemented({ element, feature, kind: "end-attempt" }),
+  /**
    * End Attempt's payload copy: not implemented; issue ei-02 fills it.
    */
   redact: notImplemented,

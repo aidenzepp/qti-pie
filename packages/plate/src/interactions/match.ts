@@ -73,6 +73,11 @@ export const matchModule: InteractionModule<"match", MatchInteraction, never> = 
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Match's feature, as the codec refused it before:
+   * the model holds no node of it until issue m3d-11 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) => unimplemented({ element, feature, kind: "match" }),
+  /**
    * Match's payload copy: not implemented; issue m3d-11 fills it.
    */
   redact: notImplemented,

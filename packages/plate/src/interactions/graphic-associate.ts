@@ -79,6 +79,12 @@ export const graphicAssociateModule: InteractionModule<
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Graphic Associate's feature, as the codec refused it
+   * before: the model holds no node of it until issue ei-08 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) =>
+    unimplemented({ element, feature, kind: "graphic-associate" }),
+  /**
    * Graphic Associate's payload copy: not implemented; issue ei-08 fills it.
    */
   redact: notImplemented,

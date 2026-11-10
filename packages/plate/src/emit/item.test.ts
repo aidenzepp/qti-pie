@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import { isModulePayload } from "#plate/emit/body.ts";
 import { emitItem, emitStatus } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
@@ -310,6 +311,10 @@ const rivers: Item = {
  */
 const interactionsIn = (nodes: readonly PayloadNode[]): readonly InteractionPayload[] =>
   nodes.flatMap((node) => {
+    if (isModulePayload(node)) {
+      return [];
+    }
+
     switch (node.kind) {
       case "element": {
         return interactionsIn(node.children);

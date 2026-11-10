@@ -73,6 +73,11 @@ export const sliderModule: InteractionModule<"slider", SliderInteraction, never>
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Slider's feature, as the codec refused it before:
+   * the model holds no node of it until issue ei-16 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) => unimplemented({ element, feature, kind: "slider" }),
+  /**
    * Slider's payload copy: not implemented; issue ei-16 fills it.
    */
   redact: notImplemented,

@@ -73,6 +73,11 @@ export const hottextModule: InteractionModule<"hottext", HottextInteraction, nev
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Hot Text's feature, as the codec refused it before:
+   * the model holds no node of it until issue m3d-09 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) => unimplemented({ element, feature, kind: "hottext" }),
+  /**
    * Hot Text's payload copy: not implemented; issue m3d-09 fills it.
    */
   redact: notImplemented,
