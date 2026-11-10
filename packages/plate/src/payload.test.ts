@@ -4221,3 +4221,26 @@ describe("isRedacted", () => {
     assert.isFalse(isRedacted(null));
   });
 });
+
+describe("payload, catalog references", () => {
+  it("copies a body element's catalog and gives an element without one no catalog key", () => {
+    const glossed: BodyNode = {
+      attributes: [{ name: "id", value: "term" }],
+      catalog: "glossary",
+      children: [text("tern")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p[0]",
+      tag: "p",
+    };
+    const built = payload(redactItem({ ...item, body: [glossed, ...item.body] }), answering);
+
+    assert.deepStrictEqual(built.body[0], {
+      attributes: [{ name: "id", value: "term" }],
+      catalog: "glossary",
+      children: [{ kind: "text", text: "tern" }],
+      kind: "element",
+      tag: "p",
+    });
+    assert.isFalse(Object.hasOwn(built.body[1] ?? {}, "catalog"));
+  });
+});

@@ -1,12 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { emitBody, emitNodes, htmlSubset, writesMalformedHeading } from "#plate/emit/body.ts";
-import type { RenderInteraction } from "#plate/emit/body.ts";
+import type { ReferencingElement, RenderInteraction } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { resolveOverrides, rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOverrides } from "#plate/emit/parts.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
+import { PartSwapRefused } from "#plate/emit/swap.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { renderChoice } from "#plate/interactions/choice.ts";
 import { renderExtendedText } from "#plate/interactions/extended-text.ts";
@@ -18,6 +19,7 @@ import type {
   EmitState,
   ExtendedTextPayload,
   InlineChoicePayload,
+  InteractionPayload,
   NoticePayload,
   Payload,
   PayloadNode,
@@ -1376,5 +1378,158 @@ describe("emitBody, render time", () => {
         );
       }),
     growthTimeoutMs,
+  );
+});
+
+/**
+ * Build the payload of a body element that references a catalog.
+ *
+ * @param tag The element's local name.
+ * @param idref The catalog it references, its `data-catalog-idref`.
+ * @param attributes Its attributes as the model kept them.
+ * @param children Its child payload nodes.
+ * @returns The element payload, carrying the idref as its `catalog`.
+ */
+const referencing = (
+  tag: string,
+  idref: string,
+  attributes: Readonly<Record<string, string>> = {},
+  children: readonly PayloadNode[] = [],
+): ElementPayload => ({ ...el(tag, attributes, children), catalog: idref });
+
+/**
+ * A render function whose attachment hook answers each catalog in `answered` with one `span` that
+ * names the catalog and points at the referencing element's id, and nothing for any other
+ * catalog, recording every reference it is handed.
+ *
+ * @param handed The references the hook is handed, in order, filled as the body is emitted.
+ * @param answered The catalogs the hook answers with a node.
+ * @returns The render function: {@link stub} for every interaction, with the hook.
+ */
+const attaching = (
+  handed: ReferencingElement[],
+  answered: ReadonlySet<string> = new Set(["glossary"]),
+): RenderInteraction =>
+  Object.assign((interaction: InteractionPayload) => stub(interaction), {
+    attach: (reference: ReferencingElement) => {
+      handed.push(reference);
+
+      return Result.succeed(
+        answered.has(reference.idref)
+          ? [h("span", { "data-defines": reference.id }, [text(reference.idref)])]
+          : [],
+      );
+    },
+  });
+
+describe("emitBody, the catalog attachment hook", () => {
+  it.effect(
+    "places the hook's nodes right after the element that references the catalog, and hands it the element's scoped id",
+    () =>
+      Effect.gen(function* attachesAfterElement() {
+        const handed: ReferencingElement[] = [];
+        const state = yield* stateAt(2);
+        const nodes = yield* Effect.fromResult(
+          emitBody(
+            payloadOf([
+              el("p", {}, [
+                txt("A "),
+                referencing("span", "glossary", { id: "term" }, [txt("tern")]),
+                txt(" follows."),
+              ]),
+            ]),
+            state,
+            attaching(handed),
+          ),
+        );
+
+        assert.deepStrictEqual(nodes, [
+          h("p", {}, [
+            text("A "),
+            h("span", { id: "i1--term" }, [text("tern")]),
+            h("span", { "data-defines": "i1--term" }, [text("glossary")]),
+            text(" follows."),
+          ]),
+        ]);
+        assert.deepStrictEqual(handed, [{ id: "i1--term", idref: "glossary" }]);
+      }),
+  );
+
+  it.effect(
+    "mints a scoped id for an element without one, numbering the walk's id-less references to the same catalog from 0, and writes it on the element",
+    () =>
+      Effect.gen(function* mintsIds() {
+        const handed: ReferencingElement[] = [];
+        const state = yield* stateAt(2);
+        const nodes = yield* Effect.fromResult(
+          emitBody(
+            payloadOf([
+              referencing("p", "glossary", {}, [txt("first")]),
+              referencing("p", "glossary", {}, [txt("second")]),
+              referencing("p", "notes", {}, [txt("third")]),
+            ]),
+            state,
+            attaching(handed, new Set(["glossary", "notes"])),
+          ),
+        );
+
+        assert.deepStrictEqual(nodes, [
+          h("p", { id: "i1-catalog-glossary-0" }, [text("first")]),
+          h("span", { "data-defines": "i1-catalog-glossary-0" }, [text("glossary")]),
+          h("p", { id: "i1-catalog-glossary-1" }, [text("second")]),
+          h("span", { "data-defines": "i1-catalog-glossary-1" }, [text("glossary")]),
+          h("p", { id: "i1-catalog-notes-0" }, [text("third")]),
+          h("span", { "data-defines": "i1-catalog-notes-0" }, [text("notes")]),
+        ]);
+        assert.deepStrictEqual(
+          handed.map(({ id }) => id),
+          ["i1-catalog-glossary-0", "i1-catalog-glossary-1", "i1-catalog-notes-0"],
+        );
+      }),
+  );
+
+  it.effect(
+    "an empty answer, or a render function without the hook, leaves the element exactly as emitted: no nodes follow and no id is minted",
+    () =>
+      Effect.gen(function* attachesNothing() {
+        const handed: ReferencingElement[] = [];
+        const state = yield* stateAt(2);
+        const body = [
+          el("p", {}, [referencing("span", "notes", {}, [txt("term")]), txt(" follows.")]),
+        ];
+        const plain = [el("p", {}, [el("span", {}, [txt("term")]), txt(" follows.")])];
+        const answered = yield* Effect.fromResult(
+          emitBody(payloadOf(body), state, attaching(handed, new Set())),
+        );
+        const unhooked = yield* Effect.fromResult(emitBody(payloadOf(body), state, stub));
+        const control = yield* Effect.fromResult(emitBody(payloadOf(plain), state, stub));
+
+        assert.deepStrictEqual(answered, control);
+        assert.deepStrictEqual(unhooked, control);
+        assert.deepStrictEqual(handed, [{ id: "i1-catalog-notes-0", idref: "notes" }]);
+      }),
+  );
+
+  it.effect("the hook's refusal of a part swap is the emit's refusal", () =>
+    Effect.gen(function* refusesThroughHook() {
+      const state = yield* stateAt(2);
+      const refusal = new PartSwapRefused({
+        cause: "root-not-allowed",
+        detail: "the card's root is a <div>",
+        interaction: "glossary-on-screen",
+        part: "card",
+      });
+      const refusing: RenderInteraction = Object.assign(
+        (interaction: InteractionPayload) => stub(interaction),
+        { attach: () => Result.fail(refusal) },
+      );
+      const emitted = emitBody(
+        payloadOf([referencing("p", "glossary", { id: "term" }, [txt("term")])]),
+        state,
+        refusing,
+      );
+
+      assert.deepStrictEqual(emitted, Result.fail(refusal));
+    }),
   );
 });
