@@ -126,8 +126,8 @@ type KindedTag =
 /**
  * Every other failure the export ends with (`#pantry/export/package.ts`): the database holds the
  * package, but the export cannot rebuild a document of it from its rows (`assemble`'s refusals,
- * `DocumentRowCount`, `XmlVersionUnread`), page through them (grizzle's `CursorError`) or write it
- * in its charset (crust's `EncodeError`). Each is a defect of qti, never of the package.
+ * `DocumentRowCount`), page through them (grizzle's `CursorError`) or write it in its charset
+ * (crust's `EncodeError`). Each is a defect of qti, never of the package.
  */
 export type ExportDefectTag = Exclude<
   Effect.Error<ReturnType<typeof exportPackage>>["_tag"],
@@ -188,7 +188,6 @@ const namedHelp = {
   RootMissing: exportDefectHelp,
   RowMissing: exportDefectHelp,
   RowsOutsideImage: exportDefectHelp,
-  XmlVersionUnread: exportDefectHelp,
 } as const satisfies Readonly<Record<NamedTag, string>>;
 
 /**

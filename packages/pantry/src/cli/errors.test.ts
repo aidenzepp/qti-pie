@@ -25,7 +25,7 @@ import { refusalFieldsOf } from "#pantry/cli/refused.ts";
 import { ClusterConfigError } from "#pantry/db/connection.ts";
 import { ServedLoadError } from "#pantry/db/served.ts";
 import { PackageNotFound } from "#pantry/export/package.ts";
-import { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
+import { DocumentRowCount } from "#pantry/export/pages.ts";
 import { RootMissing, RowMissing, RowsOutsideImage } from "#pantry/model/assemble.ts";
 import { WitnessKind } from "#pantry/package/refusal-origin.ts";
 import { EncodeError } from "@qti-pie/crust/errors.ts";
@@ -132,10 +132,6 @@ const exportDefects = {
     departure: { _tag: "differs", field: "at", found: "2", written: "1" },
     key: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
     rows: "nodes",
-  }),
-  XmlVersionUnread: new XmlVersionUnread({
-    document: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
-    xmlVersion: "2.0",
   }),
 } as const satisfies { readonly [K in ExportDefectTag]: { readonly _tag: K } };
 

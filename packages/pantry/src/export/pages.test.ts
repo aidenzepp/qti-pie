@@ -9,7 +9,6 @@ import { Brand, Effect, Formatter, Option, Result, Stream } from "effect";
 import type { Page, PageCursor } from "@bjornpagen/grizzle";
 import {
   DocumentRowCount,
-  XmlVersionUnread,
   addRow,
   assembleScan,
   emptyScan,
@@ -283,11 +282,10 @@ type PagingFeature =
 
 /**
  * The named ways a page stream departs from the scan: one page served twice in a row, as a page
- * whose lookahead repeats a boundary would; one page left out; a `Document` row on a node besides
- * the document node, which the mirror law of `Document` refuses in the database; and an `XmlDecl`
- * row whose XML version is no version, which its pattern refuses there.
+ * whose lookahead repeats a boundary would; one page left out; and a `Document` row on a node
+ * besides the document node, which the mirror law of `Document` refuses in the database.
  */
-type PageVariant = "repeatedPage" | "droppedPage" | "secondDocumentRow" | "badXmlVersion";
+type PageVariant = "repeatedPage" | "droppedPage" | "secondDocumentRow";
 
 describe("export/pages.ts", { timeout: searchTimeout }, () => {
   it.effect(
@@ -381,13 +379,14 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
   );
 
   it.effect(
-    "refuses the document when a page of its scan is served twice or left out, a second node carries a Document row, or its declaration holds no XML version",
+    "refuses the document when a page of its scan is served twice or left out, or a second node carries a Document row",
     (ctx) =>
       // Oracle: the specification as a checker: a document's rows are a set keyed by start, so a
       // page served twice repeats every start it holds and a page left out leaves its starts
       // empty, and assemble refuses both; and a document holds one Document row, on its document
-      // node, and its XmlDecl row, where it has one, a VersionNum. No defect of the page stream is
-      // absorbed.
+      // node. No defect of the page stream is absorbed. An XmlDecl row's version is the database's
+      // to hold, by its pattern law (`#pantry/export/trusted-laws.db.test.ts`), so no variant breaks
+      // it here.
       // Bound: the generator's drawn bounds, one drawn cut set, variant and page a case.
       searched(
         ctx,
@@ -395,13 +394,10 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
           {
             caseHang,
             concurrency: 1,
-            coverage: required<PageVariant>(
-              ["repeatedPage", "droppedPage", "secondDocumentRow", "badXmlVersion"],
-              {
-                cases: 200,
-                sense: notesOnly,
-              },
-            ),
+            coverage: required<PageVariant>(["repeatedPage", "droppedPage", "secondDocumentRow"], {
+              cases: 200,
+              sense: notesOnly,
+            }),
             draw: drawn(documents),
             kept: [],
             literal: Formatter.format,
@@ -421,12 +417,7 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
               const cuts = c.draw(increasing(1, scan.length - 1, { max: scan.length - 1, min: 1 }));
               const pages = pagesOf(scan, cuts);
               const variant = c.draw(
-                element([
-                  "repeatedPage",
-                  "droppedPage",
-                  "secondDocumentRow",
-                  "badXmlVersion",
-                ] as const),
+                element(["repeatedPage", "droppedPage", "secondDocumentRow"] as const),
               );
               const at = c.draw(int(0, pages.length - 1));
               c.note(variant);
@@ -460,33 +451,6 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
                   assert.deepStrictEqual(
                     Result.isFailure(assembled) ? assembled.failure : undefined,
                     new DocumentRowCount({ document: rows.document.node, found: 2 }),
-                  );
-                  break;
-                }
-                case "badXmlVersion": {
-                  const [root, ...below] = scan;
-                  if (root === undefined) {
-                    assert.fail("a scan holds the document node");
-                  }
-
-                  const documentRow = root.documentRow.pipe(
-                    Option.map((fields) => ({
-                      ...fields,
-                      declaration: Option.some({
-                        encoding: Option.none(),
-                        node: fields.node,
-                        standalone: Option.none(),
-                        version: "2.0",
-                      }),
-                    })),
-                  );
-                  const assembled = yield* assembledFrom(rows.document.node, [
-                    [{ ...root, documentRow }, ...below],
-                  ]);
-
-                  assert.deepStrictEqual(
-                    Result.isFailure(assembled) ? assembled.failure : undefined,
-                    new XmlVersionUnread({ document: rows.document.node, xmlVersion: "2.0" }),
                   );
                   break;
                 }

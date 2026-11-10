@@ -19,8 +19,8 @@ import type { NodeId } from "#pantry/model/xdm.ts";
  * @param document - The id of the document's node, which its scan was filtered by.
  * @param scan - The rows the whole scan folded (`#pantry/export/pages.ts` `addRow`).
  * @returns The document's bytes in its export charset. Fails with `assemble`'s refusal of rows that
- *   are not one document's, `DocumentRowCount`, `XmlVersionUnread`, or the encoder's error for a
- *   document its charset cannot write.
+ *   are not one document's, `DocumentRowCount`, or the encoder's error for a document its charset
+ *   cannot write.
  */
 export const scanXml = Effect.fn("export.scanXml")(function* scanXml(
   document: NodeId,

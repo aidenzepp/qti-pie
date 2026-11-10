@@ -278,85 +278,60 @@ export class DocumentRowCount extends Schema.TaggedError<DocumentRowCount>()("Do
 }
 
 /**
- * A document's `XmlDecl` row holds an XML version that is no `VersionNum`, so no declaration can be
- * written from it.
- */
-export class XmlVersionUnread extends Schema.TaggedError<XmlVersionUnread>()("XmlVersionUnread", {
-  document: Schema.String,
-  xmlVersion: Schema.String,
-}) {
-  /**
-   * The document, the version it holds, the forms a version takes, and the repair.
-   */
-  override get message(): string {
-    return `The XmlDecl row of document ${this.document} holds the XML version ${JSON.stringify(this.xmlVersion)}, but a version is 1. and digits, so the document's declaration cannot be written. Read the row from a database whose XmlDecl.version holds its pattern.`;
-  }
-}
-
-/**
- * Test whether an `XmlDecl` row's XML version is one a declaration can be written from.
- *
- * @param text - The version as the row holds it.
- * @returns Whether it is `1.` and digits, XML 1.0's `VersionNum`.
- * @see {@link https://www.w3.org/TR/xml/#NT-VersionNum | XML 1.0, VersionNum}
- */
-const isXmlVersion = (text: string): text is XmlVersion => /^1\.[0-9]+$/u.test(text);
-
-/**
  * Read an `XmlDecl` row as `assemble` reads it, its version a `VersionNum`.
  *
- * @param document - The id of the document's node, which a refusal names.
  * @param row - The row as the scan delivered it.
- * @returns The row; or `XmlVersionUnread` when its version is no version.
+ * @returns The row, its version typed as the `VersionNum` it is.
+ * @see {@link https://www.w3.org/TR/xml/#NT-VersionNum | XML 1.0, VersionNum}
  */
-const xmlDeclOf = (
-  document: NodeId,
-  { node, version }: Scan<XdmVocabulary>["xmlDecls"][number],
-): Result.Result<XmlDeclRow, XmlVersionUnread> =>
-  isXmlVersion(version)
-    ? Result.succeed({ node, version })
-    : Result.fail(new XmlVersionUnread({ document, xmlVersion: version }));
+const xmlDeclOf = ({ node, version }: Scan<XdmVocabulary>["xmlDecls"][number]): XmlDeclRow => ({
+  node,
+  // SAFETY: `XmlDecl.version` is of the text type `XmlVersion` (`#pantry/qti/chardata.ts`,
+  // `str.regex("^1\\.[0-9]+$")`), whose pattern law, "XML production", the database holds on every
+  // row it stores, so every version a scan reads is `1.` and digits.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+  version: version as XmlVersion,
+});
 
 /**
  * Assemble a document from the rows its scan folded.
  *
+ * Each row is as the database holds it, every law the schema states held of it, so no law is read
+ * again here: an `XmlDecl` row's version is a `VersionNum` by its pattern law ({@link xmlDeclOf}).
+ * Only the scan's own paging is checked, its one `Document` row.
+ *
  * @param document - The id of the document's node, which its scan was filtered by.
  * @param scan - The rows the whole scan folded.
  * @returns The document the rows stand for; or `DocumentRowCount` when the scan did not hold
- *   exactly one `Document` row, `XmlVersionUnread` when an `XmlDecl` row's XML version is no
- *   version, or `assemble`'s refusal of rows that are not one document's.
+ *   exactly one `Document` row, or `assemble`'s refusal of rows that are not one document's.
  */
 export const assembleScan = <V extends XdmVocabulary>(
   document: NodeId,
   scan: Scan<V>,
-): Result.Result<XdmDocument<V>, AssembleError | DocumentRowCount | XmlVersionUnread> => {
+): Result.Result<XdmDocument<V>, AssembleError | DocumentRowCount> => {
   const [only, ...rest] = scan.documents;
   if (only === undefined || rest.length > 0) {
     return Result.fail(new DocumentRowCount({ document, found: scan.documents.length }));
   }
 
-  return Result.flatMap(
-    Result.all(scan.xmlDecls.map((row) => xmlDeclOf(document, row))),
-    (xmlDecls) =>
-      assemble<V>({
-        attributeEntities: scan.attributeEntities,
-        attributes: scan.attributes,
-        comments: scan.comments,
-        doctypes: scan.doctypes,
-        document: only,
-        encodingDecls: scan.encodingDecls,
-        entityRefs: scan.entityRefs,
-        namespaces: scan.namespaces,
-        nodes: scan.nodes,
-        openElementNames: scan.openElementNames,
-        openNames: scan.openNames,
-        pis: scan.pis,
-        sdDecls: scan.sdDecls,
-        texts: scan.texts,
-        whitespace: scan.whitespace,
-        xmlDecls,
-      }),
-  );
+  return assemble<V>({
+    attributeEntities: scan.attributeEntities,
+    attributes: scan.attributes,
+    comments: scan.comments,
+    doctypes: scan.doctypes,
+    document: only,
+    encodingDecls: scan.encodingDecls,
+    entityRefs: scan.entityRefs,
+    namespaces: scan.namespaces,
+    nodes: scan.nodes,
+    openElementNames: scan.openElementNames,
+    openNames: scan.openNames,
+    pis: scan.pis,
+    sdDecls: scan.sdDecls,
+    texts: scan.texts,
+    whitespace: scan.whitespace,
+    xmlDecls: scan.xmlDecls.map(xmlDeclOf),
+  });
 };
 
 /**
