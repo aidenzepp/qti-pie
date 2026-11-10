@@ -28,9 +28,13 @@
  *   the controls are gone, nothing pauses the media (WCAG 1.4.2, 2.2.2), which an item's verdict
  *   does not mark and a reviewer should.
  * - `min-plays` and `max-plays` default to 0; `max-plays="0"` is no limit (reading 76), and the
- *   Schematron's least-at-most rule is `open`'s. A count over a limit that is not 0 is refused in
- *   tier (a), since no play past it is possible; a count under `min-plays` is refused in tier (b),
- *   under `validateResponses` alone, and NULL, which a page with no runtime posts, counts as 0.
+ *   Schematron's least-at-most rule is `open`'s. A posted count under `min-plays`, or over a
+ *   `max-plays` that is not 0, is an invalid response, refused in tier (b) under
+ *   `validateResponses` alone and recorded as posted otherwise, since the page, not the response
+ *   check, makes more plays impossible (issue ei-03b). NULL, which a page with no runtime posts,
+ *   carries no evidence about the candidate's plays and is accepted under either setting; a
+ *   negative count is no count and is refused in tier (a) as malformed, with the message a text
+ *   that is no number earns.
  * - `coords`, the deprecated rectangle of an `object`'s place, is read and ignored with a mark, and
  *   so is the deprecated `object` element, written as the author wrote it: a browser cannot report
  *   plays of one, so its count is never posted.
@@ -575,29 +579,34 @@ const parse = (
   });
 
 /**
- * Read the count a decoded value holds: its one integer, NULL as 0 plays.
+ * Read the count a decoded value holds: its one integer.
  *
  * @param value The decoded response.
- * @returns The count.
+ * @returns The count, none for NULL, which carries no evidence about the candidate's plays (issue
+ *   ei-03b).
  */
-const playsOf = (value: Value): bigint => {
+const playsOf = (value: Value): Option.Option<bigint> => {
   const [single] = value.values;
 
-  return single?.baseType === "integer" ? single.value : 0n;
+  return single?.baseType === "integer" ? Option.some(single.value) : Option.none();
 };
 
 /**
- * Check a Media's response, which the caller decoded, in two tiers.
+ * Check a Media's response, which the caller decoded, in two tiers (issue ei-03b).
  *
  * The caller decodes the posted entry with `decode`, under the entry name its form gave the hidden
  * input and the Media's binding (a single `integer`), and passes the value, or the
  * {@link Malformed} `decode` gave; the entry name stays the caller's, while the messages stay here.
  *
- * - A {@link Malformed} input, by its reason ({@link malformedMessage}): `malformedNumber` for text
- *   that is no number, `malformedSingleMany` for a second entry.
- * - Tier (a), always: a count above `max-plays` when that is not 0, since no play past it is
- *   possible.
- * - Tier (b), only under `validateResponses`: a count below `min-plays`, NULL counting as 0.
+ * - Tier (a), always, malformed by {@link malformedMessage}: a {@link Malformed} input by its reason
+ *   (`malformedNumber` for text that is no number, `malformedSingleMany` for a second entry), and a
+ *   negative count, which `decode` reads as the integer it is but which is no count of plays and so
+ *   did not come from the runtime's hidden input; it earns the `number` message.
+ * - Tier (b), only under `validateResponses`, a posted count that is an invalid response: above
+ *   `max-plays` when that is not 0, since the delivery, not the response check, makes more plays
+ *   impossible, and below `min-plays`.
+ * - NULL, which a page with no runtime posts (decision D3), carries no evidence about the candidate's
+ *   plays and is not an invalid response: it gets no message under either setting.
  *
  * @param interaction The Media.
  * @param input The decoded value, or why the entry did not decode.
@@ -609,32 +618,35 @@ const validate = (
   input: Value | Malformed,
   configuration: Configuration,
 ): readonly ValidationMessage[] => {
-  const { locale } = configuration;
+  const { locale, validateResponses } = configuration;
   const say = words[locale];
   const problem = (text: string): ValidationMessage => ({ response: interaction.response, text });
+  const malformed = (reason: Malformed["reason"]): ValidationMessage =>
+    problem(
+      malformedMessage({ baseType: "integer", patternMaskMessage: Option.none() }, reason, locale),
+    );
 
   if (input instanceof Malformed) {
-    return [
-      problem(
-        malformedMessage(
-          { baseType: "integer", patternMaskMessage: Option.none() },
-          input.reason,
-          locale,
-        ),
-      ),
-    ];
+    return [malformed(input.reason)];
   }
 
-  const plays = playsOf(input);
+  return Option.match(playsOf(input), {
+    onNone: (): readonly ValidationMessage[] => [],
+    onSome: (plays): readonly ValidationMessage[] => {
+      if (plays < 0n) {
+        return [malformed("number")];
+      }
 
-  return [
-    ...(interaction.maxPlays > 0n && plays > interaction.maxPlays
-      ? [problem(counted(locale, interaction.maxPlays, say.atMostOnce, say.atMost))]
-      : []),
-    ...(configuration.validateResponses && plays < interaction.minPlays
-      ? [problem(counted(locale, interaction.minPlays, say.atLeastOnce, say.atLeast))]
-      : []),
-  ];
+      return [
+        ...(validateResponses && interaction.maxPlays > 0n && plays > interaction.maxPlays
+          ? [problem(counted(locale, interaction.maxPlays, say.atMostOnce, say.atMost))]
+          : []),
+        ...(validateResponses && plays < interaction.minPlays
+          ? [problem(counted(locale, interaction.minPlays, say.atLeastOnce, say.atLeast))]
+          : []),
+      ];
+    },
+  });
 };
 
 /**

@@ -5,18 +5,21 @@
  *
  * The author's media element, its controls and its captions are the SSR's and stay the browser's,
  * so the controller builds no player, never overrides `controls`, never starts playback (it only
- * pauses a play the limit forbids) and never moves focus. A play counts when playback starts from
- * the beginning: a `play` event at `currentTime` 0, whether after the media loaded or after it
- * ended, or, for a looping media, each wrap of the loop; a play resumed mid-way counts no more. A
- * media that was already playing when the page upgraded, as `autoplay` may have made it, counts
- * once if it began within its first second. The count continues from the one the SSR restored in
- * the hidden input, and is written back after every counted play.
+ * pauses a play the limit forbids) and never moves focus. A play is a playback begun from rest
+ * (issue ei-03b): the media is at rest before its first playback and again after `ended`, and a
+ * `play` event while it is at rest begins a playback and counts one, wherever the candidate had
+ * seeked to. A `play` after a `pause` of the same playback, with no `ended` between, is a resume,
+ * wherever the position, and counts nothing. A looping media counts each wrap of the loop as one
+ * more. A media that was already playing when the page upgraded, as `autoplay` may have made it,
+ * counts once if it began within its first second. The count continues from the one the SSR
+ * restored in the hidden input, and is written back after every counted play.
  *
- * The limit is `data-max-plays` on the Root, 0 for none. Past it a `play` from the start is paused
- * at once and the item's live region says so (WCAG 4.1.3); the last allowed play of a looping
- * media is not looped, so it ends instead of wrapping into a play past the limit, and teardown
- * gives `loop` back as the author's element had it. `data-min-plays`, the least count, is the
- * server's check under `validateResponses` and is not read here.
+ * The limit is `data-max-plays` on the Root, 0 for none. Past it a `play` begun from rest is
+ * paused at once and the item's live region says so (WCAG 4.1.3); a play the limit paused began no
+ * playback, so the media is still at rest and the next press is paused and announced again; the
+ * last allowed play of a looping media is not looped, so it ends instead of wrapping into a play
+ * past the limit, and teardown gives `loop` back as the author's element had it. `data-min-plays`,
+ * the least count, is the server's check under `validateResponses` and is not read here.
  *
  * Only an answering, unfinished interaction is upgraded: in review and solution, and when the
  * author finished the item, the media plays freely and posts nothing. A Root without its entry
@@ -34,14 +37,8 @@ import { entryNameOf, readHidden, writeHidden } from "#plate/runtime/wire.dom.ts
 const mediaSelector = '[data-slot="media-interaction-media"] :is(audio, video)';
 
 /**
- * How near the start, in seconds, a `play` counts as from the beginning: the rounding a seek to 0
- * may leave.
- */
-const beginning = 0.01;
-
-/**
- * How far into its first seconds a media already playing at upgrade may be and count as started
- * from the beginning: an `autoplay` the browser began before the script ran.
+ * How far into its first seconds a media already playing at upgrade may be and count as begun from
+ * rest: an `autoplay` the browser began before the script ran.
  */
 const underway = 1;
 
@@ -110,6 +107,7 @@ const attach = (
   let count = wholeNumber(readHidden(root, name)[0]);
   let lastTime = 0;
   let adopted = false;
+  let begun = false;
 
   /**
    * Tell whether the count has reached the limit, so the next play is past it.
@@ -129,16 +127,19 @@ const attach = (
   };
 
   /**
-   * Count one play and write the count as the hidden input.
+   * Count one play, write the count as the hidden input, and mark a playback as underway, so a
+   * `play` event before the next `ended` is a resume.
    */
   const record = (): void => {
     count += 1;
+    begun = true;
     writeHidden(root, name, [String(count)]);
     stopLooping();
   };
 
   /**
-   * Begin a play from the start: count it, or, with the limit reached, pause it at once and say so.
+   * Begin a play from rest: count it, or, with the limit reached, pause it at once and say so. A
+   * play the limit paused began no playback, so the media stays at rest.
    */
   const start = (): void => {
     lastTime = media.currentTime;
@@ -162,7 +163,7 @@ const attach = (
         return;
       }
 
-      if (media.currentTime <= beginning) {
+      if (!begun) {
         start();
       }
     },
@@ -179,6 +180,7 @@ const attach = (
     "ended",
     () => {
       adopted = false;
+      begun = false;
       lastTime = 0;
     },
     { signal },
