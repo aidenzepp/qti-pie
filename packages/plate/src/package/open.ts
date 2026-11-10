@@ -157,7 +157,7 @@ import type {
   SourceElement,
   Visit,
 } from "#plate/document/source.ts";
-import { xmlWhitespaceRun, xsBooleanOf } from "#plate/model/attributes.ts";
+import { collapseXmlSpace, xmlWhitespaceRun, xsBooleanOf } from "#plate/model/attributes.ts";
 import {
   expressionKinds,
   floatOrRefOf,
@@ -189,7 +189,7 @@ import {
 } from "#plate/validate/rules.ts";
 import type { CollectedTyper, PrefixedTyper } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
-import { acceptMarkedTest, acceptedItem, check } from "#plate/validate/verdict.ts";
+import { acceptMarkedTest, acceptedItem, check, judgedInSpan } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedStimulus, AcceptedTest, Verdict } from "#plate/validate/verdict.ts";
 import { ltiLinkTypes, resourceRoots, resourceTypes } from "#plate/vocabulary.ts";
 import type { CpVersion } from "#plate/vocabulary.ts";
@@ -735,15 +735,6 @@ const classifiers = {
 >;
 
 /**
- * Collapse a value's XML whitespace: its outer whitespace removed and each inner run of it one
- * space.
- *
- * @param value The value as written.
- * @returns The value collapsed.
- */
-const collapse = (value: string): string => trimXmlSpace(value).replaceAll(xmlWhitespaceRun, " ");
-
-/**
  * Construct a refusal the package reader gives.
  *
  * @param document The location of the document it refuses.
@@ -901,7 +892,7 @@ const basesOf = (visits: readonly Visit[], path: string): ReadonlyMap<SourceElem
       onNone: () => own,
       onSome: (holder) => bases.get(holder) ?? own,
     });
-    const written = Option.map(xmlBaseOf(element), collapse);
+    const written = Option.map(xmlBaseOf(element), collapseXmlSpace);
     bases.set(
       element,
       Option.match(written, {
@@ -1124,7 +1115,7 @@ const replacedWhitespace = /[\t\n\r]/gu;
  */
 const readReference = (space: ReferenceSpace, value: string): string =>
   space === "collapse"
-    ? collapse(value)
+    ? collapseXmlSpace(value)
     : trimXmlSpace(space === "replace" ? value.replaceAll(replacedWhitespace, " ") : value);
 
 /**
@@ -1549,8 +1540,8 @@ const readAs = (
 
 /**
  * Read each document the manifest's document resources name, once, as the type {@link readAs}
- * gives it, and judge each one read as a type plate judges, under the version the manifest states.
- * The manifest is never read here (reading 146).
+ * gives it, and judge each one read as a type plate judges, under the version the manifest states,
+ * each judgement under its own `plate.check` span. The manifest is never read here (reading 146).
  *
  * @param manifest The manifest.
  * @param files The package's files, keyed by normal form.
@@ -1574,7 +1565,11 @@ const readDocuments = Effect.fnUntraced(function* readDocuments(
         source,
         type,
         verdict: judgedTypes.has(type)
-          ? Option.some(judge(documentLocation, source, manifest.version))
+          ? Option.some(
+              yield* judgedInSpan(documentLocation, () =>
+                judge(documentLocation, source, manifest.version),
+              ),
+            )
           : Option.none(),
       });
     }
@@ -1758,7 +1753,7 @@ const xmlLangOf = (element: SourceElement): Option.Option<string> =>
  * @returns The language, collapsed and as written otherwise, none when the root states none.
  */
 const titleLanguage = (root: SourceElement): Option.Option<string> =>
-  xmlLangOf(root).pipe(Option.map(collapse), Option.filter(isLanguageTag));
+  xmlLangOf(root).pipe(Option.map(collapseXmlSpace), Option.filter(isLanguageTag));
 
 /**
  * Report whether a LOM title string is one in its document's language: reading 62 reads it as "a
@@ -1817,7 +1812,7 @@ const languageForms = (source: SourceDocument): readonly string[] => {
       continue;
     }
 
-    const form = Option.getOrElse(Option.map(xmlLangOf(element), collapse), () => "");
+    const form = Option.getOrElse(Option.map(xmlLangOf(element), collapseXmlSpace), () => "");
     if (form !== "" && !forms.has(foldedTag(form))) {
       forms.set(foldedTag(form), form);
     }
@@ -2002,8 +1997,8 @@ const checkLom = (
       });
       const facts = {
         ...stating,
-        [attribute]: collapse(written),
-        metadata: collapse(named[0] ?? values.values[0]),
+        [attribute]: collapseXmlSpace(written),
+        metadata: collapseXmlSpace(named[0] ?? values.values[0]),
         path,
         reading: lomReading.written,
         resource: resource.identifier,
@@ -2024,9 +2019,13 @@ const checkLom = (
       const listed = new Set(general.languages.map(foldedTag));
 
       return [
-        ...compare("lom-identifier", "identifier", general.identifier, collapse, (values) => [
-          ...values.values,
-        ]),
+        ...compare(
+          "lom-identifier",
+          "identifier",
+          general.identifier,
+          collapseXmlSpace,
+          (values) => [...values.values],
+        ),
         ...compare("lom-title", "title", general.title, normalizedString, (values) =>
           values.values.filter((_, index) =>
             inDocumentLanguage(values.languages[index] ?? Option.none(), stated),
@@ -3565,7 +3564,7 @@ const structureIn = (
     }
 
     if (href !== undefined && isQti(element, sectionRefElements)) {
-      const written = collapse(href);
+      const written = collapseXmlSpace(href);
       const resolved = locate(bases.get(element) ?? Option.none(), written);
       if (Option.isSome(resolved)) {
         for (const listed of Option.toArray(listedAt(resolved.value).listed)) {
@@ -3587,7 +3586,7 @@ const structureIn = (
         );
       }
     } else if (href !== undefined && isQti(element, itemRefElements)) {
-      const written = collapse(href);
+      const written = collapseXmlSpace(href);
       const found = Option.map(locate(bases.get(element) ?? Option.none(), written), (inside) => ({
         inside,
         ...listedAt(inside),
@@ -6555,7 +6554,7 @@ const readPackage = Effect.fnUntraced(function* readPackage(
  * @param files The package's files keyed by their paths from its root, as the host unzipped them.
  * @returns The verdict on the package.
  */
-export const openPackage = Effect.fn("openPackage")(function* openPackage(
+export const openPackage = Effect.fn("plate.openPackage")(function* openPackage(
   location: string,
   files: ReadonlyMap<string, Uint8Array>,
 ): Effect.fn.Return<PackageVerdict> {

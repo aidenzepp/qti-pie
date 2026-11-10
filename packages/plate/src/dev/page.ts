@@ -36,7 +36,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Config, ConfigProvider, Effect, Option, Ref, Result, Schema } from "effect";
+import { Config, Effect, Layer, ManagedRuntime, Option, Ref, Result, Schema } from "effect";
 import { decodeSession } from "#plate/codec/session.ts";
 import { decodeStoredFloat } from "#plate/codec/values.ts";
 import {
@@ -49,12 +49,12 @@ import {
   slot,
 } from "#plate/dev/frame.ts";
 import type { Appearance, Page } from "#plate/dev/frame.ts";
-import { groupVerdicts, keptOnSuccess, verdictCache } from "#plate/dev/listing.ts";
+import { groupVerdicts, keptOnSuccess, Verdicts } from "#plate/dev/listing.ts";
 import type { OpenFailure, VerdictCache, VerdictGroup } from "#plate/dev/listing.ts";
 import {
   packageAt,
-  packageCache,
   packageHref,
+  Packages,
   packageSuffix,
   routePackages,
   testIn,
@@ -126,23 +126,35 @@ export type Handler = (request: Request) => Promise<Response>;
  * session; `newInstance` draws the instance token of each item the playground opens,
  * `drawInstance`'s random UUID when absent, and must give a new token each call, since the
  * playground holds each open item under its token (a test gives a fixed one so a sitting's values
- * follow from its seed alone); `provider` is where `readCorpusFile` reads `PLATE_CORPUS_DIR` and
- * `HOME` and the ledger page reads `PLATE_LEDGER_DIR`, the process environment when absent;
- * `verdicts` is the cache that opens and keeps the corpus's members, a new one over `openMember`
- * when absent; `packages` is the cache that opens and keeps the packages, a new one over
- * `openDirectory` when absent. Handlers given one cache share its opens, and a test counts them
- * through the cache's opener; a cache reads the corpus root of the first handler that asks, so
- * share one only between handlers over the same root.
+ * follow from its seed alone). They are data; the playground's caches and its config provider are
+ * services, which the handler's Layer provides ({@link PlaygroundLayer}).
  */
 export interface PlaygroundSettings {
   readonly configuration?: Partial<Configuration>;
   readonly newInstance?: () => string;
-  readonly packages?: PackageCache;
-  readonly provider?: ConfigProvider.ConfigProvider;
   readonly seed?: string;
   readonly tests?: SessionStore;
-  readonly verdicts?: VerdictCache;
 }
+
+/**
+ * The services a playground's requests run on: the verdict cache, which opens and keeps the
+ * corpus's members, and the package cache, which opens and keeps the packages. The config provider
+ * of the Layer that gives them is where `readCorpusFile` reads `PLATE_CORPUS_DIR` and `HOME` and
+ * the ledger page reads `PLATE_LEDGER_DIR`, the process environment unless the Layer provides one
+ * with `ConfigProvider.layer`.
+ *
+ * Handlers given one cache, by `Layer.succeed`, share its opens, and a test counts them through the
+ * cache's opener; a cache reads the corpus root of the first handler that asks, so share one only
+ * between handlers over the same root. A cache built by a Layer, such as {@link playgroundCaches},
+ * is built once for each handler.
+ */
+export type PlaygroundLayer = Layer.Layer<Packages | Verdicts>;
+
+/**
+ * The playground's default services: a new verdict cache over `openMember` and a new package cache
+ * over `openDirectory`, read under the process environment.
+ */
+export const playgroundCaches: PlaygroundLayer = Layer.mergeAll(Verdicts.layer, Packages.layer);
 
 /**
  * The item the plain-HTML host serves at {@link hostMount}: BG007, read from the corpus cache,
@@ -1603,26 +1615,34 @@ const answer = (
 
 /**
  * Construct a playground's Fetch handler, with its own store of open items' sittings and their
- * records, its own test sessions, theme and dark flag, its own plain-HTML host, built once its
- * first build succeeds, and its own verdict and package caches unless the settings give them: a
- * member's verdict and a package's, once its open succeeds, are kept for the handler's life.
+ * records, its own test sessions, theme and dark flag, and its own plain-HTML host, built once its
+ * first build succeeds.
  *
- * It runs `open`, `configure`, the corpus read and the ledger read with `Effect.runPromise`;
- * `begin`, `restore`, `render`, `renderStatus`, `decode`, `checkResponses` and `score` are plain
- * functions. A failure the playground's settings or code cause answers with a 500 page that gives
- * its message, and the promise never rejects.
+ * Its requests run on one runtime built from `layer`, the Effect guide's `ManagedRuntime` bridge:
+ * the runtime builds the Layer once, on the first request, so a cache the Layer builds is the
+ * handler's own and a member's verdict and a package's, once its open succeeds, are kept for the
+ * handler's life. `open`, `configure`, the corpus read and the ledger read run on it; `begin`,
+ * `restore`, `render`, `renderStatus`, `decode`, `checkResponses` and `score` are plain functions.
+ * A failure the playground's settings or code cause answers with a 500 page that gives its
+ * message, and the promise never rejects.
  *
  * @example
  *   const handle = createHandler({ configuration: { maxAttempts: 0 } });
  *   const response = await handle(new Request("http://127.0.0.1:5190/"));
  *   // 200, the listing
  *
- * @param settings The configuration input, the sittings' seed and instance tokens, the config
- *   provider, and the verdict and package caches, each optional.
+ * @param settings The configuration input, the sittings' seed and instance tokens, and the test
+ *   sessions' store, each optional.
+ * @param layer The verdict and package caches and the config provider; {@link playgroundCaches},
+ *   over the process environment, when absent.
  * @returns The handler.
  */
-export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
-  const playground: Playground = {
+export const createHandler = (
+  settings: PlaygroundSettings = {},
+  layer: PlaygroundLayer = playgroundCaches,
+): Handler => {
+  const runtime = ManagedRuntime.make(layer);
+  const state: Omit<Playground, "packages" | "verdicts"> = {
     appearance: Ref.makeUnsafe<Appearance>({ dark: false, theme: emptyTheme }),
     configuration: settings.configuration ?? {},
     host: Effect.runSync(
@@ -1633,35 +1653,32 @@ export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
       ),
     ),
     newInstance: settings.newInstance ?? drawInstance,
-    packages: settings.packages ?? Effect.runSync(packageCache()),
     seed: Option.fromUndefinedOr(settings.seed),
     sessions: boundedStore(),
     tests: settings.tests ?? sessionStore(),
-    verdicts: settings.verdicts ?? Effect.runSync(verdictCache()),
   };
-  /**
-   * Provide the settings' config provider to an effect, or leave it on the process environment.
-   *
-   * @param effect The effect to run.
-   * @returns The effect, reading its configuration from `settings.provider` when one is given.
-   */
-  const provided = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
-    settings.provider === undefined
-      ? effect
-      : effect.pipe(Effect.provide(ConfigProvider.layer(settings.provider)));
 
   return (request) =>
-    Effect.runPromise(
-      provided(route(playground, request)).pipe(
-        Effect.match({ onFailure: routeFailure, onSuccess: (outcome) => outcome }),
-        Effect.flatMap((outcome) => answer(playground, request, outcome)),
-        Effect.catchDefect((defect) =>
-          answer(
-            playground,
-            request,
-            failurePage({ message: defect instanceof Error ? defect.message : String(defect) }),
+    runtime.runPromise(
+      Effect.gen(function* served() {
+        const playground: Playground = {
+          ...state,
+          packages: yield* Packages,
+          verdicts: yield* Verdicts,
+        };
+
+        return yield* route(playground, request).pipe(
+          Effect.match({ onFailure: routeFailure, onSuccess: (outcome) => outcome }),
+          Effect.flatMap((outcome) => answer(playground, request, outcome)),
+          Effect.catchDefect((defect) =>
+            answer(
+              playground,
+              request,
+              failurePage({ message: defect instanceof Error ? defect.message : String(defect) }),
+            ),
           ),
-        ),
+        );
+      }).pipe(
         Effect.withSpan("playground.request", {
           attributes: { method: request.method, url: request.url },
         }),

@@ -3,11 +3,15 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
 import { ConfigProvider, Console, Effect } from "effect";
+import { confPath } from "#plate/ledger/features.ts";
+import { webFeaturesPath } from "#plate/test/baseline.ts";
 import type { CacheTag } from "#plate/test/caches.ts";
-import { cacheTags, caches } from "#plate/test/caches.ts";
+import { cacheTags, caches, rptemplatesDirectory, xsdPart2Path } from "#plate/test/caches.ts";
 import { xsdDirectory } from "#plate/test/xsd.ts";
 import type { XsdPath } from "#plate/test/xsd-layout.ts";
 import { xsdPaths } from "#plate/test/xsd-layout.ts";
+import { xsdPath } from "#plate/validate/xsd.ts";
+import { cacheDirectory } from "#scripts/package-tables.ts";
 
 /**
  * The scratch folder this run owns, under the package's git-ignored `work/`. Its name is new for
@@ -195,6 +199,36 @@ const tagsUnder = (env: Record<string, string>) => {
   );
 };
 
+/**
+ * The exported reads of `HOME`, each a cache's path, by name.
+ */
+const homeReads = {
+  cacheDirectory,
+  confPath,
+  rptemplatesDirectory,
+  webFeaturesPath,
+  xsdDirectory,
+  xsdPart2Path,
+  xsdPath,
+};
+
+/**
+ * What each of {@link homeReads} gives under a provider: the tag of its failure, or `"read"` when
+ * it reads a path.
+ *
+ * @param provider The provider every read is parsed with, never the host environment.
+ * @returns Each read's outcome, by name.
+ */
+const homeOutcomes = (provider: ConfigProvider.ConfigProvider) =>
+  Effect.forEach(Object.entries(homeReads), ([name, read]) =>
+    read.parse(provider).pipe(
+      Effect.match({
+        onFailure: (error) => [name, error._tag] as const,
+        onSuccess: () => [name, "read"] as const,
+      }),
+    ),
+  ).pipe(Effect.map((outcomes) => Object.fromEntries(outcomes)));
+
 beforeAll(() => {
   mkdirSync(emptyHome, { recursive: true });
   mkdirSync(corpusFolder, { recursive: true });
@@ -378,5 +412,22 @@ describe("test/caches.ts", () => {
 
       assert.strictEqual(error._tag, "ConfigError");
     }),
+  );
+
+  it.effect(
+    "an empty HOME refused by every read of it, by a provider that keeps empty strings",
+    () =>
+      Effect.gen(function* emptyHomeRefused() {
+        const refused = Object.fromEntries(
+          Object.keys(homeReads).map((name) => [name, "ConfigError"] as const),
+        );
+        const kept = yield* homeOutcomes(
+          ConfigProvider.fromEnv({ env: { HOME: "" }, preserveEmptyStrings: true }),
+        );
+        const dropped = yield* homeOutcomes(ConfigProvider.fromEnv({ env: { HOME: "" } }));
+
+        assert.deepStrictEqual(kept, refused);
+        assert.deepStrictEqual(dropped, refused);
+      }),
   );
 });

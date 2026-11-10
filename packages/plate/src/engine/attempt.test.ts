@@ -627,7 +627,7 @@ describe("runAttempt", () => {
     "[I-9b] scores a BG007-shaped item: true gives 1, false 0 and NULL 0, though SCORE's default is 1",
     () =>
       Effect.gen(function* scoresBg007() {
-        const item = yield* buildItem(bg007);
+        const item = yield* Effect.fromResult(buildItem(bg007));
         const record = fresh(item, instance);
 
         const correct = yield* Effect.fromResult(
@@ -658,7 +658,7 @@ describe("runAttempt", () => {
 
   it.effect("[I-9b] scores a BG010-shaped item: NULL gives 0.0, and york maps to 0.5", () =>
     Effect.gen(function* scoresBg010() {
-      const item = yield* buildItem(bg010);
+      const item = yield* Effect.fromResult(buildItem(bg010));
       const record = fresh(item, instance);
 
       const empty = yield* Effect.fromResult(
@@ -683,7 +683,7 @@ describe("runAttempt", () => {
     "[I-9b] resets the outcomes before each attempt: true then false gives 0, with numAttempts 2",
     () =>
       Effect.gen(function* resetsFirst() {
-        const item = yield* buildItem(correctOnly);
+        const item = yield* Effect.fromResult(buildItem(correctOnly));
         const first = yield* Effect.fromResult(
           runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
         );
@@ -703,7 +703,7 @@ describe("runAttempt", () => {
     "reads numAttempts as the count including this attempt: 1 in the first, 2 in the second",
     () =>
       Effect.gen(function* readsNumAttempts() {
-        const item = yield* buildItem(countsAttempts);
+        const item = yield* Effect.fromResult(buildItem(countsAttempts));
         const first = yield* Effect.fromResult(
           runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
         );
@@ -719,7 +719,7 @@ describe("runAttempt", () => {
 
   it.effect("leaves SCORE at its default when the item has no response processing", () =>
     Effect.gen(function* noProcessing() {
-      const item = yield* buildItem(itemDocument(trueFalse, scoreOfOne));
+      const item = yield* Effect.fromResult(buildItem(itemDocument(trueFalse, scoreOfOne)));
       const scored: ItemRecord = { ...fresh(item, instance), outcomes: { SCORE: floatValue(0) } };
 
       const after = yield* Effect.fromResult(
@@ -738,7 +738,7 @@ describe("runAttempt", () => {
 
   it.effect("keeps the record's value of a response the attempt is not given", () =>
     Effect.gen(function* keepsUngiven() {
-      const item = yield* buildItem(bg007);
+      const item = yield* Effect.fromResult(buildItem(bg007));
       const record = fresh(item, instance);
 
       const after = yield* Effect.fromResult(runAttempt(item, record, {}));
@@ -753,7 +753,7 @@ describe("runAttempt", () => {
     "[I-9a] sets completionStatus from not_attempted to unknown when the first attempt starts, before the rules read it",
     () =>
       Effect.gen(function* startsUnknown() {
-        const item = yield* buildItem(readsCompletion);
+        const item = yield* Effect.fromResult(buildItem(readsCompletion));
         const record = fresh(item, instance);
 
         const after = yield* Effect.fromResult(
@@ -777,7 +777,7 @@ describe("runAttempt", () => {
       `[I-9a] keeps the completed a rule sets in attempt 1, so attempt 2's rules start from it, in ${label} item`,
       () =>
         Effect.gen(function* carriesCompleted() {
-          const item = yield* buildItem(document);
+          const item = yield* Effect.fromResult(buildItem(document));
           const first = yield* Effect.fromResult(
             runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
           );
@@ -802,7 +802,9 @@ describe("runAttempt", () => {
     "[I-9a] keeps the not_attempted a rule sets in attempt 1, so attempt 2's rules start from it",
     () =>
       Effect.gen(function* carriesNotAttempted() {
-        const item = yield* buildItem(itemDocument(...readsThenSets("not_attempted")));
+        const item = yield* Effect.fromResult(
+          buildItem(itemDocument(...readsThenSets("not_attempted"))),
+        );
         const first = yield* Effect.fromResult(
           runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
         );
@@ -826,7 +828,7 @@ describe("runAttempt", () => {
     "[I-9a] starts a later attempt at unknown when the record lacks completionStatus, as one written before it was held does",
     () =>
       Effect.gen(function* lacksCompletion() {
-        const item = yield* buildItem(readsCompletion);
+        const item = yield* Effect.fromResult(buildItem(readsCompletion));
         const first = yield* Effect.fromResult(
           runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
         );
@@ -846,7 +848,7 @@ describe("runAttempt", () => {
 
   it.effect("[I-9a] keeps unknown into attempt 2 when no rule sets completionStatus", () =>
     Effect.gen(function* keepsUnknown() {
-      const item = yield* buildItem(readsCompletion);
+      const item = yield* Effect.fromResult(buildItem(readsCompletion));
       const first = yield* Effect.fromResult(
         runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
       );
@@ -866,7 +868,7 @@ describe("runAttempt", () => {
     Effect.gen(function* returnsFailure() {
       // The model keeps only rules whose needs the item meets, so the failure comes from the
       // record the host hands back: this one holds no value of the RESPONSE match_correct reads.
-      const item = yield* buildItem(bg007);
+      const item = yield* Effect.fromResult(buildItem(bg007));
       const record: ItemRecord = { ...fresh(item, instance), responses: {} };
       const before = structuredClone(record);
 
@@ -896,7 +898,7 @@ describe("runAttempt", () => {
     "[I-9a] draws attempt 1's response processing under the response label …␟response␟1, and attempt 2's under …␟2",
     () =>
       Effect.gen(function* drawsUnderResponseLabel() {
-        const item = yield* buildItem(drawsOnce);
+        const item = yield* Effect.fromResult(buildItem(drawsOnce));
         const first = yield* Effect.fromResult(
           runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
         );
@@ -923,7 +925,7 @@ describe("runAttempt", () => {
     "[I-9a] evaluates every operand of qti-and, left to right, so the rule after it draws the response stream's second value",
     () =>
       Effect.gen(function* evaluatesEveryOperand() {
-        const item = yield* buildItem(andThenDraws);
+        const item = yield* Effect.fromResult(buildItem(andThenDraws));
         const after = yield* Effect.fromResult(
           runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
         );
@@ -939,7 +941,7 @@ describe("runAttempt", () => {
     "[I-9a] evaluates no operand of qti-custom-operator, so the random kind inside it never draws and the rule after it draws the response stream's first value",
     () =>
       Effect.gen(function* evaluatesNoCustomOperand() {
-        const item = yield* buildItem(customThenDraws);
+        const item = yield* Effect.fromResult(buildItem(customThenDraws));
         const after = yield* Effect.fromResult(
           runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
         );
@@ -955,7 +957,7 @@ describe("runAttempt", () => {
     "[I-5] reads the record's correct responses in qti-correct and its defaults in qti-default before the declarations'",
     () =>
       Effect.gen(function* readsRecordOverrides() {
-        const item = yield* buildItem(readsOverrides);
+        const item = yield* Effect.fromResult(buildItem(readsOverrides));
         const record: ItemRecord = {
           ...fresh(item, instance),
           correct: { RESPONSE: identifierValue("false") },
@@ -977,7 +979,7 @@ describe("runAttempt", () => {
     "[I-5] resets each outcome to the record's template-set default before each attempt, never to a response's",
     () =>
       Effect.gen(function* resetsToSetDefault() {
-        const item = yield* buildItem(correctOnly);
+        const item = yield* Effect.fromResult(buildItem(correctOnly));
         const record: ItemRecord = {
           ...fresh(item, instance),
           defaults: { RESPONSE: identifierValue("true"), SCORE: floatValue(0.5) },
@@ -1003,11 +1005,13 @@ describe("runAttempt", () => {
     Effect.gen(function* readsRecordTemplates() {
       // The rules are written by hand, so the case does not depend on which reads of a template
       // variable the item model keeps in response processing.
-      const built = yield* buildItem(
-        itemDocument(
-          trueFalse,
-          declaration("qti-outcome-declaration", "COPIED", "integer"),
-          declaration("qti-template-declaration", "T", "integer"),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          itemDocument(
+            trueFalse,
+            declaration("qti-outcome-declaration", "COPIED", "integer"),
+            declaration("qti-template-declaration", "T", "integer"),
+          ),
         ),
       );
       const item: Item = {
@@ -1037,7 +1041,7 @@ describe("runAttempt", () => {
 
   it.effect("[I-5] draws response processing under the record's seed: two seeds, two values", () =>
     Effect.gen(function* drawsUnderRecordSeed() {
-      const item = yield* buildItem(drawsOnce);
+      const item = yield* Effect.fromResult(buildItem(drawsOnce));
       const seeded = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "1" }));
       const reseeded = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "2" }));
 
@@ -1059,7 +1063,7 @@ describe("runAttempt", () => {
 
   it.effect("[I-5] copies the record's seed, template values and overrides unchanged", () =>
     Effect.gen(function* copiesRecordFields() {
-      const item = yield* buildItem(bg007);
+      const item = yield* Effect.fromResult(buildItem(bg007));
       const record: ItemRecord = {
         ...fresh(item, instance),
         correct: { RESPONSE: identifierValue("false") },
@@ -1081,7 +1085,7 @@ describe("runAttempt", () => {
 
   it.effect("[T-14] keeps the record's records, the record responses' values, unchanged", () =>
     Effect.gen(function* keepsRecords() {
-      const item = yield* buildItem(bg007);
+      const item = yield* Effect.fromResult(buildItem(bg007));
       const record: ItemRecord = {
         ...fresh(item, instance),
         records: {
@@ -1111,7 +1115,7 @@ describe("firstAttempt", () => {
     "[I-5] runs template processing under the seed and the template label and writes each default, the template-set one winning",
     () =>
       Effect.gen(function* startsTemplated() {
-        const item = yield* buildItem(drawsTemplate);
+        const item = yield* Effect.fromResult(buildItem(drawsTemplate));
         const drawn = integerValue(templateDraw("42"));
 
         const record = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "42" }));
@@ -1143,7 +1147,7 @@ describe("firstAttempt", () => {
     "[I-5] starts an item with no template declaration as fresh does, with three empty maps and the seed it was given",
     () =>
       Effect.gen(function* startsUntemplated() {
-        const item = yield* buildItem(bg007);
+        const item = yield* Effect.fromResult(buildItem(bg007));
 
         const record = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "7" }));
 
@@ -1156,7 +1160,7 @@ describe("firstAttempt", () => {
     "[I-3] [I-5] holds each template variable at its declared default, else NULL, when the item has no template processing",
     () =>
       Effect.gen(function* holdsDeclaredTemplates() {
-        const item = yield* buildItem(declaresTemplates);
+        const item = yield* Effect.fromResult(buildItem(declaresTemplates));
 
         const record = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "7" }));
 
@@ -1172,7 +1176,7 @@ describe("firstAttempt", () => {
     "[I-5] holds no template value when the item's template processing does not run, since nothing computed them",
     () =>
       Effect.gen(function* holdsNoMarkedTemplates() {
-        const item = yield* buildItem(marksTemplates);
+        const item = yield* Effect.fromResult(buildItem(marksTemplates));
 
         const record = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "7" }));
 
@@ -1184,7 +1188,7 @@ describe("firstAttempt", () => {
 
   it.effect("[I-5] returns template processing's failure", () =>
     Effect.gen(function* returnsTemplateFailure() {
-      const item = yield* buildItem(mistypesTemplate);
+      const item = yield* Effect.fromResult(buildItem(mistypesTemplate));
 
       const failure = failureOf(firstAttempt(item, { instance, seed: "7" }));
 
@@ -1213,7 +1217,7 @@ describe("firstAttempt with an item ref's template defaults", () => {
     "[T-9] starts the declared state the test sets before the item's template processing reads it",
     () =>
       Effect.gen(function* startsAtTestDefault() {
-        const item = yield* buildItem(readsTemplate);
+        const item = yield* Effect.fromResult(buildItem(readsTemplate));
 
         const record = yield* Effect.fromResult(
           firstAttempt(item, { instance, seed: "7", templateDefaults: { T: integerValue(10n) } }),
@@ -1228,7 +1232,7 @@ describe("firstAttempt with an item ref's template defaults", () => {
     "[T-9] holds an item with no template processing at the declared state the test sets",
     () =>
       Effect.gen(function* holdsUnprocessedAtTestDefault() {
-        const item = yield* buildItem(declaresTemplates);
+        const item = yield* Effect.fromResult(buildItem(declaresTemplates));
 
         const record = yield* Effect.fromResult(
           firstAttempt(item, { instance, seed: "7", templateDefaults: { T: integerValue(10n) } }),
@@ -1246,7 +1250,7 @@ describe("firstAttempt with an item ref's template defaults", () => {
     "[T-9] holds a marked item's template variables at the declared state the test sets, though its processing does not run",
     () =>
       Effect.gen(function* holdsMarkedAtTestDefault() {
-        const item = yield* buildItem(marksTemplates);
+        const item = yield* Effect.fromResult(buildItem(marksTemplates));
 
         const record = yield* Effect.fromResult(
           firstAttempt(item, { instance, seed: "7", templateDefaults: { T: integerValue(10n) } }),
@@ -1262,7 +1266,7 @@ describe("firstAttempt with an item ref's template defaults", () => {
     "[T-9] tells a misfit default from the item's own failure: checkTemplateDefaults fails it on a sound item, and firstAttempt runs the declared state the test sets once it is checked",
     () =>
       Effect.gen(function* checksBeforeFirstAttempt() {
-        const item = yield* buildItem(readsTemplate);
+        const item = yield* Effect.fromResult(buildItem(readsTemplate));
 
         const misfit = failureOf(checkTemplateDefaults(item, { T: stringValue("ten") }));
         const checked = yield* Effect.fromResult(
@@ -1285,8 +1289,8 @@ describe("firstAttempt with an item ref's template defaults", () => {
     "[T-9] returns a misfit default as its failure, checking the declared state the test sets where it applies it",
     () =>
       Effect.gen(function* failsMisfitDefault() {
-        const processed = yield* buildItem(readsTemplate);
-        const marked = yield* buildItem(marksTemplates);
+        const processed = yield* Effect.fromResult(buildItem(readsTemplate));
+        const marked = yield* Effect.fromResult(buildItem(marksTemplates));
 
         const unknown = failureOf(
           firstAttempt(processed, {
@@ -1439,7 +1443,7 @@ describe("firstAttempt with a record response", () => {
     "[I-1] record default at the first attempt: firstAttempt writes a record response's declared default into records, and the NULL record for one that declares none",
     () =>
       Effect.gen(function* writesRecordDefault() {
-        const item = yield* buildItem(recordDefaults);
+        const item = yield* Effect.fromResult(buildItem(recordDefaults));
 
         const record = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "7" }));
 
@@ -1456,7 +1460,7 @@ describe("firstAttempt with a record response", () => {
     "[I-1] record default at the first attempt: score with no record stores the default of a record response the post leaves out, and scores it",
     () =>
       Effect.gen(function* scoresRecordDefault() {
-        const item = yield* buildItem(recordDefaults);
+        const item = yield* Effect.fromResult(buildItem(recordDefaults));
 
         const stored = yield* Effect.fromResult(scoreItem(acceptForTest(item), {}));
         const after = yield* Effect.fromResult(decodeRecord(stored));
@@ -1471,7 +1475,7 @@ describe("firstAttempt with a record response", () => {
     "[I-1] record default at the first attempt: an undefaulted record response starts as the NULL record, so score with no record reads its field as NULL and does not fail",
     () =>
       Effect.gen(function* readsUndefaultedField() {
-        const item = yield* buildItem(readsUndefaulted);
+        const item = yield* Effect.fromResult(buildItem(readsUndefaulted));
 
         const stored = yield* Effect.fromResult(scoreItem(acceptForTest(item), {}));
         const after = yield* Effect.fromResult(decodeRecord(stored));

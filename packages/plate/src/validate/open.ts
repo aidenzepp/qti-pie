@@ -13,12 +13,12 @@
 import { Effect, Option, Result } from "effect";
 import { readSource } from "#plate/document/read.ts";
 import { tables } from "#plate/validate/tables.ts";
-import { check } from "#plate/validate/verdict.ts";
+import { check, judgedInSpan } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
 
 /**
  * Open a document: read its bytes into the source view, then judge it with `check` against the
- * committed tables.
+ * committed tables, under the `plate.check` span.
  *
  * It never fails, because a refusal is a verdict. A document the reader cannot build a tree from
  * is `refused`, of kind `none`, with the reader's one refusal (`not-well-formed` or
@@ -33,7 +33,7 @@ import type { Verdict } from "#plate/validate/verdict.ts";
  * @param bytes The document as read from storage.
  * @returns The verdict on the document.
  */
-export const open = Effect.fn("open")(function* open(
+export const open = Effect.fn("plate.open")(function* open(
   location: string,
   bytes: Uint8Array,
 ): Effect.fn.Return<Verdict> {
@@ -42,7 +42,7 @@ export const open = Effect.fn("open")(function* open(
   const read = yield* Effect.result(readSource(location, bytes));
   const verdict: Verdict = Result.isFailure(read)
     ? { document: location, kind: "none", refusals: [read.failure], verdict: "refused" }
-    : check(read.success, tables, Option.none());
+    : yield* judgedInSpan(location, () => check(read.success, tables, Option.none()));
 
   yield* Effect.annotateCurrentSpan("document.verdict", verdict.verdict);
   yield* Effect.annotateCurrentSpan("document.kind", verdict.kind);

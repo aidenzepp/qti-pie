@@ -12,7 +12,7 @@
  *
  * @module
  */
-import { Array as Arr, Effect, Option, pipe } from "effect";
+import { Array as Arr, Option, Result } from "effect";
 import type { SourceElement } from "#plate/document/source.ts";
 import { elementsOf, identifierAttribute, isQti } from "#plate/model/attributes.ts";
 import type { Expression, TemplateBranch, TemplateRule } from "#plate/model/expression.ts";
@@ -41,7 +41,7 @@ interface TemplateReading extends ExpressionReading {
 type RuleReader = (
   reading: TemplateReading,
   element: SourceElement,
-) => Effect.Effect<Option.Option<TemplateRule>, Refusal>;
+) => Result.Result<Option.Option<TemplateRule>, Refusal>;
 
 /**
  * Construct a branch of a template condition.
@@ -67,13 +67,16 @@ const branchOf = (when: Expression, then: readonly TemplateRule[]): TemplateBran
 const sequence = (
   reading: TemplateReading,
   elements: readonly SourceElement[],
-): Effect.Effect<Option.Option<readonly TemplateRule[]>, Refusal> =>
-  pipe(
-    elements,
-    // oxlint-disable-next-line eslint/no-use-before-define -- `sequence` and `rule` are mutually recursive, as template conditions nest; the call runs only after both are defined.
-    Effect.forEach((element) => rule(reading, element)),
-    Effect.map(Option.all),
-  );
+): Result.Result<Option.Option<readonly TemplateRule[]>, Refusal> =>
+  Result.gen(function* readSequence() {
+    const read: Option.Option<TemplateRule>[] = [];
+    for (const element of elements) {
+      // oxlint-disable-next-line eslint/no-use-before-define -- `sequence` and `rule` are mutually recursive, as template conditions nest; the call runs only after both are defined.
+      read.push(yield* rule(reading, element));
+    }
+
+    return Option.all(read);
+  });
 
 /**
  * Read the one expression a setting rule or a `qti-template-constraint` holds.
@@ -87,7 +90,7 @@ const sequence = (
 const soleExpression = (
   reading: TemplateReading,
   element: SourceElement,
-): Effect.Effect<Option.Option<Expression>, Refusal> => {
+): Result.Result<Option.Option<Expression>, Refusal> => {
   const [operand, ...extra] = elementsOf(element);
 
   return operand === undefined || extra.length > 0
@@ -115,7 +118,7 @@ const soleExpression = (
 const setting =
   (kind: "set-correct-response" | "set-default-value" | "set-template-value"): RuleReader =>
   (reading, element) =>
-    Effect.gen(function* readSetting() {
+    Result.gen(function* readSetting() {
       const identifier = yield* identifierAttribute(reading.walk, element, "identifier");
       const setsRecord = kind !== "set-template-value" && reading.recordResponses.has(identifier);
       if (setsRecord) {
@@ -138,7 +141,7 @@ const setting =
  *   element the engine does not run, or a refusal.
  */
 const constraint: RuleReader = (reading, element) =>
-  Effect.gen(function* readConstraint() {
+  Result.gen(function* readConstraint() {
     const read = yield* soleExpression(reading, element);
 
     return read.pipe(
@@ -158,8 +161,8 @@ const constraint: RuleReader = (reading, element) =>
 const branch = (
   reading: TemplateReading,
   element: SourceElement,
-): Effect.Effect<Option.Option<TemplateBranch>, Refusal> =>
-  Effect.gen(function* readTemplateBranch() {
+): Result.Result<Option.Option<TemplateBranch>, Refusal> =>
+  Result.gen(function* readTemplateBranch() {
     const [test, ...body] = elementsOf(element);
     if (test === undefined) {
       return yield* reading.unread(element);
@@ -191,20 +194,26 @@ const isBranch = (part: SourceElement): boolean =>
  * @returns The rule, none when any part holds an element the engine does not run, or a refusal.
  */
 const condition: RuleReader = (reading, element) =>
-  Effect.gen(function* readTemplateCondition() {
+  Result.gen(function* readTemplateCondition() {
     const parts = elementsOf(element);
-    const branches = yield* Effect.forEach(parts.filter(isBranch), (part) => branch(reading, part));
+    const branches: Option.Option<TemplateBranch>[] = [];
+    for (const part of parts.filter(isBranch)) {
+      branches.push(yield* branch(reading, part));
+    }
+
     const otherwise = yield* Option.match(
       Arr.findFirst(parts, (part) => isQti(part, "qti-template-else")),
       {
-        onNone: () => Effect.succeed(Option.some(Option.none<readonly TemplateRule[]>())),
-        onSome: (part) => Effect.map(sequence(reading, elementsOf(part)), Option.map(Option.some)),
+        onNone: () => Result.succeed(Option.some(Option.none<readonly TemplateRule[]>())),
+        onSome: (part) => Result.map(sequence(reading, elementsOf(part)), Option.map(Option.some)),
       },
     );
-    const strays = yield* Effect.forEach(
-      parts.filter((part) => !isBranch(part) && !isQti(part, "qti-template-else")),
-      (part) => reading.unread(part),
-    );
+    const strays: Option.Option<never>[] = [];
+    for (const part of parts.filter(
+      (each) => !isBranch(each) && !isQti(each, "qti-template-else"),
+    )) {
+      strays.push(yield* reading.unread(part));
+    }
 
     return Option.map(
       Option.all({ branches: Option.all(branches), otherwise, strays: Option.all(strays) }),
@@ -231,7 +240,7 @@ const misplaced: RuleReader = (reading, element) => reading.unread(element);
  * read by {@link condition}, so one met as a rule is misplaced.
  */
 const readers = {
-  "qti-exit-template": () => Effect.succeed(Option.some<TemplateRule>({ kind: "exit-template" })),
+  "qti-exit-template": () => Result.succeed(Option.some<TemplateRule>({ kind: "exit-template" })),
   "qti-set-correct-response": setting("set-correct-response"),
   "qti-set-default-value": setting("set-default-value"),
   "qti-set-template-value": setting("set-template-value"),
@@ -253,7 +262,7 @@ const readers = {
 const rule = (
   reading: TemplateReading,
   element: SourceElement,
-): Effect.Effect<Option.Option<TemplateRule>, Refusal> =>
+): Result.Result<Option.Option<TemplateRule>, Refusal> =>
   Option.match(
     Arr.findFirst(renders.templateRules, (name) => isQti(element, name)),
     {
@@ -284,5 +293,5 @@ export const templateRules = (
   reading: ExpressionReading,
   processing: SourceElement,
   recordResponses: ReadonlySet<string>,
-): Effect.Effect<Option.Option<readonly TemplateRule[]>, Refusal> =>
+): Result.Result<Option.Option<readonly TemplateRule[]>, Refusal> =>
   sequence({ ...reading, recordResponses }, elementsOf(processing));

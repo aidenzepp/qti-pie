@@ -12,7 +12,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { assert } from "@effect/vitest";
 import type { Frame, Page } from "playwright-core";
-import { ConfigProvider, Effect, Option, Predicate } from "effect";
+import { ConfigProvider, Effect, Layer, Option, Predicate } from "effect";
+import { playgroundCaches } from "#plate/dev/page.ts";
 import { textOf } from "#plate/test/accessibility.ts";
 import {
   Engine,
@@ -330,9 +331,13 @@ eachEngine((it, name) => {
             }),
           ).pipe(
             Effect.provide(
-              playgroundLayer({
-                provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory }),
-              }),
+              playgroundLayer(
+                {},
+                Layer.merge(
+                  playgroundCaches,
+                  ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory })),
+                ),
+              ),
             ),
           );
         }),

@@ -7,7 +7,7 @@ import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
 import { walk } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
-import { lomCaps, readManifest, resourceLom } from "#plate/package/manifest.ts";
+import { lomCaps, ManifestDefect, readManifest, resourceLom } from "#plate/package/manifest.ts";
 import type { LomValues, Manifest, ManifestResource } from "#plate/package/manifest.ts";
 import { xsdDirectory } from "#plate/test/xsd.ts";
 import type { XsdPath } from "#plate/test/xsd-layout.ts";
@@ -1191,6 +1191,16 @@ describe("package/manifest.ts", () => {
           assert.lengthOf(manifest.resources, 1);
         }),
     );
+  });
+
+  describe("ManifestDefect", () => {
+    it("the ManifestDefect message names the repair: the element and attribute, and a renderer defect to report", () => {
+      const defect = new ManifestDefect({ attribute: "identifier", element: "resource" });
+
+      assert.isNotEmpty(defect.message);
+      assert.include(defect.message, "resource");
+      assert.include(defect.message, "identifier");
+    });
   });
 });
 

@@ -19,13 +19,16 @@
  *
  * `openAdmitted` and `configure` return Effects. Every other function is plain, callable with no
  * Effect runtime: it returns its value, or a `Result` when a caller can make it fail.
+ * `@qti-pie/plate/effect` (`src/effect.ts`) gives these same names, each function that returns a
+ * `Result` as an Effect, for a server that runs Effect.
  *
- * Nothing else under `src/` is reachable from outside the package but the two checking entries.
- * The tests' seams (`acceptForTest`, `acceptTestForTest`, `acceptSectionForTest` and
- * `acceptStimulusForTest`) and the redacted item's brand constructor (`brandRedacted`) are never
- * exported here, so only `check`, or `checkAdmitted` for content admission already checked, makes
- * an `Accepted` and the other accepted roots, and only `redact` and `decodeRedacted` make a
- * `Redacted`.
+ * Nothing else under `src/` is reachable from outside the package but the two checking entries and
+ * the Effect entry. The tests' seams (`acceptForTest`, `acceptTestForTest`, `acceptSectionForTest`,
+ * `acceptStimulusForTest` and `acceptPackageForTest`) and the redacted item's brand constructor
+ * (`brandRedacted`) and the predicate that reads its mark are never exported here, so only `check`,
+ * or `checkAdmitted` for content admission already checked, makes an `Accepted` and the other
+ * accepted roots, only `openPackage` makes an `AcceptedPackage`, and only `redact` and
+ * `decodeRedacted` make a `Redacted`, which `render` checks at run time too (`NotRedacted`).
  *
  * @module
  */
@@ -64,6 +67,19 @@ export { h } from "#plate/emit/node.ts";
 export type { PartOverrides } from "#plate/emit/parts.ts";
 
 export { UnknownPart } from "#plate/emit/parts.ts";
+
+export type { MarkupRefusal } from "#plate/emit/serialise.ts";
+
+export {
+  EscapableRawTextElementChild,
+  EventHandlerAttribute,
+  MalformedAttributeName,
+  MalformedTagName,
+  MarkupRefused,
+  PlaintextElement,
+  RawTextChildren,
+  VoidElementChildren,
+} from "#plate/emit/serialise.ts";
 
 export { PartSwapRefused } from "#plate/emit/swap.ts";
 
@@ -117,7 +133,15 @@ export { postings } from "#plate/payload.ts";
 
 export type { Options, Rendered } from "#plate/render.ts";
 
-export { InvalidInstance, OutputTooLarge, redact, render, renderStatus } from "#plate/render.ts";
+export {
+  InvalidHeadingLevel,
+  InvalidInstance,
+  NotRedacted,
+  OutputTooLarge,
+  redact,
+  render,
+  renderStatus,
+} from "#plate/render.ts";
 
 export { checkResponses } from "#plate/responses.ts";
 

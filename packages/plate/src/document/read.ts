@@ -123,7 +123,7 @@ const refusalOf = (location: string, error: WellFormednessError | ReaderRefusal)
  * @returns The source document; a {@link Refusal} under `not-well-formed` or `reader-refused` when
  *   the reader cannot build a tree.
  */
-export const readSource = Effect.fn("readSource")(function* readSource(
+export const readSource = Effect.fn("plate.readSource")(function* readSource(
   location: string,
   bytes: Uint8Array,
 ): Effect.fn.Return<SourceDocument, Refusal> {

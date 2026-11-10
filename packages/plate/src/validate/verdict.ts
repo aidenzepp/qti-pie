@@ -12,8 +12,8 @@
  * with a notice beside its element. Its {@link Accepted} is the only input `redact` and `score`
  * take. On a test it builds the test model, the {@link AcceptedTest} a session starts from; a
  * section or a stimulus is accepted and marked, delivered by neither M2 nor M1. A refusal is a
- * verdict, never a failure, so `check` is a plain function; it lifts each builder, which stays an
- * Effect, once.
+ * verdict, never a failure, so `check` is a plain function; each builder returns a `Result`, which
+ * it reads with no Effect runtime.
  *
  * @module
  */
@@ -970,7 +970,7 @@ const checkItem = (
 ): Verdict => {
   const document = source.location;
   const secured = secure(source, tables);
-  const built = Effect.runSync(Effect.result(buildItem(secured.source)));
+  const built = buildItem(secured.source);
   if (Result.isFailure(built)) {
     return { document, kind: "item", refusals: [built.failure], verdict: "refused" };
   }
@@ -996,7 +996,7 @@ const checkItem = (
  */
 const checkTest = (source: SourceDocument, version: Option.Option<CpVersion>): Verdict => {
   const document = source.location;
-  const built = Effect.runSync(Effect.result(buildTest(source)));
+  const built = buildTest(source);
   if (Result.isFailure(built)) {
     return { document, kind: "test", refusals: [built.failure], verdict: "refused" };
   }
@@ -1237,6 +1237,31 @@ export const checkAdmitted = (
 
   return judge(source, kindOf(source.root), tables, version);
 };
+
+/**
+ * Judge one document under the `plate.check` span, which carries the document's location, and the
+ * verdict's kind and verdict once the judgement returns.
+ *
+ * The judgement stays the synchronous function it is; the span only wraps the call, so the verdict
+ * is the one the judgement gives. The attributes are the location and the verdict's two names,
+ * never a refusal's detail or anything the document holds. `open`, `openAdmitted` and
+ * `openPackage` each judge here, so it lives with the judgements and on no entry of its own.
+ *
+ * @param location The document's location as the host named it.
+ * @param judgement The judgement: {@link check}, {@link checkAdmitted}, or a package's judgement
+ *   of a document it read.
+ * @returns The judgement's verdict.
+ */
+export const judgedInSpan = (location: string, judgement: () => Verdict): Effect.Effect<Verdict> =>
+  Effect.sync(judgement).pipe(
+    Effect.tap((verdict) =>
+      Effect.annotateCurrentSpan({
+        "document.kind": verdict.kind,
+        "document.verdict": verdict.verdict,
+      }),
+    ),
+    Effect.withSpan("plate.check", { attributes: { "document.location": location } }),
+  );
 
 /**
  * Construct an {@link Accepted} from a hand-built item: the one named seam through which tests

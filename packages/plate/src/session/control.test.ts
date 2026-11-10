@@ -85,10 +85,12 @@ const part = (
  * @returns The test model.
  */
 const testOf = (...parts: readonly SourceElement[]) =>
-  buildTest(
-    doc(
-      "tests/control.xml",
-      el("qti-assessment-test", [attr("identifier", "control"), attr("title", "Control")], parts),
+  Effect.fromResult(
+    buildTest(
+      doc(
+        "tests/control.xml",
+        el("qti-assessment-test", [attr("identifier", "control"), attr("title", "Control")], parts),
+      ),
     ),
   );
 

@@ -27,7 +27,7 @@ import { ConfigProvider, Context, Effect, Layer, Result, Schema } from "effect";
 import type { Config, Scope } from "effect";
 import { listen } from "#plate/dev/listen.ts";
 import type { ListenFailed } from "#plate/dev/listen.ts";
-import type { PlaygroundSettings } from "#plate/dev/page.ts";
+import type { PlaygroundLayer, PlaygroundSettings } from "#plate/dev/page.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
 import { writeWalkCorpus } from "#scripts/walk-corpus.ts";
 import type { ProbeUnderivable, ProbeUnwritable } from "#scripts/walk-corpus.ts";
@@ -237,19 +237,23 @@ export const engineLayer = (
  * support, and that runner loads `globalSetup` (`src/test/browser-setup.ts`), which imports this
  * module for its guards. The test workers, which build the layer, support it.
  *
- * @param settings The playground's settings: its configuration, its config provider (where the
- *   corpus is read from) and its verdict cache, each optional.
+ * @param settings The playground's settings: its configuration, seed, instance tokens and test
+ *   sessions' store, each optional.
+ * @param services The Layer the playground's requests run on, as `createHandler` takes it: its
+ *   verdict and package caches and its config provider (where the corpus is read from); the
+ *   playground's default caches over the process environment when absent.
  * @returns The layer; it fails with `ListenFailed` when no port can be bound, and with
  *   {@link ReservedPort} when the bound port is reserved.
  */
 export const playgroundLayer = (
   settings: PlaygroundSettings,
+  services?: PlaygroundLayer,
 ): Layer.Layer<Playground, ListenFailed | ReservedPort> =>
   Layer.effect(
     Playground,
     Effect.gen(function* open() {
       const { createHandler } = yield* Effect.promise(() => import("#plate/dev/page.ts"));
-      const listening = yield* listen({ handler: createHandler(settings), port: 0 });
+      const listening = yield* listen({ handler: createHandler(settings, services), port: 0 });
       const port = yield* Effect.fromResult(refusePort(listening.port));
 
       return Playground.of({ origin: listening.origin, port });
@@ -303,11 +307,15 @@ export const walkPlaygroundLayer: Layer.Layer<
 > = Layer.unwrap(
   Effect.gen(function* overWalkCorpus() {
     const { directory } = yield* WalkCorpus;
+    const { playgroundCaches } = yield* Effect.promise(() => import("#plate/dev/page.ts"));
 
-    return playgroundLayer({
-      configuration: { validateResponses: true },
-      provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory }),
-    });
+    return playgroundLayer(
+      { configuration: { validateResponses: true } },
+      Layer.merge(
+        playgroundCaches,
+        ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory })),
+      ),
+    );
   }),
 ).pipe(Layer.provideMerge(walkCorpusLayer));
 

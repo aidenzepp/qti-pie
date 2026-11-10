@@ -15,12 +15,13 @@
 import { Effect, Option, Result } from "effect";
 import { readSource } from "#plate/document/read.ts";
 import { securingTables } from "#plate/validate/securing-tables.ts";
-import { checkAdmitted } from "#plate/validate/verdict.ts";
+import { checkAdmitted, judgedInSpan } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
 
 /**
  * Open a document the host's content store has already admitted: read its bytes into the source
- * view, then judge it with `checkAdmitted` against the securing tables.
+ * view, then judge it with `checkAdmitted` against the securing tables, under the `plate.check`
+ * span.
  *
  * On a document `open` accepts, it gives the verdict `open` gives. It runs none of `open`'s checks,
  * so it accepts what they would refuse: give it only bytes the store admitted through its own
@@ -36,7 +37,7 @@ import type { Verdict } from "#plate/validate/verdict.ts";
  * @param bytes The document as read from the store.
  * @returns The verdict on the document.
  */
-export const openAdmitted = Effect.fn("openAdmitted")(function* openAdmitted(
+export const openAdmitted = Effect.fn("plate.openAdmitted")(function* openAdmitted(
   location: string,
   bytes: Uint8Array,
 ): Effect.fn.Return<Verdict> {
@@ -45,7 +46,9 @@ export const openAdmitted = Effect.fn("openAdmitted")(function* openAdmitted(
   const read = yield* Effect.result(readSource(location, bytes));
   const verdict: Verdict = Result.isFailure(read)
     ? { document: location, kind: "none", refusals: [read.failure], verdict: "refused" }
-    : checkAdmitted(read.success, securingTables, Option.none());
+    : yield* judgedInSpan(location, () =>
+        checkAdmitted(read.success, securingTables, Option.none()),
+      );
 
   yield* Effect.annotateCurrentSpan("document.verdict", verdict.verdict);
   yield* Effect.annotateCurrentSpan("document.kind", verdict.kind);

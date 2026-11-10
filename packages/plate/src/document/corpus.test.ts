@@ -174,6 +174,43 @@ describe("document/corpus.ts", () => {
     }),
   );
 
+  it.effect("the CorpusMissing message names the repair and starts with a capital letter", () =>
+    Effect.gen(function* missingMessage() {
+      const error = yield* Effect.flip(
+        readCorpusFile("x.xml").pipe(withEnvironment({ PLATE_CORPUS_DIR: missingRoot })),
+      );
+
+      assert.strictEqual(error._tag, "CorpusMissing");
+      assert.match(error.message, /^\p{Lu}/u);
+    }),
+  );
+
+  it.effect(
+    "the CorpusFileUnreadable message names the repair, PLATE_CORPUS_DIR, for a file the root does not hold",
+    () =>
+      Effect.gen(function* absentMessage() {
+        const error = yield* Effect.flip(
+          readCorpusFile("b.xml").pipe(withEnvironment({ PLATE_CORPUS_DIR: presentRoot })),
+        );
+
+        assert.strictEqual(error._tag, "CorpusFileUnreadable");
+        assert.include(error.message, "PLATE_CORPUS_DIR");
+      }),
+  );
+
+  it.effect(
+    "the CorpusFileUnreadable message names the repair, PLATE_CORPUS_DIR, for a path that leaves the root",
+    () =>
+      Effect.gen(function* escapesMessage() {
+        const error = yield* Effect.flip(
+          readCorpusFile("../a.xml").pipe(withEnvironment({ PLATE_CORPUS_DIR: presentRoot })),
+        );
+
+        assert.strictEqual(error._tag, "CorpusFileUnreadable");
+        assert.include(error.message, "PLATE_CORPUS_DIR");
+      }),
+  );
+
   it.effect("the document set is every .xml file outside the root's qtiv2p2-examples, sorted", () =>
     Effect.gen(function* fixtureSet() {
       const documents = yield* corpusDocuments.pipe(

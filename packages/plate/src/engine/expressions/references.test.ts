@@ -73,7 +73,7 @@ const declarations: readonly SourceElement[] = [
  *
  * @returns The item.
  */
-const declared = () => buildItem(processingItem(declarations, []));
+const declared = () => Effect.fromResult(buildItem(processingItem(declarations, [])));
 
 /**
  * The variables of an attempt in which every variable of {@link declarations} holds a value other
@@ -130,7 +130,7 @@ const evaluated = (expression: Expression, item: Item, variables: Variables = ch
  */
 const outcomesAfter = (declarationsOf: readonly SourceElement[], rules: readonly SourceElement[]) =>
   Effect.gen(function* runOutcomes() {
-    const item = yield* buildItem(processingItem(declarationsOf, rules));
+    const item = yield* Effect.fromResult(buildItem(processingItem(declarationsOf, rules)));
     assert.isTrue(Option.isSome(item.processing), "the processing runs");
     assert.deepStrictEqual(item.unsupported, []);
 
@@ -301,17 +301,19 @@ const templateDeclaration = (
  * @returns The item.
  */
 const templated = () =>
-  buildItem(
-    processingItem(
-      [
-        ...declarations,
-        responseDeclaration("KEYED", "identifier", "single", [
-          el("qti-correct-response", [], [el("qti-value", [], [text("A")])]),
-        ]),
-        templateDeclaration("T", "integer", [defaultValue("6")]),
-        templateDeclaration("TN", "float"),
-      ],
-      [],
+  Effect.fromResult(
+    buildItem(
+      processingItem(
+        [
+          ...declarations,
+          responseDeclaration("KEYED", "identifier", "single", [
+            el("qti-correct-response", [], [el("qti-value", [], [text("A")])]),
+          ]),
+          templateDeclaration("T", "integer", [defaultValue("6")]),
+          templateDeclaration("TN", "float"),
+        ],
+        [],
+      ),
     ),
   );
 

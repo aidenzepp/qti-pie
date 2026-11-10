@@ -242,6 +242,23 @@ const themeBox = ({ appearance, back }: Chrome): Element =>
   ]);
 
 /**
+ * Write a tree the playground built as HTML.
+ *
+ * The playground builds every page tree in its own code through `h`, and a rendered item reaches
+ * a page as HTML in a part, never as a tree, so no host markup is written here and a refusal is a
+ * defect in the playground's code that no caller recovers from: it is thrown, as before the
+ * serialiser returned its refusals.
+ *
+ * @param node The tree to write.
+ * @returns The HTML `toHtml` gives for `node`.
+ * @throws {VoidElementChildren} When `node` breaks one of the serialiser's rules; it throws the
+ *   reason `toHtml`'s `MarkupRefused` carries, which is any other class of `MarkupRefusal` for the
+ *   rule broken.
+ */
+const written = (node: Node): string =>
+  Result.getOrThrowWith(toHtml(node), (refused) => refused.reason);
+
+/**
  * Write a whole HTML page: the doctype, `html` in the locale and with the `dark` class while the
  * flag is on, a head with the title and the three stylesheets, and `main` holding the page's nodes
  * and then the theme box, with each marker replaced by its part's HTML.
@@ -249,6 +266,8 @@ const themeBox = ({ appearance, back }: Chrome): Element =>
  * @param shown The page.
  * @param chrome The stored appearance and the theme box's return path.
  * @returns The page's HTML.
+ * @throws {VoidElementChildren} When the page's nodes break one of the serialiser's rules, a
+ *   defect in the playground's code (see {@link written}).
  */
 export const pageHtml = (shown: Page, chrome: Chrome): string => {
   const tree = h(
@@ -265,9 +284,9 @@ export const pageHtml = (shown: Page, chrome: Chrome): string => {
     ],
   );
 
-  let html = toHtml(tree);
+  let html = written(tree);
   for (const [index, part] of shown.parts.entries()) {
-    html = html.replace(toHtml(slot(index)), () => part);
+    html = html.replace(written(slot(index)), () => part);
   }
 
   return `<!doctype html>${html}`;
