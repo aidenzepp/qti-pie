@@ -526,19 +526,25 @@ describe("ledger/report.ts", () => {
     }),
   );
 
-  it.effect("no stage claim: no claim's source names a plan stage, and I-19 alone is limited", () =>
-    Effect.gen(function* noStageClaim() {
-      const built = yield* fixtureLedger;
+  it.effect(
+    "no stage claim: no claim's source names a plan stage, and exactly the claimed rows are limited",
+    () =>
+      Effect.gen(function* noStageClaim() {
+        const built = yield* fixtureLedger;
+        const claimed = new Set(claims.map((claim) => claim.id));
+        const excluded = new Set(exclusions.map((exclusion) => exclusion.id));
 
-      assert.deepStrictEqual(
-        claims.filter((claim) => /\bstages?\b|\bM\d+\.|\bP\d+R-/u.test(claim.source)),
-        [],
-      );
-      assert.deepStrictEqual(
-        built.rows.filter((row) => row.state === "limited").map((row) => row.id),
-        ["I-19"],
-      );
-    }),
+        assert.deepStrictEqual(
+          claims.filter((claim) => /\bstages?\b|\bM\d+\.|\bP\d+R-/u.test(claim.source)),
+          [],
+        );
+        assert.deepStrictEqual(
+          built.rows.filter((row) => row.state === "limited").map((row) => row.id),
+          features
+            .filter((row) => claimed.has(row.id) && !excluded.has(row.id))
+            .map((row) => row.id),
+        );
+      }),
   );
 
   it.effect("a row no test carries is unsupported-with-notice", () =>
@@ -800,12 +806,63 @@ describe("ledger/report.ts", () => {
   it.effect("the headlines count each level's rows by state", () =>
     Effect.gen(function* headlines() {
       const built = yield* fixtureLedger;
+      const results = yield* decodeReport(reportText, root);
+      const unclaimed = ledger({
+        browserRuns: [],
+        claims: [],
+        corpus,
+        exclusions,
+        features,
+        records,
+        results,
+        sources,
+      });
+      const claimed = new Set(claims.map((claim) => claim.id));
 
-      assert.deepStrictEqual(built.headlines, {
+      assert.deepStrictEqual(unclaimed.headlines, {
         advanced: { covered: 1, excluded: 0, limited: 0, "unsupported-with-notice": 29 },
-        basic: { covered: 6, excluded: 0, limited: 1, "unsupported-with-notice": 11 },
+        basic: { covered: 7, excluded: 0, limited: 0, "unsupported-with-notice": 11 },
         elective: { covered: 0, excluded: 2, limited: 0, "unsupported-with-notice": 88 },
         elevated: { covered: 0, excluded: 0, limited: 0, "unsupported-with-notice": 12 },
+      });
+
+      /**
+       * Count the rows of a level that sit in a state without claims and that a claim names: a
+       * claim moves a covered or a not-yet-supported row to limited, and leaves an excluded row.
+       *
+       * @param level The level.
+       * @param state The state the row has without claims.
+       * @returns How many such rows the claims name.
+       */
+      const claimedIn = (level: (typeof levels)[number], state: LedgerRow["state"]): number =>
+        unclaimed.rows.filter(
+          (row) => row.level === level && row.state === state && claimed.has(row.id),
+        ).length;
+
+      /**
+       * Derive a level's headline with claims from its headline without them.
+       *
+       * @param level The level.
+       * @returns The counts by state once the claims move their rows to limited.
+       */
+      const withClaims = (level: (typeof levels)[number]) => {
+        const base = unclaimed.headlines[level];
+        const covered = claimedIn(level, "covered");
+        const unsupported = claimedIn(level, "unsupported-with-notice");
+
+        return {
+          covered: base.covered - covered,
+          excluded: base.excluded,
+          limited: base.limited + covered + unsupported,
+          "unsupported-with-notice": base["unsupported-with-notice"] - unsupported,
+        };
+      };
+
+      assert.deepStrictEqual(built.headlines, {
+        advanced: withClaims("advanced"),
+        basic: withClaims("basic"),
+        elective: withClaims("elective"),
+        elevated: withClaims("elevated"),
       });
 
       for (const level of levels) {
