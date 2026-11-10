@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
+import { afterAll, assert, beforeAll, describe, it, vi } from "@effect/vitest";
 import { ConfigProvider, Effect, Layer, Option, Result } from "effect";
 import { defaultTreeAdapter, parse } from "parse5";
 import type { DefaultTreeAdapterTypes } from "parse5";
@@ -12,8 +12,9 @@ import {
   verdictOrder,
 } from "#plate/dev/listing.ts";
 import { Packages, testField } from "#plate/dev/packages.ts";
+import type { FileOptions } from "#plate/dev/packages.ts";
 import { createHandler, playgroundCaches } from "#plate/dev/page.ts";
-import { postOf, valuesOf } from "#plate/dev/post.ts";
+import { commentName, postOf, valuesOf } from "#plate/dev/post.ts";
 import { sessionStore } from "#plate/dev/store.ts";
 import type { Handler, PlaygroundLayer, PlaygroundSettings } from "#plate/dev/page.ts";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
@@ -23,6 +24,7 @@ import { toHtml } from "#plate/emit/serialise.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { encodeIntent, intentName } from "#plate/form/intent.ts";
 import { begin, configure, redact, render, restore } from "#plate/index.ts";
+import type { Options } from "#plate/index.ts";
 import type { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
@@ -34,6 +36,7 @@ import { checkTree, nameOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import type * as RenderModule from "#plate/render.ts";
 import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, Verdict } from "#plate/validate/verdict.ts";
 
@@ -45,8 +48,8 @@ const origin = "http://127.0.0.1:5190";
 /**
  * The corpus paths of the documents these tests open: phase 1's three items, the refused CAT
  * test, a Choice of the Common Cartridge package scored by `CC2_match`, a QTI 2.2 item inside
- * the CAT package, and two packaged items that embed a package document by `object`, an HTML
- * page and an SVG image.
+ * the CAT package, two packaged items that embed a package document by `object`, an HTML page and
+ * an SVG image, and an item of the Beginner's Guide package, which holds a text track.
  */
 const paths = {
   bg007: "QTI3_BPIG_Examples/items/BG007.xml",
@@ -55,6 +58,7 @@ const paths = {
   cat: "qtiv3-examples/CAT/test.xml",
   ccPackage: "qtiv3-examples/packaging/ccPackage/testitems/QUE_102010.xml",
   orkney: "qtiv3-examples/packaging/items/orkney1.xml",
+  packaged: "QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip.d/items/BG007.xml",
   qti2: "qtiv3-examples/CAT/CAT_Test01_Adaptive_EchoAdapt.zip.d/items/i15211305971467662/qti.xml",
   svg: "qtiv3-examples/packaging/svg/svg.xml",
 } as const;
@@ -2489,4 +2493,115 @@ describe("dev/post.ts", () => {
     assert.deepStrictEqual([...read.malformed], []);
     assert.deepStrictEqual(valuesOf(read), { ANSWER: answer });
   });
+
+  it("[W0-DEVHOST.2] postOf reads the comment and leaves it out of the responses", () => {
+    const name = entryName("q1", "ANSWER");
+    const without = postOf(acceptForTest(answerItem), "q1", [[name, "abc"]]);
+    const commented = postOf(acceptForTest(answerItem), "q1", [
+      [name, "abc"],
+      [commentName("q1"), "hello"],
+      [commentName("q2"), "another item's comment"],
+      ["host-field", "kept apart"],
+    ]);
+
+    assert.deepStrictEqual(commented.comment, Option.some("hello"));
+    assert.deepStrictEqual(commented.decoded, without.decoded);
+    assert.deepStrictEqual(commented.posted, without.posted);
+    assert.deepStrictEqual([...commented.malformed], [...without.malformed]);
+    assert.deepStrictEqual(valuesOf(commented), valuesOf(without));
+    assert.deepStrictEqual(without.comment, Option.none());
+  });
+});
+
+/**
+ * Run an effect with `render` of `#plate/render.ts` replaced by one that records the options of
+ * each call and renders as the real one does, in a module graph of its own that the effect imports
+ * the playground from afresh, and restore the graph when it ends.
+ *
+ * @param use The effect, given the options each `render` call received, in call order.
+ * @returns The effect under that replacement.
+ */
+const recordingRender = <A, E>(
+  use: (calls: (FileOptions & Options)[]) => Effect.Effect<A, E>,
+): Effect.Effect<A, E> => {
+  const calls: (FileOptions & Options)[] = [];
+
+  return Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock("#plate/render.ts", async (importOriginal) => {
+      const actual = await importOriginal<typeof RenderModule>();
+
+      return {
+        ...actual,
+        render: (...given: Parameters<typeof actual.render>) => {
+          calls.push(given[2] ?? {});
+
+          return actual.render(...given);
+        },
+      };
+    });
+  }).pipe(
+    Effect.andThen(use(calls)),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock("#plate/render.ts");
+        vi.resetModules();
+      }),
+    ),
+  );
+};
+
+describe("dev/page.ts: the package reader handed to render", { tags: ["corpus"] }, () => {
+  it.effect(
+    "[W0-DEVHOST.2] the package item page hands files to render, and the fixture page hands none",
+    () =>
+      recordingRender((calls) =>
+        Effect.gen(function* handing() {
+          const { createHandler: fresh, playgroundCaches: freshCaches } = yield* Effect.promise(
+            () => import("#plate/dev/page.ts"),
+          );
+          const corpus = fresh();
+
+          const packaged = yield* get(corpus, itemTarget(paths.packaged));
+          assert.strictEqual(packaged.response.status, 200);
+          assert.lengthOf(calls, 1);
+
+          const [handed] = calls;
+          assert.isFunction(handed?.files);
+
+          const track = handed?.files?.("items/resources/subtitles_en.vtt") ?? Option.none();
+          assert.isTrue(Option.isSome(track));
+          assert.isAbove(Option.getOrElse(track, () => "").length, 0);
+          assert.isTrue(
+            Option.isNone(handed?.files?.("items/resources/missing.vtt") ?? Option.some("")),
+          );
+          assert.isTrue(
+            Option.isNone(
+              handed?.files?.("../BegGuide_March2025.zip.d/items/BG007.xml") ?? Option.some(""),
+            ),
+          );
+          assert.isTrue(Option.isNone(handed?.files?.("items/BG007.xml") ?? Option.some("")));
+
+          calls.length = 0;
+          const loose = yield* get(corpus, itemTarget(paths.bg007));
+          assert.strictEqual(loose.response.status, 200);
+          assert.lengthOf(calls, 1);
+          assert.notProperty(calls[0] ?? {}, "files");
+
+          calls.length = 0;
+          const fixtures = fresh(
+            {},
+            Layer.merge(
+              freshCaches,
+              ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: fixturesRoot })),
+            ),
+          );
+          const fixture = yield* get(fixtures, itemTarget("m2/items/p1-single-choice.xml"));
+          assert.strictEqual(fixture.response.status, 200);
+          assert.lengthOf(calls, 1);
+          assert.notProperty(calls[0] ?? {}, "files");
+        }),
+      ),
+    corpusTimeoutMs,
+  );
 });

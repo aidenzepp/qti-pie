@@ -6,7 +6,7 @@ import { attr, doc, el, qtiNamespace, text } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { emitNodes, nestedInteraction } from "#plate/emit/body.ts";
 import type { OwnedElements } from "#plate/emit/body.ts";
-import { h } from "#plate/emit/node.ts";
+import { h, when } from "#plate/emit/node.ts";
 import type { Attributes, PartFunction } from "#plate/emit/node.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
@@ -172,6 +172,7 @@ const placeholderOf = (module: AnyModule): ModuleInteraction<ModuleKind> => ({
 const noCopy: RedactKit = {
   autofocus: false,
   formName: (response) => response,
+  held: () => Option.none(),
   host: {},
   instance: "",
   nodes: () => [],
@@ -456,6 +457,11 @@ interface LandedPayload {
   readonly content: readonly PayloadNode[];
   readonly formName: string;
   readonly gaps: readonly string[];
+  /**
+   * The lexical form of each member of the value the redaction held for the fake under `HELD`
+   * ({@link landedVariables}), read through the kit's `held`; empty when it held none.
+   */
+  readonly held: readonly string[];
   readonly host: HostFacts;
   readonly instance: string;
   readonly posted: Option.Option<readonly string[]>;
@@ -537,6 +543,13 @@ const gapIdentifier = (element: ElementPayload): string =>
   element.attributes.find(({ name }) => name === "identifier")?.value ?? "";
 
 /**
+ * The template variables {@link landedGapMatch}'s configuration is bound to: `HELD`, which the
+ * tests declare and hold, and `OTHER_HELD`, which no test item declares, so a row shows that an
+ * identifier a module names and the redaction does not hold gives none.
+ */
+const landedVariables = ["HELD", "OTHER_HELD"] as const;
+
+/**
  * Render a `qti-gap` of {@link landedGapMatch}'s gapped content as a Gap, a `span` marked as the
  * module's Gap part and named by the gap's identifier; any other element is not the module's. The
  * Gap is written without `applyPart`: the part table types a part key from the parts the modules
@@ -556,11 +569,12 @@ const landedGap: OwnedElements = (element) =>
 
 /**
  * Compute the attributes of {@link landedGapMatch}'s Root, as its `connect` does: the module's
- * class, its response, its marker, and what its controller needs of the host's facts: the names
- * of the members the record holds (`data-host-keys`, empty for a record without one) and, when the
- * PCI member is present, the loader the host serves (`data-host-loader`). A module reads only its
- * own member and writes onto its own Root, so a test sees the host's facts reach a module through
- * the kit and the page through the Root alone.
+ * class, its response, its marker, `data-held` holding the held texts joined by one space when
+ * the redaction held any, and what its controller needs of the host's facts: the names of the
+ * members the record holds (`data-host-keys`, empty for a record without one) and, when the PCI
+ * member is present, the loader the host serves (`data-host-loader`). A module reads only its own
+ * member and writes onto its own Root, so a test sees the host's facts reach a module through the
+ * kit and the page through the Root alone.
  *
  * @param interaction The payload node.
  * @returns The Root's attributes.
@@ -568,6 +582,7 @@ const landedGap: OwnedElements = (element) =>
 const landedRootAttributes = (interaction: LandedPayload): Attributes => {
   const shared: Attributes = {
     class: interaction.class,
+    ...when(interaction.held.length > 0, { "data-held": interaction.held.join(" ") }),
     "data-host-keys": Object.keys(interaction.host).toSorted().join(" "),
     "data-response": interaction.response,
     "data-slot": landedOwner,
@@ -740,6 +755,10 @@ const landedGapMatch: InteractionModule<
       content: kit.nodes(interaction.gapped),
       formName: kit.formName(interaction.response),
       gaps: interaction.gaps,
+      held: Option.match(kit.held("HELD"), {
+        onNone: () => [],
+        onSome: (value) => value.values.map(format),
+      }),
       host: kit.host,
       instance: kit.instance,
       posted,
@@ -823,6 +842,11 @@ const landedGapMatch: InteractionModule<
     isRecordValue(correct) ? correct : { ...correct, values: correct.values.slice(0, 1) },
   unnamed: () => false,
   validate: () => [],
+  /**
+   * The template variables the fake's configuration is bound to ({@link landedVariables}), so a
+   * test sees the redaction hold their values and the kit hand them back.
+   */
+  variables: () => landedVariables,
 };
 
 /**
@@ -1136,6 +1160,62 @@ const landedStageDocument = doc(
 );
 
 /**
+ * An item whose body holds one Gap Match the landed module reads, bound to a single identifier
+ * response, and which declares the template variable `HELD` with the default `lantern` and runs
+ * no template processing, so with no record the redaction holds that default.
+ */
+const landedHeldDocument = doc(
+  "items/landed-held.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "landed-held"), attr("title", "Landed held")],
+    [
+      el(
+        "qti-response-declaration",
+        [
+          attr("base-type", "identifier"),
+          attr("cardinality", "single"),
+          attr("identifier", "RESPONSE"),
+        ],
+        [],
+      ),
+      el(
+        "qti-template-declaration",
+        [
+          attr("base-type", "identifier"),
+          attr("cardinality", "single"),
+          attr("identifier", "HELD"),
+        ],
+        [el("qti-default-value", [], [el("qti-value", [], [text("lantern")])])],
+      ),
+      el(
+        "qti-item-body",
+        [],
+        [
+          el(
+            `qti-${landedKind}-interaction`,
+            [attr("max-associations", "1"), attr("response-identifier", "RESPONSE")],
+            [el("qti-gap-text", [attr("identifier", "W")], [text("winter")])],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
+/**
+ * Construct a single identifier value.
+ *
+ * @param value The identifier.
+ * @returns The value.
+ */
+const identifierValue = (value: string): Value => ({
+  baseType: "identifier",
+  cardinality: "single",
+  values: [{ baseType: "identifier", value }],
+});
+
+/**
  * A host's replacement for a part: the part as a `span`.
  *
  * @param props The part's attributes.
@@ -1208,6 +1288,16 @@ const pairsValue = (...pairs: readonly (readonly [string, string])[]): Value => 
  * The name the host chose for the landed Gap Match's response to post under.
  */
 const hostName = "answer-1";
+
+/**
+ * Give the start tag of the landed module's Root in a rendered item's HTML.
+ *
+ * @param html The HTML.
+ * @returns The start tag, with every attribute.
+ */
+const landedRootTag = (html: string): string =>
+  new RegExp(`<div [^>]*data-slot="${landedOwner}"[^>]*>`, "u").exec(html)?.[0] ??
+  assert.fail("the HTML holds no Root of the landed module");
 
 describe("a module that lands", () => {
   it("types its own model and payload nodes into every hub through the module table", () => {
@@ -1870,6 +1960,43 @@ describe("a module that lands", () => {
         assert.match(html, /<h3[^>]*>Below<\/h3>/u);
       }),
     ),
+  );
+
+  it.effect(
+    "[W0-PCIVARS] a module's redact reads the record's template value for a variable its node binds through the kit, and writes it onto its root",
+    () =>
+      withLanded(
+        Effect.gen(function* heldThroughKit() {
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const verdict = yield* Effect.promise(() => import("#plate/validate/verdict.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const configuration = yield* configure({});
+          const built = yield* Effect.fromResult(model.buildItem(landedHeldDocument));
+          const accepted = verdict.acceptForTest(built);
+
+          // With no record and no template processing, the redaction holds the declared default.
+          const defaulted = yield* Effect.fromResult(
+            plate.render(plate.redact(accepted), configuration, { instance: "q1" }),
+          );
+
+          assert.include(landedRootTag(defaulted.html), 'data-held="lantern"');
+
+          // With a record, it holds the record's template value.
+          const recorded = yield* Effect.fromResult(
+            plate.render(
+              plate.redact(accepted, {
+                outcomes: {},
+                templates: { HELD: identifierValue("beacon") },
+              }),
+              configuration,
+              { instance: "q1" },
+            ),
+          );
+
+          assert.include(landedRootTag(recorded.html), 'data-held="beacon"');
+          assert.notInclude(recorded.html, "lantern");
+        }),
+      ),
   );
 
   it("gives each part's row from its spec, with the owner, the part and the marker derived", () => {

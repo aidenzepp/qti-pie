@@ -4,10 +4,11 @@ import { configure } from "#plate/configuration.ts";
 import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
+import { h, when } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
 import type { ValueBinding } from "#plate/form/encoding.ts";
-import type { ModuleEntry } from "#plate/interactions/contract.ts";
+import type { ModuleEntry, RedactKit } from "#plate/interactions/contract.ts";
 import { encodeRedacted } from "#plate/codec/redacted.ts";
 import { interactionsIn as bodyInteractions, isStubbed } from "#plate/model/interactions.ts";
 import type { ModelOf, Modules } from "#plate/model/interactions.ts";
@@ -54,6 +55,7 @@ import type {
   PayloadNode,
   Posting,
   Redacted,
+  RedactedStructure,
   TextEntryPayload,
   View,
 } from "#plate/payload.ts";
@@ -4586,6 +4588,37 @@ describe("payload, catalog references", () => {
   });
 });
 
+describe("payload, stimulus references", () => {
+  it("[W0-AR] copies a body element's stimulus key through redaction and payload, with its path left behind, and gives an element without one no stimulus key", () => {
+    const hosting: BodyNode = {
+      attributes: [{ name: "data-stimulus-idref", value: "S1" }],
+      children: [text("Loading.")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/div[0]",
+      stimulus: "S1",
+      tag: "div",
+    };
+    const redaction = redactItem({ ...item, body: [hosting, ...item.body] });
+    const built = payload(redaction, answering);
+
+    const [kept] = redaction.body;
+
+    assert.strictEqual(kept?.kind === "element" ? kept.stimulus : undefined, "S1");
+    assert.deepStrictEqual(kept?.kind === "element" ? kept.attributes : [], [
+      { name: "data-stimulus-idref", value: "S1" },
+    ]);
+    assert.deepStrictEqual(built.body[0], {
+      attributes: [{ name: "data-stimulus-idref", value: "S1" }],
+      children: [{ kind: "text", text: "Loading." }],
+      kind: "element",
+      stimulus: "S1",
+      tag: "div",
+    });
+    assert.isFalse(Object.hasOwn(redaction.body[1] ?? {}, "stimulus"));
+    assert.isFalse(Object.hasOwn(built.body[1] ?? {}, "stimulus"));
+  });
+});
+
 describe("redactItem and payload on a module's container", () => {
   /**
    * The hand-built item with its whole body inside one container a module owns, as a stage holds
@@ -4628,6 +4661,338 @@ describe("redactItem and payload on a module's container", () => {
       interactionsIn(payload(redacted, answering).body).map((interaction) => interaction.response),
     );
   });
+});
+
+/**
+ * The template variables the mocked stub kind's module names ({@link withVariables}): `HELD`,
+ * which the holding items declare, and `OTHER_HELD`, which none declares.
+ */
+const holdingVariables = ["HELD", "OTHER_HELD"] as const;
+
+/**
+ * The payload node the mocked stub kind's module gives ({@link withVariables}): the response it
+ * binds and the lexical form of each member of the value the kit held for it under `HELD`, empty
+ * when the kit held none.
+ */
+interface HoldingPayload {
+  readonly held: readonly string[];
+  readonly response: string;
+}
+
+/**
+ * Run an effect with the stub kind's module naming {@link holdingVariables} as the template
+ * variables its configuration is bound to, and copying, rendering and answering the hubs enough
+ * for a redaction, a payload and a render of an item that holds its node: its `redact` reads the
+ * kit's `held` for `HELD` into its payload node ({@link HoldingPayload}), and its render writes a
+ * Root with `data-held` holding those texts joined by one space, when there are any. Every module
+ * it imports is loaded afresh, and the module is restored after.
+ *
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withVariables = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(stubFile, async (importOriginal) => {
+      const actual = await importOriginal<Record<string, Modules[typeof stubKind]>>();
+
+      return Object.fromEntries(
+        Object.entries(actual).map(([name, module]) => [
+          name,
+          {
+            ...module,
+            bindings: (interaction: { readonly response: string }) => [
+              { base: Option.none(), response: interaction.response },
+            ],
+            controls: () => 1,
+            redact: (
+              interaction: { readonly response: string },
+              kit: RedactKit,
+            ): HoldingPayload => ({
+              held: Option.match(kit.held("HELD"), {
+                onNone: () => [],
+                onSome: (value) => value.values.map((single) => format(single)),
+              }),
+              response: interaction.response,
+            }),
+            render: (interaction: HoldingPayload) =>
+              Result.succeed(
+                h(
+                  "div",
+                  {
+                    ...when(interaction.held.length > 0, {
+                      "data-held": interaction.held.join(" "),
+                    }),
+                    "data-response": interaction.response,
+                  },
+                  [],
+                ),
+              ),
+            unnamed: () => false,
+            variables: () => holdingVariables,
+          },
+        ]),
+      );
+    });
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(stubFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
+ * A node of the stub kind bound to `RESPONSE`, the bare node the table of modules holds for a
+ * stub, which {@link withVariables} makes name {@link holdingVariables}.
+ */
+const holdingNode: ModelOf<typeof stubKind> = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  kind: stubKind,
+  path: `${bodyPath}/${stubElement}`,
+  response: "RESPONSE",
+};
+
+/**
+ * Construct the response declaration of `RESPONSE`, a single identifier whose correct response is
+ * `zebra-77`, which nothing redacted may hold.
+ *
+ * @returns The declaration.
+ */
+const holdingResponse = (): ResponseDeclaration => ({
+  areaMapping: Option.none(),
+  baseType: "identifier",
+  cardinality: "single",
+  correct: Option.some(identifierValue("zebra-77")),
+  defaultValue: Option.none(),
+  identifier: "RESPONSE",
+  mapping: Option.none(),
+});
+
+/**
+ * An item whose body is one node of the stub kind ({@link holdingNode}), with no template
+ * processing: it declares the template variables `HELD` (default `lantern`) and `OTHER` (default
+ * `unbound`), the outcome `SCORE` (default 7) and the response `RESPONSE` (correct `zebra-77`).
+ */
+const holder: Item = {
+  ...item,
+  body: [holdingNode],
+  outcomes: new Map([
+    [
+      "SCORE",
+      {
+        baseType: "float",
+        cardinality: "single",
+        defaultValue: Option.some(floatValue(7)),
+        identifier: "SCORE",
+        interpretation: Option.none(),
+        longInterpretation: Option.none(),
+        lookupTable: Option.none(),
+        masteryValue: Option.none(),
+        normalMaximum: Option.none(),
+        normalMinimum: Option.none(),
+        view: Option.none(),
+      },
+    ],
+  ]),
+  processing: Option.none(),
+  responses: new Map([["RESPONSE", holdingResponse()]]),
+  templates: new Map([
+    ["HELD", templateOf("HELD", identifierValue("lantern"))],
+    ["OTHER", templateOf("OTHER", identifierValue("unbound"))],
+  ]),
+  unsupported: [],
+};
+
+/**
+ * The record of an attempt of {@link holder}: `HELD` is `beacon`, `OTHER` is `unbound` and `SCORE`
+ * is 7.
+ */
+const holderRecord: RedactRecord = {
+  outcomes: { SCORE: floatValue(7) },
+  templates: { HELD: identifierValue("beacon"), OTHER: identifierValue("unbound") },
+};
+
+/**
+ * Collect the elements of a rendered tree, at any depth, in document order.
+ *
+ * @param nodes The tree's nodes.
+ * @returns Each element, itself before its descendants.
+ */
+const elementsIn = (nodes: readonly Node[]): readonly Element[] =>
+  nodes.flatMap((node) => (node.kind === "element" ? [node, ...elementsIn(node.children)] : []));
+
+/**
+ * Collect the paths, as dotted keys, of every own key named `key` in a payload or a redacted
+ * structure, at any depth, below objects and arrays.
+ *
+ * @param root The payload or the structure.
+ * @param key The key.
+ * @returns Each path at which an object holds `key`, sorted.
+ */
+const keyPaths = (root: Payload | RedactedStructure, key: string): readonly string[] => {
+  const found: string[] = [];
+  const pending: (readonly [string, unknown])[] = [["", root]];
+
+  while (pending.length > 0) {
+    const next = pending.pop();
+    if (next === undefined) {
+      break;
+    }
+
+    const [at, value] = next;
+    if (Array.isArray(value)) {
+      let index = 0;
+      for (const element of value) {
+        pending.push([`${at}[${String(index)}]`, element]);
+        index += 1;
+      }
+    } else if (Predicate.isObject(value)) {
+      if (Object.hasOwn(value, key)) {
+        found.push(at);
+      }
+
+      for (const [name, member] of Object.entries(value)) {
+        pending.push([at === "" ? name : `${at}.${name}`, member]);
+      }
+    }
+  }
+
+  return found.toSorted();
+};
+
+describe("redactItem holds a module node's bound template values", () => {
+  it.effect(
+    "[W0-PCIVARS] the redaction holds a module node's bound template values under its response and nothing else of the record",
+    () =>
+      withVariables(
+        Effect.gen(function* heldUnderResponse() {
+          const payloads = yield* Effect.promise(() => import("#plate/payload.ts"));
+
+          assert.deepStrictEqual(payloads.redactItem(holder, holderRecord).held, {
+            RESPONSE: { HELD: identifierValue("beacon") },
+          });
+          assert.deepStrictEqual(
+            payloads.redactItem(holder, {
+              ...holderRecord,
+              templates: { ...holderRecord.templates, OTHER_HELD: identifierValue("second") },
+            }).held,
+            {
+              RESPONSE: { HELD: identifierValue("beacon"), OTHER_HELD: identifierValue("second") },
+            },
+          );
+        }),
+      ),
+  );
+
+  it.effect(
+    "[W0-PCIVARS] an identifier a module names that the record's templates do not hold is not held, even when outcomes hold it",
+    () =>
+      withVariables(
+        Effect.gen(function* notFromOutcomes() {
+          const payloads = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const configuration = yield* configure({});
+          const redaction = payloads.redactItem(holder, {
+            outcomes: { OTHER_HELD: floatValue(3), SCORE: floatValue(7) },
+            templates: { HELD: identifierValue("beacon") },
+          });
+
+          assert.deepStrictEqual(redaction.held, { RESPONSE: { HELD: identifierValue("beacon") } });
+
+          const { html } = yield* Effect.fromResult(
+            plate.render(redaction, configuration, { instance }),
+          );
+          const root = elementsIn(parseHtml(html)).find(
+            (element) => element.attrs["data-response"] === "RESPONSE",
+          );
+
+          assert.isDefined(root);
+          assert.strictEqual(root?.attrs["data-held"], "beacon");
+        }),
+      ),
+  );
+
+  it.effect(
+    "[W0-PCIVARS] no record and template processing that runs holds nothing (H3); no record and none holds the declared defaults",
+    () =>
+      withVariables(
+        Effect.gen(function* withoutRecord() {
+          const payloads = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const holdingTemplated: Item = {
+            ...templated,
+            body: [...templated.body, holdingNode],
+            responses: new Map([["RESPONSE", holdingResponse()]]),
+            templates: new Map([
+              ...templated.templates,
+              ["HELD", templateOf("HELD", identifierValue("lantern"))],
+            ]),
+          };
+
+          assert.isUndefined(payloads.redactItem(templated).held);
+          assert.isUndefined(payloads.redactItem(holdingTemplated).held);
+          assert.deepStrictEqual(
+            payloads.redactItem({ ...holdingTemplated, templateProcessing: Option.none() }).held,
+            { RESPONSE: { HELD: identifierValue("lantern") } },
+          );
+        }),
+      ),
+  );
+
+  it.effect("[W0-PCIVARS] a module node inside content the page does not see holds nothing", () =>
+    withVariables(
+      Effect.gen(function* unseen() {
+        const payloads = yield* Effect.promise(() => import("#plate/payload.ts"));
+        const blocked: Item = {
+          ...holder,
+          body: [templatePart("template-block", byVisible("show"), [holdingNode], ["RESPONSE"])],
+          templateProcessing: Option.some([]),
+          templates: new Map([...holder.templates, ["VISIBLE", visibleDeclaration]]),
+        };
+
+        assert.isUndefined(
+          payloads.redactItem(
+            blocked,
+            holding({ HELD: identifierValue("beacon"), VISIBLE: multipleOf("Y") }),
+          ).held,
+        );
+        assert.deepStrictEqual(
+          payloads.redactItem(
+            blocked,
+            holding({ HELD: identifierValue("beacon"), VISIBLE: multipleOf("X") }),
+          ).held,
+          { RESPONSE: { HELD: identifierValue("beacon") } },
+        );
+      }),
+    ),
+  );
+
+  it.effect(
+    "[W0-PCIVARS] the Payload carries no held value; a held value reaches the page only through the module's payload node",
+    () =>
+      withVariables(
+        Effect.gen(function* onlyThroughNode() {
+          const payloads = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const redaction = payloads.redactItem(holder, holderRecord);
+          const built = payloads.payload(redaction, answering);
+          const [node, ...rest] = built.body;
+
+          assert.lengthOf(rest, 0);
+          assert.deepStrictEqual(keyPaths(built, "held"), ["body[0].payload"]);
+          assert.deepStrictEqual<unknown>(node?.kind === stubKind ? node.payload : undefined, {
+            held: ["beacon"],
+            response: "RESPONSE",
+          });
+          assert.deepStrictEqual(
+            keyPaths(payloads.redactStructure(holder, holderRecord), "held"),
+            [],
+          );
+        }),
+      ),
+  );
 });
 
 /**
@@ -4677,15 +5042,6 @@ const gapMatchItem = (attributes: readonly SourceAttribute[]): SourceDocument =>
  * never writes itself.
  */
 const note: SourceAttribute = attr("data-note", "x");
-
-/**
- * List every element of some nodes, in document order, the elements inside them included.
- *
- * @param nodes The nodes.
- * @returns The elements.
- */
-const elementsIn = (nodes: readonly Node[]): readonly Element[] =>
-  nodes.flatMap((node) => (node.kind === "element" ? [node, ...elementsIn(node.children)] : []));
 
 /**
  * Render a built item and give its Gap Match Root, the element marked `gap-match-interaction`.

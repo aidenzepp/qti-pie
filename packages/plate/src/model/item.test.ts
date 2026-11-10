@@ -28,7 +28,7 @@ import { message } from "#plate/messages.ts";
 import { valueOf, xsBooleanOf } from "#plate/model/attributes.ts";
 import type { IntegerOrRef, TemplateRule } from "#plate/model/expression.ts";
 import { modules } from "#plate/model/interactions.ts";
-import { buildItem } from "#plate/model/item.ts";
+import { buildItem, stimulusBody } from "#plate/model/item.ts";
 import type {
   AreaMapping,
   BodyNode,
@@ -5976,6 +5976,145 @@ describe("buildItem, catalog references", () => {
         });
         assert.deepStrictEqual(built.unsupported, [
           { feature: "data-catalog-idref", path: `${body}/p`, shown: "mark" },
+        ]);
+      }),
+  );
+});
+
+describe("buildItem, stimulus references", () => {
+  it.effect(
+    "[W0-AR] the body walk keeps data-stimulus-idref as the element's stimulus key, keeps the attribute among the element's attributes, and gives an element without one no stimulus key",
+    () =>
+      Effect.gen(function* keepsStimulusIdref() {
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "div",
+                  [attr("id", "passage"), attr("data-stimulus-idref", "S1")],
+                  [el("p", [], [text("Loading the passage.")])],
+                ),
+                el("div", [], [text("No stimulus.")]),
+              ],
+              declarations: [],
+            }),
+          ),
+        );
+
+        assert.deepStrictEqual(built.body[0], {
+          attributes: [
+            { name: "id", value: "passage" },
+            { name: "data-stimulus-idref", value: "S1" },
+          ],
+          children: [
+            {
+              attributes: [],
+              children: [{ kind: "text", text: "Loading the passage." }],
+              kind: "element",
+              path: `${body}/div[1]/p`,
+              tag: "p",
+            },
+          ],
+          kind: "element",
+          path: `${body}/div[1]`,
+          stimulus: "S1",
+          tag: "div",
+        });
+        assert.isFalse(Object.hasOwn(built.body[1] ?? {}, "stimulus"));
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+});
+
+/**
+ * Construct a stimulus document at `passages/s.xml` whose body holds the given children.
+ *
+ * @param children The children of its `qti-stimulus-body`.
+ * @returns The document.
+ */
+const stimulus = (children: readonly SourceChild[]): SourceDocument =>
+  doc(
+    "passages/s.xml",
+    el(
+      "qti-assessment-stimulus",
+      [attr("identifier", "s"), attr("title", "S")],
+      [el("qti-stimulus-body", [], children)],
+    ),
+  );
+
+describe("stimulusBody", () => {
+  it.effect(
+    "[W0-AR] reads the one stimulus body as the item body is read, with its marks and notices in document order",
+    () =>
+      Effect.gen(function* readsStimulusBody() {
+        const read = yield* Effect.fromResult(
+          stimulusBody(
+            stimulus([
+              el("p", [attr("base", "x/", xmlNamespace)], [text("Shore.")]),
+              el("qti-fake-widget", [], [text("Dropped.")]),
+            ]),
+          ),
+        );
+
+        assert.deepStrictEqual(read.body, [
+          {
+            attributes: [],
+            children: [{ kind: "text", text: "Shore." }],
+            kind: "element",
+            path: "qti-assessment-stimulus/qti-stimulus-body/p",
+            tag: "p",
+          },
+          {
+            feature: "qti-fake-widget",
+            kind: "unsupported",
+            path: "qti-assessment-stimulus/qti-stimulus-body/qti-fake-widget",
+          },
+        ]);
+        assert.deepStrictEqual(read.unsupported, [
+          {
+            feature: "xml:base",
+            path: "qti-assessment-stimulus/qti-stimulus-body/p",
+            shown: "mark",
+          },
+          {
+            feature: "qti-fake-widget",
+            path: "qti-assessment-stimulus/qti-stimulus-body/qti-fake-widget",
+            shown: "notice",
+          },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[W0-AR] gives an interaction in a stimulus body its notice, keyed by its element, in place of binding it",
+    () =>
+      Effect.gen(function* stimulusInteraction() {
+        const read = yield* Effect.fromResult(
+          stimulusBody(
+            stimulus([
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "RESPONSE")],
+                [el("qti-simple-choice", [attr("identifier", "A")], [text("A")])],
+              ),
+            ]),
+          ),
+        );
+
+        assert.deepStrictEqual(read.body, [
+          {
+            feature: "qti-choice-interaction",
+            kind: "unsupported",
+            path: "qti-assessment-stimulus/qti-stimulus-body/qti-choice-interaction",
+          },
+        ]);
+        assert.deepStrictEqual(read.unsupported, [
+          {
+            feature: "qti-choice-interaction",
+            path: "qti-assessment-stimulus/qti-stimulus-body/qti-choice-interaction",
+            shown: "notice",
+          },
         ]);
       }),
   );
