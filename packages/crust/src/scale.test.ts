@@ -4,24 +4,27 @@ import { Effect, Option } from "effect";
 import { canonicalize } from "#crust/canonical.ts";
 import { encode } from "#crust/encode.ts";
 import { readXml } from "#crust/read.ts";
-import type { ReadOptions } from "#crust/read.ts";
 import type { Child, Element, XmlDocument } from "#crust/tree.ts";
 import { writeXml } from "#crust/write.ts";
 
 /**
- * The depth of the deep trees and the width of the wide one: 100,000 elements on one path, and
- * 100,000 children under one parent. A recursive walk overflows Node's default stack within a few
- * thousand levels, so these bounds sit two orders of magnitude past it.
+ * The depth of the deep trees the writers write and the width of the wide one: 100,000 elements on
+ * one path, and 100,000 children under one parent. A recursive walk overflows Node's default stack
+ * within a few thousand levels, so these bounds sit two orders of magnitude past it. The reader
+ * refuses a document past 256 open elements, so it reads the wide tree, and chains at that bound.
  */
 const DEPTH = 100_000;
 
 const WIDTH = 100_000;
 
 /**
- * The read these tests make: no element depth refused, so the trees above the reader's default of
- * 256 are read whole.
+ * The levels of each chain the reader reads below the root, so that with the root it holds the 256
+ * elements its bound lets open at once, and how many such chains the root holds: 99,960 elements
+ * below it.
  */
-const unbounded: ReadOptions = { elementDepth: Number.POSITIVE_INFINITY };
+const CHAIN = 255;
+
+const CHAINS = 392;
 
 /**
  * The timeout, in milliseconds, for each scale test. The slowest, the namespaced deep round trip,
@@ -126,7 +129,7 @@ const text = (bytes: Uint8Array): string => new TextDecoder("utf-8", { fatal: tr
 
 describe(`every walk is iterative: depth ${DEPTH} and width ${WIDTH}`, () => {
   it.effect(
-    `encode, writeXml and canonicalize write a chain ${DEPTH} deep in their documented forms, and readXml reads it back to the same bytes`,
+    `encode, writeXml and canonicalize write a chain ${DEPTH} deep in their documented forms`,
     () =>
       Effect.gen(function* deepChain() {
         const doc = bare(chain(DEPTH, []));
@@ -139,11 +142,6 @@ describe(`every walk is iterative: depth ${DEPTH} and width ${WIDTH}`, () => {
           firstDifference(text(canonicalize(doc)), `${"<a>".repeat(DEPTH)}${"</a>".repeat(DEPTH)}`),
           -1,
         );
-
-        const read = yield* readXml(bytes, unbounded);
-
-        assert.strictEqual(firstChildPath(read.root).length, DEPTH);
-        assert.strictEqual(firstDifference(text(yield* encode(read, "UTF-8")), written), -1);
       }),
     SCALE_TIMEOUT_MS,
   );
@@ -168,7 +166,7 @@ describe(`every walk is iterative: depth ${DEPTH} and width ${WIDTH}`, () => {
           -1,
         );
 
-        const read = yield* readXml(bytes, unbounded);
+        const read = yield* readXml(bytes);
 
         assert.strictEqual(read.root.children.length, WIDTH);
         assert.strictEqual(firstDifference(text(yield* encode(read, "UTF-8")), written), -1);
@@ -177,12 +175,16 @@ describe(`every walk is iterative: depth ${DEPTH} and width ${WIDTH}`, () => {
   );
 
   it.effect(
-    `readXml resolves namespaces, applies the ATTLIST and restores undeclared references at every level of a document ${DEPTH} deep, and the round trip is a fixed point`,
+    `readXml resolves namespaces, applies the ATTLIST and restores undeclared references at every element of ${CHAINS} chains ${CHAIN} deep under one root, and the round trip is a fixed point`,
     () =>
-      Effect.gen(function* deepNamespaced() {
-        const source = `<!DOCTYPE a SYSTEM "a.dtd" [<!ATTLIST p:a d CDATA "v">]><a xmlns="urn:x" xmlns:p="urn:p">${'<p:a xml:lang="en" r="&u;">'.repeat(DEPTH - 1)}&u;${"</p:a>".repeat(DEPTH - 1)}</a>`;
-        const read = yield* readXml(new TextEncoder().encode(source), unbounded);
-        const [top, ...inner] = firstChildPath(read.root);
+      Effect.gen(function* boundedNamespaced() {
+        const written = `${'<p:a xml:lang="en" r="&u;">'.repeat(CHAIN)}&u;${"</p:a>".repeat(CHAIN)}`;
+        const source = `<!DOCTYPE a SYSTEM "a.dtd" [<!ATTLIST p:a d CDATA "v">]><a xmlns="urn:x" xmlns:p="urn:p">${written.repeat(CHAINS)}</a>`;
+        const read = yield* readXml(new TextEncoder().encode(source));
+        const paths = read.root.children.map((top) =>
+          top.kind === "element" ? firstChildPath(top) : [],
+        );
+        const inner = paths.flat();
         const wrong = inner.filter(
           (level) =>
             level.namespace !== "urn:p" ||
@@ -193,13 +195,18 @@ describe(`every walk is iterative: depth ${DEPTH} and width ${WIDTH}`, () => {
             level.attributes[1]?.references.length !== 1,
         ).length;
 
-        assert.strictEqual(top?.namespace, "urn:x");
-        assert.strictEqual(inner.length, DEPTH - 1);
+        assert.strictEqual(read.root.namespace, "urn:x");
+        assert.strictEqual(inner.length, CHAIN * CHAINS);
         assert.strictEqual(wrong, 0);
-        assert.deepStrictEqual(inner.at(-1)?.children, [{ kind: "entityRef", name: "u" }]);
+        assert.deepStrictEqual(
+          paths.map((path) => path.at(-1)?.children),
+          Array.from({ length: CHAINS }, (): readonly Child[] => [
+            { kind: "entityRef", name: "u" },
+          ]),
+        );
 
         const once = yield* encode(read, "UTF-8");
-        const twice = yield* encode(yield* readXml(once, unbounded), "UTF-8");
+        const twice = yield* encode(yield* readXml(once), "UTF-8");
 
         assert.strictEqual(firstDifference(text(twice), text(once)), -1);
       }),
