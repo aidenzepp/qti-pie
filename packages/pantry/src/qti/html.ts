@@ -174,6 +174,8 @@ export const HeaderToken = relation.generated(
  * `table`, its {@link TableScope}.
  */
 export const TableHeader = relation(
+  // GRIZZLE-PENDING: Q18, Q19: a counted family over a derived relation, and collapse of an unbounded
+  // text in a query; then the import's NCName gate goes and these rows are a query over `Attribute`.
   "TableHeader",
   { document: uuid, id: keyText, node: uuid, owner: uuid, table: uuid },
   ["node"],

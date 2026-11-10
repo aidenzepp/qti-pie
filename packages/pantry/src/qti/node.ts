@@ -176,6 +176,7 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
 export const Node = relation(
   "Node",
   {
+    // GRIZZLE-PENDING: Q13, a generated term over an accumulated field; then `ancestry` is generated.
     ancestry: bits(Flag),
     at: drawn(natural),
     attributes: drawn(natural),

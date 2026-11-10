@@ -338,7 +338,13 @@ export const DocumentLang = relation.generated(
  */
 export const LomLanguage = relation(
   "LomLanguage",
-  { general: uuid, lang: keyText, node: uuid, tag: keyText },
+  {
+    general: uuid,
+    lang: keyText,
+    node: uuid,
+    // GRIZZLE-PENDING: Q20, a family grouped by a generated field; then this copy is generated.
+    tag: keyText,
+  },
   ["node"],
 );
 
@@ -388,6 +394,7 @@ export const SsmlAttribute = relation(
     name: closedId(AttributeName),
     node: uuid,
     refers: closedId(NodeKind),
+    // GRIZZLE-PENDING: Q20, a family grouped by a generated field; then this copy is generated.
     value: keyText,
   },
   ["node", "name"],
@@ -503,6 +510,7 @@ export const PlacedId = relation(
   {
     assembly: uuid,
     assemblyKind: closedId(NodeKind),
+    // GRIZZLE-PENDING: Q20, a family grouped by a generated field; then this copy is generated.
     copy: uuid,
     document: uuid,
     id: keyText,
@@ -577,9 +585,12 @@ export const placedIdrefFamily = counted(
  * whose scope is its document, the member a counted family can count, as a family counts a relation
  * and no selection. R26's forms are these.
  */
-export const BodyXmlLang = relation("BodyXmlLang", { document: uuid, lang: keyText, node: uuid }, [
-  "node",
-]);
+export const BodyXmlLang = relation(
+  // GRIZZLE-PENDING: Q16, a family whose member side is a selection; then this stored copy goes.
+  "BodyXmlLang",
+  { document: uuid, lang: keyText, node: uuid },
+  ["node"],
+);
 
 /**
  * One `xml:lang` of an instance of an item's assembly (Q5.13's `Instance`, spec reading 117), keyed
@@ -600,6 +611,7 @@ export const PlacedXmlLang = relation(
  * assembly's family counts.
  */
 export const PlacedBodyXmlLang = relation(
+  // GRIZZLE-PENDING: Q16, a family whose member side is a selection; then this stored copy goes.
   "PlacedBodyXmlLang",
   { assembly: uuid, document: uuid, instance: uuid, lang: keyText, node: uuid },
   ["instance", "node"],
@@ -764,7 +776,7 @@ export const namingIdAttributes = select(Attribute, (a) =>
  * The ID values of one element kind: the {@link namingIdAttributes} of that kind, which a `th`'s
  * `TableHeader` copies back into (`#pantry/qti/html.ts`). Its conditions include every one of
  * {@link idAttributes}', whose key over `node` holds it, and its kind is a field it fixes to a value
- * beyond its terms, so it needs no key of its own (grizzle's fixed target, at `3cc8fbd`).
+ * beyond its terms, so it needs no key of its own (grizzle's README, "Fixed fields").
  *
  * @param kind - The element kind.
  * @returns The selection.
@@ -779,7 +791,7 @@ export const namingIdAttributesOf = (kind: "th") =>
  * `cp:resource`'s `identifier`, which its {@link ManifestId} or {@link ResourceId} copies back
  * into. Its conditions include every one of {@link idAttributes}', whose key over `node` holds it,
  * and its kind and document type are fields it fixes to values beyond its terms, so it needs no key
- * of its own (grizzle's fixed target, at `3cc8fbd`).
+ * of its own (grizzle's README, "Fixed fields").
  *
  * @param kind - The manifest element's kind.
  * @returns The selection.

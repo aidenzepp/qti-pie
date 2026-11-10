@@ -406,7 +406,7 @@ export const declarationRef = on(
  *
  * `cardinalities` is last, the order {@link DeclarationName}'s containment references the tuple in:
  * its target fixes `cardinalities` to 1 beyond its terms, and grizzle references a fixed field
- * after the terms (`#fixedTarget`, `laws/model/plan.ts:1394-1444` at `3cc8fbd`), so every reference
+ * after the terms (`#fixedTarget`, `laws/model/plan.ts:1531` at `eb56d58b`), so every reference
  * here shares that one UNIQUE (docs/grizzle-findings.md, "A fixed target's UNIQUE").
  */
 export const declarationIdentifierRef = on(
@@ -1048,8 +1048,8 @@ type Text = Term<string, unknown, unknown, "text">;
  * value and its value domain alone refuses it; and a pair with `NaN` holds, since `NaN` is ordered
  * against nothing. Each parse's otherwise is never read, since an arm holds wherever its guard
  * fails. A grizzle check is a predicate and a `Compute.when`'s branch a term
- * (`scalar/compute/builders.ts:946` of grizzle-engine at the vendored commit), so the arms stand
- * beside the comparison rather than in a guard's otherwise.
+ * (grizzle's README, "Parsing text"), so the arms stand beside the comparison rather than in a
+ * guard's otherwise.
  *
  * @param low - The form that is no greater, as the law reads it.
  * @param high - The form that is no less.

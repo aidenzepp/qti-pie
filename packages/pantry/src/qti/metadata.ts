@@ -628,7 +628,7 @@ const otherVocabularySources = select(LomResourceTypeSource, (s) =>
  * indexes the longest leading run of a containment's source columns whose entry is bounded
  * (`plannedReverse`) and no pattern bounds `Attribute.lexical`. Each selection but the `xml:lang`
  * one is also the target of its overlay's way back, which grizzle admits only under a key over
- * that selection (`laws/model/plan.ts` `#targetKeyed`), so it sits beside `key(on(selection,
+ * that selection (`laws/model/plan.ts` `#keyedTarget`), so it sits beside `key(on(selection,
  * "node"))`, which holds already, since an element holds one attribute of a closed name (AL2). The
  * `xml:lang` one is no containment's target, so it states no key.
  *
@@ -660,7 +660,7 @@ const objectLangAttributes = attributesOf("xml:lang", objectKinds);
  * The `language` of each `lom:string` of a record's document: the source of
  * {@link LomStringLanguage}'s copy, and the target of its way back, since the attribute is optional
  * and its row stands only where it is written. grizzle admits that containment only under a key
- * over this selection (`laws/model/plan.ts` `#targetKeyed`), so it sits beside `key(on(selection,
+ * over this selection (`laws/model/plan.ts` `#keyedTarget`), so it sits beside `key(on(selection,
  * "node"))`, which holds already, since an element holds one attribute of a closed name (AL2).
  */
 const stringLanguageAttributes = select(Attribute, (a) =>

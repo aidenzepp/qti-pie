@@ -43,8 +43,7 @@ import { EndCharacter, members, Node, nodeRef } from "#pantry/qti/node.ts";
 
 /**
  * The quotation punctuation a `q`'s four ends are refused for: the ASCII double quote, the single
- * and double curly and low quotes but the right single quotation mark, and the guillemets, main's
- * set (`src/import/guards/content.ts` at `2b276d76`).
+ * and double curly and low quotes but the right single quotation mark, and the guillemets.
  *
  * The ASCII apostrophe (U+0027) and the right single quotation mark (U+2019) are left out: each is
  * an apostrophe as often as a quote, and a possessive or an elision beside a `q`, as in

@@ -390,6 +390,8 @@ export const ResourceFile = relation(
  * (spec reading 152, decision 457 (2)).
  */
 export const Dependency = relation.generated(
+  // GRIZZLE-PENDING: Q18, Q19: a counted family over a derived relation, and collapse of an unbounded
+  // text in a query; then the import's NCName gate goes and these rows are a query over `Attribute`.
   "Dependency",
   {
     document: uuid,

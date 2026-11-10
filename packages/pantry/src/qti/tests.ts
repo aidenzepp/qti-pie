@@ -259,6 +259,8 @@ export const TestFlag = relation(
  *   section that places the document reaches it. Both are false on every other kind.
  */
 export const Named = relation(
+  // GRIZZLE-PENDING: Q18, Q19: a counted family over a derived relation, and collapse of an unbounded
+  // text in a query; then the import's NCName gate goes and these rows are a query over `Attribute`.
   "Named",
   {
     document: uuid,

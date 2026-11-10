@@ -414,8 +414,7 @@ export const mediaLawsByName = (policy: Option.Option<MediaPolicy>): Partial<Med
 /**
  * Build the query a policy's rule over a query reads, over a stored level: `UnusedEntry`, the
  * entries no document is at and no reference resolves to, by package and path, a query no table
- * stores (README, "Rules over queries"). Each negation stands alone as a filter, since grizzle
- * states a rule over a query whose relational negation is no part of a conjunction. It is a
+ * stores (README, "Rules over queries"). Each negation is a filter of its own. It is a
  * relation of every build, a policy's or none, so `Qti`'s relations are one shape whatever the
  * policy (`QtiSchema` of `#pantry/qti/schema.ts`); only a policy's build states a law over it
  * ({@link mediaQueriesOf}).

@@ -336,6 +336,8 @@ export const Processing = relation(
  * `unknown`.
  */
 export const VariableRef = relation(
+  // GRIZZLE-PENDING: Q18, Q19: a counted family over a derived relation, and collapse of an unbounded
+  // text in a query; then the import's NCName gate goes and these rows are a query over `Attribute`.
   "VariableRef",
   {
     after: Affix,

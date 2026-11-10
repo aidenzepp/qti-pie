@@ -218,10 +218,10 @@ export const Run = str.bytes(keyTextBytes, str.regex("^[^\\t\\n\\r ]+$"));
  * which the host writes and `E1_derived` proves.
  *
  * The split is the host's because no grizzle `Compute` term splits a text (no substring, split or
- * pattern group at the vendored commit; the gap is reported to grizzle, and the split waits on its
- * text-split term). Every typed value read from the items is the database's: the queries
- * `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair` (`#pantry/qti/queries.ts`) select the
- * items of their base type's form and read the value from them.
+ * pattern group; grizzle's queue item Q7, a text-split term). Every typed value read from the items
+ * is the database's: the queries `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`
+ * (`#pantry/qti/queries.ts`) select the items of their base type's form and read the value from
+ * them.
  */
 export const MapKeyItems = relation.generated(
   "MapKeyItems",

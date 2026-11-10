@@ -446,6 +446,8 @@ export const BindingCardinality = relation(
  * `Document.bindings`.
  */
 export const BindingName = relation(
+  // GRIZZLE-PENDING: Q18, Q19: a counted family over a derived relation, and collapse of an unbounded
+  // text in a query; then the import's NCName gate goes and these rows are a query over `Attribute`.
   "BindingName",
   {
     attribute: closedId(AttributeName),
@@ -665,9 +667,12 @@ export const choiceFamily = counted(
  * `Interaction.choices` counts a gap match's gap texts beside its gaps; "Binding cardinality" reads
  * the gaps alone (spec reading 169). It owns no sequence.
  */
-export const GapInteraction = relation("GapInteraction", { interaction: uuid, node: uuid }, [
-  "node",
-]);
+export const GapInteraction = relation(
+  // GRIZZLE-PENDING: Q16, a family whose member side is a selection; then this stored copy goes.
+  "GapInteraction",
+  { interaction: uuid, node: uuid },
+  ["node"],
+);
 
 /**
  * Each interaction's gaps, counted by `Interaction.gaps`: a flat row whose group, `interaction`,
@@ -925,6 +930,7 @@ export const Slider = relation("Slider", { lower: keyText, node: uuid, upper: ke
  * One ARIA range attribute of an element, keyed by its node and its name: its value, collapsed.
  */
 export const AriaValue = relation(
+  // GRIZZLE-PENDING: Q16, a family whose member side is a selection; then this stored copy goes.
   "AriaValue",
   { name: closedId(AttributeName), node: uuid, value: keyText },
   ["node", "name"],
@@ -2201,9 +2207,8 @@ const identifierTyped = on(
  *   pair with a value that is no `xs:decimal` holds the law by its own arm, since its value domain
  *   alone refuses it; each parse's otherwise is never read, since that arm holds wherever its guard
  *   fails. A value is a `keyText`, at most `keyTextBytes`, below the 16,384 bytes the parse reads
- *   (`decimalTextMaxBytes`), and a match guard keeps its subject's byte bound in its branch
- *   (`scalar/compute/lower.ts:930-934` and `:2951-2958` of grizzle-engine at the vendored commit),
- *   so the parse needs no byte guard.
+ *   (`decimalTextMaxBytes`), and a match guard keeps its subject's byte bound in its branch, so the
+ *   parse needs no byte guard (grizzle's README, "Parsing text", `Compute.parseDecimal`).
  * - **section documents' and fragments' references:** each one's row, counted per document and class;
  *   one placement row per instance of an item's or a test's assembly whose document is neither, a
  *   section document's or a fragment's (spec reading 117), counting as many resolutions of each

@@ -14,8 +14,8 @@
  * narrow relations keyed by `node`, each mirrored with `select(Node, kind = k)`: an arm row names a
  * node of its kind, and a node of its kind has its arm row. A target selected by `kind = k` is a
  * constant selection, so the arm carries the constant and every one of them references one
- * `UNIQUE (id, kind)` on `Node` (`laws/model/plan.ts` of the vendored engine, the recognition
- * table's constant-selection row).
+ * `UNIQUE (id, kind)` on `Node` (grizzle's README, "Fixed fields": the UNIQUE a fixed target
+ * references is the key it holds, or one over more columns).
  *
  * Each text field's pattern is XML's own production for what it holds, no tighter, except where a
  * key or an index over the field needs a byte bound, which each such field states.
@@ -382,9 +382,9 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  *   states the node's context. What every document node holds alike is no field: the containment's
  *   target is the document nodes, selected as their own `document`, governed by and of kind
  *   `document` under a `document` parent, at start 0, fields grizzle fixes beyond the target's
- *   terms (its fixed target, at `3cc8fbd`), held by `Node`'s key `id`. grizzle references a UNIQUE
- *   over the terms and then the fixed fields in field order, which no other containment into `Node`
- *   shares (docs/grizzle-findings.md, "A fixed target's UNIQUE").
+ *   terms (its fixed target, grizzle's README "Fixed fields"), held by `Node`'s key `id`. grizzle
+ *   references a UNIQUE over the terms and then the fixed fields in field order, which no other
+ *   containment into `Node` shares (docs/grizzle-findings.md, "A fixed target's UNIQUE").
  */
 export const Document = relation(
   "Document",

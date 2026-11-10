@@ -158,13 +158,12 @@ export const queriesOf = (base: QtiBase) => {
    * resource's node: its {@link ResourceHref}'s package and path, where the resource's manifest
    * `type` is nonempty and the resource has no {@link ResourceTyped}, whose rows are exactly the
    * resources whose `type` spells a handle (spec reading 67: AL1's value domain refuses the `type`
-   * alone). The two conditions are two filters: grizzle states a rule over a query whose relational
-   * negation stands alone as a filter, never inside a conjunction, and reads no pattern over the
-   * attribute's unbounded lexical form in a query. A resource that writes no `type` has none (AL3
-   * refuses it alone), and neither has one that writes no `href`, which names no path. Its rows are
-   * a join no table stores, which "Item ref target" reads: an item ref with no target
-   * ({@link UntargetedItemRef}) names a path one of these names, or is refused (the oracle's
-   * `itemRefTargetOf` names no target there).
+   * alone). The two conditions are two filters, the `type` nonempty and no {@link ResourceTyped}
+   * naming the resource, so the query reads no pattern over the attribute's unbounded lexical form.
+   * A resource that writes no `type` has none (AL3 refuses it alone), and neither has one that
+   * writes no `href`, which names no path. Its rows are a join no table stores, which "Item ref
+   * target" reads: an item ref with no target ({@link UntargetedItemRef}) names a path one of these
+   * names, or is refused (the oracle's `itemRefTargetOf` names no target there).
    */
   const UnreadTypeHref = derived(
     "UnreadTypeHref",

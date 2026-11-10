@@ -29,6 +29,7 @@ import type { QtiSchema } from "#pantry/qti/schema.ts";
  * @param qti - The `Qti` schema.
  * @returns The inputs.
  */
+// GRIZZLE-PENDING: Q2, the rowless ChangeSet builder, which states the import's inserts with no rows.
 const noInputsOf = (qti: QtiSchema): PackageInputs =>
   pipe(
     Struct.pick(qti.relations, insertableNamesOf(qti)),
@@ -87,7 +88,7 @@ export const authorWorkloadsOf = (qti: QtiSchema, author: AuthorRole) => {
  * @param qti - The `Qti` schema, built for an install's policy or none
  *   (`#pantry/qti/schema.ts` `qtiSchema`).
  * @returns The login.
- * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/engine/src/program/names.ts#L61-L76
+ * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/packages/engine/src/program/names.ts#L61-L76
  */
 export const authorAppOf = (qti: QtiSchema) => {
   const author = authorRoleOf(qti);

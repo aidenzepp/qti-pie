@@ -127,7 +127,13 @@ export const DefaultEntry = relation.generated(
  */
 export const CatalogRef = relation(
   "CatalogRef",
-  { document: uuid, lexical: keyText, node: uuid, token: keyText },
+  {
+    document: uuid,
+    lexical: keyText,
+    node: uuid,
+    // GRIZZLE-PENDING: Q20, a family grouped by a generated field; then this copy is generated.
+    token: keyText,
+  },
   ["node"],
 );
 
@@ -138,6 +144,8 @@ export const CatalogRef = relation(
  * `DocumentId` reads.
  */
 export const CatalogId = relation(
+  // GRIZZLE-PENDING: Q18, Q19: a counted family over a derived relation, and collapse of an unbounded
+  // text in a query; then the import's NCName gate goes and these rows are a query over `Attribute`.
   "CatalogId",
   { document: uuid, id: keyText, node: uuid, owner: uuid },
   ["node"],
