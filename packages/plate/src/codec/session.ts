@@ -365,18 +365,24 @@ type SessionRule = (
 ) => Option.Option<string>;
 
 /**
- * The identifier of each item ref of a test, in document order, with the index of the part that
- * holds it. An identifier keeps its first item ref, as a search of the test finds it.
+ * The identifier of each item ref of a test, in document order, with the index of every part that
+ * holds an item ref of it. A section document the test places in two parts supplies an item ref of
+ * the same identifier to each, so an identifier names every such part, not only the first (S-9,
+ * T-14, issue m3f-02c, GitHub issue #219).
  *
  * @param test The test.
- * @returns Each item ref's part index, by identifier, in document order.
+ * @returns Each identifier's part indexes, ascending and each once, by identifier, in document
+ *   order.
  */
-const partsOfRefs = (test: SessionTest): ReadonlyMap<string, number> => {
-  const parts = new Map<string, number>();
+const partsOfRefs = (test: SessionTest): ReadonlyMap<string, readonly number[]> => {
+  const parts = new Map<string, number[]>();
   for (const [index, part] of test.test.parts.entries()) {
     for (const ref of refsIn(part.children)) {
-      if (!parts.has(ref.identifier)) {
-        parts.set(ref.identifier, index);
+      const held = parts.get(ref.identifier);
+      if (held === undefined) {
+        parts.set(ref.identifier, [index]);
+      } else if (!held.includes(index)) {
+        held.push(index);
       }
     }
   }
@@ -418,6 +424,15 @@ const placementsOf = (test: SessionTest): ReadonlyMap<string, number> => {
  * alone fills, stays what a selection with replacement can repeat. Without a selection every
  * identifier is delivered exactly as often as it is placed, `repeatable` or not.
  *
+ * A section document may be placed in more than one part, and a stored item names its item ref and
+ * no placement, so the part an item belongs to is the one the stored sequence admits: the smallest
+ * part that holds an item ref of its identifier and is not below the part the items have reached
+ * (S-9, T-14, issue m3f-02c, GitHub issue #219). An item ref placed in several parts therefore
+ * restores in each, and an item whose identifier appears in no part at or after the one reached is
+ * refused, which keeps the items in the test's parts in order. This is the most permissive reading
+ * of that order the stored sequence carries without a per-instance key; the count of placements
+ * still bounds how often an identifier is delivered.
+ *
  * Which item refs a selection drops, and in what order an ordering puts those it keeps, is drawn at
  * `startTest` under the session's seed and stored, so these are the conditions every delivery meets
  * and not the draw itself: the sequence is read as stored, never drawn again, so it stays what it
@@ -438,7 +453,7 @@ const itemsRule: SessionRule = (session, test, sequence) => {
   let reached = 0;
   const broken = Arr.findFirst(session.items, (item, index) => {
     const listed = sequence[index];
-    const part = parts.get(item.ref);
+    const held = parts.get(item.ref);
     const path = `items[${String(index)}].ref`;
     if (item.ref !== listed) {
       return Option.some(
@@ -446,15 +461,20 @@ const itemsRule: SessionRule = (session, test, sequence) => {
       );
     }
 
-    if (part === undefined) {
+    if (held === undefined) {
       return Option.some(
         `${path} is ${JSON.stringify(item.ref)}, which is no item ref of the test`,
       );
     }
 
-    if (part < reached) {
+    const part = held.find((candidate) => candidate >= reached);
+    if (part === undefined) {
+      const named = new Intl.ListFormat("en").format(
+        held.map((partIndex) => String(partIndex + 1)),
+      );
+
       return Option.some(
-        `${path} is ${JSON.stringify(item.ref)}, an item ref of the test's part ${String(part + 1)}, after an item of its part ${String(reached + 1)}, where the items meet the test's parts in order`,
+        `${path} is ${JSON.stringify(item.ref)}, an item ref of the test's ${held.length === 1 ? "part" : "parts"} ${named}, after an item of its part ${String(reached + 1)}, where the items meet the test's parts in order`,
       );
     }
 

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0p1_imscpv1p2_v1p0.xsd"
+  identifier="m3f-section-parts">
+  <metadata>
+    <schema>QTI Package</schema>
+    <schemaversion>3.0.1</schemaversion>
+  </metadata>
+  <organizations/>
+  <resources>
+    <resource identifier="section-parts-test" type="imsqti_test_xmlv3p0" href="tests/test.xml">
+      <file href="tests/test.xml"/>
+      <dependency identifierref="section-shared"/>
+      <dependency identifierref="item-first"/>
+      <dependency identifierref="item-second"/>
+    </resource>
+    <resource identifier="section-shared" type="imsqti_section_xmlv3p0" href="sections/shared.xml">
+      <file href="sections/shared.xml"/>
+      <dependency identifierref="item-shared"/>
+    </resource>
+    <resource identifier="item-first" type="imsqti_item_xmlv3p0" href="items/first.xml">
+      <file href="items/first.xml"/>
+    </resource>
+    <resource identifier="item-second" type="imsqti_item_xmlv3p0" href="items/second.xml">
+      <file href="items/second.xml"/>
+    </resource>
+    <resource identifier="item-shared" type="imsqti_item_xmlv3p0" href="items/shared-item.xml">
+      <file href="items/shared-item.xml"/>
+    </resource>
+  </resources>
+</manifest>
