@@ -92,15 +92,13 @@ const fixture = (name: string): Uint8Array =>
   new Uint8Array(readFileSync(new URL(`../../fixtures/m4/${name}`, import.meta.url)));
 
 /**
- * Open the item fixture and take its accepted item, failing the test with the refusals when the
- * verdict accepts none.
+ * Open the item fixture and take its accepted item, failing the test naming the verdict when it
+ * accepts none.
  */
 const acceptedFixture = open(itemLocation, fixture("items/catalog-audio-description.xml")).pipe(
   Effect.map((verdict) =>
     Option.getOrElse(acceptedItem(verdict), () =>
-      assert.fail(
-        `the item fixture is ${verdict.verdict}, not accepted: ${JSON.stringify(verdict.refusals)}`,
-      ),
+      assert.fail(`the item fixture is ${verdict.verdict}, not accepted`),
     ),
   ),
 );
