@@ -47,12 +47,11 @@ const noInputsOf = (qti: QtiSchema): PackageInputs =>
  * @returns The workloads, in the login's order.
  */
 export const authorWorkloadsOf = (qti: QtiSchema, author: AuthorRole) => {
-  const { documentScan, documentsOf, entriesOf } = exportQueriesOf(qti);
+  const { documentScan, entriesOf } = exportQueriesOf(qti);
 
   return [
     workload(author, {
       documentScan: paged(documentScan),
-      documentsOf,
       entriesOf,
       packageOf: qti.relations.Package,
     }),
@@ -64,9 +63,9 @@ export const authorWorkloadsOf = (qti: QtiSchema, author: AuthorRole) => {
  * Build the author application's login over a `Qti` schema, over its author role
  * (`#pantry/qti/roles.ts` `authorRoleOf`), with two workloads:
  *
- * - **the export's reads**: one document's ordered scan, the documents of a package and a package's
- *   record (`#pantry/export/scan.ts` `exportQueriesOf`), each compiled once when the login's
- *   `DbLayer` is built, its access paths earning their indexes (the W5 amendment's C20), and
+ * - **the export's reads**: one document's ordered scan and a package's record with each entry's
+ *   document (`#pantry/export/scan.ts` `exportQueriesOf`), each compiled by `grizzle generate` into
+ *   the login's served file, its access paths earning their indexes (the W5 amendment's C20), and
  *   `packageOf`, the `Package` row by its key, a key member whose handle's `get` the export reads
  *   to refuse an id no package has and the import reads back after a commit with no answer, so
  *   every read pantry runs is a member of the workload;

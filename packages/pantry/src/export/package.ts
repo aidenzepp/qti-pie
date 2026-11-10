@@ -2,11 +2,11 @@
  * The export of a package: every document the database holds for it rebuilt from its scan and
  * written in its charset, and every other entry written from the record (fin.md P7, D6, §4.6).
  *
- * A package's entries are its `Entry` family, in listing order. Each entry that is a document, a
- * `Document` row of the package at its path, is read by one ordered scan of its nodes, page by page
- * (`#pantry/export/scan.ts` `documentScan`, `#pantry/export/pages.ts`), assembled with one stack
- * (`#pantry/model/assemble.ts`) and written by `unshred` in its export charset; every other entry
- * is written as the bytes the import read. No tree is walked and no query recurses.
+ * A package's entries are its `Entry` family, in listing order, each read with its `Document` row
+ * where it is a document (`#pantry/export/scan.ts` `entriesOf`). A document is read by one ordered
+ * scan of its nodes, page by page (`documentScan`, `#pantry/export/pages.ts`), assembled with one
+ * stack (`#pantry/model/assemble.ts`) and written by `unshred` in its export charset; every other
+ * entry is written as the bytes the import read. No tree is walked and no query recurses.
  */
 import { Db } from "@bjornpagen/grizzle/runtime";
 import type { CursorError, Uuid } from "@bjornpagen/grizzle";
@@ -66,16 +66,17 @@ type EntriesError =
 /**
  * The entries an export of the package `packageId` writes, in listing order, without writing any.
  *
- * Each document of the package is scanned in pages of `size` rows, assembled, and written by
- * `unshred` in its export charset; a document that cannot be written in that charset fails here,
- * and nothing falls back to another. Every other entry is the record's bytes. Every document's
- * path is an entry's: the database holds it, as the law "Document entry" states
- * (`#pantry/qti/package.ts`, `Document` ⊆ `Entry` over package and path), and refused every write
- * that broke it, so the export trusts the rows it reads and checks it again nowhere.
+ * The record is read once, each entry with its document where it is one. Each document is scanned
+ * in pages of `size` rows, assembled, and written by `unshred` in its export charset; a document
+ * that cannot be written in that charset fails here, and nothing falls back to another. Every
+ * other entry is the record's bytes. Every document's path is an entry's: the database holds it,
+ * as the law "Document entry" states (`#pantry/qti/package.ts`, `Document` ⊆ `Entry` over package
+ * and path), and refused every write that broke it, so the export reads each document from the
+ * entry it is, and checks the law again nowhere.
  *
- * The documents, the record and each page are separate reads, each in a snapshot of its own. They
- * agree because a package is written once, in one transaction, and never changed: no relation of
- * the schema is mutable, and an immutable owner's family is fixed when it is inserted.
+ * The record and each page are separate reads, each in a snapshot of its own. They agree because
+ * a package is written once, in one transaction, and never changed: no relation of the schema is
+ * mutable, and an immutable owner's family is fixed when it is inserted.
  *
  * Fails with `PackageNotFound` when no imported package has the id, before any scan.
  *
@@ -97,23 +98,31 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
     return yield* new PackageNotFound({ packageId });
   }
 
-  const documents = yield* (yield* db.workload.documentsOf.execute({ package: packageId })).collect;
   const record = yield* (yield* db.workload.entriesOf.execute({ package: packageId })).collect;
-  const rendered = new Map<string, Uint8Array>();
-  for (const { node, path } of documents) {
-    const scan = yield* Stream.runFold(
-      scannedRows((request) => db.workload.documentScan.page({ document: node }, request), size),
-      emptyScan<Composed>,
-      addRow,
-    ).pipe(Effect.withSpan("export.scanDocument", { attributes: { document: node, path } }));
-    rendered.set(path, yield* scanXml(node, scan));
-  }
-
-  const entries: readonly ZipEntry[] = record.map(({ content, path }) => ({
-    bytes: rendered.get(path) ?? content,
-    path,
-  }));
-  yield* Effect.annotateCurrentSpan({ documents: documents.length, entries: entries.length });
+  const entries = yield* Effect.all(
+    record.map(({ content, document, path }): Effect.Effect<ZipEntry, EntriesError> =>
+      Option.match(document, {
+        onNone: () => Effect.succeed({ bytes: content, path }),
+        onSome: ({ node }) =>
+          Stream.runFold(
+            scannedRows(
+              (request) => db.workload.documentScan.page({ document: node }, request),
+              size,
+            ),
+            emptyScan<Composed>,
+            addRow,
+          ).pipe(
+            Effect.flatMap((scan) => scanXml(node, scan)),
+            Effect.map((bytes) => ({ bytes, path })),
+            Effect.withSpan("export.scanDocument", { attributes: { document: node, path } }),
+          ),
+      }),
+    ),
+  );
+  yield* Effect.annotateCurrentSpan({
+    documents: record.filter(({ document }) => Option.isSome(document)).length,
+    entries: entries.length,
+  });
 
   return entries;
 });

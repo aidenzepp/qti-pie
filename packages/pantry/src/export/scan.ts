@@ -1,8 +1,8 @@
 /**
  * The export's reads (fin.md §4.6, trees.md §3, plan N11; the W5 amendment's C20): one ordered
- * scan per document, and the documents and entries of a package. The author login's workload
- * (`#pantry/qti/logins.ts` `authorAppOf`) holds all three, so `grizzle generate` compiles each
- * into the login's served file and plans its indexes.
+ * scan per document, and a package's entries, each with its document where it is one. The author
+ * login's workload (`#pantry/qti/logins.ts` `authorAppOf`) holds both, so `grizzle generate`
+ * compiles each into the login's served file and plans its indexes.
  *
  * `documentScan` reads one document's `Node` rows by T1's key, `(document, start)`: filtered by
  * `document` and ordered by `start`, it is one index range in document order, with no sort and no
@@ -44,7 +44,7 @@ import type { QtiSchema } from "#pantry/qti/schema.ts";
  *
  * @param qti - The `Qti` schema, built for an install's policy or none
  *   (`#pantry/qti/schema.ts` `qtiSchema`).
- * @returns The scan of one document, the documents of a package and a package's record.
+ * @returns The scan of one document, and a package's record with each entry's document.
  */
 export const exportQueriesOf = (qti: QtiSchema) => {
   /**
@@ -257,30 +257,36 @@ export const exportQueriesOf = (qti: QtiSchema) => {
     .orderBy(["start", "asc"]);
 
   /**
-   * The documents of a package: each `Document` row's node, which is the document's id and the
-   * parameter of its {@link documentScan}, and its entry path.
-   */
-  const documentsOf = query(qti).rule((r) => {
-    const { node, path } = v(Document, "document");
-
-    return r
-      .match(Document, { node, package: r.param("package", uuid), path })
-      .find({ node, path });
-  });
-
-  /**
    * The record of a package: every entry's path and its bytes, in listing order, the `Entry`
-   * family's `at`.
+   * family's `at`, each with its document where the entry is one: the `Document` row at the
+   * entry's package and path, keyed there ("Document entry" holds every document to an entry),
+   * whose node is the document's id and the parameter of its {@link documentScan}.
+   *
+   * `package` is in the head, fixed by its parameter, so the attachment correlates to it, as
+   * {@link documentScan}'s `document` is.
    */
   const entriesOf = query(qti)
     .rule((r) => {
-      const { at, content, path } = v(Entry, "entry");
+      const { at, content, package: owner, path } = v(Entry, "entry");
 
       return r
-        .match(Entry, { at, content, package: r.param("package", uuid), path })
-        .find({ at, content, path });
+        .match(Entry, { at, content, package: owner, path })
+        .where(r.eq(owner, r.param("package", uuid)))
+        .find({ at, content, package: owner, path });
     })
+    .attach(
+      "document",
+      (entry) =>
+        query(qti).rule((r) => {
+          const { node } = v(Document, "entryDocument");
+
+          return r
+            .match(Document, { node, package: entry.package, path: entry.path })
+            .find({ node });
+        }),
+      "option",
+    )
     .orderBy(["at", "asc"]);
 
-  return { documentScan, documentsOf, entriesOf };
+  return { documentScan, entriesOf };
 };

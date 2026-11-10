@@ -27,7 +27,7 @@ import { Db } from "@bjornpagen/grizzle";
 import type { Plan, Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Context, Effect, FileSystem, Layer } from "effect";
+import { Context, Effect, FileSystem, Layer, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
@@ -308,11 +308,13 @@ describe.skipIf(!hasLease)(
               }
 
               for (const { id, name } of yield* Imported) {
-                const documents = yield* (yield* db.workload.documentsOf.execute({ package: id }))
-                  .collect;
+                const documents = (yield* (yield* db.workload.entriesOf.execute({ package: id }))
+                  .collect).flatMap(({ document, path: entry }) =>
+                  Option.toArray(document).map(({ node }) => ({ entry, node })),
+                );
 
                 assert.isAbove(documents.length, 0, name);
-                for (const { node, path: entry } of documents) {
+                for (const { entry, node } of documents) {
                   const plans = yield* explainMember(
                     (yield* AuthorLogin).roles.author,
                     "documentScan",
