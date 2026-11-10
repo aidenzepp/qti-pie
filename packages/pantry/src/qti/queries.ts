@@ -84,11 +84,14 @@ import {
 import { integerKeyPattern, itemPattern, MapKeyItems, MapKeyType } from "#pantry/qti/mapping.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
 import { ResourceDocument, ResourceHref, ResourceTyped } from "#pantry/qti/package.ts";
+import { Document } from "#pantry/qti/chardata.ts";
 import {
   AssembledName,
+  instanceRoots,
   InstanceName,
   ItemRefDocument,
   ItemRefHref,
+  SiteTarget,
   VariableMapping,
 } from "#pantry/qti/tests.ts";
 import { noLanguage } from "#pantry/vocab/terms/metadata.ts";
@@ -1219,6 +1222,43 @@ export const queriesOf = (base: QtiBase) => {
   const mappingQueryLaws = Object.values(mappingQueryLawsByName).flat();
 
   /**
+   * The documents that head an assembly, by the document's node (spec reading 117): each assembled
+   * document (`Document.assembled`, it has its `TestDocument`) that no include splices in place, no
+   * `SiteTarget` that splices naming it (`Inclusion.splices`: an include under one of
+   * `splicingParents` that may stand for its target's root). An included fragment is judged where
+   * it is included and not alone, and every other assembled document, a test, a section, an item, a
+   * stimulus, a response processing template or a fragment no include splices, is judged as its own
+   * merged document.
+   */
+  const HeadDocument = derived(
+    "HeadDocument",
+    query(base).rule((r) => {
+      const { node } = v(Document, "document");
+
+      return r
+        .match(Document, { assembled: true, node })
+        .where(r.not(SiteTarget, { splices: true, target: node }))
+        .find({ node });
+    }),
+  );
+
+  /**
+   * The tests overlays' rules over a query, each named by its oracle law:
+   *
+   * - **"E1 derived":** each assembly's root is a document that heads one ({@link HeadDocument});
+   * - **"Inclusion cycle"** (reading 85): each document that heads an assembly is the root of one.
+   */
+  const testQueryLawsByName = {
+    "E1 derived": [contained(on(instanceRoots, "document"), on(HeadDocument, "node"))],
+    "Inclusion cycle": [contained(on(HeadDocument, "node"), on(instanceRoots, "document"))],
+  } as const;
+
+  /**
+   * The tests overlays' rules over a query, in one list.
+   */
+  const testQueryLaws = Object.values(testQueryLawsByName).flat();
+
+  /**
    * Each property a `data-ssml` member requires, by the member's element, its place and the
    * property's name (Data-SSML 1.0 §3.4: `phoneme`'s `ph`, `say-as`'s `interpret-as`, `sub`'s
    * `alias`): one rule per required property, each a member of that name, beside the property's
@@ -1278,6 +1318,7 @@ export const queriesOf = (base: QtiBase) => {
     DescribedAssembledLang,
     DescribedLang,
     FoundName,
+    HeadDocument,
     HeldScope,
     HeldType,
     ItemRefTarget,
@@ -1309,6 +1350,7 @@ export const queriesOf = (base: QtiBase) => {
     expressionQueryLawsByName,
     mappingQueryLawsByName,
     dataSsmlQueryLawsByName,
+    testQueryLawsByName,
   ] as const;
 
   /**
@@ -1325,7 +1367,8 @@ export const queriesOf = (base: QtiBase) => {
     | (typeof metadataQueryLaws)[number]
     | (typeof expressionQueryLaws)[number]
     | (typeof mappingQueryLaws)[number]
-    | (typeof dataSsmlQueryLaws)[number];
+    | (typeof dataSsmlQueryLaws)[number]
+    | (typeof testQueryLaws)[number];
 
   /**
    * Every rule over a query, each domain's list spread in `lawsByName`'s order.
@@ -1337,6 +1380,7 @@ export const queriesOf = (base: QtiBase) => {
     ...expressionQueryLaws,
     ...mappingQueryLaws,
     ...dataSsmlQueryLaws,
+    ...testQueryLaws,
   ];
 
   return { laws, lawsByName, relations };

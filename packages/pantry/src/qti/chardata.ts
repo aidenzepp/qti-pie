@@ -372,11 +372,12 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  * - **its assembly** (spec readings 85 and 117): `assembled`, the host's, whether the document is in
  *   an assembly (it has a Q5.13 `TestDocument` row: a test or a section, or a document that holds a
  *   site or that a site names), so its IDREFs resolve per instance of its assemblies rather than in
- *   it alone (Q5.07); `spliced`, the count of the includes that splice it in place, 0 exactly where
- *   it heads an assembly of its own (Q5.13's `splicedFold`, spec reading 117); and the counts its
- *   instances copy, drawn: `bindings`, `choices` and `hottexts` (Q5.09's `BindingName`, `Choice`
- *   and `Hottext` rows), `ids` (Q5.07's `DocumentId` rows), `idrefTargets` (Q5.07's `IdrefTarget`
- *   rows), `langs` (Q5.07's `XmlLang` rows) and `variables` (Q5.10's `VariableRef` rows).
+ *   it alone (Q5.07), and it heads an assembly of its own exactly where no include splices it in
+ *   place (the query `HeadDocument` of `#pantry/qti/queries.ts`, spec reading 117); and the counts
+ *   its instances copy, drawn: `bindings`, `choices` and `hottexts` (Q5.09's `BindingName`,
+ *   `Choice` and `Hottext` rows), `ids` (Q5.07's `DocumentId` rows), `idrefTargets` (Q5.07's
+ *   `IdrefTarget` rows), `langs` (Q5.07's `XmlLang` rows) and `variables` (Q5.10's `VariableRef`
+ *   rows).
  * - **its document node's copies:** `nodeChildren` and `version`, the document node's own, so the row
  *   states the node's context. What every document node holds alike is no field: the containment's
  *   target is the document nodes, selected as their own `document`, governed by and of kind
@@ -406,7 +407,6 @@ export const Document = relation(
     package: uuid,
     path: EntryPath,
     rootKind: closedId(NodeKind),
-    spliced: accumulated(natural, 0n),
     targetedBy: drawn(natural),
     variables: drawn(natural),
     version: closedId(SchemaVersion),

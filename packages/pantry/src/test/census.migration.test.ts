@@ -21,8 +21,9 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  * move no count; after `Entry`'s generated `digest`, whose column and text domain move none; and
  * after the legacy sweep's derived item ref target, `ItemRefTarget` a query where it was a table,
  * so one table fewer, and its rules and the untargeted item refs' thirteen constraint triggers
- * more), as a ratchet: a change that moves one fails here until the count is measured again. A
- * regeneration updates them here, and only here.
+ * more; the heads of the assemblies a query, `HeadDocument`, where they were `Document.spliced`'s
+ * count, its mirror with the roots six triggers more), as a ratchet: a change that moves one fails
+ * here until the count is measured again. A regeneration updates them here, and only here.
  *
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
@@ -40,7 +41,7 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  */
 const measured = {
   constants: 119,
-  constraintTriggers: 109,
+  constraintTriggers: 115,
   live: 7,
   names: 48,
   nodeAxes: 5,

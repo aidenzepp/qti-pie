@@ -8,7 +8,11 @@
  * Its assembled documents are a test, a section, two items with includes, a fragment of content
  * and a fragment of response rules (spec readings 5 and 117). A fragment an item's include splices
  * heads no assembly of its own (`#pantry/qti/tests.ts` `splicingParents`), so its IDREFs resolve
- * among the item's IDs alone, and the heads are mirrored with the assemblies' roots both ways.
+ * among the item's IDs alone. The heads are mirrored with the assemblies' roots both ways, and
+ * every document of a test or a section is one some instance places, by rules over the queries
+ * `HeadDocument` and `InstanceDocument` (`#pantry/qti/queries.ts`), which the host does not judge:
+ * PostgreSQL alone does, the importer's every-relation package accepted and the unplaced cycles
+ * refused (`#pantry/import/inclusion-cycles.db.test.ts`).
  *
  * A law the host cannot judge reads a value it does not restore, and {@link unjudged} names each
  * such value with why. That list is exact: a value the host comes to hold fails the test until its
@@ -110,22 +114,9 @@ const containedAs =
     law.kind === "contained" && readsOne(law.from, ...from) && readsOne(law.to, ...to);
 
 /**
- * The roots' half of the heads' mirror: every instance's document is a document.
- */
-const instanceInDocument = containedAs(["Instance", "document"], ["Document", "node"]);
-
-/**
- * The laws the test must judge, each with its label: both halves of the heads' mirror with the
- * roots, the count that places every assembled document, and both halves of `ReferenceDocument`'s
- * mirror.
+ * The laws the test must judge, each with its label: both halves of `ReferenceDocument`'s mirror.
  */
 const required: readonly (readonly [string, (law: Law) => boolean])[] = [
-  [
-    "Document(node) in Instance(document)",
-    containedAs(["Document", "node"], ["Instance", "document"]),
-  ],
-  ["Instance(document) in Document(node)", instanceInDocument],
-  ["check Inclusion_cycle", (law) => law.kind === "check" && law.name === "Inclusion_cycle"],
   [
     "ReferenceDocument(document) in Document(node)",
     containedAs(["ReferenceDocument", "document"], ["Document", "node"]),
@@ -167,24 +158,11 @@ const namedIn = (paths: ReadonlyMap<string, string>, row: HostRow): HostRow =>
     ]),
   );
 
-/**
- * The rows with one more assembly's root: a writer that makes a document a head it is not.
- *
- * @param rows - The rows.
- * @param document - The planted head's document node.
- * @returns The rows, the root among them.
- */
-const withRoot = (rows: HostRows, document: string): HostRows => {
-  const root: HostRow = { assembly: document, document, id: document, parent: document, start: 0n };
-
-  return new Map([...rows, ["Instance", [...(rows.get("Instance") ?? []), root]]]);
-};
-
 layer(NodeServices.layer, { excludeTestServices: true })(
   "every law the host can judge over the every-relation package",
   (it) => {
     it.effect(
-      "holds every law the host can judge over the every-relation package's rows, names each one it cannot by its absent value, and refuses a fragment made a head",
+      "holds every law the host can judge over the every-relation package's rows, and names each one it cannot by its absent value",
       () =>
         // Oracle: the schema's own statements over the rows the import writes, each law as the
         // database states it, and the law oracle's verdict on the package.
@@ -236,33 +214,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               Object.keys(unjudged).filter((value) => !absent.has(value)),
               [],
               "an entry of the unjudged list the host now judges: remove it",
-            );
-
-            // The planted heads: every assembled document a head, as the import made them before
-            // reading 117's splice, gives the two fragments the items splice an assembly each, and
-            // the roots' mirror with the heads refuses exactly those.
-            const heads = (rows.get("TestDocument") ?? []).flatMap(({ node }) =>
-              Predicate.isString(node) ? [node] : [],
-            );
-            const rooted = new Set(
-              (rows.get("Instance") ?? []).flatMap(({ document, start }) =>
-                start === 0n && Predicate.isString(document) ? [document] : [],
-              ),
-            );
-            let planted: HostRows = rows;
-            for (const node of heads.filter((held) => !rooted.has(held))) {
-              planted = withRoot(planted, node);
-            }
-
-            const refused = judge(planted, laws).broken.find(({ law }) => instanceInDocument(law));
-            assert.deepStrictEqual(
-              (refused?.rows ?? [])
-                .map(
-                  ({ document }) => paths.get(Predicate.isString(document) ? document : "") ?? "",
-                )
-                .toSorted((left, right) => left.localeCompare(right)),
-              ["items/fragment.xml", "items/rules.xml"],
-              "the planted heads the roots' mirror refuses",
             );
           }),
         ),

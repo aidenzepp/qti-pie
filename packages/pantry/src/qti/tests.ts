@@ -901,8 +901,7 @@ const placingSites = select(SiteTarget, (s) => s.eq(s.places, true));
  * each of its instances holds (reading 85), one per site that places its target. An include that
  * may not stand for its target's root names it (`Document.targetedBy`, reading 117's context) but
  * places nothing, and "Include root" alone refuses it. A family's member is a whole relation, which
- * no selection narrows, so the count is a fold over {@link siteFamily}, as {@link splicedFold} is
- * over {@link siteTargetFamily}.
+ * no selection narrows, so the count is a fold over {@link siteFamily}.
  */
 export const sitesFold = fold(
   siteFamily,
@@ -927,27 +926,6 @@ export const contextFold = fold(
   Monoid.or,
   on(SiteTarget, "target", "ancestry"),
   on(Document, "node", "context"),
-);
-
-/**
- * The sites that splice their target in place: each include under one of {@link splicingParents}
- * that may stand for its target's root (`Inclusion.splices`).
- */
-const splicingSites = select(SiteTarget, (s) => s.eq(s.splices, true));
-
-/**
- * The includes that splice each document in place, counted into `Document.spliced`, 0 exactly where
- * the document heads an assembly (spec reading 117, {@link splicingParents}, {@link splicingSites}).
- * "No include splices it" is an anti-join, which no grizzle statement is: a statement is
- * conditioned on no row being absent, and there are no outer joins (grizzle's README, Limits; the
- * absence limit lane VD records). The count stands in for it as a fold over keyed `SiteTarget`
- * rows, each a site that exists, so 0 is a count of none and no sentinel.
- */
-export const splicedFold = fold(
-  siteTargetFamily,
-  Monoid.count,
-  on(splicingSites, "target"),
-  on(Document, "node", "spliced"),
 );
 
 /**
@@ -1020,15 +998,6 @@ const includes = select(Node, (n) =>
  * instance (spec reading 117).
  */
 const assembledDocuments = select(Document, (d) => d.eq(d.assembled, true));
-
-/**
- * The documents that head an assembly: each assembled document no include splices in place
- * ({@link splicedFold}), so an included fragment is judged where it is included and not alone
- * (spec reading 117), and every other assembled document, a test, a section, an item, a stimulus,
- * a response processing template or a fragment no include splices, is judged as its own merged
- * document.
- */
-const headDocuments = select(Document, (d) => d.and(d.eq(d.assembled, true), d.eq(d.spliced, 0n)));
 
 /**
  * The instances of an item's assembly, each of which places its document's bindings (Q5.09's
@@ -1259,9 +1228,10 @@ const sectionDocuments = select(TestDocument, (d) => d.eq(d.rootKind, sectionKin
 const instanceMembers = select(Instance, (i) => i.gt(i.start, 0n));
 
 /**
- * The roots of the assemblies, one per document of a test or a section.
+ * The roots of the assemblies, one per document that heads one (the query `HeadDocument`,
+ * `#pantry/qti/queries.ts`, whose rules hold the two to each other).
  */
-const instanceRoots = select(Instance, (i) => i.eq(i.start, 0n));
+export const instanceRoots = select(Instance, (i) => i.eq(i.start, 0n));
 
 /**
  * The instances of a test's assembly, whose names and branch rules resolve.
@@ -1531,9 +1501,10 @@ const flagCopies = flagCarriers.map(flagCopy);
  *   sites) ⊆ Instance(document, rootKind, children)`, has no key of `Instance` in its target's
  *   projection, which grizzle refuses, so the count states it.
  *
- * The heads are {@link splicingParents}'s, through `Inclusion.splices`, by `Document.spliced`,
- * mirrored with the roots both ways. Its `E1_derived` pins the root's fields and derives a member's
- * scope.
+ * The heads are {@link splicingParents}'s, through `Inclusion.splices`: the query `HeadDocument`
+ * (`#pantry/qti/queries.ts`), each assembled document no include splices in place, mirrored with
+ * the roots both ways by its rules there. Its `E1_derived` pins the root's fields and derives a
+ * member's scope.
  *
  * The statements of reading 86's law, "Test name key": each instance of a test's assembly holds
  * one name per name of its document, their projection holds each written element once, so a
@@ -1837,7 +1808,6 @@ export const testLawsByName = {
     ),
     siteTargetFamily,
     contextFold,
-    splicedFold,
     check("E1_derived", Inclusion, (i) =>
       i.and(
         i.eq(IncludeParentKind.at("kind", i.includeParent), i.parentKind),
@@ -1889,7 +1859,6 @@ export const testLawsByName = {
         b.in(b.parentKind, [itemRefKind, sectionKind, partKind]),
       ),
     ),
-    contained(on(instanceRoots, "document"), on(headDocuments, "node")),
     contained(on(TestDocument, "node"), on(assembledDocuments, "node")),
     contained(
       on(Instance, "document", "ids", "idrefTargets", "choices", "hottexts"),
@@ -2022,7 +1991,6 @@ export const testLawsByName = {
       on(TestDocument, "node", "rootKind", "sites"),
     ),
     key(on(instanceRoots, "document")),
-    contained(on(headDocuments, "node"), on(instanceRoots, "document")),
     documentInstanceFamily,
     check("Inclusion_cycle", TestDocument, (d) => d.gt(d.instances, 0n)),
   ],

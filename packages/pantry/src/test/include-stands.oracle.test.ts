@@ -4,7 +4,8 @@
  * `IncludeRoot` does not give its parent splices nothing, "Include root" refuses it, and the
  * document it names heads an assembly of its own. The law oracle judges so (`standsFor` in
  * `#pantry/test/oracle.ts`), and the schema states it as `Inclusion.splices`, which
- * `SiteTarget.splices` copies and `Document.spliced` counts (`#pantry/qti/tests.ts`).
+ * `SiteTarget.splices` copies (`#pantry/qti/tests.ts`), and which the query `HeadDocument` negates
+ * (`#pantry/qti/queries.ts`).
  *
  * The box is an item whose response processing includes a rule fragment, and whose body or
  * processing includes one more document: none, the item itself, a paragraph or a rule, each of the
