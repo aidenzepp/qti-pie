@@ -1675,6 +1675,168 @@ describe("emitBody, the catalog attachment hook", () => {
 });
 
 /**
+ * Build the payload of a body element that names a stimulus through `data-stimulus-idref`, the
+ * attribute kept among its attributes as the model keeps it.
+ *
+ * @param tag The element's local name.
+ * @param idref The stimulus it names, its `data-stimulus-idref`.
+ * @param attributes Its further attributes as the model kept them.
+ * @param children Its child payload nodes.
+ * @returns The element payload, carrying the idref as its `stimulus`.
+ */
+const hosting = (
+  tag: string,
+  idref: string,
+  attributes: Readonly<Record<string, string>> = {},
+  children: readonly PayloadNode[] = [],
+): ElementPayload => ({
+  ...el(tag, { ...attributes, "data-stimulus-idref": idref }, children),
+  stimulus: idref,
+});
+
+/**
+ * A render function whose dock hook answers each stimulus in `answered` with one paragraph naming
+ * it and pointing at the hosting element's id, and none for any other stimulus, recording every
+ * reference it is handed.
+ *
+ * @param handed The references the hook is handed, in order, filled as the body is emitted.
+ * @param answered The stimuli the hook answers with nodes.
+ * @returns The render function: {@link stub} for every interaction, with the hook.
+ */
+const docking = (
+  handed: ReferencingElement[],
+  answered: ReadonlySet<string> = new Set(["S1"]),
+): RenderInteraction =>
+  Object.assign((interaction: InteractionPayload) => stub(interaction), {
+    dock: (reference: ReferencingElement) => {
+      handed.push(reference);
+
+      return Result.succeed(
+        answered.has(reference.idref)
+          ? Option.some([h("p", { "data-docked-in": reference.id }, [text(reference.idref)])])
+          : Option.none(),
+      );
+    },
+  });
+
+describe("emitBody, the stimulus dock hook", () => {
+  it.effect(
+    "[W0-AR] replaces the content of the element that names the stimulus with the hook's nodes, and hands it the element's scoped id",
+    () =>
+      Effect.gen(function* docksIntoElement() {
+        const handed: ReferencingElement[] = [];
+        const state = yield* stateAt(2);
+        const nodes = yield* Effect.fromResult(
+          emitBody(
+            payloadOf([
+              hosting("div", "S1", { id: "passage" }, [el("p", {}, [txt("Loading.")])]),
+              el("p", {}, [txt("After.")]),
+            ]),
+            state,
+            docking(handed),
+          ),
+        );
+
+        assert.deepStrictEqual(nodes, [
+          h("div", { "data-stimulus-idref": "S1", id: "i1--passage" }, [
+            h("p", { "data-docked-in": "i1--passage" }, [text("S1")]),
+          ]),
+          h("p", {}, [text("After.")]),
+        ]);
+        assert.deepStrictEqual(handed, [{ id: "i1--passage", idref: "S1" }]);
+      }),
+  );
+
+  it.effect(
+    "[W0-AR] mints a scoped id for a hosting element without one and writes it only when the hook answers nodes",
+    () =>
+      Effect.gen(function* mintsDockIds() {
+        const handed: ReferencingElement[] = [];
+        const state = yield* stateAt(2);
+        const nodes = yield* Effect.fromResult(
+          emitBody(
+            payloadOf([
+              hosting("div", "S1", {}, [txt("first")]),
+              hosting("div", "S1", {}, [txt("second")]),
+              hosting("div", "S2", {}, [txt("third")]),
+            ]),
+            state,
+            docking(handed),
+          ),
+        );
+
+        assert.deepStrictEqual(nodes, [
+          h("div", { "data-stimulus-idref": "S1", id: "i1-stimulus-S1-0" }, [
+            h("p", { "data-docked-in": "i1-stimulus-S1-0" }, [text("S1")]),
+          ]),
+          h("div", { "data-stimulus-idref": "S1", id: "i1-stimulus-S1-1" }, [
+            h("p", { "data-docked-in": "i1-stimulus-S1-1" }, [text("S1")]),
+          ]),
+          h("div", { "data-stimulus-idref": "S2" }, [text("third")]),
+        ]);
+        assert.deepStrictEqual(
+          handed.map(({ id }) => id),
+          ["i1-stimulus-S1-0", "i1-stimulus-S1-1", "i1-stimulus-S2-0"],
+        );
+      }),
+  );
+
+  it.effect(
+    "[W0-AR] a none answer, or a render function without the hook, emits the element with the stimulus key exactly as the same element without it: its own children, no minted id",
+    () =>
+      Effect.gen(function* docksNothing() {
+        const handed: ReferencingElement[] = [];
+        const state = yield* stateAt(2);
+        const body = [
+          hosting("div", "S2", { id: "passage" }, [el("p", {}, [txt("Loading.")])]),
+          hosting("div", "S2", {}, [txt("second")]),
+        ];
+        const plain = [
+          el("div", { "data-stimulus-idref": "S2", id: "passage" }, [
+            el("p", {}, [txt("Loading.")]),
+          ]),
+          el("div", { "data-stimulus-idref": "S2" }, [txt("second")]),
+        ];
+        const answered = yield* Effect.fromResult(
+          emitBody(payloadOf(body), state, docking(handed, new Set())),
+        );
+        const unhooked = yield* Effect.fromResult(emitBody(payloadOf(body), state, stub));
+        const control = yield* Effect.fromResult(emitBody(payloadOf(plain), state, stub));
+
+        assert.deepStrictEqual(answered, control);
+        assert.deepStrictEqual(unhooked, control);
+        assert.deepStrictEqual(handed, [
+          { id: "i1--passage", idref: "S2" },
+          { id: "i1-stimulus-S2-0", idref: "S2" },
+        ]);
+      }),
+  );
+
+  it.effect("[W0-AR] the dock hook's refusal of a part swap is the emit's refusal", () =>
+    Effect.gen(function* refusesThroughDock() {
+      const state = yield* stateAt(2);
+      const refusal = new PartSwapRefused({
+        cause: "root-not-allowed",
+        detail: "the passage's root is a <div>",
+        interaction: "stimulus",
+        part: "passage",
+      });
+      const refusing: RenderInteraction = Object.assign(
+        (interaction: InteractionPayload) => stub(interaction),
+        { dock: () => Result.fail(refusal) },
+      );
+      const emitted = emitBody(
+        payloadOf([hosting("div", "S1", { id: "passage" }, [txt("Loading.")])]),
+        state,
+        refusing,
+      );
+
+      assert.deepStrictEqual(emitted, Result.fail(refusal));
+    }),
+  );
+});
+
+/**
  * The container render a module would give: a `section` naming the module around the children's
  * output.
  */

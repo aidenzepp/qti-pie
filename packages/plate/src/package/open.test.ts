@@ -2143,8 +2143,26 @@ const hostileNamingSpans = 20_000;
  * The most the hostile-size case's package may take, as a multiple of the thread CPU of the same
  * package with one resource naming its item: a walk of the item for every resource took over 5
  * times as long, and one walk leaves only each resource's own share.
+ *
+ * The bound reads that defect, not the runner: 3 sits under the 5 times and leaves one and a half
+ * times the margin of 2 for the noise of a shared virtual machine, which put the fastest of the
+ * 2,000 resources 0.6 % over 2 times the fastest of one in GitHub issue #375.
  */
-const namingCpuLimit = 2;
+const namingCpuLimit = 3;
+
+/**
+ * The most the thread CPU of a refused opening may be, as a multiple of the thread CPU of the
+ * same package opened within the assembly limit. A refusal that walked every placement before
+ * refusing would cost about as many times the opening as the package places each document (16, 64
+ * or 128 times in the rows of finding 11, F17-A and F17-B), and finding 10's bytes refusal must
+ * cost no more than opening the same placements once.
+ *
+ * The bound reads those defects, not the runner: 1.5 stays an order of magnitude under the
+ * smallest of those walks' multiples, 16, and leaves nearly twice the widest miss of a bound of 1
+ * that GitHub issue #375 records on a shared virtual machine, 17.3 %, for the tail that sample did
+ * not reach.
+ */
+const refusalCpuLimit = 1.5;
 
 /**
  * The growth check opens packages of up to 16,000 resources naming an item of 32,000 spans, three
@@ -3313,6 +3331,46 @@ const refusedFast = (files: ReadonlyMap<string, Uint8Array>, refused: Seen, limi
     }
 
     assert.isBelow(fastest, limitMs, `the refusal took ${fastest.toFixed(0)} ms of thread CPU`);
+  });
+
+/**
+ * Open a package past the assembly limit and check that it is refused `assembly-limit` alone, but
+ * for the documents' own refusals, and that refusing costs less than {@link refusalCpuLimit}
+ * times opening the same package within the limit. The two openings are timed in turn for
+ * {@link growthRuns} runs, so a busy spell slows both, and the fastest of each is compared; the
+ * baseline's opening also checks on every run that the package is within the limit.
+ *
+ * @param files The package's files, past the limit.
+ * @param refused The facts the `assembly-limit` refusal carries.
+ * @param baseline The same package within the limit, whose opening is the bound.
+ * @returns Nothing; the test fails when the package is refused otherwise, or slowly.
+ */
+const refusedAgainstBaseline = (
+  files: ReadonlyMap<string, Uint8Array>,
+  refused: Seen,
+  baseline: ReadonlyMap<string, Uint8Array>,
+) =>
+  Effect.gen(function* limitRefusedAgainstBaseline() {
+    const verdict = yield* openPackage(location, files);
+    assert.deepStrictEqual(refusalsOf(verdict), [refused, ...documentRefusals(verdict)]);
+
+    let baselineMs = Number.POSITIVE_INFINITY;
+    let refusedMs = Number.POSITIVE_INFINITY;
+    for (let run = 0; run < growthRuns; run += 1) {
+      baselineMs = Math.min(baselineMs, yield* cpuMillis(opening(baseline)));
+      refusedMs = Math.min(
+        refusedMs,
+        yield* cpuMillis(() => {
+          Effect.runSync(openPackage(location, files));
+        }),
+      );
+    }
+
+    assert.isBelow(
+      refusedMs,
+      refusalCpuLimit * baselineMs,
+      `the refusal took ${(refusedMs / baselineMs).toFixed(1)} times the CPU of the package within the limit`,
+    );
   });
 
 /**
@@ -5705,6 +5763,49 @@ describe("package/open.ts", () => {
         }),
     );
 
+    it.effect("[W0-AR] a package's stimulus carries its body", () =>
+      Effect.gen(function* stimulusBodyCarried() {
+        const verdict = yield* openPackage(
+          location,
+          packageOf({
+            "items/q.xml": itemXml("q"),
+            [manifestFile]: manifestXml(
+              resourceXml("Q", "imsqti_item_xmlv3p0", "items/q.xml"),
+              resourceXml("S", "imsqti_stimulus_xmlv3p0", "stimuli/harbour.xml"),
+            ),
+            "stimuli/harbour.xml": `<qti-assessment-stimulus xmlns="${qti}" identifier="harbour" title="The harbour" xml:lang="fr"><qti-stimulus-body><p>Le port <em>dort</em>.</p><p>La nuit tombe.</p></qti-stimulus-body></qti-assessment-stimulus>`,
+          }),
+        );
+        const stimulusLocation = fileLocation(location, "stimuli/harbour.xml");
+        const stimulus = acceptedOf(verdict).stimuli.get(stimulusLocation);
+
+        assert.isDefined(stimulus);
+        assert.strictEqual(stimulus?.document, stimulusLocation);
+        assert.deepStrictEqual(stimulus?.lang, Option.some("fr"));
+        assert.deepStrictEqual(
+          stimulus?.body.map((node) => (node.kind === "element" ? node.tag : node.kind)),
+          ["p", "p"],
+        );
+        assert.deepStrictEqual(stimulus?.body[0], {
+          attributes: [],
+          children: [
+            { kind: "text", text: "Le port " },
+            {
+              attributes: [],
+              children: [{ kind: "text", text: "dort" }],
+              kind: "element",
+              path: "qti-assessment-stimulus/qti-stimulus-body/p[1]/em",
+              tag: "em",
+            },
+            { kind: "text", text: "." },
+          ],
+          kind: "element",
+          path: "qti-assessment-stimulus/qti-stimulus-body/p[1]",
+          tag: "p",
+        });
+      }),
+    );
+
     it.effect(
       "files leaves out the document of every QTI resource type, outcome declarations, response processing, a response-processing template and a fragment among them, and keeps a file such a resource lists besides its document",
       () =>
@@ -6772,7 +6873,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r11 LOM languages once finding 13c: 2,000 resources naming an item of 20,000 spans open in under twice the thread CPU of one resource naming it, whether no resource gives a LOM record or each gives a title the item matches",
+      "align-54 r11 LOM languages once finding 13c: 2,000 resources naming an item of 20,000 spans open in under three times the thread CPU of one resource naming it, whether no resource gives a LOM record or each gives a title the item matches",
       () =>
         Effect.gen(function* namingHostile() {
           const metadata = [
@@ -7036,22 +7137,17 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r12 assembly limit finding 10: 640 parts, each placing one section document whose item ref holds 640 dotted pre-conditions, are refused assembly-limit naming the bytes bound, in under the thread CPU of the same 640 section refs in one part, which opens within the limit with no refusal",
+      "align-54 r12 assembly limit finding 10: 640 parts, each placing one section document whose item ref holds 640 dotted pre-conditions, are refused assembly-limit naming the bytes bound, in under 1.5 times the thread CPU of the same 640 section refs in one part, which opens within the limit with no refusal",
       () =>
         Effect.gen(function* placingRefused() {
           const one = placingPackage(hostilePlacingParts, "one part");
           const many = placingPackage(hostilePlacingParts, "a part each");
           assert.deepStrictEqual(refusalsOf(yield* openPackage(location, one)), []);
 
-          let oneMs = Number.POSITIVE_INFINITY;
-          for (let run = 0; run < growthRuns; run += 1) {
-            oneMs = Math.min(oneMs, yield* cpuMillis(opening(one)));
-          }
-
-          yield* refusedFast(
+          yield* refusedAgainstBaseline(
             many,
             limitRefused("bytes", bytesReached(many.get("sections/s2.xml")?.byteLength ?? 0)),
-            oneMs,
+            one,
           );
         }),
       growthTimeoutMs,
@@ -7278,20 +7374,16 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r12 assembly limit finding 11: 1,000 branch rules, each to the target its own section document writes, each document placed 16 times by 8 parts, are refused assembly-limit naming the placements bound, in under the thread CPU of the same package placed by one part, which opens within the limit, with the rules in the test and in a section document below every target's writer",
+      "align-54 r12 assembly limit finding 11: 1,000 branch rules, each to the target its own section document writes, each document placed 16 times by 8 parts, are refused assembly-limit naming the placements bound, in under 1.5 times the thread CPU of the same package placed by one part, which opens within the limit, with the rules in the test and in a section document below every target's writer",
       () =>
         Effect.gen(function* distinctTargetsRefused() {
           for (const rulesIn of ["the test", "a section document"] as const) {
             const one = targetsPackage(hostileTargetDocuments, "each its own", rulesIn, 1);
-            let oneMs = Number.POSITIVE_INFINITY;
-            for (let run = 0; run < growthRuns; run += 1) {
-              oneMs = Math.min(oneMs, yield* cpuMillis(opening(one)));
-            }
 
-            yield* refusedFast(
+            yield* refusedAgainstBaseline(
               targetsPackage(hostileTargetDocuments, "each its own", rulesIn),
               limitRefused("placements", "2049"),
-              oneMs,
+              one,
             );
           }
         }),
@@ -7359,19 +7451,15 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r12 assembly limit F17-A: 2,000 section documents a hub places under each of 64 parts, each read through by the test's outcome processing, are refused assembly-limit naming the placements bound, in under the thread CPU of the same package with one part, which opens within the limit",
+      "align-54 r12 assembly limit F17-A: 2,000 section documents a hub places under each of 64 parts, each read through by the test's outcome processing, are refused assembly-limit naming the placements bound, in under 1.5 times the thread CPU of the same package with one part, which opens within the limit",
       () =>
         Effect.gen(function* hubRefused() {
           const one = hubPackage(hostileHubDocuments, "each document's item", 1);
-          let oneMs = Number.POSITIVE_INFINITY;
-          for (let run = 0; run < growthRuns; run += 1) {
-            oneMs = Math.min(oneMs, yield* cpuMillis(opening(one)));
-          }
 
-          yield* refusedFast(
+          yield* refusedAgainstBaseline(
             hubPackage(hostileHubDocuments, "each document's item"),
             limitRefused("placements", "2049"),
-            oneMs,
+            one,
           );
         }),
       growthTimeoutMs,
@@ -7428,7 +7516,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r12 assembly limit F17-B: 2,000 branch rules, each to its own target, below a chain of 70 section documents from two placements of their targets' writer, beside 1,000 section documents a hub places under each of 128 parts, are refused assembly-limit naming the placements bound, in under the thread CPU of the same package with the hub under one part, which opens within the limit",
+      "align-54 r12 assembly limit F17-B: 2,000 branch rules, each to its own target, below a chain of 70 section documents from two placements of their targets' writer, beside 1,000 section documents a hub places under each of 128 parts, are refused assembly-limit naming the placements bound, in under 1.5 times the thread CPU of the same package with the hub under one part, which opens within the limit",
       () =>
         Effect.gen(function* layeredRefused() {
           const one = layeredPackage(
@@ -7437,12 +7525,8 @@ describe("package/open.ts", () => {
             1,
             hostileLayeredDocuments,
           );
-          let oneMs = Number.POSITIVE_INFINITY;
-          for (let run = 0; run < growthRuns; run += 1) {
-            oneMs = Math.min(oneMs, yield* cpuMillis(opening(one)));
-          }
 
-          yield* refusedFast(
+          yield* refusedAgainstBaseline(
             layeredPackage(
               hostileLayeredTargets,
               "each its own",
@@ -7450,7 +7534,7 @@ describe("package/open.ts", () => {
               hostileLayeredDocuments,
             ),
             limitRefused("placements", "2049"),
-            oneMs,
+            one,
           );
         }),
       growthTimeoutMs,
