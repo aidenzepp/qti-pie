@@ -380,6 +380,19 @@ describe("an interaction module not implemented", () => {
 });
 
 /**
+ * The kind the landed fake stands in for: one whose module is still a stub, the last to land, so a
+ * real module that lands never meets it. The fake keeps the shape of a Gap Match (gap texts, gaps)
+ * whatever the kind, and everything that names the kind reads it from here, so a real module of
+ * this kind lands by changing this one line.
+ */
+const landedKind = "select-point" as const;
+
+/**
+ * The module file the fake takes the place of, and the name that file exports its module by.
+ */
+const landedFile = `#plate/interactions/${landedKind}.ts`;
+
+/**
  * One gap text of {@link landedGapMatch}'s model node: a `qti-gap-text`, content it holds beyond
  * its Prompt, read through the kit's body walk.
  */
@@ -394,7 +407,7 @@ interface LandedGapText {
  * identifier of each `qti-gap` in it, `max-associations`, and the base type of the declaration it
  * binds.
  */
-interface LandedModel extends ModuleInteraction<"gap-match"> {
+interface LandedModel extends ModuleInteraction<typeof landedKind> {
   readonly baseType: Option.Option<BaseType>;
   readonly class: string;
   readonly gapTexts: readonly LandedGapText[];
@@ -429,7 +442,7 @@ interface LandedPayload {
 /**
  * The owner of every part of {@link landedGapMatch}.
  */
-const landedOwner = "gap-match-interaction" as const;
+const landedOwner = `${landedKind}-interaction` as const;
 
 /**
  * The parts of {@link landedGapMatch} that `partRow` places: a Root, and a part whose key is in
@@ -455,7 +468,7 @@ const landedParts = {
 
 /**
  * Every part of {@link landedGapMatch}: {@link landedParts} and a Gap, a part no shipped kind has,
- * which a host overrides by `parts["gap-match-interaction"].gap`, and which the module's render
+ * which a host overrides by `parts[landedOwner].gap`, and which the module's render
  * places for each `qti-gap` of its gapped content.
  */
 const landedAllParts = {
@@ -509,11 +522,7 @@ const landedGap: OwnedElements = (element) =>
   element.tag === "qti-gap"
     ? Option.some(
         Result.succeed([
-          h(
-            "span",
-            { "data-gap": gapIdentifier(element), "data-slot": "gap-match-interaction-gap" },
-            [],
-          ),
+          h("span", { "data-gap": gapIdentifier(element), "data-slot": `${landedOwner}-gap` }, []),
         ]),
       )
     : Option.none();
@@ -527,7 +536,7 @@ const landedGap: OwnedElements = (element) =>
  * ({@link landedTable}) and run it in place of the stub through `vi.doMock`.
  */
 const landedGapMatch: InteractionModule<
-  "gap-match",
+  typeof landedKind,
   LandedModel,
   LandedPayload,
   "gap" | "itemButton" | "root",
@@ -537,10 +546,10 @@ const landedGapMatch: InteractionModule<
   connect: () => ({}),
   content: (interaction) => interaction.content,
   controls: () => 1,
-  element: "qti-gap-match-interaction",
-  feature: "Q-6",
+  element: `qti-${landedKind}-interaction`,
+  feature: features[landedKind],
   implemented: true,
-  kind: "gap-match",
+  kind: landedKind,
   nullValue: () => ({ baseType: "identifier", cardinality: "single", values: [] }),
   owner: landedOwner,
   parse: (element, { read }) =>
@@ -580,7 +589,7 @@ const landedGapMatch: InteractionModule<
         gapTexts,
         gapped,
         gaps: gapsIn(gapped),
-        kind: "gap-match",
+        kind: landedKind,
         maxAssociations: Option.getOrElse(maxAssociations, () => 1n),
         path: read.pathOf(element),
         prompt,
@@ -597,7 +606,7 @@ const landedGapMatch: InteractionModule<
       gapTexts: Schema.Array(Schema.Struct({ content: BodyNodes, identifier: Schema.String })),
       gapped: BodyNodes,
       gaps: Schema.Array(Schema.String),
-      kind: Schema.Literal("gap-match"),
+      kind: Schema.Literal(landedKind),
       maxAssociations: Count,
       path: NoPath,
       prompt: Schema.OptionFromOptionalKey(BodyNodes),
@@ -702,11 +711,11 @@ const landedGapMatch: InteractionModule<
 };
 
 /**
- * The table of modules with {@link landedGapMatch} in place of the Gap Match stub: what the hubs
+ * The table of modules with {@link landedGapMatch} in place of the stub of its kind: what the hubs
  * read, so `tsc` types the landed module against them here, with no hub edited and no `vi.doMock`
  * hiding it.
  */
-const landedTable = { ...moduleTable, "gap-match": landedGapMatch } satisfies ModuleTable;
+const landedTable = { ...moduleTable, [landedKind]: landedGapMatch } satisfies ModuleTable;
 
 /**
  * The module table as {@link landedGapMatch} changes it.
@@ -730,12 +739,12 @@ type Equals<A, B> =
  * model is the module's own, every field included. `tsc` refuses this line when a hub type stops
  * deriving from the table.
  */
-const modelDerived: Equals<ModelOfIn<LandedTable, "gap-match">, LandedModel> = true;
+const modelDerived: Equals<ModelOfIn<LandedTable, typeof landedKind>, LandedModel> = true;
 
 /**
  * The hubs read a module's payload node from the table the same way.
  */
-const payloadDerived: Equals<PayloadOfIn<LandedTable, "gap-match">, LandedPayload> = true;
+const payloadDerived: Equals<PayloadOfIn<LandedTable, typeof landedKind>, LandedPayload> = true;
 
 /**
  * The item model's union of module nodes derives from the table too: the model node of a kind is
@@ -743,8 +752,8 @@ const payloadDerived: Equals<PayloadOfIn<LandedTable, "gap-match">, LandedPayloa
  * disagree with. `tsc` refuses this line when the item model names a kind's node on its own.
  */
 const itemDerived: Equals<
-  Extract<Interaction, { readonly kind: "gap-match" }>,
-  ModelOf<"gap-match">
+  Extract<Interaction, { readonly kind: typeof landedKind }>,
+  ModelOf<typeof landedKind>
 > = true;
 
 /**
@@ -755,8 +764,8 @@ const itemDerived: Equals<
 const landedSteps: SteppedIn<LandedTable> = landedTable;
 
 /**
- * Run an effect with {@link landedGapMatch} registered in place of the Gap Match stub, every module
- * it imports loaded afresh, and the stub restored after.
+ * Run an effect with {@link landedGapMatch} registered in place of the stub of its kind, every
+ * module it imports loaded afresh, and the stub restored after.
  *
  * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
  * @returns The effect, wrapped.
@@ -764,12 +773,12 @@ const landedSteps: SteppedIn<LandedTable> = landedTable;
 const withLanded = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
   Effect.sync(() => {
     vi.resetModules();
-    vi.doMock("#plate/interactions/gap-match.ts", () => ({ gapMatchModule: landedGapMatch }));
+    vi.doMock(landedFile, () => ({ selectPointModule: landedGapMatch }));
   }).pipe(
     Effect.andThen(effect),
     Effect.ensuring(
       Effect.sync(() => {
-        vi.doUnmock("#plate/interactions/gap-match.ts");
+        vi.doUnmock(landedFile);
         vi.resetModules();
       }),
     ),
@@ -786,7 +795,7 @@ const landedJson = {
       gapTexts: [{ content: [{ kind: "text", text: "cat" }], identifier: "G1" }],
       gapped: [],
       gaps: [],
-      kind: "gap-match",
+      kind: landedKind,
       maxAssociations: "1",
       response: "RESPONSE",
     },
@@ -829,7 +838,7 @@ const landedDocument = doc(
         [],
         [
           el(
-            "qti-gap-match-interaction",
+            `qti-${landedKind}-interaction`,
             [
               attr("max-associations", "2"),
               attr("response-identifier", "RESPONSE"),
@@ -882,7 +891,7 @@ const textNode = (value: string): BodyNode => ({ kind: "text", text: value });
  * @returns Whether it is a Gap Match with the landed module's gap texts.
  */
 const isLandedModel = (node: BodyNode): node is LandedModel =>
-  node.kind === "gap-match" && "gapTexts" in node;
+  node.kind === landedKind && "gapTexts" in node;
 
 /**
  * Tell whether a value is the landed Gap Match's payload node at its kind, by the field no stub's
@@ -893,9 +902,9 @@ const isLandedModel = (node: BodyNode): node is LandedModel =>
  */
 const isLandedPayloadNode = (
   value: unknown,
-): value is { readonly kind: "gap-match"; readonly payload: LandedPayload } =>
+): value is { readonly kind: typeof landedKind; readonly payload: LandedPayload } =>
   Predicate.isObject(value) &&
-  value["kind"] === "gap-match" &&
+  value["kind"] === landedKind &&
   Predicate.isObject(value["payload"]) &&
   Predicate.isString(value["payload"]["formName"]);
 
@@ -934,7 +943,7 @@ describe("a module that lands", () => {
     assert.isTrue(modelDerived);
     assert.isTrue(payloadDerived);
     assert.isTrue(itemDerived);
-    assert.strictEqual(landedSteps["gap-match"], landedGapMatch);
+    assert.strictEqual(landedSteps[landedKind], landedGapMatch);
   });
 
   it.effect(
@@ -945,7 +954,7 @@ describe("a module that lands", () => {
           const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
           const built = yield* Effect.fromResult(model.buildItem(landedDocument));
           const [node] = built.body;
-          const path = "qti-assessment-item/qti-item-body/qti-gap-match-interaction";
+          const path = `qti-assessment-item/qti-item-body/qti-${landedKind}-interaction`;
 
           assert.isDefined(node);
           if (node === undefined || !isLandedModel(node)) {
@@ -1022,7 +1031,7 @@ describe("a module that lands", () => {
           const [node] = redactedItem.body;
 
           assert.isDefined(node);
-          if (node?.kind !== "gap-match") {
+          if (node?.kind !== landedKind) {
             assert.fail(`the body holds a ${node?.kind ?? "nothing"}, not the landed Gap Match`);
           }
 
@@ -1033,7 +1042,10 @@ describe("a module that lands", () => {
           assert.include(html, "It was ");
           assert.match(
             html,
-            /<span [^>]*data-gap="G1"[^>]*data-slot="gap-match-interaction-gap"[^>]*><\/span>/u,
+            new RegExp(
+              `<span [^>]*data-gap="G1"[^>]*data-slot="${landedOwner}-gap"[^>]*></span>`,
+              "u",
+            ),
           );
           assert.include(html, 'data-gap="G2"');
           assert.notInclude(html, "<qti-gap");
@@ -1151,7 +1163,7 @@ describe("a module that lands", () => {
           );
 
           assert.include(html, "Fill the gaps: ");
-          assert.match(html, /<div [^>]*data-slot="gap-match-interaction"[^>]*>/u);
+          assert.match(html, new RegExp(`<div [^>]*data-slot="${landedOwner}"[^>]*>`, "u"));
           assert.include(html, 'data-response="RESPONSE"');
           assert.include(html, 'class="gaps"');
         }),
@@ -1167,13 +1179,13 @@ describe("a module that lands", () => {
 
           const parts = yield* Effect.promise(() => import("#plate/emit/parts.ts"));
           const resolved = yield* Effect.fromResult(
-            parts.resolveOverrides({ "gap-match-interaction": { gap: replacement } }),
+            parts.resolveOverrides({ [landedOwner]: { gap: replacement } }),
           );
-          const named = parts.partForSlot("gap-match-interaction-gap");
+          const named = parts.partForSlot(`${landedOwner}-gap`);
 
           assert.deepStrictEqual<unknown>(
             named,
-            Option.some({ interaction: "gap-match-interaction", part: "gap" }),
+            Option.some({ interaction: landedOwner, part: "gap" }),
           );
           assert.strictEqual(
             Option.getOrUndefined(
@@ -1188,12 +1200,12 @@ describe("a module that lands", () => {
           );
           assert.deepStrictEqual(
             Result.map(
-              parts.resolveOverrides({ "gap-match-interaction": { gaps: replacement } }),
+              parts.resolveOverrides({ [landedOwner]: { gaps: replacement } }),
               () => "resolved",
             ),
             Result.fail(
               new parts.UnknownPart({
-                interaction: "gap-match-interaction",
+                interaction: landedOwner,
                 part: Option.some("gaps"),
               }),
             ),
@@ -1217,9 +1229,9 @@ describe("a module that lands", () => {
           ],
           gapped: [textNode("gapped")],
           gaps: [],
-          kind: "gap-match",
+          kind: landedKind,
           maxAssociations: 1n,
-          path: "qti-assessment-item/qti-item-body/qti-gap-match-interaction",
+          path: `qti-assessment-item/qti-item-body/qti-${landedKind}-interaction`,
           prompt: Option.some([textNode("Fill")]),
           response: "RESPONSE",
         };
@@ -1319,23 +1331,23 @@ describe("a module that lands", () => {
     assert.deepStrictEqual(partRow(module, "root"), {
       defaults: {},
       element: "div",
-      interaction: "gap-match-interaction",
+      interaction: landedOwner,
       legendOwner: true,
       listOwner: false,
       merged: ["class"],
       part: "root",
-      slot: "gap-match-interaction",
+      slot: landedOwner,
       tagClass: "flow-container",
     });
     assert.deepStrictEqual(partRow(module, "itemButton"), {
       defaults: { type: "button" },
       element: "button",
-      interaction: "gap-match-interaction",
+      interaction: landedOwner,
       legendOwner: false,
       listOwner: false,
       merged: [],
       part: "itemButton",
-      slot: "gap-match-interaction-item-button",
+      slot: `${landedOwner}-item-button`,
       tagClass: "button",
     });
     assert.deepStrictEqual(
@@ -1343,12 +1355,12 @@ describe("a module that lands", () => {
       {
         defaults: { type: "button" },
         element: "span",
-        interaction: "gap-match-interaction",
+        interaction: landedOwner,
         legendOwner: false,
         listOwner: false,
         merged: [],
         part: "itemButton",
-        slot: "gap-match-interaction-item-button",
+        slot: `${landedOwner}-item-button`,
         tagClass: "phrasing-container",
       },
     );

@@ -516,19 +516,25 @@ export interface ToolSettings {
  * it, and the preferences a PNP gives that no renderer reads yet. A `PnpSupports` is a `Supports`,
  * so a host passes it to `render` and `redact` as it is, and they read only the contract's fields.
  *
- * A feature the profile assigns and names in no set is active; `prohibit-set` wins over an
- * assignment, so a prohibited feature is in `prohibited` and in no other field. Every vocabulary
- * value is in the schema's spelling, each of the guide's read as its schema counterpart.
+ * A feature the profile assigns is active, whether or not a set names it, and `prohibit-set` wins
+ * over an assignment: a prohibited feature is in `prohibited` and in no other field, and sets
+ * nothing. `atStart` and `optional` only record which features the profile's sets name; a feature
+ * a set names without the profile assigning it is in that set, is not active, and has no settings
+ * read into this value. Every vocabulary value is in the schema's spelling, each of the guide's
+ * read as its schema counterpart.
  */
 export interface PnpSupports extends Supports {
   /**
-   * The features of `activate-at-initialization-set`, or of the guide's
-   * `activate-at-initiation-set` (row 7).
+   * The features `activate-at-initialization-set` names, or the guide's
+   * `activate-at-initiation-set` (row 7): those the profile turns on when the test begins. A
+   * feature named here and not assigned is in this set only; it is not in `features`.
    */
   readonly atStart: ReadonlySet<PnpFeature>;
   /**
-   * Every feature the profile assigns and does not prohibit, the features the contract has no
-   * field for (`captions`, `alternative-text`, `item-translation`, `encouragement`) included.
+   * The active features: every feature the profile assigns and `prohibit-set` does not name, the
+   * features the contract has no field for (`captions`, `alternative-text`, `item-translation`,
+   * `encouragement`) included. A feature only a set names, such as one in `optional` that the
+   * profile does not assign, is not active, and its settings are not read.
    */
   readonly features: ReadonlySet<PnpFeature>;
   readonly hazards: ReadonlySet<HazardAvoidance>;
@@ -544,7 +550,8 @@ export interface PnpSupports extends Supports {
    */
   readonly languages: ReadonlyMap<LanguageFeature, string>;
   /**
-   * The features of `activate-as-option-set`.
+   * The features `activate-as-option-set` names: those the test taker may turn on. A feature
+   * named here and also assigned is active and optional; one named here alone is optional only.
    */
   readonly optional: ReadonlySet<PnpFeature>;
   /**

@@ -17,6 +17,17 @@
  *   holds.
  */
 import { Data, Option, Predicate, Result, Schema, SchemaGetter } from "effect";
+import { catalogInfoModule } from "#plate/content/catalog-info.ts";
+import { companionMaterialsModule } from "#plate/content/companion-materials.ts";
+import { feedbackBlockModule } from "#plate/content/feedback-block.ts";
+import { feedbackInlineModule } from "#plate/content/feedback-inline.ts";
+import { mathmlModule } from "#plate/content/mathml.ts";
+import { modalFeedbackModule } from "#plate/content/modal-feedback.ts";
+import type { BodyModules } from "#plate/content/modules.ts";
+import { rubricModule } from "#plate/content/rubric.ts";
+import { ssmlModule } from "#plate/content/ssml.ts";
+import { stimulusRefModule } from "#plate/content/stimulus-ref.ts";
+import { stylesheetModule } from "#plate/content/stylesheet.ts";
 import { greatestCount } from "#plate/count-range.ts";
 import { associateModule } from "#plate/interactions/associate.ts";
 import { drawingModule } from "#plate/interactions/drawing.ts";
@@ -174,6 +185,24 @@ interface UnsupportedJson {
 type ModuleJson = ReturnType<Modules[ModuleKind]["payloadSchema"]>["Encoded"];
 
 /**
+ * The node of a body-placed content element, in the JSON form: the module's element, the kind and
+ * the encoded side of the module's `payloadSchema`, one member per module, read from the modules,
+ * so a module that lands needs no line here; a stub's node is `never`, so no form holds one.
+ *
+ * @template E The module's element.
+ */
+interface ContentJsonOf<E extends keyof BodyModules> {
+  readonly element: E;
+  readonly kind: "content";
+  readonly node: ReturnType<BodyModules[E]["payloadSchema"]>["Encoded"];
+}
+
+/**
+ * The node of any body-placed content element in the JSON form, one member per module.
+ */
+type ContentJson = { readonly [E in keyof BodyModules]: ContentJsonOf<E> }[keyof BodyModules];
+
+/**
  * A node of the body in the JSON form: the encoded side of {@link BodyNodeSchema}, written out
  * because the body is recursive and its suspended reference needs a declared type.
  */
@@ -181,6 +210,7 @@ type BodyNodeJson =
   | BodyElementJson
   | BodyTextJson
   | ChoiceInteractionJson
+  | ContentJson
   | InlineChoiceInteractionJson
   // oxlint-disable-next-line typescript/no-redundant-type-constituents -- `ModuleJson` is never while every module is a stub; a module that lands adds its JSON form through it, with no line here.
   | ModuleJson
@@ -409,6 +439,46 @@ const unimplemented = <K extends ModuleKind>(stub: {
 };
 
 /**
+ * The node of a content element whose module is a stub, which the JSON form never holds: the
+ * stub's `parse` gives the notice or the mark, so the model holds no node of it, and its module has
+ * no step past `parse`. Both sides are `Never`, so decoding refuses a node of the element, naming
+ * it, and `render` never meets one. A stub's `payloadSchema` gives it, through {@link SchemaKit}.
+ *
+ * @param stub The element's stub module, by the element.
+ * @returns The element's codec, which refuses every value.
+ */
+const unimplementedContent = (stub: { readonly element: string }): Schema.Codec<never, never> => {
+  const refusal = `a redacted item holds no ${stub.element} node: plate reads the element as its notice or its mark until its module lands, so redact never writes one`;
+
+  return Schema.Never.pipe(
+    Schema.decodeTo(Schema.Never, {
+      decode: SchemaGetter.forbidden(() => refusal),
+      encode: SchemaGetter.forbidden(() => refusal),
+    }),
+  );
+};
+
+/**
+ * The member of {@link BodyNodeSchema} for one body-placed content module's element: the element,
+ * the kind `content`, the node through the module's `payloadSchema`, and no path ({@link NoPath}).
+ *
+ * @template E The module's element.
+ * @param module The module, by its element and its `payloadSchema`.
+ * @param schemaKit The kit the module's `payloadSchema` is handed.
+ * @returns The member.
+ */
+const contentMember = <E extends keyof BodyModules>(
+  module: BodyModules[E] & { readonly element: E },
+  schemaKit: SchemaKit,
+) =>
+  Schema.Struct({
+    element: Schema.Literal(module.element),
+    kind: Schema.Literal("content"),
+    node: module.payloadSchema(schemaKit),
+    path: NoPath,
+  });
+
+/**
  * What the codec hands an interaction module's `payloadSchema`: Schema itself, so that no browser
  * module value-imports it, the field schemas the codec's own members share, the body's recursive
  * reference among them, and the refusal a stub gives.
@@ -431,6 +501,11 @@ export interface SchemaKit {
    * ({@link unimplemented}).
    */
   readonly unimplemented: typeof unimplemented;
+  /**
+   * The codec of a content element whose module is a stub, which refuses the element
+   * ({@link unimplementedContent}).
+   */
+  readonly unimplementedContent: typeof unimplementedContent;
 }
 
 /**
@@ -447,14 +522,17 @@ const kit: SchemaKit = {
   Schema,
   SchemaGetter,
   unimplemented,
+  unimplementedContent,
 };
 
 /**
  * The Schema of one body node, a union over every kind of `BodyNode`, every field included; its
  * type is {@link BodyNode} and its encoded form {@link BodyNodeJson}, which holds no path
  * ({@link NoPath}), no printed variable ({@link NoPrintedVariable}), no template block or inline
- * ({@link NoTemplateContent}) and no interaction a stub module parses ({@link unimplemented}). An
- * interaction a module parses is its module's `payloadSchema`, handed {@link kit}.
+ * ({@link NoTemplateContent}), no interaction a stub module parses ({@link unimplemented}) and no
+ * node of a content element whose module is a stub ({@link unimplementedContent}). An interaction
+ * a module parses is its module's `payloadSchema`, handed {@link kit}, and a content element's
+ * node its module's, in its member ({@link contentMember}).
  */
 const BodyNodeSchema = Schema.Union([
   Schema.Struct({
@@ -535,6 +613,11 @@ const BodyNodeSchema = Schema.Union([
   selectPointModule.payloadSchema(kit),
   sliderModule.payloadSchema(kit),
   uploadModule.payloadSchema(kit),
+  contentMember(ssmlModule, kit),
+  contentMember(mathmlModule, kit),
+  contentMember(feedbackBlockModule, kit),
+  contentMember(feedbackInlineModule, kit),
+  contentMember(rubricModule, kit),
 ]);
 
 /**
@@ -582,10 +665,27 @@ const ResponseBindingSchema = Schema.Union([
 
 /**
  * The Schema of a redacted item's fields; its type is {@link RedactedFields}, and its encoded form
- * the {@link RedactedJson} a host sends to a page.
+ * the {@link RedactedJson} a host sends to a page. `content` holds the nodes the item-placed
+ * content modules read that the redaction kept, by element, each through its module's
+ * `payloadSchema`; the key is absent when none was kept.
  */
 export const RedactedSchema = Schema.Struct({
   body: BodyNodes,
+  content: Schema.optionalKey(
+    Schema.Struct({
+      "qti-assessment-stimulus-ref": Schema.optionalKey(
+        Schema.Array(stimulusRefModule.payloadSchema(kit)),
+      ),
+      "qti-catalog-info": Schema.optionalKey(Schema.Array(catalogInfoModule.payloadSchema(kit))),
+      "qti-companion-materials-info": Schema.optionalKey(
+        Schema.Array(companionMaterialsModule.payloadSchema(kit)),
+      ),
+      "qti-modal-feedback": Schema.optionalKey(
+        Schema.Array(modalFeedbackModule.payloadSchema(kit)),
+      ),
+      "qti-stylesheet": Schema.optionalKey(Schema.Array(stylesheetModule.payloadSchema(kit))),
+    }),
+  ),
   document: Schema.String,
   identifier: Schema.String,
   lang: OptionalText,
@@ -791,6 +891,7 @@ const misplacedInteraction = (body: readonly BodyNode[]): Option.Option<string> 
         enqueue(node.content, within);
         break;
       }
+      case "content":
       case "printed-variable":
       case "text":
       case "unsupported": {
