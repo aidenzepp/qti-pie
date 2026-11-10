@@ -1,7 +1,7 @@
 /**
  * The import's rows judged on the host: the laws `Qti` states that a package's rows can be held to
  * before any of them is written, evaluated over the rows `readProgram` builds, each named by its
- * law as a refusal names it (`#pantry/import/refusal.ts` `schemaLawNameOf`), each statement's laws
+ * law as a refusal names it (`#pantry/test/law-namer.ts` `schemaLawNameOf`), each statement's laws
  * as grizzle's `lawsByStatement` gives them.
  *
  * Four kinds of statement are evaluated, from the statements grizzle keeps for them, never from a
@@ -321,7 +321,7 @@ const evaluatedOf = (
 
 /**
  * Each statement of `Qti` with its laws, as grizzle's `lawsByStatement` names them: the one lookup
- * `#pantry/import/refusal.ts` builds per process (`statementLawsOf`).
+ * `#pantry/test/law-namer.ts` builds per process (`statementLawsOf`).
  */
 const statementLaws = statementLawsOf(Qti);
 
@@ -378,7 +378,7 @@ const unreadChecks: ReadonlySet<LawName> = new Set(
 );
 
 /**
- * The laws no statement states, as grizzle's `lawsOf` lists them, each with the name `refusal.ts`
+ * The laws no statement states, as grizzle's `lawsOf` lists them, each with the name `law-namer.ts`
  * gives it (`statedLaws`): the primary keys, the contracts, the patterns and the generated fields.
  */
 const writtenLaws = statedLaws().filter(

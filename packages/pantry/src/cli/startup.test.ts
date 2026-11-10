@@ -22,9 +22,9 @@ const startupForbidden = [
 ];
 
 /**
- * This package's own install's author login, whose workload (the export scan) grizzle's builders
- * build when the module is evaluated (`#pantry/qti/own-login.ts`): the dry run never needs it, and
- * the database layer loads it only once its settings resolve, so neither may reach it statically.
+ * This package's own install's author login, test support whose workloads grizzle's builders build
+ * when the module is evaluated (`#pantry/qti/own-login.ts`): the database layer serves the login's
+ * committed file instead, and the dry run needs no login, so neither may reach it statically.
  */
 const loginForbidden = ["#pantry/qti/own-login.ts"];
 
@@ -102,8 +102,8 @@ export const forbiddenImports = (
 /**
  * Every module a set of entries reaches: through each static, non-type import, and through each
  * dynamic `import("#pantry/…")`, which is how the command handlers load the engine and the
- * database layer loads the author login. A type written `import("#pantry/…")` is followed too, so
- * the set errs toward more modules, never fewer.
+ * database layer. A type written `import("#pantry/…")` is followed too, so the set errs toward more
+ * modules, never fewer.
  *
  * @param entries - The absolute paths of the modules to start from.
  * @param read - Reads a module's text.
@@ -195,7 +195,7 @@ describe("the author login's place in the graph", () => {
     assert.deepStrictEqual(offences, []);
   });
 
-  it("is not reached statically from the database layer, which loads it once its settings resolve", () => {
+  it("is not reached statically from the database layer, which serves the login's committed file", () => {
     const offences = forbiddenImports(
       path.join(sourceRoot, "db", "layer.ts"),
       loginForbidden,

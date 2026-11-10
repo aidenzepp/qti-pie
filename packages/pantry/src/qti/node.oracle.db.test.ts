@@ -817,16 +817,6 @@ const nodeBreaches = (rows: FoldedRows<Composed>): readonly string[] => {
 };
 
 /**
- * Assert PostgreSQL refused a case with one of the SQLSTATEs and by a constraint of one of the
- * roles.
- *
- * @param constraints - Node's constraints.
- * @param verdict - The verdict.
- * @param codes - The SQLSTATEs the law's constraints raise.
- * @param roles - The roles of the law's constraints.
- * @param label - The case.
- */
-/**
  * Write the `ElementType` fact of one fact's element under a type: its node's tuple, and the
  * governor the type gives it (`governorOf`), so its own `E1_derived` holds.
  *
@@ -853,6 +843,16 @@ const typeFactOf = (rows: readonly Stated[], at: number, type: string): Stated =
   };
 };
 
+/**
+ * Assert PostgreSQL refused a case with one of the SQLSTATEs and by a constraint of one of the
+ * roles.
+ *
+ * @param constraints - Node's constraints.
+ * @param verdict - The verdict.
+ * @param codes - The SQLSTATEs the law's constraints raise.
+ * @param roles - The roles of the law's constraints.
+ * @param label - The case.
+ */
 const assertRefused = (
   constraints: readonly Constraint[],
   verdict: Option.Option<DatabaseError>,
@@ -1560,9 +1560,9 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
           // and, for every other target, `Qti`'s own statements, each containment from Node, each
           // mirrors' Node half and each family Node owns, so a key grizzle merged, split or
           // dropped, or a law a slice put on Node unstated, changes a target's count. On the
-          // drafted _init (20261107020714) that is 40 keys into 38 relations: Document and Site
-          // take two each, and Rounding (ccccaeb3), LomResourceType and LomResourceTypeSource
-          // (96a7ea14) are the three the 2026-11-06 hand list lacked.
+          // committed init migration that is 45 keys into 43 relations: Document and Site take two
+          // each, and Rounding (ccccaeb3), LomResourceType and LomResourceTypeSource (96a7ea14) are
+          // the three the 2026-11-06 hand list lacked.
           // Bound: every constraint of Node's table and every statement of Qti.
           Effect.gen(function* census() {
             const client = yield* loginSession;
