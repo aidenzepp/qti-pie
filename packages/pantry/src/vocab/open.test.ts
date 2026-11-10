@@ -700,6 +700,12 @@ const judgeVersion = Effect.fn("test.judgeOpenNames")(function* judgeVersion(
   const elementProbes: string[] = [];
   const attributeCases: Omit<JudgedAttribute, "errors">[][] = [];
   const elementCases: Omit<JudgedElement, "errors">[] = [];
+  // One probe per open class: an attribute probe per parent namespace, attribute wildcard and set
+  // of declared names (which decide the candidates and their readings), and an element probe per
+  // parent namespace, every wildcard its model holds (their namespaces and processing, which
+  // together decide a candidate's reading), the wildcard the candidate stands at and the
+  // candidate's class. A second kind of the same class poses xmllint the same question.
+  const posedClasses = new Set<string>();
 
   for (const [kind, target] of targets) {
     const own = Option.match(world.elementOf(kind), {
@@ -717,33 +723,41 @@ const judgeVersion = Effect.fn("test.judgeOpenNames")(function* judgeVersion(
         ),
     );
 
-    attributeProbes.push(
-      tagged(
-        rootNameOf(world, target),
-        [
-          ...required,
-          ...candidates.map(
-            (candidate) =>
-              [writtenName(candidate), candidate.local === "space" ? "default" : "x"] as const,
-          ),
-        ],
-        "",
-      ),
-    );
-    attributeCases.push(
-      candidates.map((candidate) => ({
-        candidate,
-        kind,
-        underOtherLax:
-          (candidate.namespace === "" || candidate.namespace === own) &&
-          Option.exists(
-            wildcard,
-            ({ namespace, processing }) => namespace === "##other" && processing === "lax",
-          ),
-        version,
-        vocabulary: vocabularyAdmits(candidate, names, wildcard, own),
-      })),
-    );
+    const attributeClass = `${own} ${Option.match(wildcard, {
+      onNone: () => "none",
+      onSome: ({ namespace, processing }) => `${namespace}/${processing}`,
+    })} ${[...names].toSorted().join(",")} ${candidates.map(writtenName).join(" ")}`;
+
+    if (!posedClasses.has(attributeClass)) {
+      posedClasses.add(attributeClass);
+      attributeProbes.push(
+        tagged(
+          rootNameOf(world, target),
+          [
+            ...required,
+            ...candidates.map(
+              (candidate) =>
+                [writtenName(candidate), candidate.local === "space" ? "default" : "x"] as const,
+            ),
+          ],
+          "",
+        ),
+      );
+      attributeCases.push(
+        candidates.map((candidate) => ({
+          candidate,
+          kind,
+          underOtherLax:
+            (candidate.namespace === "" || candidate.namespace === own) &&
+            Option.exists(
+              wildcard,
+              ({ namespace, processing }) => namespace === "##other" && processing === "lax",
+            ),
+          version,
+          vocabulary: vocabularyAdmits(candidate, names, wildcard, own),
+        })),
+      );
+    }
 
     const content = world.modelOf(kind);
     const scope: MatchScope = {
@@ -756,6 +770,11 @@ const judgeVersion = Effect.fn("test.judgeOpenNames")(function* judgeVersion(
       (content.value._tag === "element-only" || content.value._tag === "mixed")
     ) {
       const { particle } = content.value;
+      const wildcardsHeld = placesOf(particle)
+        .flatMap(({ leaf, possible }) =>
+          leaf._tag === "any" && possible ? [`${leaf.namespace}/${leaf.processing}`] : [],
+        )
+        .join(" ");
 
       for (const [place, { leaf, possible }] of placesOf(particle).entries()) {
         if (leaf._tag !== "any" || !possible) {
@@ -774,6 +793,14 @@ const judgeVersion = Effect.fn("test.judgeOpenNames")(function* judgeVersion(
           own,
           namedIn(particle, world),
         )) {
+          const posedClass = `${own} ${wildcardsHeld} ${leaf.namespace}/${leaf.processing} ${kindOfCandidate}`;
+
+          if (posedClasses.has(posedClass)) {
+            continue;
+          }
+
+          posedClasses.add(posedClass);
+
           const namespace =
             letter._tag === "foreign"
               ? letter.namespace
@@ -947,7 +974,7 @@ describe.skipIf(Option.isSome(absence))(
               ctx,
               exhaust(
                 {
-                  box: `every (version, kind) xmllint probes, each with its attribute candidates, one per class and spelling: ${byKind.length} probes`,
+                  box: `one (version, kind) per open attribute class, each with its attribute candidates, one per class and spelling: ${byKind.length} probes`,
                   caseHang,
                   coverage: requiredInSpace<"admitted" | "refused" | "ruled">([
                     "admitted",
@@ -1017,7 +1044,7 @@ describe.skipIf(Option.isSome(absence))(
               ctx,
               exhaust(
                 {
-                  box: `every (version, kind) xmllint probes, each with its element wildcard's candidates: ${byKind.length} probes`,
+                  box: `one (version, kind) per open element class, each with its element wildcard's candidates: ${byKind.length} probes`,
                   caseHang,
                   coverage: requiredInSpace<"foreign" | "kind" | "refused" | "ruled">([
                     "foreign",
