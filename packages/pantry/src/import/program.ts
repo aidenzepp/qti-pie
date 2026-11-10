@@ -42,8 +42,8 @@ import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { PackageReadError, readPackage } from "#pantry/package/read.ts";
-import type { PackageFile } from "#pantry/package/read.ts";
+import { PackageReadError, readPackage, sourceNameOf } from "#pantry/package/read.ts";
+import type { PackageFile, PackageSource } from "#pantry/package/read.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import { cpNamespace } from "#pantry/vocab/namespaces.ts";
 
@@ -158,17 +158,23 @@ const documentTypeOf = <T extends string>(
   );
 
 /**
- * Read the package at `dir` and list its documents, one per path: the manifest, then each other
+ * Read the package at `source` and list its documents, one per path: the manifest, then each other
  * document its resources name that an entry holds, in the manifest's order, each shredded once.
  *
- * @param dir - The package directory or `.zip` file.
+ * @param source - The package directory, `.zip` file or zip archive's bytes.
  * @returns The entries and the documents; the reader's, the container's or the codec's refusal.
  */
-const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(dir: string) {
-  const files = yield* readPackage(dir);
+const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(
+  source: PackageSource,
+) {
+  const files = yield* readPackage(source);
   const manifest = files.find(({ kind }) => kind === "manifest");
   if (manifest === undefined) {
-    return yield* new PackageReadError({ dir, path: manifestPath, rule: "manifest-root" });
+    return yield* new PackageReadError({
+      dir: sourceNameOf(source),
+      path: manifestPath,
+      rule: "manifest-root",
+    });
   }
 
   const manifestXml = yield* readXml(manifest.bytes);
@@ -214,26 +220,27 @@ const isReadRefusal = <E extends { readonly _tag: string }>(
 ): error is Exclude<E, PlatformError.PlatformError> => error._tag !== "PlatformError";
 
 /**
- * Read the package at `dir` as an import writes it: its entries, its documents shredded, their ids
- * minted, and every input of its ChangeSet built, each a keyed set.
+ * Read the package at `source` as an import writes it: its entries, its documents shredded, their
+ * ids minted, and every input of its ChangeSet built, each a keyed set.
  *
  * A key two builders give two different rows is a defect of the builders, and dies as the
  * `OverlayConflict` that names it.
  *
- * @param dir - The package directory or `.zip` file.
+ * @param source - The package directory, `.zip` file or zip archive's bytes; the package's stored
+ *   name is the last segment of its path or its archive's name.
  * @param mint - Draws each fresh uuid. Defaults to `crypto.randomUUID`; a test passes its own.
  * @returns The program. Fails with `ImportRefused` naming the rule the reader, the container or the
  *   codec refused the package under, and with the platform's error when the package cannot be read.
  */
 export const readProgram = Effect.fn("import.readProgram")(function* readProgram(
-  dir: string,
+  source: PackageSource,
   mint: () => NodeId = () => crypto.randomUUID(),
 ): Effect.fn.Return<
   ImportProgram,
   ImportRefused | PlatformError.PlatformError,
   FileSystem.FileSystem
 > {
-  const { documents, files } = yield* listDocuments(dir).pipe(
+  const { documents, files } = yield* listDocuments(source).pipe(
     Effect.catchIf(isReadRefusal, (refusal) => Effect.fail(ruleOfError(refusal))),
   );
   const ids = nodeIdsOf(
@@ -254,9 +261,17 @@ export const readProgram = Effect.fn("import.readProgram")(function* readProgram
       return [root.id, root] as const;
     }),
   );
-  const record = packageRecordOf({ files, id: ids.package, name: packageNameOf(dir) });
+  const record = packageRecordOf({
+    files,
+    id: ids.package,
+    name: packageNameOf(sourceNameOf(source)),
+  });
 
-  yield* Effect.annotateCurrentSpan({ documents: placed.length, entries: files.length });
+  yield* Effect.annotateCurrentSpan({
+    documents: placed.length,
+    entries: files.length,
+    source: sourceNameOf(source),
+  });
 
   return {
     documents: placed,

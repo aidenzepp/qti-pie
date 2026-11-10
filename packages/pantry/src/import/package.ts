@@ -27,6 +27,7 @@ import { readProgram } from "#pantry/import/program.ts";
 import { refusalOfLaws } from "#pantry/import/refusal.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
+import type { PackageSource } from "#pantry/package/read.ts";
 import { authorLogin } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
 import type { AuthorRole } from "#pantry/qti/roles.ts";
@@ -184,7 +185,7 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
 });
 
 /**
- * Import the package at `dir`.
+ * Import the package at `source`.
  *
  * Reads the package once, shreds the documents its manifest names, mints every id afresh and
  * builds every row, then applies them as one ChangeSet through the author role. `Db.open` and
@@ -193,18 +194,18 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
  * was accepted; absent, the error is the answer; a read-back that fails is `CommitUnresolved`. The
  * same package imported twice is two packages, each with its own ids.
  *
- * @param dir - The package directory or `.zip` file.
+ * @param source - The package directory, `.zip` file or zip archive's bytes.
  * @param options - Replacements for the retry schedule and the apply step, for tests.
  * @returns The id of the committed package. Fails with `ImportRefused` naming the rule the package
  *   broke, whether the reader, the codec or the database refused it; with `RefusedAbove` naming
  *   the level and its rule when every law the database refused it under is stated by one level
  *   above `Qti`, which no rule of the roster owns; with the platform's error
- *   when the directory cannot be read; with `CommitUnresolved` when the commit's outcome is
+ *   when the package cannot be read; with `CommitUnresolved` when the commit's outcome is
  *   unknown and the read-back failed, so the package may or may not be stored; and with grizzle's
  *   own error when the database failed for a reason that is not a refusal.
  */
 export const importPackage = Effect.fn("import.importPackage")(function* importPackage(
-  dir: string,
+  source: PackageSource,
   options: ImportOptions = {},
 ): Effect.fn.Return<
   Uuid,
@@ -218,7 +219,7 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
 > {
   const schedule = options.schedule ?? retrySchedule;
   const wrap = options.wrapApply ?? (<A, E, R>(apply: Effect.Effect<A, E, R>) => apply);
-  const program = yield* readProgram(dir);
+  const program = yield* readProgram(source);
   const { packageId } = program;
   const changes = changeSetOf(authorLogin(qti()).roles.author.role, program.inputs);
   const db = yield* retried("Db.open", Db.open(authorLogin(qti()).roles.author, {}), schedule);

@@ -702,13 +702,19 @@ const readData = Effect.fn("package.readData")(function* readData(
 });
 
 /**
- * Parse an archive and return every file's bytes.
+ * Read a zip archive's entries from its bytes, as {@link readZip} reads a zip file's.
  *
- * @param archive - The zip file's path, which names archive-level refusals.
- * @param bytes - The whole file.
- * @returns The listing sorted by path, or a {@link ZipRefusal}.
+ * The names, methods, CRC-32 checks, sorting and refusals are {@link readZip}'s; only where the
+ * bytes come from differs.
+ *
+ * @param archive - The archive's name: the zip file's path, or the name a caller gives bytes it
+ *   holds. It names archive-level refusals.
+ * @param bytes - The whole archive.
+ * @param budget - The budgets read under: {@link packageBudget} for a package.
+ * @returns The files as {@link ZipEntry} values sorted by path, or a {@link ZipRefusal} under the
+ *   rules {@link readZip} lists.
  */
-const parseZip = Effect.fn("package.parseZip")(function* parseZip(
+export const readZipBytes = Effect.fn("package.readZipBytes")(function* readZipBytes(
   archive: string,
   bytes: Uint8Array,
   budget: ZipBudget,
@@ -787,7 +793,7 @@ export const readZip = Effect.fn("package.readZip")(function* readZip(
 > {
   const fs = yield* FileSystem.FileSystem;
 
-  return yield* parseZip(path, yield* fs.readFile(path), budget);
+  return yield* readZipBytes(path, yield* fs.readFile(path), budget);
 });
 
 /**
