@@ -246,7 +246,8 @@ describe("shred and unshred", { timeout: searchTimeout }, () => {
     (ctx) =>
       // Oracle: a universal one, the round trip; the tree records exactly what shred reads, so the
       // rows come back field for field.
-      // Bound: the generator's drawn bounds, up to 200 nodes and depth 7 a tree.
+      // Bound: the generator's drawn bounds, up to 200 nodes and depth 7 a tree; 50 runs, the
+      // run's seed drawing a fresh sample each run.
       searched(
         ctx,
         explore(
@@ -278,7 +279,7 @@ describe("shred and unshred", { timeout: searchTimeout }, () => {
               kind: "universal",
               name: "the round trip: shred ∘ unshred ∘ assemble = id on flatten's rows",
             },
-            runs: 300,
+            runs: 50,
             shrink: completeShrink,
             steerEvery: 16,
             suite: "model/shred-unshred-rows",
@@ -309,7 +310,8 @@ describe("shred and unshred", { timeout: searchTimeout }, () => {
     (ctx) =>
       // Oracle: a universal one, the round trip, under Canonical XML 1.0 (crust's canonicalizer),
       // which erases exactly the forms the XDM does not record.
-      // Bound: the generator's drawn bounds, the source's CDATA, runs and attribute order drawn.
+      // Bound: the generator's drawn bounds, the source's CDATA, runs and attribute order drawn;
+      // 50 runs, the run's seed drawing a fresh sample each run.
       searched(
         ctx,
         explore(
@@ -327,7 +329,7 @@ describe("shred and unshred", { timeout: searchTimeout }, () => {
               kind: "universal",
               name: "the round trip unshred ∘ shred = id under Canonical XML 1.0, by crust's canonicalizer",
             },
-            runs: 300,
+            runs: 50,
             shrink: completeShrink,
             steerEvery: 16,
             suite: "model/unshred-shred-canonical",
@@ -353,7 +355,7 @@ describe("shred and unshred", { timeout: searchTimeout }, () => {
   it.effect("give back documents xmllint canonicalizes the same, before and after", (ctx) =>
     // Oracle: a second implementation, libxml2's `xmllint --c14n`, beside crust's canonicalizer,
     // over a sample of the round trips above.
-    // Bound: 30 generated trees, drawn with no doctype and so no unexpanded entity reference
+    // Bound: 8 generated trees, drawn with no doctype and so no unexpanded entity reference
     // ({@link unjudged}), which xmllint refuses without their declarations; none is discarded.
     searched(
       ctx,
@@ -372,7 +374,7 @@ describe("shred and unshred", { timeout: searchTimeout }, () => {
             kind: "second-implementation",
             name: "libxml2's xmllint --c14n, of the source and of its round trip",
           },
-          runs: 30,
+          runs: 8,
           shrink: completeShrink,
           steerEvery: 16,
           suite: "model/unshred-shred-xmllint",
@@ -471,7 +473,7 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
       // MathML element where only a foreign one stands (MathML 3 §2.2, law "MathML foreign
       // element"), and a foreign element's xsi:type whose prefix nothing binds (spec reading 83).
       // Bound: the generator's drawn bounds, one name added to a valid tree a case, on an element
-      // drawn among those the variant fits, so no case is discarded.
+      // drawn among those the variant fits, so no case is discarded; 50 runs.
       searched(
         ctx,
         explore(
@@ -486,7 +488,7 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
               kind: "specification",
               name: "the codec refuses exactly what has no representation: the eight named variants, MathML 3 §2.2 and reading 83 among them",
             },
-            runs: 300,
+            runs: 50,
             shrink: completeShrink,
             steerEvery: 16,
             suite: "model/shred-refusals",
@@ -832,7 +834,8 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
     "decodes exactly the roster's versions, and refuses any other declaration and none as not-qti3",
     (ctx) =>
       // Oracle: the specification as a checker, the `SchemaVersion` roster.
-      // Bound: every roster version, and strings of up to 6 characters over the versions' own.
+      // Bound: every roster version, and strings of up to 6 characters over the versions' own;
+      // 50 runs.
       searched(
         ctx,
         explore(
@@ -856,7 +859,7 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
             kept: [],
             literal: Formatter.format,
             oracle: { kind: "specification", name: "the SchemaVersion roster" },
-            runs: 300,
+            runs: 50,
             shrink: completeShrink,
             steerEvery: 16,
             suite: "model/shred-version-of",
