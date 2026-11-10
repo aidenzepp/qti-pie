@@ -37,6 +37,7 @@
  * The rows also must name no uuid the program did not mint: a row's uuid field that names no id of
  * the program names no row PostgreSQL can hold, as a sentinel standing for an absent target does.
  */
+// GRIZZLE-PENDING: Q10. A ChangeSet's host preview replaces this host restatement of the laws.
 import { Array as Arr, Formatter, Option, Predicate, Schema } from "effect";
 import { sameLaw } from "@bjornpagen/grizzle";
 import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";

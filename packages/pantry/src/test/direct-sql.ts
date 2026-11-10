@@ -265,6 +265,8 @@ const checksOf = (client: Client, table: string) =>
     [`${qtiSchema}.${table}`],
   );
 
+// GRIZZLE-PENDING: Q10. An installation map would name each hidden column's law; until then a
+// fold's accumulator is keyed from grizzle's COMMENT prose.
 /**
  * The key a case's hidden value for a column is held under: grizzle's comment on the column, except
  * that a fold's accumulator names its fold by its end, `Owner.field`, where grizzle names it by a
@@ -592,6 +594,7 @@ const FieldSchema = Schema.Struct({
  */
 const FieldsSchema = Schema.Struct({ fields: Schema.Record(Schema.String, FieldSchema) });
 
+// GRIZZLE-PENDING: Q10. The installation map's column names replace this restated rule.
 /**
  * A field's column name, as grizzle converts a declared name: its segments, split before each
  * capital that follows a lowercase letter or a digit, lowercased and joined by underscores. A

@@ -25,6 +25,8 @@
  *   and its terms, each a field or `pred` of one, written as an outcome names a law's side
  *   ({@link lawSideOf}).
  */
+// GRIZZLE-PENDING: Q10. A ChangeSet's host preview would judge the selections and checks this
+// evaluates from the statements' kept predicates.
 import type { AnySchema, LawSide, Statement } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, pipe, Predicate, Schema } from "effect";
 

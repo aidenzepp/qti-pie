@@ -48,6 +48,8 @@
  * every read value the host holds breaks the check where its predicate is false or unknown, unknown
  * being SQL's NULL, such as a closed read at a key no row holds (decision 442).
  */
+// GRIZZLE-PENDING: Q10. A ChangeSet's host preview (its filled rows and broken laws) replaces this
+// host rebuild of the import's rows.
 import type { Law, LawSide } from "@bjornpagen/grizzle";
 import { Array as Arr, Formatter, Function as Fn, Option, Order, Predicate, Schema } from "effect";
 import {

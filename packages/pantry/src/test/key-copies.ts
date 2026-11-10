@@ -24,6 +24,8 @@
  * schema of its own), over the fields the oracle knows of a row ({@link attributeFields},
  * {@link nodeFields}).
  */
+// GRIZZLE-PENDING: Q10. The key copies are read from the statements' kept predicates; the
+// installation map would list which fields of `keyText` type each law writes.
 import type { Law, LawSide, Statement } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Predicate, Result, Schema } from "effect";
 import {

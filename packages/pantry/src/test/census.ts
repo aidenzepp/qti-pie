@@ -175,6 +175,8 @@ export interface Census {
  */
 const installed = `"${RegExp.escape(schemaNameOf(QtiBase))}"`;
 
+// GRIZZLE-PENDING: Q10. The census reads the migration's SQL by pattern; the installation map
+// would give the tables, keys, functions and laws as data.
 /**
  * A `CREATE TABLE` in `Qti`'s schema: its name and the body between its parentheses.
  */
