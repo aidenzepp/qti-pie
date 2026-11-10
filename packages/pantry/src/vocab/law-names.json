@@ -42,6 +42,12 @@
     "__aria_range_in_aria_value_wuwutj2rop": {
       "name": "E1 derived"
     },
+    "__aria_range_pattern_max_snzy4stqxu": {
+      "name": "Key text bound"
+    },
+    "__aria_range_pattern_min_iuisn7zcsk": {
+      "name": "Key text bound"
+    },
     "__aria_range_pk_node_dp2e3aedej": {
       "name": "E1 derived"
     },
@@ -50,6 +56,9 @@
     },
     "__aria_value_in_interaction_attribute_v4agwkfy7j": {
       "name": "E1 derived"
+    },
+    "__aria_value_pattern_value_bj5olz4kdz": {
+      "name": "Key text bound"
     },
     "__aria_value_pk_node_name_mljtpyq3xs": {
       "name": "E1 derived"
@@ -60,20 +69,38 @@
     "__assembled_catalog_in_catalog_id_zm5l37jkll": {
       "name": "E1 derived"
     },
+    "__assembled_catalog_pattern_id_inmirnbib6": {
+      "name": "Key text bound"
+    },
     "__assembled_catalog_pk_assembly_id_udmagsd2qh": {
       "name": "E1 derived"
     },
     "__assembled_id_key_assembly_id_dpyvriup2b": {
       "name": "DocumentId key"
     },
+    "__assembled_id_pattern_id_f3zdohgpc7": {
+      "name": "Key text bound"
+    },
     "__assembled_id_pk_assembly_id_owner_copy_nzo7fuxiet": {
       "name": "E1 derived"
+    },
+    "__assembled_lang_generated_value_a4njdme4v4": {
+      "name": "E1 derived"
+    },
+    "__assembled_lang_pattern_lang_2hyzbrmsl6": {
+      "name": "Key text bound"
+    },
+    "__assembled_lang_pattern_value_allq2tanw6": {
+      "name": "Key text bound"
     },
     "__assembled_lang_pk_assembly_lang_57l6jgxvlb": {
       "name": "E1 derived"
     },
     "__assembled_name_key_assembly_identifier_wo244qnsd2": {
       "name": "Test name key"
+    },
+    "__assembled_name_pattern_identifier_azjw3hz2ko": {
+      "name": "Key text bound"
     },
     "__assembled_name_pk_assembly_node_7duuty6j7b": {
       "name": "Test name key"
@@ -89,6 +116,12 @@
     },
     "__assembled_reference_kind_role_in_reading_bdtb6ea2w4": {
       "name": "Variable kind"
+    },
+    "__assembled_reference_pattern_identifier_55xwpfpcnw": {
+      "name": "Key text bound"
+    },
+    "__assembled_reference_pattern_joined_ba6kin7br7": {
+      "name": "Key text bound"
     },
     "__assembled_reference_pk_assembly_node_attribute_d5sp7mdwkl": {
       "name": "E1 derived"
@@ -131,6 +164,9 @@
     },
     "__attribute_entity_ordered_attribute_entities_unxdua3y4t": {
       "name": "AttributeEntity owner"
+    },
+    "__attribute_entity_pattern_name_fwvrvqnurr": {
+      "name": "XML production"
     },
     "__attribute_entity_pk_node_attribute_at_xmttmmkdhc": {
       "name": "AttributeEntity owner"
@@ -486,6 +522,15 @@
     "__attribute_ordered_node_attributes_d4y7amvtix": {
       "name": "AL2 count"
     },
+    "__attribute_pattern_idref_text_mcusx7kpnt": {
+      "name": "Key text bound"
+    },
+    "__attribute_pattern_lexical_adp2pghvec": {
+      "name": "XML production"
+    },
+    "__attribute_pattern_prefix_q3lb5hng54": {
+      "name": "Key text bound"
+    },
     "__attribute_pk_node_id_efgoz225mk": {
       "name": "AL2 count"
     },
@@ -537,6 +582,9 @@
     "__binding_declaration_in_declaration_identifier_b67fuyfrju": {
       "name": "Binding declared"
     },
+    "__binding_declaration_pattern_identifier_wog4ilosxi": {
+      "name": "Key text bound"
+    },
     "__binding_declaration_pk_node_attribute_dhrkxv5puw": {
       "name": "E1 derived"
     },
@@ -555,6 +603,9 @@
     "__binding_name_in_binding_35fy6nwzyr": {
       "name": "E1 derived"
     },
+    "__binding_name_pattern_identifier_tf5gasrbfg": {
+      "name": "Key text bound"
+    },
     "__binding_name_pk_node_attribute_3ucasbsers": {
       "name": "E1 derived"
     },
@@ -566,6 +617,9 @@
     },
     "__body_xml_lang_in_xml_lang_ldzyay73yz": {
       "name": "E1 derived"
+    },
+    "__body_xml_lang_pattern_lang_p2lul5vi27": {
+      "name": "Key text bound"
     },
     "__body_xml_lang_pk_node_sivndkvbu5": {
       "name": "E1 derived"
@@ -584,6 +638,9 @@
     },
     "__bound_variable_key_document_identifier_nl3t3ns5at": {
       "name": "Binding unique"
+    },
+    "__bound_variable_pattern_identifier_4tl6qr56ex": {
+      "name": "Key text bound"
     },
     "__bound_variable_pk_node_attribute_kqgla53lnr": {
       "name": "E1 derived"
@@ -606,6 +663,9 @@
     "__branch_resolution_in_instance_qnrllac3pt": {
       "name": "Branch target"
     },
+    "__branch_resolution_pattern_target_4pnkbkujpk": {
+      "name": "Key text bound"
+    },
     "__branch_resolution_pk_instance_rule_bwfyzl3pok": {
       "name": "Branch target"
     },
@@ -620,6 +680,9 @@
     },
     "__branch_rule_in_test_token_enrg6rmsxp": {
       "name": "Test overlay"
+    },
+    "__branch_rule_pattern_target_b2bk2hd5cp": {
+      "name": "Key text bound"
     },
     "__branch_rule_pk_node_2slnvhav77": {
       "name": "Test overlay"
@@ -657,6 +720,9 @@
     "__branch_target_in_instance_oytpm4d6d5": {
       "name": "Branch target"
     },
+    "__branch_target_pattern_target_237ikdnyou": {
+      "name": "Key text bound"
+    },
     "__branch_target_pk_instance_rule_4phrza24fs": {
       "name": "Branch target"
     },
@@ -668,6 +734,12 @@
     },
     "__card_support_key_catalog_support_bacvyqxa5u": {
       "name": "Card support"
+    },
+    "__card_support_pattern_lexical_gk7phomr4p": {
+      "name": "Key text bound"
+    },
+    "__card_support_pattern_support_5iwoc2fqf2": {
+      "name": "Key text bound"
     },
     "__card_support_pk_node_7q5eliwlct": {
       "name": "E1 derived"
@@ -681,6 +753,9 @@
     "__catalog_id_key_document_id_hvnowjjljo": {
       "name": "DocumentId key"
     },
+    "__catalog_id_pattern_id_b3npoeflw5": {
+      "name": "Key text bound"
+    },
     "__catalog_id_pk_node_4dl7j73ab3": {
       "name": "E1 derived"
     },
@@ -689,6 +764,12 @@
     },
     "__catalog_ref_in_attribute_3ckqtel6ef": {
       "name": "E1 derived"
+    },
+    "__catalog_ref_pattern_lexical_rvn57dvvsj": {
+      "name": "Key text bound"
+    },
+    "__catalog_ref_pattern_token_33anelkdwj": {
+      "name": "Key text bound"
     },
     "__catalog_ref_pk_node_klbmfd5qt7": {
       "name": "E1 derived"
@@ -711,6 +792,9 @@
     "__catalog_target_in_document_lfzzsmj7fp": {
       "name": "E1 derived"
     },
+    "__catalog_target_pattern_id_jlytcawk2z": {
+      "name": "Key text bound"
+    },
     "__catalog_target_pk_document_id_nmqjz2upzw": {
       "name": "E1 derived"
     },
@@ -719,6 +803,12 @@
     },
     "__cell_headers_in_table_scope_mwin37alpe": {
       "name": "E1 derived"
+    },
+    "__cell_headers_pattern_lexical_l35j32xlil": {
+      "name": "Key text bound"
+    },
+    "__cell_headers_pattern_token_text_nvk4mxoxha": {
+      "name": "Key text bound"
     },
     "__cell_headers_pk_node_dpru5hfozv": {
       "name": "E1 derived"
@@ -774,17 +864,26 @@
     "__choice_kind_in_gap_interaction_63rquxzjkz": {
       "name": "N8 nearest"
     },
+    "__choice_pattern_identifier_iv2kv5jarl": {
+      "name": "Key text bound"
+    },
     "__choice_pk_node_faorkmvhey": {
       "name": "E1 derived"
     },
     "__choice_variable_name_in_document_zm4rvhlzyo": {
       "name": "E1 derived"
     },
+    "__choice_variable_name_pattern_identifier_6yz36drgv4": {
+      "name": "Key text bound"
+    },
     "__choice_variable_name_pk_document_identifier_d7m5fvpr6n": {
       "name": "E1 derived"
     },
     "__cn_attribute_in_attribute_cimryx3a3y": {
       "name": "E1 derived"
+    },
+    "__cn_attribute_pattern_lexical_34pt3mxdlf": {
+      "name": "Key text bound"
     },
     "__cn_attribute_pk_node_name_pioi747d2q": {
       "name": "E1 derived"
@@ -794,6 +893,9 @@
     },
     "__cn_count_in_node_4wvsu3tkjv": {
       "name": "E1 derived"
+    },
+    "__cn_count_pattern_type_lexical_xjjhnhsl4v": {
+      "name": "Key text bound"
     },
     "__cn_count_pk_node_ww7pw42z6y": {
       "name": "E1 derived"
@@ -809,6 +911,9 @@
     },
     "__cn_part_text_in_math_cn_anj3mhxgwr": {
       "name": "E1 derived"
+    },
+    "__cn_part_text_pattern_text_lrd7tfsxq4": {
+      "name": "Key text bound"
     },
     "__cn_part_text_pk_node_part_grj62dlh5a": {
       "name": "E1 derived"
@@ -828,6 +933,9 @@
     "__comment_in_node_lzcxefglp5": {
       "name": "comment arm"
     },
+    "__comment_pattern_value_hd5oqc2o7e": {
+      "name": "XML production"
+    },
     "__comment_pk_node_mobompmsvs": {
       "name": "comment arm"
     },
@@ -843,8 +951,14 @@
     "__context_ref_declaration_in_declaration_identifier_tm2dsfuayj": {
       "name": "Context variable reference"
     },
+    "__context_ref_declaration_pattern_identifier_cwy5fpaeau": {
+      "name": "Key text bound"
+    },
     "__context_ref_declaration_pk_node_attribute_wnuyykyhcs": {
       "name": "E1 derived"
+    },
+    "__context_ref_pattern_identifier_fbbpozirz2": {
+      "name": "Key text bound"
     },
     "__context_ref_pk_node_attribute_sptbnfoc6p": {
       "name": "E1 derived"
@@ -888,6 +1002,9 @@
     "__data_ssml_member_in_data_ssml_2drx5nav3m": {
       "name": "E1 derived"
     },
+    "__data_ssml_member_pattern_member_w63dh6sreb": {
+      "name": "Key text bound"
+    },
     "__data_ssml_member_pk_node_at_m2rkh6gee2": {
       "name": "E1 derived"
     },
@@ -897,6 +1014,15 @@
     "__data_ssml_property_in_data_ssml_member_wc5f6fbipg": {
       "name": "E1 derived"
     },
+    "__data_ssml_property_pattern_member_name_mps5nuc2a2": {
+      "name": "Key text bound"
+    },
+    "__data_ssml_property_pattern_name_pnevd3oi6o": {
+      "name": "Key text bound"
+    },
+    "__data_ssml_property_pattern_value_vgi3t7thtb": {
+      "name": "Key text bound"
+    },
     "__data_ssml_property_pk_node_member_at_kueksivbzs": {
       "name": "E1 derived"
     },
@@ -905,6 +1031,9 @@
     },
     "__declaration_base_type_in_attribute_jy4tytjg4h": {
       "name": "Declaration overlay"
+    },
+    "__declaration_base_type_pattern_base_type_lexical_ls4zabjd65": {
+      "name": "Key text bound"
     },
     "__declaration_base_type_pk_node_rqlbu3klmm": {
       "name": "Declaration overlay"
@@ -920,6 +1049,9 @@
     },
     "__declaration_cardinality_in_attribute_mduokyxqyf": {
       "name": "Declaration overlay"
+    },
+    "__declaration_cardinality_pattern_cardinality_jh6dldppyr": {
+      "name": "Key text bound"
     },
     "__declaration_cardinality_pk_node_vyaicquyqj": {
       "name": "Declaration overlay"
@@ -951,6 +1083,18 @@
     "__declaration_identifier_key_document_identifier_bc7qo2hfol": {
       "name": "Declaration key"
     },
+    "__declaration_identifier_pattern_identifier_lead_yrkqwew4qj": {
+      "name": "E1 derived"
+    },
+    "__declaration_identifier_pattern_identifier_lexical_cdlruyzhol": {
+      "name": "Key text bound"
+    },
+    "__declaration_identifier_pattern_identifier_r2stylu4zt": {
+      "name": "Key text bound"
+    },
+    "__declaration_identifier_pattern_identifier_trail_y4qcvddpeo": {
+      "name": "E1 derived"
+    },
     "__declaration_identifier_pk_node_umgwhjihrx": {
       "name": "Declaration overlay"
     },
@@ -978,6 +1122,9 @@
     "__declaration_name_in_declaration_identifier_r7dv2ok7mj": {
       "name": "Declaration overlay"
     },
+    "__declaration_name_pattern_identifier_fvic6rngz5": {
+      "name": "Key text bound"
+    },
     "__declaration_name_pk_node_veeevzwaty": {
       "name": "Declaration overlay"
     },
@@ -999,6 +1146,12 @@
     "__default_entry_key_card_npwwpua4gb": {
       "name": "Card default entry"
     },
+    "__default_entry_pattern_lexical_pxkk2ot4y3": {
+      "name": "Key text bound"
+    },
+    "__default_entry_pattern_value_3m7h5oit4b": {
+      "name": "Key text bound"
+    },
     "__default_entry_pk_node_a76mrcxfzm": {
       "name": "E1 derived"
     },
@@ -1014,6 +1167,12 @@
     "__dependency_in_resource_xnelpo5g2m": {
       "name": "Manifest overlay"
     },
+    "__dependency_pattern_lexical_5iwpo6xz3b": {
+      "name": "Key text bound"
+    },
+    "__dependency_pattern_ref_pvbtn6eoal": {
+      "name": "Key text bound"
+    },
     "__dependency_pk_node_yvmjzqljzy": {
       "name": "Manifest overlay"
     },
@@ -1022,6 +1181,9 @@
     },
     "__dependency_target_in_resource_id_sjxnv3blib": {
       "name": "Manifest overlay"
+    },
+    "__dependency_target_pattern_ref_iamrww433z": {
+      "name": "Key text bound"
     },
     "__dependency_target_pk_node_6ozqoot4rr": {
       "name": "Manifest overlay"
@@ -1034,6 +1196,9 @@
     },
     "__doctype_in_node_2l5d4gdbq4": {
       "name": "doctype arm"
+    },
+    "__doctype_pattern_value_puvi2giydd": {
+      "name": "XML production"
     },
     "__doctype_pk_node_5gswjfdahm": {
       "name": "doctype arm"
@@ -1068,6 +1233,18 @@
     "__document_id_node_owner_in_identity_text_g6q6cwskxg": {
       "name": "DocumentId key"
     },
+    "__document_id_pattern_after_cbjwn6vdmz": {
+      "name": "E1 derived"
+    },
+    "__document_id_pattern_before_gqnrsz2si6": {
+      "name": "E1 derived"
+    },
+    "__document_id_pattern_id_wzd55snhh5": {
+      "name": "Key text bound"
+    },
+    "__document_id_pattern_lexical_7rbe4gimlg": {
+      "name": "Key text bound"
+    },
     "__document_id_pk_node_bvmxcxhmqu": {
       "name": "DocumentId key"
     },
@@ -1083,8 +1260,26 @@
     "__document_key_package_path_xr7fw5iy5t": {
       "name": "Document entry"
     },
+    "__document_lang_generated_value_mziw4qlec4": {
+      "name": "E1 derived"
+    },
+    "__document_lang_pattern_lang_znafogknvl": {
+      "name": "Key text bound"
+    },
+    "__document_lang_pattern_value_ackawbetq4": {
+      "name": "Key text bound"
+    },
     "__document_lang_pk_document_lang_662q5oowhr": {
       "name": "E1 derived"
+    },
+    "__document_pattern_charset_jjk3iiiwcy": {
+      "name": "XML production"
+    },
+    "__document_pattern_export_charset_2sm3pwbfjq": {
+      "name": "XML production"
+    },
+    "__document_pattern_path_mexjsmzulg": {
+      "name": "Key text bound"
     },
     "__document_pk_node_rimjjnr2oa": {
       "name": "Document"
@@ -1113,6 +1308,9 @@
     "__encoding_decl_in_xml_decl_s7dba7veyt": {
       "name": "Document"
     },
+    "__encoding_decl_pattern_encoding_25xjqibsih": {
+      "name": "XML production"
+    },
     "__encoding_decl_pk_node_a7j4hcp5xy": {
       "name": "Document"
     },
@@ -1124,6 +1322,9 @@
     },
     "__entry_path_in_file_href_thjljvmult": {
       "name": "File listed"
+    },
+    "__entry_pattern_path_2dksgqwafq": {
+      "name": "Key text bound"
     },
     "__entry_pk_package_at_q5tfxxpglx": {
       "name": "Entry family"
@@ -1139,6 +1340,9 @@
     },
     "__expression_attribute_in_expression_qurdbsow6c": {
       "name": "E1 derived"
+    },
+    "__expression_attribute_pattern_lexical_yiqpgv2kc3": {
+      "name": "Key text bound"
     },
     "__expression_attribute_pk_node_attribute_rg5rctelde": {
       "name": "E1 derived"
@@ -1224,8 +1428,14 @@
     "__feedback_ref_declaration_in_feedback_ref_4q2akjvhv4": {
       "name": "Feedback reference"
     },
+    "__feedback_ref_declaration_pattern_identifier_4h62lb4y7c": {
+      "name": "Key text bound"
+    },
     "__feedback_ref_declaration_pk_node_attribute_r6vpx2zqmy": {
       "name": "E1 derived"
+    },
+    "__feedback_ref_pattern_identifier_khfpftmwjo": {
+      "name": "Key text bound"
     },
     "__feedback_ref_pk_node_attribute_icw4onnzl6": {
       "name": "E1 derived"
@@ -1239,6 +1449,9 @@
     "__field_value_in_value_base_type_pczhyxq5f4": {
       "name": "Declaration overlay"
     },
+    "__field_value_pattern_text_hjwhvvt2o3": {
+      "name": "Key text bound"
+    },
     "__field_value_pk_node_hrhh6sbq3y": {
       "name": "Declaration overlay"
     },
@@ -1247,6 +1460,9 @@
     },
     "__file_counted_resource_file_files_uu7uw4ivga": {
       "name": "Href listed"
+    },
+    "__file_href_pattern_path_sslibjoub7": {
+      "name": "Key text bound"
     },
     "__file_href_pk_package_scope_path_4r4675icaq": {
       "name": "File listed"
@@ -1260,11 +1476,20 @@
     "__file_in_resource_t6527uakxb": {
       "name": "Manifest overlay"
     },
+    "__file_pattern_href_eshqvpxivx": {
+      "name": "Key text bound"
+    },
+    "__file_pattern_path_dhg4vw6lkk": {
+      "name": "Key text bound"
+    },
     "__file_pk_node_ord2o6fejq": {
       "name": "Manifest overlay"
     },
     "__file_scope_in_entry_o3euroaose": {
       "name": "File exists"
+    },
+    "__fragment_value_pattern_value_epsfi2fhp3": {
+      "name": "Key text bound"
     },
     "__fragment_value_pk_fragment_kind_value_jqx36abh6r": {
       "name": "E1 derived"
@@ -1281,6 +1506,9 @@
     "__gap_interaction_pk_node_dqub5d67ci": {
       "name": "E1 derived"
     },
+    "__header_token_generated_piece_xmybyiem25": {
+      "name": "E1 derived"
+    },
     "__header_token_in_cell_headers_355zpwcg5n": {
       "name": "E1 derived"
     },
@@ -1292,6 +1520,24 @@
     },
     "__header_token_ordered_cell_headers_tokens_5mbo4fzq3f": {
       "name": "E1 derived"
+    },
+    "__header_token_pattern_after_5ifgjlqfth": {
+      "name": "E1 derived"
+    },
+    "__header_token_pattern_before_sbt3sat46r": {
+      "name": "E1 derived"
+    },
+    "__header_token_pattern_piece_shmfwnz5h2": {
+      "name": "Key text bound"
+    },
+    "__header_token_pattern_pieces_after_fovjaqwkeh": {
+      "name": "Key text bound"
+    },
+    "__header_token_pattern_pieces_was_24nhx3bxuz": {
+      "name": "Key text bound"
+    },
+    "__header_token_pattern_token_tvv5potnlx": {
+      "name": "Key text bound"
     },
     "__header_token_pk_node_at_4ftuddzciu": {
       "name": "E1 derived"
@@ -1311,6 +1557,9 @@
     "__hotspot_in_node_xbpwsvchne": {
       "name": "E1 derived"
     },
+    "__hotspot_pattern_area_uhc6ifd63j": {
+      "name": "Key text bound"
+    },
     "__hotspot_pk_node_4qlcq5ceyz": {
       "name": "E1 derived"
     },
@@ -1329,11 +1578,17 @@
     "__hottext_nearest_kind_in_interaction_xdykfmydbl": {
       "name": "N8 nearest"
     },
+    "__hottext_pattern_identifier_odzza44yi4": {
+      "name": "Key text bound"
+    },
     "__hottext_pk_node_4ew6f6li42": {
       "name": "E1 derived"
     },
     "__id_binding_admitted_key_document_id_ceexlan2jq": {
       "name": "DocumentId key"
+    },
+    "__id_binding_pattern_id_uqj32jhrn5": {
+      "name": "Key text bound"
     },
     "__id_binding_pk_document_id_owner_mzjpxrnzki": {
       "name": "E1 derived"
@@ -1347,7 +1602,16 @@
     "__identity_text_in_node_dpz4agbabg": {
       "name": "E1 derived"
     },
+    "__identity_text_pattern_idref_text_y257nojpuk": {
+      "name": "Key text bound"
+    },
+    "__identity_text_pattern_lexical_uiazjrvhw4": {
+      "name": "Key text bound"
+    },
     "__identity_text_pk_node_vonraimthe": {
+      "name": "E1 derived"
+    },
+    "__idref_generated_piece_wi3csyf5ot": {
       "name": "E1 derived"
     },
     "__idref_in_attribute_exykdcq3mq": {
@@ -1358,6 +1622,24 @@
     },
     "__idref_ordered_attribute_idrefs_4oq37r5vso": {
       "name": "E1 derived"
+    },
+    "__idref_pattern_after_2hc77i4kfc": {
+      "name": "E1 derived"
+    },
+    "__idref_pattern_before_vkazg44bpj": {
+      "name": "E1 derived"
+    },
+    "__idref_pattern_piece_gmzsahma67": {
+      "name": "Key text bound"
+    },
+    "__idref_pattern_pieces_after_af7g3y5jud": {
+      "name": "Key text bound"
+    },
+    "__idref_pattern_pieces_was_fgn3ew25cp": {
+      "name": "Key text bound"
+    },
+    "__idref_pattern_token_xbwpvfmwrc": {
+      "name": "Key text bound"
     },
     "__idref_pk_node_attribute_at_lwdcawwmr7": {
       "name": "E1 derived"
@@ -1370,6 +1652,9 @@
     },
     "__idref_target_in_document_lmukgo3c3i": {
       "name": "E1 derived"
+    },
+    "__idref_target_pattern_id_and5ep4qar": {
+      "name": "Key text bound"
     },
     "__idref_target_pk_document_id_2i466qmcsg": {
       "name": "E1 derived"
@@ -1418,6 +1703,9 @@
     },
     "__instance_name_in_named_zs3hpt4vau": {
       "name": "Test name key"
+    },
+    "__instance_name_pattern_identifier_5plp2qfwep": {
+      "name": "Key text bound"
     },
     "__instance_name_pk_instance_node_ng4qfjl6fe": {
       "name": "Test name key"
@@ -1506,6 +1794,12 @@
     "__interaction_attribute_name_in_aria_value_z5xz2cptb3": {
       "name": "E1 derived"
     },
+    "__interaction_attribute_pattern_lexical_uq6xeifsbi": {
+      "name": "Key text bound"
+    },
+    "__interaction_attribute_pattern_value_shyadrdggs": {
+      "name": "Key text bound"
+    },
     "__interaction_attribute_pk_node_name_6at32mi22q": {
       "name": "E1 derived"
     },
@@ -1554,6 +1848,9 @@
     "__item_ref_document_in_item_ref_target_yc35y3zujx": {
       "name": "Item ref target"
     },
+    "__item_ref_document_pattern_path_5aadp4hh6l": {
+      "name": "Key text bound"
+    },
     "__item_ref_document_pk_node_cyqj43c2z5": {
       "name": "Test overlay"
     },
@@ -1565,6 +1862,9 @@
     },
     "__item_ref_href_in_unread_type_href_6ch72pgwxj": {
       "name": "Item ref target"
+    },
+    "__item_ref_href_pattern_path_o4bchgobx5": {
+      "name": "Key text bound"
     },
     "__item_ref_href_pk_node_7yig6zo7cv": {
       "name": "Item ref target"
@@ -1580,6 +1880,9 @@
     },
     "__item_ref_target_in_typed_href_nwfxpvseni": {
       "name": "Item ref target"
+    },
+    "__item_ref_target_pattern_path_fk6f4eatjb": {
+      "name": "Key text bound"
     },
     "__item_ref_target_pk_node_5unlby7q54": {
       "name": "Item ref target"
@@ -1611,6 +1914,9 @@
     "__least_count_min_written_in_interaction_attribute_ccw5fdnlij": {
       "name": "E1 derived"
     },
+    "__least_count_pattern_least_zknlbckft5": {
+      "name": "Key text bound"
+    },
     "__least_count_pk_node_enr6ssrozx": {
       "name": "E1 derived"
     },
@@ -1623,11 +1929,17 @@
     "__literal_in_expression_vnqermyycr": {
       "name": "E1 derived"
     },
+    "__literal_pattern_text_rwwuu6ndnj": {
+      "name": "Key text bound"
+    },
     "__literal_pk_node_d23l3545zu": {
       "name": "E1 derived"
     },
     "__literal_typed_in_literal_65uaay3ga5": {
       "name": "E1 derived"
+    },
+    "__literal_typed_pattern_text_jejjaygyvo": {
+      "name": "Key text bound"
     },
     "__literal_typed_pk_node_hf4ws4mopc": {
       "name": "E1 derived"
@@ -1636,6 +1948,18 @@
       "name": "E1 derived"
     },
     "__lom_entry_in_node_hiekvcdphi": {
+      "name": "E1 derived"
+    },
+    "__lom_entry_pattern_lead_nyhwnf2t7n": {
+      "name": "E1 derived"
+    },
+    "__lom_entry_pattern_text_4apfqgdrad": {
+      "name": "Key text bound"
+    },
+    "__lom_entry_pattern_token_mc3e4zzrlg": {
+      "name": "Key text bound"
+    },
+    "__lom_entry_pattern_trail_ffwadgjzmt": {
       "name": "E1 derived"
     },
     "__lom_entry_pk_node_ssh54eirb2": {
@@ -1652,6 +1976,12 @@
     },
     "__lom_language_in_node_3nnszkaosm": {
       "name": "E1 derived"
+    },
+    "__lom_language_pattern_lang_4ztqcnh66j": {
+      "name": "Key text bound"
+    },
+    "__lom_language_pattern_tag_7yhm4karyt": {
+      "name": "Key text bound"
     },
     "__lom_language_pk_node_pv3tdvgr4i": {
       "name": "E1 derived"
@@ -1671,6 +2001,9 @@
     "__lom_resource_type_key_term_5nfmkvnqof": {
       "name": "E1 derived"
     },
+    "__lom_resource_type_pattern_text_gvfg4mugpn": {
+      "name": "Key text bound"
+    },
     "__lom_resource_type_pk_node_sdpcrdd75m": {
       "name": "E1 derived"
     },
@@ -1679,6 +2012,9 @@
     },
     "__lom_resource_type_source_key_term_3jnpyamegf": {
       "name": "E1 derived"
+    },
+    "__lom_resource_type_source_pattern_text_kagtwb62ev": {
+      "name": "Key text bound"
     },
     "__lom_resource_type_source_pk_node_5f5dqu4yee": {
       "name": "E1 derived"
@@ -1695,11 +2031,20 @@
     "__lom_string_language_in_attribute_ulxenfqogb": {
       "name": "E1 derived"
     },
+    "__lom_string_language_pattern_language_6fz6klyy33": {
+      "name": "Key text bound"
+    },
+    "__lom_string_language_pattern_language_tag_bpzqkxmhbe": {
+      "name": "Key text bound"
+    },
     "__lom_string_language_pk_node_i3cjmueenf": {
       "name": "E1 derived"
     },
     "__lom_string_languages_in_lom_string_language_mnyqcnhi35": {
       "name": "E1 derived"
+    },
+    "__lom_string_pattern_language_tag_nrtvk4l2uz": {
+      "name": "Key text bound"
     },
     "__lom_string_pk_node_7ve3opwlph": {
       "name": "E1 derived"
@@ -1715,6 +2060,12 @@
     },
     "__lom_title_string_in_node_4dhqiwpusy": {
       "name": "E1 derived"
+    },
+    "__lom_title_string_pattern_text_ks3bryoe6w": {
+      "name": "Key text bound"
+    },
+    "__lom_title_string_pattern_text_value_kudsyqcmzd": {
+      "name": "Key text bound"
     },
     "__lom_title_string_pk_node_jmyqhuqyvk": {
       "name": "E1 derived"
@@ -1761,6 +2112,9 @@
     "__lookup_value_kind_in_lookup_table_kbgj2l6tsr": {
       "name": "Mapping overlay"
     },
+    "__lookup_value_pattern_value_4ugq3l7jgg": {
+      "name": "Key text bound"
+    },
     "__lookup_value_pk_node_qbl6qcoya3": {
       "name": "Mapping overlay"
     },
@@ -1769,6 +2123,9 @@
     },
     "__lookup_value_type_in_lookup_value_dzskonfbfj": {
       "name": "Mapping overlay"
+    },
+    "__lookup_value_type_pattern_value_sg7zjtnfk4": {
+      "name": "Key text bound"
     },
     "__lookup_value_type_pk_node_wvgdb3yr3z": {
       "name": "Mapping overlay"
@@ -1791,6 +2148,12 @@
     "__manifest_id_key_package_xbex4efcl5": {
       "name": "Manifest overlay"
     },
+    "__manifest_id_pattern_identifier_k3byvpaua4": {
+      "name": "Key text bound"
+    },
+    "__manifest_id_pattern_lexical_m7vcwwxc5a": {
+      "name": "Key text bound"
+    },
     "__manifest_id_pk_node_zx7lg2i6ei": {
       "name": "Manifest overlay"
     },
@@ -1802,6 +2165,9 @@
     },
     "__manifest_id_space_kind_in_resource_id_nl6nsoho2o": {
       "name": "Manifest overlay"
+    },
+    "__manifest_id_space_pattern_identifier_xuvoumekmb": {
+      "name": "Key text bound"
     },
     "__manifest_id_space_pk_package_identifier_kind_xbvihpmx6a": {
       "name": "Manifest overlay"
@@ -1833,8 +2199,32 @@
     "__map_key_integer_key_mapping_value_rcfvsoxr23": {
       "name": "Map key"
     },
+    "__map_key_items_generated_ordered_3njzz6achv": {
+      "name": "E1 derived"
+    },
+    "__map_key_items_generated_unordered_a74xl4ybgp": {
+      "name": "E1 derived"
+    },
     "__map_key_items_in_map_key_type_gz5sznacgd": {
       "name": "Mapping overlay"
+    },
+    "__map_key_items_pattern_first_7tswpyvwou": {
+      "name": "E1 derived"
+    },
+    "__map_key_items_pattern_gap_7ognjr66ey": {
+      "name": "E1 derived"
+    },
+    "__map_key_items_pattern_key_nhxczli4yb": {
+      "name": "Key text bound"
+    },
+    "__map_key_items_pattern_ordered_agu6zftmwi": {
+      "name": "Key text bound"
+    },
+    "__map_key_items_pattern_second_zd6ckhygha": {
+      "name": "E1 derived"
+    },
+    "__map_key_items_pattern_unordered_vb5ojgit2i": {
+      "name": "Key text bound"
     },
     "__map_key_items_pk_node_edfs6ha4x7": {
       "name": "Mapping overlay"
@@ -1844,6 +2234,15 @@
     },
     "__map_key_pair_key_mapping_value_yhnpge475v": {
       "name": "Map key"
+    },
+    "__map_key_pattern_case_text_fwkmkjlg7y": {
+      "name": "Key text bound"
+    },
+    "__map_key_pattern_key_6ypkj3vf5u": {
+      "name": "Key text bound"
+    },
+    "__map_key_pattern_matched_rg3dtqlysv": {
+      "name": "Key text bound"
     },
     "__map_key_pk_node_vzfgtajlv7": {
       "name": "Mapping overlay"
@@ -1862,6 +2261,9 @@
     },
     "__map_key_type_in_mapping_base_type_bbmsguyade": {
       "name": "Mapping overlay"
+    },
+    "__map_key_type_pattern_key_yal2za37bh": {
+      "name": "Key text bound"
     },
     "__map_key_type_pk_node_n3wmz653je": {
       "name": "Mapping overlay"
@@ -1947,6 +2349,12 @@
     "__mapping_source_declaration_key_item_ref_target_dxhohrxaxo": {
       "name": "Variable mapping target"
     },
+    "__mapping_source_declaration_pattern_source_sa42ms3abj": {
+      "name": "Key text bound"
+    },
+    "__mapping_source_declaration_pattern_target_lal64u3qre": {
+      "name": "Key text bound"
+    },
     "__mapping_source_declaration_pk_node_axg6c4fbkz": {
       "name": "E1 derived"
     },
@@ -1955,6 +2363,12 @@
     },
     "__mastery_ceiling_in_normal_maximum_nvafsgdaze": {
       "name": "Declaration overlay"
+    },
+    "__mastery_ceiling_pattern_mastery_value_2cq3nqocpp": {
+      "name": "Key text bound"
+    },
+    "__mastery_ceiling_pattern_normal_maximum_nnbb2gbqbv": {
+      "name": "Key text bound"
     },
     "__mastery_ceiling_pk_node_hvnolgr6k5": {
       "name": "Declaration overlay"
@@ -1965,6 +2379,12 @@
     "__mastery_floor_in_normal_minimum_t7c7ivujgz": {
       "name": "Declaration overlay"
     },
+    "__mastery_floor_pattern_mastery_value_lzlepv226h": {
+      "name": "Key text bound"
+    },
+    "__mastery_floor_pattern_normal_minimum_zxqxhvkppj": {
+      "name": "Key text bound"
+    },
     "__mastery_floor_pk_node_qh2emtjn3e": {
       "name": "Declaration overlay"
     },
@@ -1974,6 +2394,9 @@
     "__mastery_value_in_attribute_4dlcxclcig": {
       "name": "Declaration overlay"
     },
+    "__mastery_value_pattern_lexical_rgu6im3xem": {
+      "name": "Key text bound"
+    },
     "__mastery_value_pk_node_fanrozhk5w": {
       "name": "Declaration overlay"
     },
@@ -1982,6 +2405,12 @@
     },
     "__math_action_in_node_d4dyuxi2ww": {
       "name": "E1 derived"
+    },
+    "__math_action_pattern_selection_lexical_p2zyjkrbja": {
+      "name": "Key text bound"
+    },
+    "__math_action_pattern_selection_text_d4cbjplkck": {
+      "name": "Key text bound"
     },
     "__math_action_pk_node_ug4nvjnaca": {
       "name": "E1 derived"
@@ -2024,6 +2453,9 @@
     },
     "__math_align_scope_kind_state_in_math_align_group_hg7abvs2fn": {
       "name": "E1 derived"
+    },
+    "__math_align_scope_pattern_dir_lexical_obytzbs7ds": {
+      "name": "Key text bound"
     },
     "__math_align_scope_pk_node_anunn3usyr": {
       "name": "E1 derived"
@@ -2076,6 +2508,12 @@
     "__math_cn_in_node_orswpko5gu": {
       "name": "E1 derived"
     },
+    "__math_cn_pattern_base_lexical_dondvxnfkw": {
+      "name": "Key text bound"
+    },
+    "__math_cn_pattern_type_lexical_hdeo3mpfjr": {
+      "name": "Key text bound"
+    },
     "__math_cn_pk_node_4j6zpy6zqk": {
       "name": "E1 derived"
     },
@@ -2084,6 +2522,9 @@
     },
     "__math_dir_in_attribute_g3x3irddnt": {
       "name": "E1 derived"
+    },
+    "__math_dir_pattern_lexical_2znxpketx7": {
+      "name": "Key text bound"
     },
     "__math_dir_pk_node_o7vrmvhb57": {
       "name": "E1 derived"
@@ -2127,6 +2568,9 @@
     "__most_count_max_written_in_interaction_attribute_poaomkcmb2": {
       "name": "E1 derived"
     },
+    "__most_count_pattern_most_xmdkzdidzv": {
+      "name": "Key text bound"
+    },
     "__most_count_pk_node_t5knsne3ek": {
       "name": "E1 derived"
     },
@@ -2154,6 +2598,9 @@
     "__named_kind_parent_kind_in_section_pln2ltitzw": {
       "name": "Test overlay"
     },
+    "__named_pattern_identifier_yl3did7lgh": {
+      "name": "Key text bound"
+    },
     "__named_pk_node_vk4v3pl34m": {
       "name": "Test overlay"
     },
@@ -2163,8 +2610,17 @@
     "__namespace_ordered_node_namespaces_lpkgddwkkb": {
       "name": "Namespace family"
     },
+    "__namespace_pattern_prefix_x3yaalmvwc": {
+      "name": "Key text bound"
+    },
+    "__namespace_pattern_uri_z5yi5i4qgm": {
+      "name": "Namespace name"
+    },
     "__namespace_pk_node_at_llkk4y45xe": {
       "name": "Namespace family"
+    },
+    "__natural_hcnvygsglu": {
+      "name": "E1 derived"
     },
     "__node_attributes_or_fold_rflkywqstc": {
       "name": "AL2 fold"
@@ -2322,6 +2778,27 @@
     "__node_parent_kind_kind_in_value_f4znl2bswr": {
       "name": "Declaration overlay"
     },
+    "__node_pattern_chars_after_ij7s4ekavs": {
+      "name": "Key text bound"
+    },
+    "__node_pattern_chars_gwq3zczrwy": {
+      "name": "XML production"
+    },
+    "__node_pattern_chars_was_ynppfwcq6i": {
+      "name": "Key text bound"
+    },
+    "__node_pattern_first_pumxnpxobo": {
+      "name": "E1 derived"
+    },
+    "__node_pattern_last_gbq55no64j": {
+      "name": "E1 derived"
+    },
+    "__node_pattern_prefix_ribevhat65": {
+      "name": "Key text bound"
+    },
+    "__node_pattern_string_value_ld357tkogu": {
+      "name": "Key text bound"
+    },
     "__node_pk_id_vw2xp7fgfa": {
       "name": "Node key"
     },
@@ -2346,6 +2823,9 @@
     "__normal_maximum_in_attribute_sfolns55sz": {
       "name": "Declaration overlay"
     },
+    "__normal_maximum_pattern_lexical_frvemhwf6q": {
+      "name": "Key text bound"
+    },
     "__normal_maximum_pk_node_3i3emg7bdj": {
       "name": "Declaration overlay"
     },
@@ -2354,6 +2834,9 @@
     },
     "__normal_minimum_in_declaration_h372dfgjbr": {
       "name": "Declaration overlay"
+    },
+    "__normal_minimum_pattern_lexical_27b7xy2rmw": {
+      "name": "Key text bound"
     },
     "__normal_minimum_pk_node_lo5uebm5sw": {
       "name": "Declaration overlay"
@@ -2370,6 +2853,18 @@
     "__object_identifier_key_document_akvxvxjzuv": {
       "name": "E1 derived"
     },
+    "__object_identifier_pattern_identifier_rfdfo7o2z7": {
+      "name": "Key text bound"
+    },
+    "__object_identifier_pattern_lead_vja6swnpn6": {
+      "name": "E1 derived"
+    },
+    "__object_identifier_pattern_lexical_bu6nhh5re3": {
+      "name": "Key text bound"
+    },
+    "__object_identifier_pattern_trail_wfdu2oxdui": {
+      "name": "E1 derived"
+    },
     "__object_identifier_pk_node_x2hsag7dyh": {
       "name": "E1 derived"
     },
@@ -2378,6 +2873,12 @@
     },
     "__object_lang_in_attribute_edhnrjikku": {
       "name": "E1 derived"
+    },
+    "__object_lang_pattern_lang_f5if4zxyfu": {
+      "name": "Key text bound"
+    },
+    "__object_lang_pattern_lang_tag_at53dfetsk": {
+      "name": "Key text bound"
     },
     "__object_lang_pk_node_bxeruzpdw4": {
       "name": "E1 derived"
@@ -2390,6 +2891,12 @@
     },
     "__object_title_key_document_47l6v3bsjp": {
       "name": "E1 derived"
+    },
+    "__object_title_pattern_title_fvf2xnletw": {
+      "name": "Key text bound"
+    },
+    "__object_title_pattern_title_value_fgfai75okf": {
+      "name": "Key text bound"
     },
     "__object_title_pk_node_2uvy66vexu": {
       "name": "E1 derived"
@@ -2406,6 +2913,15 @@
     "__open_attribute_name_ordered_attribute_open_name_fdp6gia4tb": {
       "name": "AL4 open names"
     },
+    "__open_attribute_name_pattern_element_namespace_qwlg4emt4h": {
+      "name": "Key text bound"
+    },
+    "__open_attribute_name_pattern_local_zvzgfjrals": {
+      "name": "Key text bound"
+    },
+    "__open_attribute_name_pattern_uri_ueq4roagc3": {
+      "name": "Key text bound"
+    },
     "__open_attribute_name_pk_node_attribute_at_i44djs5akv": {
       "name": "AL4 open names"
     },
@@ -2421,6 +2937,15 @@
     "__open_element_name_parent_kind_in_open_element_name_k3h32lfwmj": {
       "name": "Foreign element class"
     },
+    "__open_element_name_pattern_local_l5pglhcpuy": {
+      "name": "XML production"
+    },
+    "__open_element_name_pattern_namespace_dr26wstbob": {
+      "name": "Key text bound"
+    },
+    "__open_element_name_pattern_parent_namespace_yka6xev5nq": {
+      "name": "Key text bound"
+    },
     "__open_element_name_pk_node_etbnnivpzp": {
       "name": "OpenElementName"
     },
@@ -2430,11 +2955,20 @@
     "__open_element_type_in_open_element_name_w6jxhegukr": {
       "name": "E1 derived"
     },
+    "__open_element_type_pattern_parent_namespace_ggdrgaqc7c": {
+      "name": "Key text bound"
+    },
     "__open_element_type_pk_node_xsdced6h2v": {
       "name": "E1 derived"
     },
     "__operand_counted_expression_operands_gwdaxvhpif": {
       "name": "Arity"
+    },
+    "__operand_generated_base_type_bit_irtpnywdzi": {
+      "name": "E1 derived"
+    },
+    "__operand_generated_cardinality_bit_dhebgne557": {
+      "name": "E1 derived"
     },
     "__operand_in_expression_436z5cvlme": {
       "name": "E1 derived"
@@ -2462,6 +2996,12 @@
     },
     "__pi_in_node_jmkqmvbqwy": {
       "name": "pi arm"
+    },
+    "__pi_pattern_data_f6ucepbojl": {
+      "name": "XML production"
+    },
+    "__pi_pattern_target_qwqlgcs37u": {
+      "name": "XML production"
     },
     "__pi_pk_node_7x727lhmh3": {
       "name": "pi arm"
@@ -2520,6 +3060,9 @@
     "__placed_binding_declaration_in_placed_binding_aq3c7yr67f": {
       "name": "E1 derived"
     },
+    "__placed_binding_declaration_pattern_identifier_gtqaeo74ka": {
+      "name": "Key text bound"
+    },
     "__placed_binding_declaration_pk_instance_node_rrwmidlr57": {
       "name": "E1 derived"
     },
@@ -2538,6 +3081,9 @@
     "__placed_binding_key_assembly_identifier_ncfblzbf4t": {
       "name": "Binding unique"
     },
+    "__placed_binding_pattern_identifier_ssjpn5o52z": {
+      "name": "Key text bound"
+    },
     "__placed_binding_pk_instance_node_attribute_x7crczgvu2": {
       "name": "E1 derived"
     },
@@ -2546,6 +3092,9 @@
     },
     "__placed_body_xml_lang_in_placed_xml_lang_jiqk7squ5e": {
       "name": "E1 derived"
+    },
+    "__placed_body_xml_lang_pattern_lang_k52leqmgki": {
+      "name": "Key text bound"
     },
     "__placed_body_xml_lang_pk_instance_node_x6uqv35umd": {
       "name": "E1 derived"
@@ -2558,6 +3107,9 @@
     },
     "__placed_catalog_ref_in_placed_idref_tou2yeokgk": {
       "name": "E1 derived"
+    },
+    "__placed_catalog_ref_pattern_id_a4p73dlw5p": {
+      "name": "Key text bound"
     },
     "__placed_catalog_ref_pk_instance_id_kxo7vpnhb6": {
       "name": "E1 derived"
@@ -2576,6 +3128,9 @@
     },
     "__placed_choice_key_assembly_kind_identifier_q4ucqz2yhs": {
       "name": "Choice identifier key"
+    },
+    "__placed_choice_pattern_identifier_sw3bwnz7ol": {
+      "name": "Key text bound"
     },
     "__placed_choice_pk_instance_node_st7rgdpbfo": {
       "name": "E1 derived"
@@ -2604,6 +3159,9 @@
     "__placed_hottext_key_assembly_identifier_iwkgmyj7gi": {
       "name": "Choice identifier key"
     },
+    "__placed_hottext_pattern_identifier_yyekba36uu": {
+      "name": "Key text bound"
+    },
     "__placed_hottext_pk_instance_node_im2fxwig4u": {
       "name": "E1 derived"
     },
@@ -2619,6 +3177,9 @@
     "__placed_id_in_instance_o556e2vuiz": {
       "name": "E1 derived"
     },
+    "__placed_id_pattern_id_y4lta4tgnz": {
+      "name": "Key text bound"
+    },
     "__placed_id_pk_instance_node_7jvf4y3nqy": {
       "name": "E1 derived"
     },
@@ -2633,6 +3194,9 @@
     },
     "__placed_idref_in_instance_4kqgnczdsz": {
       "name": "E1 derived"
+    },
+    "__placed_idref_pattern_id_oerxum2omy": {
+      "name": "Key text bound"
     },
     "__placed_idref_pk_instance_id_uy7od2jdav": {
       "name": "E1 derived"
@@ -2685,6 +3249,9 @@
     "__placed_share_target_in_share_fragment_6sdiy57avj": {
       "name": "E1 derived"
     },
+    "__placed_share_target_pattern_id_rby52d7kro": {
+      "name": "Key text bound"
+    },
     "__placed_share_target_pk_instance_node_bq22hcz3jl": {
       "name": "E1 derived"
     },
@@ -2709,6 +3276,9 @@
     "__placed_variable_ref_declaration_in_placed_variable_rd72a2jmyx": {
       "name": "E1 derived"
     },
+    "__placed_variable_ref_declaration_pattern_identifier_ju4vszk4tj": {
+      "name": "Key text bound"
+    },
     "__placed_variable_ref_declaration_pk_instance_node_fncl3li2ku": {
       "name": "E1 derived"
     },
@@ -2720,6 +3290,9 @@
     },
     "__placed_variable_ref_in_variable_ref_c6d67stwrg": {
       "name": "E1 derived"
+    },
+    "__placed_variable_ref_pattern_identifier_pti6me5b77": {
+      "name": "Key text bound"
     },
     "__placed_variable_ref_pk_instance_node_attribute_lbubljc3ry": {
       "name": "E1 derived"
@@ -2739,6 +3312,9 @@
     "__placed_xml_lang_in_xml_lang_uqwh5n2bdy": {
       "name": "E1 derived"
     },
+    "__placed_xml_lang_pattern_lang_jyfizwcs3y": {
+      "name": "Key text bound"
+    },
     "__placed_xml_lang_pk_instance_node_vv7w4adu6j": {
       "name": "E1 derived"
     },
@@ -2754,8 +3330,14 @@
     "__printed_variable_ref_declaration_in_printed_wt7vnm6k5p": {
       "name": "Printed variable reference"
     },
+    "__printed_variable_ref_declaration_pattern_tpmlxmbftx": {
+      "name": "Key text bound"
+    },
     "__printed_variable_ref_declaration_pk_node_attribute_3xowfennya": {
       "name": "E1 derived"
+    },
+    "__printed_variable_ref_pattern_identifier_jkwdrcfsvy": {
+      "name": "Key text bound"
     },
     "__printed_variable_ref_pk_node_attribute_72ks2kz26c": {
       "name": "E1 derived"
@@ -2771,6 +3353,9 @@
     },
     "__processing_pk_node_idsff74wjn": {
       "name": "E1 derived"
+    },
+    "__processing_template_pattern_uri_hqyr3iqnvy": {
+      "name": "Key text bound"
     },
     "__processing_template_pk_node_hfbvtmc5k7": {
       "name": "E1 derived"
@@ -2797,6 +3382,18 @@
       "name": "E1 derived"
     },
     "__quotation_next_at_siblings_in_node_s4ocmi6vno": {
+      "name": "E1 derived"
+    },
+    "__quotation_pattern_after_xohidrrtrh": {
+      "name": "E1 derived"
+    },
+    "__quotation_pattern_before_pbl52sn6u2": {
+      "name": "E1 derived"
+    },
+    "__quotation_pattern_first_236crwwrxf": {
+      "name": "E1 derived"
+    },
+    "__quotation_pattern_last_72pbwfma7m": {
       "name": "E1 derived"
     },
     "__quotation_pk_node_llr6taht34": {
@@ -2841,6 +3438,9 @@
     "__reading_declaration_in_reading_vtckhjwbbp": {
       "name": "E1 derived"
     },
+    "__reading_declaration_pattern_variable_mromijjv6v": {
+      "name": "Key text bound"
+    },
     "__reading_declaration_pk_assembly_node_attribute_fy72nisinv": {
       "name": "E1 derived"
     },
@@ -2877,6 +3477,18 @@
     "__reading_in_mapped_reading_hfanpkr3fj": {
       "name": "E1 derived"
     },
+    "__reading_pattern_identifier_agvqwp4vew": {
+      "name": "Key text bound"
+    },
+    "__reading_pattern_number_yely4syrf7": {
+      "name": "Key text bound"
+    },
+    "__reading_pattern_scope_nbgzhsqvwp": {
+      "name": "Key text bound"
+    },
+    "__reading_pattern_variable_my4uydosji": {
+      "name": "Key text bound"
+    },
     "__reading_pk_assembly_node_attribute_form_split_skqciohjuy": {
       "name": "E1 derived"
     },
@@ -2901,8 +3513,26 @@
     "__record_field_name_key_parent_identifier_z2vqixnu36": {
       "name": "Record field key"
     },
+    "__record_field_name_pattern_identifier_3ghrxn7ocv": {
+      "name": "Key text bound"
+    },
+    "__record_field_name_pattern_identifier_lead_3ulg2wkewh": {
+      "name": "E1 derived"
+    },
+    "__record_field_name_pattern_identifier_lexical_bqg4h4gqlm": {
+      "name": "Key text bound"
+    },
+    "__record_field_name_pattern_identifier_trail_3bxrnfusd2": {
+      "name": "E1 derived"
+    },
     "__record_field_name_pk_node_qk3rufv7c4": {
       "name": "Declaration overlay"
+    },
+    "__record_field_pattern_base_type_lexical_7p4zmavaqg": {
+      "name": "Key text bound"
+    },
+    "__record_field_pattern_identifier_lexical_dzzx4quket": {
+      "name": "Key text bound"
     },
     "__record_field_pk_node_sruozvzkz7": {
       "name": "Declaration overlay"
@@ -2931,8 +3561,26 @@
     "__reference_path_kind_in_document_q5l5ya6czq": {
       "name": "Stimulus ref target"
     },
+    "__reference_path_pattern_path_jtrq44lpmt": {
+      "name": "Key text bound"
+    },
     "__reference_path_pk_node_name_4nzs43x6qs": {
       "name": "Reference overlay"
+    },
+    "__reference_pattern_lead_4uy34klwf4": {
+      "name": "E1 derived"
+    },
+    "__reference_pattern_lexical_aj6mm2lzvt": {
+      "name": "Key text bound"
+    },
+    "__reference_pattern_params_7gfatp7e5i": {
+      "name": "E1 derived"
+    },
+    "__reference_pattern_target_xf7grfjlhw": {
+      "name": "Key text bound"
+    },
+    "__reference_pattern_trail_i5rcgoip3g": {
+      "name": "E1 derived"
     },
     "__reference_pk_node_name_bu2vhvzrcz": {
       "name": "Reference overlay"
@@ -2940,8 +3588,26 @@
     "__reference_scope_in_reference_path_p7vcu65xr3": {
       "name": "Reference overlay"
     },
+    "__reference_segment_generated_token_ko47hdrar7": {
+      "name": "E1 derived"
+    },
     "__reference_segment_ordered_assembled_reference_7uxtrrrse4": {
       "name": "E1 derived"
+    },
+    "__reference_segment_pattern_after_gv3uawk532": {
+      "name": "Key text bound"
+    },
+    "__reference_segment_pattern_before_iyuuucta55": {
+      "name": "Key text bound"
+    },
+    "__reference_segment_pattern_piece_xdgkgamnfv": {
+      "name": "Key text bound"
+    },
+    "__reference_segment_pattern_separator_dyunqmnxq5": {
+      "name": "E1 derived"
+    },
+    "__reference_segment_pattern_token_o4erut7vhf": {
+      "name": "Key text bound"
     },
     "__reference_segment_pk_assembly_node_attribute_at_eykp6gwpu5": {
       "name": "E1 derived"
@@ -2964,8 +3630,14 @@
     "__resource_document_key_package_path_lvy65x37bj": {
       "name": "Document entry"
     },
+    "__resource_document_pattern_path_f7ffsoc5et": {
+      "name": "Key text bound"
+    },
     "__resource_document_pk_node_aye4lx6p3v": {
       "name": "E1 derived"
+    },
+    "__resource_file_pattern_path_dapvfoftxe": {
+      "name": "Key text bound"
     },
     "__resource_file_pk_resource_scope_path_zowtwdza42": {
       "name": "Href listed"
@@ -2978,6 +3650,12 @@
     },
     "__resource_href_in_resource_rdltqdaumz": {
       "name": "Manifest overlay"
+    },
+    "__resource_href_pattern_href_uuylxj6x5t": {
+      "name": "Key text bound"
+    },
+    "__resource_href_pattern_path_s6q4didyab": {
+      "name": "Key text bound"
     },
     "__resource_href_pk_node_iayf2clp6o": {
       "name": "Manifest overlay"
@@ -2994,6 +3672,12 @@
     "__resource_id_key_package_identifier_tbq6mr6qhd": {
       "name": "DocumentId key"
     },
+    "__resource_id_pattern_identifier_cviornrjfd": {
+      "name": "Key text bound"
+    },
+    "__resource_id_pattern_lexical_ifsh7miamz": {
+      "name": "Key text bound"
+    },
     "__resource_id_pk_node_pkt3awa472": {
       "name": "Manifest overlay"
     },
@@ -3006,6 +3690,9 @@
     "__resource_in_node_uhbtoltqgs": {
       "name": "Manifest overlay"
     },
+    "__resource_lom_language_set_pattern_lang_xq6dpotcu5": {
+      "name": "Key text bound"
+    },
     "__resource_lom_language_set_pk_general_lang_dpxb5elisr": {
       "name": "E1 derived"
     },
@@ -3015,6 +3702,9 @@
     "__resource_typed_in_resource_t4mzi4etmm": {
       "name": "E1 derived"
     },
+    "__resource_typed_pattern_type_lexical_mwejhy4ggq": {
+      "name": "Key text bound"
+    },
     "__resource_typed_pk_node_vntatdu4va": {
       "name": "E1 derived"
     },
@@ -3023,6 +3713,12 @@
     },
     "__rounding_figures_in_rounding_aokqkr6kqi": {
       "name": "E1 derived"
+    },
+    "__rounding_figures_pattern_figures_ictlcnd2ro": {
+      "name": "Key text bound"
+    },
+    "__rounding_figures_pattern_figures_lexical_7qmzjx3zuu": {
+      "name": "Key text bound"
     },
     "__rounding_figures_pk_node_7iz26zqkur": {
       "name": "E1 derived"
@@ -3048,6 +3744,12 @@
     "__rounding_mode_figures_in_rounding_mode_zxqirnjcvh": {
       "name": "E1 derived"
     },
+    "__rounding_mode_figures_pattern_figures_givdmsjmln": {
+      "name": "Key text bound"
+    },
+    "__rounding_mode_figures_pattern_mode_gzkyswzb3k": {
+      "name": "Key text bound"
+    },
     "__rounding_mode_figures_pk_node_pyc254gpbd": {
       "name": "E1 derived"
     },
@@ -3056,6 +3758,9 @@
     },
     "__rounding_mode_in_rounding_ohynh46g4w": {
       "name": "E1 derived"
+    },
+    "__rounding_mode_pattern_mode_7apfsmsn2w": {
+      "name": "Key text bound"
     },
     "__rounding_mode_pk_node_js4yfativl": {
       "name": "E1 derived"
@@ -3075,6 +3780,9 @@
     "__section_context_name_counted_referring_document_pwnfxs6ice": {
       "name": "E1 derived"
     },
+    "__section_context_name_pattern_identifier_ln7gwxsg5r": {
+      "name": "Key text bound"
+    },
     "__section_context_name_pk_node_attribute_dzisohjsmk": {
       "name": "E1 derived"
     },
@@ -3093,6 +3801,9 @@
     "__section_context_ref_declaration_in_section_context_ycsd4i5spo": {
       "name": "Context variable reference"
     },
+    "__section_context_ref_declaration_pattern_identifier_k6urc7rbjs": {
+      "name": "Key text bound"
+    },
     "__section_context_ref_declaration_pk_instance_node_u22qfcvs4b": {
       "name": "E1 derived"
     },
@@ -3102,11 +3813,17 @@
     "__section_context_ref_in_section_scope_qphnqe4wc4": {
       "name": "E1 derived"
     },
+    "__section_context_ref_pattern_identifier_qfqe3ilisr": {
+      "name": "Key text bound"
+    },
     "__section_context_ref_pk_instance_node_attribute_upb6kzujp3": {
       "name": "E1 derived"
     },
     "__section_feedback_name_counted_referring_document_5fwtmmiwlo": {
       "name": "E1 derived"
+    },
+    "__section_feedback_name_pattern_identifier_gciaynkxan": {
+      "name": "Key text bound"
     },
     "__section_feedback_name_pk_node_attribute_tfwc6pwf6i": {
       "name": "E1 derived"
@@ -3141,6 +3858,9 @@
     "__section_feedback_ref_declaration_in_section_lyc5wzkdun": {
       "name": "Feedback reference"
     },
+    "__section_feedback_ref_declaration_pattern_sdx4bhmxas": {
+      "name": "Key text bound"
+    },
     "__section_feedback_ref_declaration_pk_instance_node_sr2jutcaxo": {
       "name": "E1 derived"
     },
@@ -3149,6 +3869,9 @@
     },
     "__section_feedback_ref_in_section_scope_tculakwmdo": {
       "name": "E1 derived"
+    },
+    "__section_feedback_ref_pattern_identifier_fmnacwy2s4": {
+      "name": "Key text bound"
     },
     "__section_feedback_ref_pk_instance_node_attribute_t656igpb5h": {
       "name": "E1 derived"
@@ -3161,6 +3884,18 @@
     },
     "__section_identifier_in_node_7ikfng7lgr": {
       "name": "E1 derived"
+    },
+    "__section_identifier_pattern_after_ceozivvldh": {
+      "name": "E1 derived"
+    },
+    "__section_identifier_pattern_before_6vemilvoif": {
+      "name": "E1 derived"
+    },
+    "__section_identifier_pattern_identifier_4dhlcnwvm4": {
+      "name": "Key text bound"
+    },
+    "__section_identifier_pattern_lexical_llfpjjxf3e": {
+      "name": "Key text bound"
     },
     "__section_identifier_pk_node_sjjezpskc3": {
       "name": "E1 derived"
@@ -3225,6 +3960,9 @@
     "__section_printed_name_counted_referring_document_xxx2rq253q": {
       "name": "E1 derived"
     },
+    "__section_printed_name_pattern_identifier_lz533korzt": {
+      "name": "Key text bound"
+    },
     "__section_printed_name_pk_node_attribute_54ovy7qu5k": {
       "name": "E1 derived"
     },
@@ -3243,6 +3981,9 @@
     "__section_printed_ref_declaration_in_section_printed_232qz6mxmc": {
       "name": "Printed variable reference"
     },
+    "__section_printed_ref_declaration_pattern_identifier_pb54lvjygx": {
+      "name": "Key text bound"
+    },
     "__section_printed_ref_declaration_pk_instance_node_5uygwovewu": {
       "name": "E1 derived"
     },
@@ -3251,6 +3992,9 @@
     },
     "__section_printed_ref_in_section_scope_3u6nc3rpd4": {
       "name": "E1 derived"
+    },
+    "__section_printed_ref_pattern_identifier_elylx2zdlm": {
+      "name": "Key text bound"
     },
     "__section_printed_ref_pk_instance_node_attribute_zagfj5cnvt": {
       "name": "E1 derived"
@@ -3262,6 +4006,9 @@
       "name": "E1 derived"
     },
     "__section_scope_pk_instance_r2lfukjprt": {
+      "name": "E1 derived"
+    },
+    "__section_selection_generated_select_swno4anj7g": {
       "name": "E1 derived"
     },
     "__section_selection_in_attribute_rnqihg54ja": {
@@ -3279,6 +4026,18 @@
     "__section_selection_key_parent_5cl4y2z7d6": {
       "name": "Test overlay"
     },
+    "__section_selection_pattern_select_form_h7byfcqsyk": {
+      "name": "value domain"
+    },
+    "__section_selection_pattern_select_lead_2fmhgjyg7h": {
+      "name": "E1 derived"
+    },
+    "__section_selection_pattern_select_lexical_hgpnfwlfd2": {
+      "name": "Key text bound"
+    },
+    "__section_selection_pattern_select_trail_prk7bb4b42": {
+      "name": "E1 derived"
+    },
     "__section_selection_pk_node_s23y74aqx3": {
       "name": "Test overlay"
     },
@@ -3290,6 +4049,9 @@
     },
     "__section_template_name_counted_referring_document_dc6h2qzb6x": {
       "name": "E1 derived"
+    },
+    "__section_template_name_pattern_identifier_rohg2mfpah": {
+      "name": "Key text bound"
     },
     "__section_template_name_pk_node_attribute_mnacvjvhyv": {
       "name": "E1 derived"
@@ -3324,6 +4086,9 @@
     "__section_template_ref_declaration_in_section_k226fmftkn": {
       "name": "Template reference"
     },
+    "__section_template_ref_declaration_pattern_rojhja5bn4": {
+      "name": "Key text bound"
+    },
     "__section_template_ref_declaration_pk_instance_node_25ntxqyx53": {
       "name": "E1 derived"
     },
@@ -3332,6 +4097,9 @@
     },
     "__section_template_ref_in_section_template_name_34jvobswex": {
       "name": "Template reference"
+    },
+    "__section_template_ref_pattern_identifier_bqrzi5nafb": {
+      "name": "Key text bound"
     },
     "__section_template_ref_pk_instance_node_attribute_54uccc4vka": {
       "name": "E1 derived"
@@ -3354,6 +4122,12 @@
     "__share_fragment_in_idref_target_adxvukku2u": {
       "name": "Idref target"
     },
+    "__share_fragment_pattern_id_6y7gyuqjp5": {
+      "name": "Key text bound"
+    },
+    "__share_fragment_pattern_src_ph3i3lw436": {
+      "name": "Key text bound"
+    },
     "__share_fragment_pk_node_6zbo5zjisn": {
       "name": "E1 derived"
     },
@@ -3368,6 +4142,9 @@
     },
     "__share_target_in_share_fragment_766z6b6xnw": {
       "name": "E1 derived"
+    },
+    "__share_target_pattern_id_geiih5nebv": {
+      "name": "Key text bound"
     },
     "__share_target_pk_node_c3qlherpcs": {
       "name": "E1 derived"
@@ -3402,6 +4179,9 @@
     "__site_path_in_site_qz3xihfpzy": {
       "name": "Test overlay"
     },
+    "__site_path_pattern_path_3dddtxuvkf": {
+      "name": "Key text bound"
+    },
     "__site_path_pk_node_hmwrlb6qt5": {
       "name": "Test overlay"
     },
@@ -3429,11 +4209,20 @@
     "__site_target_kind_in_test_document_a3zmoa53yk": {
       "name": "Document entry"
     },
+    "__site_target_pattern_path_ndyxne5dtu": {
+      "name": "Key text bound"
+    },
     "__site_target_pk_node_iqxb4ejhxb": {
       "name": "Test overlay"
     },
     "__slider_in_interaction_attribute_37o765xiym": {
       "name": "E1 derived"
+    },
+    "__slider_pattern_lower_pztgr5t7jp": {
+      "name": "Key text bound"
+    },
+    "__slider_pattern_upper_w2ifnfrtn2": {
+      "name": "Key text bound"
     },
     "__slider_pk_node_z3w3s2lwli": {
       "name": "E1 derived"
@@ -3453,6 +4242,12 @@
     "__ssml_attribute_kind_in_fragment_value_cndhd3sxkt": {
       "name": "SSML lexicon reference"
     },
+    "__ssml_attribute_pattern_lexical_p4qj42pdlf": {
+      "name": "Key text bound"
+    },
+    "__ssml_attribute_pattern_value_4pro42ovnl": {
+      "name": "Key text bound"
+    },
     "__ssml_attribute_pk_node_name_crjydlhndr": {
       "name": "E1 derived"
     },
@@ -3465,7 +4260,22 @@
     "__ssml_scope_pk_node_dzz5gebeap": {
       "name": "E1 derived"
     },
+    "__statistic_date_generated_date_3d6nkwto2w": {
+      "name": "value domain"
+    },
     "__statistic_date_in_attribute_ajvcgbdf7c": {
+      "name": "E1 derived"
+    },
+    "__statistic_date_pattern_day_wonxdqlp7f": {
+      "name": "value domain"
+    },
+    "__statistic_date_pattern_lead_glegdzrbfv": {
+      "name": "E1 derived"
+    },
+    "__statistic_date_pattern_lexical_upkmoi7ya5": {
+      "name": "Key text bound"
+    },
+    "__statistic_date_pattern_trail_tirwc2vdir": {
       "name": "E1 derived"
     },
     "__statistic_date_pk_node_3oplr45njk": {
@@ -3483,6 +4293,9 @@
     "__stimulus_ref_key_document_identifier_lbriesghu5": {
       "name": "Stimulus ref key"
     },
+    "__stimulus_ref_pattern_identifier_2cyqrkrlyw": {
+      "name": "Key text bound"
+    },
     "__stimulus_ref_pk_node_psbmrg6woc": {
       "name": "Test overlay"
     },
@@ -3497,6 +4310,9 @@
     },
     "__table_header_in_table_scope_ixhtpprtkq": {
       "name": "E1 derived"
+    },
+    "__table_header_pattern_id_kgrnpvkzwk": {
+      "name": "Key text bound"
     },
     "__table_header_pk_node_e5x6w7ncxo": {
       "name": "E1 derived"
@@ -3528,6 +4344,18 @@
     "__template_default_in_template_default_target_zrxzzjv4qu": {
       "name": "Template default target"
     },
+    "__template_default_pattern_lead_wj4hd4hsio": {
+      "name": "E1 derived"
+    },
+    "__template_default_pattern_lexical_laprau2noc": {
+      "name": "Key text bound"
+    },
+    "__template_default_pattern_template_5brcu7zroe": {
+      "name": "Key text bound"
+    },
+    "__template_default_pattern_trail_77edn56bkl": {
+      "name": "E1 derived"
+    },
     "__template_default_pk_node_yy24b47bqs": {
       "name": "E1 derived"
     },
@@ -3548,6 +4376,9 @@
     },
     "__template_default_target_in_template_default_w3h6qmy4q2": {
       "name": "E1 derived"
+    },
+    "__template_default_target_pattern_template_2jilgphu4k": {
+      "name": "Key text bound"
     },
     "__template_default_target_pk_node_nwqqzld3jm": {
       "name": "E1 derived"
@@ -3579,8 +4410,14 @@
     "__template_ref_declaration_in_template_ref_gkhkf5ojdq": {
       "name": "Template reference"
     },
+    "__template_ref_declaration_pattern_identifier_7klvlxaysm": {
+      "name": "Key text bound"
+    },
     "__template_ref_declaration_pk_node_attribute_mnsvmp27yb": {
       "name": "E1 derived"
+    },
+    "__template_ref_pattern_identifier_z6qfrk4sqh": {
+      "name": "Key text bound"
     },
     "__template_ref_pk_node_attribute_hfaad2vgoa": {
       "name": "E1 derived"
@@ -3590,6 +4427,9 @@
     },
     "__test_document_in_document_fu2sciunh5": {
       "name": "Test overlay"
+    },
+    "__test_document_pattern_path_t2vm6ffqec": {
+      "name": "Key text bound"
     },
     "__test_document_pk_node_nlya2wqkch": {
       "name": "Test overlay"
@@ -3633,11 +4473,17 @@
     "__test_flag_name_value_in_section_bylzwjllll": {
       "name": "Test overlay"
     },
+    "__test_flag_pattern_lexical_7zdkzbrvlm": {
+      "name": "Key text bound"
+    },
     "__test_flag_pk_node_name_66sutwn65m": {
       "name": "Test overlay"
     },
     "__test_reference_counted_reference_document_vackflullb": {
       "name": "E1 derived"
+    },
+    "__test_reference_pattern_identifier_tljn7znizl": {
+      "name": "Key text bound"
     },
     "__test_reference_pk_node_attribute_ix3hzqwa4f": {
       "name": "E1 derived"
@@ -3660,11 +4506,26 @@
     "__test_token_name_in_attribute_z7wbqk4ivv": {
       "name": "Test overlay"
     },
+    "__test_token_pattern_lead_5yypc2t2ws": {
+      "name": "E1 derived"
+    },
+    "__test_token_pattern_lexical_k6bqot7vrb": {
+      "name": "Key text bound"
+    },
+    "__test_token_pattern_trail_xl67jlacqb": {
+      "name": "E1 derived"
+    },
+    "__test_token_pattern_value_wlivgplnkv": {
+      "name": "Key text bound"
+    },
     "__test_token_pk_node_name_fle6zbmrrr": {
       "name": "Test overlay"
     },
     "__test_token_value_name_in_branch_rule_3gwhrgzhvb": {
       "name": "Test overlay"
+    },
+    "__text_idref_generated_piece_givdyvsh3y": {
+      "name": "E1 derived"
     },
     "__text_idref_in_identity_text_nebygjdgyj": {
       "name": "E1 derived"
@@ -3674,6 +4535,24 @@
     },
     "__text_idref_ordered_identity_text_idrefs_vgmsc7da2d": {
       "name": "E1 derived"
+    },
+    "__text_idref_pattern_after_5w5jzh7lom": {
+      "name": "E1 derived"
+    },
+    "__text_idref_pattern_before_dzo3vz4krw": {
+      "name": "E1 derived"
+    },
+    "__text_idref_pattern_piece_pfdb7wxgsj": {
+      "name": "Key text bound"
+    },
+    "__text_idref_pattern_pieces_after_lyhzd24ayl": {
+      "name": "Key text bound"
+    },
+    "__text_idref_pattern_pieces_was_y3feb3mvo2": {
+      "name": "Key text bound"
+    },
+    "__text_idref_pattern_token_5y2ayl66px": {
+      "name": "Key text bound"
     },
     "__text_idref_pk_node_at_lyod6gotzp": {
       "name": "E1 derived"
@@ -3690,8 +4569,26 @@
     "__text_reference_path_in_text_reference_6wnnonzjve": {
       "name": "Reference overlay"
     },
+    "__text_reference_path_pattern_path_faocrymohz": {
+      "name": "Key text bound"
+    },
     "__text_reference_path_pk_node_3zqxsp5ryz": {
       "name": "Reference overlay"
+    },
+    "__text_reference_pattern_lead_4r2jjafwo4": {
+      "name": "E1 derived"
+    },
+    "__text_reference_pattern_lexical_na5t4mpsbu": {
+      "name": "Key text bound"
+    },
+    "__text_reference_pattern_params_6omaefhbvc": {
+      "name": "E1 derived"
+    },
+    "__text_reference_pattern_target_umxlbyg6ep": {
+      "name": "Key text bound"
+    },
+    "__text_reference_pattern_trail_x7np6pq5qh": {
+      "name": "E1 derived"
     },
     "__text_reference_pk_node_glw63ozdjy": {
       "name": "Reference overlay"
@@ -3702,11 +4599,38 @@
     "__tolerance_in_attribute_n7umava2io": {
       "name": "E1 derived"
     },
+    "__tolerance_pattern_lexical_kmuea3ie5e": {
+      "name": "Key text bound"
+    },
+    "__tolerance_pattern_token_text_7yfuv4sapn": {
+      "name": "Key text bound"
+    },
     "__tolerance_pk_node_nbylrcil3w": {
+      "name": "E1 derived"
+    },
+    "__tolerance_token_generated_piece_stwstekzyb": {
       "name": "E1 derived"
     },
     "__tolerance_token_ordered_tolerance_tokens_llpogayymo": {
       "name": "E1 derived"
+    },
+    "__tolerance_token_pattern_after_fm3h7wm7ge": {
+      "name": "E1 derived"
+    },
+    "__tolerance_token_pattern_before_s6qnhxewk7": {
+      "name": "E1 derived"
+    },
+    "__tolerance_token_pattern_piece_i43xyqgrgx": {
+      "name": "Key text bound"
+    },
+    "__tolerance_token_pattern_pieces_after_ilajipgxxc": {
+      "name": "Key text bound"
+    },
+    "__tolerance_token_pattern_pieces_was_ecjojpfgrl": {
+      "name": "Key text bound"
+    },
+    "__tolerance_token_pattern_token_x22cqu5plt": {
+      "name": "Key text bound"
     },
     "__tolerance_token_pk_node_at_axylkrtwu2": {
       "name": "E1 derived"
@@ -3726,11 +4650,17 @@
     "__typed_value_in_value_cubzrqtdcs": {
       "name": "Declaration overlay"
     },
+    "__typed_value_pattern_text_qpjek426qk": {
+      "name": "Key text bound"
+    },
     "__typed_value_pk_node_zcrpxf2qdc": {
       "name": "Declaration overlay"
     },
     "__usage_base_type_in_attribute_mgi7jd62oi": {
       "name": "E1 derived"
+    },
+    "__usage_base_type_pattern_lexical_nanvw7tkca": {
+      "name": "Key text bound"
     },
     "__usage_base_type_pk_node_wwvojfpfnk": {
       "name": "E1 derived"
@@ -3744,6 +4674,12 @@
     "__usage_value_base_type_lexical_in_usage_value_base_5j7ebaqeed": {
       "name": "E1 derived"
     },
+    "__usage_value_base_type_pattern_base_type_lexical_bvz7th2hoo": {
+      "name": "Key text bound"
+    },
+    "__usage_value_base_type_pattern_text_5gkbzg6a7v": {
+      "name": "Key text bound"
+    },
     "__usage_value_base_type_pk_node_2ylr2vwtah": {
       "name": "E1 derived"
     },
@@ -3756,6 +4692,12 @@
     "__usage_value_in_usage_base_type_qz2sqz5kow": {
       "name": "E1 derived"
     },
+    "__usage_value_pattern_base_type_lexical_i5l5dy35sa": {
+      "name": "Key text bound"
+    },
+    "__usage_value_pattern_text_62ctcbe3jo": {
+      "name": "Key text bound"
+    },
     "__usage_value_pk_node_b6pcm36mxq": {
       "name": "E1 derived"
     },
@@ -3767,6 +4709,9 @@
     },
     "__value_base_type_in_value_rvgv43pyny": {
       "name": "Declaration overlay"
+    },
+    "__value_base_type_pattern_base_type_lexical_q2z7gvlcp6": {
+      "name": "Key text bound"
     },
     "__value_base_type_pk_node_42g55jibcx": {
       "name": "Declaration overlay"
@@ -3782,6 +4727,9 @@
     },
     "__value_in_value_set_dibhttwd7u": {
       "name": "Declaration overlay"
+    },
+    "__value_pattern_text_w5oc3k4zge": {
+      "name": "Key text bound"
     },
     "__value_pk_node_wicgjbhi2m": {
       "name": "Declaration overlay"
@@ -3828,6 +4776,12 @@
     "__variable_mapping_key_parent_target_s77grritij": {
       "name": "Variable mapping target"
     },
+    "__variable_mapping_pattern_source_i52d2imgyv": {
+      "name": "Key text bound"
+    },
+    "__variable_mapping_pattern_target_ajpjjpsy5h": {
+      "name": "Key text bound"
+    },
     "__variable_mapping_pk_node_fbuszizg4u": {
       "name": "Test overlay"
     },
@@ -3867,6 +4821,9 @@
     "__variable_ref_declaration_kind_attribute_in_g6vc4bnwgj": {
       "name": "Mapped response"
     },
+    "__variable_ref_declaration_pattern_identifier_boa2fjnbep": {
+      "name": "Key text bound"
+    },
     "__variable_ref_declaration_pk_node_attribute_jihnv5qazh": {
       "name": "E1 derived"
     },
@@ -3878,6 +4835,18 @@
     },
     "__variable_ref_kind_in_processing_2kjixh5tbl": {
       "name": "E1 derived"
+    },
+    "__variable_ref_pattern_after_ublui5s63l": {
+      "name": "E1 derived"
+    },
+    "__variable_ref_pattern_before_4uyz654anj": {
+      "name": "E1 derived"
+    },
+    "__variable_ref_pattern_identifier_yberasbike": {
+      "name": "Key text bound"
+    },
+    "__variable_ref_pattern_lexical_d7ryi3g7ja": {
+      "name": "Key text bound"
     },
     "__variable_ref_pk_node_attribute_53jr4hmrsh": {
       "name": "E1 derived"
@@ -3912,6 +4881,9 @@
     "__xml_decl_in_document_cwtnlraiae": {
       "name": "Document"
     },
+    "__xml_decl_pattern_version_u4cfer6mrm": {
+      "name": "XML production"
+    },
     "__xml_decl_pk_node_s2r2nqx4va": {
       "name": "Document"
     },
@@ -3927,321 +4899,11 @@
     "__xml_lang_in_catalog_scope_uhjiie2jjt": {
       "name": "E1 derived"
     },
+    "__xml_lang_pattern_lang_f4pdu3f5po": {
+      "name": "Key text bound"
+    },
     "__xml_lang_pk_node_ph4d4ywf5d": {
       "name": "E1 derived"
     }
-  },
-  "patterns": {
-    "AriaRange.max": "Key text bound",
-    "AriaRange.min": "Key text bound",
-    "AriaValue.value": "Key text bound",
-    "AssembledCatalog.id": "Key text bound",
-    "AssembledId.id": "Key text bound",
-    "AssembledLang.lang": "Key text bound",
-    "AssembledLang.value": "Key text bound",
-    "AssembledName.identifier": "Key text bound",
-    "AssembledReference.identifier": "Key text bound",
-    "AssembledReference.joined": "Key text bound",
-    "Attribute.idrefText": "Key text bound",
-    "Attribute.lexical": "XML production",
-    "Attribute.prefix": "Key text bound",
-    "AttributeEntity.name": "XML production",
-    "BindingDeclaration.identifier": "Key text bound",
-    "BindingName.identifier": "Key text bound",
-    "BodyXmlLang.lang": "Key text bound",
-    "BoundVariable.identifier": "Key text bound",
-    "BranchResolution.target": "Key text bound",
-    "BranchRule.target": "Key text bound",
-    "BranchTarget.target": "Key text bound",
-    "CardSupport.lexical": "Key text bound",
-    "CardSupport.support": "Key text bound",
-    "CatalogId.id": "Key text bound",
-    "CatalogRef.lexical": "Key text bound",
-    "CatalogRef.token": "Key text bound",
-    "CatalogTarget.id": "Key text bound",
-    "CellHeaders.lexical": "Key text bound",
-    "CellHeaders.tokenText": "Key text bound",
-    "Choice.identifier": "Key text bound",
-    "ChoiceVariableName.identifier": "Key text bound",
-    "CnAttribute.lexical": "Key text bound",
-    "CnCount.typeLexical": "Key text bound",
-    "CnPartText.text": "Key text bound",
-    "Comment.value": "XML production",
-    "ContextRef.identifier": "Key text bound",
-    "ContextRefDeclaration.identifier": "Key text bound",
-    "DataSsmlMember.member": "Key text bound",
-    "DataSsmlProperty.memberName": "Key text bound",
-    "DataSsmlProperty.name": "Key text bound",
-    "DataSsmlProperty.value": "Key text bound",
-    "DeclarationBaseType.baseTypeLexical": "Key text bound",
-    "DeclarationCardinality.cardinalityLexical": "Key text bound",
-    "DeclarationIdentifier.identifier": "Key text bound",
-    "DeclarationIdentifier.identifierLead": "E1 derived",
-    "DeclarationIdentifier.identifierLexical": "Key text bound",
-    "DeclarationIdentifier.identifierTrail": "E1 derived",
-    "DeclarationName.identifier": "Key text bound",
-    "DefaultEntry.lexical": "Key text bound",
-    "DefaultEntry.value": "Key text bound",
-    "Dependency.lexical": "Key text bound",
-    "Dependency.ref": "Key text bound",
-    "DependencyTarget.ref": "Key text bound",
-    "Doctype.value": "XML production",
-    "Document.charset": "XML production",
-    "Document.exportCharset": "XML production",
-    "Document.path": "Key text bound",
-    "DocumentId.after": "E1 derived",
-    "DocumentId.before": "E1 derived",
-    "DocumentId.id": "Key text bound",
-    "DocumentId.lexical": "Key text bound",
-    "DocumentLang.lang": "Key text bound",
-    "DocumentLang.value": "Key text bound",
-    "EncodingDecl.encoding": "XML production",
-    "Entry.path": "Key text bound",
-    "ExpressionAttribute.lexical": "Key text bound",
-    "FeedbackRef.identifier": "Key text bound",
-    "FeedbackRefDeclaration.identifier": "Key text bound",
-    "FieldValue.text": "Key text bound",
-    "File.href": "Key text bound",
-    "File.path": "Key text bound",
-    "FileHref.path": "Key text bound",
-    "FragmentValue.value": "Key text bound",
-    "HeaderToken.after": "E1 derived",
-    "HeaderToken.before": "E1 derived",
-    "HeaderToken.piece": "Key text bound",
-    "HeaderToken.piecesAfter": "Key text bound",
-    "HeaderToken.piecesWas": "Key text bound",
-    "HeaderToken.token": "Key text bound",
-    "Hotspot.area": "Key text bound",
-    "Hottext.identifier": "Key text bound",
-    "IdBinding.id": "Key text bound",
-    "IdentityText.idrefText": "Key text bound",
-    "IdentityText.lexical": "Key text bound",
-    "Idref.after": "E1 derived",
-    "Idref.before": "E1 derived",
-    "Idref.piece": "Key text bound",
-    "Idref.piecesAfter": "Key text bound",
-    "Idref.piecesWas": "Key text bound",
-    "Idref.token": "Key text bound",
-    "IdrefTarget.id": "Key text bound",
-    "InstanceName.identifier": "Key text bound",
-    "InteractionAttribute.lexical": "Key text bound",
-    "InteractionAttribute.value": "Key text bound",
-    "ItemRefDocument.path": "Key text bound",
-    "ItemRefHref.path": "Key text bound",
-    "ItemRefTarget.path": "Key text bound",
-    "LeastCount.least": "Key text bound",
-    "Literal.text": "Key text bound",
-    "LiteralTyped.text": "Key text bound",
-    "LomEntry.lead": "E1 derived",
-    "LomEntry.text": "Key text bound",
-    "LomEntry.token": "Key text bound",
-    "LomEntry.trail": "E1 derived",
-    "LomLanguage.lang": "Key text bound",
-    "LomLanguage.tag": "Key text bound",
-    "LomResourceType.text": "Key text bound",
-    "LomResourceTypeSource.text": "Key text bound",
-    "LomString.languageTag": "Key text bound",
-    "LomStringLanguage.language": "Key text bound",
-    "LomStringLanguage.languageTag": "Key text bound",
-    "LomTitleString.text": "Key text bound",
-    "LomTitleString.textValue": "Key text bound",
-    "LookupValue.value": "Key text bound",
-    "LookupValueType.value": "Key text bound",
-    "ManifestId.identifier": "Key text bound",
-    "ManifestId.lexical": "Key text bound",
-    "ManifestIdSpace.identifier": "Key text bound",
-    "MapKey.caseText": "Key text bound",
-    "MapKey.key": "Key text bound",
-    "MapKey.matched": "Key text bound",
-    "MapKeyItems.first": "E1 derived",
-    "MapKeyItems.gap": "E1 derived",
-    "MapKeyItems.key": "Key text bound",
-    "MapKeyItems.ordered": "Key text bound",
-    "MapKeyItems.second": "E1 derived",
-    "MapKeyItems.unordered": "Key text bound",
-    "MapKeyType.key": "Key text bound",
-    "MappingSourceDeclaration.source": "Key text bound",
-    "MappingSourceDeclaration.target": "Key text bound",
-    "MasteryCeiling.masteryValue": "Key text bound",
-    "MasteryCeiling.normalMaximum": "Key text bound",
-    "MasteryFloor.masteryValue": "Key text bound",
-    "MasteryFloor.normalMinimum": "Key text bound",
-    "MasteryValue.lexical": "Key text bound",
-    "MathAction.selectionLexical": "Key text bound",
-    "MathAction.selectionText": "Key text bound",
-    "MathAlignScope.dirLexical": "Key text bound",
-    "MathCn.baseLexical": "Key text bound",
-    "MathCn.typeLexical": "Key text bound",
-    "MathDir.lexical": "Key text bound",
-    "MostCount.most": "Key text bound",
-    "Named.identifier": "Key text bound",
-    "Namespace.prefix": "Key text bound",
-    "Namespace.uri": "Namespace name",
-    "Node.chars": "XML production",
-    "Node.charsAfter": "Key text bound",
-    "Node.charsWas": "Key text bound",
-    "Node.first": "E1 derived",
-    "Node.last": "E1 derived",
-    "Node.prefix": "Key text bound",
-    "Node.stringValue": "Key text bound",
-    "NormalMaximum.lexical": "Key text bound",
-    "NormalMinimum.lexical": "Key text bound",
-    "ObjectIdentifier.identifier": "Key text bound",
-    "ObjectIdentifier.lead": "E1 derived",
-    "ObjectIdentifier.lexical": "Key text bound",
-    "ObjectIdentifier.trail": "E1 derived",
-    "ObjectLang.lang": "Key text bound",
-    "ObjectLang.langTag": "Key text bound",
-    "ObjectTitle.title": "Key text bound",
-    "ObjectTitle.titleValue": "Key text bound",
-    "OpenAttributeName.elementNamespace": "Key text bound",
-    "OpenAttributeName.local": "Key text bound",
-    "OpenAttributeName.uri": "Key text bound",
-    "OpenElementName.local": "XML production",
-    "OpenElementName.namespace": "Key text bound",
-    "OpenElementName.parentNamespace": "Key text bound",
-    "OpenElementType.parentNamespace": "Key text bound",
-    "Pi.data": "XML production",
-    "Pi.target": "XML production",
-    "PlacedBinding.identifier": "Key text bound",
-    "PlacedBindingDeclaration.identifier": "Key text bound",
-    "PlacedBodyXmlLang.lang": "Key text bound",
-    "PlacedCatalogRef.id": "Key text bound",
-    "PlacedChoice.identifier": "Key text bound",
-    "PlacedHottext.identifier": "Key text bound",
-    "PlacedId.id": "Key text bound",
-    "PlacedIdref.id": "Key text bound",
-    "PlacedShareTarget.id": "Key text bound",
-    "PlacedVariableRef.identifier": "Key text bound",
-    "PlacedVariableRefDeclaration.identifier": "Key text bound",
-    "PlacedXmlLang.lang": "Key text bound",
-    "PrintedVariableRef.identifier": "Key text bound",
-    "PrintedVariableRefDeclaration.identifier": "Key text bound",
-    "ProcessingTemplate.uri": "Key text bound",
-    "Quotation.after": "E1 derived",
-    "Quotation.before": "E1 derived",
-    "Quotation.first": "E1 derived",
-    "Quotation.last": "E1 derived",
-    "Reading.identifier": "Key text bound",
-    "Reading.number": "Key text bound",
-    "Reading.scope": "Key text bound",
-    "Reading.variable": "Key text bound",
-    "ReadingDeclaration.variable": "Key text bound",
-    "RecordField.baseTypeLexical": "Key text bound",
-    "RecordField.identifierLexical": "Key text bound",
-    "RecordFieldName.identifier": "Key text bound",
-    "RecordFieldName.identifierLead": "E1 derived",
-    "RecordFieldName.identifierLexical": "Key text bound",
-    "RecordFieldName.identifierTrail": "E1 derived",
-    "Reference.lead": "E1 derived",
-    "Reference.lexical": "Key text bound",
-    "Reference.params": "E1 derived",
-    "Reference.target": "Key text bound",
-    "Reference.trail": "E1 derived",
-    "ReferencePath.path": "Key text bound",
-    "ReferenceSegment.after": "Key text bound",
-    "ReferenceSegment.before": "Key text bound",
-    "ReferenceSegment.piece": "Key text bound",
-    "ReferenceSegment.separator": "E1 derived",
-    "ReferenceSegment.token": "Key text bound",
-    "ResourceDocument.path": "Key text bound",
-    "ResourceFile.path": "Key text bound",
-    "ResourceHref.href": "Key text bound",
-    "ResourceHref.path": "Key text bound",
-    "ResourceId.identifier": "Key text bound",
-    "ResourceId.lexical": "Key text bound",
-    "ResourceLomLanguageSet.lang": "Key text bound",
-    "ResourceTyped.typeLexical": "Key text bound",
-    "RoundingFigures.figures": "Key text bound",
-    "RoundingFigures.figuresLexical": "Key text bound",
-    "RoundingMode.mode": "Key text bound",
-    "RoundingModeFigures.figures": "Key text bound",
-    "RoundingModeFigures.mode": "Key text bound",
-    "SectionContextName.identifier": "Key text bound",
-    "SectionContextRef.identifier": "Key text bound",
-    "SectionContextRefDeclaration.identifier": "Key text bound",
-    "SectionFeedbackName.identifier": "Key text bound",
-    "SectionFeedbackRef.identifier": "Key text bound",
-    "SectionFeedbackRefDeclaration.identifier": "Key text bound",
-    "SectionIdentifier.after": "E1 derived",
-    "SectionIdentifier.before": "E1 derived",
-    "SectionIdentifier.identifier": "Key text bound",
-    "SectionIdentifier.lexical": "Key text bound",
-    "SectionPrintedName.identifier": "Key text bound",
-    "SectionPrintedRef.identifier": "Key text bound",
-    "SectionPrintedRefDeclaration.identifier": "Key text bound",
-    "SectionSelection.selectForm": "value domain",
-    "SectionSelection.selectLead": "E1 derived",
-    "SectionSelection.selectLexical": "Key text bound",
-    "SectionSelection.selectTrail": "E1 derived",
-    "SectionTemplateName.identifier": "Key text bound",
-    "SectionTemplateRef.identifier": "Key text bound",
-    "SectionTemplateRefDeclaration.identifier": "Key text bound",
-    "ShareFragment.id": "Key text bound",
-    "ShareFragment.src": "Key text bound",
-    "ShareTarget.id": "Key text bound",
-    "SitePath.path": "Key text bound",
-    "SiteTarget.path": "Key text bound",
-    "Slider.lower": "Key text bound",
-    "Slider.upper": "Key text bound",
-    "SsmlAttribute.lexical": "Key text bound",
-    "SsmlAttribute.value": "Key text bound",
-    "StatisticDate.day": "value domain",
-    "StatisticDate.lead": "E1 derived",
-    "StatisticDate.lexical": "Key text bound",
-    "StatisticDate.trail": "E1 derived",
-    "StimulusRef.identifier": "Key text bound",
-    "TableHeader.id": "Key text bound",
-    "TemplateDefault.lead": "E1 derived",
-    "TemplateDefault.lexical": "Key text bound",
-    "TemplateDefault.template": "Key text bound",
-    "TemplateDefault.trail": "E1 derived",
-    "TemplateDefaultTarget.template": "Key text bound",
-    "TemplateRef.identifier": "Key text bound",
-    "TemplateRefDeclaration.identifier": "Key text bound",
-    "TestDocument.path": "Key text bound",
-    "TestFlag.lexical": "Key text bound",
-    "TestReference.identifier": "Key text bound",
-    "TestToken.lead": "E1 derived",
-    "TestToken.lexical": "Key text bound",
-    "TestToken.trail": "E1 derived",
-    "TestToken.value": "Key text bound",
-    "TextIdref.after": "E1 derived",
-    "TextIdref.before": "E1 derived",
-    "TextIdref.piece": "Key text bound",
-    "TextIdref.piecesAfter": "Key text bound",
-    "TextIdref.piecesWas": "Key text bound",
-    "TextIdref.token": "Key text bound",
-    "TextReference.lead": "E1 derived",
-    "TextReference.lexical": "Key text bound",
-    "TextReference.params": "E1 derived",
-    "TextReference.target": "Key text bound",
-    "TextReference.trail": "E1 derived",
-    "TextReferencePath.path": "Key text bound",
-    "Tolerance.lexical": "Key text bound",
-    "Tolerance.tokenText": "Key text bound",
-    "ToleranceToken.after": "E1 derived",
-    "ToleranceToken.before": "E1 derived",
-    "ToleranceToken.piece": "Key text bound",
-    "ToleranceToken.piecesAfter": "Key text bound",
-    "ToleranceToken.piecesWas": "Key text bound",
-    "ToleranceToken.token": "Key text bound",
-    "TypedValue.text": "Key text bound",
-    "UsageBaseType.lexical": "Key text bound",
-    "UsageValue.baseTypeLexical": "Key text bound",
-    "UsageValue.text": "Key text bound",
-    "UsageValueBaseType.baseTypeLexical": "Key text bound",
-    "UsageValueBaseType.text": "Key text bound",
-    "Value.text": "Key text bound",
-    "ValueBaseType.baseTypeLexical": "Key text bound",
-    "VariableMapping.source": "Key text bound",
-    "VariableMapping.target": "Key text bound",
-    "VariableRef.after": "E1 derived",
-    "VariableRef.before": "E1 derived",
-    "VariableRef.identifier": "Key text bound",
-    "VariableRef.lexical": "Key text bound",
-    "VariableRefDeclaration.identifier": "Key text bound",
-    "XmlDecl.version": "XML production",
-    "XmlLang.lang": "Key text bound"
   }
 }

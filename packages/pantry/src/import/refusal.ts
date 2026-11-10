@@ -9,11 +9,11 @@
  *
  * - **Laws by name.** Every law the schema states has a name, the law oracle's (`src/test/oracle.ts`
  *   `LawName`) where the oracle states the law, with its rule and its spec source
- *   ({@link lawTable}). An outcome's law is named by its own fields ({@link lawNameOf}): a check by
- *   its name ({@link checkNameOf}), a primary key by its relation, a generated field by its
- *   relation and field, a contract by its name, a pattern by its field's type, and a statement's
- *   law by the group its module files the statement under, matched by grizzle's `sameLaw`. The
- *   tables are dictionaries keyed by the database's law, never a judge.
+ *   ({@link lawTable}). An outcome's law is named one way ({@link lawNameOf}): a check by its own
+ *   name ({@link lawOfCheck}), and every other law by its id, the one the outcome carries
+ *   (grizzle's `RefusedLaw.id`), in the committed dictionary (`#pantry/vocab/law-names.json`),
+ *   which `src/test/law-names.ts` generates from the schema's own naming. The dictionary is keyed
+ *   by the database's law, never a judge.
  * - **A refusal is what the database said.** A family's axis foreign key discharges the family and
  *   every containment and fold merged into it, and its violation names them all. The refusal
  *   carries how grizzle decided them, every law it named and the set of their rules
@@ -26,7 +26,7 @@
  */
 
 import type { Law, Refused, Witness } from "@bjornpagen/grizzle";
-import { Array as Arr, Formatter, Match, Option, Order, pipe, Predicate, Schema } from "effect";
+import { Array as Arr, Formatter, Option, Order, pipe, Predicate, Schema } from "effect";
 import type { Types } from "effect";
 
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
@@ -40,17 +40,6 @@ import { lawTable } from "#pantry/vocab/laws.ts";
 import { ruleOrder, ImportRefused } from "#pantry/import/rules.ts";
 import type { Rule } from "#pantry/import/rules.ts";
 import lawNamesFile from "#pantry/vocab/law-names.json" with { type: "json" };
-
-/**
- * The rules no law of the schema keeps yet, each with the W5 slice that states its law, so the
- * census shows them. Each slice names its law, and its row joins {@link lawTable} or
- * {@link statedLaws} when it lands.
- *
- * - `typed-copy`: a typed value proved against its lexical form through G-parse (the tier 1
- *   addendum), as a relation of its own per typed form.
- * - The O2 to O4 and O6 laws the oracle states no host predicate for.
- */
-export const owedRules = {} as const satisfies Partial<Readonly<Record<Rule, string>>>;
 
 /**
  * The name of a law of {@link lawTable}.
@@ -86,139 +75,19 @@ export const lawOfCheck = (name: string): Option.Option<LawName> => {
 };
 
 /**
- * The relation each side of a law reads, in the order the law names its sides: the part of a law
- * {@link bucketOf} files it under beside its kind. A contract reads no relation, and a law of a
- * level above the schema reads its own law's relations: `Qti` is one level, which no level extends,
- * so no outcome names one (grizzle `999facc6`'s `above`), and none is in the table.
- *
- * @param law - A law as grizzle names it.
- * @returns Its sides' relations.
- */
-export const relationsOf = (law: Law): readonly string[] =>
-  Match.value(law).pipe(
-    Match.discriminatorsExhaustive("kind")({
-      above: ({ law: stated }) => relationsOf(stated),
-      check: ({ relation }) => [relation],
-      contained: ({ from, to }) => [from.relation, to.relation],
-      contract: () => [],
-      coverage: ({ from, to }) => [from.relation, to.relation],
-      family: ({ member, slots }) => [member.relation, slots.owner],
-      fold: ({ end, family, step }) => [family.owner, step.relation, end.relation],
-      generated: ({ relation }) => [relation],
-      key: ({ side }) => [side.relation],
-      pattern: ({ relation }) => [relation],
-      primaryKey: ({ relation }) => [relation],
-      tree: ({ member, slots }) => [member.relation, slots.owner],
-    }),
-  );
-
-/**
- * File a law by its kind and its sides' relations, so {@link lawNameOf} holds an outcome's law to
- * the few stated laws of that kind over those relations, never every law of Qti.
- *
- * This is no identity of the law: grizzle's `sameLaw` decides whether two laws are one, comparing
- * them whole, and two laws one bucket holds may still differ in their terms or selections. The
- * bucket only needs one law's two descriptions to fall in it together, which they do, since
- * `sameLaw` holds only of laws of one kind whose sides read the same relations.
- *
- * @param law - A law as grizzle names it.
- * @returns Its bucket.
- */
-export const bucketOf = (law: Law): string => [law.kind, ...relationsOf(law)].join(" ");
-
-/**
- * The law of a given kind.
- */
-export type LawOf<Kind extends Law["kind"]> = Extract<Law, { readonly kind: Kind }>;
-
-/**
- * Name each key by one law: one row per key, so a table lists its laws as their names group them.
- *
- * @param name - The law.
- * @param keys - The keys it names.
- * @returns The rows.
- */
-export const namedBy = (
-  name: LawName,
-  ...keys: readonly string[]
-): readonly (readonly [string, LawName])[] => keys.map((key) => [key, name] as const);
-
-/**
- * The law each generated field of Qti's stored relations is named by, by `Relation.field`: grizzle
- * names one when PostgreSQL refuses a row because the field's column is NULL there (23502). grizzle
- * writes no NULL, so only the field's term can have no value: a closed read `C.at` at a key its
- * closed relation holds no row at. No term of Qti's reads `C.at`, so no row breaks one. Each is
- * named by the law that states its value exists, its relation's rows', and the census
- * (`refusal.oracle.test.ts`) holds the table to `lawsOf(Qti)` both ways:
- *
- * - An IDREF token's piece, a header's and a tolerance value's, and a reference segment's token, is
- *   its own whitespace or separator and its token concatenated, its concat fold's step: written
- *   texts, none NULL, so the term is never NULL. A piece or a token past its keyText bound is
- *   refused by its own pattern law, named by keyText's row of {@link textLaws}, "Key text bound".
- * - An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of a
- *   set keyed by the row's own NOT NULL `baseType` and `cardinality`: ∅ where the diagonal holds no
- *   row (`any`, `unknown`), never NULL, which only a NULL key, an absent `C.at`, reads
- *   (docs/grizzle-findings.md, lane DBT's). A field a closed relation determines is E1 derived.
- * - A selection's `select` casts `selectForm`, which its pattern law, named by SelectForm's row of
- *   {@link textLaws}, holds to the language the cast reads total: a form outside it is refused by
- *   that law as the statement casts it into its column, before PostgreSQL computes `select`.
- * - A statistic's `date` casts `day`, which its pattern law, named by DayForm's row of
- *   {@link textLaws}, holds to the days 0001-01-01 to 9999-12-31 the cast reads total, refused the
- *   same way. Its value is the calendar day `lastUpdated` names, which the value domain states
- *   exists, so it is the value domain's.
- * - A document's and an item's assembly's `xml:lang` form's compared `value` is the form collapsed
- *   and case-folded, cast into the form's own key text, a cast the schema proves total: a written
- *   text, never NULL.
- */
-export const generatedNames: readonly (readonly [string, LawName])[] = [
-  ...namedBy(
-    "E1 derived",
-    "Idref.piece",
-    "TextIdref.piece",
-    "HeaderToken.piece",
-    "ToleranceToken.piece",
-    "ReferenceSegment.token",
-    "Operand.baseTypeBit",
-    "Operand.cardinalityBit",
-    "SectionSelection.select",
-  ),
-  ...namedBy("value domain", "StatisticDate.date"),
-  ...namedBy(
-    "E1 derived",
-    "DocumentLang.value",
-    "AssembledLang.value",
-    "MapKeyItems.ordered",
-    "MapKeyItems.unordered",
-  ),
-];
-
-/**
- * The law each contract Qti's fields are of is named by, by the contract's name: grizzle's builtin
- * `natural`, a bigint never below zero (README, "Tables and types": "A negative value is an outcome
- * on the law `{ kind: "contract", contract: "natural" }`"), the type of every count, position and
- * bit set of the model. Each natural the import writes is a count or a position of its own rows, or
- * a set of a closed relation's bits, and grizzle draws or accumulates the rest, so no row breaks
- * it, and it is named by the law of the values the import derives, "E1 derived". The census
- * (`refusal.oracle.test.ts`) holds the table to `lawsOf(Qti)` both ways.
- */
-export const contractNames: readonly (readonly [string, LawName])[] = namedBy(
-  "E1 derived",
-  "natural",
-);
-
-/**
  * The object that refused a law, as the importer reads it: an installed constraint or domain, by
- * the name PostgreSQL holds it under, or a write statement or a column's NOT NULL, which name no
- * check. grizzle's `RefusingObject` is one, its name a branded text.
+ * the name PostgreSQL holds it under, or a write statement or a generated column's NOT NULL, which
+ * install no constraint of the law's. grizzle's `RefusingObject` is one, its name a branded text.
  */
 export type RefusingBy =
   | { readonly kind: "constraint" | "domain"; readonly name: string }
   | { readonly kind: "notNull" | "statement" };
 
 /**
- * One law of a refusal, as the importer names it: the law as the schema states it, its LawId, the
- * key of the snapshot's theory.laws, and the object that refused it. grizzle's `RefusedLaw` is
- * one, its LawId and installed name branded texts; a test plants one with texts of its own.
+ * One law of a refusal, as the importer names it: the law as the schema states it, its id, and the
+ * object that refused it. The id is a LawId for a law of the theory or a text pattern, and a
+ * GeneratedLawId for a generated field's law. grizzle's `RefusedLaw` is one, its id and installed
+ * name branded texts; a test plants one with texts of its own.
  */
 export interface RefusalLaw {
   readonly by: RefusingBy;
@@ -242,19 +111,15 @@ const LawEntry = Schema.Struct({ name: Schema.String });
 
 /**
  * The law-name dictionary's form, `#pantry/vocab/law-names.json`: each installed law the importer
- * names, keyed by its LawId, the key a refused law carries (grizzle's `RefusedLaw.id`, the key of
- * the snapshot's theory.laws); and each pattern law's name, keyed by `Relation.field`, the law's
- * own fields.
+ * names but a check, keyed by its id, the key a refused law carries (grizzle's `RefusedLaw.id`): a
+ * law of the theory's and a text pattern's LawId, and a generated field's law's GeneratedLawId.
  *
  * `src/test/law-names.ts` generates it from the schema's own naming (`src/test/law-namer.ts`) and
- * the committed snapshot, and `law-names.committed.test.ts` holds the committed file to it and
- * names every law of `lawsOf(Qti)` through both, so the dictionary is the schema's naming, read
- * without building the schema.
+ * the ids the committed migrations give each law, and `law-names.committed.test.ts` holds the
+ * committed file to it and names every law of `lawsOf(Qti)` through both, so the dictionary is the
+ * schema's naming, read without building the schema.
  */
-export const LawNamesFileSchema = Schema.Struct({
-  laws: Schema.Record(Schema.String, LawEntry),
-  patterns: Schema.Record(Schema.String, Schema.String),
-});
+export const LawNamesFileSchema = Schema.Struct({ laws: Schema.Record(Schema.String, LawEntry) });
 
 /**
  * The law-name dictionary, decoded.
@@ -284,45 +149,19 @@ export interface LawNamer {
 }
 
 /**
- * Build the namer of a law-name dictionary. A refused law is named by its own fields where they
- * name it: a check by its name ({@link lawOfCheck}), a contract and a generated field by their
- * tables ({@link contractNames}, {@link generatedNames}), and a pattern by its relation and field,
- * the dictionary's `patterns`. Every other law is named by the dictionary's entry of its LawId,
- * which the outcome carries. Nothing reads the schema.
+ * Build the namer of a law-name dictionary. A check is named by its own name ({@link lawOfCheck}),
+ * since grizzle names a check by the name its statement declares; every other law by the
+ * dictionary's entry of its id, which the outcome carries. Nothing reads the schema.
  *
  * @param file - The dictionary.
  * @returns Its namer.
  */
-export const namerFrom = (file: LawNamesFile): LawNamer => {
-  const byContract = new Map(contractNames);
-  const byGenerated = new Map(generatedNames);
-
-  return {
-    nameOf: ({ id, law }) => {
-      const stated = (): Option.Option<LawName> =>
-        Option.flatMap(Option.fromUndefinedOr(file.laws[id]), ({ name }) => lawNamed(name));
-
-      return Match.value(law).pipe(
-        Match.discriminatorsExhaustive("kind")({
-          above: stated,
-          check: ({ name }) => lawOfCheck(name),
-          contained: stated,
-          contract: ({ contract }) => Option.fromUndefinedOr(byContract.get(contract)),
-          coverage: stated,
-          family: stated,
-          fold: stated,
-          generated: ({ field, relation }) =>
-            Option.fromUndefinedOr(byGenerated.get(`${relation}.${field}`)),
-          key: stated,
-          pattern: ({ field, relation }) =>
-            Option.flatMap(Option.fromUndefinedOr(file.patterns[`${relation}.${field}`]), lawNamed),
-          primaryKey: stated,
-          tree: stated,
-        }),
-      );
-    },
-  };
-};
+export const namerFrom = (file: LawNamesFile): LawNamer => ({
+  nameOf: ({ id, law }) =>
+    law.kind === "check"
+      ? lawOfCheck(law.name)
+      : Option.flatMap(Option.fromUndefinedOr(file.laws[id]), ({ name }) => lawNamed(name)),
+});
 
 /**
  * The namer of the committed dictionary, `#pantry/vocab/law-names.json`, built once, when this
@@ -343,17 +182,19 @@ export const lawNameOf = (refused: RefusalLaw): Option.Option<LawName> =>
   committedNamer.nameOf(refused);
 
 /**
- * Read the name PostgreSQL holds a refused check under: the constraint or domain check that refused
- * it, as the outcome names it (grizzle's `RefusedLaw.by`). A check a statement or a trigger refused
- * has none, and nor has any other kind of law.
+ * Read the name PostgreSQL holds the object that refused a law under, as the outcome names it
+ * (grizzle's `RefusedLaw.by`), whatever the law's kind: a table's constraint, a CHECK, a key, a
+ * foreign key or an exclusion constraint, or a domain's CHECK. A write statement and a rule over a
+ * query's trigger raise the law under its identity and install no constraint for it, and grizzle
+ * names a generated column's NOT NULL by its table and column alone, so a law they refused has
+ * none.
  *
  * @param refused - A law of an `invariant-rejected` outcome.
- * @returns The check's installed name, or none.
+ * @returns The refusing object's installed name, or none.
+ * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/engine/src/types/changeset/changeset.ts#L1196-L1211
  */
-export const installedNameOf = ({ by, law }: RefusalLaw): Option.Option<string> =>
-  law.kind === "check" && (by.kind === "constraint" || by.kind === "domain")
-    ? Option.some(by.name)
-    : Option.none();
+export const installedNameOf = ({ by }: RefusalLaw): Option.Option<string> =>
+  by.kind === "constraint" || by.kind === "domain" ? Option.some(by.name) : Option.none();
 
 /**
  * The rule the law table gives a law: its name's row's ({@link lawNameOf}).
@@ -729,8 +570,8 @@ export const explain = (
 };
 
 /**
- * One law of a refusal as the refusal carries it: its display text, the installed name of a check
- * the outcome names ({@link installedNameOf}), and the name and rule the law table gives it.
+ * One law of a refusal as the refusal carries it: its display text, the installed name of the
+ * object that refused it ({@link installedNameOf}), and the name and rule the law table gives it.
  *
  * @param law - A law of an `invariant-rejected` outcome.
  * @returns Its facts.

@@ -1,8 +1,16 @@
 /**
  * The law-name dictionary's generator: `#pantry/vocab/law-names.json` from the schema's own naming
- * of its laws (`#pantry/test/law-namer.ts`) and the committed migrations snapshot, which records
- * each installed law under its LawId, the key a refused law carries. `law-names.committed.test.ts`
- * holds the committed file to it.
+ * of its laws (`#pantry/test/law-namer.ts`) and the ids the committed migrations give them, the
+ * key a refused law carries (grizzle's `RefusedLaw.id`). `law-names.committed.test.ts` holds the
+ * committed file to it.
+ *
+ * The committed snapshot describes each law of the theory beside its LawId. It records no text
+ * pattern's LawId but one per domain (`constraintToLaw.domains`), and no generated field's law's
+ * GeneratedLawId at all (grizzle's `analysis/theory/description.ts`, `GeneratedFieldLaw`: "which no
+ * fingerprinted part of a snapshot holds"), so those two kinds take their ids from the author
+ * login's committed served file, whose refusal tables list every pattern law and every generated
+ * field's law under the id its refusal carries (grizzle's `served/forms.ts` `ServedKeyLaws`, read
+ * by `adapter/witness/keylaw.ts` `keyLawsOf` and `classify.ts` `nativeLaws`).
  *
  * Run it with this package's own install, `GR8DES_QTI_INSTALL` unset, from the package's folder:
  * `node src/test/law-names.ts` writes the file.
@@ -12,10 +20,10 @@ import { fileURLToPath } from "node:url";
 import { sameLaw } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Predicate, Schema } from "effect";
-import { bucketOf } from "#pantry/import/refusal.ts";
+import { servedPath } from "#pantry/db/served.ts";
 import type { LawNamesFile, RefusalLaw } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/own.ts";
-import { schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
+import { bucketOf, schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The part of a migrations snapshot that gives each installed law its LawId: each level's laws,
@@ -89,7 +97,7 @@ const snapshotPath: string = fileURLToPath(import.meta.resolve("#migrations/qti/
 
 /**
  * The installed laws the committed snapshot describes, each with its LawId, grouped by bucket
- * (`#pantry/import/refusal.ts` `bucketOf`) for the search {@link lawIdOf} makes.
+ * (`#pantry/test/law-namer.ts` `bucketOf`) for the search {@link lawIdOf} makes.
  */
 const describedByBucket = Arr.groupBy(
   Schema.decodeUnknownSync(SnapshotLaws)(readFileSync(snapshotPath, "utf-8")).levels.flatMap(
@@ -104,22 +112,115 @@ const describedByBucket = Arr.groupBy(
 );
 
 /**
- * Find a law's LawId: the id of the law the committed snapshot describes that grizzle's `sameLaw`
- * holds it to be.
+ * A list of a served file's, as grizzle writes it: the array itself, or, where an item holds a
+ * value the file revives at load, the array under `~a` beside the indices of those items under `~`
+ * (grizzle's `served/json.ts`).
  *
- * @param law - A law of `lawsOf(Qti)`.
- * @returns Its LawId, or none for a law the snapshot describes none of.
+ * @param item - The items' schema.
+ * @returns The list's schema.
  */
-export const lawIdOf = (law: Law): Option.Option<string> =>
-  Option.map(
-    Arr.findFirst(describedByBucket[bucketOf(law)] ?? [], (held) => sameLaw(held.law, law)),
-    ({ id }) => id,
-  );
+const servedList = <S extends Schema.Top>(item: S) =>
+  Schema.Union([Schema.Array(item), Schema.Struct({ "~a": Schema.Array(item) })]);
 
 /**
- * Build a law of `lawsOf(Qti)` as a refusal of it carries it, by a statement: the law, and its
- * LawId, or the law's own text where the snapshot describes no law of it (a check, a contract, a
- * generated field, a pattern), which names it by its own fields.
+ * Read a served file's list as its items.
+ *
+ * @param list - The list as the file writes it.
+ * @returns Its items.
+ */
+const itemsOf = <A>(list: readonly A[] | { readonly "~a": readonly A[] }): readonly A[] =>
+  "~a" in list ? list["~a"] : list;
+
+/**
+ * The part of the author login's served file that gives each text pattern's law and each generated
+ * field's law the id its refusal carries: each role's refusal tables, each installed constraint's
+ * laws, every pattern law among them by its relation and field, and each generated field's law.
+ */
+const ServedLawIds = Schema.fromJsonString(
+  Schema.Struct({
+    roles: servedList(
+      Schema.Struct({
+        refusals: Schema.Struct({
+          laws: Schema.Struct({
+            constraintLaws: servedList(
+              Schema.Struct({
+                laws: servedList(
+                  Schema.Struct({
+                    described: Schema.Struct({
+                      field: Schema.optionalKey(Schema.String),
+                      kind: Schema.String,
+                      relation: Schema.optionalKey(Schema.String),
+                    }),
+                    law: Schema.String,
+                  }),
+                ),
+              }),
+            ),
+            generated: servedList(
+              Schema.Struct({
+                id: Schema.String,
+                law: Schema.Struct({ field: Schema.String, relation: Schema.String }),
+              }),
+            ),
+          }),
+        }),
+      }),
+    ),
+  }),
+);
+
+/**
+ * Key a pattern law or a generated field's law by its kind and its own fields, its relation and
+ * field, which name one law of each kind.
+ *
+ * @param kind - The law's kind.
+ * @param relation - Its relation.
+ * @param field - Its field.
+ * @returns The key.
+ */
+const fieldLawKey = (kind: "generated" | "pattern", relation: string, field: string): string =>
+  `${kind} ${relation}.${field}`;
+
+/**
+ * The id of every pattern law and every generated field's law the committed served file lists, by
+ * {@link fieldLawKey}.
+ */
+const servedIdOf: ReadonlyMap<string, string> = new Map(
+  itemsOf(Schema.decodeUnknownSync(ServedLawIds)(readFileSync(servedPath, "utf-8")).roles).flatMap(
+    ({ refusals: { laws } }) => [
+      ...itemsOf(laws.constraintLaws).flatMap((constraint) =>
+        itemsOf(constraint.laws).flatMap(({ described: { field, kind, relation }, law }) =>
+          kind === "pattern" && field !== undefined && relation !== undefined
+            ? [[fieldLawKey("pattern", relation, field), law] as const]
+            : [],
+        ),
+      ),
+      ...itemsOf(laws.generated).map(
+        ({ id, law }) => [fieldLawKey("generated", law.relation, law.field), id] as const,
+      ),
+    ],
+  ),
+);
+
+/**
+ * Find a law's id, the one a refusal of it carries: a pattern law's and a generated field's law's
+ * the committed served file lists for its relation and field, and any other law's the id of the
+ * law the committed snapshot describes that grizzle's `sameLaw` holds it to be.
+ *
+ * @param law - A law of `lawsOf(Qti)`.
+ * @returns Its id, or none for a law the committed migrations give none.
+ */
+export const lawIdOf = (law: Law): Option.Option<string> =>
+  law.kind === "pattern" || law.kind === "generated"
+    ? Option.fromUndefinedOr(servedIdOf.get(fieldLawKey(law.kind, law.relation, law.field)))
+    : Option.map(
+        Arr.findFirst(describedByBucket[bucketOf(law)] ?? [], (held) => sameLaw(held.law, law)),
+        ({ id }) => id,
+      );
+
+/**
+ * Build a law of `lawsOf(Qti)` as a refusal of it carries it, by a statement: the law, and its id
+ * ({@link lawIdOf}), empty where the committed migrations give it none.
  *
  * @param law - A law of `lawsOf(Qti)`.
  * @returns The refused law.
@@ -147,43 +248,37 @@ const sortedRecord = <A>(record: Readonly<Record<string, A>>): Readonly<Record<s
   Object.fromEntries(Object.entries(record).toSorted(([x], [y]) => (x < y ? -1 : Number(x > y))));
 
 /**
- * Build the dictionary from the schema and the committed snapshot: under its LawId, each named law
- * of grizzle's `lawsOf(Qti)` the dictionary names (every law but a check, a contract, a generated
- * field and a pattern, which their own fields name), and under `Relation.field` each named pattern
- * law. A law to enter whose LawId the snapshot lacks, or two laws the snapshot holds as one, is a
- * defect of the snapshot's or of this generator's, and the build throws naming it.
+ * Build the dictionary from the schema and the committed migrations: under its id
+ * ({@link lawIdOf}), each named law of grizzle's `lawsOf(Qti)` but a check, which its own name
+ * names. A law to enter whose id the migrations lack, or two laws they hold as one, is a defect of
+ * the migrations' or of this generator's, and the build throws naming it.
  *
  * @returns The dictionary.
  */
 export const lawNamesOf = (): LawNamesFile => {
   const laws: Record<string, { readonly name: string }> = {};
-  const patterns: Record<string, string> = {};
 
   for (const law of schemaLawsOf(Qti)) {
-    for (const name of Option.toArray(schemaLawNameOf(law))) {
-      if (law.kind === "pattern") {
-        patterns[`${law.relation}.${law.field}`] = name;
-      } else if (law.kind !== "check" && law.kind !== "contract" && law.kind !== "generated") {
-        const id = Option.getOrThrowWith(
-          lawIdOf(law),
-          () =>
-            new Error(
-              `The committed snapshot describes no law grizzle's sameLaw holds to be this ${law.kind} law of ${bucketOf(law)}.`,
-            ),
+    for (const name of law.kind === "check" ? [] : Option.toArray(schemaLawNameOf(law))) {
+      const id = Option.getOrThrowWith(
+        lawIdOf(law),
+        () =>
+          new Error(
+            `The committed migrations give no id to this ${law.kind} law of ${bucketOf(law)}: neither the snapshot describes a law grizzle's sameLaw holds it to be, nor does the served file list its relation and field. Run \`grizzle generate\` and this generator again.`,
+          ),
+      );
+      const held = laws[id];
+      if (held !== undefined && held.name !== name) {
+        throw new Error(
+          `Two laws of lawsOf(Qti) are the migrations' one law ${id}, named ${held.name} and ${name}: the dictionary cannot name both.`,
         );
-        const held = laws[id];
-        if (held !== undefined && held.name !== name) {
-          throw new Error(
-            `Two laws of lawsOf(Qti) are the snapshot's one law ${id}, named ${held.name} and ${name}: the dictionary cannot name both.`,
-          );
-        }
-
-        laws[id] = { name };
       }
+
+      laws[id] = { name };
     }
   }
 
-  return { laws: sortedRecord(laws), patterns: sortedRecord(patterns) };
+  return { laws: sortedRecord(laws) };
 };
 
 if (import.meta.main) {

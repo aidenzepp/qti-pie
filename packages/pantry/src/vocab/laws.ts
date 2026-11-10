@@ -26,9 +26,9 @@
  * 6. The document layer: the stated bound on a key's text, foreign names, derived fields and the tree.
  *
  * A specific law says what in the content to change, and a general one only that the representation
- * broke, so a QTI rule is listed before a tree law and a content-order law before a family law. The
- * rules `owedRules` (`#pantry/import/refusal.ts`) lists stand at their tier already, so the order
- * holds when their laws land.
+ * broke, so a QTI rule is listed before a tree law and a content-order law before a family law.
+ * Every rule listed is a law's of the table, and every law's rule is listed once
+ * (`refusal.oracle.test.ts`).
  */
 export const precedence = [
   // O1, identity.

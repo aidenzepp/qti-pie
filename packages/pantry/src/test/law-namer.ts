@@ -1,11 +1,12 @@
 /**
  * The schema's own naming of its laws, which the committed law-name dictionary
  * (`#pantry/vocab/law-names.json`) is generated from and held to: a check by its name, a primary
- * key by its relation, a pattern by its field's type, and a statement's law by the group its module
- * files the statement under, matched by grizzle's `sameLaw` over the schema's law model
- * (`lawsByStatement`), with the installed name of each check the schema states
- * (`constraintNamesOf`). Each compiles `Qti`'s law model, which takes seconds, so production never
- * runs it: `#pantry/import/refusal.ts` names a refusal from the dictionary alone.
+ * key by its relation, a generated field by its relation and field, a contract by its name, a
+ * pattern by its field's type, and a statement's law by the group its module files the statement
+ * under, matched by grizzle's `sameLaw` over the schema's law model (`lawsByStatement`), with the
+ * installed name of each check the schema states (`constraintNamesOf`). Each compiles `Qti`'s law
+ * model, which takes seconds, so production never runs it: `#pantry/import/refusal.ts` names a
+ * refusal from the dictionary alone, a check by its name and every other law by its id.
  */
 import { constraintNamesOf, lawsByStatement, lawsOf, sameLaw } from "@bjornpagen/grizzle";
 import type { AnySchema, Law, RegexText, Statement } from "@bjornpagen/grizzle";
@@ -49,18 +50,135 @@ import { quotationLawsByName, quotationRelations } from "#pantry/qti/quotation.t
 import { SelectForm, testLawsByName } from "#pantry/qti/tests.ts";
 import type { testRelations } from "#pantry/qti/tests.ts";
 import { builtLawsByName, Qti } from "#pantry/qti/own.ts";
-import {
-  bucketOf,
-  contractNames,
-  generatedNames,
-  lawNames,
-  lawOfCheck,
-  namedBy,
-} from "#pantry/import/refusal.ts";
-import type { LawName, LawOf } from "#pantry/import/refusal.ts";
+import { lawNames, lawOfCheck } from "#pantry/import/refusal.ts";
+import type { LawName } from "#pantry/import/refusal.ts";
 import { ruleOrder } from "#pantry/import/rules.ts";
 import type { Rule } from "#pantry/import/rules.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
+
+/**
+ * The relation each side of a law reads, in the order the law names its sides: the part of a law
+ * {@link bucketOf} files it under beside its kind. A contract reads no relation, and a law of a
+ * level above the schema reads its own law's relations: `Qti` is one level, which no level extends,
+ * so no outcome names one (grizzle `999facc6`'s `above`), and none is in the table.
+ *
+ * @param law - A law as grizzle names it.
+ * @returns Its sides' relations.
+ */
+export const relationsOf = (law: Law): readonly string[] =>
+  Match.value(law).pipe(
+    Match.discriminatorsExhaustive("kind")({
+      above: ({ law: stated }) => relationsOf(stated),
+      check: ({ relation }) => [relation],
+      contained: ({ from, to }) => [from.relation, to.relation],
+      contract: () => [],
+      coverage: ({ from, to }) => [from.relation, to.relation],
+      family: ({ member, slots }) => [member.relation, slots.owner],
+      fold: ({ end, family, step }) => [family.owner, step.relation, end.relation],
+      generated: ({ relation }) => [relation],
+      key: ({ side }) => [side.relation],
+      pattern: ({ relation }) => [relation],
+      primaryKey: ({ relation }) => [relation],
+      tree: ({ member, slots }) => [member.relation, slots.owner],
+    }),
+  );
+
+/**
+ * File a law by its kind and its sides' relations, so the schema's naming ({@link namerOf}) and the
+ * dictionary's generator (`#pantry/test/law-names.ts` `lawIdOf`) hold a law to the few stated laws
+ * of that kind over those relations, never every law of Qti.
+ *
+ * This is no identity of the law: grizzle's `sameLaw` decides whether two laws are one, comparing
+ * them whole, and two laws one bucket holds may still differ in their terms or selections. The
+ * bucket only needs one law's two descriptions to fall in it together, which they do, since
+ * `sameLaw` holds only of laws of one kind whose sides read the same relations.
+ *
+ * @param law - A law as grizzle names it.
+ * @returns Its bucket.
+ */
+export const bucketOf = (law: Law): string => [law.kind, ...relationsOf(law)].join(" ");
+
+/**
+ * The law of a given kind.
+ */
+export type LawOf<Kind extends Law["kind"]> = Extract<Law, { readonly kind: Kind }>;
+
+/**
+ * Name each key by one law: one row per key, so a table lists its laws as their names group them.
+ *
+ * @param name - The law.
+ * @param keys - The keys it names.
+ * @returns The rows.
+ */
+export const namedBy = (
+  name: LawName,
+  ...keys: readonly string[]
+): readonly (readonly [string, LawName])[] => keys.map((key) => [key, name] as const);
+
+/**
+ * The law each generated field of Qti's stored relations is named by, by `Relation.field`: grizzle
+ * names one when PostgreSQL refuses a row because the field's column is NULL there (23502). grizzle
+ * writes no NULL, so only the field's term can have no value: a closed read `C.at` at a key its
+ * closed relation holds no row at. No term of Qti's reads `C.at`, so no row breaks one. Each is
+ * named by the law that states its value exists, its relation's rows'. The dictionary's generator
+ * (`#pantry/test/law-names.ts`) enters each under its GeneratedLawId, and the census
+ * (`refusal.oracle.test.ts`) holds the table to `lawsOf(Qti)` both ways:
+ *
+ * - An IDREF token's piece, a header's and a tolerance value's, and a reference segment's token, is
+ *   its own whitespace or separator and its token concatenated, its concat fold's step: written
+ *   texts, none NULL, so the term is never NULL. A piece or a token past its keyText bound is
+ *   refused by its own pattern law, named by keyText's row of {@link textLaws}, "Key text bound".
+ * - An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of a
+ *   set keyed by the row's own NOT NULL `baseType` and `cardinality`: ∅ where the diagonal holds no
+ *   row (`any`, `unknown`), never NULL, which only a NULL key, an absent `C.at`, reads
+ *   (docs/grizzle-findings.md, lane DBT's). A field a closed relation determines is E1 derived.
+ * - A selection's `select` casts `selectForm`, which its pattern law, named by SelectForm's row of
+ *   {@link textLaws}, holds to the language the cast reads total: a form outside it is refused by
+ *   that law as the statement casts it into its column, before PostgreSQL computes `select`.
+ * - A statistic's `date` casts `day`, which its pattern law, named by DayForm's row of
+ *   {@link textLaws}, holds to the days 0001-01-01 to 9999-12-31 the cast reads total, refused the
+ *   same way. Its value is the calendar day `lastUpdated` names, which the value domain states
+ *   exists, so it is the value domain's.
+ * - A document's and an item's assembly's `xml:lang` form's compared `value` is the form collapsed
+ *   and case-folded, cast into the form's own key text, a cast the schema proves total: a written
+ *   text, never NULL.
+ */
+export const generatedNames: readonly (readonly [string, LawName])[] = [
+  ...namedBy(
+    "E1 derived",
+    "Idref.piece",
+    "TextIdref.piece",
+    "HeaderToken.piece",
+    "ToleranceToken.piece",
+    "ReferenceSegment.token",
+    "Operand.baseTypeBit",
+    "Operand.cardinalityBit",
+    "SectionSelection.select",
+  ),
+  ...namedBy("value domain", "StatisticDate.date"),
+  ...namedBy(
+    "E1 derived",
+    "DocumentLang.value",
+    "AssembledLang.value",
+    "MapKeyItems.ordered",
+    "MapKeyItems.unordered",
+  ),
+];
+
+/**
+ * The law each contract Qti's fields are of is named by, by the contract's name: grizzle's builtin
+ * `natural`, a bigint never below zero (README, "Tables and types": "A negative value is an outcome
+ * on the law `{ kind: "contract", contract: "natural" }`"), the type of every count, position and
+ * bit set of the model. Each natural the import writes is a count or a position of its own rows, or
+ * a set of a closed relation's bits, and grizzle draws or accumulates the rest, so no row breaks
+ * it, and it is named by the law of the values the import derives, "E1 derived". The dictionary's
+ * generator (`#pantry/test/law-names.ts`) enters it under its LawId, and the census
+ * (`refusal.oracle.test.ts`) holds the table to `lawsOf(Qti)` both ways.
+ */
+export const contractNames: readonly (readonly [string, LawName])[] = namedBy(
+  "E1 derived",
+  "natural",
+);
 
 /**
  * Name every stored relation of a module's relations by one law: a module whose rows one law holds
@@ -559,8 +677,9 @@ export const namerOf = Fn.memoize((schema: typeof Qti) => {
  * order: the primary keys, the statements' laws, the contracts, the pattern laws and the generated
  * fields' laws (grizzle `3ba13e38`, `program/laws.ts`).
  *
- * The importer reads none of it: {@link lawNameOf} names a law by its own fields or its
- * statement's. It is the list the census and the tests read the table against. `lawsOf` compiles
+ * The importer reads none of it: `#pantry/import/refusal.ts` names a law from the committed
+ * dictionary, by its own name or its id. It is the list the census and the tests read the table
+ * against. `lawsOf` compiles
  * the schema's law model, which takes seconds, so this is memoized by the schema's identity.
  */
 export const schemaLawsOf = Fn.memoize((schema: AnySchema): readonly Law[] => lawsOf(schema));
@@ -583,9 +702,9 @@ const statedIn = Fn.memoize((schema: typeof Qti): readonly (readonly [Law, LawNa
 
 /**
  * Every law `Qti` states that is no check, as grizzle's `lawsOf` lists it, with its name in
- * {@link lawTable} ({@link lawNameOf}): the tests that read the laws by their names read the very
- * names production names a refusal by. The first call compiles Qti's law model, twice: `lawsOf`'s
- * list and `lawsByStatement`'s lookup.
+ * {@link lawTable} ({@link schemaLawNameOf}): the tests that read the laws by their names read the
+ * very names production names a refusal by, which the committed dictionary is held to. The first
+ * call compiles Qti's law model, twice: `lawsOf`'s list and `lawsByStatement`'s lookup.
  *
  * @returns The laws, with their names.
  */

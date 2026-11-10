@@ -6,7 +6,6 @@ import {
   closed,
   closedId,
   Compute,
-  constraintNamesOf,
   contained,
   counted,
   drawn,
@@ -42,15 +41,8 @@ import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Result, Schema
 import { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { followPairsOf } from "#pantry/grammar/content.ts";
-import {
-  checkNameOf,
-  contractNames,
-  explain,
-  generatedNames,
-  owedRules,
-  refusalOf,
-} from "#pantry/import/refusal.ts";
-import type { LawName, RefusalLaw } from "#pantry/import/refusal.ts";
+import { checkNameOf, explain, refusalOf } from "#pantry/import/refusal.ts";
+import type { LawName } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
@@ -68,6 +60,8 @@ import { ZipRefusal } from "#pantry/package/zip.ts";
 import { ImportRefused, ImportRule, limitRules, ruleOfError } from "#pantry/import/rules.ts";
 import type { ReadRefusal, Rule } from "#pantry/import/rules.ts";
 import {
+  contractNames,
+  generatedNames,
   keyNames,
   patternNameIn,
   patternTypeOf,
@@ -92,16 +86,6 @@ const testTimeoutMs = 120_000;
  * explanation reads.
  */
 const grammar = Result.getOrThrow(composed());
-
-/**
- * The laws a refusal of `laws` prints, as the database reported them: empty unless its origin is
- * the database's.
- */
-const printed = (laws: Arr.NonEmptyReadonlyArray<RefusalLaw>) => {
-  const refused = refusalOf({ kind: "every", laws }, { kind: "unreported" }, grammar);
-
-  return refused.origin._tag === "Database" ? refused.origin.laws : [];
-};
 
 /**
  * A scratch schema, in the shapes `node.ts` and `attributes.ts` state, built with grizzle's own
@@ -684,44 +668,25 @@ const crossTier = nonEmpty("the cross-tier laws", [
 ]);
 
 describe("the law table", () => {
-  it.effect(
-    "ranks every rule a law keeps once, and owes each rule no law keeps yet to the slice that states it",
-    (ctx) =>
-      Effect.gen(function* ranks() {
-        const owned: ReadonlySet<Rule> = new Set(Object.values(lawTable).map(({ rule }) => rule));
-        const owed: readonly Rule[] = Object.keys(owedRules).filter((rule): rule is Rule =>
-          Schema.is(ImportRule)(rule),
-        );
+  it("ranks every rule a law keeps, each once, and no rule no law keeps", () => {
+    // Oracle: the law table itself, each law's rule. Bound: every law of the table and every rule
+    // the precedence lists, exhausted.
+    const owned: ReadonlySet<Rule> = new Set(Object.values(lawTable).map(({ rule }) => rule));
 
-        assert.strictEqual(new Set(precedence).size, precedence.length, "a rule ranks twice");
-        assert.deepStrictEqual(
-          [...owned, ...owed].toSorted(),
-          [...precedence].toSorted(),
-          "the precedence is exactly the owned and the owed rules",
-        );
-        assert.deepStrictEqual(
-          owed.filter((rule) => owned.has(rule)),
-          [],
-          "an owed rule has a law",
-        );
-        for (const rule of precedence) {
-          assert.isTrue(Schema.is(ImportRule)(rule), rule);
-        }
+    assert.strictEqual(new Set(precedence).size, precedence.length, "a rule ranks twice");
+    assert.deepStrictEqual(
+      [...owned].toSorted(),
+      [...precedence].toSorted(),
+      "the precedence is exactly the rules the laws keep",
+    );
+    for (const rule of precedence) {
+      assert.isTrue(Schema.is(ImportRule)(rule), rule);
+    }
 
-        for (const rule of limitRules) {
-          assert.include(precedence, rule, "a limit's rule ranks among the laws'");
-        }
-
-        yield* Effect.promise(() =>
-          ctx.annotate(
-            Object.entries<string>(owedRules)
-              .map(([rule, slice]) => `${rule} (${slice})`)
-              .join(", "),
-            "rules with no law yet",
-          ),
-        );
-      }),
-  );
+    for (const rule of limitRules) {
+      assert.include(precedence, rule, "a limit's rule ranks among the laws'");
+    }
+  });
 });
 
 /**
@@ -794,58 +759,44 @@ describe("the merged axes and the laws no row states", () => {
     assert.isTrue(Option.isNone(schemaRuleOfLaw(law)));
   });
 
-  it(
-    "gives a check the installed name of the constraint or domain that refused it, and none where a statement did, whether or not Qti states the check",
-    () => {
-      // Oracle: the refusing object the outcome names (grizzle's `RefusedLaw.by`), and the law
-      // table's name and rule for each law. A native check names the constraint PostgreSQL holds it
-      // under: AL1's admission on Attribute by grizzle's `constraintNamesOf(Qti)`, and a CDN
-      // install's `CDN_origin` (`#pantry/qti/cdn.ts`), which the default Qti does not state, by its
-      // install's own domain. Each prints with that name, its name and its rule; the same check
-      // refused by a write statement names no constraint, so it prints with no installed name.
-      const stated = {
-        kind: "check",
-        name: checkNameOf("AL1 admission"),
-        relation: "Attribute",
-      } as const;
-      const cdn = {
-        kind: "check",
-        name: checkNameOf("CDN origin"),
-        relation: "Attribute",
-      } as const;
-      const installed = constraintNamesOf(Qti)(stated);
-      const cdnInstalled = "cdn_origin_domain";
+  it("gives each law the installed name of the constraint or domain that refused it, whatever the law's kind, and none where a write statement or a generated column's NOT NULL did", () => {
+    // Oracle: grizzle's `RefusedLaw.by` (`RefusingObject`, `types/changeset/changeset.ts` at the
+    // vendored commit): a table's constraint and a domain's CHECK carry the name PostgreSQL holds
+    // them under, and a write statement and a generated column's NOT NULL carry none, so the
+    // refusal reads the name off the refusing object and nothing off the schema. Bound: a check Qti
+    // states (AL1's admission), a check it does not (a CDN install's origin), a primary key, a
+    // contract and a generated field's law, each refused by each kind of object; exhausted.
+    const laws: readonly Law[] = [
+      { kind: "check", name: checkNameOf("AL1 admission"), relation: "Attribute" },
+      { kind: "check", name: checkNameOf("CDN origin"), relation: "Attribute" },
+      { fields: ["id"], kind: "primaryKey", relation: "Package" },
+      { contract: "natural", kind: "contract" },
+      { field: "value", kind: "generated", relation: "DocumentLang" },
+    ];
+    const objects = [
+      [{ kind: "constraint", name: "planted_constraint" }, Option.some("planted_constraint")],
+      [{ kind: "domain", name: "planted_domain_check" }, Option.some("planted_domain_check")],
+      [{ kind: "statement" }, Option.none()],
+      [{ kind: "notNull" }, Option.none()],
+    ] as const;
 
-      assert.deepStrictEqual(
-        printed([
-          { ...refusedOf(stated), by: { kind: "constraint", name: installed } },
-          { ...refusedOf(cdn), by: { kind: "domain", name: cdnInstalled } },
-        ]),
-        [
-          {
-            installed,
-            name: "AL1 admission",
-            rule: lawTable["AL1 admission"].rule,
-            text: Formatter.format(stated),
-          },
-          {
-            installed: cdnInstalled,
-            name: "CDN origin",
-            rule: lawTable["CDN origin"].rule,
-            text: Formatter.format(cdn),
-          },
-        ],
-      );
-      assert.deepStrictEqual(printed([refusedOf(stated)]), [
-        {
-          name: "AL1 admission",
-          rule: lawTable["AL1 admission"].rule,
-          text: Formatter.format(stated),
-        },
-      ]);
-    },
-    testTimeoutMs,
-  );
+    for (const law of laws) {
+      for (const [by, installed] of objects) {
+        const refused = refusalOf(
+          { kind: "every", laws: [{ by, id: "", law }] },
+          { kind: "unreported" },
+          grammar,
+        );
+        const [fact] = refused.origin._tag === "Database" ? refused.origin.laws : [];
+
+        assert.deepStrictEqual(
+          Option.fromUndefinedOr(fact?.installed),
+          installed,
+          `${Formatter.format(law)}, refused by a ${by.kind}`,
+        );
+      }
+    }
+  });
 });
 
 /**

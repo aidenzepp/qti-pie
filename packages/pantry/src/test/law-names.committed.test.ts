@@ -1,16 +1,16 @@
 /**
  * The committed law-name dictionary (`#pantry/vocab/law-names.json`), held to the schema and the
- * committed snapshot: the file is the one `#pantry/test/law-names.ts` generates, and the importer's
- * namer over it (`#pantry/import/refusal.ts` `namerFrom`) names every law grizzle's `lawsOf(Qti)`
- * states, each as a refusal of it carries it (its LawId beside it), exactly as the schema's own
- * naming does (`#pantry/test/law-namer.ts`), so naming a refusal needs no schema.
+ * committed migrations: the file is the one `#pantry/test/law-names.ts` generates, and the
+ * importer's namer over it (`#pantry/import/refusal.ts` `namerFrom`) names every law grizzle's
+ * `lawsOf(Qti)` states, each as a refusal of it carries it (its id beside it), exactly as the
+ * schema's own naming does (`#pantry/test/law-namer.ts`), so naming a refusal needs no schema.
  */
 import { readFileSync } from "node:fs";
 import type { Law } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Formatter, Option, Schema } from "effect";
+import { Array as Arr, Formatter, Option, Schema } from "effect";
 import { lawNames, LawNamesFileSchema, namerFrom } from "#pantry/import/refusal.ts";
-import type { LawNamer } from "#pantry/import/refusal.ts";
+import type { LawNamer, LawNamesFile } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
 import { lawNamesOf, lawNamesPath, refusedOf } from "#pantry/test/law-names.ts";
@@ -49,10 +49,10 @@ const disagreements = (namer: LawNamer, laws: readonly Law[]): readonly string[]
 
 describe("the law-name dictionary", () => {
   it(
-    "is the one the schema and the committed snapshot generate",
+    "is the one the schema and the committed migrations generate",
     () => {
-      // Oracle: the generator over the schema's own naming and the snapshot's LawIds. Bound: every
-      // law of lawsOf(Qti) the dictionary enters.
+      // Oracle: the generator over the schema's own naming and the ids the committed snapshot and
+      // served file give the laws. Bound: every law of lawsOf(Qti) the dictionary enters.
       assert.deepStrictEqual(
         committed,
         lawNamesOf(),
@@ -73,28 +73,32 @@ describe("the law-name dictionary", () => {
   );
 
   it(
-    "finds a dictionary that misses an entry, names one wrongly, or misses a pattern",
+    "finds a dictionary that misses an entry, names one wrongly, or misses a pattern's, a generated field's or a contract's",
     () => {
       // Oracle: the comparison above, on planted dictionaries. Live: an entry dropped, an entry's
-      // name changed and a pattern dropped each yield a disagreement. Stale: the committed
-      // dictionary yields none (the case above).
+      // name changed, and the entry of a pattern law, of a generated field's law and of the
+      // contract each dropped, each yield a disagreement. Stale: the committed dictionary yields
+      // none (the case above).
       const [firstId, firstEntry] = Object.entries(committed.laws)[0] ?? ["", { name: "" }];
-      const [firstPattern] = Object.keys(committed.patterns);
       const other = lawNames.find((name) => name !== firstEntry.name) ?? "comment arm";
       const laws = schemaLawsOf(Qti);
+      const idOfKind = (kind: Law["kind"]): string =>
+        refusedOf(
+          Option.getOrThrowWith(
+            Arr.findFirst(laws, (law) => law.kind === kind),
+            () => new Error(`lawsOf(Qti) states no ${kind} law`),
+          ),
+        ).id;
+      const without = (dropped: string): LawNamesFile => ({
+        laws: Object.fromEntries(Object.entries(committed.laws).filter(([id]) => id !== dropped)),
+      });
 
       for (const planted of [
-        {
-          laws: Object.fromEntries(Object.entries(committed.laws).filter(([id]) => id !== firstId)),
-          patterns: committed.patterns,
-        },
-        { laws: { ...committed.laws, [firstId]: { name: other } }, patterns: committed.patterns },
-        {
-          laws: committed.laws,
-          patterns: Object.fromEntries(
-            Object.entries(committed.patterns).filter(([key]) => key !== firstPattern),
-          ),
-        },
+        without(firstId),
+        { laws: { ...committed.laws, [firstId]: { name: other } } },
+        without(idOfKind("pattern")),
+        without(idOfKind("generated")),
+        without(idOfKind("contract")),
       ]) {
         assert.isAbove(disagreements(namerFrom(planted), laws).length, 0);
       }
