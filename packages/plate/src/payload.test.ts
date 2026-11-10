@@ -40,6 +40,7 @@ import {
   payload,
   postings,
   postingsIn,
+  printNodes,
   redactItem,
   redactStructure,
   templateShows,
@@ -2930,7 +2931,10 @@ describe("choiceOrder", () => {
  * @param baseType Its base type.
  * @returns The declaration.
  */
-const declared = (identifier: string, baseType: "boolean" | "point"): ResponseDeclaration => ({
+const declared = (
+  identifier: string,
+  baseType: "boolean" | "file" | "point",
+): ResponseDeclaration => ({
   areaMapping: Option.none(),
   baseType,
   cardinality: "single",
@@ -3280,6 +3284,41 @@ describe("postings", () => {
     assert.deepStrictEqual(
       Result.getSuccess(decode([[doneBinding.name, "true"]], doneBinding, doneOptions)),
       Option.some(truth),
+    );
+  });
+
+  it("[W0-AY] gives a file response an interaction binds its posting, a value binding of file, which decodes a posted file by its name, size and type", () => {
+    const bound: Item = {
+      ...item,
+      body: [textEntry("UPLOADED")],
+      responses: new Map([...item.responses, ["UPLOADED", declared("UPLOADED", "file")]]),
+    };
+    const [uploaded, ...others] = postings(redactItem(bound), instance);
+
+    assert.deepStrictEqual(uploaded, postingOf("UPLOADED", "file", 10));
+    assert.lengthOf(others, 0);
+
+    const { binding, options } = uploaded ?? assert.fail("UPLOADED has no posting.");
+    const posted = new File([new Uint8Array([1, 2, 3])], "photo.png", { type: "image/png" });
+    const photo: Value = {
+      baseType: "file",
+      cardinality: "single",
+      values: [{ baseType: "file", value: { name: "photo.png", size: 3, type: "image/png" } }],
+    };
+
+    assert.deepStrictEqual(
+      Result.getSuccess(decode([[binding.name, posted]], binding, options)),
+      Option.some(photo),
+    );
+    assert.deepStrictEqual(
+      Result.getSuccess(decode([], binding, options)),
+      Option.some(nullOf("file", "single")),
+    );
+    assert.deepStrictEqual(
+      Result.getFailure(decode([[binding.name, "photo.png"]], binding, options)).pipe(
+        Option.map((malformed) => malformed.reason),
+      ),
+      Option.some("file-text"),
     );
   });
 
@@ -4743,4 +4782,51 @@ describe("an author's data-* on a module's interaction root (D24)", () => {
       assert.strictEqual(root["data-note"], "x");
     }),
   );
+});
+
+describe("the printer of test content", () => {
+  it("[W0-BF] printNodes prints a test outcome and leaves redactItem equal", () => {
+    const record: RedactRecord = { outcomes: { X: floatValue(2.675) }, templates: {} };
+    const path = `${bodyPath}/p`;
+    const placed: BodyNode = {
+      attributes: [],
+      children: [text("Total "), printed("X", `${path}/qti-printed-variable`)],
+      kind: "element",
+      path,
+      tag: "p",
+    };
+    const onItem = (given?: RedactRecord, limits?: { readonly outputBudget: number }) =>
+      redactItem({ ...item, body: [placed], unsupported: [] }, given, limits).body;
+
+    assert.deepStrictEqual(printNodes([placed], Option.some(record)), [
+      { attributes: [], children: texts("Total ", "2.675"), kind: "element", path, tag: "p" },
+    ]);
+    assert.deepStrictEqual(printNodes([placed], Option.some(record)), onItem(record));
+
+    const withheld = printNodes([placed], Option.some({ outcomes: {}, templates: {} }));
+
+    assert.deepStrictEqual(withheld, [
+      {
+        attributes: [],
+        children: [
+          text("Total "),
+          noticeOf("qti-printed-variable", `${path}/qti-printed-variable`),
+        ],
+        kind: "element",
+        path,
+        tag: "p",
+      },
+    ]);
+    assert.deepStrictEqual(withheld, onItem({ outcomes: {}, templates: {} }));
+
+    const limits = { outputBudget: 3 };
+
+    assert.deepStrictEqual(
+      printNodes([placed], Option.some(record), limits),
+      onItem(record, limits),
+    );
+    assert.deepStrictEqual(printNodes([placed], Option.some(record), limits), [
+      { attributes: [], children: texts("Total "), kind: "element", path, tag: "p" },
+    ]);
+  });
 });

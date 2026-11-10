@@ -16,6 +16,7 @@ import {
   startTest,
 } from "#plate/index.ts";
 import type { Configuration, Intent, PackageTest, Step, TestSession, Value } from "#plate/index.ts";
+import { format } from "#plate/model/values.ts";
 import { validateAgainst } from "#plate/test/xsd.ts";
 
 /**
@@ -300,7 +301,7 @@ const oracleOf = (session: TestSession, summed: SummedProcessing): Option.Option
 const valueText = (value: Value | undefined): string =>
   value === undefined
     ? "none"
-    : `${value.baseType} ${value.cardinality} [${value.values.map((single) => `${single.baseType}:${String(single.value)}`).join(" ")}]`;
+    : `${value.baseType} ${value.cardinality} [${value.values.map((single) => `${single.baseType}:${format(single)}`).join(" ")}]`;
 
 /**
  * Write the results report of a closed session, as a host does from its stored form.
