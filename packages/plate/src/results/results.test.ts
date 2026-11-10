@@ -625,6 +625,7 @@ const sessionItem = (
   datestamp: updated,
   duration: 0,
   firstOutcomes: Option.none(),
+  locked: false,
   presented: false,
   record: fresh(accepted.item, `${instance}.${String(sequenceIndex)}`),
   ref: refId,
@@ -675,6 +676,7 @@ const storedSession = (
   Result.getOrElse(
     encodeSession({
       document: test.document,
+      expired: [],
       instance,
       items,
       kind: "test",
