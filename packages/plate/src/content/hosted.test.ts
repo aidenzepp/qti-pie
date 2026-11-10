@@ -11,7 +11,6 @@ import type {
   ItemContentModule,
 } from "#plate/content/contract.ts";
 import { bodyModules, itemModules } from "#plate/content/modules.ts";
-import { mathmlModule } from "#plate/content/mathml.ts";
 import type {
   BodyContentNodeIn,
   BodyTable,
@@ -21,15 +20,7 @@ import type {
 import { presenters } from "#plate/content/presenters/table.ts";
 import type { Presenters } from "#plate/content/presenters/table.ts";
 import { ssmlModule } from "#plate/content/ssml.ts";
-import {
-  attr,
-  doc,
-  el,
-  mathmlNamespace,
-  qtiNamespace,
-  ssmlNamespace,
-  text,
-} from "#plate/document/source.ts";
+import { attr, doc, el, qtiNamespace, ssmlNamespace, text } from "#plate/document/source.ts";
 import type { SourceDocument } from "#plate/document/source.ts";
 import { h } from "#plate/emit/node.ts";
 import type { BodyNode } from "#plate/model/item.ts";
@@ -644,15 +635,6 @@ const withIsland = (island: ReturnType<typeof el>): SourceDocument =>
 
 describe("the verdict's islands", () => {
   for (const { exported, local, name, namespace, reason, specifier, stub } of [
-    {
-      exported: "mathmlModule",
-      local: "math",
-      name: "MathML",
-      namespace: mathmlNamespace,
-      reason: "mathml",
-      specifier: "#plate/content/mathml.ts",
-      stub: mathmlModule,
-    },
     {
       exported: "ssmlModule",
       local: "speak",

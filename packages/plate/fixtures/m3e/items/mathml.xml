@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:m="http://www.w3.org/1998/Math/MathML"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m3e-mathml" title="Formulas in a lighthouse log" adaptive="false" time-dependent="false"
+  xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string">
+    <qti-correct-response>
+      <qti-value>9</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <p>The keeper's lamp loses power with the square of the distance, so the log writes it as
+      <m:math><m:mi>P</m:mi><m:mo>=</m:mo><m:msup><m:mi>d</m:mi><m:mn>2</m:mn></m:msup></m:math>.</p>
+    <m:math display="block">
+      <m:mfenced separators=",;"><m:mi>a</m:mi><m:mi>b</m:mi><m:mi>c</m:mi></m:mfenced>
+      <m:mo>=</m:mo>
+      <m:mrow><m:mfenced><m:mi>x</m:mi><m:mi>y</m:mi></m:mfenced></m:mrow>
+    </m:math>
+    <p>The same tide table, read right to left:
+      <m:math dir="rtl"><m:mi>ت</m:mi><m:mo>=</m:mo><m:mn>3</m:mn></m:math></p>
+    <p dir="rtl">قراءة المنارة <m:math><m:mi>h</m:mi><m:mo>+</m:mo><m:mn>1</m:mn></m:math></p>
+    <m:math>
+      <m:semantics>
+        <m:mfrac><m:mn>1</m:mn><m:mn>2</m:mn></m:mfrac>
+        <m:annotation encoding="application/x-tex">\frac{1}{2}</m:annotation>
+        <m:annotation-xml encoding="application/xhtml+xml">
+          <p>one half</p>
+        </m:annotation-xml>
+      </m:semantics>
+    </m:math>
+    <p>The area of the lens is
+      <m:math alttext="x squared"><m:msup><m:mi>x</m:mi><m:mn>2</m:mn></m:msup></m:math>.</p>
+    <p>A reading the gauge cannot hold is logged as
+      <m:math><m:cn type="hexdouble">7ff0000000000000</m:cn></m:math>.</p>
+    <p>If <m:math><m:mi>d</m:mi><m:mo>=</m:mo><m:mn>3</m:mn></m:math>, what is the logged power?
+      <qti-text-entry-interaction response-identifier="RESPONSE" expected-length="4"/></p>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+</qti-assessment-item>

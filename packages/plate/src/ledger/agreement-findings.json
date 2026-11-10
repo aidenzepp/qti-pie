@@ -1,28 +1,28 @@
 [
   {
     "file": "qtiv3-examples/packaging/basicFeedbackTest/basicFeedbackTest.zip",
-    "finding": "plate leaves 1 of its 4 items unchecked for its MathML and accepts the test and the other 3 items, with unsupported features (test, modal, block and inline feedback, an adaptive item, a rubric block and outcome processing among them); a package with an unchecked document agrees with no verdict. pantry accepts it. The difference is plate's unmodeled vocabulary: plate does not validate MathML yet, so it judges nothing in that item, which marks what plate does not model, not a QTI rule the package breaks.",
+    "finding": "Resolved: the two agree since 316908f4 (feat(plate): MathML: math rendered in place, mfenced rewritten as MathML 3 defines it; issue m3e-05). The item that holds MathML is built and accepted with unsupported features, so plate accepts the test and all 4 items, with unsupported features (test, modal, block and inline feedback, an adaptive item, a rubric block and outcome processing among them), and pantry accepts it. Before that commit plate left that 1 item unchecked for its MathML, and a package with an unchecked document agreed with no verdict: plate did not validate MathML, so it judged nothing in that item, which marked what plate did not model, not a QTI rule the package breaks.",
     "pantry": {
       "rule": "",
       "verdict": "accepted"
     },
     "plate": {
       "rules": [],
-      "verdict": "unchecked"
+      "verdict": "accepted-with-unsupported"
     },
     "ruling": {
-      "expectedWhile": "plate does not validate MathML (M3)",
+      "expectedWhile": "resolved: plate reads MathML since 316908f4 (issue m3e-05), so the verdicts agree; the row stays as the record of the difference that was expected while plate did not validate MathML (M3)",
       "group": 1,
-      "source": "rule 4325d4c1 (operator, criterion 5), its group 1 widened to either package's unmodeled vocabulary by 057ff1af (overseer, 2026-11-08)",
+      "source": "rule 4325d4c1 (operator, criterion 5), its group 1 widened to either package's unmodeled vocabulary by 057ff1af (overseer, 2026-11-08); resolved by 316908f4 (issue m3e-05, the supervisor's grant on its pull request)",
       "state": {
-        "commit": "083890d8",
+        "commit": "c6e55307",
         "pantry": {
           "rule": "",
           "verdict": "accepted"
         },
         "plate": {
           "rules": [],
-          "verdict": "unchecked"
+          "verdict": "accepted-with-unsupported"
         }
       }
     }
