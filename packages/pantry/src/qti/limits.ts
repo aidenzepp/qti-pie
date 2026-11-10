@@ -17,7 +17,9 @@
  * text's type, so a bounded copy meets the unbounded text it copies in a containment, and its `n`
  * is grizzle's own `keyTextBytes(fields)` (`public/text.ts` of the vendored engine), the UTF-8
  * bytes a text holds beside its key's other fields, read exactly as the schema's compilation reads
- * the key. No PostgreSQL constant is re-spelled here.
+ * the key. One PostgreSQL constant is re-spelled here, {@link regexTextBytes}, because grizzle
+ * derives it but exports no name for it (its `regexTextMaxBytes`, which feature request FR-1 asks
+ * it to export), and `limits.test.ts` pins it to grizzle's refusal one byte past it.
  *
  * @see {@link https://github.com/postgres/postgres/blob/REL_19_STABLE/src/include/access/nbtree.h | PostgreSQL, nbtree.h BTMaxItemSize}
  */
@@ -102,6 +104,22 @@ export const namespaceText = str.bytes(namespaceBytes, anyText);
  * other field of the key `Namespace(node, prefix)`, 2,665 at the vendored grizzle.
  */
 export const prefixBytes = bytesBeside([uuid]);
+
+/**
+ * The most UTF-8 bytes a text PostgreSQL's regular expressions read: `RE_execute` widens its
+ * subject into one `pg_wchar` per byte and one more (`regexp.c`, `palloc_array(pg_wchar, dat_len +
+ * 1)`), and `palloc` refuses a size past `MaxAllocSize` (`memutils.h`), so a subject holds at most
+ * `floor(MaxAllocSize / sizeof(pg_wchar)) - 1` bytes, 268,435,454, whatever its characters.
+ *
+ * It is grizzle's `regexTextMaxBytes` (`core/limits.ts` of the vendored engine), re-spelled because
+ * grizzle exports no name for it, and pinned by `limits.test.ts` to grizzle's own refusal of
+ * `Compute.matches` in a query one byte past it. An attribute's lexical form is bounded by it, the
+ * stated limit "Regex text bound" (reading 178), the ceiling the field's domain `~` already holds
+ * every write to.
+ *
+ * @see {@link https://github.com/postgres/postgres/blob/REL_19_STABLE/src/backend/utils/adt/regexp.c | PostgreSQL, regexp.c RE_execute}
+ */
+export const regexTextBytes = 268_435_454;
 
 /**
  * The encoder {@link utf8Length} counts with.

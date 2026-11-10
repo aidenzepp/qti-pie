@@ -2,9 +2,25 @@
  * The key-text bounds against grizzle's own representability rule, `keyTextBytes(fields)`, which
  * measures a key's B-tree entry as the schema's compilation does: each bound is the UTF-8 bytes it
  * leaves beside its key's other fields, and every index of the composed `Qti` that holds a text of
- * one of the bounded kinds holds it at its kind's one bound and is representable.
+ * one of the bounded kinds holds it at its kind's one bound and is representable. And the regex
+ * bound, `regexTextBytes`, against grizzle's refusal of `Compute.matches` in a query one byte past
+ * it.
  */
-import { keyTextBytes, natural, str, uuid, writableNamesOf } from "@bjornpagen/grizzle";
+import {
+  check,
+  Compute,
+  derived,
+  keyTextBytes,
+  lawsOf,
+  natural,
+  query,
+  relation as storedRelation,
+  schema,
+  str,
+  uuid,
+  v,
+  writableNamesOf,
+} from "@bjornpagen/grizzle";
 import type { FieldBase } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Predicate, Result, Schema } from "effect";
@@ -17,10 +33,11 @@ import {
   namespaceBytes,
   namespaceText,
   prefixBytes,
+  regexTextBytes,
   utf8Length,
   widestTextKey,
 } from "#pantry/qti/limits.ts";
-import { Node } from "#pantry/qti/node.ts";
+import { charsPattern, Node } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/test/qti.ts";
 
 /**
@@ -193,6 +210,42 @@ const textKinds: ReadonlyMap<FieldBase, { readonly bytes: number; readonly kind:
  */
 const anyText = str.regex("^.*$", "su");
 
+/**
+ * Compile the laws of a root schema holding one relation whose text field takes `bytes` as its byte
+ * bound over `Attribute.lexical`'s pattern, and a level above it whose check reads a derived
+ * relation over that field with `Compute.matches`: a rule over a query, which grizzle compiles as a
+ * query (`check/checker.ts`), so it refuses the match unless the field's type bounds it within the
+ * most PostgreSQL's regular expressions read (`scalar/compute/lower.ts` `regexReadable` of the
+ * vendored engine).
+ *
+ * @param bytes - The field's byte bound.
+ * @returns The laws, or the error grizzle's builder throws.
+ */
+const matchedAtLevel = (bytes: number): Result.Result<unknown, unknown> => {
+  const Held = storedRelation(
+    "Held",
+    { id: uuid, lexical: str.bytes(bytes, str.regex(charsPattern)) },
+    ["id"],
+  );
+  const Root = schema("Probe", { Held }, []);
+  const Read = derived(
+    "Read",
+    query(Root).rule((r) => {
+      const { id, lexical } = v(Held, "h");
+
+      return r.match(Held, { id, lexical }).find({ id, lexical });
+    }),
+  );
+
+  return Result.try(() =>
+    lawsOf(
+      schema.extend(Root, "Level", { Read }, [
+        check("Matched", Read, (h) => h.not(Compute.matches(h.lexical, Compute.pattern("^d")))),
+      ]),
+    ),
+  );
+};
+
 describe("qti/limits.ts", () => {
   it("states each bound as the UTF-8 bytes grizzle's keyTextBytes leaves beside its widest key's other fields", () => {
     // Oracle: grizzle's own rule (`keyTextBytes`, public/text.ts of the vendored engine), the
@@ -211,6 +264,27 @@ describe("qti/limits.ts", () => {
     assert.deepStrictEqual(
       { keyTextBound, localNameBytes, namespaceBytes, prefixBytes },
       { keyTextBound: 2587, localNameBytes: 1329, namespaceBytes: 1329, prefixBytes: 2665 },
+    );
+  });
+
+  it("states the regex bound as the most bytes grizzle lets a query match, refusing one byte past it", () => {
+    // Oracle: grizzle's own refusal (`regexReadable`, `scalar/compute/lower.ts` of the vendored
+    // engine, over its unexported `regexTextMaxBytes`, `core/limits.ts`), probes B1 and B6 of
+    // research 009144af. Bound: the bound and one byte past it.
+    //
+    // A re-pin past grizzle b9f100ac moves this refusal from `lawsOf` to the installation's
+    // compile, where a rule over a query's violation query is checked, so the `+ 1` case then
+    // fails here, loudly, until it is re-pointed at that compile.
+    assert.strictEqual(regexTextBytes, 268_435_454);
+    assert.isTrue(Result.isSuccess(matchedAtLevel(regexTextBytes)), "at the bound, it compiles");
+
+    const past = matchedAtLevel(regexTextBytes + 1);
+    assert.isTrue(
+      Result.isFailure(past) &&
+        Predicate.isTagged(past.failure, "CompileError") &&
+        Predicate.hasProperty(past.failure, "reason") &&
+        Predicate.isTagged(past.failure.reason, "UnsupportedOperation"),
+      "one byte past it, grizzle refuses the match as an unsupported operation",
     );
   });
 

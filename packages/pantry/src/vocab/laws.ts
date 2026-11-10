@@ -130,8 +130,9 @@ export const precedence = [
   "child-set",
   "union-count",
   "admission",
-  // The document layer: its stated limit, then its laws.
+  // The document layer: its stated limits, then its laws.
   "key-text-bound",
+  "regex-text-bound",
   "href-form",
   "fragment-context",
   "remote-section",
@@ -759,6 +760,11 @@ export const lawTable = {
     rule: "P24",
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#Union_IntegerOrVariableRef (§9.3.3, §9.3.1 and §9.3.4: an integerOrVariableRef, floatOrVariableRef or stringOrVariableRef names a template or outcome variable of that base type, single) (expression.ts ReferenceBase; the old checker's P24)",
+  },
+  "Regex text bound": {
+    rule: "regex-text-bound",
+    source:
+      "reading 178; src/qti/limits.ts regexTextBytes: an attribute's lexical form (attributes.ts Lexical) is at most 268,435,454 UTF-8 bytes, the longest text PostgreSQL's regular expressions read: RE_execute widens its subject into one pg_wchar per byte and one more (regexp.c, 'data = palloc_array(pg_wchar, dat_len + 1)'), and palloc refuses a size past MaxAllocSize (memutils.h), and the field's domain CHECK runs ~ on every write; a stated limit of the representation, not a law of the specification",
   },
   "Remote section ref": {
     rule: "remote-section",

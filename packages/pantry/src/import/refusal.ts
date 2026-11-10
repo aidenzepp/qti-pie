@@ -247,7 +247,10 @@ const codecRules = [
 /**
  * The rules that name a stated limit of the representation, never a law of the specification:
  * `key-text-bound` is the bound on a text a key holds (`src/qti/limits.ts` `keyText`), which
- * grizzle's representability rule derives from PostgreSQL's `BTMaxItemSize`, and `href-form` an
+ * grizzle's representability rule derives from PostgreSQL's `BTMaxItemSize`, `regex-text-bound`
+ * the bound on an attribute's lexical form (`src/qti/limits.ts` `regexTextBytes`, reading 178), the
+ * longest text PostgreSQL's regular expressions read, which the field's domain CHECK runs on every
+ * write, and `href-form` an
  * href the importer reads no name from (reading 102, `overlays/package.ts` `Limit`), and
  * `fragment-context` the one context an included fragment's rows are judged in (reading 117,
  * `tests.ts` `Fragment_context`): a fragment two includes place in different interactions would
@@ -264,6 +267,7 @@ const codecRules = [
  */
 export const limitRules = [
   "key-text-bound",
+  "regex-text-bound",
   "href-form",
   "fragment-context",
   "remote-section",
@@ -522,9 +526,12 @@ export const patternLawsOf = (
  *   with no `/` because the directory reader lists paths relative to the package root and `zip.ts`
  *   refuses an absolute name; a typed float map key is an `xs:double` lexical form because the
  *   import writes its row only for one (`doublePattern`);
- * - An unbounded XML production (a node's or an attribute's `Char*`, a comment, an instruction, a
- *   doctype, an encoding name, a version number, an NCName) is "XML production", which crust
- *   refuses before any row exists;
+ * - The bound on an attribute's lexical form is "Regex text bound", a stated limit: `Lexical` is
+ *   `Char`s, which crust refuses a break of before any row exists, so its pattern law breaks only
+ *   on the bound, as the bounded names' rows reason above;
+ * - An unbounded XML production (a node's `Char*`, a comment, an instruction, a doctype, an encoding
+ *   name, a version number, an NCName) is "XML production", which crust refuses before any row
+ *   exists;
  * - A namespace declaration's value is "Namespace name": an RFC 3986 URI reference (reading 131),
  *   which crust does not check, so the domain is the law;
  * - The whitespace around an IDREF token is the host's own split, "E1 derived", as is every other
@@ -542,7 +549,7 @@ export const textLaws: ReadonlyMap<TextType, LawName> = new Map<TextType, LawNam
   [FloatKey, "Key text bound"],
   [NamespaceUri, "Namespace name"],
   [Chars, "XML production"],
-  [Lexical, "XML production"],
+  [Lexical, "Regex text bound"],
   [CommentText, "XML production"],
   [PiTarget, "XML production"],
   [PiData, "XML production"],
