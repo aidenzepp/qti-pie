@@ -1,8 +1,8 @@
 /**
  * Which two keys of a float mapping repeat (spec readings 98, 144 and 154), three ways alike: the
- * import's rows (`rowsOf` of `#pantry/import/overlays/mapping.ts`), the law oracle's `Map key`
- * (`documentBreaches` of `#pantry/test/oracle.ts`), and an exact reference written here from the
- * specifications alone.
+ * schema's keys over the import's rows (`rowsOf` of `#pantry/import/overlays/mapping.ts`), the law
+ * oracle's `Map key` (`documentBreaches` of `#pantry/test/oracle.ts`), and an exact reference
+ * written here from the specifications alone.
  *
  * - **The reference** reads a key in XML Schema 1.0's `xs:double` lexical space (Part 2 §3.2.5.1,
  *   reading 71's edition, `+INF` outside it) by a scan of its own, and maps it as XML Schema 1.1's
@@ -12,19 +12,23 @@
  *   where they are equal or identical (Part 1 §3.11.4): -0 equals 0, and NaN is identical to itself
  *   (Part 2 §3.3.5.1). Where a key has at most 20 significant digits the reference is held to
  *   ECMAScript's `Number`, which ECMA-262 rounds exactly there (RoundMVResult).
- * - **The import** decides which keys have a typed `MapKeyFloat` row; PostgreSQL generates each row's
- *   value by grizzle's `Compute.parseDouble`, which grizzle proves and tests, so a row's value is
- *   read here as the reference reads its key, and two keys repeat for the import where they are one
- *   text (`key(mapping, key)`) or both have a row of one value (`key(mapping, value)`).
+ * - **The schema** reads a float key's typed value from the import's `MapKeyType` row, by the query
+ *   `MapKeyFloat` (`#pantry/qti/queries.ts`), which holds a row exactly where the key is in the
+ *   lexical space (`doublePattern`), so a key outside it has no typed value and
+ *   `Typed_attribute_value` alone refuses it; PostgreSQL computes each row's value by grizzle's
+ *   `Compute.parseDouble`, which grizzle proves and tests, so a row's value is read here as the
+ *   reference reads its key, and two keys repeat for the schema where they are one text
+ *   (`key(mapping, key)`) or both have a row of one value (the key over `MapKeyFloat`).
  * - **The oracle** names `Map key` where the second key repeats the first.
  *
  * The search draws keys at the edges of grizzle's former bounded form of `double precision` (15
  * significant digits, an exponent of at most 293, zero runs of 255) and past them: 16 to 400
  * digits, exponents from 294 to 400 and far beyond, overflow and underflow, -0 against 0, and each
  * special spelling. Two plants restate the deleted fallback, under which a key outside the bounded
- * form had no typed value and was distinct by its text alone: in the import, a typed row only for
- * a key of that form, and in the oracle, a lexical value for any other key. The search must catch
- * each.
+ * form had no typed value and was distinct by its text alone: in the schema, a typed value only for
+ * a key of that form, and in the oracle, a lexical value for any other key. A third restates the
+ * ungated import of 78b6676e, a typed value for every key, which a key outside the lexical space
+ * has none of. The search must catch each.
  */
 import { lexicalForm, pg } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
@@ -44,6 +48,7 @@ import type { MappingIds } from "#pantry/import/overlays/mapping.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
+import { doublePattern } from "#pantry/qti/operators.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 
@@ -290,7 +295,13 @@ const numberName = (value: number): string => {
  * Grizzle's former bounded form of `double precision` (`lexicalForm`, its zero runs unbounded):
  * the plants' test of a key that had a typed value under the deleted fallback.
  */
-const boundedForm = new RegExp(lexicalForm(pg["double precision"]), "u");
+const boundedForm = new RegExp(lexicalForm(pg["double precision"]).source, "u");
+
+/**
+ * `doublePattern`, the selection of the query `MapKeyFloat` (`#pantry/qti/queries.ts`): the float
+ * keys it gives a typed value, as JavaScript's engine reads it.
+ */
+const floatSelection = new RegExp(doublePattern.source, "u");
 
 /**
  * The law oracle's laws over the composed grammar, built once.
@@ -600,6 +611,7 @@ const pairs: Gen<KeyPair> = weighted<KeyPair>([
  */
 type Situation =
   | "caught: the import's bounded form"
+  | "caught: the import's ungated row"
   | "caught: the oracle's bounded form"
   | "distinct"
   | "exponent past 293"
@@ -658,9 +670,10 @@ const valued = (name: Option.Option<string>, other: Option.Option<string>): bool
   Option.isSome(name) && Option.isSome(other) && name.value === other.value;
 
 /**
- * Judge a case: the import, the oracle and the reference agree on whether the two keys repeat, the
- * import types exactly the keys in the lexical space, the reference agrees with `Number` where
- * ECMA-262 rounds exactly, and each plant that disagrees is caught.
+ * Judge a case: the schema, the oracle and the reference agree on whether the two keys repeat, the
+ * query `MapKeyFloat` holds a key's typed value exactly where the reference reads it, the
+ * reference agrees with `Number` where ECMA-262 rounds exactly, and each plant that disagrees is
+ * caught.
  *
  * @param pair - The case.
  * @param note - Where to note its situations.
@@ -681,22 +694,29 @@ const judged = ({ keys }: KeyPair, note: (situation: Situation) => void) =>
       entries.map(({ key }) => key),
       [first, second],
     );
+
+    // The query's rows, read on the host by its selection over the `MapKeyType` rows it reads.
+    const typedNodes = new Set(
+      [...rows.MapKeyType.values()].flatMap(({ baseType, key, node }) =>
+        baseType === "float" && floatSelection.test(key) ? [node] : [],
+      ),
+    );
     assert.deepStrictEqual(
-      entries.map(({ node }) => rows.MapKeyFloat.has(node)),
-      keys.map((key) => Option.isSome(referenceOf(key))),
-      "a typed row for every key in the lexical space, and none for another",
+      entries.map(({ node }) => typedNodes.has(node)),
+      [firstName, secondName].map(Option.isSome),
+      "a typed value exactly for each key in the lexical space",
     );
 
     const repeatsWhere = (typed: (at: 0 | 1) => boolean): boolean =>
       first === second || (typed(0) && typed(1) && valued(firstName, secondName));
     const imported = repeatsWhere((at) =>
-      Option.exists(Option.fromNullishOr(entries[at]), ({ node }) => rows.MapKeyFloat.has(node)),
+      Option.exists(Option.fromNullishOr(entries[at]), ({ node }) => typedNodes.has(node)),
     );
     const judgedByOracle = documentBreaches("item.xml", folded, oracleLaws).some(
       ({ law }) => law === "Map key",
     );
 
-    assert.strictEqual(imported, expected, `the import on ${Formatter.format(keys)}`);
+    assert.strictEqual(imported, expected, `the schema on ${Formatter.format(keys)}`);
     assert.strictEqual(judgedByOracle, expected, `the oracle on ${Formatter.format(keys)}`);
     for (const [key, name] of [
       [first, firstName],
@@ -733,6 +753,10 @@ const judged = ({ keys }: KeyPair, note: (situation: Situation) => void) =>
       note(situation);
     }
 
+    if ([firstName, secondName].some(Option.isNone)) {
+      note("caught: the import's ungated row");
+    }
+
     const plantedImport = repeatsWhere(
       (at) => boundedForm.test(keys[at]) && Option.isSome(referenceOf(keys[at])),
     );
@@ -765,6 +789,7 @@ const situations: readonly [Situation | AdversarialName, ...(Situation | Adversa
   "negative zero",
   "outside the lexical space",
   "caught: the import's bounded form",
+  "caught: the import's ungated row",
   "caught: the oracle's bounded form",
   ...adversarial.map(({ name }) => name),
 ];

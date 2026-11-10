@@ -352,7 +352,7 @@ const SuiteLayer = Layer.mergeAll(
 
 /**
  * Whether xmllint's verdict on an undeclared name is one where libxml2 departs from XML Schema, so
- * the specification's verdict, the leaf's, stands (the operator's rule: the spec wins).
+ * the specification's verdict, the leaf's, stands (Bjorn's rule: the spec wins).
  *
  * Libxml2 2.9 admits an attribute in no namespace under an `##other` wildcard whose processing is
  * `lax`, though XML Schema 1.0 Part 1, 3.10.4 (Wildcard allows Namespace Name), clause 2.3, keeps
