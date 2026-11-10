@@ -3741,8 +3741,6 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      is valid. This is not a case of documents in conflict. (Proposed in PR #55, 2026-11-09, for the operator; Bjorn's
      direction that the database checks everything, with no checker outside it.)
 
-<!-- Readings 173 to 177 arrive with PR #55, which lands first (decision 485), so this reading is numbered 178. -->
-
 178. **An attribute's value holds at most 268,435,454 UTF-8 bytes: a stated limit of the representation, not a law of
      QTI.** No QTI specification bounds the length of an attribute's value, and XML bounds none (reading 94). pantry's
      representation still refuses one past a bound, because `Attribute.lexical`'s domain checks every value it stores
