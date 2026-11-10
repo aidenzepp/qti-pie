@@ -10,15 +10,18 @@ import {
   isXmlText,
   partition,
   pointEntryNames,
+  postedStrings,
 } from "#plate/form/encoding.ts";
 import type {
   Binding,
   Entry,
   Malformed,
+  ModuleBinding,
   RecordBinding,
   ValueBinding,
 } from "#plate/form/encoding.ts";
-import { format, modelledBaseTypes } from "#plate/model/values.ts";
+import type { ModuleEntry } from "#plate/interactions/contract.ts";
+import { format, isRecordValue, modelledBaseTypes } from "#plate/model/values.ts";
 import type {
   RecordField,
   RecordValue,
@@ -266,6 +269,14 @@ const decodeRecord = (bound: RecordBinding) => decode([], bound);
 const decodeValue = (bound: ValueBinding) => decode([], bound);
 
 /**
+ * Decode no entries under a module binding.
+ *
+ * @param bound A module binding.
+ * @returns What `decode` gives.
+ */
+const decodeModule = (bound: ModuleBinding) => decode([], bound);
+
+/**
  * Decode posted values under the record binding of the response `RESPONSE`.
  *
  * @param values The posted values, in order.
@@ -284,6 +295,79 @@ const resultsFollow: readonly [
   Equals<ReturnType<typeof decodeRecord>, Result.Result<RecordValue, Malformed>>,
   Equals<ReturnType<typeof decodeValue>, Result.Result<Value, Malformed>>,
 ] = [true, true, true];
+
+/**
+ * `decode`'s result for a `ModuleBinding` is either kind of value, since the module declares the
+ * type; `tsc` refuses this line when it parts.
+ */
+const moduleResultFollows: Equals<
+  ReturnType<typeof decodeModule>,
+  Result.Result<ResponseValue, Malformed>
+> = true;
+
+/**
+ * The one text the toy module reads: `{"n":<integer>}`.
+ */
+const toyText = /^\{"n":(?<n>-?\d+)\}$/u;
+
+/**
+ * What the toy module's `decode` says of a text it does not read: what to post instead.
+ */
+const toyDetail = 'post {"n":<integer>}, as the toy control gives it';
+
+/**
+ * The single integer the toy module reads a text as.
+ *
+ * @param n The integer.
+ * @returns The value.
+ */
+const toyInteger = (n: bigint): Value => ({
+  baseType: "integer",
+  cardinality: "single",
+  values: [{ baseType: "integer", value: n }],
+});
+
+/**
+ * The NULL of the toy module's declared type, a single integer.
+ */
+const nullInteger: Value = { baseType: "integer", cardinality: "single", values: [] };
+
+/**
+ * A module's entry in the shape pci-05's will have: `decode` reads `{"n":<integer>}` as a single
+ * integer and empty text, which the form posts for no entry, as its NULL, and refuses any other
+ * text with {@link toyDetail}; `encode` writes that JSON, and empty text for NULL.
+ */
+const toyEntry: ModuleEntry = {
+  decode: (text) => {
+    if (text === "") {
+      return Result.succeed(nullInteger);
+    }
+
+    const n = toyText.exec(text)?.groups?.["n"];
+
+    return n === undefined ? Result.fail(toyDetail) : Result.succeed(toyInteger(BigInt(n)));
+  },
+  encode: (encoded) => {
+    const [first] = isRecordValue(encoded) ? [] : encoded.values;
+
+    return first === undefined ? "" : `{"n":${format(first)}}`;
+  },
+};
+
+/**
+ * Construct the module binding of the response `RESPONSE` over {@link toyEntry}, named for
+ * {@link instance}.
+ *
+ * @param cardinality The declared cardinality, `single` by default.
+ * @returns The binding.
+ */
+const moduleBinding = (cardinality: ModuleBinding["cardinality"] = "single"): ModuleBinding => ({
+  cardinality,
+  decode: toyEntry.decode,
+  encode: toyEntry.encode,
+  kind: "module",
+  name: entryName(instance, "RESPONSE"),
+});
 
 /**
  * Encode a value under a binding and decode the entries back.
@@ -736,8 +820,98 @@ describe("encode and decode", () => {
   );
 });
 
+describe("a file binding", () => {
+  const file = binding("file");
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  const photo = new File([bytes], "photo.png", { type: "image/png" });
+  const photoValue: Single = {
+    baseType: "file",
+    value: { name: "photo.png", size: bytes.length, type: "image/png" },
+  };
+
+  it.effect("[W0-AY] a posted file decodes to a file value by its name, size and type", () =>
+    Effect.gen(function* postedFile() {
+      assert.deepStrictEqual(yield* Effect.fromResult(decode(posted(photo), file)), {
+        baseType: "file",
+        cardinality: "single",
+        values: [photoValue],
+      });
+
+      const bare = yield* Effect.fromResult(decode(posted(new Blob([bytes])), file));
+      assert.deepStrictEqual(
+        bare,
+        value(file, { baseType: "file", value: { name: "", size: bytes.length, type: "" } }),
+      );
+
+      const multiple = binding("file", "multiple");
+      const notes = new File(["a"], "notes.txt", { type: "text/plain" });
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode(posted(photo, notes), multiple)),
+        value(multiple, photoValue, {
+          baseType: "file",
+          value: { name: "notes.txt", size: 1, type: "text/plain" },
+        }),
+      );
+    }),
+  );
+
+  it.effect(
+    "[W0-AY] no entry under a file binding is NULL; two entries under a single are single-many",
+    () =>
+      Effect.gen(function* nullAndMany() {
+        assert.deepStrictEqual(yield* Effect.fromResult(decode([], file)), value(file));
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(
+            decode(posted(new File([], "", { type: "application/octet-stream" })), file),
+          ),
+          value(file),
+          "an input of type file left empty posts a nameless empty file, which is NULL",
+        );
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(posted(new File([], "empty.txt")), file)),
+          value(file, { baseType: "file", value: { name: "empty.txt", size: 0, type: "" } }),
+          "a named empty file is a value",
+        );
+
+        const many = yield* Effect.flip(Effect.fromResult(decode(posted(photo, photo), file)));
+        assert.strictEqual(many.reason, "single-many");
+        assert.strictEqual(many.entry, file.name);
+      }),
+  );
+
+  it.effect("[W0-AY] a text entry under a file binding is malformed as file-text", () =>
+    Effect.gen(function* fileText() {
+      const text = yield* Effect.flip(Effect.fromResult(decode(posted("photo.png"), file)));
+      assert.strictEqual(text.reason, "file-text");
+      assert.strictEqual(text.entry, file.name);
+
+      const mixed = yield* Effect.flip(
+        Effect.fromResult(decode(posted(photo, "photo.png"), binding("file", "multiple"))),
+      );
+      assert.strictEqual(mixed.reason, "file-text");
+
+      const stillFile = yield* Effect.flip(
+        Effect.fromResult(decode(posted(photo), binding("string"))),
+      );
+      assert.strictEqual(stillFile.reason, "file");
+    }),
+  );
+
+  it("[W0-AY] encode of a file value gives no entry", () => {
+    assert.deepStrictEqual(encode(value(file, photoValue), file), []);
+    assert.deepStrictEqual(
+      encode(
+        value(binding("file", "multiple"), photoValue, photoValue),
+        binding("file", "multiple"),
+      ),
+      [],
+    );
+    assert.deepStrictEqual(encode(value(file), file), []);
+  });
+});
+
 describe("a point or boolean binding", () => {
-  it("posts identifier, string, integer, float, directedPair, pair, point and boolean, and nothing else", () => {
+  it("[W0-AY] posts identifier, string, integer, float, directedPair, pair, point, boolean and file, and nothing else", () => {
     assert.deepStrictEqual(modelledBaseTypes.filter(isPosted), [
       "identifier",
       "boolean",
@@ -747,10 +921,11 @@ describe("a point or boolean binding", () => {
       "point",
       "pair",
       "directedPair",
+      "file",
     ]);
     assert.isFalse(isPosted("duration"));
     assert.isFalse(isPosted("uri"));
-    assert.isFalse(isPosted("file"));
+    assert.isTrue(isPosted("file"));
   });
 
   it("names a point's two entries <name>.x and <name>.y", () => {
@@ -1160,6 +1335,90 @@ describe("a record binding", () => {
   );
 });
 
+describe("a module binding", () => {
+  it("[W0-PCIJSON] decode routes a module binding to the module's decode", () => {
+    assert.isTrue(moduleResultFollows);
+    assert.deepStrictEqual(
+      Result.getSuccess(decode(posted('{"n":7}'), moduleBinding(), {})),
+      Option.some(toyInteger(7n)),
+    );
+  });
+
+  it.effect(
+    "[W0-PCIJSON] a module's refusal is Malformed with the reason module and the module's detail",
+    () =>
+      Effect.gen(function* moduleRefusal() {
+        const refused = yield* Effect.flip(
+          Effect.fromResult(decode(posted("oops"), moduleBinding(), {})),
+        );
+
+        assert.strictEqual(refused._tag, "Malformed");
+        assert.strictEqual(refused.reason, "module");
+        assert.strictEqual(refused.detail, toyDetail);
+        assert.strictEqual(refused.entry, entryName(instance, "RESPONSE"));
+      }),
+  );
+
+  it.effect("[W0-PCIJSON] no entry under a module binding is NULL, or the absent option", () =>
+    Effect.gen(function* moduleAbsent() {
+      const three = toyInteger(3n);
+
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode([], moduleBinding(), {})),
+        nullInteger,
+      );
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode([], moduleBinding(), { absent: three })),
+        three,
+      );
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode(posted(""), moduleBinding(), { absent: three })),
+        nullInteger,
+      );
+    }),
+  );
+
+  it.effect(
+    "[W0-PCIJSON] two entries under a single module binding are single-many, and a Blob is file",
+    () =>
+      Effect.gen(function* moduleShared() {
+        const many = yield* Effect.flip(
+          Effect.fromResult(decode(posted('{"n":1}', '{"n":2}'), moduleBinding())),
+        );
+        assert.strictEqual(many.reason, "single-many");
+
+        const manyOfMultiple = yield* Effect.flip(
+          Effect.fromResult(decode(posted('{"n":1}', '{"n":2}'), moduleBinding("multiple"))),
+        );
+        assert.strictEqual(manyOfMultiple.reason, "single-many");
+
+        const file = yield* Effect.flip(
+          Effect.fromResult(decode(posted(new Blob(["1"])), moduleBinding())),
+        );
+        assert.strictEqual(file.reason, "file");
+      }),
+  );
+
+  it.effect(
+    "[W0-PCIJSON] encode writes a module binding's value through the module's encode, and decode reads it back",
+    () =>
+      Effect.gen(function* moduleRoundTrip() {
+        const seven = toyInteger(7n);
+
+        assert.deepStrictEqual(encode(seven, moduleBinding()), posted('{"n":7}'));
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(encode(seven, moduleBinding()), moduleBinding())),
+          seven,
+        );
+        assert.deepStrictEqual(encode(nullInteger, moduleBinding()), posted(""));
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(encode(nullInteger, moduleBinding()), moduleBinding())),
+          nullInteger,
+        );
+      }),
+  );
+});
+
 describe("isXmlText", () => {
   it("refuses a control character other than tab and the line breaks, U+FFFE, U+FFFF and a lone surrogate", () => {
     for (const text of [
@@ -1241,5 +1500,87 @@ describe("partition", () => {
       host: [host, dotted],
       own: [own],
     });
+  });
+});
+
+describe("postedStrings", () => {
+  it("[W0-HOSTS] postedStrings gives a point binding's coordinates in posted order, x then y for each value", () => {
+    const name = entryName(instance, "P");
+    const [x, y] = pointEntryNames(name);
+    const point: ValueBinding = { baseType: "point", cardinality: "multiple", name };
+
+    assert.deepStrictEqual(
+      postedStrings(
+        [
+          [x, "12"],
+          [y, "7"],
+          [x, "3"],
+          [y, "40"],
+          [entryName(instance, "Q"), "z"],
+        ],
+        point,
+      ),
+      ["12", "7", "3", "40"],
+    );
+    assert.deepStrictEqual(
+      postedStrings(
+        [
+          [y, "7"],
+          [name, "3 4"],
+          [x, new Blob(["12"])],
+          [x, "12"],
+        ],
+        point,
+      ),
+      ["7", "12"],
+      "a hand-built post comes back in the order it was posted, and a Blob and the bare name are not a point's",
+    );
+    assert.deepStrictEqual(postedStrings([], point), []);
+  });
+
+  it("[W0-HOSTS] postedStrings gives a value binding's own entries and drops a Blob and the other names", () => {
+    const name = entryName(instance, "RESPONSE");
+    const text: ValueBinding = { baseType: "string", cardinality: "single", name };
+
+    assert.deepStrictEqual(
+      postedStrings(
+        [
+          [name, "a"],
+          [`${name}.x`, "9"],
+          ["host", "b"],
+          [name, new Blob(["f"])],
+        ],
+        text,
+      ),
+      ["a"],
+    );
+  });
+
+  it("[W0-HOSTS] postedStrings gives a record binding's text", () => {
+    const name = entryName(instance, "RESPONSE");
+
+    assert.deepStrictEqual(postedStrings([[name, "1.5"]], { cardinality: "record", name }), [
+      "1.5",
+    ]);
+  });
+
+  it("[W0-PCIJSON] postedStrings keeps a module binding's text", () => {
+    const viaModule = moduleBinding();
+    const { name } = viaModule;
+
+    assert.deepStrictEqual(
+      postedStrings(
+        [
+          [name, '{"n":7}'],
+          [`${name}.x`, "9"],
+          ["host", "b"],
+          [name, new Blob(["f"])],
+        ],
+        viaModule,
+      ),
+      ['{"n":7}'],
+      "the one entry under the binding's name comes back; a point suffix, another name and a Blob do not",
+    );
+    assert.deepStrictEqual(postedStrings([], viaModule), []);
   });
 });

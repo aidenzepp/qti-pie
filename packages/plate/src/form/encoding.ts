@@ -7,11 +7,17 @@
  * {@link parseLexical}'s, with the allowances a posted form needs: a number is trimmed, and a
  * string's line breaks are a textarea's. A record posts the text it was typed as, and its other
  * fields are read from that text. A point posts its two coordinates as two entries, `<name>.x` and
- * `<name>.y` ({@link pointEntryNames}), and is read back from the pair at each position.
+ * `<name>.y` ({@link pointEntryNames}), and is read back from the pair at each position;
+ * {@link postedStrings} reads the same two names back as the strings a refused post restores. A
+ * file posts as a `File` entry, read as its name, size and type and never its bytes, and encodes to
+ * no entry. A response whose interaction module reads its own posted text travels under a
+ * {@link ModuleBinding}: one entry, written and read by the module's `ModuleEntry`
+ * (`#plate/interactions/contract.ts`), as a Portable Custom Interaction posts Appendix C JSON.
  *
  * @module
  */
 import { Array, Data, Option, Result } from "effect";
+import type { ModuleEntry } from "#plate/interactions/contract.ts";
 import { format, isRecordValue, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type {
   RecordField,
@@ -57,10 +63,19 @@ const pointBaseType = "point";
 const booleanBaseType = "boolean";
 
 /**
+ * The base type whose value is a file, which Upload (`ei-01`) and Drawing (`ei-17`) post as one
+ * `File` entry per value under the binding's name, from a `multipart/form-data` post. Plate reads
+ * the entry's name, size and type into a `FileValue` and never its bytes: the host keeps those
+ * under the same entry name ({@link entryName}). A file cannot be re-posted from text, so
+ * {@link encode} gives a file value no entry; a module shows a restored file by its name.
+ */
+const fileBaseType = "file";
+
+/**
  * The base types an interaction posts: Choice's `identifier`, Text Entry's and Extended Text's
  * `string`, `integer` and `float`, the {@link PairBaseType}s of the interactions that put
- * identifiers into targets, the `point` of the interactions that place a point on an image, and
- * End Attempt's `boolean`.
+ * identifiers into targets, the `point` of the interactions that place a point on an image, End
+ * Attempt's `boolean`, and the `file` of Upload and Drawing.
  */
 const postedBaseTypes = [
   "identifier",
@@ -70,6 +85,7 @@ const postedBaseTypes = [
   ...pairBaseTypes,
   pointBaseType,
   booleanBaseType,
+  fileBaseType,
 ] as const;
 
 /**
@@ -105,6 +121,15 @@ const isPoint = (baseType: PostedBaseType): baseType is typeof pointBaseType =>
   baseType === pointBaseType;
 
 /**
+ * Report whether a posted base type is a file, whose value posts as a `File` entry.
+ *
+ * @param baseType A posted base type.
+ * @returns Whether `baseType` is `file`.
+ */
+const isFile = (baseType: PostedBaseType): baseType is typeof fileBaseType =>
+  baseType === fileBaseType;
+
+/**
  * How a response of a base type travels through the form: the entry name it posts under, from
  * {@link entryName}, and the base type and cardinality of its declaration. A `point` response
  * posts under the two names {@link pointEntryNames} derives from it, every other base type under
@@ -126,10 +151,37 @@ export interface RecordBinding {
 }
 
 /**
- * How one response travels through the form: a {@link ValueBinding} for a response of a base type,
- * or a {@link RecordBinding} for a record response.
+ * How a response its interaction module reads travels through the form: the entry name it posts
+ * under, from {@link entryName}, the declared cardinality, and the module's `decode` and `encode`
+ * (`ModuleEntry` in `#plate/interactions/contract.ts`), which read and write its one posted text.
+ * The base type is the module's business, so the binding carries none: `postingsIn`
+ * (`#plate/payload.ts`) gives a response this binding when the first interaction in document
+ * order that binds it declares `entry`, before it asks whether a control posts the base type, so
+ * a module posts a value of any base type, `duration` among them. `kind` tells it from the other
+ * bindings, which name none.
  */
-export type Binding = ValueBinding | RecordBinding;
+export interface ModuleBinding {
+  readonly cardinality: Value["cardinality"] | "record";
+  readonly decode: ModuleEntry["decode"];
+  readonly encode: ModuleEntry["encode"];
+  readonly kind: "module";
+  readonly name: string;
+}
+
+/**
+ * How one response travels through the form: a {@link ValueBinding} for a response of a base type,
+ * a {@link RecordBinding} for a record response, or a {@link ModuleBinding} for a response whose
+ * interaction module reads its own posted text.
+ */
+export type Binding = ValueBinding | RecordBinding | ModuleBinding;
+
+/**
+ * Tell whether a binding is a {@link ModuleBinding}: the one arm that names its kind.
+ *
+ * @param binding A binding.
+ * @returns Whether its module reads its posted text.
+ */
+const isModuleBinding = (binding: Binding): binding is ModuleBinding => "kind" in binding;
 
 /**
  * Settings for {@link decode}.
@@ -141,7 +193,7 @@ export interface DecodeOptions {
    * `#plate/interactions/contract.ts`), which `postings` in `#plate/payload.ts` puts in the
    * response's posting. Absent means NULL. It applies only when the form posted no entry named for
    * the binding: one empty entry is a response the form did post, and stays NULL. A record binding
-   * ignores it, as it ignores `base`.
+   * ignores it, as it ignores `base`; a module binding takes it as a value binding does.
    */
   readonly absent?: Value;
   /**
@@ -184,21 +236,27 @@ type MalformedReason =
   | "boolean"
   | "character"
   | "file"
+  | "file-text"
   | "identifier"
+  | "module"
   | "number"
   | "point"
   | "single-many";
 
 /**
- * What each {@link MalformedReason} asks the poster to change.
+ * What each {@link MalformedReason} asks the poster to change. The `module` remedy is completed by
+ * the module's own detail, which {@link Malformed} appends after a colon.
  */
 const remedies = {
   boolean: "is not a boolean; post true or false, as the form gives it",
   character:
     "holds a character XML cannot carry: a control character other than tab, line feed and carriage return, U+FFFE, U+FFFF or a lone surrogate; post the text without it",
   file: "is a file, but this response takes text; post text, not a file",
+  "file-text":
+    "is text, but this response takes a file; post the file itself, as a multipart/form-data form with an input of type file gives it, not its name",
   identifier:
     "is not an identifier, or for a pair response not two identifiers separated by a space; post an NCName such as choiceA, or a pair such as choiceA gapB, as the form gives it",
+  module: "is not a value its interaction reads",
   number:
     "is not a number; post digits in the interaction's base with an optional sign, or a finite decimal such as 2.5 or 1E3",
   point:
@@ -211,9 +269,12 @@ const remedies = {
  * given.
  *
  * `entry` is the binding's entry name (for a point, the name its `.x` and `.y` entries extend),
- * and `reason` is the first of {@link decode}'s refusals the entries meet.
+ * and `reason` is the first of {@link decode}'s refusals the entries meet. `detail` is set with
+ * the `module` reason alone: what the interaction module's `decode` said the text should have
+ * been, in its words, which the message appends.
  */
 export class Malformed extends Data.TaggedError("Malformed")<{
+  readonly detail?: string;
   readonly entry: string;
   readonly reason: MalformedReason;
 }> {
@@ -221,7 +282,9 @@ export class Malformed extends Data.TaggedError("Malformed")<{
    * The entry name and what to post instead, in one line.
    */
   override get message(): string {
-    return `The form entry ${JSON.stringify(this.entry)} ${remedies[this.reason]}.`;
+    const detail = this.detail === undefined ? "" : `: ${this.detail}`;
+
+    return `The form entry ${JSON.stringify(this.entry)} ${remedies[this.reason]}${detail}.`;
   }
 }
 
@@ -308,6 +371,52 @@ export const pointEntryNames = (name: string): readonly [x: string, y: string] =
 ];
 
 /**
+ * Name the entries a binding posts under: the two {@link pointEntryNames} of a `point` value
+ * binding, and the binding's own name for every other binding, a {@link ModuleBinding}'s one
+ * entry included.
+ *
+ * @param binding The response's binding.
+ * @returns The entry names the binding's response is posted under.
+ */
+const entryNamesOf = (binding: Binding): readonly string[] =>
+  !isModuleBinding(binding) && binding.cardinality !== "record" && isPoint(binding.baseType)
+    ? pointEntryNames(binding.name)
+    : [binding.name];
+
+/**
+ * Give the strings a post carries for one binding, in posted order: the entries named by either of
+ * a `point` value binding's {@link pointEntryNames}, and the entries named `binding.name` for every
+ * other binding. A `Blob` entry is a file, not a string, so it is dropped and never shown again as
+ * text. A host builds the `posted` option of `render` with this, over the entries of the item
+ * instance ({@link partition}'s `own`), so a refused post's controls show what the candidate
+ * typed, whichever base type the response has.
+ *
+ * A point's strings come in the order they were posted, so a form that posts its inputs in
+ * document order, x then y for each value, gives x, y, x, y and so on; the coordinates are not
+ * paired here, which {@link decode} does by position.
+ *
+ * @example
+ *   postedStrings(
+ *     [
+ *       ["i.R.x", "12"],
+ *       ["i.R.y", "7"],
+ *     ],
+ *     { baseType: "point", cardinality: "single", name: "i.R" },
+ *   ); // ["12", "7"]
+ *
+ * @param entries The posted entries, in order.
+ * @param binding The response's binding.
+ * @returns The strings posted under the binding's entry names, in posted order.
+ */
+export const postedStrings = (entries: readonly Entry[], binding: Binding): readonly string[] => {
+  const names = entryNamesOf(binding);
+
+  return entries.flatMap(([name, value]) =>
+    value instanceof Blob || !names.includes(name) ? [] : [value],
+  );
+};
+
+/**
  * Give the text a record was typed as: its `stringValue` field, which {@link encode} posts for the
  * record and the text control bound to it shows and checks.
  *
@@ -323,10 +432,15 @@ export const recordText = (record: RecordValue): readonly Single[] =>
  * @param single The value.
  * @param binding The response's binding, which names the entries.
  * @returns For a point, its two coordinates under the binding's {@link pointEntryNames}, x then y,
- *   each written as an integer is; for any other single, one entry under the binding's name in
- *   {@link format}'s lexical form.
+ *   each written as an integer is; for a file, no entry, since a form posts a file as its bytes and
+ *   plate holds none; for any other single, one entry under the binding's name in {@link format}'s
+ *   lexical form.
  */
 const entriesOf = (single: Single, binding: Binding): readonly Entry[] => {
+  if (single.baseType === "file") {
+    return [];
+  }
+
   if (single.baseType === "point") {
     const [x, y] = pointEntryNames(binding.name);
 
@@ -345,16 +459,24 @@ const entriesOf = (single: Single, binding: Binding): readonly Entry[] => {
  * A record posts its `stringValue` field ({@link recordText}), the text {@link decode} reads every
  * other field from, so a record decoded from a post encodes back to that post. A point posts two
  * entries per value, `<name>.x` and `<name>.y` ({@link pointEntryNames}), as the form's two number
- * inputs do.
+ * inputs do. A file value encodes to no entry: a form posts a file as its bytes, which plate never
+ * holds, so a file cannot be re-posted from its name, size and type; a module that restores one
+ * shows its name instead. A module binding posts one entry holding the text the module's `encode`
+ * writes for the whole value, NULL included, as its control does.
  *
  * @param value The response's value.
  * @param binding The response's binding, which names the entries.
- * @returns No entries for NULL, one for a `single`, one for each value of a `multiple` or
- *   `ordered`, in order, and for a record one for its `stringValue` field, none when it has none,
- *   all under the binding's name and in {@link format}'s lexical form; a point value is two entries
- *   in that place, its x then its y.
+ * @returns No entries for NULL or for a file value, one for a `single`, one for each value of a
+ *   `multiple` or `ordered`, in order, and for a record one for its `stringValue` field, none when
+ *   it has none, all under the binding's name and in {@link format}'s lexical form; a point value
+ *   is two entries in that place, its x then its y. For a {@link ModuleBinding}, one entry under
+ *   the binding's name holding the module's text for the value.
  */
 export const encode = (value: ResponseValue, binding: Binding): readonly Entry[] => {
+  if (isModuleBinding(binding)) {
+    return [[binding.name, binding.encode(value)]];
+  }
+
   const singles = isRecordValue(value) ? recordText(value) : value.values;
 
   return singles.flatMap((single) => entriesOf(single, binding));
@@ -694,6 +816,58 @@ const postedTexts = (
 };
 
 /**
+ * Read one posted file as a file value: its `name` when the entry is a `File`, else the empty
+ * string, and its `size` and `type` as the `Blob` reports them. Not a byte of it is read.
+ *
+ * A nameless empty file is no value: a `multipart/form-data` form posts one for an input of type
+ * file the candidate left empty, as it posts an empty string for an empty text input, so it is
+ * NULL as that is. A named empty file, or a nameless `Blob` with bytes, is a value.
+ *
+ * @param posted The posted entry's `Blob`.
+ * @returns The file, or none for a nameless empty file.
+ */
+const readFile = (posted: Blob): Option.Option<Single> => {
+  const name = posted instanceof File ? posted.name : "";
+
+  return name === "" && posted.size === 0
+    ? Option.none()
+    : Option.some({ baseType: "file", value: { name, size: posted.size, type: posted.type } });
+};
+
+/**
+ * Read a file value from the entries posted under its binding's name.
+ *
+ * Each entry is a `File`, as a `multipart/form-data` form posts an input of type file; a text
+ * entry under the name is `file-text`, as a file under a text binding is `file`. A `single` takes
+ * one entry, so two are `single-many`; a `multiple` or `ordered` holds one value per entry in
+ * posted order, less the nameless empty files ({@link readFile}), and NULL when none remains.
+ *
+ * @param entries The posted entries.
+ * @param binding The file response's binding.
+ * @returns The value, or the first reason the entries are refused.
+ */
+const readFiles = (
+  entries: readonly Entry[],
+  binding: ValueBinding,
+): Result.Result<Value, MalformedReason> => {
+  const posted = entries.filter(([entry]) => entry === binding.name).map(([, value]) => value);
+  const files = posted.filter((value): value is Blob => typeof value !== "string");
+  if (files.length < posted.length) {
+    return Result.fail("file-text");
+  }
+
+  if (binding.cardinality === "single" && files.length > 1) {
+    return Result.fail("single-many");
+  }
+
+  return Result.succeed({
+    baseType: binding.baseType,
+    cardinality: binding.cardinality,
+    values: Array.getSomes(files.map(readFile)),
+  });
+};
+
+/**
  * Read a point value from the `.x` and `.y` entries posted for its binding.
  *
  * The two names are read as two bindings of the point's cardinality are, so a file under either is
@@ -732,18 +906,18 @@ const readPoints = (
 };
 
 /**
- * Read the entries posted for a binding of either kind as its value.
+ * Read the entries posted for a value or record binding as its value.
  *
  * @param entries The posted entries.
  * @param binding The response's binding.
  * @param base The number base of an integer.
  * @returns A record for a record binding, a point from its two entry names for a point binding, a
- *   value of the binding's base type from its one name for any other, or the reason the entries
- *   are refused.
+ *   file from the `File` entries under its name for a file binding, a value of the binding's base
+ *   type from its one name for any other, or the reason the entries are refused.
  */
 const readBinding = (
   entries: readonly Entry[],
-  binding: Binding,
+  binding: ValueBinding | RecordBinding,
   base: number,
 ): Result.Result<ResponseValue, MalformedReason> => {
   if (binding.cardinality === "record") {
@@ -752,6 +926,10 @@ const readBinding = (
 
   if (isPoint(binding.baseType)) {
     return readPoints(entries, binding);
+  }
+
+  if (isFile(binding.baseType)) {
+    return readFiles(entries, binding);
   }
 
   return Result.flatMap(postedTexts(entries, binding.name, binding.cardinality), (texts) =>
@@ -769,27 +947,66 @@ const readBinding = (
  * @returns Whether an entry is named for the binding.
  */
 const postedFor = (entries: readonly Entry[], binding: ValueBinding): boolean => {
-  const names: readonly string[] = isPoint(binding.baseType)
-    ? pointEntryNames(binding.name)
-    : [binding.name];
+  const names = entryNamesOf(binding);
 
   return entries.some(([name]) => names.includes(name));
 };
 
 /**
- * Decode posted entries under a binding of either kind, as {@link decode} does.
+ * Decode the one entry posted for a module binding through the module's `decode`.
+ *
+ * The entry is read under the shared rules first, as a `single` is whatever the declared
+ * cardinality, since the module's control posts one entry for the whole value: a file is `file`
+ * and a second entry is `single-many`. No entry is the `absent` option's value when the caller
+ * gives one, else the module reads empty text, its NULL, as it reads one empty entry. A text the
+ * module refuses is `module`, with the module's detail.
+ *
+ * @param entries The posted entries.
+ * @param binding The module binding.
+ * @param options The value no entry takes; `base` is the module's business and not applied.
+ * @returns The value the module reads, or {@link Malformed}.
+ */
+const decodeModule = (
+  entries: readonly Entry[],
+  binding: ModuleBinding,
+  options: DecodeOptions,
+): Result.Result<ResponseValue, Malformed> => {
+  const { absent } = options;
+  const posted = postedTexts(entries, binding.name, "single");
+  if (absent !== undefined && Result.isSuccess(posted) && posted.success.length === 0) {
+    return Result.succeed(absent);
+  }
+
+  return posted.pipe(
+    Result.mapError((reason) => new Malformed({ entry: binding.name, reason })),
+    Result.flatMap(([text = ""]) =>
+      Result.mapError(
+        binding.decode(text),
+        (detail) => new Malformed({ detail, entry: binding.name, reason: "module" }),
+      ),
+    ),
+  );
+};
+
+/**
+ * Decode posted entries under a binding of any kind, as {@link decode} does.
  *
  * @param entries The posted entries.
  * @param binding The response's binding.
- * @param options The number base of an integer, and the value no entry takes for a value binding.
- * @returns A record for a record binding, a value of the binding's base type for the other, or
- *   {@link Malformed}.
+ * @param options The number base of an integer, and the value no entry takes for a value or module
+ *   binding.
+ * @returns A record for a record binding, a value of the binding's base type for a value binding,
+ *   what the module reads for a module binding, or {@link Malformed}.
  */
 const decodeResponse = (
   entries: readonly Entry[],
   binding: Binding,
   options: DecodeOptions = {},
 ): Result.Result<ResponseValue, Malformed> => {
+  if (isModuleBinding(binding)) {
+    return decodeModule(entries, binding, options);
+  }
+
   if (
     options.absent !== undefined &&
     binding.cardinality !== "record" &&
@@ -825,7 +1042,8 @@ interface Decode {
     options?: DecodeOptions,
   ): Result.Result<RecordValue, Malformed>;
   /**
-   * A binding of either kind decodes to either kind of value.
+   * A binding of any kind decodes to either kind of value, as a module binding alone does: its
+   * module declares the type.
    */
   (
     entries: readonly Entry[],
@@ -857,12 +1075,26 @@ interface Decode {
  * empty is no value, so NULL when every position is. One filled and one empty, more `.x` entries
  * than `.y` or the reverse, and a coordinate that is not a whole number are refused as `point`.
  *
+ * A file binding reads `File` entries under its name, one per value, as a `multipart/form-data`
+ * form posts an input of type file: each gives the file's `name` (the empty string for a bare
+ * `Blob`), its `size` in bytes and its MIME `type`, and not a byte of it; the host keeps the bytes
+ * under the same entry name. A nameless empty file, which a form posts for an input of type file
+ * left empty, is no value, so NULL when every entry is one. A text entry under a file binding is
+ * refused as `file-text`.
+ *
  * A record binding reads one text, kept as the record's `stringValue` field with its line breaks
  * made LF, and, when the text trimmed of XML whitespace is a decimal number with an optional
  * exponent, the fields `floatValue`, `integerValue` (only for a whole number with no exponent),
  * `leftDigits`, `rightDigits`, `ndp`, `nsf` and `exponent` (only when written), every integer
  * exact (G-R4, pending). Text that is not such a number, `INF`, `-INF` and `NaN` among it,
  * gives `stringValue` alone; empty text gives a NULL record, with no field. `base` is not applied.
+ *
+ * A module binding reads one entry, whatever its declared cardinality, since the module's control
+ * posts one text for the whole value: a second entry is `single-many` and a file is `file`, as
+ * for a `single`. The text goes to the module's `decode`, which gives the value of the type the
+ * module declares, so this reads nothing of it; no entry, or the `absent` option when the caller
+ * gives one, as for a value binding, is read as empty text, the module's NULL. A text the module
+ * refuses is `module`, with the module's detail of what to post. `base` is not applied.
  *
  * @example
  *   decode([["i.R", "1.5e3"]], { cardinality: "record", name: "i.R" });
@@ -874,12 +1106,15 @@ interface Decode {
  * @param options The number base of an integer, and the value no entry takes, which a record
  *   binding ignores.
  * @returns A value of the binding's base type for a {@link ValueBinding}, a record for a
- *   {@link RecordBinding}, or {@link Malformed}: `file` for a file, `single-many` for two entries
- *   of a `single` or a record, `character` for text holding a character XML cannot carry, and
- *   `number`, `identifier`, `boolean` or `point` for text outside the base type's lexical space.
+ *   {@link RecordBinding}, the value the module reads for a {@link ModuleBinding}, or
+ *   {@link Malformed}: `file` for a file under a text binding, `file-text` for text under a file
+ *   binding, `single-many` for two entries of a `single`, a record or a module binding,
+ *   `character` for text holding a character XML cannot carry, `number`, `identifier`, `boolean`
+ *   or `point` for text outside the base type's lexical space, and `module` for text the module
+ *   refuses.
  */
 export const decode =
-  // SAFETY: decodeResponse gives a record exactly when the binding's cardinality is `record`, which only a RecordBinding has, and a Value of the binding's base type otherwise, which is what each overload states.
+  // SAFETY: decodeResponse gives a record exactly when the binding is a RecordBinding, a Value of the binding's base type for a ValueBinding, and whatever the module declares for a ModuleBinding, which is what each overload states.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The SAFETY note above: one body cannot state the overloads to TypeScript, which checks each overload against the body's union result.
   decodeResponse as Decode;
 

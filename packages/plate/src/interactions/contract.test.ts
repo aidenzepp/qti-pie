@@ -30,7 +30,7 @@ import type {
 } from "#plate/model/interactions.ts";
 import { parseContextOf } from "#plate/model/item.ts";
 import type { BodyNode, Interaction, Unsupported } from "#plate/model/item.ts";
-import { format, isRecordValue } from "#plate/model/values.ts";
+import { format, isRecordValue, nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import type {
   ElementPayload,
@@ -40,6 +40,7 @@ import type {
   UnnamedPosition,
   View,
 } from "#plate/payload.ts";
+import type { HostFacts } from "#plate/pci/host.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
 import type { BaseType } from "#plate/vocabulary.ts";
 
@@ -171,6 +172,7 @@ const placeholderOf = (module: AnyModule): ModuleInteraction<ModuleKind> => ({
 const noCopy: RedactKit = {
   autofocus: false,
   formName: (response) => response,
+  host: {},
   instance: "",
   nodes: () => [],
   posted: () => Option.none(),
@@ -444,8 +446,8 @@ interface LandedModel extends ModuleInteraction<typeof landedKind> {
  * The payload node of {@link landedGapMatch}: what its `redact` copies of the model node, its
  * gapped content among it, which its render writes through `emitNodes`, and what it reads of the
  * view through the kit: the name its hidden inputs post under, the texts they restore (the posted
- * strings when the view has messages, else the shown pairs), and the other facts the kit carries,
- * each copied so a test reads what the kit handed the module.
+ * strings when the view has messages, else the shown pairs), the host's facts whole, and the other
+ * facts the kit carries, each copied so a test reads what the kit handed the module.
  */
 interface LandedPayload {
   readonly autofocus: boolean;
@@ -454,6 +456,7 @@ interface LandedPayload {
   readonly content: readonly PayloadNode[];
   readonly formName: string;
   readonly gaps: readonly string[];
+  readonly host: HostFacts;
   readonly instance: string;
   readonly posted: Option.Option<readonly string[]>;
   readonly response: string;
@@ -552,6 +555,31 @@ const landedGap: OwnedElements = (element) =>
     : Option.none();
 
 /**
+ * Compute the attributes of {@link landedGapMatch}'s Root, as its `connect` does: the module's
+ * class, its response, its marker, and what its controller needs of the host's facts: the names
+ * of the members the record holds (`data-host-keys`, empty for a record without one) and, when the
+ * PCI member is present, the loader the host serves (`data-host-loader`). A module reads only its
+ * own member and writes onto its own Root, so a test sees the host's facts reach a module through
+ * the kit and the page through the Root alone.
+ *
+ * @param interaction The payload node.
+ * @returns The Root's attributes.
+ */
+const landedRootAttributes = (interaction: LandedPayload): Attributes => {
+  const shared: Attributes = {
+    class: interaction.class,
+    "data-host-keys": Object.keys(interaction.host).toSorted().join(" "),
+    "data-response": interaction.response,
+    "data-slot": landedOwner,
+  };
+
+  return Option.match(Option.fromUndefinedOr(interaction.host.pci), {
+    onNone: () => shared,
+    onSome: (pci) => ({ ...shared, "data-host-loader": pci.loader }),
+  });
+};
+
+/**
  * A Gap Match module as one that has landed would be: implemented, with its own model node, payload
  * node, JSON form and parts, in this file only. Its `parse` reads the element through the kit the
  * body walk hands it: the bound declaration's base type, the Prompt and each gap text's content
@@ -576,7 +604,7 @@ const landedGapMatch: InteractionModule<
     values: [{ baseType: "directedPair", value: ["W", "G1"] }],
   }),
   bindings: (interaction) => [{ base: Option.none(), response: interaction.response }],
-  connect: () => ({}),
+  connect: (interaction) => ({ root: landedRootAttributes(interaction) }),
   /**
    * The element the fake owns as the container of its interactions ({@link landedStage}): its
    * `parse` keeps the children the body walk read, marked on the element, so a test sees the walk
@@ -607,6 +635,33 @@ const landedGapMatch: InteractionModule<
    */
   countsAttempt: (interaction, posted) => Object.hasOwn(posted, interaction.response),
   element: `qti-${landedKind}-interaction`,
+  /**
+   * The one posted text read as a single integer, `{"n":<integer>}`, empty text as its NULL, and
+   * any other text refused with what to post, the way pci-05's entry reads Appendix C JSON: a toy,
+   * so a test sees the postings and the decoder route a post through this member.
+   */
+  entry: () => ({
+    decode: (json) => {
+      if (json === "") {
+        return Result.succeed(nullOf("integer", "single"));
+      }
+
+      const n = /^\{"n":(?<n>-?\d+)\}$/u.exec(json)?.groups?.["n"];
+
+      return n === undefined
+        ? Result.fail('post {"n":<integer>}, as the toy control gives it')
+        : Result.succeed({
+            baseType: "integer",
+            cardinality: "single",
+            values: [{ baseType: "integer", value: BigInt(n) }],
+          });
+    },
+    encode: (encoded) => {
+      const [first] = isRecordValue(encoded) ? [] : encoded.values;
+
+      return first === undefined ? "" : `{"n":${format(first)}}`;
+    },
+  }),
   feature: features[landedKind],
   implemented: true,
   kind: landedKind,
@@ -685,6 +740,7 @@ const landedGapMatch: InteractionModule<
       content: kit.nodes(interaction.gapped),
       formName: kit.formName(interaction.response),
       gaps: interaction.gaps,
+      host: kit.host,
       instance: kit.instance,
       posted,
       response: interaction.response,
@@ -725,16 +781,12 @@ const landedGapMatch: InteractionModule<
         nestedInteraction(landedOwner, landedGap),
       );
 
-      return yield* applyPart(
-        row,
-        { class: interaction.class, "data-response": interaction.response, "data-slot": row.slot },
-        [
-          ...content,
-          ...interaction.restore.map((value) =>
-            h("input", { name: interaction.formName, type: "hidden", value }),
-          ),
-        ],
-      );
+      return yield* applyPart(row, landedRootAttributes(interaction), [
+        ...content,
+        ...interaction.restore.map((value) =>
+          h("input", { name: interaction.formName, type: "hidden", value }),
+        ),
+      ]);
     });
   },
   replaceRegions: (interaction, contents) => {
@@ -1300,6 +1352,76 @@ describe("a module that lands", () => {
   );
 
   it.effect(
+    "[W0-AZ] a module reads its host facts and writes what its controller needs onto its root",
+    () =>
+      withLanded(
+        Effect.gen(function* hostFacts() {
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const configuration = yield* configure({});
+          const built = yield* Effect.fromResult(model.buildItem(landedDocument));
+          const redactedItem = payload.redactItem(built);
+          const host: HostFacts = { pci: { loader: "/pci/loader.js", modules: new Map() } };
+
+          const { html } = yield* Effect.fromResult(
+            plate.render(redactedItem, configuration, { host, instance: "q1" }),
+          );
+
+          const root = new RegExp(`<div [^>]*data-slot="${landedOwner}"[^>]*>`, "u").exec(html);
+
+          assert.isNotNull(root);
+          assert.include(root?.[0], 'data-host-keys="pci"');
+          assert.include(root?.[0], 'data-host-loader="/pci/loader.js"');
+          assert.notInclude(html.replace(root?.[0] ?? "", ""), "data-host-loader");
+
+          const without = yield* Effect.fromResult(
+            plate.render(redactedItem, configuration, { instance: "q1" }),
+          );
+
+          assert.notInclude(without.html, "data-host-loader");
+          assert.notInclude(without.html, "/pci/loader.js");
+        }),
+      ),
+  );
+
+  it.effect("[W0-AZ] a view without host facts gives every module an empty record", () =>
+    withLanded(
+      Effect.gen(function* emptyHost() {
+        const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+        const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+        const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+        const configuration = yield* configure({});
+        const built = yield* Effect.fromResult(model.buildItem(landedDocument));
+        const redactedItem = payload.redactItem(built);
+
+        // Through render with no `host`: the Root names no member of the record.
+        const { html } = yield* Effect.fromResult(
+          plate.render(redactedItem, configuration, { instance: "q1" }),
+        );
+
+        assert.match(html, /<div [^>]*data-host-keys=""[^>]*>/u);
+
+        // Through the payload: the kit handed the module exactly the empty record.
+        const view: View = {
+          finished: false,
+          instance: "q1",
+          locale: configuration.locale,
+          messages: [],
+          mode: "answering",
+          names: new Map(),
+          posted: Option.none(),
+          values: new Map(),
+        };
+        const node = Arr.findFirst(payload.payload(redactedItem, view).body, landedPayloadOf);
+        const handed: Option.Option<HostFacts> = node.pipe(Option.map((landed) => landed.host));
+
+        assert.deepStrictEqual(handed, Option.some<HostFacts>({}));
+      }),
+    ),
+  );
+
+  it.effect(
     "renders through render(), its node surviving encodeRedacted and decodeRedacted, with no hub edit",
     () =>
       withLanded(
@@ -1489,6 +1611,55 @@ describe("a module that lands", () => {
           assert.deepStrictEqual(
             Result.getSuccess(form.decode([], posting.binding, posting.options)),
             Option.some(absent),
+          );
+        }),
+      ),
+  );
+
+  it.effect(
+    "[W0-PCIJSON] declares an entry the postings read through the module table, so its response posts under a module binding the decoder routes to it",
+    () =>
+      withLanded(
+        Effect.gen(function* moduleEntry() {
+          const interactions = yield* Effect.promise(() => import("#plate/model/interactions.ts"));
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const form = yield* Effect.promise(() => import("#plate/form/encoding.ts"));
+          const built = yield* Effect.fromResult(model.buildItem(landedDocument));
+
+          // The table of modules holds the fake's member, where the hub reads it.
+          assert.strictEqual(interactions.modules[landedKind].entry, landedGapMatch.entry);
+
+          const [posting, ...others] = payload.postings(payload.redactItem(built), "q1");
+
+          assert.lengthOf(others, 0);
+
+          const { binding, options } = posting ?? assert.fail("RESPONSE has no posting.");
+
+          if (!("kind" in binding)) {
+            assert.fail("RESPONSE's binding is not its module's.");
+          }
+
+          assert.strictEqual(binding.kind, "module");
+          assert.strictEqual(binding.cardinality, "multiple");
+          assert.strictEqual(binding.name, form.entryName("q1", "RESPONSE"));
+
+          const seven: Value = {
+            baseType: "integer",
+            cardinality: "single",
+            values: [{ baseType: "integer", value: 7n }],
+          };
+
+          assert.deepStrictEqual(
+            Result.getSuccess(form.decode([[binding.name, '{"n":7}']], binding, options)),
+            Option.some(seven),
+          );
+          assert.deepStrictEqual(
+            Option.map(
+              Result.getFailure(form.decode([[binding.name, "oops"]], binding, options)),
+              ({ reason }) => reason,
+            ),
+            Option.some("module"),
           );
         }),
       ),

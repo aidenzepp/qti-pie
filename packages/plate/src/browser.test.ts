@@ -18,10 +18,18 @@ const modules = sourceModules();
 const nonTest = [...modules.keys()].filter((path) => !path.endsWith(".test.ts"));
 
 /**
- * The modules under `src/session/` that are not browser modules, each with its reason. Every other
- * non-test module under `src/session/` is a root.
+ * The modules under the {@link browserFolders} that are not browser modules, each with its
+ * reason. Every other non-test module under those folders is a root.
+ *
+ * The two `src/pci/` entries name server modules by their imports, which value-import more of
+ * `effect` than a browser module may. Neither file is on the gate, so the entries are inert here
+ * and bind when the gate forwards to the pci base, which holds both (issue pci-01).
  */
 const sessionExclusions = {
+  "src/pci/resolve.ts":
+    "resolves a PCI's module locations on the server, by its imports (issue pci-01; inert until the pci base)",
+  "src/pci/type-identifier.ts":
+    "reads a PCI's type identifier on the server, by its imports (issue pci-01; inert until the pci base)",
   "src/session/advance.ts":
     "calls score, which decodes the stored record through Schema (the want d1d70ac8)",
   "src/session/submit.ts":
@@ -56,6 +64,8 @@ const inDomProgram = (path: string): boolean => isDomModule(path) || path.endsWi
 
 /**
  * The folders whose non-test modules are browser modules, but for {@link sessionExclusions}.
+ * `src/pci/` holds the host facts' types on the gate, and the PCI modules once the gate forwards
+ * to the pci base; its two server modules are the exclusions, inert until then.
  */
 const browserFolders = [
   "src/emit/",
@@ -63,6 +73,7 @@ const browserFolders = [
   "src/engine/",
   "src/session/",
   "src/form/",
+  "src/pci/",
 ] as const;
 
 /**
@@ -114,6 +125,8 @@ const notRoots = {
   "src/control-cap.ts": "reached from the roots, so the scan checks it",
   "src/count-range.ts":
     "the count range the model builder, the structural walk and decodeRedacted read, kept apart from vocabulary.ts so decodeRedacted loads none of its tables",
+  "src/effect.ts":
+    "the opt-in ./effect entry for servers, which re-exports the Effect versions under src/effect/ beside the public entry; no browser module may reach it",
   "src/index.ts": "the public entry, which re-exports the Schema side beside the browser modules",
   "src/messages.ts": "reached from the roots, so the scan checks it",
   "src/output-budget.ts": "reached from the roots, so the scan checks it",
@@ -215,10 +228,29 @@ describe("the browser modules", () => {
     assert.include(roots, "src/session/session.ts");
     assert.include(roots, "src/form/encoding.ts");
     assert.sameMembers(Object.keys(sessionExclusions), [
+      "src/pci/resolve.ts",
+      "src/pci/type-identifier.ts",
       "src/session/advance.ts",
       "src/session/submit.ts",
     ]);
     assert.notIncludeMembers([...roots], Object.keys(sessionExclusions));
+  });
+
+  it("[W0-AZ] the browser allowlist knows src/pci and its two server modules", () => {
+    assert.include(browserFolders, "src/pci/");
+    assert.sameMembers(Object.keys(sessionExclusions), [
+      "src/pci/resolve.ts",
+      "src/pci/type-identifier.ts",
+      "src/session/advance.ts",
+      "src/session/submit.ts",
+    ]);
+    // The types-only module on the gate is a root by place; the two server modules never are,
+    // whether or not the checkout holds them.
+    assert.include(roots, "src/pci/host.ts");
+    assert.isTrue(isRootByPlace("src/pci/frame.dom.ts"));
+    assert.isFalse(isRootByPlace("src/pci/resolve.ts"));
+    assert.isFalse(isRootByPlace("src/pci/type-identifier.ts"));
+    assert.isTrue(isRootByPlace("src/pci/bridge.ts"));
   });
 
   it("classify every top-level module as a root or a named non-root, and take every DOM module but no in-page test as a root", () => {
@@ -229,6 +261,15 @@ describe("the browser modules", () => {
     assert.deepStrictEqual(unclassified([...paths, "src/unlisted.ts"]), ["src/unlisted.ts"]);
     assert.include(selectRoots([...paths, "src/x.dom.ts"]), "src/x.dom.ts");
     assert.notInclude(selectRoots([...paths, "src/x.dom.test.ts"]), "src/x.dom.test.ts");
+  });
+
+  it("[effect entry boundary] reach neither src/effect.ts nor any module under src/effect/", () => {
+    assert.include(nonTest, "src/effect.ts");
+    assert.isNotEmpty(nonTest.filter((path) => path.startsWith("src/effect/")));
+    assert.deepStrictEqual(
+      closure.filter((path) => path === "src/effect.ts" || path.startsWith("src/effect/")),
+      [],
+    );
   });
 
   it("throw no bare Error, and the browser closure calls no getOrThrow (rule d772ad5c point 2)", () => {

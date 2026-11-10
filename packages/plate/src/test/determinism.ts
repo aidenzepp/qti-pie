@@ -457,6 +457,7 @@ const templateRules: readonly TemplateRule[] = [
  * can load it.
  */
 export const determinismItem: Item = {
+  adaptive: false,
   body: [
     {
       attributes: [],

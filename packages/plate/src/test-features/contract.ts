@@ -12,19 +12,25 @@
  * a section or stimulus root, `lti-link`) name no element and have no module.
  *
  * Each module beside this file is a stub, built by {@link stub}: `implemented` is false, its
- * `parse` records the mark the test model records for its element and reads no node, and its three
- * hooks have no effect, so the verdicts, the sequence and the HTML stay what they were. The hubs
- * consult the modules through the table `testFeatures` (`#plate/test-features/table.ts`) and the
- * delegations of `#plate/test-features/dispatch.ts`, each at one site:
+ * `parse` records the mark the test model records for its element and reads no node, its four
+ * hooks have no effect, and it presents nothing, so the verdicts, the sequence and the HTML stay
+ * what they were. The hubs consult the modules through the table `testFeatures`
+ * (`#plate/test-features/table.ts`) and the delegations of `#plate/test-features/dispatch.ts`, each
+ * at one site:
  *
  * - The test model (`buildTest` in `#plate/model/test.ts`) dispatches each element a module names to
  *   its `parse`, and holds the nodes it reads in `Test.features`, keyed by the module's key
  *   ({@link TestFeatureNodes});
- * - The session consults `sequence` as it starts (`startTest` in `#plate/session/start.ts`), and
- *   `gate` before each move (`moveTargets` in `#plate/session/navigate.ts`) and each submission
- *   (`advance` in `#plate/session/advance.ts`);
+ * - The session consults `sequence` as it starts (`startTest` in `#plate/session/start.ts`), `gate`
+ *   before each move (`moveTargets` in `#plate/session/navigate.ts`) and each submission (`advance`
+ *   in `#plate/session/advance.ts`), and `enter` at each place a session lands on: the first place
+ *   at `startTest`, and in `advance` the place each move, submission target, expiry, exit or skip
+ *   lands on;
  * - The package consults `deliver` as it delivers each test (`openPackage` in
- *   `#plate/package/open.ts`).
+ *   `#plate/package/open.ts`);
+ * - The session consults `present` as it builds each item view and the summary (`current`, `itemView`
+ *   and `itemViews` in `#plate/session/start.ts`), and the host renders what it gave through each
+ *   module's `render` (`renderTestContent` in `#plate/session/content.ts`).
  *
  * Landing a feature changes only its module, its test and its fixtures: `implemented` turns true,
  * `parse` reads the element into the module's own node type, and the hooks do the feature's work.
@@ -34,10 +40,19 @@
 import { Data, Option } from "effect";
 import type { Result } from "effect";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
+import type { ReaderKit } from "#plate/interactions/contract.ts";
+import type { Element, Node } from "#plate/emit/node.ts";
+import type { PartSwapRefused } from "#plate/emit/swap.ts";
+import type { Expression } from "#plate/model/expression.ts";
+import type { BodyNode } from "#plate/model/item.ts";
 import type { AttributeReaders } from "#plate/model/reader.ts";
-import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
+import type { ItemRef, Section, Test, TestPart } from "#plate/model/test.ts";
+import type { EmitState } from "#plate/payload.ts";
 import type { Intent, TestSession } from "#plate/session/session.ts";
+import type { Supports } from "#plate/supports.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
+import type { Accepted } from "#plate/validate/verdict.ts";
+import type { OutcomeView } from "#plate/vocabulary.ts";
 
 /**
  * The keys of the test features that have a module, each once: the one place that names them, in
@@ -86,12 +101,45 @@ export const isTestFeatureKey = (mark: string): mark is TestFeatureKey => keyMar
 export type TestFeatureId = `${"I" | "P" | "S" | "T"}-${number}`;
 
 /**
+ * The nearest structural element that encloses a module's element, by nesting: the test, a test
+ * part, a section or an item ref. `identifier` is that element's `identifier` attribute as the
+ * model reads it, with its outer XML whitespace removed, and the empty string when the element
+ * writes none.
+ *
+ * A `qti-assessment-section-ref` is a mark and owns nothing, so an element under one takes the
+ * owner above it. A package assembles a test with each section document in its reference's place
+ * before the test is judged, so the `qti-assessment-section` a section document's root names owns
+ * what it holds.
+ */
+export type FeatureOwner =
+  | { readonly identifier: string; readonly kind: "item-ref" }
+  | { readonly identifier: string; readonly kind: "part" }
+  | { readonly identifier: string; readonly kind: "section" }
+  | { readonly kind: "test" };
+
+/**
  * What the test model hands a module's `parse`: the way to record its element as a mark on the
- * verdict, the element's path, and the attribute readers bound to the build
- * (`#plate/model/reader.ts`), so a module reads its element as the test model reads its own and
- * never imports the readers.
+ * verdict, the way to read an expression element as the test's processing reads one, the owner of
+ * the element, the element's path, the reader kit over the test document, and the attribute
+ * readers bound to the build (`#plate/model/reader.ts`), so a module reads its element, its
+ * expressions and the body content under it as the models read their own and never imports the
+ * readers, the expression readers or the body walk.
  */
 export interface TestParseContext {
+  /**
+   * Read an expression element as the test's outcome processing reads its own, over the test's
+   * reading (`readExpression` in `#plate/model/expressions/read.ts` under the `ExpressionReading`
+   * `buildTest` builds): the test's outcome declarations and its item refs' prefixed variables are
+   * the names it knows, and an element the engine does not run is marked where the walk's marks
+   * go, as none. A pre-condition's or a branch rule's expression is read this way, so the module
+   * never imports the expression readers; `qti-pre-condition` (issue m5-05) is its first caller.
+   *
+   * @param element The expression element.
+   * @returns The expression; none once the element was marked; or the refusal the reading gives.
+   */
+  readonly expression: (
+    element: SourceElement,
+  ) => Result.Result<Option.Option<Expression>, Refusal>;
   /**
    * Record the feature as a mark at the element's path, as the test model marks every element it
    * does not deliver.
@@ -101,11 +149,45 @@ export interface TestParseContext {
    */
   readonly mark: (feature: string) => Result.Result<Option.Option<never>>;
   /**
+   * The owner of the element being parsed: the test, a test part, a section or an item ref
+   * ({@link FeatureOwner}), whichever encloses the element nearest. A module that acts on the
+   * scope its element sits in reads it here and never walks the document for it. The modules of
+   * gate unit W0-BE, which branch on a test's structure, are the first to read it.
+   */
+  readonly owner: FeatureOwner;
+  /**
    * The element path of the element being parsed.
    */
   readonly path: string;
   /**
-   * The attribute readers, bound to the build.
+   * The reader kit over the test document: the attribute readers beside `nodes`, the body walk
+   * that reads an element's children as body nodes, as an item-placed content module reads its own
+   * (`ItemParseContext.read` in `#plate/content/contract.ts`). Issues m3e-01b, which reads a
+   * section's and the test's rubric blocks, and m5-04, which reads test feedback, are the first
+   * modules to read a body through it.
+   *
+   * The kit is a fresh build of the test document by the item model (`parseContextOf` in
+   * `#plate/model/item.ts`), made when `parse` first reads `read`, so its paths are the document's
+   * own and its `names` are the identifiers the document root declares, a test's outcome and
+   * context declarations among them, with the built-in variables. It is valid while `parse` runs:
+   * the features the walk records through it, a notice for each `qti-*` element it does not read
+   * and the marks it places on a body element, are carried into the test's marks when `parse`
+   * returns, as the item model places them: once per feature and path, with `shown` as the walk
+   * gave it, after the marks the module recorded through `mark`, and not again for one the module
+   * recorded itself at the same path.
+   *
+   * A `qti-printed-variable` in a body is read as the walk reads one in an item body: a node that
+   * holds the `identifier` as written, with outer XML whitespace removed, its `base` and `index`
+   * as a number or a variable's name by their lexical form, and its `format`, `field`,
+   * `delimiter` and `mapping-indicator` as `xs:normalizedString`s. The walk resolves no value and
+   * checks no name against `names`, which the item model's processing readers consult and its
+   * body walk does not, so the node is the same whether `identifier` names a test outcome or
+   * names nothing; what the page prints is for the code that presents the test to decide.
+   */
+  readonly read: ReaderKit;
+  /**
+   * The attribute readers, bound to the build. Kept beside `read`, whose kit holds the same
+   * readers over the fresh build, for the modules that already read their element through it.
    */
   readonly readers: AttributeReaders;
 }
@@ -131,15 +213,47 @@ export interface SequenceContext {
 
 /**
  * What the session hands a module's `gate` before an intent is carried out: the intent, the
- * session as it stands, the test, and the time of the request where the hub has one (`advance`
- * and `move` have it; `moveTargets`, which decides the moves a session allows now, has none).
+ * session as it stands, the test, the time of the request where the hub has one (`advance` and
+ * `move` have it; `moveTargets`, which decides the moves a session allows now, has none), and the
+ * test's items where the hub has them.
  */
 export interface GateContext {
   readonly intent: Intent;
+  /**
+   * The test's accepted items, keyed by item ref identifier, as `startTest` took them: some from
+   * `advance`, whose moves and submissions hold them; none from `allowedIntents` and `moveTargets`,
+   * which decide what a session allows now without them, unless their caller passed the items.
+   * A module that evaluates an expression over the items' records reads them through here.
+   */
+  readonly items: Option.Option<ReadonlyMap<string, Accepted>>;
   readonly now: Option.Option<Date>;
   readonly session: TestSession;
   readonly test: Test;
 }
+
+/**
+ * What the session hands a module's `enter` as a place is about to be presented: the session as it
+ * stands, with the place's item not yet presented, the test, the test's items, the time of the
+ * transition, and the sequence index of the place. There is no intent: the hub asks the same way
+ * whatever brought the session to the place.
+ */
+export type EnterContext = Omit<GateContext, "intent"> & {
+  /**
+   * The sequence index, counted from 1, of the place the session is about to present.
+   */
+  readonly sequenceIndex: number;
+};
+
+/**
+ * What a module's `enter` says of a place: `skip`, that the place is passed over, so its item is
+ * never presented, its record untouched, and the session goes on to the place after it in the
+ * part (its end when none follows); or `exit`, that the session leaves a scope from here, as an
+ * `exit` {@link GateVerdict} leaves it, without submitting or locking anything, and enters what
+ * follows the scope. None lets the place be entered.
+ */
+export type EnterVerdict =
+  | { readonly kind: "skip" }
+  | { readonly kind: "exit"; readonly scope: TimedScope };
 
 /**
  * A scope a time limit bounds, named for the session hub: an item ref, a section, a test part or
@@ -155,12 +269,15 @@ export interface TimedScope {
 
 /**
  * What a module's `gate` says of an intent: `refuse`, with the module's own rule and the reason in
- * words; for a move, `target`, the sequence index the move reaches in place of the one the part's
- * modes give (a branch rule's target); or `expire`, that the time of a scope the intent falls in
- * has run out. None lets the intent through to the modes' rules.
+ * words; `target`, the sequence index the intent reaches in place of the one the part's modes
+ * give (a branch rule's target), which a move takes as its destination and a `submit-item` goes
+ * to once the item is submitted; `expire`, that the time of a scope the intent falls in has run
+ * out; or `exit`, that the session leaves a scope. None lets the intent through to the modes'
+ * rules.
  *
  * An `expire` answers any intent, a move included, and the session hub (`expireScope` in
- * `#plate/session/expire.ts`, which `advance` calls) carries it out in place of the intent:
+ * `#plate/session/advance.ts`, over the scope `#plate/session/expire.ts` reads) carries it out in
+ * place of the intent:
  *
  * - The request's own responses are not saved: the expiry runs before the step is saved, so the
  *   current item keeps what it held, and only the time the item was shown is added.
@@ -187,9 +304,21 @@ export interface TimedScope {
  *
  * `qti-time-limits` (issue m3f-01b) is the first module to answer `expire`, implementing reading
  * D19 of `docs/spec-readings.md`.
+ *
+ * An `exit` also answers any intent, and the session hub (`exitScope` in
+ * `#plate/session/advance.ts`, over the same scope reading) leaves the scope as an expiry leaves
+ * it, and nothing else: no item is submitted, processed or locked, every item of the scope keeps
+ * what it holds, and `expired` is not written. An exit answering a move replaces the move, after
+ * the step is saved; one answering a submission follows it: the item or the part is submitted
+ * first, then the scope is left. The position moves to the first item after the scope in its part;
+ * where none follows, an individual part ends and a simultaneous one keeps its position; a part's
+ * exit ends the part, and the test's ends every part and closes the test. The place the exit lands
+ * on is then entered through `enter`. `qti-pre-condition` (issue m5-05) is the first module to
+ * answer `exit`, and the first to answer a `submit-item` with `target`.
  */
 export type GateVerdict =
   | { readonly detail: string; readonly kind: "refuse"; readonly rule: string }
+  | { readonly kind: "exit"; readonly scope: TimedScope }
   | { readonly kind: "expire"; readonly scope: TimedScope }
   | { readonly kind: "target"; readonly sequenceIndex: number };
 
@@ -216,6 +345,84 @@ export interface DeliveryContext {
 }
 
 /**
+ * Where a module's content is presented: at an item of the session, or at the summary a closed
+ * test shows.
+ *
+ * An item place names the item's part, the item ref's identifier and the item's sequence index,
+ * counted from 1, and `sections` lists the sections that enclose the item ref, outermost first, so
+ * a module that shows a rubric chain, or the part's feedback with the part's views, needs no second
+ * lookup of the test.
+ */
+export type PresentPlace =
+  | {
+      readonly kind: "item";
+      readonly part: TestPart;
+      readonly ref: string;
+      readonly sections: readonly Section[];
+      readonly sequenceIndex: number;
+    }
+  | { readonly kind: "summary" };
+
+/**
+ * What a read of a session hands a module's `present`: the place the content would stand at, the
+ * session as it stands, and the test.
+ *
+ * The session carries the outcomes, the parts' statuses and the status, so a module decides from
+ * them whether its content shows now, such as test feedback shown `during` the test or `atEnd`, and
+ * which of its nodes: no hub holds a rule that shows or hides content, only the modules do.
+ */
+export interface PresentContext {
+  readonly place: PresentPlace;
+  readonly session: TestSession;
+  readonly test: Test;
+}
+
+/**
+ * What the host hands a module's `render`, beside the emit state: the emission of body nodes, and
+ * the supports and the view the content is shown to, which decide what a module shows of its own
+ * nodes. It mirrors `ContentRenderKit` (`#plate/content/contract.ts`), whose nodes an item's
+ * redaction has already printed.
+ */
+export interface TestContentRenderKit {
+  /**
+   * Print the body nodes by the session's outcomes and emit them at a phrasing position, with the
+   * body's id scoping, heading shift, URLs and Notice part: a printed variable shows the value its
+   * outcome holds, and one naming no outcome the session holds is withheld behind its notice, as a
+   * body withholds one it has no value of. The nodes are printed through the body's own printer
+   * (`printNodes` in `#plate/payload.ts`), so the text is held to the configuration's output
+   * budget as an item's is.
+   *
+   * Reading: a test's rubric and feedback hold no interactions or templates, and may print
+   * variables. So an interaction among the nodes is refused, never emitted, and a template block or
+   * inline is withheld behind its notice.
+   *
+   * @param nodes The body nodes a module's node holds, such as those its rubric block or feedback
+   *   reads through the parse context's `read.nodes` (issues `m3e-01b`, `m5-04`).
+   * @returns The emitted nodes, or the first refusal of a part swap, an interaction among the nodes
+   *   included.
+   */
+  readonly nodes: (nodes: readonly BodyNode[]) => Result.Result<readonly Node[], PartSwapRefused>;
+  /**
+   * The supports the host enabled, `noSupports` when it named none.
+   */
+  readonly supports: Supports;
+  /**
+   * The view the content is shown to, `defaultView` when the host named none.
+   */
+  readonly view: OutcomeView;
+}
+
+/**
+ * One node a module presented, kept with the key of its module and its node type erased: the hubs
+ * read a module's node as {@link TestFeatureNodes} does, and the host hands it back to the
+ * module's `render` through the key.
+ */
+export interface TestContent {
+  readonly key: TestFeatureKey;
+  readonly node: unknown;
+}
+
+/**
  * The members every test-feature module has.
  *
  * @template K The feature's key.
@@ -231,6 +438,21 @@ export interface TestFeatureModule<K extends TestFeatureKey, N> {
    * The element's local name, which the test model dispatches on with the module's `namespace`.
    */
   readonly element: string;
+  /**
+   * Say what the feature does with a place the session is about to present: none for a feature
+   * that lets every place be entered.
+   *
+   * The hubs ask in one order, the same in every part. At `startTest`, the first place of the
+   * sequence is asked for before it is presented; in `advance`, once the intent's transition, the
+   * expiry or the exit it answered has run, the place it landed on is asked for, with the session
+   * as it stands except that the place's item is not yet presented. A `skip` or an `exit` moves
+   * the session on without presenting that item, and the place landed on next is asked for in
+   * turn, until a place is entered (every module answers none) or the test closes. An item a
+   * module skipped is never presented and its record stays fresh. `qti-pre-condition` (issue
+   * m5-05) is the first module to answer; it decides what a pre-condition means in each navigation
+   * mode, which this hub does not.
+   */
+  readonly enter: (context: EnterContext) => Option.Option<EnterVerdict>;
   /**
    * The feature's Appendix A identifiers; none for one no row names.
    */
@@ -260,6 +482,33 @@ export interface TestFeatureModule<K extends TestFeatureKey, N> {
     element: SourceElement,
     context: TestParseContext,
   ) => Result.Result<Option.Option<N>, Refusal>;
+  /**
+   * Give the nodes of the module's content that stand at a place of the session, in the order they
+   * show: none for a feature that has no content there, and none for a stub. The session carries
+   * them as `content` on the item view or the summary it builds. The modules that fill it are
+   * test and section rubric blocks (issue `m3e-01b`), test feedback (issue `m5-04`) and the test
+   * stylesheet (issue `m5-06`).
+   */
+  readonly present: (context: PresentContext) => readonly N[];
+  /**
+   * Render one node `present` gave as the element the host places beside the item: the paragraph of
+   * a feedback, the block of a rubric. It is a stub's to throw {@link TestFeatureNotImplemented},
+   * unreachable since a stub presents nothing.
+   *
+   * It is declared as a method, so the node type stays bivariant: the table holds modules of
+   * different node types, and the hubs hand `render` the node erased ({@link TestContent}).
+   *
+   * @param node A node `present` gave.
+   * @param state The emit state.
+   * @param kit The emission of body nodes, the supports and the view.
+   * @returns The element, or the refusal of a part swap.
+   */
+  // oxlint-disable-next-line typescript/method-signature-style -- A property would make the node type contravariant, so a module of one node type would not stand in the table of erased ones (`TestFeatureTable`).
+  render(
+    node: N,
+    state: EmitState,
+    kit: TestContentRenderKit,
+  ): Result.Result<Element, PartSwapRefused>;
   /**
    * Give the places a session walks, from those the sequence holds so far: unchanged for a feature
    * that neither selects nor orders.
@@ -327,8 +576,9 @@ export type StubDeclaration<K extends TestFeatureKey> = Pick<
 
 /**
  * Build a stub module from its declaration: `implemented` false, a `parse` that records the
- * declaration's key as the element's mark and reads no node, and the three hooks with no effect,
- * so a test that holds the feature is marked and delivered as it was before the module existed.
+ * declaration's key as the element's mark and reads no node, the four hooks with no effect, a
+ * `present` that gives nothing and a `render` that throws, so a test that holds the feature is
+ * marked and delivered as it was before the module existed.
  *
  * @template K The feature's key.
  * @param declared The feature's facts.
@@ -339,8 +589,13 @@ export const stub = <K extends TestFeatureKey>(
 ): TestFeatureModule<K, never> => ({
   ...declared,
   deliver: (context) => context.test,
+  enter: () => Option.none(),
   gate: () => Option.none(),
   implemented: false,
   parse: (_element, context) => context.mark(declared.key),
+  present: () => [],
+  render: () => {
+    throw new TestFeatureNotImplemented({ feature: declared.key, issue: declared.issue });
+  },
   sequence: (context) => context.places,
 });

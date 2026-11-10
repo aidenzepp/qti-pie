@@ -10,6 +10,12 @@
  * them; the plain functions keep taking `now`, the datestamp and their seeds. Nothing outside
  * `src/effect/` imports this module.
  *
+ * Each runs in a span named for it, `plate.begin` and the rest, whose attributes are identifiers
+ * and counts, and logs each decision it takes for its caller at the debug level, after it: a seed
+ * drawn, a datestamp taken from the `Clock`. No span attribute or log holds a seed, a response, a
+ * record value or a stored form, since a program may export its telemetry where the page's data
+ * must not go; a failure is recorded by its span, never logged.
+ *
  * @module
  */
 import { DateTime, Effect } from "effect";
@@ -48,12 +54,33 @@ type ClockedResultsInput =
   | Extract<PlainResultsInput, { readonly kind: "test" }>;
 
 /**
+ * Give the host's seed, or draw one through `Randomness` and log at the debug level that a seed
+ * was drawn, under the operation's identifier and `seed.source: "drawn"`, never the seed.
+ *
+ * @param given The host's seed, used as given, `""` included; none to draw one.
+ * @param identifier The operation's identifier annotation, such as `item.identifier`.
+ * @returns The seed.
+ */
+const seedOf = (
+  given: string | undefined,
+  identifier: Readonly<Record<string, string>>,
+): Effect.Effect<string> =>
+  given === undefined
+    ? Effect.tap(drawnSeed, () =>
+        Effect.logDebug("a seed was drawn").pipe(
+          Effect.annotateLogs({ ...identifier, "seed.source": "drawn" }),
+        ),
+      )
+    : Effect.succeed(given);
+
+/**
  * Start the stored record of an item's first attempt, as the plain `begin` does, drawing its seed
  * through `Randomness` when the host gives none.
  *
  * A host's seed is used as given, `""` included, and then nothing is drawn. Absent, the seed is
  * {@link drawnSeed}'s, in `drawSeed`'s format, so the same document, instance and drawn bytes give
- * the record the plain `begin` gives under that seed.
+ * the record the plain `begin` gives under that seed. Its span, `plate.begin`, carries
+ * `item.identifier`.
  *
  * @example
  *   begin(accepted, { instance: "q1" });
@@ -69,11 +96,14 @@ type ClockedResultsInput =
  *   failure: {@link InvalidRecord} at stage `encode`, a renderer defect, or an
  *   {@link EngineFailure} from template processing.
  */
-export const begin = Effect.fnUntraced(function* begin(
+export const begin = Effect.fn("plate.begin")(function* begin(
   document: Accepted,
   start: { readonly instance: string; readonly seed?: string },
 ): Effect.fn.Return<StoredRecord, EngineFailure | InvalidRecord> {
-  const seed = start.seed ?? (yield* drawnSeed);
+  const identifier = { "item.identifier": document.item.identifier };
+  yield* Effect.annotateCurrentSpan(identifier);
+
+  const seed = yield* seedOf(start.seed, identifier);
 
   return yield* Effect.fromResult(plainBegin(document, { instance: start.instance, seed }));
 });
@@ -84,7 +114,8 @@ export const begin = Effect.fnUntraced(function* begin(
  * gives none.
  *
  * The configuration's `seed` stays the session's shuffle seed and never its processing seed. A
- * host's processing seed is used as given, and then nothing is drawn.
+ * host's processing seed is used as given, and then nothing is drawn. Its span, `plate.startTest`,
+ * carries `test.identifier` and `items.count`.
  *
  * @example
  *   startTest(test, items, { instance: "sitting-42" }).pipe(Effect.provide(ConfigurationFromEnv));
@@ -102,7 +133,7 @@ export const begin = Effect.fnUntraced(function* begin(
  *   {@link InvalidSessionInstance}, an {@link EngineFailure} of the first part's template defaults,
  *   or {@link InvalidTime}, which only a `Clock` whose time is not a number gives.
  */
-export const startTest = Effect.fnUntraced(function* startTest(
+export const startTest = Effect.fn("plate.startTest")(function* startTest(
   test: AcceptedTest,
   items: ReadonlyMap<string, Accepted>,
   context: { readonly instance: string; readonly seed?: string },
@@ -111,9 +142,12 @@ export const startTest = Effect.fnUntraced(function* startTest(
   EngineFailure | InvalidSessionInstance | InvalidTime | TestNotDeliverable,
   Configuration
 > {
+  const identifier = { "test.identifier": test.test.identifier };
+  yield* Effect.annotateCurrentSpan({ ...identifier, "items.count": items.size });
+
   const configuration = yield* Configuration;
   const now = yield* DateTime.nowAsDate;
-  const seed = context.seed ?? (yield* drawnSeed);
+  const seed = yield* seedOf(context.seed, identifier);
 
   return yield* Effect.fromResult(
     plainStartTest(test, items, configuration, { instance: context.instance, now, seed }),
@@ -122,7 +156,8 @@ export const startTest = Effect.fnUntraced(function* startTest(
 
 /**
  * Carry out what one request asks of a test session, as the plain `advance` does, at the
- * `Clock`'s now and under the {@link Configuration} service.
+ * `Clock`'s now and under the {@link Configuration} service. Its span, `plate.advance`, carries
+ * `test.identifier` and `intent.kind`, never the step's responses.
  *
  * @example
  *   advance(test, items, session, { intent: { kind: "next" }, responses }).pipe(
@@ -137,17 +172,34 @@ export const startTest = Effect.fnUntraced(function* startTest(
  * @returns The session after the intent, or the plain `advance`'s {@link AdvanceFailure}; its
  *   `InvalidTime` only a `Clock` whose time is not a number gives.
  */
-export const advance = Effect.fnUntraced(function* advance(
+export const advance = Effect.fn("plate.advance")(function* advance(
   test: AcceptedTest,
   items: ReadonlyMap<string, Accepted>,
   session: TestSession,
   step: Step,
 ): Effect.fn.Return<TestSession, AdvanceFailure, Configuration> {
+  yield* Effect.annotateCurrentSpan({
+    "intent.kind": step.intent.kind,
+    "test.identifier": test.test.identifier,
+  });
+
   const configuration = yield* Configuration;
   const now = yield* DateTime.nowAsDate;
 
   return yield* Effect.fromResult(plainAdvance(test, items, session, step, configuration, { now }));
 });
+
+/**
+ * Take an item's datestamp from the `Clock`'s now, and log at the debug level that it came from
+ * the `Clock`, under the item's identifier and never the time.
+ *
+ * @param identifier The item's `item.identifier` annotation.
+ * @returns The `Clock`'s now.
+ */
+const clockedDatestamp = (identifier: Readonly<Record<string, string>>): Effect.Effect<Date> =>
+  Effect.tap(DateTime.nowAsDate, () =>
+    Effect.logDebug("the datestamp came from the Clock").pipe(Effect.annotateLogs(identifier)),
+  );
 
 /**
  * Write the Results Reporting document for an item or a test session, as the plain `results`
@@ -156,6 +208,8 @@ export const advance = Effect.fnUntraced(function* advance(
  * The plain `datestamp` is the `Date` of the item session's last change, so a host that writes an
  * item's result as that change happens leaves it out; one that writes it later passes the time of
  * the change. A test session's result reads its times from the stored session, never the `Clock`.
+ * Its span, `plate.results`, carries `results.kind` and the item's `item.identifier` or the test's
+ * `test.identifier`, and a datestamp taken from the `Clock` is logged at the debug level.
  *
  * @example
  *   results({ context: { sourcedId: "candidate-1" }, document: accepted, kind: "item", record });
@@ -167,7 +221,7 @@ export const advance = Effect.fnUntraced(function* advance(
  *   {@link InvalidRecord}, {@link InvalidSession}, {@link SessionMismatch}, {@link RecordMismatch}
  *   or {@link ResultItemMissing}.
  */
-export const results = Effect.fnUntraced(function* results(
+export const results = Effect.fn("plate.results")(function* results(
   input: ClockedResultsInput,
 ): Effect.fn.Return<
   string,
@@ -179,10 +233,18 @@ export const results = Effect.fnUntraced(function* results(
   | SessionMismatch
 > {
   if (input.kind === "test") {
+    yield* Effect.annotateCurrentSpan({
+      "results.kind": "test",
+      "test.identifier": input.test.test.identifier,
+    });
+
     return yield* Effect.fromResult(plainResults(input));
   }
 
-  const datestamp = input.datestamp ?? (yield* DateTime.nowAsDate);
+  const identifier = { "item.identifier": input.document.item.identifier };
+  yield* Effect.annotateCurrentSpan({ ...identifier, "results.kind": "item" });
+
+  const datestamp = input.datestamp ?? (yield* clockedDatestamp(identifier));
 
   return yield* Effect.fromResult(plainResults({ ...input, datestamp }));
 });
