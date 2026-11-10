@@ -452,7 +452,9 @@ const helpOf = (failure: unknown, kind: Kind): string => {
 /**
  * The kind of a failure.
  *
- * An error this program defines names its own kind through {@link cliKind}. Every other failure is
+ * An error this program defines names its own kind through {@link cliKind}, as `RefusedByLevel`
+ * (`#pantry/cli/verdict.ts`), a package a level above `Qti` refused, names `import-refused`. Every
+ * other failure is
  * mapped by what it is, without importing the module that defines it, so the program starts
  * without loading the engine: Effect's CLI errors are `cli-usage`, an `ImportRefused` and a
  * `RefusedAbove` (a package a level above `Qti` refused) are `import-refused`, a
