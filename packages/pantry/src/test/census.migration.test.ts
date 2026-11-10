@@ -9,7 +9,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import path from "node:path";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
 
 /**

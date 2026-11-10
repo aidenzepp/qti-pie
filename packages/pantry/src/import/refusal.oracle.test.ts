@@ -1773,7 +1773,7 @@ const unownedGenerated = (relations: AnySchema["relations"]): readonly Law[] =>
  * The composed `Qti` schema, loaded by the census alone: it composes every `src/qti/` module that
  * has landed, and reading it runs `install.ts`'s generators.
  */
-const composedQti = Effect.promise(() => import("#pantry/qti/schema.ts")).pipe(
+const composedQti = Effect.promise(() => import("#pantry/test/qti.ts")).pipe(
   Effect.map(({ Qti }) => Qti),
 );
 

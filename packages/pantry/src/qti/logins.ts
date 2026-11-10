@@ -19,7 +19,7 @@ import { writtenNames } from "#pantry/import/roster.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import { Author } from "#pantry/qti/roles.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { qti } from "#pantry/qti/schema.ts";
 
 /**
  * The author application's workload: one document's ordered scan, which the export pages, the
@@ -55,6 +55,6 @@ export const importWork = workload(Author, { importWrite: changeSetOf(Author, no
  * The author application's login, `qti__author_app` on the cluster. Its name is the one every
  * earlier installation used, so a migration from scratch needs no `--rename @…`.
  */
-export const AuthorApp = login(Qti, "author_app", [Author], {
+export const AuthorApp = login(qti(), "author_app", [Author], {
   workload: [exportWork, importWork],
 });

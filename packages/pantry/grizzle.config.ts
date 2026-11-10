@@ -3,7 +3,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { Effect } from "effect";
 import { migrationConnection } from "#pantry/db/connection.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { qti } from "#pantry/qti/schema.ts";
 
 /**
  * The grizzle configuration every `grizzle` command of this package names: the `Qti` schema, its
@@ -20,5 +20,5 @@ export default defineConfig({
   ),
   logins: [AuthorApp],
   migrations: "migrations",
-  schemas: [Qti],
+  schemas: [qti()],
 });

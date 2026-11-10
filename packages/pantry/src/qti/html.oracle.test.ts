@@ -23,7 +23,7 @@ import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { htmlLaws, htmlRelations } from "#pantry/qti/html.ts";
 import { identityLaws, identityRelations } from "#pantry/qti/identity.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { judge, lawNames, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment, LawName } from "#pantry/test/oracle.ts";
 

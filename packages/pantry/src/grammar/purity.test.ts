@@ -164,7 +164,8 @@ const oracleDataModules: ReadonlySet<string> = new Set([
  * a module of the oracle that starts reading one fails the test, and one that stops fails it until
  * its entry goes.
  *
- * - `test/key-copies.ts` reads the composed `Qti` to find the fields a key text is written into.
+ * - `test/qti.ts` builds the composed `Qti`, which `test/key-copies.ts` reads to find the fields a
+ *   key text is written into.
  * - `test/oracle.ts` reads `splicingParents` from `#pantry/qti/tests.ts`, the kinds whose include
  *   splices its document.
  *
@@ -179,8 +180,8 @@ const oracleDataModules: ReadonlySet<string> = new Set([
  *   owed an oracle-side derivation.
  */
 const oracleStatementReads: readonly string[] = [
-  "test/key-copies.ts: #pantry/qti/schema.ts",
   "test/oracle.ts: #pantry/vocab/open.ts",
+  "test/qti.ts: #pantry/qti/schema.ts",
 ];
 
 /**
@@ -321,7 +322,7 @@ describe("the test helpers", () => {
     // type-only import of a schema module, a read of the data module, and of the law catalog. Wild:
     // a module the oracle does not reach, which reads a statement and is no part of it.
     const planted = new Map([
-      ["test/elsewhere.ts", 'import { Qti } from "#pantry/qti/schema.ts";'],
+      ["test/elsewhere.ts", 'import { qti } from "#pantry/qti/schema.ts";'],
       [
         "test/oracle-laws.ts",
         [

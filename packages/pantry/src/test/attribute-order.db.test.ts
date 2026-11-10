@@ -41,7 +41,7 @@ import {
 } from "#pantry/test/gen/attribute-order.ts";
 import type { CaseEntry } from "#pantry/test/gen/attribute-order.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { judgedOf } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import type { OracleVerdict } from "#pantry/test/oracle-verdict.ts";

@@ -18,7 +18,7 @@ import { ConfigProvider, Effect, FileSystem, Option } from "effect";
 import { ruleOfLaws } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { materialize, weightedNames } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";

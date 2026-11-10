@@ -58,7 +58,7 @@ import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { LabelUse } from "#pantry/qti/identity.ts";
 import { copiedTextKinds, Node, universalDomains, vocabularyTermKinds } from "#pantry/qti/node.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   accumulatorOf,

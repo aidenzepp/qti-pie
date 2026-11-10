@@ -44,7 +44,7 @@ import { boundedShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { corpusOf } from "#pantry/test/gen/genetic/corpus.ts";
 import { residualsOf } from "#pantry/test/gen/genetic/engine.ts";

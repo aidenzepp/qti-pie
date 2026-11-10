@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { committedRosters } from "#pantry/db/codes.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 /**
  * Find the first declared handle that grizzle would refuse: one the committed snapshot holds

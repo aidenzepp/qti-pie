@@ -11,7 +11,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option } from "effect";
 import { checkNameOf, lawNameOf, lawNames, namedLaws } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 describe("the laws each module names where it states them", () => {
   it("names each group by a law of the table, holds each check in its own law's group, groups every statement of Qti once, and names each law by its statement's group", () => {

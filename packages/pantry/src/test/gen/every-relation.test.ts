@@ -14,7 +14,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect } from "effect";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import {
   everyRelationPackage,
   scopedPackage,

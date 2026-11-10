@@ -42,7 +42,7 @@ import { changeSetOf } from "#pantry/import/write.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Author } from "#pantry/qti/roles.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import {
   assemblyLiteral,
   assemblyPackage,

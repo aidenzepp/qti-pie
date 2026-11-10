@@ -41,7 +41,7 @@ import { packageLaws } from "#pantry/qti/package.ts";
 import * as quotation from "#pantry/qti/quotation.ts";
 import { quotationLaws } from "#pantry/qti/quotation.ts";
 import { Author } from "#pantry/qti/roles.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import * as tests from "#pantry/qti/tests.ts";
 import { testLaws } from "#pantry/qti/tests.ts";
 

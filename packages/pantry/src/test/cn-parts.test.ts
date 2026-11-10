@@ -14,7 +14,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import { ruleOfLaws } from "#pantry/import/refusal.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
 import { judgedLaws } from "#pantry/test/judged-laws.ts";

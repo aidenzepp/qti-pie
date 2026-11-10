@@ -32,7 +32,7 @@ import {
   operatorRelations,
   positivePattern,
 } from "#pantry/qti/operators.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import {
   collapsedText,
   doubleReadingOf,

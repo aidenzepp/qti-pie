@@ -27,7 +27,7 @@ import {
   SdDecl,
   XmlDecl,
 } from "#pantry/qti/chardata.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { qti } from "#pantry/qti/schema.ts";
 
 /**
  * The document layer's relations, which `documentRowsOf` of `#pantry/import/write.ts` writes for
@@ -65,7 +65,7 @@ const OrderedFamily = Schema.Struct({
  * on its own.
  */
 const nestedMembers: ReadonlySet<string> = new Set(
-  Qti.statements.flatMap((statement) =>
+  qti().statements.flatMap((statement) =>
     Option.match(Schema.decodeUnknownOption(OrderedFamily)(statement), {
       onNone: () => [],
       onSome: ({ family: { source } }) => [
@@ -93,7 +93,7 @@ const sorted = <N extends string>(names: readonly N[]): readonly N[] =>
 // one set over a real import.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
 export const writtenNames = sorted(
-  writableNamesOf(Qti).filter((name) => !nestedMembers.has(name)),
+  writableNamesOf(qti()).filter((name) => !nestedMembers.has(name)),
 ) as readonly (keyof PackageInputs)[];
 
 /**

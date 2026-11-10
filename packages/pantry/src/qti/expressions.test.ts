@@ -79,7 +79,7 @@ import {
 } from "#pantry/qti/expressions.ts";
 import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { itemRefKind, linkResourceTypes } from "#pantry/qti/tests.ts";
 
 /**

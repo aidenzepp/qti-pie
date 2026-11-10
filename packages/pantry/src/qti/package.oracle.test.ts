@@ -30,7 +30,7 @@ import {
   resolvedPathPattern,
   srcsetCandidatePattern,
 } from "#pantry/qti/package.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { judge } from "#pantry/test/host-judge.ts";

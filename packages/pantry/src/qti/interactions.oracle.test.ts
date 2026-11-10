@@ -32,7 +32,7 @@ import {
   readAttributes,
   references,
 } from "#pantry/qti/interactions.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { readProgram } from "#pantry/import/program.ts";

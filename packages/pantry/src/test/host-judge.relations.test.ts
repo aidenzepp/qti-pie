@@ -21,7 +21,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option } from "effect";
 import { lawNameOf } from "#pantry/import/refusal.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { judge, modelledRelations } from "#pantry/test/host-judge.ts";
 import type { HostRow } from "#pantry/test/host-judge.ts";
 import { containmentsOf, judgedLaws } from "#pantry/test/judged-laws.ts";

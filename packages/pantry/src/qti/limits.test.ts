@@ -21,7 +21,7 @@ import {
   widestTextKey,
 } from "#pantry/qti/limits.ts";
 import { Node } from "#pantry/qti/node.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 /**
  * A term of a side as grizzle keeps it: a field's name, or a `pred` term over a natural field, a

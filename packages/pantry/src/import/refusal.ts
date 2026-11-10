@@ -222,7 +222,8 @@ import {
 import { mathmlLawsByName } from "#pantry/qti/mathml.ts";
 import { quotationLawsByName } from "#pantry/qti/quotation.ts";
 import { SectionSelection, SelectForm, testLawsByName, testRelations } from "#pantry/qti/tests.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { qti } from "#pantry/qti/schema.ts";
+import type { QtiSchema } from "#pantry/qti/schema.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
 import type { ZipRefusal } from "#pantry/package/zip.ts";
 import type { Source } from "#pantry/vocab/inventory/types.ts";
@@ -583,7 +584,7 @@ export const plainTexts: ReadonlySet<TextType> = new Set([anyText]);
  * no row fails the module's load, naming the field.
  */
 const patternLaws = Result.getOrThrowWith(
-  patternLawsOf(Qti.relations, textLaws, plainTexts),
+  patternLawsOf(qti().relations, textLaws, plainTexts),
   ({ field, relation }) =>
     new Error(
       `${relation}.${field} is typed by a text type no row of textLaws in src/import/refusal.ts names. Export the type from its module, type the field by that one object, and give it a row of textLaws, or of plainTexts if its pattern is a tautology.`,
@@ -1051,7 +1052,7 @@ interface Stated {
  * @param schema - The schema, `Qti`.
  * @returns Its laws, with their names.
  */
-const statedIn = Fn.memoize((schema: typeof Qti): Stated => {
+const statedIn = Fn.memoize((schema: QtiSchema): Stated => {
   const lawsOfStatement = lawsByStatement(schema);
   const laws = [
     ...schema.statements.flatMap((statement) =>
@@ -1075,7 +1076,7 @@ const statedIn = Fn.memoize((schema: typeof Qti): Stated => {
  *
  * @returns The laws, with their names.
  */
-export const statedLaws = (): readonly (readonly [Law, LawName])[] => statedIn(Qti).laws;
+export const statedLaws = (): readonly (readonly [Law, LawName])[] => statedIn(qti()).laws;
 
 /**
  * Name the law an outcome's law is: a check by its name ({@link lawOfCheck}), any other law by the
@@ -1094,7 +1095,7 @@ export const lawNameOf: (law: Law) => Option.Option<LawName> = Fn.memoize(
     law.kind === "check"
       ? lawOfCheck(law.name)
       : pipe(
-          Option.fromUndefinedOr(statedIn(Qti).buckets.get(bucketOf(law))),
+          Option.fromUndefinedOr(statedIn(qti()).buckets.get(bucketOf(law))),
           Option.flatMap(Arr.findFirst(([stated]) => sameLaw(stated, law))),
           Option.map(([, name]) => name),
         ),

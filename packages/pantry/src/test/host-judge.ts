@@ -39,7 +39,7 @@
 import type { Law } from "@bjornpagen/grizzle";
 import { Option, Order, Predicate, Schema } from "effect";
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import {
   closedRows,
