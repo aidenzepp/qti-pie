@@ -296,11 +296,13 @@ const arranged = (walk: Walk, section: Section): readonly Block[] => {
  * each one's place, an item ref a selection with replacement repeats giving its place once per
  * instance, so every instance is a session item of its own. A test holding neither element gives
  * its places back as they came. A `qti-selection` that writes no `select`, which the validator
- * refuses before a test is built, is marked as the stub marked it and read as no selection.
+ * refuses before a test is built, is marked as the stub marked it and read as no selection. Its
+ * `gate` and `deliver` have no effect, and its `enter` lets every place be entered.
  */
 export const selectionModule: TestFeatureModule<"qti-selection", SelectionNode> = {
   deliver: (context) => context.test,
   element: "qti-selection",
+  enter: () => Option.none(),
   feature: ["S-3"],
   gate: () => Option.none(),
   implemented: true,

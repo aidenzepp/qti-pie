@@ -37,11 +37,13 @@ export interface OrderingNode {
 /**
  * The Ordering module (S-4, issue m3f-02): it reads each `qti-ordering` into an
  * {@link OrderingNode}, whose `shuffle` the Selection module's `sequence` applies right after its
- * section's selection. Its own `sequence`, `gate` and `deliver` have no effect.
+ * section's selection. Its own `sequence`, `gate` and `deliver` have no effect, and its `enter`
+ * lets every place be entered.
  */
 export const orderingModule: TestFeatureModule<"qti-ordering", OrderingNode> = {
   deliver: (context) => context.test,
   element: "qti-ordering",
+  enter: () => Option.none(),
   feature: ["S-4"],
   gate: () => Option.none(),
   implemented: true,
