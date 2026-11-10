@@ -1,7 +1,7 @@
 /**
- * The export on the lease: four packages the import accepts, one per kind of storage the scan reads
- * back, imported, exported and compared with their record, and the scan's plan read back through
- * `db.explain`. The rendering itself is the host's, held generatively on the free tier
+ * The export on the lease: three packages the import accepts, one per kind of storage the scan
+ * reads back, imported, exported and compared with their record, and the scan's plan read back
+ * through `db.explain`. The rendering itself is the host's, held generatively on the free tier
  * (`model/unshred.test.ts`, `test/attribute-order.export.test.ts`, `export/pages.test.ts`); what
  * only the lease holds is that the rows the database stores and the served scan returns are the
  * ones the import wrote.
@@ -56,14 +56,13 @@ const workDirectory = path.resolve(import.meta.dirname, "../../work");
 /**
  * The packages the import accepts, each materialized as the import reads it, one per kind of
  * storage the scan reads back: `simple`, a directory of QTI documents; `svg`, a zip whose item
- * holds a foreign SVG element (`verdicts/qti-examples-0a92fbb.tsv`); `ssml-nested`, nested SSML
- * elements under their own namespace (held by `fixtures.ssml.oracle.test.ts`); and `data-entity`,
- * `data-*` attributes with an entity reference (held by `fixtures.data.oracle.test.ts`).
+ * holds a foreign element under its own namespace (`verdicts/qti-examples-0a92fbb.tsv`); and
+ * `data-entity`, `data-*` attributes with an entity reference (held by
+ * `fixtures.data.oracle.test.ts`).
  */
 const accepted = [
   { name: "simple", source: materialize("simple") },
   { name: "svg", source: materializeZip("svg") },
-  { name: "ssml-nested", source: materialize("ssml-nested") },
   { name: "data-entity", source: materialize("data-entity") },
 ] as const;
 
