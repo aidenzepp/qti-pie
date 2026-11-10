@@ -2,7 +2,7 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import { readXml } from "#crust/read.ts";
 import type { Child, Element, XmlDocument } from "#crust/tree.ts";
 import { declared } from "#crust/test/bytes.ts";
@@ -239,6 +239,59 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
 
       assert.strictEqual(error._tag, "ReaderRefusal");
       assert.strictEqual(error._tag === "ReaderRefusal" ? error.rule : undefined, "element-depth");
+    }),
+  );
+
+  suite.effect("places an element-depth refusal at the parser's line and column", () =>
+    Effect.gen(function* placeTooDeep() {
+      const error = yield* Effect.flip(readText(`${"<a>".repeat(256)}\n<a>${"</a>".repeat(257)}`));
+
+      assert.strictEqual(error._tag, "ReaderRefusal");
+      assert.strictEqual(error._tag === "ReaderRefusal" ? error.rule : undefined, "element-depth");
+      // The line and column the detail states: where saxes stands after the 257th start tag.
+      assert.deepStrictEqual(
+        error._tag === "ReaderRefusal" ? error.position : undefined,
+        Option.some({ column: 3, line: 2 }),
+      );
+    }),
+  );
+
+  suite.effect("places a refused undeclared entity at its first reference", () =>
+    Effect.gen(function* placeUndeclared() {
+      const error = yield* Effect.flip(readText("<a>\n  &nbsp;</a>"));
+
+      assert.strictEqual(error._tag, "ReaderRefusal");
+      assert.strictEqual(
+        error._tag === "ReaderRefusal" ? error.rule : undefined,
+        "undeclared-entity",
+      );
+      assert.deepStrictEqual(
+        error._tag === "ReaderRefusal" ? error.position : undefined,
+        Option.some({ column: 3, line: 2 }),
+      );
+    }),
+  );
+
+  suite.effect("places an undeclared entity left without a stand-in at its first reference", () =>
+    Effect.gen(function* placeExhausted() {
+      let everySentinel = "";
+      for (let point = 0xe0_00; point <= 0xf8_ff; point += 1) {
+        everySentinel += String.fromCodePoint(point);
+      }
+
+      const error = yield* Effect.flip(
+        readText(`<!DOCTYPE a SYSTEM "a.dtd"><a>${everySentinel}\n\n  &u;</a>`),
+      );
+
+      assert.strictEqual(error._tag, "ReaderRefusal");
+      assert.strictEqual(
+        error._tag === "ReaderRefusal" ? error.rule : undefined,
+        "undeclared-entity",
+      );
+      assert.deepStrictEqual(
+        error._tag === "ReaderRefusal" ? error.position : undefined,
+        Option.some({ column: 3, line: 3 }),
+      );
     }),
   );
 
