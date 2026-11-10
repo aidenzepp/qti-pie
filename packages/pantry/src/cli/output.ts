@@ -166,42 +166,20 @@ export const modeOfEnvironment = Effect.gen(function* resolveEnvironmentMode() {
 }).pipe(Effect.catchTag("ConfigError", () => Effect.succeedNone));
 
 /**
- * One law the database refused an import under, as the error object names it: the refusal's own
- * `RefusedLaw` (`#pantry/package/refusal-origin.ts`).
- */
-export const ErrorLaw = RefusedLaw;
-
-/**
- * One law of a refusal, as {@link ErrorLaw} reads it.
- */
-export type LawFact = typeof ErrorLaw.Type;
-
-/**
- * How a refusal the database gave names the row that broke its laws, as the error object prints
- * it: the refusal's own `WitnessKind` (`#pantry/package/refusal-origin.ts`). `key` (grizzle's key
- * witness) names one in the message, and `unreported` names none, for a foreign key or a law no
- * row the ChangeSet states breaks as grizzle judges it.
- */
-export const ErrorWitness = WitnessKind;
-
-/**
- * How grizzle decided the laws a refusal the database gave names, as the error object prints it:
- * the refusal's own `RefusedKind` (`#pantry/package/refusal-origin.ts`). `every`: each law is
- * broken; `first`: the laws of the CHECK PostgreSQL tried first, and the row may break others too;
- * `some`: at least one law is broken, and nothing says which.
- */
-export const ErrorRefusedKind = RefusedKind;
-
-/**
  * What a failure prints under `json` and `jsonl`: one line on standard error, in the shape of the
  * success envelope's `schema_version`, `command` and `ok`, with `error` true and the failure's
  * kind, message, next step and exit code.
  *
  * - `rules` is present only when an import was refused: the rules it was refused under, each once,
  *   most specific first, none where the database named only laws the law table does not hold.
- *   `refused_kind`, `laws`, `sources` and `witness` are present only when the database refused it:
- *   how grizzle decided the laws its refusal names, the laws, where each is stated, and whether the
- *   message names the row that broke them (`key`) or the database named none (`unreported`).
+ *   `refused_kind`, `laws`, `sources` and `witness` are present only when the database refused it,
+ *   each as the refusal's origin holds it (`#pantry/package/refusal-origin.ts`): how grizzle
+ *   decided the laws its refusal names (`RefusedKind`: `every`, each law is broken; `first`, the
+ *   laws of the CHECK PostgreSQL tried first, and the row may break others too; `some`, at least
+ *   one law is broken, and nothing says which), the laws (`RefusedLaw`), where each is stated, and
+ *   whether the message names the row that broke them (`WitnessKind`: `key`, grizzle's key witness)
+ *   or the database named none (`unreported`, for a foreign key or a law no row the ChangeSet
+ *   states breaks as grizzle judges it).
  * - `failure` is present only for an `internal` failure qti can name, such as an export that cannot
  *   rebuild a stored package: the failure's tag.
  */
@@ -212,14 +190,14 @@ export const ErrorObject = Schema.Struct({
   failure: Schema.optionalKey(Schema.String),
   help: Schema.String,
   kind: Schema.String,
-  laws: Schema.optionalKey(Schema.Array(ErrorLaw)),
+  laws: Schema.optionalKey(Schema.Array(RefusedLaw)),
   message: Schema.String,
   ok: Schema.Literal(false),
-  refused_kind: Schema.optionalKey(ErrorRefusedKind),
+  refused_kind: Schema.optionalKey(RefusedKind),
   rules: Schema.optionalKey(Schema.Array(Schema.String)),
   schema_version: Schema.Literal(1),
   sources: Schema.optionalKey(Schema.Array(Schema.String)),
-  witness: Schema.optionalKey(ErrorWitness),
+  witness: Schema.optionalKey(WitnessKind),
 });
 
 /**

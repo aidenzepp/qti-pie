@@ -5,7 +5,7 @@ import type { HelpDoc } from "effect/cli";
 import { describeFailure, kindExitCode, kindHelp, namedFailureOf } from "#pantry/cli/errors.ts";
 import type { FailureDescription } from "#pantry/cli/errors.ts";
 import { ErrorObject } from "#pantry/cli/output.ts";
-import type { LawFact, OutputMode } from "#pantry/cli/output.ts";
+import type { OutputMode } from "#pantry/cli/output.ts";
 import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
 import type { DatabaseRefusal } from "#pantry/cli/refused.ts";
 
@@ -150,7 +150,7 @@ const encodeErrorObject = Schema.encodeSync(Schema.fromJsonString(ErrorObject));
  */
 interface Facts {
   readonly failure?: string;
-  readonly laws?: readonly LawFact[];
+  readonly laws?: DatabaseRefusal["laws"];
   readonly refused_kind?: DatabaseRefusal["kind"];
   readonly rules?: readonly string[];
   readonly sources?: readonly string[];
