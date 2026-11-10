@@ -557,6 +557,45 @@ const submitButtons = (page: Shown, id: string): readonly Element[] =>
   );
 
 /**
+ * Read a session page's form children, the hidden default submit, the item, Save and the
+ * navigation in that order, asserting that the hidden default is `hidden`, carries no `aria-hidden`
+ * or `tabindex`, and mirrors Save's `name`, `value` and `disabled`.
+ *
+ * @param page The page.
+ * @param id The session id.
+ * @returns The hidden default submit.
+ */
+const defaultSubmitOf = (page: Shown, id: string): Element => {
+  const [first, item, save, navigation, ...others] = sessionForm(page, id).children.filter(
+    (child): child is Element => child.kind === "element",
+  );
+
+  assert.lengthOf(others, 0);
+  assert.isDefined(first);
+  assert.isDefined(save);
+  assert.isDefined(navigation);
+  assert.strictEqual(first.tag, "button");
+  assert.strictEqual(first.attrs["type"], "submit");
+  assert.isTrue(Object.hasOwn(first.attrs, "hidden"));
+  assert.isFalse(Object.hasOwn(first.attrs, "aria-hidden"));
+  assert.isFalse(Object.hasOwn(first.attrs, "tabindex"));
+  assert.isTrue(Object.hasOwn(item?.attrs ?? {}, "lang"));
+  assert.strictEqual(save.tag, "button");
+  assert.strictEqual(textOf(save), "Save");
+  assert.isFalse(Object.hasOwn(save.attrs, "hidden"));
+  assert.strictEqual(first.attrs["name"], intentName(id));
+  assert.strictEqual(first.attrs["value"], save.attrs["value"]);
+  assert.strictEqual(Object.hasOwn(first.attrs, "disabled"), Object.hasOwn(save.attrs, "disabled"));
+  assert.isNotEmpty(
+    elementsOf([navigation]).filter((element) =>
+      navigationSlots.has(String(element.attrs["data-slot"])),
+    ),
+  );
+
+  return first;
+};
+
+/**
  * Give a page's navigation buttons, in document order.
  *
  * @param page The page.
@@ -841,6 +880,35 @@ describe("routeSessions", () => {
 
         assert.deepStrictEqual(disabledOf(buttons), before);
         assert.isTrue(before.some(([, disabled]) => disabled));
+      }),
+  );
+
+  it.effect(
+    "[W0-DEFAULT-SUBMIT] the session page's form begins with a hidden default submit that posts the Save intent, disabled exactly when Save is",
+    () =>
+      Effect.gen(function* defaultSubmit() {
+        const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot);
+        const id = yield* start(bench);
+        const choice = entryName(`${id}.1`, "RESPONSE");
+        const opened = yield* open(bench, id);
+        const hiddenDefault = defaultSubmitOf(opened, id);
+
+        assert.strictEqual(
+          hiddenDefault.attrs["value"],
+          encodeIntent({ kind: "go", sequenceIndex: 1 }),
+        );
+        assert.isUndefined(hiddenDefault.attrs["disabled"]);
+
+        redirected(yield* press(bench, id, hiddenDefault, [[choice, "B"]]));
+
+        const saved = yield* open(bench, id);
+        assert.strictEqual(saved.page.title, itemTitle(fixture, "answering", 1));
+        assert.deepStrictEqual(checkedValues(controlsNamed(saved, choice)), ["B"]);
+        defaultSubmitOf(saved, id);
+
+        const fourth = yield* follow(bench, yield* confirmed(bench, id, saved));
+        assert.strictEqual(fourth.page.title, itemTitle(fixture, "partSubmitted", 4));
+        defaultSubmitOf(fourth, id);
       }),
   );
 

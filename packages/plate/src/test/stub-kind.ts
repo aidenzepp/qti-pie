@@ -21,12 +21,14 @@
  * derives {@link stubKind} and {@link hasStub}; `src/session/skip.test.ts`, which skips its
  * stub-notice test, with the reason in the title, while {@link hasStub} is false; and
  * `src/styles.markup.test.ts`, which includes its stub witness row only while {@link hasStub}. When
- * no kind of the order is a bare stub, {@link stubKind} is the last kind of the order and
- * {@link hasStub} is false. The five importers of this file (`src/engine/attempt.test.ts`,
- * `src/model/item.test.ts`, `src/payload.test.ts`, `src/validate/verdict.test.ts` and
- * `src/vertical.test.ts`) read {@link stubKind}, {@link stubElement}, {@link stubBaseType} and
- * {@link stubCardinality} and not {@link hasStub}: their tests whose premise is that a stub shows as
- * a notice have no premise then, and the merge that lands the last bare stub deletes them.
+ * no kind of the order is a bare stub, this module refuses to load, at compile time and at run
+ * time, with a message naming the rows to delete, so {@link hasStub} is true whenever it loads and
+ * the two gates stand for the premise rather than for a state the module admits. The five importers
+ * of this file (`src/engine/attempt.test.ts`, `src/model/item.test.ts`, `src/payload.test.ts`,
+ * `src/validate/verdict.test.ts` and `src/vertical.test.ts`) read {@link stubKind},
+ * {@link stubElement}, {@link stubBaseType} and {@link stubCardinality} and not {@link hasStub}: their
+ * tests whose premise is that a stub shows as a notice have no premise then, and the merge that
+ * lands the last bare stub deletes them, the two `stubNode` rows the message names first.
  * `src/vertical.test.ts` reads {@link stubKind} alone and pairs it with its Select Point fixture, so
  * it follows the kind only while Select Point is the stub kind.
  *
@@ -34,6 +36,7 @@
  *
  * @module
  */
+import { Data } from "effect";
 import type { ModuleInteraction, ModuleKind } from "#plate/interactions/contract.ts";
 import type { ModelOf } from "#plate/model/interactions.ts";
 import { containerKinds, modules } from "#plate/model/interactions.ts";
@@ -95,18 +98,27 @@ type OrderKind = (typeof stubOrder)[number];
  * ModuleInteraction<K>, never>`. A module that lands declares its own model node with the fields
  * its render reads, so `ModelOf<K>` grows past the bare node and the kind leaves this union, and
  * the literal `{ kind: stubKind, … }` a test builds as the bare node of the stub kind keeps
- * fitting `ModelOf<typeof stubKind>` on a branch where a kind of the order has landed.
+ * fitting `ModelOf<typeof stubKind>` on a branch where any kinds of the order have landed, in any
+ * order: {@link stubKind} is typed as this union alone, so no kind is named as its fallback. When
+ * every kind has landed this union is `never`, which {@link noBareStub} reports.
  */
 type BareKind = {
   readonly [K in OrderKind]: ModuleInteraction<K> extends ModelOf<K> ? K : never;
 }[OrderKind];
 
 /**
- * The last kind of {@link stubOrder}, read from its type so the order's end is written once.
- *
- * @template T The order.
+ * The message this module refuses to load with when every kind of {@link stubOrder} has landed.
+ * The `satisfies` is the same refusal at compile time: while a kind of the order is bare the
+ * expected type is `string`, and when none is it is `never`, so `tsc` reports this line with the
+ * message as the literal's type, beside the two rows it names, which then fail against
+ * `ModelOf<never>`.
  */
-type LastOf<T extends readonly unknown[]> = T extends readonly [...unknown[], infer L] ? L : never;
+const noBareStub =
+  "Every kind of stubOrder has landed, so no stub kind remains: delete the stubNode rows of src/engine/attempt.test.ts and src/payload.test.ts, whose premise was a stub shown as a notice." satisfies [
+    BareKind,
+  ] extends [never]
+    ? never
+    : string;
 
 /**
  * Tell whether a kind of the order is a bare stub: its module in the table of modules has
@@ -126,23 +138,38 @@ const isBareStub = (kind: OrderKind): kind is BareKind =>
 const bareStub = stubOrder.find(isBareStub);
 
 /**
- * The last kind of {@link stubOrder}, which {@link stubKind} falls back to. `satisfies` pins the
- * literal to the order's end, so moving the order's last kind fails here until this follows.
- */
-const lastOfOrder = "graphic-gap-match" satisfies LastOf<typeof stubOrder>;
-
-/**
- * The stub kind: the first bare stub of {@link stubOrder}, or the last kind of the order when it
- * holds none, which {@link hasStub} reports.
- */
-export const stubKind = bareStub ?? lastOfOrder;
-
-/**
- * Whether the order holds a bare stub: false once every kind of {@link stubOrder} is implemented or
- * declares a container, when {@link stubKind} names a module a notice no longer stands for and a
- * test whose premise is a stub shown as a notice has nothing to stand on.
+ * Whether the order holds a bare stub. True whenever this module loads, as it refuses to load
+ * ({@link noBareStub}) once every kind of {@link stubOrder} is implemented or declares a container;
+ * the importers that gate on it (`src/session/skip.test.ts`, `src/styles.markup.test.ts`) state
+ * their premise, a stub shown as a notice, through it.
  */
 export const hasStub = bareStub !== undefined;
+
+/**
+ * The refusal to load when every kind of {@link stubOrder} has landed. It is thrown at load time,
+ * never returned: the module has no caller to return to, and the condition is a defect of the
+ * repository's state (two test rows outliving their premise), not a failure a caller can cause.
+ * It is a tagged class and not a bare `Error` because the "throw no bare Error" pin of
+ * `src/browser.test.ts` scans every non-test module under `src/`, this one included. It carries
+ * {@link noBareStub} as its message, so the run-time refusal and the compile-time one say the same
+ * thing.
+ */
+class NoBareStub extends Data.TaggedError("NoBareStub")<{
+  /**
+   * The rows to delete, as {@link noBareStub} names them.
+   */
+  readonly message: string;
+}> {}
+
+if (bareStub === undefined) {
+  throw new NoBareStub({ message: noBareStub });
+}
+
+/**
+ * The stub kind: the first bare stub of {@link stubOrder}. Its type is {@link BareKind}, the kinds
+ * still bare, whichever kinds have landed; the module does not load without one.
+ */
+export const stubKind: BareKind = bareStub;
 
 /**
  * The QTI element of {@link stubKind}, read from its module in the table of modules, so a fixture

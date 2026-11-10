@@ -7114,4 +7114,19 @@ describe("align-54 Data-SSML: a data-ssml value is Data-SSML JSON (the operator'
     assert.deepStrictEqual(judged(listed), []);
     assert.deepStrictEqual(verdictRefusals(listed), []);
   });
+
+  it("[W0-AU] align-54 Data-SSML P3: a data-ssml on a kind that does not declare it is an author data-*, kept and no longer marked (decision D24)", () => {
+    const verdict = check(
+      item([], [el("ul", [], [el("li", [attr("data-ssml", "hello")], [text("mRNA")])])]),
+      tables,
+      Option.none(),
+    );
+
+    assert.deepStrictEqual(
+      verdict.verdict === "accepted-with-unsupported" && verdict.kind === "item"
+        ? verdict.accepted.unsupported
+        : verdict.verdict,
+      "accepted",
+    );
+  });
 });

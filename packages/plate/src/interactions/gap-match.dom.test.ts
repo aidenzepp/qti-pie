@@ -329,8 +329,9 @@ describe(server.browser, () => {
 
             const upgraded = item.begin();
 
+            // The interaction roots alone: the item Root's controller is the registry's, not Gap Match's.
             assert.deepStrictEqual(
-              upgraded.controllers.map(({ root }) => root),
+              upgraded.controllers.flatMap((entry) => ("kind" in entry ? [entry.root] : [])),
               [item.root],
             );
             assert.isUndefined(item.root.dataset["runtime"]);
@@ -808,7 +809,7 @@ describe(server.browser, () => {
               const second = item.begin();
 
               assert.deepStrictEqual(
-                second.controllers.map(({ root }) => root),
+                second.controllers.flatMap((entry) => ("kind" in entry ? [entry.root] : [])),
                 [item.root],
               );
               assert.strictEqual(shownIn(item.gap("G1")), "tulips");
