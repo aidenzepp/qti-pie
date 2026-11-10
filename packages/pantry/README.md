@@ -29,9 +29,10 @@ pantry is a private workspace package of [qti-pie](../../README.md). An app depe
 ```
 
 The app uses the grizzle pantry pins ([`vendor/README.md`](../../vendor/README.md)), so the workspace holds one copy of
-grizzle and one of Effect. pantry gives no connection, configuration or plugin layer. The app installs pantry's schema as the lowest levels of
-its own grizzle installation, connects with its own grizzle configuration, and gives pantry's programs the author
-login's `DbLayer`. [Database](#database) states what that requires.
+grizzle and one of Effect. pantry gives no connection, configuration or plugin layer. The app installs pantry's schema
+as the lowest levels of its own grizzle installation and connects with its own grizzle configuration. It gives pantry's
+programs the author login's `DbLayer` and `ServedAuthorLogin`, both from the served file its own `grizzle generate`
+writes for that login. [Database](#database) states what that requires.
 
 ## Entry point
 
@@ -44,9 +45,10 @@ else, so no other module of `src/` resolves from outside the package. Every expo
 | `QtiSchema` | type | The type of the `Qti` level |
 | `QtiOptions` | type | The options `qti` takes. It holds none yet |
 | `authorRole` | function | The author role over a `Qti` value: it holds every stored relation and roster whole, and writes every stored relation |
-| `AuthorRole` | type | The author role's type. Every program requires `DbLayer<AuthorRole>`, except `previewPackage` |
-| `authorLogin` | function | The `author_app` login over a `Qti` value, with the workloads pantry's programs run |
-| `AuthorLogin` | type | The author login's type |
+| `AuthorRole` | type | The author role's type. Every program but `previewPackage` requires `ServedAuthorLogin \| DbLayer<AuthorRole>` |
+| `authorLogin` | function | The `author_app` login over a `Qti` value, with the workloads pantry's programs run. An app lists it in its grizzle configuration |
+| `AuthorLogin` | type | The author login's type, which an app's `served<AuthorLogin>(file, "author_app")` serves |
+| `ServedAuthorLogin` | service | The served author login, which an app provides beside the `DbLayer` it built over that login. Each program opens its `Db` on its author role |
 | `singleCdn` | function | The refuse-only `Cdn` level over a base level, for one CDN origin |
 | `CdnOptions` | schema | Decodes `singleCdn`'s options, `{ origin }`. Its type is `typeof CdnOptions.Type` |
 | `CdnLevel` | type | The `Cdn` level's type, which an app's own level extends |
@@ -62,10 +64,10 @@ else, so no other module of `src/` resolves from outside the package. Every expo
 | `PackageSource` | type | A package to read: a directory or `.zip` path, or `{ name, bytes }` holding a zip archive |
 | `ImportVerdict` | type | `accepted` with the stored `packageId`, or `refused` with a `Refusal` |
 | `PreviewVerdict` | type | `previewed` with relation and row counts and `databaseChecked: false`, or `refused` with a `Refusal` |
-| `Refusal` | type | The level and rule a package broke: `kind: "qti"` at level `Qti`, or `kind: "above"` at a level above it |
+| `Refusal` | type | The level and rules a package broke: `kind: "qti"` at level `Qti`, or `kind: "above"` at a level above it. `rules` lists every rule the refusal names, and `rule` is the first of them |
 | `PackageEntry` | type | One exported entry, its `path` and `bytes` |
 | `PackageListing` | type | One listed package: its `id` and `name` |
-| `DocumentListing` | type | One listed document: its `node`, `package`, `path`, `resourceType` and `rootKind` |
+| `DocumentListing` | type | One listed document: its `node`, `package`, `path`, `documentType` and `rootKind` |
 | `publishedRelations` | value | Each published relation's key and published fields, and the `BaseType` roster |
 | `PublishedRow` | type | A published relation's row, narrowed to its published fields |
 | `PackageNotFound` | error | No stored package has the id |
@@ -75,7 +77,7 @@ else, so no other module of `src/` resolves from outside the package. Every expo
 | `XmlVersionUnread` | error type | A document's stored XML version is no XML version, so no declaration can be written |
 | `AssembleError` | error type | A document's rows do not assemble into one document: `RootMissing`, `RowMissing` or `RowsOutsideImage` |
 
-The ten published relations are exports too: [Published relations](#published-relations) lists them. A refusal is a
+The eleven published relations are exports too: [Published relations](#published-relations) lists them. A refusal is a
 verdict value, never an error: the programs fail only for what is not about the package, with the platform's error,
 grizzle's own error, or pantry's errors above. The TSDoc on each name in `src/index.ts` is its reference.
 
@@ -88,15 +90,20 @@ every other relation of `Qti`, is internal and changes with pantry.
 | Relation | Key | Published fields |
 | --- | --- | --- |
 | `Package` | `id` | `id`, `name` |
-| `Document` | `node` | `node`, `package`, `path`, `resourceType`, `rootKind` |
+| `Document` | `node` | `node`, `package`, `path`, `documentType`, `rootKind` |
 | `TestDocument` | `node` | `node`, `package`, `path`, `rootKind` |
 | `Named` | `node` | `node`, `document`, `identifier`, `kind`, `parent`, `part` |
-| `Section` | `node` | `node`, `document`, `parent`, `visible`, `keepTogether`, `shuffle`, `withReplacement`, `members`, `required` |
+| `Section` | `node` | `node`, `document`, `parent`, `keepTogether`, `shuffle`, `withReplacement`, `members`, `required` |
 | `SectionSelection` | `node` | `node`, `document`, `parent`, `select`, `withReplacement` |
 | `SectionMember` | `node` | `node`, `section`, `document`, `kind`, `required`, `start` |
+| `TestFlag` | `node`, `name` | `node`, `name`, `value` |
 | `ItemRefDocument` | `node` | `node`, `document`, `package`, `path` |
 | `DeclarationIdentifier` | `node` | `node`, `document`, `identifier`, `declarationKind` |
 | `BaseType` | roster | Its handles, which an app's `closedId(BaseType)` columns name |
+
+A section's visibility is its `TestFlag` row named `visible`. QTI requires the attribute on every section, so every
+section has that row. A document's `documentType` is `manifest` for the manifest, and the type of the manifest resource
+that lists it for any other document.
 
 A published field's type is part of the contract, and a closed id carries its roster's handle names. A `BaseType`
 handle is typed as a plain `string`, so `PublishedRow<"BaseType">` does not narrow its `id` to the roster's handles.
@@ -107,6 +114,29 @@ pantry runs only on grizzle's PostgreSQL. An app installs pantry as levels of it
 the bottom, then any level pantry builds, such as `singleCdn(qti(), options)`, then the app's own levels over them. The
 app's grizzle configuration lists the author login, `authorLogin(qti())`, so pantry's programs run unchanged inside the
 app's database, and the app writes and runs its own migrations.
+
+`grizzle generate` writes the login's served file beside the app's snapshot, `migrations/qti/served/author_app.json`
+in the app's migrations folder. The app commits it, and at run time it serves the login from that file and builds the
+login's `DbLayer` over it. The programs compile nothing and evaluate no schema module at run time. Every program but
+`previewPackage` requires `ServedAuthorLogin | DbLayer<AuthorRole>`, so the app provides both:
+
+```ts
+import { DbLayer, roleNameOf, served } from "@bjornpagen/grizzle/runtime";
+import { ServedAuthorLogin } from "@qti-pie/pantry";
+import type { AuthorLogin } from "@qti-pie/pantry";
+import { Layer } from "effect";
+
+// file: the app's served file, read and parsed as JSON.
+const login = served<AuthorLogin>(file, "author_app");
+const pantryLayer = Layer.merge(
+  DbLayer.make({ ...connectionOf(roleNameOf(login)), login, pool }),
+  Layer.succeed(ServedAuthorLogin, login),
+);
+```
+
+`connectionOf` and `pool` are the app's: its connection to the database for the login's role, and its pool bounds.
+pantry reads no environment variable and no install folder for an app; its
+[optional settings](#optional-settings) are its own command line's and tests'.
 
 One installation per PostgreSQL server: PostgreSQL roles belong to the whole server, and pantry's root level is always
 named `Qti`, so a server holds at most one installation of pantry. Relation, role and login names share one namespace
@@ -151,6 +181,12 @@ item-prefixed names that pass through it, because the package declares nothing t
 
 `scripts/db.sh reset` drops the database and this package's roles, then creates and migrates again.
 
+## Optional settings
+
+- `GR8DES_PG_PASSWORD_COMMAND` names an executable that prints a role's password. Every connection attempt runs it,
+  without a shell, with the role's name as its one argument, in place of `GR8DES_PG_MIGRATION_PASSWORD` and the logins'
+  password files.
+
 ## Development
 
 [`docs/qti-intent.md`](../../docs/qti-intent.md) records what was settled before the model was planned. Read it before
@@ -168,10 +204,6 @@ The vocabulary's derivations and the XSD differentials read the 23 XSDs that
 `https://purl.imsglobal.org/spec/`. They are cached outside the repository, in `~/.cache/gr8des/qti3/xsd/`:
 `pnpm --filter @qti-pie/pantry run fetch-xsds` downloads them there and checks each digest. Without them those tests
 are skipped, or fail naming that command.
-
-The roster order the grammar reads is [`src/db/rosters.json`](src/db/rosters.json), written from
-`migrations/qti/snapshot.json`. After any `grizzle generate` that changes a roster, regenerate it with
-`pnpm --filter @qti-pie/pantry run rosters`; a test fails, naming that command, while the two disagree.
 
 ## License
 
