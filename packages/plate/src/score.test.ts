@@ -1967,6 +1967,7 @@ describe("the public surface", () => {
         "encodeRedacted",
         "encodeSession",
         "entryName",
+        "feedbackShown",
         "h",
         "intentName",
         "isPosted",
