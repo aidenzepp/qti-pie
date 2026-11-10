@@ -997,7 +997,7 @@ describe("startTest", () => {
   );
 
   it.effect(
-    "[T-1] keeps the configuration's seed as the shuffle seed, none when it has none, and a session stored at version 4 keeps either",
+    "[T-1] keeps the configuration's seed as the shuffle seed, none when it has none, and a session stored at version 5 keeps either",
     () =>
       Effect.gen(function* keepsShuffleSeed() {
         const delivery = yield* builtDelivery("shuffled", [

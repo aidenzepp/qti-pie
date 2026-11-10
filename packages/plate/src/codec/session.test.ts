@@ -30,9 +30,9 @@ type Equals<A, B> =
 const sessionPinned: Equals<typeof TestSessionSchema.Type, TestSession> = true;
 
 /**
- * The stored form carries version 4; `tsc` refuses this line when it carries another.
+ * The stored form carries version 5; `tsc` refuses this line when it carries another.
  */
-const versionPinned: Equals<StoredTestSession["version"], 4> = true;
+const versionPinned: Equals<StoredTestSession["version"], 5> = true;
 
 /**
  * The test the sessions below belong to, as `decodeSession` checks them against it: its outcomes
@@ -241,7 +241,7 @@ const fieldsOf = (failure: InvalidSession | SessionMismatch): readonly unknown[]
     : [failure._tag, failure.field, failure.found, failure.expected];
 
 describe("the plain type", () => {
-  it("is the Schema's type, and the stored form carries version 4", () => {
+  it("is the Schema's type, and the stored form carries version 5", () => {
     assert.isTrue(sessionPinned && versionPinned);
   });
 });
@@ -312,7 +312,7 @@ describe("encodeSession and decodeSession", () => {
         const stored = yield* Effect.fromResult(encodeSession(seeded));
         const [first, second] = stored.items;
 
-        assert.strictEqual(stored.version, 4);
+        assert.strictEqual(stored.version, 5);
         assert.strictEqual(stored.seed, "7");
 
         const count = first?.saved?.["COUNT"];
@@ -328,14 +328,14 @@ describe("encodeSession and decodeSession", () => {
   );
 
   it.effect(
-    "[T-1] [T-14] round-trip a session stored at version 4: the test's outcomes, the run count, the shuffle seed and an item's template defaults, each absent one left out of the stored form",
+    "[T-1] [T-14] round-trip a session stored at version 5: the test's outcomes, the run count, the shuffle seed and an item's template defaults, each absent one left out of the stored form",
     () =>
       Effect.gen(function* roundTripsProcessed() {
         const stored = yield* Effect.fromResult(encodeSession(processed));
         const bare = yield* Effect.fromResult(encodeSession(seeded));
         const [first, second] = stored.items;
 
-        assert.strictEqual(stored.version, 4);
+        assert.strictEqual(stored.version, 5);
         assert.strictEqual(stored.outcomeRuns, 2);
         assert.strictEqual(stored.shuffleSeed, "9");
         assert.strictEqual(stored.outcomes["TOTAL"]?.values[0]?.value, "9007199254740993");
@@ -392,7 +392,7 @@ describe("encodeSession and decodeSession", () => {
   );
 
   it.effect(
-    "[T-14] stored at version 4: an item's record keeps its record responses' values through the host",
+    "[T-14] stored at version 5: an item's record keeps its record responses' values through the host",
     () =>
       Effect.gen(function* roundTripsRecords() {
         const detail = {
@@ -413,7 +413,7 @@ describe("encodeSession and decodeSession", () => {
         };
         const stored = yield* Effect.fromResult(encodeSession(recording));
 
-        assert.strictEqual(stored.version, 4);
+        assert.strictEqual(stored.version, 5);
         assert.deepStrictEqual(
           stored.items[0]?.record.records["DETAIL"]?.fields.map((field) => field.value.value),
           ["-0.050", -0.05, "2"],
@@ -434,7 +434,7 @@ describe("encodeSession and decodeSession", () => {
 
 describe("decodeSession", () => {
   it.effect(
-    "[T-1] [T-14] [I-5] reads only a session stored at version 4: one stored at version 3, 2 or 1 is InvalidSession at stage decode, naming the version found",
+    "[T-1] [T-14] [I-5] reads only a session stored at version 5: one stored at version 3, 2 or 1 is InvalidSession at stage decode, naming the version found",
     () =>
       Effect.gen(function* refusesEarlierVersions() {
         const stored = yield* Effect.fromResult(encodeSession(processed));
@@ -467,7 +467,7 @@ describe("decodeSession", () => {
 
       assert.deepStrictEqual(
         Option.map(failureOf({ ...stored, items: [first, ...unversioned] }), fieldsOf),
-        Option.some(["InvalidSession", "decode", Option.some(4)]),
+        Option.some(["InvalidSession", "decode", Option.some(5)]),
       );
     }),
   );
@@ -489,7 +489,7 @@ describe("decodeSession", () => {
         ]) {
           assert.deepStrictEqual(
             Option.map(failureOf(malformed), fieldsOf),
-            Option.some(["InvalidSession", "decode", Option.some(4)]),
+            Option.some(["InvalidSession", "decode", Option.some(5)]),
             JSON.stringify(malformed),
           );
         }
@@ -542,9 +542,9 @@ const refusalOf = (
 
 /**
  * What {@link refusalOf} gives for a session `decodeSession` refuses against its test: an
- * InvalidSession at stage decode, naming the version 4 the session holds.
+ * InvalidSession at stage decode, naming the version 5 the session holds.
  */
-const refusedAgainstTest = Option.some(["InvalidSession", "decode", Option.some(4)]);
+const refusedAgainstTest = Option.some(["InvalidSession", "decode", Option.some(5)]);
 
 /**
  * Give {@link seeded}'s items with changes made to some of them.

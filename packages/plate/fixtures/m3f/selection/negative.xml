@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  identifier="negative-selection" title="A selection below zero">
+  <qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">
+    <qti-assessment-section identifier="drawn" title="Drawn section" visible="true">
+      <qti-selection select="-1"/>
+      <qti-assessment-item-ref identifier="a" href="choice.xml"/>
+      <qti-assessment-item-ref identifier="b" href="choice.xml" required="true"/>
+      <qti-assessment-item-ref identifier="c" href="choice.xml"/>
+      <qti-assessment-item-ref identifier="d" href="choice.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+</qti-assessment-test>
