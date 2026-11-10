@@ -8,6 +8,18 @@
  * the payload and the emitter meet the same decision. A typed value outside its lexical space is
  * the content refusal `value-type`, so a caller that builds an item stays total.
  *
+ * An author `data-*` attribute on a body element is carried as the element's attribute, unchanged
+ * (decision D24), and reaches the rendered HTML; plate reads none of them and attaches no
+ * behaviour. The drop is documented here and made once, upstream, by `check`'s E3 securing: a
+ * `data-*` name plate reserves (`reservedDataNames` and the `data-qti-` prefix in
+ * `#plate/vocabulary.ts`) and the XSD does not declare is removed and marked
+ * `attribute:<name>` before this builder reads the source, never refused, and it never overrides
+ * plate's own marker. The builder carries what E3 left, so it holds no list of reserved names of
+ * its own; the emitter drops a reserved name a payload carries all the same, as its own guard.
+ * `data-ssml`, `data-qti-suppress-tts` and `data-catalog-idref` are the XSD's own and keep their
+ * routes (decision D22 and {@link BodyElement.catalog}). The attributes of an interaction's root
+ * are W0-AU.2's, and a portable custom interaction keeps its route (`pci-03`).
+ *
  * @module
  */
 import { Array as Arr, Option, Result, pipe } from "effect";
@@ -387,10 +399,12 @@ export interface BodyAttribute {
 
 /**
  * An HTML element of the QTI namespace in the item body (I-8), with its attributes as written but
- * for the ones marked unsupported; or an element an interaction module owns inside its own content,
- * such as a Gap Match's `qti-gap`, which the body walk reads the same way where the module claims
- * it (`ReaderKit.nodes` in `#plate/interactions/contract.ts`) and the module's render writes
- * (`OwnedElements` in `#plate/emit/body.ts`), so the payload and the codec carry it as any element.
+ * for the ones marked unsupported, an author `data-*` among them (decision D24, which drops a name
+ * plate reserves upstream, in `check`); or an element an interaction module owns inside its own
+ * content, such as a Gap Match's `qti-gap`, which the body walk reads the same way where the module
+ * claims it (`ReaderKit.nodes` in `#plate/interactions/contract.ts`) and the module's render writes
+ * (`OwnedElements` in `#plate/emit/body.ts`), so the payload and the codec carry it as any
+ * element.
  */
 export interface BodyElement {
   readonly attributes: readonly BodyAttribute[];
@@ -1856,6 +1870,11 @@ const notice = (build: Build, feature: string, path: string): Result.Result<Unsu
 /**
  * Read a body element's attributes as written, without namespace declarations, attributes of
  * other namespaces, or the attributes a mark names.
+ *
+ * An author `data-*` is carried like any other attribute (decision D24). `check` has already
+ * removed the ones plate reserves, so this walk reads what E3 left and filters nothing by name; see
+ * the module's note on the drop. An interaction root's attributes are W0-AU.2's, and a portable
+ * custom interaction keeps its route (`pci-03`).
  *
  * `data-ssml` and `data-qti-suppress-tts` are carried, not marked (decision D22): QTI types
  * `data-ssml` as "the container for the equivalent JSON value that is to be passed to the SSML
