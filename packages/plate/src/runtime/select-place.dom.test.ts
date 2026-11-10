@@ -302,6 +302,59 @@ describe(server.browser, () => {
 
       assert.strictEqual(live.heard.at(-1), announcements.full("Gap 1"));
     });
+
+    it("[m3d-02] moveTo moves the cursor to the given target and announces it with its position", () => {
+      const live = recorder();
+      const gap4 = { identifier: "G4", label: "Gap 4" };
+      const targets: readonly Target[] = [gap1, gap2, gap3, gap4];
+      const machine = createSelectPlace<Token, Target>({
+        capacity: () => 1,
+        live,
+        targetLabel: (gap) => gap.label,
+        targets,
+        tokenLabel: (token) => token.label,
+      });
+
+      machine.pickUp(winter);
+      live.heard.length = 0;
+
+      const state = machine.moveTo(gap3);
+
+      assert.deepStrictEqual(state, {
+        cursor: 2,
+        phase: "holding",
+        placements: [],
+        token: winter,
+      });
+      assert.deepStrictEqual(live.heard, ["Gap 3, 3 of 4."]);
+      assert.deepStrictEqual(machine.place(), {
+        phase: "idle",
+        placements: [{ target: gap3, token: winter }],
+      });
+    });
+
+    it("[m3d-02] moveTo with nothing held, or to a target outside the machine, changes nothing and announces nothing", () => {
+      const { live, machine } = started();
+      const idle = machine.state();
+
+      assert.strictEqual(machine.moveTo(gap2), idle);
+      assert.deepStrictEqual(live.heard, []);
+
+      machine.pickUp(winter);
+      machine.move("first");
+      live.heard.length = 0;
+
+      const held = machine.state();
+
+      assert.strictEqual(machine.moveTo({ identifier: "G2", label: "Gap 2" }), held);
+      assert.deepStrictEqual(machine.state(), {
+        cursor: 0,
+        phase: "holding",
+        placements: [],
+        token: winter,
+      });
+      assert.deepStrictEqual(live.heard, []);
+    });
   });
 
   describe("the select-then-place announcements", () => {
