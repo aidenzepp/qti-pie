@@ -239,9 +239,9 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
     // so a `some` or `first` refusal stays under every rule its laws carry. The witness is the key
     // of the first stated row that breaks a law, or `unreported` for a foreign key and for a law no
     // stated row breaks as grizzle's host judges it (README "Errors and outcomes"). A law no row of
-    // the law table names still prints its text, and carries no rule. Naming the laws and
-    // explaining the refusal read the committed dictionary and the installed grammar's rows, so
-    // that step has a span of its own, which records the laws it named and their rules.
+    // the law table names still prints its text, and carries no rule. Naming the laws reads the
+    // committed dictionary alone, which compiles nothing, and that step has a span of its own,
+    // which records the laws it named and their rules.
     const { refused } = outcome;
     const refusal = yield* Effect.sync(() => refusalOf(refused, outcome.witness)).pipe(
       Effect.tap((built) =>
