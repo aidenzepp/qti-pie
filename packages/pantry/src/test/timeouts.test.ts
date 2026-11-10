@@ -134,10 +134,6 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: its 97-case exhaust ran 31.5 s at a load average of 21 to 34 in FIX-IDNCNAME's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
-    "pantry/src/import/refusal-ruling.oracle.test.ts",
-    "measurement owed: its 8-package exhaust, which compiles Qti's law model once, ran 137.4 s in the final run of 2026-11-08, whose load average was 4 to 47; its 1_800_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
     "pantry/src/qti/identity.copyback.test.ts",
     "measurement owed: its three exhausts, of 440, 616 and 5,896 cases, ran 10.4 s at the slowest in the final run of 2026-11-08, whose load average was 4 to 47; its 120_000 stays in place until it is remeasured at a load average of at least 60",
   ],

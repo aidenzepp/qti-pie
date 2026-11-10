@@ -171,7 +171,7 @@ export interface Census {
  * The PostgreSQL schema grizzle installs `Qti`'s tables, domains and functions in, its stored
  * level's (`#pantry/qti/base.ts`), as its printed SQL quotes it, escaped for a pattern.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a/packages/engine/src/program/names.ts#L78-L100
+ * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/engine/src/program/names.ts#L78-L100
  */
 const installed = `"${RegExp.escape(schemaNameOf(QtiBase))}"`;
 
@@ -240,7 +240,10 @@ const functionPattern = new RegExp(
  * A function a later migration drops, by name. Its name is a hash of its body, so a changed body is
  * a new function and the old one is dropped; the chain holds the new one only.
  */
-const droppedFunctionPattern = /^DROP FUNCTION "qti"\."(?<name>[^"]+)"/gmu;
+const droppedFunctionPattern = new RegExp(
+  String.raw`^DROP FUNCTION ${installed}\."(?<name>[^"]+)"`,
+  "gmu",
+);
 
 /**
  * A function's head, with its return type unqualified and unquoted (`"pg_catalog"."trigger"` reads
