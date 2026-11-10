@@ -43,6 +43,7 @@ import { readProgram } from "#pantry/import/program.ts";
 import { Flag, OperatorArity } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { DeclarationIdentifier } from "#pantry/qti/declarations.ts";
+import { ValueBase, ValueCardinality } from "#pantry/qti/expression-types.ts";
 import type {
   ExpressionAttribute,
   LiteralTyped,
@@ -338,7 +339,19 @@ const referenceFacts = (
     // the manifest, so its context is the empty union.
     { fact: { ...documentOf(reference), context: bitsText(Flag, []) }, relation: Document },
     { fact: reference, relation: VariableRef },
-    ...rows.held.map((fact) => ({ fact, relation: Expression })),
+    // So are the held expression's five accumulated operand folds, which the writer derives for
+    // no `Monoid.or` fold: it holds no operand, so each is its fold's start, the empty set.
+    ...rows.held.map((fact) => ({
+      fact: {
+        ...fact,
+        leadCardinalities: bitsText(ValueCardinality, []),
+        operandBaseTypes: bitsText(ValueBase, []),
+        operandCardinalities: bitsText(ValueCardinality, []),
+        tailBaseTypes: bitsText(ValueBase, []),
+        tailCardinalities: bitsText(ValueCardinality, []),
+      },
+      relation: Expression,
+    })),
     ...rows.declarations.map((fact) => ({ fact, relation: VariableRefDeclaration })),
     ...rows.tables.map((fact) => ({ fact, relation: VariableRefTable })),
   ];

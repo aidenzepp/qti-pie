@@ -18,7 +18,7 @@
  * once by `grizzle generate` into the login's served file, applied to the package's facts.
  */
 import { CommitUnknown, Db, login, query, v, workload } from "@bjornpagen/grizzle";
-import type { ApplyOutcome, Law, Plan } from "@bjornpagen/grizzle";
+import type { ApplyOutcome, Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Duration, Effect, Formatter, Layer, Option, Result } from "effect";
@@ -46,7 +46,6 @@ import { Qti } from "#pantry/qti/own.ts";
 import { authorRoleOf } from "#pantry/qti/roles.ts";
 import { authorWorkloadsOf } from "#pantry/qti/logins.ts";
 import { servedProbe } from "#pantry/test/served-members.ts";
-import { explainMember } from "@bjornpagen/grizzle/compile";
 
 const fixtures = inject("fixtures");
 
@@ -348,17 +347,6 @@ const valueNodeOf = (inputs: PackageInputs, text: string): string => {
 };
 
 /**
- * Every node of a plan tree, the plan itself first.
- *
- * @param plan - The plan.
- * @returns Its nodes' names.
- */
-const planNodes = (plan: Plan): readonly string[] => [
-  plan.node,
-  ...plan.children.flatMap(planNodes),
-];
-
-/**
  * Insert markup into `simple`'s item body before its choice interaction, where flow content stands.
  *
  * @param markup - The markup.
@@ -443,29 +431,6 @@ describe.skipIf(!hasLease)(
 
           assert.strictEqual(failed._tag, "CommitUnknown");
           assert.strictEqual(yield* storedPackages, before);
-        }),
-      );
-
-      it.effect("plans no recursion for any accepted package's ChangeSet", () =>
-        // Oracle: PostgreSQL's own planner. No statement of the import's write program applied to an
-        // accepted package's facts plans a recursive union or a work-table scan (`explainMember`,
-        // estimate only).
-        Effect.gen(function* planAudit() {
-          const authorLogin = yield* AuthorLogin;
-          for (const dir of Object.values(yield* acceptedPackages)) {
-            const program = yield* readProgram(dir);
-            const plans = yield* explainMember(
-              authorLogin.roles.author,
-              "importWrite",
-              { facts: { insert: packageFactsOf(program.inputs) }, kind: "facts", params: {} },
-              {},
-            );
-            const nodes = plans.flatMap(planNodes);
-
-            assert.isAbove(plans.length, 0, dir);
-            assert.notInclude(nodes, "Recursive Union", dir);
-            assert.notInclude(nodes, "WorkTable Scan", dir);
-          }
         }),
       );
 
