@@ -135,7 +135,9 @@ export type {
 
 export {
   checkInstance,
+  commentName,
   configure,
+  decodeComment,
   decodeIntent,
   encode,
   encodeIntent,
