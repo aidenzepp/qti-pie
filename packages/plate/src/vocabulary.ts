@@ -386,12 +386,9 @@ export const renders = {
       on: "body",
       when: { kind: "attribute", name: "data-catalog-idref" },
     },
-    {
-      feature: "data-qti-suppress-tts",
-      on: "body",
-      when: { kind: "attribute", name: "data-qti-suppress-tts" },
-    },
-    { feature: "data-ssml", on: "body", when: { kind: "attribute", name: "data-ssml" } },
+    // `data-ssml` and `data-qti-suppress-tts` are not marks (decision D22, 2026-11-10): the body
+    // walk keeps both on their elements and the emitter writes them through, so the browser's
+    // read-aloud engine reads the speech plan from the rendered HTML.
   ],
   notices: [
     // A pattern the translator takes is checked. One it refuses keeps this notice and the item stays
