@@ -41,9 +41,9 @@ const retryBound = Duration.seconds(30);
 const retryDelayCap = Duration.seconds(1);
 
 /**
- * The schedule the import retries `Db.open` and the `importWrite` apply on after a transient
- * refusal. Its default is the production schedule, so a caller provides nothing; a test provides
- * another through `Effect.provideService`, to give up sooner than the bound allows.
+ * The schedule the import retries the `importWrite` apply on after a transient refusal. Its
+ * default is the production schedule, so a caller provides nothing; a test provides another
+ * through `Effect.provideService`, to give up sooner than the bound allows.
  *
  * The default is bounded by elapsed time and not by count. A serialization failure never depends
  * on the call's inputs, and under contention PostgreSQL expects many attempts, so a count says
@@ -82,14 +82,12 @@ export const WrapApply = Context.Reference<
 
 /**
  * Whether the database refused an attempt for a reason outside the call's inputs, so the same call
- * may succeed again: grizzle's `TransientFailure`. An `OpenError` never is, since `Db.open`
- * contacts nothing of the database and refuses only what the host decides (grizzle `d994809c`).
- * Nothing else is retried.
+ * may succeed again: grizzle's `TransientFailure`. Nothing else is retried.
  *
  * @param error - The failure.
  * @returns Whether it is transient.
  */
-const isTransient = (error: ApplyError | OpenError): boolean => error._tag === "TransientFailure";
+const isTransient = (error: ApplyError): boolean => error._tag === "TransientFailure";
 
 /**
  * Run `attempt` again while the database calls the failure transient, on `schedule`. Each retry
@@ -102,7 +100,7 @@ const isTransient = (error: ApplyError | OpenError): boolean => error._tag === "
  * @param schedule - The retries' schedule.
  * @returns The first attempt that succeeds, or the last failure.
  */
-const retried = <A, E extends ApplyError | OpenError, R>(
+const retried = <A, E extends ApplyError, R>(
   name: string,
   attempt: Effect.Effect<A, E, R>,
   schedule: Schedule.Schedule<unknown>,
@@ -188,12 +186,14 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
  * Import the package at `dir`.
  *
  * Reads the package once, shreds the documents its manifest names, mints every id afresh and builds
- * every row, then applies them as one ChangeSet through the author role. `Db.open` and the
- * `importWrite` apply are retried on a transient refusal and on nothing else. When the commit's
- * outcome is unknown the package row is read back by its id ({@link settleCommitUnknown}): present,
- * the import was accepted; absent, the error is the answer; a read-back that fails is
- * `CommitUnresolved`. The same package imported twice is two packages, each with its own ids. The
- * retries run on {@link RetrySchedule}, and each attempt of the apply through {@link WrapApply}.
+ * every row, then applies them as one ChangeSet through the author role. The `importWrite` apply is
+ * retried on a transient refusal and on nothing else; `Db.open` is not, since it contacts nothing
+ * of the database and refuses only what the host decides (grizzle `d994809c`), never a transient
+ * failure. When the commit's outcome is unknown the package row is read back by its id
+ * ({@link settleCommitUnknown}): present, the import was accepted; absent, the error is the answer;
+ * a read-back that fails is `CommitUnresolved`. The same package imported twice is two packages,
+ * each with its own ids. The retries run on {@link RetrySchedule}, and each attempt of the apply
+ * through {@link WrapApply}.
  *
  * @param dir - The package directory or `.zip` file.
  * @returns The id of the committed package. Fails with `ImportRefused` naming the rules the package
@@ -215,7 +215,7 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   const program = yield* readProgram(dir);
   const { packageId } = program;
   const facts = packageFactsOf(program.inputs);
-  const db = yield* retried("Db.open", Db.open(login.roles.author, {}), schedule);
+  const db = yield* Db.open(login.roles.author, {});
   const [elapsed, outcome] = yield* retried(
     "importWrite",
     wrap(db.workload.importWrite.apply({ insert: facts }, {})),
@@ -240,8 +240,9 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
     // `some` or `first` refusal stays under every rule its laws carry. The witness is the key of
     // the first stated row that breaks a law, or `unreported` for a foreign key and for a law no
     // stated row breaks as grizzle's host judges it (README "Errors and outcomes"). A law no row of
-    // the law table names still prints its text, and carries no rule. The first refusal of a
-    // process compiles Qti's law model to name the laws, so the naming has a span of its own.
+    // the law table names still prints its text, and carries no rule. Naming the laws and
+    // explaining the refusal read the committed dictionary and the installed grammar's rows, so
+    // that step has a span of its own, which records the laws it named and their rules.
     const { refused } = outcome;
     const refusal = yield* Effect.sync(() => refusalOf(refused, outcome.witness, grammar)).pipe(
       Effect.tap((built) =>
