@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A hand-written AfA PNP 3.0 profile that assigns tactile graphics and names them in activate-at-initialization-set, so they are on at the start of the delivery. -->
+<access-for-all-pnp xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <tactile/>
+  <activate-at-initialization-set>
+    <tactile/>
+  </activate-at-initialization-set>
+</access-for-all-pnp>
