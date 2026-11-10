@@ -19,15 +19,24 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  * whose placed reference type is a query, `PlacedReferenceType`: its rule, "Condition type", reads
  * four tables, so four constraint triggers more, and its placed map responses' two containments
  * move no count; after `Entry`'s generated `digest`, whose column and text domain move none; and
- * after the legacy sweep's derived item ref target, `ItemRefTarget` a query where it was a table,
- * so one table fewer, and its rules and the untargeted item refs' thirteen constraint triggers
- * more; the heads of the assemblies a query, `HeadDocument`, where they were `Document.spliced`'s
- * count, its mirror with the roots six triggers more; and every test document placed, a containment
- * into the query `InstanceDocument` where it was a check of `TestDocument.instances`, two more; and
- * reading 104's names rules over queries, `ChoiceOrHottext`, `PlacedChoiceOrHottext` and
- * `UnclaimedName`, where `ChoiceVariableName` was a table of counts, so one table fewer and sixteen
- * triggers more), as a ratchet: a change that moves one fails here until the count is measured
- * again. A regeneration updates them here, and only here.
+ * after the legacy sweep's moves below), as a ratchet: a change that moves one fails here until the
+ * count is measured again. A regeneration updates them here, and only here.
+ *
+ * The legacy sweep's moves, each a stored copy turned into a query or a rule over one:
+ *
+ * - `ItemRefTarget` a query where it was a table: one table fewer, and its rules and the untargeted
+ *   item refs' thirteen constraint triggers more;
+ * - The heads of the assemblies a query, `HeadDocument`, where they were `Document.spliced`'s count:
+ *   its mirror with the roots six triggers more;
+ * - Every test document placed, a containment into the query `InstanceDocument` where it was a check
+ *   of `TestDocument.instances`: two more;
+ * - Reading 104's names, rules over the queries `ChoiceOrHottext`, `PlacedChoiceOrHottext` and
+ *   `UnclaimedName`, where `ChoiceVariableName` was a table of counts: one table fewer and sixteen
+ *   triggers more;
+ * - The manifest's identifier space a query, `ManifestIdSpace`, where it was a holder that mirrored
+ *   `ManifestId` and `ResourceId`: one table fewer and two triggers more.
+ *
+ * What each count counts:
  *
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
@@ -45,12 +54,12 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  */
 const measured = {
   constants: 119,
-  constraintTriggers: 133,
+  constraintTriggers: 135,
   live: 7,
   names: 48,
   nodeAxes: 5,
   nodeKeys: 48,
-  tables: 249,
+  tables: 248,
   validateFiles: 1,
 } as const;
 

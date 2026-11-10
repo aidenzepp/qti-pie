@@ -32,7 +32,7 @@ import {
   select,
   v,
 } from "@bjornpagen/grizzle";
-import { documentTypes } from "#pantry/grammar/install.ts";
+import { documentTypes, NodeKind } from "#pantry/grammar/install.ts";
 import type { QtiBase } from "#pantry/qti/base.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { DataSsmlMember, DataSsmlProperty } from "#pantry/qti/data-ssml.ts";
@@ -90,7 +90,13 @@ import {
 } from "#pantry/qti/metadata.ts";
 import { integerKeyPattern, itemPattern, MapKeyItems, MapKeyType } from "#pantry/qti/mapping.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
-import { ResourceDocument, ResourceHref, ResourceTyped } from "#pantry/qti/package.ts";
+import {
+  ManifestId,
+  ResourceDocument,
+  ResourceHref,
+  ResourceId,
+  ResourceTyped,
+} from "#pantry/qti/package.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
   AssembledName,
@@ -319,6 +325,47 @@ export const queriesOf = (base: QtiBase) => {
       ),
     ],
   } as const;
+
+  /**
+   * The identifiers of a package's manifest and its resources, one `xs:ID` space (IMS Content
+   * Packaging 1.2): each collapsed identifier beside the kind of element that writes it,
+   * `cp:manifest` ({@link ManifestId}) or `cp:resource` ({@link ResourceId}), the constant that
+   * tells the two rules apart. Two resources of one identifier are one row, which "DocumentId key"
+   * refuses over `ResourceId`; a resource of the manifest's identifier is a second row of its
+   * (package, identifier), which "Manifest id space" refuses. A side that writes no identifier has
+   * no row, so it is compared with nothing.
+   */
+  const ManifestIdSpace = derived(
+    "ManifestIdSpace",
+    query(base)
+      .rule((r) => {
+        const { identifier, package: pkg } = v(ManifestId, "manifest");
+
+        return r
+          .match(ManifestId, { identifier, package: pkg })
+          .find({ identifier, kind: NodeKind.handle("cp:manifest"), package: pkg });
+      })
+      .rule((r) => {
+        const { identifier, package: pkg } = v(ResourceId, "resource");
+
+        return r
+          .match(ResourceId, { identifier, package: pkg })
+          .find({ identifier, kind: NodeKind.handle("cp:resource"), package: pkg });
+      }),
+  );
+
+  /**
+   * The package overlays' rules over the identifier space, each named by its oracle law: P4
+   * `manifest-id-space` ("Manifest id space"), no resource's identifier is its manifest's.
+   */
+  const manifestQueryLawsByName = {
+    "Manifest id space": [key(on(ManifestIdSpace, "package", "identifier"))],
+  } as const;
+
+  /**
+   * {@link manifestQueryLawsByName}'s rules in one list.
+   */
+  const manifestQueryLaws = Object.values(manifestQueryLawsByName).flat();
 
   /**
    * {@link packageQueryLawsByName}'s rules in one list.
@@ -1482,6 +1529,7 @@ export const queriesOf = (base: QtiBase) => {
     LinkReading,
     ListedIdentifier,
     ListedTitle,
+    ManifestIdSpace,
     MapKeyDirectedPair,
     MapKeyFloat,
     MapKeyInteger,
@@ -1511,6 +1559,7 @@ export const queriesOf = (base: QtiBase) => {
     dataSsmlQueryLawsByName,
     testQueryLawsByName,
     interactionQueryLawsByName,
+    manifestQueryLawsByName,
   ] as const;
 
   /**
@@ -1529,7 +1578,8 @@ export const queriesOf = (base: QtiBase) => {
     | (typeof mappingQueryLaws)[number]
     | (typeof dataSsmlQueryLaws)[number]
     | (typeof testQueryLaws)[number]
-    | (typeof interactionQueryLaws)[number];
+    | (typeof interactionQueryLaws)[number]
+    | (typeof manifestQueryLaws)[number];
 
   /**
    * Every rule over a query, each domain's list spread in `lawsByName`'s order.
@@ -1543,6 +1593,7 @@ export const queriesOf = (base: QtiBase) => {
     ...dataSsmlQueryLaws,
     ...testQueryLaws,
     ...interactionQueryLaws,
+    ...manifestQueryLaws,
   ];
 
   return { laws, lawsByName, relations };

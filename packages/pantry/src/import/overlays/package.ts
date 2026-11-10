@@ -35,7 +35,6 @@ import type {
   File,
   FileHref,
   ManifestId,
-  ManifestIdSpace,
   Reference,
   ReferencePath,
   Resource,
@@ -72,7 +71,6 @@ export interface PackageRows {
   readonly File: ReadonlyMap<string, Addition<typeof File>>;
   readonly FileHref: ReadonlyMap<string, Addition<typeof FileHref>>;
   readonly ManifestId: ReadonlyMap<string, Addition<typeof ManifestId>>;
-  readonly ManifestIdSpace: ReadonlyMap<string, Addition<typeof ManifestIdSpace>>;
   readonly Resource: ReadonlyMap<string, Addition<typeof Resource>>;
   readonly ResourceFile: ReadonlyMap<string, Addition<typeof ResourceFile>>;
   readonly ResourceHref: ReadonlyMap<string, Addition<typeof ResourceHref>>;
@@ -93,7 +91,6 @@ export const noPackageRows: PackageRows = {
   File: new Map(),
   FileHref: new Map(),
   ManifestId: new Map(),
-  ManifestIdSpace: new Map(),
   Resource: new Map(),
   ResourceFile: new Map(),
   ResourceHref: new Map(),
@@ -738,8 +735,8 @@ const dependencyTargetsOf = (
  * Build the overlay rows of a package's manifest.
  *
  * An element's identifier is a row only where it is written: a `cp:manifest`'s is its
- * `ManifestId`, a `cp:resource`'s its `ResourceId`, each beside its row of the package's
- * identifier space (`ManifestIdSpace`). A row whose existence an attribute's copy proves is left
+ * `ManifestId`, a `cp:resource`'s its `ResourceId`, which the database's query `ManifestIdSpace`
+ * holds as one identifier space. A row whose existence an attribute's copy proves is left
  * out where the attribute is absent (a `cp:file`'s `href`, a `cp:dependency`'s `identifierref`),
  * and a resource's `href` and its `type`'s code are each a row only where it is written and, for
  * the code, spelled; AL3 refuses an absent required attribute. A dependency's `Dependency` is left
@@ -783,20 +780,12 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
   const dependencies = new Map<string, Addition<typeof Dependency>>();
   const files = new Map<string, Addition<typeof File>>();
   const fileHrefs = new Map<string, Addition<typeof FileHref>>();
-  const idSpace = new Map<string, Addition<typeof ManifestIdSpace>>();
   const manifests = new Map<string, Addition<typeof ManifestId>>();
   const resources = new Map<string, Addition<typeof Resource>>();
   const resourceFiles = new Map<string, Addition<typeof ResourceFile>>();
   const resourceHrefs = new Map<string, Addition<typeof ResourceHref>>();
   const resourceIds = new Map<string, Addition<typeof ResourceId>>();
   const resourceTypes = new Map<string, Addition<typeof ResourceTyped>>();
-  const spaceOf = (identifier: string, kind: "cp:manifest" | "cp:resource"): void => {
-    idSpace.set(headingKey([ids.package, identifier, kind]), {
-      identifier,
-      kind,
-      package: ids.package,
-    });
-  };
 
   for (const node of rows.nodes) {
     if (node.kind === "cp:manifest") {
@@ -809,7 +798,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
           package: ids.package,
           parent: node.parent,
         });
-        spaceOf(identifier, "cp:manifest");
       }
     }
 
@@ -818,7 +806,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
       for (const lexical of Option.toArray(valueOf(node, "identifier"))) {
         const identifier = collapse(lexical);
         resourceIds.set(node.id, { identifier, lexical, node: node.id, package: ids.package });
-        spaceOf(identifier, "cp:resource");
       }
 
       for (const typeLexical of Option.toArray(valueOf(node, "type"))) {
@@ -885,7 +872,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
     File: files,
     FileHref: fileHrefs,
     ManifestId: manifests,
-    ManifestIdSpace: idSpace,
     Resource: resources,
     ResourceFile: resourceFiles,
     ResourceHref: resourceHrefs,

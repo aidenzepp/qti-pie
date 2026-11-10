@@ -272,7 +272,6 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
     "File",
     "Dependency",
     "DependencyTarget",
-    "ManifestIdSpace",
     "ResourceHref",
   ),
   ...namedBy("E1 derived", "ResourceDocument", "ResourceTyped"),

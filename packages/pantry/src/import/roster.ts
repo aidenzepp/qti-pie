@@ -129,7 +129,6 @@ export const writtenRelations = {
   LookupValue: { name: "LookupValue" },
   LookupValueType: { name: "LookupValueType" },
   ManifestId: { name: "ManifestId" },
-  ManifestIdSpace: { name: "ManifestIdSpace" },
   MapKey: { name: "MapKey" },
   MapKeyItems: { name: "MapKeyItems" },
   MapKeyType: { name: "MapKeyType" },

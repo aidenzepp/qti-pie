@@ -146,10 +146,10 @@ export const entryFamily = ordered(on(Entry, "package", "at"), fin(Package, "ent
 /**
  * The manifest's identifier, keyed by the `cp:manifest` node, where the manifest writes one: its
  * {@link nodeRef} tuple, its package, its `identifier` as written (`lexical`, C18's copy) and that
- * form collapsed (`identifier`), its value, which {@link ManifestIdSpace} holds beside the
- * resources' identifiers. An `xs:ID` is a whiteSpace `collapse` type, so `" M"` and `M` are one
- * identifier (decision 457 (3); IMS Content Packaging 1.2, §6.11.4, leaves the value to the
- * binding).
+ * form collapsed (`identifier`), its value, which the query `ManifestIdSpace`
+ * (`#pantry/qti/queries.ts`) holds beside the resources' identifiers. An `xs:ID` is a whiteSpace
+ * `collapse` type, so `" M"` and `M` are one identifier (decision 457 (3); IMS Content Packaging
+ * 1.2, §6.11.4, leaves the value to the binding).
  */
 export const ManifestId = relation(
   "ManifestId",
@@ -200,27 +200,6 @@ export const ResourceId = relation(
   "ResourceId",
   { identifier: keyText, lexical: keyText, node: uuid, package: uuid },
   ["node"],
-);
-
-/**
- * The identifiers of a package's manifest and its resources, one `xs:ID` space (IMS Content
- * Packaging 1.2), a projection keyed by its heading: one row per collapsed identifier and kind of
- * element that writes it, `cp:manifest` ({@link ManifestId}) or `cp:resource` ({@link ResourceId}).
- * Two resources of one identifier are one row, which "DocumentId key" refuses over
- * {@link ResourceId}; a resource of the manifest's identifier is a second row of its (package,
- * identifier), which "Manifest id space" refuses. A side that writes no identifier has no row, so
- * it is compared with nothing.
- *
- * Its kind is `cp:manifest` or `cp:resource` by its containments and its key alone, with no check:
- * every check is named by an oracle law, and these rows are "Manifest overlay"'s, a law the law
- * oracle does not state (`hostlessLaws`). A row that is not the manifest's names a
- * {@link ResourceId}'s (package, identifier), that resource's own `cp:resource` row is in the space,
- * and the key over (package, identifier) leaves that row alone of its pair, so the row is it.
- */
-export const ManifestIdSpace = relation(
-  "ManifestIdSpace",
-  { identifier: keyText, kind: closedId(NodeKind), package: uuid },
-  ["package", "identifier", "kind"],
 );
 
 /**
@@ -654,22 +633,6 @@ const spelledTypes = select(Attribute, (a) =>
 );
 
 /**
- * The manifests' identifiers in their package's identifier space.
- */
-const manifestIdSpaces = select(ManifestIdSpace, (m) => m.eq(m.kind, "cp:manifest"));
-
-/**
- * The resources' identifiers in their package's identifier space.
- */
-const resourceIdSpaces = select(ManifestIdSpace, (m) => m.eq(m.kind, "cp:resource"));
-
-/**
- * The identifiers in their package's identifier space that are not its manifest's: each is a
- * resource's, so the space holds the manifest's and the resources' alone ({@link ManifestIdSpace}).
- */
-const nonManifestIdSpaces = select(ManifestIdSpace, (m) => m.ne(m.kind, "cp:manifest"));
-
-/**
  * The files the importer resolved in the package: each names an entry (`file-exists`). An external
  * href is left out (reading 35), and so is one that names its own document, the manifest.
  */
@@ -766,9 +729,10 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  *   listed under two document types, is refused here and never under `root-type-reverse`. The
  *   halves of P2 and P3 that read a typed href are rules over the query `TypedHref`, stated under
  *   the same names in `#pantry/qti/queries.ts`.
- * - **P4 `manifest-id-space` ("Manifest id space"):** no resource's identifier is its manifest's: the
- *   two are one (package, identifier) of {@link ManifestIdSpace}, each side's rows exactly its
- *   collapsed identifiers, and every row but the manifest's a resource's.
+ * - **P4 `manifest-id-space` ("Manifest id space"):** no resource's identifier is its manifest's: a
+ *   key over the query `ManifestIdSpace`, the union of the manifest's and the resources' collapsed
+ *   identifiers, each beside the kind of element that writes it, stated in
+ *   `#pantry/qti/queries.ts`.
  * - **C17 ("E1 derived"):** the manifest's and each resource's identifier, and each dependency's
  *   `identifierref`, is its written form collapsed (decision 457 (3)); a resource's type code is
  *   the one its `type` spells, where it spells one; a document a resource lists has its
@@ -912,7 +876,6 @@ export const packageLawsByName = {
       r.or(r.ne(r.kind, "xi:include"), r.not(Compute.matches(r.params, fragmentMark))),
     ),
   ],
-  "Manifest id space": [key(on(ManifestIdSpace, "package", "identifier"))],
   "Manifest overlay": [
     contained(
       on(ManifestId, "node", "document", "kind", "start", "nearest", "version", "parent"),
@@ -923,14 +886,6 @@ export const packageLawsByName = {
     contained(on(manifestIdentifiers, "node", "lexical"), on(ManifestId, "node", "lexical")),
     key(on(ManifestId, "package")),
     contained(
-      on(ManifestId, "package", "identifier"),
-      on(manifestIdSpaces, "package", "identifier"),
-    ),
-    contained(
-      on(manifestIdSpaces, "package", "identifier"),
-      on(ManifestId, "package", "identifier"),
-    ),
-    contained(
       on(Resource, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
@@ -938,14 +893,6 @@ export const packageLawsByName = {
     contained(on(Resource, "document", "package"), on(Document, "node", "package")),
     contained(on(resourceIdentifiers, "node", "lexical"), on(ResourceId, "node", "lexical")),
     contained(on(ResourceId, "node", "package"), on(Resource, "node", "package")),
-    contained(
-      on(ResourceId, "package", "identifier"),
-      on(resourceIdSpaces, "package", "identifier"),
-    ),
-    contained(
-      on(nonManifestIdSpaces, "package", "identifier"),
-      on(ResourceId, "package", "identifier"),
-    ),
     contained(on(resourceHrefs, "node", "lexical"), on(ResourceHref, "node", "href")),
     contained(on(ResourceHref, "node"), on(resourceHrefs, "node")),
     contained(on(ResourceHref, "node", "package"), on(Resource, "node", "package")),

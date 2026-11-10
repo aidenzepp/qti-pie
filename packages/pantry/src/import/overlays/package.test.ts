@@ -209,7 +209,6 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     File: new Map(),
     FileHref: new Map(),
     ManifestId: new Map(),
-    ManifestIdSpace: new Map(),
     Resource: new Map(),
     ResourceFile: new Map(),
     ResourceHref: new Map(),
@@ -262,11 +261,6 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
         package: pkg,
         parent: parent.id,
       });
-      expected.ManifestIdSpace.set(heading([pkg, identifier, kind]), {
-        identifier,
-        kind,
-        package: pkg,
-      });
     }
 
     if (kind === "cp:resource") {
@@ -285,11 +279,6 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
           identifier,
           lexical: identifierLexical,
           node: id,
-          package: pkg,
-        });
-        expected.ManifestIdSpace.set(heading([pkg, identifier, kind]), {
-          identifier,
-          kind,
           package: pkg,
         });
       }
@@ -366,7 +355,6 @@ const relationNames = [
   "File",
   "FileHref",
   "ManifestId",
-  "ManifestIdSpace",
   "Resource",
   "ResourceFile",
   "ResourceHref",

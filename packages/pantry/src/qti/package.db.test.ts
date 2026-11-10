@@ -159,20 +159,6 @@ const containedIn =
     law.kind === "contained" && law.from.relation === from && law.to.relation === to;
 
 /**
- * Pick a key by its relation and its fields, in order.
- *
- * @param relation - The key's relation.
- * @param fields - Its fields.
- * @returns The predicate.
- */
-const keyOn =
-  (relation: string, ...fields: readonly string[]) =>
-  (law: Law): boolean =>
-    law.kind === "key" &&
-    law.side.relation === relation &&
-    law.side.terms.map((term) => term.field).join(" ") === fields.join(" ");
-
-/**
  * A document row, its node and package stray, as a direct writer fills its table: every written
  * column, the manifest's when `documentType` is `manifest`, lawful on its own CHECKs (no
  * declaration, no site naming it, its context its own node), and its families' counts at 0.
@@ -344,49 +330,38 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
       }),
     );
 
-    it.effect(
-      "refuses a resource's row by its own laws: its code and its manifest's identifier",
-      () =>
-        // Oracle: PostgreSQL, judged as the rows are inserted: C17's "E1 derived", a CHECK on a
-        // resource's type (a code its lexical form does not spell), and P4 "Manifest id space",
-        // the key over the package's identifier space that a resource of the manifest's
-        // identifier breaks. Which types a version admits is the `type` attribute's value
-        // domain's (spec reading 67), a law of `Attribute`, so no law of the row reads it.
-        // Bound: one case per law, every other law of its rows kept.
-        Effect.gen(function* resourceChecks() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
-          const cases = [
-            {
-              facts: importFacts({
-                ResourceTyped: [
-                  {
-                    node: stray,
-                    package: stray,
-                    type: "imsqti_item_xmlv3p0",
-                    typeLexical: "webcontent",
-                  },
-                ],
-              }),
-              law: checkNamed("ResourceTyped", "E1_derived"),
-              name: "E1 derived",
-            },
-            {
-              facts: importFacts({
-                ManifestIdSpace: [
-                  { identifier: "m", kind: "cp:manifest", package: stray },
-                  { identifier: "m", kind: "cp:resource", package: stray },
-                ],
-              }),
-              law: keyOn("ManifestIdSpace", "package", "identifier"),
-              name: "manifest-id-space",
-            },
-          ];
-          for (const { facts, law, name } of cases) {
-            const outcome = yield* db.workload.importWrite.apply(facts, {});
+    it.effect("refuses a resource's row by its own law: its code", () =>
+      // Oracle: PostgreSQL, judged as the rows are inserted: C17's "E1 derived", a CHECK on a
+      // resource's type (a code its lexical form does not spell). P4 "Manifest id space", the
+      // key over the query `ManifestIdSpace` (`src/qti/queries.ts`), is a rule over a query the
+      // database judges at COMMIT, witnessed through the importer by a resource of the
+      // manifest's identifier (`#pantry/import/program.oracle.db.test.ts`). Which types a version admits is the `type` attribute's value
+      // domain's (spec reading 67), a law of `Attribute`, so no law of the row reads it.
+      // Bound: one case per law, every other law of its rows kept.
+      Effect.gen(function* resourceChecks() {
+        const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+        const cases = [
+          {
+            facts: importFacts({
+              ResourceTyped: [
+                {
+                  node: stray,
+                  package: stray,
+                  type: "imsqti_item_xmlv3p0",
+                  typeLexical: "webcontent",
+                },
+              ],
+            }),
+            law: checkNamed("ResourceTyped", "E1_derived"),
+            name: "E1 derived",
+          },
+        ];
+        for (const { facts, law, name } of cases) {
+          const outcome = yield* db.workload.importWrite.apply(facts, {});
 
-            assert.isTrue(rejectedBy(outcome, law), `${name}: ${outcome.kind}`);
-          }
-        }),
+          assert.isTrue(rejectedBy(outcome, law), `${name}: ${outcome.kind}`);
+        }
+      }),
     );
 
     it.effect(
