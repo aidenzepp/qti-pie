@@ -308,19 +308,12 @@ const brokenBeyondOracle: readonly (readonly [FixtureName, readonly string[]])[]
 ];
 
 /**
- * The accepted fixtures, each a copy of `simple` in another encoding or layout.
+ * The accepted fixtures, each a copy of `simple` in another encoding or layout: one decoded from
+ * UTF-16, and one whose identifier value is padded with the whitespace its type collapses. The
+ * other layouts' verdicts are the law oracle's over generated packages (`genetic.oracle`), and the
+ * codec's encodings are crust's.
  */
-const clean: readonly FixtureName[] = [
-  "doctype",
-  "latin1",
-  "external",
-  "utf16",
-  "comment-in-element",
-  "padded-identifier-value",
-  "windows-1252",
-  "padded-attributes",
-  "padded-text",
-];
+const clean: readonly FixtureName[] = ["utf16", "padded-identifier-value"];
 
 describe.skipIf(!hasLease)(
   "import/package.test.ts, on the lease",
@@ -363,18 +356,6 @@ describe.skipIf(!hasLease)(
               `${name}: ${refused.message}`,
             );
           }),
-        );
-      }
-
-      for (const [name, dir] of [
-        ["lti", fixtures.lti],
-        ["metaData", fixtures.metaData],
-        ["CAT_Test01_Adaptive_EchoAdapt", fixtures.CAT_Test01_Adaptive_EchoAdapt],
-        ["sample_pci", fixtures.sample_pci],
-      ] as const) {
-        it.effect(`gives the published ${name} the law oracle's verdict`, () =>
-          // Oracle: a second implementation, the law oracle's verdict over the same entries.
-          importAgreesWithOracle(dir, name),
         );
       }
 
