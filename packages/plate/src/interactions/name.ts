@@ -106,6 +106,11 @@ export const givesText = (nodes: readonly (BodyNode | PayloadNode)[]): boolean =
         // No content holds an interaction: the emitter refuses one there (`nestedInteraction`).
         return false;
       }
+      case "content": {
+        // A content module's node names no Control: its render decides what it writes, and the
+        // naming reads none of it.
+        return false;
+      }
       default: {
         // Only nodes that lost their type on the way here hold another kind.
         node satisfies never;
