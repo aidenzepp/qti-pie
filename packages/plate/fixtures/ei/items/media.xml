@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="ei-media" title="Dawn chorus" adaptive="false" time-dependent="false"
+  xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"/>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-media-interaction response-identifier="RESPONSE" autostart="false" min-plays="1" max-plays="2">
+      <qti-prompt>Listen to the recording of a dawn chorus. You may play it twice.</qti-prompt>
+      <audio controls="controls" preload="none">
+        <source src="media/dawn-chorus.mp3" type="audio/mpeg"/>
+        <track kind="captions" src="media/dawn-chorus.en.vtt" srclang="en"/>
+      </audio>
+    </qti-media-interaction>
+  </qti-item-body>
+</qti-assessment-item>
