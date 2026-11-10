@@ -1,6 +1,7 @@
 /**
- * The committed law-name dictionary (`#pantry/vocab/law-names.json`), held to the schema and the
- * committed migrations: the file is the one `#pantry/test/law-names.ts` generates, and the
+ * The committed law-name dictionary (`#pantry/vocab/law-names.json`), held to the schema: the file
+ * is the one `#pantry/test/law-names.ts` generates from the schema's naming and grizzle's
+ * `lawIdsOf`, and the
  * importer's namer over it (`#pantry/import/refusal.ts` `namerFrom`) names every law grizzle's
  * `lawsOf(Qti)` states, each as a refusal of it carries it (its id beside it), exactly as the
  * schema's own naming does (`#pantry/test/law-namer.ts`), so naming a refusal needs no schema.
@@ -49,10 +50,10 @@ const disagreements = (namer: LawNamer, laws: readonly Law[]): readonly string[]
 
 describe("the law-name dictionary", () => {
   it(
-    "is the one the schema and the committed migrations generate",
+    "is the one the schema generates",
     () => {
-      // Oracle: the generator over the schema's own naming and the ids the committed snapshot and
-      // served file give the laws. Bound: every law of lawsOf(Qti) the dictionary enters.
+      // Oracle: the generator over the schema's own naming and the ids grizzle's lawIdsOf(Qti)
+      // gives the laws. Bound: every law of lawIdsOf(Qti) the dictionary enters.
       assert.deepStrictEqual(
         committed,
         lawNamesOf(),

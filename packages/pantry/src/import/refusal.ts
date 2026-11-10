@@ -115,7 +115,7 @@ const LawEntry = Schema.Struct({ name: Schema.String });
  * law of the theory's and a text pattern's LawId, and a generated field's law's GeneratedLawId.
  *
  * `src/test/law-names.ts` generates it from the schema's own naming (`src/test/law-namer.ts`) and
- * the ids the committed migrations give each law, and `law-names.committed.test.ts` holds the
+ * the id grizzle's `lawIdsOf` gives each law, and `law-names.committed.test.ts` holds the
  * committed file to it and names every law of `lawsOf(Qti)` through both, so the dictionary is the
  * schema's naming, read without building the schema.
  */
@@ -166,8 +166,8 @@ export const namerFrom = (file: LawNamesFile): LawNamer => ({
 /**
  * The namer of the committed dictionary, `#pantry/vocab/law-names.json`, built once, when this
  * module loads. The file is trusted as its import types it: the typecheck holds its shape to
- * {@link LawNamesFile}, and `law-names.committed.test.ts` holds it to the one the schema and the
- * committed snapshot generate, so loading it decodes nothing, and a dictionary of a stale shape
+ * {@link LawNamesFile}, and `law-names.committed.test.ts` holds it to the one the schema
+ * generates, so loading it decodes nothing, and a dictionary of a stale shape
  * still loads for its generator to replace.
  */
 const committedNamer = namerFrom(lawNamesFile);

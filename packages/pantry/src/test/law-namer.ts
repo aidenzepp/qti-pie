@@ -8,8 +8,8 @@
  * model, which takes seconds, so production never runs it: `#pantry/import/refusal.ts` names a
  * refusal from the dictionary alone, a check by its name and every other law by its id.
  */
-import { constraintNamesOf, lawsByStatement, lawsOf, sameLaw } from "@bjornpagen/grizzle";
-import type { AnySchema, Law, RegexText, Statement } from "@bjornpagen/grizzle";
+import { constraintNamesOf, lawIdsOf, lawsByStatement, sameLaw } from "@bjornpagen/grizzle";
+import type { AnySchema, IdentifiedLaw, Law, RegexText, Statement } from "@bjornpagen/grizzle";
 import { Array as Arr, Function as Fn, Match, Option, pipe, Schema } from "effect";
 import { attributeLawsByName, EntityName, OpenLocal, Space } from "#pantry/qti/attributes.ts";
 import {
@@ -696,16 +696,30 @@ export const namerOf = Fn.memoize((schema: typeof Qti) => {
 });
 
 /**
+ * Every law a schema states with its id, as grizzle's `lawIdsOf` lists them: each law `lawsOf`
+ * lists, in its order, beside the id a refusal of it carries (grizzle `0b69d6c8`,
+ * `program/laws.ts`). The dictionary's generator (`#pantry/test/law-names.ts`) keys its names by
+ * these ids. `lawIdsOf` compiles the schema's law model, which takes seconds, so this is memoized
+ * by the schema's identity.
+ */
+export const schemaLawIdsOf = Fn.memoize((schema: AnySchema): readonly IdentifiedLaw[] =>
+  lawIdsOf(schema),
+);
+
+/**
  * Every law a schema states, as grizzle's `lawsOf` lists them, each once and in its canonical
  * order: the primary keys, the statements' laws, the contracts, the pattern laws and the generated
- * fields' laws (grizzle `3ba13e38`, `program/laws.ts`).
+ * fields' laws (grizzle `3ba13e38`, `program/laws.ts`). Read from {@link schemaLawIdsOf}, which
+ * lists the same laws in the same order from one derivation, so the list and the ids come from one
+ * compile of the law model.
  *
  * The importer reads none of it: `#pantry/import/refusal.ts` names a law from the committed
  * dictionary, by its own name or its id. It is the list the census and the tests read the table
- * against. `lawsOf` compiles
- * the schema's law model, which takes seconds, so this is memoized by the schema's identity.
+ * against.
  */
-export const schemaLawsOf = Fn.memoize((schema: AnySchema): readonly Law[] => lawsOf(schema));
+export const schemaLawsOf = Fn.memoize((schema: AnySchema): readonly Law[] =>
+  schemaLawIdsOf(schema).map(({ law }) => law),
+);
 
 /**
  * Read every law a schema states that is no check, each with its name, in `lawsOf`'s order: a law
