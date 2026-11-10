@@ -32,14 +32,17 @@ import type {
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { move, requestOf } from "#plate/session/navigate.ts";
 import type { MoveRefused, MoveRule, MoveStep } from "#plate/session/navigate.ts";
+import { alreadyExpired, expireScope } from "#plate/session/expire.ts";
+import type { UnknownTimedScope } from "#plate/session/expire.ts";
 import type { Intent, Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import { ItemNotInSession, current, valuesOf } from "#plate/session/start.ts";
 import type { InvalidTime, TestNotDeliverable } from "#plate/session/start.ts";
 import { deliveredItem, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
 import type { SubmissionFailure, SubmissionRefused } from "#plate/session/submit.ts";
-import type { FeatureRefusal } from "#plate/test-features/contract.ts";
+import type { FeatureRefusal, TimedScope } from "#plate/test-features/contract.ts";
 import { gatedBy } from "#plate/test-features/dispatch.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
+import type { TestFeatureTable } from "#plate/test-features/table.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 
 /**
@@ -188,7 +191,8 @@ export class StepResponseMisfit extends Data.TaggedError("StepResponseMisfit")<{
  * `TestNotDeliverable` for items that lack the one an intent reaches or hold another document's,
  * and `InvalidRecord` and `RecordMismatch` for an item record `score` cannot take.
  * `RecordRequired` is `score`'s, which a session never meets, since it always passes the item's
- * record.
+ * record. {@link UnknownTimedScope} is a test-feature module expiring a scope the test does not
+ * hold, a module defect.
  */
 export type AdvanceFailure =
   | EngineFailure
@@ -202,13 +206,18 @@ export type AdvanceFailure =
   | ResponsesRefused
   | StepResponseMisfit
   | TestNotDeliverable
-  | UnknownItemRef;
+  | UnknownItemRef
+  | UnknownTimedScope;
 
 /**
  * What every transition of one {@link advance} call works with.
  */
 interface Advancing {
   readonly configuration: Configuration;
+  /**
+   * The test-feature modules the gate consults: the table, or the one the caller handed in.
+   */
+  readonly features: TestFeatureTable;
   readonly items: ReadonlyMap<string, Accepted>;
   /**
    * Whether the current part is linear with individual submission: the one combination where
@@ -266,6 +275,23 @@ const closedRefusal = (intent: Intent): IntentRefused =>
   });
 
 /**
+ * Give the {@link IntentRefused} for a submission's refusal.
+ *
+ * @param intent The intent posted.
+ * @param refusal The submission's refusal.
+ * @returns The refusal, under the submission's rule.
+ */
+const refusedSubmission = (intent: Intent, refusal: SubmissionRefused): IntentRefused =>
+  new IntentRefused({
+    feature: Option.none(),
+    intent,
+    messages: refusal.messages,
+    refusal: Option.some(refusal),
+    rule: refusal.rule,
+    sequenceIndex: refusal.sequenceIndex,
+  });
+
+/**
  * Turn a submission's refusal into an {@link IntentRefused} for the intent posted, leaving its other
  * failures as they are, the `EngineFailure` of a run of the test's outcome processing among them.
  *
@@ -278,16 +304,29 @@ const asIntent = (
   result: Result.Result<TestSession, SubmissionFailure>,
 ): Result.Result<TestSession, AdvanceFailure> =>
   Result.mapError(result, (failure) =>
-    failure._tag === "SubmissionRefused"
-      ? new IntentRefused({
-          feature: Option.none(),
-          intent,
-          messages: failure.messages,
-          refusal: Option.some(failure),
-          rule: failure.rule,
-          sequenceIndex: failure.sequenceIndex,
-        })
-      : failure,
+    failure._tag === "SubmissionRefused" ? refusedSubmission(intent, failure) : failure,
+  );
+
+/**
+ * Carry out the expiry of a timed scope a module answered the intent with, in the intent's place.
+ *
+ * @param advancing What the call works with.
+ * @param session The session, its step not yet saved.
+ * @param intent The intent posted, which the expiry answers and which is not carried out.
+ * @param scope The scope whose time has run out.
+ * @returns The session after the expiry, or an {@link AdvanceFailure}: `expireScope` refuses
+ *   nothing, so no {@link IntentRefused} arises here.
+ */
+const expired = (
+  advancing: Advancing,
+  session: TestSession,
+  intent: Intent,
+  scope: TimedScope,
+): Result.Result<TestSession, AdvanceFailure> =>
+  Result.mapError(
+    expireScope(advancing.test, advancing.items, session, intent, scope, advancing.now),
+    (failure) =>
+      failure._tag === "SubmissionRefused" ? refusedSubmission(intent, failure) : failure,
   );
 
 /**
@@ -501,46 +540,63 @@ const fittingStep = (
   });
 
 /**
- * Ask the test-feature modules what they do with a submission or an end of part, before the
- * transition that owns it runs: a module's refusal is the rule `feature`. A move is not asked
- * here, since `moveTargets` asks for it; every stub lets every intent through.
+ * What the gate decides before a step's transition runs: the step is refused, or a timed scope
+ * expires in its place.
+ */
+type Gating =
+  | { readonly kind: "expire"; readonly scope: TimedScope }
+  | { readonly kind: "refuse"; readonly refused: IntentRefused };
+
+/**
+ * Ask the test-feature modules what they do with an intent, before the transition that owns it
+ * runs: a module's refusal of a submission or an end of part is the rule `feature`, and a module's
+ * `expire` of any intent, a move included, is the scope to expire in the intent's place, unless the
+ * session already records that scope as expired, when the intent goes through to its own rules. A
+ * move's refusal and a move's target are not taken here, since `moveTargets` takes them as the
+ * move is made, and a submission's target is dropped; every stub lets every intent through.
  *
  * @param advancing What the call works with.
  * @param session The session.
  * @param intent The intent.
- * @param sequenceIndex The current item's sequence index, which the refusal names.
- * @returns The refusal, none when no module refuses the intent.
+ * @param sequenceIndex The current item's sequence index, which a refusal names.
+ * @returns The refusal or the expiry, none when no module answers the intent with either.
  */
 const gatedIntent = (
   advancing: Advancing,
   session: TestSession,
   intent: Intent,
   sequenceIndex: number,
-): Option.Option<IntentRefused> => {
-  if (intent.kind === "go" || intent.kind === "next" || intent.kind === "previous") {
-    return Option.none();
-  }
+): Option.Option<Gating> => {
+  const moving = intent.kind === "go" || intent.kind === "next" || intent.kind === "previous";
 
   return Option.flatMap(
-    gatedBy(testFeatures, {
+    gatedBy(advancing.features, {
       intent,
       now: Option.some(advancing.now),
       session,
       test: advancing.test.test,
     }),
-    (gated) =>
-      gated.kind === "refused"
-        ? Option.some(
-            new IntentRefused({
-              feature: Option.some(gated.refusal),
-              intent,
-              messages: [],
-              refusal: Option.none(),
-              rule: "feature",
-              sequenceIndex: Option.some(sequenceIndex),
-            }),
-          )
-        : Option.none(),
+    (gated): Option.Option<Gating> => {
+      if (gated.kind === "expire") {
+        return alreadyExpired(session, gated.scope) ? Option.none() : Option.some(gated);
+      }
+
+      if (gated.kind === "refused" && !moving) {
+        return Option.some({
+          kind: "refuse",
+          refused: new IntentRefused({
+            feature: Option.some(gated.refusal),
+            intent,
+            messages: [],
+            refusal: Option.none(),
+            rule: "feature",
+            sequenceIndex: Option.some(sequenceIndex),
+          }),
+        });
+      }
+
+      return Option.none();
+    },
   );
 };
 
@@ -615,6 +671,14 @@ const carriedOut = (
  * accepts now, given responses that pass the item's `allow-skipping`, `validate-responses` and
  * `score`'s own checks.
  *
+ * Before the intent's transition, the test-feature modules are asked what they do with it. A
+ * module that answers `expire` names a timed scope whose time has run out, and the expiry is
+ * carried out in the intent's place (`expireScope`): the step's responses are not saved, each
+ * presented item of the scope is processed with the responses it holds, every item of the scope is
+ * locked, the scope is left as its kind asks, and it is appended to the session's `expired`. The
+ * returned session is the one after the expiry; a host that compares `expired` across the call
+ * learns of it.
+ *
  * @example
  *   advance(test, items, session, { intent: { kind: "next" }, responses }, configuration, {
  *     now: new Date(),
@@ -627,6 +691,8 @@ const carriedOut = (
  *   open item.
  * @param configuration The host's configuration, whose locale a submission's messages take.
  * @param context The transition.
+ * @param context.features The test-feature modules the gate consults, the table by default; a
+ *   test hands in one holding a module that has landed.
  * @param context.now When it happens.
  * @returns The session after the intent; {@link StepResponseMisfit} when a response the step
  *   carries does not fit the current item; {@link IntentRefused} when the test's rules forbid it
@@ -639,7 +705,7 @@ export const advance = (
   session: TestSession,
   step: Step,
   configuration: Configuration,
-  context: { readonly now: Date },
+  context: { readonly features?: TestFeatureTable; readonly now: Date },
 ): Result.Result<TestSession, AdvanceFailure> => {
   if (session.status === "closed") {
     return Result.fail(closedRefusal(step.intent));
@@ -656,6 +722,7 @@ export const advance = (
       const carried: Step = shown.disabled ? { intent } : step;
       const advancing: Advancing = {
         configuration,
+        features: context.features ?? testFeatures,
         items,
         linearIndividual: shown.navigation === "linear" && shown.submission === "individual",
         linearSimultaneous: shown.navigation === "linear" && shown.submission === "simultaneous",
@@ -666,7 +733,10 @@ export const advance = (
       return Result.flatMap(fittingStep(items, session, carried), (checked) =>
         Option.match(gatedIntent(advancing, session, checked.intent, shown.sequenceIndex), {
           onNone: () => carriedOut(advancing, session, checked, shown.sequenceIndex),
-          onSome: (refused) => Result.fail(refused),
+          onSome: (gating) =>
+            gating.kind === "refuse"
+              ? Result.fail(gating.refused)
+              : expired(advancing, session, checked.intent, gating.scope),
         }),
       );
     },
