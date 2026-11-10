@@ -12,12 +12,13 @@
  * with its children already emitted (`RenderInteraction.containers`), and each notice `check`
  * handed in becomes the Notice part, a `span` at a phrasing position and a `div` where the parent
  * takes flow content. An element that references a catalog (`ElementPayload.catalog`) is handed,
- * once emitted, to the render function's attachment hook (`RenderInteraction.attach`), whose nodes
- * follow it as its next siblings; the hook answers nothing while no catalog support is active, and
- * the element then renders as any other. An element that names a stimulus
- * (`ElementPayload.stimulus`) is handed, once emitted, to the dock hook (`RenderInteraction.dock`),
- * whose nodes replace its content; the hook answers none while no module declares `dock`, and the
- * element then renders as any other.
+ * once emitted, to the render function's attachment hook (`RenderInteraction.attach`), whose
+ * answer ({@link AttachAnswer}) adds attributes to the element and places nodes right after it or
+ * after the nearest enclosing element at a flow position; the hook answers nothing while no
+ * catalog support is active, and the element then renders as any other. An element that names a
+ * stimulus (`ElementPayload.stimulus`) is handed, once emitted, to the dock hook
+ * (`RenderInteraction.dock`), whose nodes replace its content; the hook answers none while no
+ * module declares `dock`, and the element then renders as any other.
  *
  * The emitter value-imports no interaction module and nothing that reaches one, neither
  * `#plate/model/interactions.ts` nor `#plate/emit/item.ts` (which reaches them through the
@@ -37,6 +38,13 @@
  * dropped. Names match exactly, so `A` or `HREF` is not `a` or `href`. Valid content loses
  * nothing, since `check` refuses or strips everything outside the subset first.
  *
+ * One attribute the XSD does not declare is emitted: an author `data-*` that plate does not
+ * reserve ({@link isAuthorData}, decision D24), written unchanged on any element of the subset.
+ * Plate reads none of them and attaches no behaviour; they are inert in the HTML until the host's
+ * own CSS or script reads them. A reserved name (`data-slot`, `data-mode`, anything under
+ * `data-qti-`, any `data-*` name plate itself writes) is dropped here as it is by `check`, so an
+ * authored attribute never overrides plate's marker.
+ *
  * @module
  * @see {@link Payload} for what the walk reads.
  */
@@ -47,6 +55,7 @@ import {
   authoredId,
   authoredIdrefs,
   headings,
+  isAuthorData,
   positionUnder,
   rowFor,
   scopedId,
@@ -146,8 +155,8 @@ export interface ReferencingElement {
    * (`<instance>-catalog-<idref>-<n>` for a catalog reference and `<instance>-stimulus-<idref>-<n>`
    * for a stimulus, through {@link scopedId}, `n` counting from 0 the id-less elements of the walk
    * that name the same one). A minted id is written on the element only when the hook answers at
-   * least one node, so a hook's nodes can point at the element and an empty answer changes no
-   * HTML.
+   * least one node or attribute, so a hook's nodes can point at the element and an empty answer
+   * changes no HTML.
    */
   readonly id: string;
   /**
@@ -173,17 +182,38 @@ export type DockStimulus = (
 ) => Result.Result<Option.Option<readonly Node[]>, PartSwapRefused>;
 
 /**
+ * What {@link AttachCatalog} answers for a referencing element: attributes for the element, nodes
+ * to place beside it, and where they go. The empty answer, no attributes and no nodes, changes no
+ * HTML, whatever its `place`.
+ */
+export interface AttachAnswer {
+  /**
+   * Attributes merged onto the referencing element; its own win on a clash, `id` stays the
+   * authored or minted one.
+   */
+  readonly attributes: Attributes;
+  readonly nodes: readonly Node[];
+  /**
+   * Where the nodes go: right after the element, or after the nearest enclosing element at a flow
+   * position. An element that stands at a flow position itself is that element, so the nodes
+   * follow it either way; for one at a phrasing position, such as a `span` inside a `p`, the nodes
+   * follow the `p`, where a `details` may stand.
+   */
+  readonly place: "after-block" | "after-element";
+}
+
+/**
  * Attach a catalog presenter's nodes beside a body element that references a catalog: the catalog
  * module's answer, which presents the active cards of the catalog for the supports the host
  * enabled.
  *
  * @param reference The referencing element: the catalog's idref and the element's id.
- * @returns The nodes to place right after the element, empty to attach nothing, or the refusal of
- *   a part swap.
+ * @returns The answer ({@link AttachAnswer}), empty to attach nothing, or the refusal of a part
+ *   swap.
  */
 export type AttachCatalog = (
   reference: ReferencingElement,
-) => Result.Result<readonly Node[], PartSwapRefused>;
+) => Result.Result<AttachAnswer, PartSwapRefused>;
 
 /**
  * Render one interaction of the body: the interaction module's render function, with the payload
@@ -201,10 +231,13 @@ export interface RenderInteraction {
    * Attach a catalog presenter's nodes to an element that references a catalog
    * ({@link AttachCatalog}). The walk calls it once for each body element it emits whose payload
    * carries a `catalog` idref, after the element and its subtree are emitted, with the idref and
-   * the element's id ({@link ReferencingElement}), and places the nodes it answers right after
-   * the element, as its following siblings. An empty answer attaches nothing and leaves the
-   * element as emitted, with no minted id: the default `render` sets, so the HTML is unchanged
-   * while no catalog support is active. A render function without it attaches nothing either.
+   * the element's id ({@link ReferencingElement}). It merges the answer's attributes onto the
+   * element (the element's own win on a clash, and `id` stays the authored or minted one), places
+   * `after-element` nodes right after the element, as its following siblings, and `after-block`
+   * nodes after the nearest enclosing element at a flow position ({@link AttachAnswer}). An empty
+   * answer attaches nothing and leaves the element as emitted, with no minted id: what `render`'s
+   * renderer answers while no item-placed module attaches, so the HTML is unchanged while no
+   * catalog support is active. A render function without it attaches nothing either.
    */
   readonly attach?: AttachCatalog;
   /**
@@ -634,14 +667,22 @@ export const htmlSubset: ReadonlyMap<string, ReadonlySet<string>> = new Map(
 
 /**
  * Tell whether the second line admits an attribute on an element: the XSD declares it there by
- * name, or it is ARIA's shortcuts attribute on an element that declares the misspelling.
+ * name, it is ARIA's shortcuts attribute on an element that declares the misspelling, or it is an
+ * author `data-*` plate does not reserve ({@link isAuthorData}, decision D24).
+ *
+ * The declared set is asked first, so a name the XSD declares (`data-ssml`,
+ * `data-qti-suppress-tts`, `data-catalog-idref`, decision D22) passes though plate reserves its
+ * prefix; a reserved name the XSD does not declare, and a name the reading's form refuses, is
+ * dropped, so the serialiser never meets one.
  *
  * @param declared The attributes the XSD declares on the element.
  * @param name The attribute's name as the payload holds it.
  * @returns Whether the attribute is emitted.
  */
 const admits = (declared: ReadonlySet<string>, name: string): boolean =>
-  declared.has(name) || (name === keyShortcuts && declared.has(keyShortcutsMisspelt));
+  declared.has(name) ||
+  (name === keyShortcuts && declared.has(keyShortcutsMisspelt)) ||
+  isAuthorData(name);
 
 /**
  * Text that holds whitespace only, which the HTML parser keeps in place between table rows.
@@ -654,6 +695,15 @@ const blank = /^[\t\n\f\r ]*$/u;
  */
 interface Walk {
   readonly assetBase: string;
+  /**
+   * The nodes an attach answer places after the nearest enclosing element at a flow position
+   * (`after-block` in {@link AttachAnswer}), waiting for that element's emission to flush them
+   * after it. Every element at a flow position starts a queue for the walk below it
+   * ({@link below}), so the queue a phrasing-position element pushes to is its nearest flow
+   * ancestor's; the walk's own queue, which only a walk started at a phrasing position
+   * ({@link emitNodes}) fills, is flushed after its nodes.
+   */
+  readonly deferred: Node[];
   /**
    * The amount added to an authored heading's level, from {@link headingOffsetOf}.
    */
@@ -790,11 +840,12 @@ const attributeFor = (
 /**
  * Give an authored element's attributes as they render.
  *
- * Only the attributes the second line admits are emitted, so an event handler, `style`, an
- * authored `data-slot` or `data-mode`, and any other undeclared name is dropped; `check` already
- * removes and marks every attribute only the XSD's wildcard admits, so this drop is the emitter's
- * own guard. When the author wrote both `lang` and `xml:lang`, `xml:lang` wins, as it does in HTML,
- * and when they wrote both shortcut spellings, ARIA's wins.
+ * Only the attributes the second line admits are emitted, so an event handler, `style`, an authored
+ * `data-slot` or `data-mode` (any name `isReservedData` holds), and any other undeclared name is
+ * dropped, while an author `data-*` plate does not reserve is written unchanged; `check` already
+ * removes and marks every attribute only the XSD's wildcard admits and plate does not keep, so this
+ * drop is the emitter's own guard. When the author wrote both `lang` and `xml:lang`, `xml:lang`
+ * wins, as it does in HTML, and when they wrote both shortcut spellings, ARIA's wins.
  *
  * @param element The element as the model kept it.
  * @param declared The attributes the XSD declares on the element, from {@link htmlSubset}.
@@ -897,7 +948,9 @@ const noticeOf = (notice: NoticePayload, walk: Walk): Result.Result<Element, Par
 };
 
 /**
- * Give the walk below an authored element: its children stand where the element's content stands.
+ * Give the walk below an authored element: its children stand where the element's content stands,
+ * and, when the element stands at a flow position, they push the nodes they defer to a queue of
+ * its own, which {@link admittedElement} flushes after the element.
  *
  * @param walk The walk at the element.
  * @param tag The element's authored local name.
@@ -905,6 +958,7 @@ const noticeOf = (notice: NoticePayload, walk: Walk): Result.Result<Element, Par
  */
 const below = (walk: Walk, tag: string): Walk => ({
   ...walk,
+  deferred: walk.position === "flow" ? [] : walk.deferred,
   phrasingOnly: walk.phrasingOnly || tag === "p",
   position: positionUnder(tag, walk.phrasingOnly),
 });
@@ -932,18 +986,19 @@ const nodesOf = (
  *
  * @param element The element's payload.
  * @param declared The attributes the XSD declares on the element, from {@link htmlSubset}.
- * @param walk What the walk carries.
+ * @param inner The walk below the element ({@link below}), which its children are emitted with;
+ *   its instance, asset base and heading offset are the element's own.
  * @returns The element as it renders, or the first refusal of a part swap.
  */
 const elementOf = (
   element: ElementPayload,
   declared: ReadonlySet<string>,
-  walk: Walk,
+  inner: Walk,
 ): Result.Result<Element, PartSwapRefused> =>
-  Result.map(nodesOf(element.children, below(walk, element.tag)), (children) =>
+  Result.map(nodesOf(element.children, inner), (children) =>
     h(
-      tagFor(element.tag, walk.headingOffset),
-      attributesFor(element, declared, walk),
+      tagFor(element.tag, inner.headingOffset),
+      attributesFor(element, declared, inner),
       element.tag === "table" ? withBodies(children) : children,
     ),
   );
@@ -997,17 +1052,48 @@ const handedId = (element: Element, kind: Named, idref: string, walk: Walk) => {
 };
 
 /**
- * Place a catalog presenter's nodes after an emitted element that references a catalog, through
- * the render function's `attach`.
+ * Tell whether an attach answer changes no HTML: it holds no node and no attribute.
+ *
+ * @param answer The answer.
+ * @returns Whether it is empty.
+ */
+const attachesNothing = (answer: AttachAnswer): boolean =>
+  answer.nodes.length === 0 && Object.keys(answer.attributes).length === 0;
+
+/**
+ * Give a referencing element's attributes with an answer's merged on: the element's own first, as
+ * emitted, then each of the answer's the element lacks. The element's own win on a clash, and `id`
+ * is the one handed to the hook, authored or minted, whatever the answer says.
+ *
+ * @param element The element as emitted.
+ * @param answered The answer's attributes.
+ * @param id The element's id as handed to the hook.
+ * @returns The merged attributes.
+ */
+const attributesWith = (element: Element, answered: Attributes, id: string): Attributes => {
+  const own: Attributes = { ...element.attrs, id };
+
+  return {
+    ...own,
+    ...Object.fromEntries(Object.entries(answered).filter(([name]) => !Object.hasOwn(own, name))),
+  };
+};
+
+/**
+ * Attach what the render function's `attach` answers for an emitted element that references a
+ * catalog ({@link AttachAnswer}).
  *
  * The element's own emitted id is handed when it has one; otherwise an id is minted
- * ({@link mintedId}) and written on the element only when the hook answers at least one node, so
- * an empty answer leaves the element exactly as emitted.
+ * ({@link mintedId}) and written on the element only when the answer holds a node or an attribute,
+ * so an empty answer leaves the element exactly as emitted. `after-element` nodes follow the
+ * element; `after-block` nodes do too when the element stands at a flow position, and otherwise
+ * wait in the walk's queue for its nearest flow ancestor ({@link Walk.deferred}).
  *
  * @param element The element as emitted.
  * @param idref The catalog it references.
- * @param walk What the walk carries.
- * @returns The element followed by the attached nodes, or the first refusal of a part swap.
+ * @param walk What the walk carries, at the element.
+ * @returns The element with the answer's attributes, followed by the nodes placed after it, or
+ *   the first refusal of a part swap.
  */
 const attached = (
   element: Element,
@@ -1017,13 +1103,29 @@ const attached = (
   Option.match(Option.fromUndefinedOr(walk.renderInteraction.attach), {
     onNone: () => Result.succeed([element]),
     onSome: (attach) => {
-      const { authored, id } = handedId(element, "catalog", idref, walk);
+      const { id } = handedId(element, "catalog", idref, walk);
 
-      return Result.map(attach({ id, idref }), (nodes) =>
-        nodes.length === 0 || authored
-          ? [element, ...nodes]
-          : [h(element.tag, { ...element.attrs, id }, element.children), ...nodes],
-      );
+      return Result.map(attach({ id, idref }), (answer): readonly Node[] => {
+        if (attachesNothing(answer)) {
+          return [element];
+        }
+
+        const referencing = h(
+          element.tag,
+          attributesWith(element, answer.attributes, id),
+          element.children,
+        );
+
+        if (answer.place === "after-element" || walk.position === "flow") {
+          return [referencing, ...answer.nodes];
+        }
+
+        for (const node of answer.nodes) {
+          walk.deferred.push(node);
+        }
+
+        return [referencing];
+      });
     },
   });
 
@@ -1062,34 +1164,41 @@ const docked = (
 
 /**
  * Emit an authored HTML element the second line admits: with a module's nodes docked in place of
- * its content when it names a stimulus, and with the nodes a catalog presenter attaches after it
- * when it references a catalog.
+ * its content when it names a stimulus, with what a catalog presenter attaches after it when it
+ * references a catalog, and then the nodes its subtree deferred to it when it stands at a flow
+ * position.
  *
  * @param element The element's payload.
  * @param declared The attributes the XSD declares on the element, from {@link htmlSubset}.
  * @param walk What the walk carries.
  * @returns The element, its content docked when it names a stimulus ({@link docked}), followed by
- *   the attached nodes when it references a catalog ({@link attached}), or the first refusal of a
- *   part swap.
+ *   the attached nodes when it references a catalog ({@link attached}) and by the nodes deferred
+ *   to it ({@link Walk.deferred}), or the first refusal of a part swap.
  */
 const admittedElement = (
   element: ElementPayload,
   declared: ReadonlySet<string>,
   walk: Walk,
-): Result.Result<readonly Node[], PartSwapRefused> =>
-  Result.flatMap(elementOf(element, declared, walk), (emitted) =>
-    Result.flatMap(
-      Option.match(Option.fromUndefinedOr(element.stimulus), {
-        onNone: () => Result.succeed(emitted),
-        onSome: (idref) => docked(emitted, idref, walk),
-      }),
-      (hosting) =>
-        Option.match(Option.fromUndefinedOr(element.catalog), {
-          onNone: () => Result.succeed([hosting]),
-          onSome: (idref) => attached(hosting, idref, walk),
+): Result.Result<readonly Node[], PartSwapRefused> => {
+  const inner = below(walk, element.tag);
+
+  return Result.map(
+    Result.flatMap(elementOf(element, declared, inner), (emitted) =>
+      Result.flatMap(
+        Option.match(Option.fromUndefinedOr(element.stimulus), {
+          onNone: () => Result.succeed(emitted),
+          onSome: (idref) => docked(emitted, idref, walk),
         }),
+        (hosting) =>
+          Option.match(Option.fromUndefinedOr(element.catalog), {
+            onNone: () => Result.succeed([hosting]),
+            onSome: (idref) => attached(hosting, idref, walk),
+          }),
+      ),
     ),
+    (nodes) => (inner.deferred === walk.deferred ? nodes : [...nodes, ...inner.deferred]),
   );
+};
 
 /**
  * Emit a module's container: its children first, through the walk, then the container around their
@@ -1390,6 +1499,7 @@ const walkOf = (
   position: Position,
 ): Walk => ({
   assetBase: state.assetBase,
+  deferred: [],
   headingOffset: headingOffsetOf(
     payload.body,
     state.headingLevel,
@@ -1406,11 +1516,28 @@ const walkOf = (
 });
 
 /**
+ * Emit the nodes a walk starts at, then the nodes attach answers deferred to the walk itself,
+ * which no enclosing element of the walk could take ({@link Walk.deferred}).
+ *
+ * @param nodes The payload nodes.
+ * @param walk The walk, freshly started ({@link walkOf}).
+ * @returns The emitted nodes, then the deferred ones, or the first refusal of a part swap.
+ */
+const walked = (
+  nodes: readonly PayloadNode[],
+  walk: Walk,
+): Result.Result<readonly Node[], PartSwapRefused> =>
+  Result.map(nodesOf(nodes, walk), (emitted) =>
+    walk.deferred.length === 0 ? emitted : [...emitted, ...walk.deferred],
+  );
+
+/**
  * Emit payload nodes from anywhere in the body, such as a Prompt's or a choice's content, with the
  * same id scoping, heading shift, URLs and Notice part as the body itself.
  *
  * The nodes stand at a phrasing position, so a Notice among them, or anywhere below them, is a
- * `span`: content inside a Label or a `legend` holds phrasing content only.
+ * `span`: content inside a Label or a `legend` holds phrasing content only. Nodes an attach answer
+ * places after the block stand after the emitted nodes when no element among them takes them.
  *
  * @param nodes The payload nodes.
  * @param payload The payload, which gives the item instance key.
@@ -1424,7 +1551,7 @@ export const emitNodes = (
   state: EmitState,
   renderInteraction: RenderInteraction,
 ): Result.Result<readonly Node[], PartSwapRefused> =>
-  nodesOf(nodes, walkOf(payload, state, renderInteraction, "phrasing"));
+  walked(nodes, walkOf(payload, state, renderInteraction, "phrasing"));
 
 /**
  * Emit the item body: the payload's body nodes as the output tree's nodes, in order.
@@ -1442,7 +1569,7 @@ export const emitBody = (
   state: EmitState,
   renderInteraction: RenderInteraction,
 ): Result.Result<readonly Node[], PartSwapRefused> =>
-  nodesOf(
+  walked(
     payload.body,
     walkOf(payload, state, renderInteraction, positionUnder(rowFor("item", "root").element, false)),
   );
