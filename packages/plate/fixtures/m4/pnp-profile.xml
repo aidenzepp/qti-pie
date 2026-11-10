@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A hand-written AfA PNP 3.0 profile in the schema's spellings, every feature element once. -->
+<access-for-all-pnp xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <additional-directions/>
+  <keyboard-directions/>
+  <linguistic-guidance/>
+  <glossary-on-screen/>
+  <captions/>
+  <audio-description/>
+  <transcript/>
+  <high-contrast/>
+  <simplified-graphics/>
+  <simplified-language-portions/>
+  <alternative-text/>
+  <answer-masking/>
+  <keyword-emphasis/>
+  <tactile/>
+  <layout-single-column/>
+  <encouragement/>
+  <additional-testing-time>
+    <time-multiplier>1.5</time-multiplier>
+  </additional-testing-time>
+  <braille xml:lang="en">
+    <delivery-mode>embossed</delivery-mode>
+    <grade>1</grade>
+    <braille-type>ueb</braille-type>
+    <math-type>nemeth</math-type>
+  </braille>
+  <calculator-on-screen calculator-type="scientific"/>
+  <dictionary-on-screen/>
+  <thesaurus-on-screen/>
+  <homophone-checker-on-screen/>
+  <note-taking-on-screen/>
+  <outliner-on-screen/>
+  <peer-interaction-on-screen/>
+  <spell-checker-on-screen/>
+  <visual-organizer-on-screen/>
+  <line-reader highlight-color="#ffff00"/>
+  <environment>
+    <description>A quiet room with a window</description>
+    <breaks>true</breaks>
+  </environment>
+  <hazard-avoidance>flashing</hazard-avoidance>
+  <hazard-avoidance>motion-simulation</hazard-avoidance>
+  <input-requirements>full-keyboard-control</input-requirements>
+  <invert-display-polarity foreground="#ffffff" background="#000000"/>
+  <item-translation xml:lang="fr"/>
+  <keyword-translation xml:lang="es"/>
+  <sign-language xml:lang="ase"/>
+  <language-of-interface xml:lang="de"/>
+  <long-description hide-visually="false"/>
+  <magnification>
+    <all-content zoom-amount="2.0"/>
+  </magnification>
+  <spoken>
+    <reading-type>computer-read-aloud</reading-type>
+    <restriction-type>skip-math-equations</restriction-type>
+    <speech-rate>160</speech-rate>
+    <pitch>0.4</pitch>
+    <volume>0.8</volume>
+    <link-indication>speak-link</link-indication>
+    <typing-echo>words</typing-echo>
+  </spoken>
+  <text-appearance>
+    <background-color>#fffff0</background-color>
+    <font-color>#101010</font-color>
+    <font-size>18</font-size>
+    <font-face>
+      <font-name>Plate Sans</font-name>
+      <font-name>Plate Serif</font-name>
+      <generic-font-face>sans serif</generic-font-face>
+    </font-face>
+    <line-spacing>1.5</line-spacing>
+    <line-height>24</line-height>
+    <letter-spacing>1</letter-spacing>
+    <uniform-font-sizing/>
+    <word-spacing>2</word-spacing>
+    <word-wrapping/>
+  </text-appearance>
+  <activate-as-option-set>
+    <calculator-on-screen/>
+    <line-reader/>
+  </activate-as-option-set>
+  <activate-at-initialization-set>
+    <spoken/>
+  </activate-at-initialization-set>
+  <prohibit-set>
+    <encouragement/>
+  </prohibit-set>
+</access-for-all-pnp>

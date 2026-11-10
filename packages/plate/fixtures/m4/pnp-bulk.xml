@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A hand-written AfA PNP 3.0 bulk record file: two persons, three appointments. -->
+<access-for-all-pnp-records xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <access-for-all-pnp-record>
+    <person-sourced-id source-system="sis.example">person-100</person-sourced-id>
+    <appointment-id>appointment-1</appointment-id>
+    <access-for-all-pnp>
+      <answer-masking/>
+    </access-for-all-pnp>
+  </access-for-all-pnp-record>
+  <access-for-all-pnp-record>
+    <person-sourced-id source-system="sis.example">person-200</person-sourced-id>
+    <appointment-id>appointment-2</appointment-id>
+    <appointment-id>appointment-3</appointment-id>
+    <access-for-all-pnp>
+      <high-contrast/>
+    </access-for-all-pnp>
+  </access-for-all-pnp-record>
+</access-for-all-pnp-records>
