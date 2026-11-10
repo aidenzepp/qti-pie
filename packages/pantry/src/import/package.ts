@@ -1,6 +1,7 @@
 /**
- * The importer's front door: a package directory in, one committed package out or one named
- * refusal (plan W5, Q5.15; the W5 amendment's A, C19 and C22).
+ * The importer's front door: a package in (a directory, a `.zip` file or a zip archive's bytes),
+ * one committed package out or one named refusal (plan W5, Q5.15; the W5 amendment's A, C19 and
+ * C22).
  *
  * The package is read, shredded and built into its rows once (`readProgram` of
  * `#pantry/import/program.ts`), and written by the author login's `importWrite` member, the one
@@ -20,15 +21,30 @@ import {
 } from "@bjornpagen/grizzle/runtime";
 import type { Uuid } from "@bjornpagen/grizzle";
 import type { ApplyError, DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
-import { Clock, Context, Duration, Effect, Option, Random, Ref, Schedule, Schema } from "effect";
+import {
+  Array as Arr,
+  Clock,
+  Context,
+  Duration,
+  Effect,
+  Option,
+  pipe,
+  Random,
+  Ref,
+  Schedule,
+  Schema,
+} from "effect";
 import type { FileSystem, PlatformError } from "effect";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { grammar } from "#pantry/grammar/install.ts";
+import { aboveRefusalOf } from "#pantry/import/above.ts";
+import type { RefusedAbove } from "#pantry/import/above.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { refusalOf } from "#pantry/import/refusal.ts";
-import { ServedAuthorLogin } from "#pantry/db/served.ts";
-import { packageFactsOf } from "#pantry/import/write.ts";
-import type { AuthorRole } from "#pantry/qti/roles.ts";
 import type { ImportRefused } from "#pantry/import/rules.ts";
+import { packageFactsOf } from "#pantry/import/write.ts";
+import type { PackageSource } from "#pantry/package/read.ts";
+import type { AuthorRole } from "#pantry/qti/roles.ts";
 
 /**
  * The longest the retries of one database call run, in total.
@@ -185,7 +201,7 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
 });
 
 /**
- * Import the package at `dir`.
+ * Import the package at `source`.
  *
  * Reads the package once, shreds the documents its manifest names, mints every id afresh and builds
  * every row, then applies them as one ChangeSet through the author role. `Db.open` and the
@@ -195,24 +211,33 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
  * `CommitUnresolved`. The same package imported twice is two packages, each with its own ids. The
  * retries run on {@link RetrySchedule}, and each attempt of the apply through {@link WrapApply}.
  *
- * @param dir - The package directory or `.zip` file.
+ * Requires the served author login ({@link ServedAuthorLogin}), whose author role `Db.open` takes,
+ * beside that login's `DbLayer`.
+ *
+ * @param source - The package: a directory, a `.zip` file, or a zip archive's bytes.
  * @returns The id of the committed package. Fails with `ImportRefused` naming the rules the package
- *   was refused under, whether the reader, the codec or the database refused it; with the
- *   platform's error when the directory cannot be read; with `CommitUnresolved` when the commit's
+ *   was refused under, whether the reader, the codec or the database refused it; with
+ *   `RefusedAbove` when every law the database names is one level above `Qti`'s; with the
+ *   platform's error when the package cannot be read; with `CommitUnresolved` when the commit's
  *   outcome is unknown and the read-back failed, so the package may or may not be stored; and with
  *   grizzle's own error when the database failed for a reason that is not a refusal.
  */
 export const importPackage = Effect.fn("import.importPackage")(function* importPackage(
-  dir: string,
+  source: PackageSource,
 ): Effect.fn.Return<
   Uuid,
-  ImportRefused | PlatformError.PlatformError | ApplyError | OpenError | CommitUnresolved,
+  | ImportRefused
+  | RefusedAbove
+  | PlatformError.PlatformError
+  | ApplyError
+  | OpenError
+  | CommitUnresolved,
   ServedAuthorLogin | FileSystem.FileSystem | DbLayer<AuthorRole>
 > {
   const schedule = yield* RetrySchedule;
   const wrap = yield* WrapApply;
   const login = yield* ServedAuthorLogin;
-  const program = yield* readProgram(dir);
+  const program = yield* readProgram(source);
   const { packageId } = program;
   const facts = packageFactsOf(program.inputs);
   const db = yield* retried("Db.open", Db.open(login.roles.author, {}), schedule);
@@ -242,7 +267,22 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
     // stated row breaks as grizzle's host judges it (README "Errors and outcomes"). A law no row of
     // the law table names still prints its text, and carries no rule. The first refusal of a
     // process compiles Qti's law model to name the laws, so the naming has a span of its own.
+    // A refusal whose every law one level above `Qti` states holds no law of the table, so it is
+    // named by that level first (`aboveRefusalOf`, over each law as the schema states it); a set
+    // with any `Qti` law, or laws of two levels, takes the table's path.
     const { refused } = outcome;
+    const above = aboveRefusalOf(
+      pipe(
+        refused.laws,
+        Arr.map(({ law }) => law),
+      ),
+      outcome.witness,
+    );
+
+    if (Option.isSome(above)) {
+      return yield* above.value;
+    }
+
     const refusal = yield* Effect.sync(() => refusalOf(refused, outcome.witness, grammar)).pipe(
       Effect.tap((built) =>
         Effect.annotateCurrentSpan({

@@ -61,6 +61,8 @@ export {
 
 export type { ImportVerdict, PreviewVerdict, Refusal } from "#pantry/api/verdict.ts";
 
+export { ServedAuthorLogin } from "#pantry/db/served.ts";
+
 export { PackageNotFound } from "#pantry/export/package.ts";
 
 export type { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
