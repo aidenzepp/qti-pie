@@ -1612,7 +1612,7 @@ const nameProbeHolds = (rows: PackageRows, r: ReadingRow): boolean => {
 /**
  * Whether a reading's variable is a built-in of its scope, as the information model states the
  * built-ins: a test's `duration` and `QTI_CONTEXT`, unsplit; an item's, through an item ref; a
- * part's, a section's or a section ref's `duration` (§2.2.2, info.txt:9214; spec reading 86).
+ * part's, a section's or a section ref's `duration` (§2.8.5, info.txt:5373; spec reading 86).
  *
  * @param r - The reading.
  * @param itemScoped - Whether its scope is a found item ref.
