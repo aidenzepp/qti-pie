@@ -2868,14 +2868,6 @@ interface Dfa {
 const dfaStates = 256;
 
 /**
- * The most positions a product ({@link tracked}) may be written with, counted by
- * {@link positionsOf}: grizzle's `regexMaxPositions` (`core/limits.ts`, 4,096 NFA positions once
- * counted repetitions are written out), past which its admission refuses a pattern, so a product
- * past it is refused here, naming the reason.
- */
-const productPositions = 4096;
-
-/**
  * Merge the states of an automaton that accept alike and move alike (Moore's refinement), each
  * block numbered by the first state in it, so the start stays state 0.
  *
@@ -3204,8 +3196,10 @@ const narrowed = (left: Regex, right: Regex): readonly [Regex, Regex] => {
  *    states, and the product cuts the other to its columns.
  *
  * It is refused, never approximated, where neither automaton is built within {@link dfaStates}
- * states, or where the product would be written past {@link productPositions} positions: grizzle's
- * grammar has no lookahead to assert both over one span.
+ * states: grizzle's grammar has no lookahead to assert both over one span. How large a product may
+ * be written is grizzle's to say: `str.regex` bounds a pattern in PostgreSQL's own units and
+ * refuses one past them when it is admitted (`ResourceBound`), so no bound of pantry's stands
+ * before it.
  *
  * @param left - A tree.
  * @param right - A tree.
@@ -3246,11 +3240,7 @@ const intersectTwo = (left: Regex, right: Regex): Result.Result<Regex, UnreadDef
     );
   }
 
-  return positionsOf(product.value) > productPositions
-    ? refuse(
-        `an intersection whose product pattern needs more than ${productPositions} positions, grizzle's regexMaxPositions, written out`,
-      )
-    : Result.succeed(product.value);
+  return Result.succeed(product.value);
 };
 
 /**
