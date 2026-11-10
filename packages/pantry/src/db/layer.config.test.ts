@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { ConfigProvider, Effect, FileSystem, Result } from "effect";
+import { ConfigProvider, Effect, FileSystem } from "effect";
 import { fileURLToPath } from "node:url";
 import { ClusterConfigError, PasswordCommandFailed } from "#pantry/db/connection.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
@@ -12,14 +12,14 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 const scratch = fileURLToPath(new URL("../../work/cli-layer-config/", import.meta.url));
 
 /**
- * Build `AuthorAppLayer` under the settings given, and return how it failed. The layer is built and
- * released at once, so no connection is made: it fails before it reaches the cluster.
+ * Build `AuthorAppLayer` under the settings given, and return how it failed, failing where it was
+ * built. The layer is built and released at once, so no connection is made: it fails before it
+ * reaches the cluster.
  */
 const buildFailure = (settings: Readonly<Record<string, string>>) =>
   Effect.provide(Effect.void, AuthorAppLayer).pipe(
     Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(settings))),
-    Effect.result,
-    Effect.map((result) => (Result.isFailure(result) ? result.failure : undefined)),
+    Effect.flip,
   );
 
 layer(NodeServices.layer)("db/layer.ts, a cluster that is not set up", (it) => {
@@ -35,7 +35,6 @@ layer(NodeServices.layer)("db/layer.ts, a cluster that is not set up", (it) => {
       const failure = yield* buildFailure({ GRIZZLE_PG_STATE: state, HOME: home });
 
       assert.instanceOf(failure, ClusterConfigError);
-      assert.isTrue(failure.path.endsWith("tls/ca.crt"));
       assert.strictEqual(failure.path, `${state}/tls/ca.crt`);
       assert.strictEqual(failure.setting, "GRIZZLE_PG_STATE");
       assert.include(failure.message, `${state}/tls/ca.crt`);
