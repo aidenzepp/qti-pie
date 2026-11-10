@@ -29,6 +29,8 @@ interface ShippedPartsOf {
     | "control"
     | "indicator"
     | "label"
+    | "mask"
+    | "maskToggle"
     | "prompt"
     | "root";
   "extended-text-interaction": "control" | "prompt" | "root";
@@ -648,6 +650,24 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     listOwner: false,
     merged: ["id", "for"],
     part: "label",
+    tagClass: "any",
+  },
+  {
+    defaults: {},
+    element: "details",
+    interaction: "choice-interaction",
+    listOwner: false,
+    merged: [],
+    part: "mask",
+    tagClass: "any",
+  },
+  {
+    defaults: {},
+    element: "summary",
+    interaction: "choice-interaction",
+    listOwner: false,
+    merged: [],
+    part: "maskToggle",
     tagClass: "any",
   },
   {

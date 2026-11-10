@@ -97,6 +97,8 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
     control: rowFor(owner, "control"),
     indicator: rowFor(owner, "indicator"),
     label: rowFor(owner, "label"),
+    mask: rowFor(owner, "mask"),
+    maskToggle: rowFor(owner, "maskToggle"),
     prompt: rowFor(owner, "prompt", context),
     root: rowFor(owner, "root", context),
   };
