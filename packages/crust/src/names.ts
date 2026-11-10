@@ -55,7 +55,7 @@ export const qnameOf = (name: string): Option.Option<QName> => {
  * @param name - The name, an XML Name.
  * @returns Whether it holds no colon.
  */
-export const isNCName = (name: string): boolean => !name.includes(":");
+const isNCName = (name: string): boolean => !name.includes(":");
 
 /**
  * The production a name must match where it stands, in a document Namespaces in XML governs:

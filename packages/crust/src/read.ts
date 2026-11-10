@@ -4,7 +4,7 @@ import { decode } from "#crust/decode.ts";
 import { PREDEFINED, lexProlog, positionOf, substitute, undeclaredEntity } from "#crust/dtd.ts";
 import type { AttlistEntry, Prolog, ValuePiece } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
-import { NAME_CHAR, NAME_START, isNCName, productionViolation } from "#crust/names.ts";
+import { NAME_CHAR, NAME_START, productionViolation } from "#crust/names.ts";
 import { namespacesVersionOf, resolved, rootScope } from "#crust/namespaces.ts";
 import type { Scope } from "#crust/namespaces.ts";
 import { SENTINEL_FIRST, SENTINEL_LAST, sentinelsWritten } from "#crust/sentinels.ts";
@@ -90,6 +90,23 @@ const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Sc
 };
 
 /**
+ * Build the well-formedness error for what breaks at a line and column, worded as `saxes` words its
+ * own: the position, then what breaks there.
+ *
+ * @param position - The line and column, both from 1.
+ * @param message - What breaks there.
+ * @returns The error.
+ */
+const violationAt = (
+  position: { readonly column: number; readonly line: number },
+  message: string,
+): WellFormednessError =>
+  new WellFormednessError({
+    ...position,
+    message: `${String(position.line)}:${String(position.column)}: ${message}.`,
+  });
+
+/**
  * Give each undeclared entity name in the body a stand-in character, or refuse.
  *
  * A reference whose name holds a colon is refused first, as a well-formedness error at the
@@ -110,60 +127,54 @@ const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Sc
 const assignSentinels = (
   substituted: string,
   prolog: Prolog,
-): Effect.Effect<ReadonlyMap<string, string>, ReaderRefusal | WellFormednessError> =>
-  Effect.suspend(
-    (): Effect.Effect<ReadonlyMap<string, string>, ReaderRefusal | WellFormednessError> => {
-      const scanned = scanReferences(substituted.slice(prolog.bodyStart), prolog.entities);
-      if (Option.isSome(scanned.colon)) {
-        const { offset, violation } = scanned.colon.value;
-        const at = prolog.bodyStart + offset;
-        const position = positionOf(substituted, at);
+): Effect.Effect<ReadonlyMap<string, string>, ReaderRefusal | WellFormednessError> => {
+  const scanned = scanReferences(substituted.slice(prolog.bodyStart), prolog.entities);
+  if (Option.isSome(scanned.colon)) {
+    const { offset, violation } = scanned.colon.value;
 
-        return Effect.fail(
-          new WellFormednessError({
-            ...position,
-            message: `${String(position.line)}:${String(position.column)}: entity reference: ${violation}.`,
-          }),
-        );
-      }
+    return Effect.fail(
+      violationAt(
+        positionOf(substituted, prolog.bodyStart + offset),
+        `entity reference: ${violation}`,
+      ),
+    );
+  }
 
-      const at = (offset: number) =>
-        Option.some(positionOf(substituted, prolog.bodyStart + offset));
-      const [first] = scanned.names;
-      if (first === undefined) {
-        return Effect.succeed(new Map<string, string>());
-      }
+  const at = (offset: number) => Option.some(positionOf(substituted, prolog.bodyStart + offset));
+  const [first] = scanned.names;
+  if (first === undefined) {
+    return Effect.succeed(new Map<string, string>());
+  }
 
-      if (prolog.undeclared._tag === "refused") {
-        const [name, offset] = first;
+  if (prolog.undeclared._tag === "refused") {
+    const [name, offset] = first;
 
-        return Effect.fail(undeclaredEntity(name, prolog.undeclared.why, at(offset)));
-      }
+    return Effect.fail(undeclaredEntity(name, prolog.undeclared.why, at(offset)));
+  }
 
-      const sentinels = new Map<string, string>();
-      let point = SENTINEL_FIRST;
-      for (const [name, offset] of scanned.names) {
-        while (point <= SENTINEL_LAST && scanned.used.has(point)) {
-          point += 1;
-        }
+  const sentinels = new Map<string, string>();
+  let point = SENTINEL_FIRST;
+  for (const [name, offset] of scanned.names) {
+    while (point <= SENTINEL_LAST && scanned.used.has(point)) {
+      point += 1;
+    }
 
-        if (point > SENTINEL_LAST) {
-          return Effect.fail(
-            undeclaredEntity(
-              name,
-              "the document leaves no private use character free to stand for it",
-              at(offset),
-            ),
-          );
-        }
+    if (point > SENTINEL_LAST) {
+      return Effect.fail(
+        undeclaredEntity(
+          name,
+          "the document leaves no private use character free to stand for it",
+          at(offset),
+        ),
+      );
+    }
 
-        sentinels.set(name, String.fromCodePoint(point));
-        point += 1;
-      }
+    sentinels.set(name, String.fromCodePoint(point));
+    point += 1;
+  }
 
-      return Effect.succeed(sentinels);
-    },
-  );
+  return Effect.succeed(sentinels);
+};
 
 /**
  * The unresolved tree attribute for one written attribute: its name as written, its value the
@@ -355,23 +366,6 @@ const restoredText = (value: string, names: ReadonlyMap<string, string>): readon
   );
 
 /**
- * Build the error for a namespace constraint an element breaks, at the position its start tag
- * ended, where `saxes` itself reports a well-formedness error a start tag holds.
- *
- * @param start - Where the element's start tag ended.
- * @param message - What the element breaks.
- * @returns The error.
- */
-const violationAt = (
-  start: { readonly column: number; readonly line: number },
-  message: string,
-): WellFormednessError =>
-  new WellFormednessError({
-    ...start,
-    message: `${String(start.line)}:${String(start.column)}: ${message}.`,
-  });
-
-/**
  * Run `saxes` over `substituted` and build the document's tree from its events, in one pass: the
  * root element and the comments and processing instructions around it.
  *
@@ -509,9 +503,11 @@ const parse = (
         place({ kind: "comment", text });
       });
       parser.on("processinginstruction", ({ body, target }) => {
-        if (!isNCName(target)) {
-          throw new Error(
-            `the processing instruction target ${target} holds a colon, which Namespaces in XML section 7 forbids in every processing instruction target`,
+        const misnamed = productionViolation(target, "NCName");
+        if (Option.isSome(misnamed)) {
+          throw violationAt(
+            { column: parser.column, line: parser.line },
+            `processing instruction: ${misnamed.value}`,
           );
         }
 
