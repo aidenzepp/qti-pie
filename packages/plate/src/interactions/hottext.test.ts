@@ -381,6 +381,26 @@ describe("Hot Text", () => {
     }),
   );
 
+  it.effect("[Q-11] the root carries max-choices as data-max-choices for the runtime", () =>
+    Effect.gen(function* carriesLimit() {
+      const limitOf = (xml: string) =>
+        Effect.gen(function* limit() {
+          const root = rootOf(yield* rendered(yield* accept(xml, "hottext.xml")));
+
+          return partOf(root, slots.root).attrs["data-max-choices"];
+        });
+      const many = fixtureText("hottext.xml");
+
+      assert.strictEqual(yield* limitOf(many), "2");
+      assert.strictEqual(yield* limitOf(fixtureText("hottext-single.xml")), "1");
+      assert.strictEqual(
+        yield* limitOf(many.replace('max-choices="2" min-choices="1"', 'max-choices="0"')),
+        "0",
+        "0 is written as it is read: no limit",
+      );
+    }),
+  );
+
   it.effect("[Q-11] a hottext a template hides keeps its text and has no control", () =>
     Effect.gen(function* hidden() {
       const root = rootOf(yield* rendered(yield* opened("hottext-single.xml")));

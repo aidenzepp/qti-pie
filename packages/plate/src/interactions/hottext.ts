@@ -183,6 +183,11 @@ export interface HottextPayload {
    * `entryName(instance, response)`.
    */
   readonly formName: string;
+  /**
+   * `max-choices` as the model holds it, which the Root carries as `data-max-choices` for the
+   * runtime: 0 limits nothing.
+   */
+  readonly maxChoices: bigint;
   readonly prompt: Option.Option<readonly PayloadNode[]>;
   /**
    * The identifier of the response it binds.
@@ -278,7 +283,7 @@ const parts = {
     defaults: {},
     element,
     listOwner: false,
-    merged: ["role", "aria-labelledby", "aria-label", "class"],
+    merged: ["role", "aria-labelledby", "aria-label", "class", "data-max-choices"],
     tagClass: "flow-container",
   },
 } as const satisfies { readonly [Q in HottextPart]: PartSpec };
@@ -549,10 +554,10 @@ const authorsName = (interaction: HottextPayload, instance: string): Attributes 
  * Compute every attribute of every part of one Hot Text once: the connect function.
  *
  * - Root: the marker, `role="group"`, the state (`data-mode`, and `data-disabled` when the author
- *   disabled every control), the author's `class`, and the group's name: with a Prompt, the Prompt
- *   names it (`aria-labelledby` → the Prompt's id) and the author's names are not written; with
- *   none, the author's `aria-label` and `aria-labelledby` ({@link authorsName}); with neither the
- *   group stays unnamed.
+ *   disabled every control), `data-max-choices` (the count as written, for the runtime), the
+ *   author's `class`, and the group's name: with a Prompt, the Prompt names it (`aria-labelledby` →
+ *   the Prompt's id) and the author's names are not written; with none, the author's `aria-label`
+ *   and `aria-labelledby` ({@link authorsName}); with neither the group stays unnamed.
  * - Prompt: the marker and its id, which the Root names.
  * - Content: the marker.
  * - Each Choice: the marker, and `for` → its Control's id.
@@ -619,6 +624,7 @@ const connect = (
         : authorsName(interaction, instance)),
       ...when(interaction.class !== "", { class: interaction.class }),
       ...when(payload.finished, { "data-disabled": true }),
+      "data-max-choices": String(interaction.maxChoices),
       "data-mode": payload.mode,
       "data-slot": rows.root.slot,
       role: "group",
@@ -916,6 +922,7 @@ const redact = (interaction: HottextInteraction, kit: RedactKit): HottextPayload
   class: interaction.class,
   content: kit.nodes(interaction.content),
   formName: kit.formName(interaction.response),
+  maxChoices: interaction.maxChoices,
   prompt: interaction.prompt.pipe(Option.map((nodes) => kit.nodes(nodes))),
   response: interaction.response,
   restore: Option.getOrElse(kit.posted(interaction.response), () =>
