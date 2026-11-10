@@ -21,8 +21,8 @@ import { AuthorLogin } from "#pantry/db/served.ts";
 import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
 
 /**
- * The probe layer's session pool: one session, closed a second after its last use. The database
- * tests run one file at a time (`maxWorkers: 1`, vite.config.ts), each call after the last.
+ * The probe layer's session pool: one session, closed a second after its last use. A database test
+ * file's calls on its probe run one after another, each in its file's own worker.
  */
 const probePool = { idleTimeoutMs: 1000, max: 1, min: 0 } as const;
 
