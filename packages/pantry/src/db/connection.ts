@@ -4,6 +4,7 @@
  * identity (`grizzle migrate`, through grizzle.config.ts) and by a login (its `DbLayer`,
  * src/db/layer.ts).
  */
+import { readFileSync } from "node:fs";
 import net from "node:net";
 import type { MigrationConnectionConfig } from "@bjornpagen/grizzle";
 import { CredentialError } from "@bjornpagen/grizzle/runtime";
@@ -165,8 +166,8 @@ const passwordCommand = Config.option(Config.String("GR8DES_PG_PASSWORD_COMMAND"
  * startup and authentication), so the bound stands well above a reachable server's answer, and a
  * server that never answers fails the command within seconds rather than holding it.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/999facc69571db35dc9878d47f2d82ba95c41456/packages/grizzle/src/adapter/types/layer.ts#L61-L78
- * @see https://github.com/bjornpagen/grizzle/blob/999facc69571db35dc9878d47f2d82ba95c41456/README.md#connecting
+ * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/grizzle/src/adapter/types/layer.ts#L70-L87
+ * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/README.md#connecting
  */
 const connectTimeoutMs = 5000;
 
@@ -245,16 +246,24 @@ const runPasswordCommand = (command: string, role: string): DbConnection["passwo
  * (grizzle's development CA names `localhost`, `127.0.0.1` and `::1`), and node-postgres as the
  * driver.
  *
+ * The CA is read synchronously, so building the connection needs no service and runs under
+ * `Effect.runSync`: grizzle calls the config's migration connection synchronously
+ * (`GrizzleConfig.connection`, `() => MigrationConnectionConfig`), and its transport takes the CA
+ * as text, while Effect's `FileSystem` (`@effect/platform-node`'s `NodeFileSystem`) reads a file
+ * only asynchronously.
+ *
  * It fails with Effect's `ConfigError` for a missing or malformed setting, before any file is read,
  * and with a {@link ClusterConfigError} when the CA is unreadable.
+ *
+ * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/grizzle/src/adapter/types/config.ts#L41-L45
  */
 const clusterConnection = Effect.gen(function* clusterConnection() {
-  const fs = yield* FileSystem.FileSystem;
   const cluster = yield* localCluster;
   const command = yield* passwordCommand;
-  const ca = yield* fs
-    .readFileString(cluster.ca.path)
-    .pipe(Effect.mapError(() => new ClusterConfigError(cluster.ca)));
+  const ca = yield* Effect.try({
+    catch: () => new ClusterConfigError(cluster.ca),
+    try: () => readFileSync(cluster.ca.path, "utf-8"),
+  });
   const transport: Transport = {
     ca,
     host: cluster.host,
@@ -276,12 +285,14 @@ const clusterConnection = Effect.gen(function* clusterConnection() {
 });
 
 /**
- * The migration identity's connection to the cluster, the `connection` of grizzle.config.ts.
+ * The migration identity's connection to the cluster, which the `connection` of grizzle.config.ts
+ * builds when `grizzle migrate` or `grizzle drift` calls it: `grizzle generate`, `check` and
+ * `names` never call it, so they read no setting of the cluster's and no CA. It needs no service,
+ * so the config runs it with `Effect.runSync`.
  *
- * Its password is read at each connection attempt, never when the connection is built, so `grizzle
- * generate`, `check` and `names`, which never connect, need no password: from the password command
- * where `GR8DES_PG_PASSWORD_COMMAND` names one, run for the migration role, else from
- * `GR8DES_PG_MIGRATION_PASSWORD`. A missing password fails the attempt with grizzle's
+ * Its password is read at each connection attempt, never when the connection is built: from the
+ * password command where `GR8DES_PG_PASSWORD_COMMAND` names one, run for the migration role, else
+ * from `GR8DES_PG_MIGRATION_PASSWORD`. A missing password fails the attempt with grizzle's
  * `CredentialError`, whose cause is the command's failure or Effect's `ConfigError` naming the
  * variable.
  *
@@ -322,7 +333,7 @@ export const migrationConnection = clusterConnection.pipe(
  * It fails with Effect's `ConfigError` for a missing or malformed setting, before any file is read,
  * and with a {@link ClusterConfigError} when the CA is unreadable.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a/packages/engine/src/program/names.ts#L61-L76
+ * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/engine/src/program/names.ts#L61-L76
  */
 export const loginConnection = Effect.gen(function* loginConnection() {
   const fs = yield* FileSystem.FileSystem;
@@ -342,9 +353,9 @@ export const loginConnection = Effect.gen(function* loginConnection() {
 }).pipe(Effect.withSpan("db.loginConnection"));
 
 /**
- * The services building either connection reads: the file system its CA and the logins' password
- * files are read from. A password command needs none of the caller's: it runs as a child of this
- * Node process. grizzle.config.ts and `AuthorAppLayer` (src/db/layer.ts) provide it, and so does an
- * install outside this package that builds a connection here.
+ * The services building a login's connection reads: the file system its logins' password files are
+ * read from. The migration identity's connection reads none, and a password command needs none of
+ * the caller's: it runs as a child of this Node process. `AuthorAppLayer` (src/db/layer.ts)
+ * provides it, and so does an install outside this package that builds a login's connection here.
  */
 export const connectionServices = NodeFileSystem.layer;
