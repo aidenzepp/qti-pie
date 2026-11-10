@@ -1094,9 +1094,10 @@
 }
 
 /*
- * A modal feedback that carries the credit its attempt earned (data-credit): a 4px edge at its
- * inline start in the credit's colour, the other sides keeping the card's 1px border, and a mark
- * level with its first line, in the space the wider start padding leaves. The mark's alternative
+ * A modal feedback that carries the credit its attempt earned (data-credit): the card's whole
+ * border, 1.5px on every side, in the credit's colour, on the card's own surface and radius, and a
+ * mark level with its first line at the card's start padding. The content starts after the mark's
+ * 1em box and a 0.5rem gap, so the words keep one indent whatever the mark. The mark's alternative
  * text is empty: the feedback's own words say how the answer did, and the mark and colour repeat it
  * for the eye; its shape carries the result where colour does not (WCAG 1.4.1), forced colours
  * included. Each colour holds 3:1 on the card in light and in .dark, as a graphical object needs.
@@ -1106,19 +1107,20 @@
  */
 :where([data-slot="item-modal-feedback"][data-credit]) {
   position: relative;
-  padding-inline-start: 2.5rem;
-  border-inline-start-width: 4px;
+  padding-inline-start: calc(1.5rem + 1em);
+  border-width: 1.5px;
 }
 
 :where([data-slot="item-modal-feedback"][data-credit])::before {
   position: absolute;
   inset-block-start: 0.75rem;
-  inset-inline-start: 0.875rem;
+  inset-inline-start: 1rem;
+  inline-size: 1em;
   font-weight: 600;
 }
 
 :where([data-slot="item-modal-feedback"][data-credit="full"]) {
-  border-inline-start-color: oklch(0.6 0.16 150);
+  border-color: oklch(0.6 0.16 150);
 }
 
 :where([data-slot="item-modal-feedback"][data-credit="full"])::before {
@@ -1128,7 +1130,7 @@
 }
 
 :where([data-slot="item-modal-feedback"][data-credit="partial"]) {
-  border-inline-start-color: oklch(0.62 0.16 60);
+  border-color: oklch(0.62 0.16 60);
 }
 
 :where([data-slot="item-modal-feedback"][data-credit="partial"])::before {
@@ -1138,7 +1140,7 @@
 }
 
 :where([data-slot="item-modal-feedback"][data-credit="none"]) {
-  border-inline-start-color: var(--destructive, oklch(0.577 0.245 27.325));
+  border-color: var(--destructive, oklch(0.577 0.245 27.325));
 }
 
 :where([data-slot="item-modal-feedback"][data-credit="none"])::before {
