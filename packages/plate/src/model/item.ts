@@ -44,6 +44,15 @@ import {
   xsBooleanOf,
   xsInt,
 } from "#plate/model/attributes.ts";
+import { catalogInfoModule } from "#plate/content/catalog-info.ts";
+import { companionMaterialsModule } from "#plate/content/companion-materials.ts";
+import { feedbackBlockModule } from "#plate/content/feedback-block.ts";
+import { feedbackInlineModule } from "#plate/content/feedback-inline.ts";
+import { mathmlModule } from "#plate/content/mathml.ts";
+import { modalFeedbackModule } from "#plate/content/modal-feedback.ts";
+import { rubricModule } from "#plate/content/rubric.ts";
+import { stimulusRefModule } from "#plate/content/stimulus-ref.ts";
+import { stylesheetModule } from "#plate/content/stylesheet.ts";
 import { associateModule } from "#plate/interactions/associate.ts";
 import { drawingModule } from "#plate/interactions/drawing.ts";
 import { endAttemptModule } from "#plate/interactions/end-attempt.ts";
@@ -2555,15 +2564,57 @@ const stubNode = (
 };
 
 /**
+ * The content modules of the elements the body walk reads: those placed in the item body, of the
+ * nine content modules. The item root's walk reads none yet.
+ */
+const bodyContent = [
+  rubricModule,
+  feedbackInlineModule,
+  feedbackBlockModule,
+  modalFeedbackModule,
+  companionMaterialsModule,
+  stylesheetModule,
+  catalogInfoModule,
+  stimulusRefModule,
+  mathmlModule,
+].filter((module) => module.placement === "body");
+
+/**
+ * Read a body element a content module reads, by its module's `parse`, which the element's notice
+ * and path are handed to.
+ *
+ * @param build The build.
+ * @param element The element.
+ * @returns Its body node, or a refusal; none when no body-placed content module reads the element.
+ */
+const contentNode = (
+  build: Build,
+  element: SourceElement,
+): Option.Option<Result.Result<BodyNode, Refusal>> => {
+  const module = bodyContent.find(
+    (candidate) => candidate.namespace === element.namespace && candidate.element === element.local,
+  );
+  if (module === undefined) {
+    return Option.none();
+  }
+
+  const path = pathOf(build, element);
+
+  return Option.some(
+    module.parse(element, { notice: (feature) => notice(build, feature, path), path }),
+  );
+};
+
+/**
  * Read one child of a body element.
  *
  * @param build The build.
  * @param parent The element that holds it.
  * @param child The child.
  * @returns Its body node: text as itself, an HTML element with its subtree, an interaction's model
- *   or, for one a stub module reads, what its `parse` gives, a printed variable's, a template
- *   block's or inline's with its content, or a notice for anything else, its subtree dropped; or a
- *   refusal.
+ *   or, for one a stub module or a body-placed content module reads, what its `parse` gives, a
+ *   printed variable's, a template block's or inline's with its content, or a notice for anything
+ *   else, its subtree dropped; or a refusal.
  */
 const bodyNode = (
   build: Build,
@@ -2586,6 +2637,11 @@ const bodyNode = (
   const stub = stubNode(build, child);
   if (Option.isSome(stub)) {
     return stub.value;
+  }
+
+  const content = contentNode(build, child);
+  if (Option.isSome(content)) {
+    return content.value;
   }
 
   if (isQti(child, "qti-printed-variable")) {
