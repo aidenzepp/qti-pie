@@ -1,14 +1,12 @@
 import { Effect, Option, Result } from "effect";
 import { SaxesParser } from "saxes";
 import { decode } from "#crust/decode.ts";
-import type { Decoded } from "#crust/decode.ts";
 import { PREDEFINED, lexProlog, positionOf, substitute, undeclaredEntity } from "#crust/dtd.ts";
 import type { AttlistEntry, Prolog, ValuePiece } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
 import { NAME_CHAR, NAME_START, isNCName, productionViolation } from "#crust/names.ts";
 import { namespacesVersionOf, resolved, rootScope } from "#crust/namespaces.ts";
 import type { Scope } from "#crust/namespaces.ts";
-import { rebuild } from "#crust/rebuild.ts";
 import { SENTINEL_FIRST, SENTINEL_LAST, sentinelsWritten } from "#crust/sentinels.ts";
 import type {
   Attribute,
@@ -21,35 +19,22 @@ import type {
 } from "#crust/tree.ts";
 
 /**
- * Where the parser stood when it had read an element's start tag: the line and column it reports.
- */
-interface StartTag {
-  readonly column: number;
-  readonly line: number;
-}
-
-/**
- * An element whose start tag has been read and whose end tag has not: its attributes as written,
- * its names unresolved, and where its start tag ended.
+ * An element whose start tag has been read and whose end tag has not: its own fields, its names
+ * resolved, the children collected for it so far, and the namespace scope they are read in.
  */
 interface OpenElement {
-  readonly attributes: readonly Attribute[];
   readonly children: Child[];
-  readonly qname: string;
-  readonly start: StartTag;
+  readonly element: Omit<Element, "children">;
+  readonly scope: Scope;
 }
 
 /**
- * What `parse` builds: the root element and the comments and processing instructions around it,
- * and where each element's start tag ended. The tree's names are unresolved: each element and
- * attribute holds its name as written as its local name, in no namespace and with no prefix, until
- * {@link assemble} resolves them after the attribute-list defaults are added.
+ * What `parse` builds: the root element and the comments and processing instructions around it.
  */
 interface Built {
   readonly epilog: readonly Misc[];
   readonly prolog: readonly Misc[];
   readonly root: Element;
-  readonly starts: ReadonlyMap<Element, StartTag>;
 }
 
 /**
@@ -194,19 +179,6 @@ const toAttribute = ([qname, value]: readonly [string, string]): Attribute => ({
 });
 
 /**
- * The unresolved tree element for a closed element and the children collected for it.
- */
-const toElement = (open: OpenElement): Element => ({
-  attributes: open.attributes,
-  children: open.children,
-  kind: "element",
-  local: open.qname,
-  namespace: "",
-  prefix: "",
-  qname: open.qname,
-});
-
-/**
  * The most elements a document may hold open at once unless its reader says otherwise: 256, the
  * stated limit "Element depth" of spec reading 1's list. Neither XML 1.0 nor QTI bounds an
  * element's depth (production [39] of section 3 and [43] of section 3.1), no official package
@@ -227,139 +199,6 @@ export interface ReadOptions {
    */
   readonly elementDepth?: number;
 }
-
-/**
- * Run `saxes` over `substituted` and build the root element with the comments and processing
- * instructions around it, its names unresolved.
- *
- * `saxes` reads without namespaces: a namespace declaration may come from an attribute-list
- * default, which `saxes` never sees, so every namespace constraint is judged after the defaults are
- * added ({@link assemble}). It throws its first well-formedness error; that error becomes a
- * `WellFormednessError` at the position the parser had reached, as does a processing instruction
- * target holding a colon, which Namespaces in XML section 7 forbids. A document that nests more
- * than `elementDepth` elements is refused with a `ReaderRefusal` under rule `element-depth`. The
- * tree is built on a stack of open elements, so a document of any depth within that bound is read
- * without recursion.
- *
- * @param substituted - The document text with its declared entities substituted.
- * @param sentinels - The stand-in character of each undeclared entity name.
- * @param elementDepth - The most elements open at once.
- * @returns The root element, the comments and processing instructions around it and where each
- *   start tag ended; the `ReaderRefusal` for an element past `elementDepth`, or the
- *   `WellFormednessError` for the first error `saxes` raises.
- */
-const parse = (
-  substituted: string,
-  sentinels: ReadonlyMap<string, string>,
-  elementDepth: number,
-): Effect.Effect<Built, WellFormednessError | ReaderRefusal> => {
-  const parser = new SaxesParser({ position: true });
-  for (const [name, sentinel] of sentinels) {
-    parser.ENTITIES[name] = sentinel;
-  }
-
-  return Effect.try({
-    catch: (error) =>
-      error instanceof ReaderRefusal
-        ? error
-        : new WellFormednessError({
-            column: parser.column,
-            line: parser.line,
-            message: error instanceof Error ? error.message : String(error),
-          }),
-    try: () => {
-      const open: OpenElement[] = [];
-      const starts = new Map<Element, StartTag>();
-      const prolog: Misc[] = [];
-      const epilog: Misc[] = [];
-      let root: Element | undefined;
-      const place = (node: Child & Misc): void => {
-        const parent = open.at(-1);
-        if (parent === undefined) {
-          (root ? epilog : prolog).push(node);
-        } else {
-          parent.children.push(node);
-        }
-      };
-
-      parser.on("opentag", (tag) => {
-        if (open.length >= elementDepth) {
-          throw new ReaderRefusal({
-            detail: `The document nests elements more than ${elementDepth} deep: element <${tag.name}> at line ${parser.line}, column ${parser.column} opens past the reader's limit. Flatten the structure so at most ${elementDepth} elements are open at once.`,
-            position: Option.some({ column: parser.column, line: parser.line }),
-            rule: "element-depth",
-          });
-        }
-
-        // The attribute record's insertion order is the order the attributes were written in,
-        // namespace declarations included.
-        open.push({
-          attributes: Object.entries(tag.attributes).map(toAttribute),
-          children: [],
-          qname: tag.name,
-          start: { column: parser.column, line: parser.line },
-        });
-      });
-      parser.on("closetag", () => {
-        const closed = open.pop();
-        if (closed === undefined) {
-          return;
-        }
-
-        const element = toElement(closed);
-        starts.set(element, closed.start);
-
-        const parent = open.at(-1);
-        if (parent === undefined) {
-          root = element;
-        } else {
-          parent.children.push(element);
-        }
-      });
-      // `saxes` emits a text event only for text that is not empty: `handleTextInRoot` calls its
-      // handler with the run so far only when that run is non-empty, and `end` only when the
-      // remaining text is (saxes 6.0.0, saxes.js:1625-1700 and :1822-1825), so no empty run is ever
-      // put in the tree.
-      parser.on("text", (value) => {
-        const parent = open.at(-1);
-        const last = parent?.children.at(-1);
-        if (parent === undefined) {
-          return;
-        }
-
-        if (last?.kind === "text" && last.cdata) {
-          parent.children.push({ cdata: false, kind: "text", value });
-        } else if (last?.kind === "text") {
-          parent.children[parent.children.length - 1] = { ...last, value: last.value + value };
-        } else {
-          parent.children.push({ cdata: false, kind: "text", value });
-        }
-      });
-      parser.on("cdata", (value) => {
-        open.at(-1)?.children.push({ cdata: true, kind: "text", value });
-      });
-      parser.on("comment", (text) => {
-        place({ kind: "comment", text });
-      });
-      parser.on("processinginstruction", ({ body, target }) => {
-        if (!isNCName(target)) {
-          throw new Error(
-            `the processing instruction target ${target} holds a colon, which Namespaces in XML section 7 forbids in every processing instruction target`,
-          );
-        }
-
-        place({ data: body, kind: "pi", target });
-      });
-      parser.write(substituted).close();
-
-      if (root === undefined) {
-        throw new Error("the document has no root element");
-      }
-
-      return { epilog, prolog, root, starts };
-    },
-  });
-};
 
 /**
  * A value's pieces after the second normalization step a non-`CDATA` attribute type adds (XML 1.0
@@ -389,11 +228,17 @@ const collapsed = (pieces: readonly ValuePiece[]): readonly ValuePiece[] =>
  * Split `value` around its stand-in characters: the text between them, and the reference each
  * stand-in stands for.
  *
+ * A document with no undeclared reference has no stand-in, so its text is one piece unread.
+ *
  * @param value - Text the parser built, holding a stand-in for each undeclared reference.
  * @param names - The entity name each stand-in character stands for.
  * @returns The pieces, text and references alternating, no text piece empty.
  */
 const piecesOf = (value: string, names: ReadonlyMap<string, string>): readonly ValuePiece[] => {
+  if (names.size === 0) {
+    return value === "" ? [] : [{ kind: "text", text: value }];
+  }
+
   const pieces: ValuePiece[] = [];
   let run = "";
   for (const character of value) {
@@ -464,7 +309,7 @@ const normalizedAs = (
  * is the prolog's, which the body's stand-ins are chosen apart from. So a default is appended after
  * the stand-ins are restored, and no character of its text is read as a reference.
  *
- * @param element - The element as `saxes` built it, its names unresolved.
+ * @param element - The element as `saxes` read it, its names unresolved.
  * @param table - The ATTLIST table of the element's name, none where the prolog declares none.
  * @param names - The entity name each stand-in character stands for.
  * @returns The attributes, their names unresolved until {@link resolved} resolves them with the
@@ -529,99 +374,176 @@ const restoredText = (value: string, names: ReadonlyMap<string, string>): readon
  * @param message - What the element breaks.
  * @returns The error.
  */
-const violationAt = (start: StartTag, message: string): WellFormednessError =>
+const violationAt = (
+  start: { readonly column: number; readonly line: number },
+  message: string,
+): WellFormednessError =>
   new WellFormednessError({
-    column: start.column,
-    line: start.line,
+    ...start,
     message: `${String(start.line)}:${String(start.column)}: ${message}.`,
   });
 
 /**
- * Read where an element of the built tree ended its start tag. {@link parse} records it for every
- * element it builds, when the element closes, so an element it did not build is its caller's defect
- * and is thrown as one.
+ * Run `saxes` over `substituted` and build the document's tree from its events, in one pass: the
+ * root element and the comments and processing instructions around it.
  *
- * @param built - The tree `saxes` built.
- * @param element - One of its elements.
- * @returns Where the element's start tag ended.
+ * `saxes` reads without namespaces, because a namespace declaration may come from an attribute-list
+ * default, which `saxes` never sees. So each start tag gets its {@link attributesOf}, written and
+ * defaulted, and is resolved against the scope its parent's start tag left ({@link resolved}),
+ * before its children are read; each text run has its stand-in characters put back as the
+ * `EntityRef`s they stand for. An element that breaks a namespace constraint is recorded at the
+ * position its start tag ended, where `saxes` itself reports a well-formedness error a start tag
+ * holds, and the first one in document order is the document's failure once `saxes` has read the
+ * whole text: an error `saxes` raises anywhere, or the element depth, refuses the document first.
+ *
+ * `saxes` throws its first well-formedness error; that error becomes a `WellFormednessError` at the
+ * position the parser had reached, as does a processing instruction target holding a colon, which
+ * Namespaces in XML section 7 forbids. A document that nests more than `elementDepth` elements is
+ * refused with a `ReaderRefusal` under rule `element-depth`. The tree is built on a stack of open
+ * elements, so a document of any depth within that bound is read without recursion.
+ *
+ * @param substituted - The document text with its declared entities substituted.
+ * @param prolog - The prolog, for its ATTLIST tables and its XML version.
+ * @param sentinels - The stand-in character of each undeclared entity name.
+ * @param elementDepth - The most elements open at once.
+ * @returns The root element and the comments and processing instructions around it; the
+ *   `ReaderRefusal` for an element past `elementDepth`, the `WellFormednessError` for the first
+ *   error `saxes` raises, or else for the first element that breaks a namespace constraint.
  */
-const startOf = (built: Built, element: Element): StartTag => {
-  const start = built.starts.get(element);
-  if (start === undefined) {
-    throw new Error(
-      `The reader's built tree records no start tag for the element <${element.qname}>.`,
-    );
+const parse = (
+  substituted: string,
+  prolog: Prolog,
+  sentinels: ReadonlyMap<string, string>,
+  elementDepth: number,
+): Effect.Effect<Built, WellFormednessError | ReaderRefusal> => {
+  const parser = new SaxesParser({ position: true });
+  for (const [name, sentinel] of sentinels) {
+    parser.ENTITIES[name] = sentinel;
   }
 
-  return start;
-};
-
-/**
- * Assemble the document from what the earlier stages read and the tree `saxes` built.
- *
- * One walk, without recursion, gives every element its {@link attributesOf}, written and
- * defaulted, then resolves its names and its attributes' against the namespaces in scope, its own
- * declarations, written or defaulted, included ({@link resolved}); and it puts every stand-in
- * character of the content back as the `EntityRef` it stands for.
- *
- * @param decoded - The decoded bytes, for the charset label.
- * @param prolog - The prolog, for its declaration, DOCTYPE and ATTLIST tables.
- * @param built - The root element, the comments and processing instructions around it, and where
- *   each start tag ended.
- * @param names - The entity name each stand-in character stands for.
- * @returns The document; the `WellFormednessError` of the first namespace constraint an element
- *   breaks, in document order.
- */
-const assemble = (
-  decoded: Decoded,
-  prolog: Prolog,
-  built: Built,
-  names: ReadonlyMap<string, string>,
-): Effect.Effect<XmlDocument, WellFormednessError> => {
+  const names = new Map([...sentinels].map(([name, sentinel]) => [sentinel, name]));
   const namespaces = namespacesVersionOf(
     Option.match(prolog.declaration, {
       onNone: () => "1.0",
       onSome: (declaration) => declaration.version,
     }),
   );
-  const root = rebuild<Scope, WellFormednessError>(
-    built.root,
-    rootScope,
-    (element, scope) =>
-      Result.mapError(
-        resolved(
+
+  return Effect.try({
+    catch: (error) =>
+      error instanceof ReaderRefusal || error instanceof WellFormednessError
+        ? error
+        : new WellFormednessError({
+            column: parser.column,
+            line: parser.line,
+            message: error instanceof Error ? error.message : String(error),
+          }),
+    try: () => {
+      const open: OpenElement[] = [];
+      const before: Misc[] = [];
+      const after: Misc[] = [];
+      let root = Option.none<Element>();
+      let violation = Option.none<WellFormednessError>();
+      const place = (node: Child & Misc): void => {
+        const parent = open.at(-1);
+        if (parent === undefined) {
+          (Option.isSome(root) ? after : before).push(node);
+        } else {
+          parent.children.push(node);
+        }
+      };
+
+      parser.on("opentag", (tag) => {
+        if (open.length >= elementDepth) {
+          throw new ReaderRefusal({
+            detail: `The document nests elements more than ${elementDepth} deep: element <${tag.name}> at line ${parser.line}, column ${parser.column} opens past the reader's limit. Flatten the structure so at most ${elementDepth} elements are open at once.`,
+            position: Option.some({ column: parser.column, line: parser.line }),
+            rule: "element-depth",
+          });
+        }
+
+        // The attribute record's insertion order is the order the attributes were written in,
+        // namespace declarations included.
+        const written: Element = {
+          attributes: Object.entries(tag.attributes).map(toAttribute),
+          children: [],
+          kind: "element",
+          local: tag.name,
+          namespace: "",
+          prefix: "",
+          qname: tag.name,
+        };
+        const parent = open.at(-1);
+        const scope = parent === undefined ? rootScope : parent.scope;
+        const opened = resolved(
           {
-            ...element,
+            ...written,
             attributes: attributesOf(
-              element,
-              Option.fromUndefinedOr(prolog.attlists.get(element.qname)),
+              written,
+              Option.fromUndefinedOr(prolog.attlists.get(tag.name)),
               names,
             ),
           },
           scope,
           namespaces,
-        ),
-        (message) => violationAt(startOf(built, element), message),
-      ),
-    (leaf) =>
-      Result.succeed(
-        leaf.kind === "text" && !leaf.cdata && names.size > 0
-          ? restoredText(leaf.value, names)
-          : [leaf],
-      ),
-  );
+        );
+        if (Result.isFailure(opened)) {
+          violation = Option.orElseSome(violation, () =>
+            violationAt({ column: parser.column, line: parser.line }, opened.failure),
+          );
+          open.push({ children: [], element: written, scope });
+        } else {
+          open.push({ children: [], ...opened.success });
+        }
+      });
+      parser.on("closetag", () => {
+        const closed = open.pop();
+        if (closed === undefined) {
+          return;
+        }
 
-  return Result.match(root, {
-    onFailure: (error) => Effect.fail(error),
-    onSuccess: (resolvedRoot) =>
-      Effect.succeed({
-        charset: decoded.label,
-        declaration: prolog.declaration,
-        doctype: prolog.doctype,
-        epilog: built.epilog,
-        prolog: built.prolog,
-        root: resolvedRoot,
-      }),
+        const element: Element = { ...closed.element, children: closed.children };
+        const parent = open.at(-1);
+        if (parent === undefined) {
+          root = Option.some(element);
+        } else {
+          parent.children.push(element);
+        }
+      });
+      // `saxes` emits a text event only for text that is not empty, and only at markup or the end
+      // of the text, so two text events in one element always have a node between them (saxes
+      // 6.0.0, saxes.js:1624-1704 and :1820-1825): each run is put in the tree as it comes.
+      parser.on("text", (value) => {
+        open.at(-1)?.children.push(...restoredText(value, names));
+      });
+      parser.on("cdata", (value) => {
+        open.at(-1)?.children.push({ cdata: true, kind: "text", value });
+      });
+      parser.on("comment", (text) => {
+        place({ kind: "comment", text });
+      });
+      parser.on("processinginstruction", ({ body, target }) => {
+        if (!isNCName(target)) {
+          throw new Error(
+            `the processing instruction target ${target} holds a colon, which Namespaces in XML section 7 forbids in every processing instruction target`,
+          );
+        }
+
+        place({ data: body, kind: "pi", target });
+      });
+      parser.write(substituted).close();
+      if (Option.isSome(violation)) {
+        throw violation.value;
+      }
+
+      // `saxes` refuses a document without a root element when it closes ("document must contain
+      // a root element."), so a closed parse has one.
+      return {
+        epilog: after,
+        prolog: before,
+        root: Option.getOrThrowWith(root, () => new Error("the document has no root element")),
+      };
+    },
   });
 };
 
@@ -629,23 +551,23 @@ const assemble = (
  * Read a document's bytes into its tree.
  *
  * The bytes are decoded, the prolog is lexed and the declared entities are substituted into the
- * body, then `saxes` parses the result without namespaces and the tree is built from its events:
- * adjacent text events become one `Text`, a CDATA section stays its own `Text`, and the
- * empty-element form is dropped. The ATTLIST table is then applied: a declared default the element
- * lacks is appended, and a non-`CDATA` attribute value is normalized. Last, every name is resolved
- * against the namespace declarations in scope, defaulted ones included, and each namespace
- * constraint is checked (`#crust/namespaces.ts`).
+ * body, then `saxes` parses the result without namespaces and the tree is built from its events, in
+ * one pass: a CDATA section stays its own `Text`, and the empty-element form is dropped. Each start
+ * tag has the ATTLIST table applied, a declared default the element lacks appended and a
+ * non-`CDATA` attribute value normalized, and then its names resolved against the namespace
+ * declarations in scope, defaulted ones included, with each namespace constraint checked
+ * (`#crust/namespaces.ts`).
  *
  * A reference to an entity the document does not declare is refused when the document is
  * `standalone="yes"` or has no external subset. Otherwise each such name is registered with
- * `saxes` as one private use character that the document does not contain, and after the parse each
- * character becomes the reference it stood for: an `EntityRef` in content, `&name;` with a recorded
- * offset in an attribute value.
+ * `saxes` as one private use character that the document does not contain, and each character
+ * becomes the reference it stood for: an `EntityRef` in content, `&name;` with a recorded offset in
+ * an attribute value.
  *
  * At most `options.elementDepth` elements may be open at once, {@link defaultElementDepth} (256,
  * as in `xmllint`) unless the caller gives another bound; a deeper document is refused under rule
- * `element-depth`. Within the bound, a document of any depth or width is read: the tree is built,
- * and then rewritten, on stacks of its own, never by recursion.
+ * `element-depth`. Within the bound, a document of any depth or width is read: the tree is built on
+ * a stack of its own, never by recursion.
  *
  * @param bytes - The document as read from storage.
  * @param options - How to read it: the element depth it is refused past.
@@ -662,8 +584,19 @@ export const readXml = Effect.fn("xml.read")(function* readXml(
   const prolog = yield* lexProlog(decoded.text);
   const substituted = yield* substitute(decoded.text, prolog);
   const sentinels = yield* assignSentinels(substituted, prolog);
-  const built = yield* parse(substituted, sentinels, options.elementDepth ?? defaultElementDepth);
-  const names = new Map([...sentinels].map(([name, sentinel]) => [sentinel, name]));
+  const built = yield* parse(
+    substituted,
+    prolog,
+    sentinels,
+    options.elementDepth ?? defaultElementDepth,
+  );
 
-  return yield* assemble(decoded, prolog, built, names);
+  return {
+    charset: decoded.label,
+    declaration: prolog.declaration,
+    doctype: prolog.doctype,
+    epilog: built.epilog,
+    prolog: built.prolog,
+    root: built.root,
+  };
 });
