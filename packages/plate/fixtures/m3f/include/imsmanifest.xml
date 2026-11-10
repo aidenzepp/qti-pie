@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0p1_imscpv1p2_v1p0.xsd"
+  identifier="m3f-include">
+  <metadata>
+    <schema>QTI Package</schema>
+    <schemaversion>3.0.1</schemaversion>
+  </metadata>
+  <organizations/>
+  <resources>
+    <resource identifier="include-test" type="imsqti_test_xmlv3p0" href="tests/test.xml">
+      <file href="tests/test.xml"/>
+      <dependency identifierref="item-choice"/>
+      <dependency identifierref="fragment-item-ref"/>
+      <dependency identifierref="item-second"/>
+    </resource>
+    <resource identifier="item-choice" type="imsqti_item_xmlv3p0" href="items/choice.xml">
+      <file href="items/choice.xml"/>
+      <dependency identifierref="fragment-prompt"/>
+      <dependency identifierref="fragment-interaction"/>
+    </resource>
+    <resource identifier="item-second" type="imsqti_item_xmlv3p0" href="items/second.xml">
+      <file href="items/second.xml"/>
+    </resource>
+    <resource identifier="fragment-prompt" type="imsqti_fragment_xmlv3p0" href="fragments/prompt.xml">
+      <file href="fragments/prompt.xml"/>
+    </resource>
+    <resource identifier="fragment-interaction" type="imsqti_fragment_xmlv3p0" href="fragments/interaction.xml">
+      <file href="fragments/interaction.xml"/>
+    </resource>
+    <resource identifier="fragment-item-ref" type="imsqti_fragment_xmlv3p0" href="fragments/item-ref.xml">
+      <file href="fragments/item-ref.xml"/>
+    </resource>
+  </resources>
+</manifest>

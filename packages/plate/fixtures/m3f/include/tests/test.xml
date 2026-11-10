@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xi="http://www.w3.org/2001/XInclude"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="include-test" title="The watch">
+  <qti-test-part identifier="P1" navigation-mode="linear" submission-mode="individual">
+    <qti-assessment-section identifier="S1" title="The evening round" visible="true">
+      <qti-assessment-item-ref identifier="first" href="../items/choice.xml"/>
+      <xi:include href="../fragments/item-ref.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+</qti-assessment-test>
