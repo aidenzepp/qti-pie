@@ -290,9 +290,15 @@ export const rowsAt = <K, R>(groups: ReadonlyMap<K, readonly R[]>, key: K): read
 
 /**
  * The largest `int8`, 2⁶³ − 1: the top of the carrier of a count of children, the bound that bounds
- * nothing where an arity is unbounded.
+ * nothing where an arity is unbounded, and of a count spec reading 46 holds to the signed 64-bit
+ * range.
  */
 export const int8Max = 9_223_372_036_854_775_807n;
+
+/**
+ * The least `int8`, −2⁶³: the bottom of the signed 64-bit range spec reading 46 holds a count to.
+ */
+export const int8Min = -9_223_372_036_854_775_808n;
 
 /**
  * Two rows of a closed relation at one key, a fault {@link faultOf} finds. A key is a law of the

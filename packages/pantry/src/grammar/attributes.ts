@@ -39,6 +39,8 @@ import {
   fin,
   idField,
   indexed,
+  int8Max,
+  int8Min,
   OutsideCodeSpace,
   roster,
   valueField,
@@ -199,16 +201,6 @@ export interface DeclaredTypeText {
 }
 
 /**
- * The largest signed 64-bit integer, the bound spec reading 46 holds a count to.
- */
-const int64Max = "9223372036854775807";
-
-/**
- * The least signed 64-bit integer.
- */
-const int64Min = "-9223372036854775808";
-
-/**
  * Replace a definition's facets of some names with others: a spec reading's narrowing.
  *
  * @param domain - The definition.
@@ -269,8 +261,8 @@ const toInt64 = (domain: Domain): Domain => {
   };
 
   return withFacets(domain, [
-    { facet: "maxInclusive", value: bound("maxInclusive", int64Max, (a, b) => a < b) },
-    { facet: "minInclusive", value: bound("minInclusive", int64Min, (a, b) => a > b) },
+    { facet: "maxInclusive", value: bound("maxInclusive", String(int8Max), (a, b) => a < b) },
+    { facet: "minInclusive", value: bound("minInclusive", String(int8Min), (a, b) => a > b) },
   ]);
 };
 
