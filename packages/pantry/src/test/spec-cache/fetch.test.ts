@@ -1,7 +1,8 @@
 /**
  * The spec fetcher, against a small pin table of its own and a fake server that counts the
  * requests each URL receives: what it leaves in a scratch `HOME`'s cache, and what it requests.
- * Digests in the checks come from `node:crypto`, not from the module's `Digest`.
+ * Digests in the checks come from `node:crypto`, not from the module's `Digest`. Every run checks
+ * the `xmllint` on `PATH` first, so these cases need one, as the spec tests do.
  */
 import { createHash } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
@@ -10,7 +11,7 @@ import { ConfigProvider, Effect, FileSystem, Layer, Result } from "effect";
 import { Digest } from "effect/crypto";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { fetchSpecs, SpecFetchIncomplete } from "#pantry/test/spec-cache/fetch.ts";
-import type { SpecPins } from "#pantry/test/spec-cache/pins.ts";
+import type { Rendering, SpecPins } from "#pantry/test/spec-cache/pins.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
@@ -39,10 +40,25 @@ const published = new Map([
 const urlOf = (path: string): string => `https://example.org/${path}`;
 
 /**
- * The test table: each of {@link published} pinned to its bytes, and no renderings.
+ * The text rendering of `spec.html` by the recorded command, written out by hand: each of its four
+ * tags becomes one space, and each run of spaces then becomes one.
+ */
+const renderedSpec = new TextEncoder().encode(" spec ");
+
+/**
+ * The rendering of `spec.html`, pinned to {@link renderedSpec}.
+ */
+const specText: Rendering = {
+  from: "spec.html",
+  path: "spec.txt",
+  sha256: sha256Of(renderedSpec),
+};
+
+/**
+ * The test table: each of {@link published} pinned to its bytes, and {@link specText}.
  */
 const table: SpecPins = {
-  renderings: [],
+  renderings: [specText],
   sources: [...published].map(([path, held]) => ({
     path,
     sha256: sha256Of(held),
@@ -93,17 +109,32 @@ const fakeServer = (changed: readonly string[] = []) => {
 };
 
 /**
- * Run `fetchSpecs` over the test table in a scratch `HOME`, against a client.
+ * Run `fetchSpecs` over a pin table and no XSDs in a scratch `HOME`, against a client.
  *
  * @param home - The scratch `HOME`.
  * @param client - The fake server's client.
+ * @param options - What differs from the default run.
+ * @param options.pins - The pin table; the test table when absent.
+ * @param options.xmllint - The `XMLLINT` setting; `xmllint` on `PATH` when absent.
  * @returns The run's result.
  */
-const runIn = (home: string, client: HttpClient.HttpClient) =>
+const runIn = (
+  home: string,
+  client: HttpClient.HttpClient,
+  options: { readonly pins?: SpecPins; readonly xmllint?: string } = {},
+) =>
   Effect.result(
-    fetchSpecs(table).pipe(
+    fetchSpecs(options.pins ?? table, {}).pipe(
       Effect.provideService(HttpClient.HttpClient, client),
-      Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ HOME: home }))),
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromUnknown(
+            options.xmllint === undefined
+              ? { HOME: home }
+              : { HOME: home, XMLLINT: options.xmllint },
+          ),
+        ),
+      ),
     ),
   );
 
@@ -157,7 +188,8 @@ const scratchLeft = Effect.fn("test.specCache.scratchLeft")(function* scratchLef
 });
 
 /**
- * The layer every case runs under: Node's file system and paths, and WebCrypto's digests.
+ * The layer every case runs under: Node's file system, paths and processes, and WebCrypto's
+ * digests.
  */
 const fetchLayer = Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto);
 
@@ -265,6 +297,88 @@ describe("fetchSpecs", () => {
         yield* cachedDigest(home, stale),
         sha256Of(published.get(stale) ?? new Uint8Array()),
       );
+    }).pipe(Effect.scoped, Effect.provide(fetchLayer)),
+  );
+
+  it.effect("fails before any request when xmllint does not run", () =>
+    Effect.gen(function* refusesWithoutXmllint() {
+      const home = yield* scratchDirectory("spec-fetch-home-");
+      const server = fakeServer();
+      const run = yield* runIn(home, server.client, { xmllint: `${home}/no-such-xmllint` });
+
+      assert.strictEqual(
+        Result.isFailure(run) ? run.failure._tag : "succeeded",
+        "SpecXmllintUnavailable",
+      );
+      assert.strictEqual(server.total(), 0);
+      for (const { path } of [...table.sources, ...table.renderings]) {
+        assert.strictEqual(yield* cachedDigest(home, path), "absent", path);
+      }
+    }).pipe(Effect.scoped, Effect.provide(fetchLayer)),
+  );
+
+  it.effect(
+    "derives a rendering that hashes to its pin, and a second run derives and downloads nothing",
+    () =>
+      Effect.gen(function* derivesRendering() {
+        const home = yield* scratchDirectory("spec-fetch-home-");
+        const first = yield* runIn(home, fakeServer().client);
+
+        assert.deepStrictEqual(Result.isSuccess(first) ? first.success.renderings : [], [
+          { outcome: "derived", path: specText.path },
+        ]);
+        assert.strictEqual(yield* cachedDigest(home, specText.path), specText.sha256);
+
+        const again = fakeServer();
+        const second = yield* runIn(home, again.client);
+
+        assert.strictEqual(again.total(), 0);
+        assert.deepStrictEqual(Result.isSuccess(second) ? second.success.renderings : [], [
+          { outcome: "present", path: specText.path },
+        ]);
+        assert.deepStrictEqual(yield* scratchLeft(home), []);
+      }).pipe(Effect.scoped, Effect.provide(fetchLayer)),
+  );
+
+  it.effect(
+    "refuses a rendering that does not hash to its pin, and writes nothing at its path",
+    () =>
+      Effect.gen(function* refusesUnpinnedRendering() {
+        const home = yield* scratchDirectory("spec-fetch-home-");
+        const pins: SpecPins = {
+          ...table,
+          renderings: [{ ...specText, sha256: sha256Of(otherBytes(renderedSpec)) }],
+        };
+        const run = yield* runIn(home, fakeServer().client, { pins });
+        const failure = Result.isFailure(run) ? run.failure : undefined;
+
+        assert.deepStrictEqual(
+          failure?._tag === "SpecRenderIncomplete"
+            ? failure.failures.map((held) => ({
+                actual: held._tag === "SpecRenderingChanged" ? held.actual : "",
+                path: held.path,
+                tag: held._tag,
+              }))
+            : failure?._tag,
+          [{ actual: specText.sha256, path: specText.path, tag: "SpecRenderingChanged" }],
+        );
+        assert.strictEqual(yield* cachedDigest(home, specText.path), "absent");
+        assert.deepStrictEqual(yield* scratchLeft(home), []);
+      }).pipe(Effect.scoped, Effect.provide(fetchLayer)),
+  );
+
+  it.effect("replaces a cached rendering whose bytes differ from its pin", () =>
+    Effect.gen(function* replacesOldRendering() {
+      const home = yield* scratchDirectory("spec-fetch-home-");
+
+      yield* seed(home, specText.path, otherBytes(renderedSpec));
+
+      const run = yield* runIn(home, fakeServer().client);
+
+      assert.deepStrictEqual(Result.isSuccess(run) ? run.success.renderings : [], [
+        { outcome: "replaced", path: specText.path },
+      ]);
+      assert.strictEqual(yield* cachedDigest(home, specText.path), specText.sha256);
     }).pipe(Effect.scoped, Effect.provide(fetchLayer)),
   );
 });
