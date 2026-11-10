@@ -80,16 +80,8 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: its 146-package box ran 20.0 s in FIX-MANIFEST's run of 2026-11-07, which recorded no load average; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
-    "pantry/src/import/overlays/unwritten-identifier.oracle.test.ts",
-    "measurement owed: its 64-package box ran 46.0 s at a load average of 45 to 48 in FB-TESTS's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
     "pantry/src/import/overlays/expressions.absence.oracle.test.ts",
     "measurement owed: its 18-package box ran under FB-EXPR's run of 2026-11-07, whose load average was below 60, and its 9-package box, once FIX-A1 struck the timing cases, 3.9 s at a load average of 34 to 40 beside four other suites; its 600_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
-    "pantry/src/import/overlays/reference-names.oracle.test.ts",
-    "measurement owed: its 343-package box ran 137.6 s at a load average of 26 to 44, and 198.4 s at a load average of 34 to 46, in FIX-NCNAME's runs of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
     "pantry/src/import/law-names.test.ts",
@@ -100,32 +92,12 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: FB-EXPR's NS1 guard (66716a8b) ran at a load average below 60; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
-    "pantry/src/import/overlays/operators.holds.oracle.test.ts",
-    "measurement owed: FB-EXPR's Rounding guard (33a71bb7) ran at a load average below 60; its 600_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
     "pantry/src/qti/item-ref-href.oracle.test.ts",
     "measurement owed: FIX-ITEMREF's 128-package exhaust (65a3c4dd) ran 8.8 s at a load average of 21 to 22, its slowest run; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
     "pantry/src/qti/duplicate-declaration.oracle.test.ts",
     "measurement owed: FIX-DUPDECL's 21-package guard (8c6394a1) ran in a run of 2026-11-07 that recorded no load average; its 600_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
-    "pantry/src/import/overlays/collapsed-values.oracle.test.ts",
-    "measurement owed: FIX-ATOMIC's 160-package guard (9a9074d4) ran in a run of 2026-11-07 that recorded no load average; its 600_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
-    "pantry/src/import/overlays/referenced-cardinality.oracle.test.ts",
-    "measurement owed: FIX-REFCARD's 480-case exhaust ran 13.4 s at a load average of 7 in its run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
-    "pantry/src/import/overlays/id-names.oracle.test.ts",
-    "measurement owed: its 97-case exhaust ran 31.5 s at a load average of 21 to 34 in FIX-IDNCNAME's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
-    "pantry/src/qti/media.test.ts",
-    "measurement owed: its package-media case, which judges one package on the host under two rosters, ran 8.3 s at a load average of 33 to 36 in lane P's full run of 2026-11-09, beside the database project; its 300_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
     "pantry/src/grammar/attributes.test.ts",
@@ -138,10 +110,6 @@ const exempt: ReadonlyMap<string, string> = new Map([
   [
     "pantry/src/test/complete.oracle.test.ts",
     "measurement owed: its literal 300_000 went unread until the guard's reader took a regular expression literal as one (2026-11-10), and no lane edits this file; it stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
-    "pantry/src/test/fixtures.test.ts",
-    "measurement owed: its two literals of 120_000 went unread until the guard's reader took a regular expression literal as one (2026-11-10), and no lane edits this file; they stay in place until they are remeasured at a load average of at least 60",
   ],
 ]);
 

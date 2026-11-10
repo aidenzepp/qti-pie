@@ -3,7 +3,7 @@ import { Config, Effect, Option } from "effect";
 /**
  * The named lease database, when one is held; `Option.none()` otherwise.
  */
-export const leaseDatabase = Config.option(Config.String("GR8DES_PG_DATABASE"));
+const leaseDatabase = Config.option(Config.String("GR8DES_PG_DATABASE"));
 
 /**
  * Whether `GR8DES_CORPUS=1` asks for the 1EdTech corpus tests.
@@ -51,19 +51,6 @@ export const hasLease = Option.isSome(settings.leaseDatabase);
 export const leaseTestTimeoutMs = 49_000;
 
 /**
- * The timeout, in milliseconds, for the export's page-size test
- * (`#pantry/export/package.db.test.ts`), which exports every accepted package three times: whole,
- * then in pages of 1 and of 7 `Node` rows, so one `documentScan.page` call per row at size 1.
- *
- * Measured at qti-pie 5a61bc92 on grizzle b927d999, 2026-11-09: 211,019 ms on the lease at a load
- * average of about 27 to 36. grizzle's PORT-Q1 measured the same test at page size 1 served and in
- * process, 30.1 s and 29.5 s, the same 3,380 flights and 60,089 statements, so serving the
- * workload costs it nothing. The value is twice the measurement, rounded up to the next 1,000, the
- * rule `leaseTestTimeoutMs` uses. Raise it only on a new measurement recorded here.
- */
-export const exportPageSizesTestTimeoutMs = 423_000;
-
-/**
  * The timeout, in milliseconds, for one test that spawns the CLI as a child process.
  *
  * Such a test pays Node's start and the module graph of `cli.ts`. Measured 2026-11-07: 3.0 s at a
@@ -81,9 +68,10 @@ export const cliProcessTestTimeoutMs = 10_000;
  * modules `#pantry/test/cli.ts`'s `preloadEngine` imports, which the command handlers import when
  * they run.
  *
- * Measured 2026-11-07: 36.9 s at a load average of 80 to 83, `cli/import.test.ts`'s hook beside one
- * other suite, which the budget is over twice. Nine concurrent loads of the five modules took 4.2
- * to 4.6 s on 2026-11-10 at a load average of 19 to 22, on grizzle eb56d58. Raise it only on a new
+ * Measured 2026-11-07: 36.9 s at a load average of 80 to 83, the hook of `cli/import.test.ts`,
+ * since deleted, beside one other suite, which the budget is over twice; `cli/present.test.ts` is
+ * the one file that takes the hook now. Nine concurrent loads of the five modules took 4.2 to 4.6 s
+ * on 2026-11-10 at a load average of 19 to 22, on grizzle eb56d58. Raise it only on a new
  * measurement recorded here, never to make a run pass.
  */
 export const engineLoadHookTimeoutMs = 97_000;
