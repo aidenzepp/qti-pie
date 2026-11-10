@@ -31,8 +31,16 @@ import type { QtiSchema } from "#pantry/qti/schema.ts";
 export const styleFetch = String.raw`[uU][rR][lL]\(|@[iI][mM][pP][oO][rR][tT]|[iI][mM][aA][gG][eE]-[sS][eE][tT]\(|[sS][rR][cC]\(|\\`;
 
 /**
- * Select, over a base level, the `style` attributes: each `(node, id)` with its lexical form as
- * `value` and its count of kept entity references as `entities`.
+ * The one attribute name the rule judges: HTML's `style`, whose value the player reads as CSS
+ * declarations. Every other attribute is free of the rule.
+ *
+ * @see {@link https://html.spec.whatwg.org/multipage/dom.html#the-style-attribute | HTML Standard, the style attribute}
+ */
+export const styleName = "style";
+
+/**
+ * Select, over a base level, the {@link styleName} attributes: each `(node, id)` with its lexical
+ * form as `value` and its count of kept entity references as `entities`.
  *
  * @param base - The level the query reads, pantry's `Qti`.
  * @returns The query.
@@ -43,7 +51,7 @@ const stylesOf = (base: QtiSchema) =>
 
     return r
       .match(Attribute, { entities, id, lexical, name, node })
-      .where(r.eq(name, "style"))
+      .where(r.eq(name, styleName))
       .find({ entities, id, node, value: lexical });
   });
 

@@ -41,7 +41,8 @@ describe("CdnOptions", () => {
   });
 
   it("refuses an http origin and an origin without its root path", () => {
-    // Oracle: #55's CdnOrigin (`src/db/install.ts`): an `https://` origin and one slash after it.
+    // Oracle: #55's CdnOrigin (`src/db/install.ts` at `b340be09`): an `https://` origin and one
+    // slash after it.
     assert.isTrue(Exit.isFailure(decodeOrigin("http://cdn.example.com/")));
     assert.isTrue(Exit.isFailure(decodeOrigin("https://cdn.example.com")));
   });

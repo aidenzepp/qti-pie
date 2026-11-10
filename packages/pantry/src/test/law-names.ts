@@ -4,8 +4,7 @@
  * each installed law under its LawId, the key a refused law carries. `law-names.committed.test.ts`
  * holds the committed file to it.
  *
- * Run it with this package's own install, `GR8DES_QTI_INSTALL` unset, from the package's folder:
- * `node src/test/law-names.ts` writes the file.
+ * Run it from the package's folder: `node src/test/law-names.ts` writes the file.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

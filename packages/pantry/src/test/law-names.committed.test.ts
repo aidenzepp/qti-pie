@@ -56,7 +56,7 @@ describe("the law-name dictionary", () => {
       assert.deepStrictEqual(
         committed,
         lawNamesOf(),
-        "The committed law-name dictionary is stale: run `node src/test/law-names.ts` in packages/pantry, with GR8DES_QTI_INSTALL unset, and commit src/vocab/law-names.json.",
+        "The committed law-name dictionary is stale: run `node src/test/law-names.ts` in packages/pantry and commit src/vocab/law-names.json.",
       );
     },
     lawModelTimeoutMs,

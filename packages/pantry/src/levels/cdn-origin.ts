@@ -22,9 +22,8 @@
  * @see https://github.com/bjornpagen/grizzle/blob/89e94c040262c587065e84df42829a2f12d9f0c3/README.md#L1866-L1950
  */
 import { check, Compute, derived, query, v } from "@bjornpagen/grizzle";
-import { Array as Arr } from "effect";
-import { GoverningOf, grammar } from "#pantry/grammar/install.ts";
-import { noType } from "#pantry/grammar/xsi.ts";
+import { Array as Arr, Option } from "effect";
+import { grammar } from "#pantry/grammar/install.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Node } from "#pantry/qti/node.ts";
 import type { QtiSchema } from "#pantry/qti/schema.ts";
@@ -99,11 +98,9 @@ export const candidatesPattern = (origin: string): string => {
 export const governorsOf = (kinds: readonly string[]): readonly string[] => {
   const types = new Set(
     kinds.flatMap((kind) =>
-      grammar.kinds.versions.handles.flatMap((version) => {
-        const type = grammar.xsi.declaredType(version, kind);
-
-        return type === noType ? [] : [type];
-      }),
+      grammar.kinds.versions.handles.flatMap((version) =>
+        Option.toArray(grammar.xsi.declaredType(version, kind)),
+      ),
     ),
   );
 
@@ -118,7 +115,7 @@ export const governorsOf = (kinds: readonly string[]): readonly string[] => {
 /**
  * One fetched attribute name in one address form, with every governor it is fetched under.
  */
-interface FetchedName {
+export interface FetchedName {
   readonly form: AddressForm;
   readonly governors: readonly string[];
   readonly name: (typeof fetchedAttributes)[number]["name"];
@@ -127,7 +124,7 @@ interface FetchedName {
 /**
  * The fetched attributes by name and form, each with the governors of every kind that fetches it.
  */
-const fetchedNames: readonly FetchedName[] = Object.values(
+export const fetchedNames: readonly FetchedName[] = Object.values(
   Arr.groupBy(fetchedAttributes, ({ form, name }) => `${form} ${name}`),
 ).map((rows) => ({
   form: rows[0].form,
@@ -138,12 +135,13 @@ const fetchedNames: readonly FetchedName[] = Object.values(
 /**
  * The governors whose text a player fetches.
  */
-const textGovernors = governorsOf(fetchedTexts);
+export const textGovernors = governorsOf(fetchedTexts);
 
 /**
  * Select, over a base level, the attributes a player fetches in one address form: each `(node, id)`
- * whose name is one a kind fetches in that form, under a governor of such a kind, with its lexical
- * form as `value` and its count of kept entity references as `entities`.
+ * whose name is one a kind fetches in that form, under a governor of such a kind (its element's
+ * `governor`, which `Attribute` copies), with its lexical form as `value` and its count of kept
+ * entity references as `entities`.
  *
  * @param base - The level the query reads, pantry's `Qti`.
  * @param form - The address form.
@@ -151,12 +149,10 @@ const textGovernors = governorsOf(fetchedTexts);
  */
 const fetchedAttributesIn = (base: QtiSchema, form: AddressForm) =>
   query(base).rule((r) => {
-    const { entities, governs, id, kind, lexical, name, node, version } = v(Attribute, "attribute");
-    const { governor } = v(GoverningOf, "governing");
+    const { entities, governor, id, lexical, name, node } = v(Attribute, "attribute");
 
     return r
-      .match(Attribute, { entities, governs, id, kind, lexical, name, node, version })
-      .match(GoverningOf, { governor, governs, kind, version })
+      .match(Attribute, { entities, governor, id, lexical, name, node })
       .where(
         r.or(
           ...fetchedNames
@@ -178,12 +174,10 @@ const fetchedAttributesIn = (base: QtiSchema, form: AddressForm) =>
  */
 const fetchedTextsOf = (base: QtiSchema) =>
   query(base).rule((r) => {
-    const { governs, id, kind, stringValue, version } = v(Node, "node");
-    const { governor } = v(GoverningOf, "governing");
+    const { governor, id, stringValue } = v(Node, "node");
 
     return r
-      .match(Node, { governs, id, kind, stringValue, version })
-      .match(GoverningOf, { governor, governs, kind, version })
+      .match(Node, { governor, id, stringValue })
       .where(r.inSet(governor, textGovernors))
       .find({ id, value: stringValue });
   });

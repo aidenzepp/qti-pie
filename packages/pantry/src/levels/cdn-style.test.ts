@@ -13,6 +13,8 @@
  * - **Its entity bypass** (decision 488): an entity reference crust keeps unexpanded, which a player
  *   reading the external subset expands, hides a fetch from the pattern, so the rule's relation
  *   carries each style's count of kept references for its check to refuse.
+ * - **What it selects**, #55's case (`src/qti/cdn.test.ts` at `b340be09`): only `style`, so a `class`
+ *   holding any of those texts is free of every rule of the level.
  */
 import { lawsOf } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
@@ -23,11 +25,16 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter } from "effect";
+import { AttributeGrammar } from "#pantry/grammar/install.ts";
 import { singleCdn } from "#pantry/levels/cdn.ts";
-import { cdnStyleRule, styleFetch } from "#pantry/levels/cdn-style.ts";
+import { uriDomains } from "#pantry/levels/cdn-data.ts";
+import { uninterpretedClasses } from "#pantry/levels/cdn-foreign.ts";
+import { fetchedNames } from "#pantry/levels/cdn-origin.ts";
+import { cdnStyleRule, styleFetch, styleName } from "#pantry/levels/cdn-style.ts";
 import { qti } from "#pantry/qti/schema.ts";
 import { grizzleCheck, writtenCdnConfig } from "#pantry/test/grizzle-check.ts";
 import { addedLaws } from "#pantry/test/level-laws.ts";
+import { addressLists } from "#pantry/vocab/fetched.ts";
 
 /**
  * The origin the level is built for.
@@ -237,6 +244,35 @@ describe("levels/cdn-style.ts, the entity bypass", () => {
       Object.keys(relations.CdnStyleAttribute.heading),
       "entities",
       `${styleRelation} judges no count of kept entity references`,
+    );
+  });
+});
+
+describe("levels/cdn-style.ts, what it selects", () => {
+  it("judges only a style attribute, and no rule of the level selects a class attribute, which #55 left free whatever it holds", () => {
+    // Oracle: #55's CDN style case (`src/qti/cdn.test.ts` at `b340be09`), which admitted a `class`
+    // holding any drawn text. Here against what each rule's relations select: the style rule only
+    // `styleName`; the origin rule a fetched name; the data rule an `xs:anyURI` domain or an
+    // address list; the foreign rule an uninterpreted open class.
+    assert.strictEqual(styleName, "style");
+    assert.isFalse(
+      new Set<string>(fetchedNames.map(({ name }) => name)).has("class"),
+      "the origin rule selects class",
+    );
+    assert.isFalse(
+      new Set<string>(addressLists).has("class"),
+      "the data rule reads class as a list",
+    );
+    assert.deepStrictEqual(
+      AttributeGrammar.rows.filter(
+        ({ domain, name }) => name === "class" && uriDomains.includes(domain),
+      ),
+      [],
+      "the data rule reads class as an xs:anyURI",
+    );
+    assert.isFalse(
+      new Set<string>(uninterpretedClasses).has("class"),
+      "the foreign rule selects class",
     );
   });
 });

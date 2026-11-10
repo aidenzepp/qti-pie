@@ -28,7 +28,7 @@ import { queriesOf } from "#pantry/qti/queries.ts";
  *   with it (`lawsByName`).
  */
 const buildLevels = () => {
-  const base = qtiBaseOf([]);
+  const base = qtiBaseOf();
   const queries = queriesOf(base);
 
   return {

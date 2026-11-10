@@ -13,18 +13,33 @@
  * - **A kept entity reference hides a value from them** (decision 488): `Qti` admits an address list
  *   and a URI text that keep an entity reference the document never declares, which a player that
  *   reads the external DTD expands, so the level refuses every judged value that keeps one.
+ * - **#55's cases** (`src/qti/cdn.test.ts` at `b340be09`): the attributes and texts it judged, each
+ *   selected by the relation of its form or by none, and its search over values of up to six
+ *   pieces.
  */
 import { lawsOf } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Formatter } from "effect";
-import { ValueDomainOf } from "#pantry/grammar/install.ts";
-import { cdnDataRule, dataScheme, dataToken } from "#pantry/levels/cdn-data.ts";
+import { drawn, explore } from "@grizzle/testing/explore";
+import { required } from "@grizzle/testing/features";
+import { array, element } from "@grizzle/testing/gen";
+import { notesOnly } from "@grizzle/testing/sense";
+import { completeShrink } from "@grizzle/testing/shrink";
+import { searched } from "@grizzle/testing/vitest";
+import { Duration, Effect, Formatter } from "effect";
+import {
+  AttributeGrammar,
+  AttributeModelOf,
+  TextDomain,
+  ValueDomainOf,
+} from "#pantry/grammar/install.ts";
+import { cdnDataRule, dataScheme, dataToken, uriDomains } from "#pantry/levels/cdn-data.ts";
 import { singleCdn } from "#pantry/levels/cdn.ts";
 import { grizzleCheck, writtenCdnConfig } from "#pantry/test/grizzle-check.ts";
 import { addedLaws } from "#pantry/test/level-laws.ts";
 import { asi, breachesOf, judged, shown, withItem } from "#pantry/test/probe.ts";
 import { Qti } from "#pantry/test/qti.ts";
+import { addressLists } from "#pantry/vocab/fetched.ts";
 import { xsiNamespace as xsi } from "#pantry/vocab/namespaces.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
@@ -48,9 +63,9 @@ const isData = (address: string): boolean =>
   URL.canParse(address, base) && new URL(address, base).protocol === "data:";
 
 /**
- * The pieces #55's search built values from (`src/qti/cdn.test.ts`, CDN data): the scheme in
- * several cases and with a tab or newline inside, near misses, whitespace, a C0 control, a
- * relative path and another host.
+ * The pieces #55's search built values from (`src/qti/cdn.test.ts` at `b340be09`, CDN data): the
+ * scheme in several cases and with a tab or newline inside, near misses, whitespace, a C0 control,
+ * a relative path and another host.
  */
 const pieces = [
   "data:",
@@ -280,4 +295,136 @@ describe("dataToken", () => {
     assert.deepStrictEqual(disagreeing, []);
     assert.isTrue(values.some((value) => pattern.test(value)));
   });
+});
+
+/**
+ * The attributes #55's CDN data case judged, each with how its value holds addresses: an
+ * `xs:anyURI` attribute's value is one address, `xsi:schemaLocation`'s each whitespace-separated
+ * token, and any other attribute's none.
+ */
+const dataFields = [
+  { form: "address", governor: "a", name: "href", version: "3.0.0" },
+  { form: "address", governor: "img", name: "src", version: "3.0.1" },
+  { form: "address", governor: "m:mglyph", name: "src", version: "3.0.0" },
+  { form: "address", governor: "qti-response-processing", name: "template", version: "3.0.1" },
+  { form: "list", governor: "qti-assessment-item", name: "xsi:schemaLocation", version: "3.0.0" },
+  { form: "none", governor: "img", name: "alt", version: "3.0.0" },
+  { form: "none", governor: "img", name: "data-*", version: "3.0.1" },
+] as const;
+
+/**
+ * The element texts #55's CDN data case judged: a `qti-file-href`'s and an adaptation's, each an
+ * `xs:anyURI`, and a value's, which is none.
+ */
+const dataTexts = [
+  { form: "address", governor: "qti-file-href", version: "3.0.0" },
+  { form: "address", governor: "drd:hasAdaptation", version: "3.0.1" },
+  { form: "none", governor: "qti-value", version: "3.0.0" },
+] as const;
+
+/**
+ * Read an attribute's value domain under a governor in a version, as `CdnDataUriAttribute`'s query
+ * reads it: the governor's attribute model, then the name's row of it.
+ *
+ * @param version - The schema version.
+ * @param governor - The element's governor.
+ * @param name - The attribute's name.
+ * @returns The domain, or none where the governor admits no such name.
+ */
+const attributeDomain = (version: string, governor: string, name: string): string | undefined => {
+  const model = AttributeModelOf.rows.find(
+    (row) => row.version === version && row.governor === governor,
+  )?.model;
+
+  return AttributeGrammar.rows.find((row) => row.model === model && row.name === name)?.domain;
+};
+
+/**
+ * The relations of the data rule that select a value of a form: one for an address or a list, none
+ * for any other value.
+ */
+const relationsOfForm = {
+  address: ["CdnDataUriAttribute"],
+  list: ["CdnDataAddressList"],
+  none: [],
+} as const satisfies Readonly<Record<string, readonly string[]>>;
+
+describe("cdnDataRule, #55's fields", () => {
+  it("selects each of #55's xs:anyURI attributes and texts by its domain, its address list by name, and none of its other values", () => {
+    // Oracle: #55's CDN data case (`src/qti/cdn.test.ts` at `b340be09`), which judged each of these
+    // fields under the reading its form states and left a `none` value free. Here against what the
+    // rule's relations select: an attribute whose domain under its governor is an `xs:anyURI`'s
+    // (`uriDomains`), an attribute of an address list (`addressLists`), and a text whose governor
+    // reads it in such a domain (`TextDomain`).
+    const misread = [
+      ...dataFields.flatMap(({ form, governor, name, version }) => {
+        const domain = attributeDomain(version, governor, name);
+        const uri = domain !== undefined && uriDomains.includes(domain);
+        const list = addressLists.some((listed) => listed === name);
+        const selectedBy = [
+          ...(uri ? ["CdnDataUriAttribute"] : []),
+          ...(list ? ["CdnDataAddressList"] : []),
+        ];
+        const expected: readonly string[] = relationsOfForm[form];
+
+        return selectedBy.join(" ") === expected.join(" ")
+          ? []
+          : [
+              `${governor}'s ${name} in ${version}: [${selectedBy.join(", ")}], not [${expected.join(", ")}]`,
+            ];
+      }),
+      ...dataTexts.flatMap(({ form, governor, version }) => {
+        const domain = TextDomain.rows.find(
+          (row) => row.version === version && row.governor === governor,
+        )?.domain;
+        const uri = domain !== undefined && uriDomains.includes(domain);
+
+        return uri === (form === "address") ? [] : [`${governor}'s text in ${version}`];
+      }),
+    ];
+
+    assert.deepStrictEqual(misread, []);
+  });
+
+  it.effect(
+    "matches #55's drawn values of up to six pieces: the scheme pattern exactly where the URL Standard reads data, the token pattern exactly where a whitespace-separated token does",
+    (ctx) =>
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang: Duration.seconds(10),
+            concurrency: 1,
+            coverage: required(
+              ["address admitted", "address refused", "list admitted", "list refused"] as const,
+              { cases: 400, sense: notesOnly },
+            ),
+            draw: drawn((source) => ({
+              form: source.draw(element(["address", "list"] as const)),
+              value: source.draw(array(element(pieces), { max: 6, min: 0 })).join(""),
+            })),
+            kept: [],
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "the URL Standard's scheme (Node's URL protocol)",
+            },
+            runs: 3000,
+            shrink: completeShrink,
+            steerEvery: 32,
+            suite: "levels/cdn-data/patterns",
+          },
+          ({ form, value }, c) =>
+            Effect.sync(() => {
+              const addresses = form === "list" ? value.split(/[\t\n\r ]+/u) : [value];
+              const admitted = !addresses.some(isData);
+              const pattern = new RegExp(form === "list" ? dataToken : dataScheme, "u");
+              const verdict = !pattern.test(value);
+
+              assert.strictEqual(verdict, admitted, `${form} ${JSON.stringify(value)}`);
+              c.note(verdict ? `${form} admitted` : `${form} refused`);
+            }),
+        ),
+      ),
+  );
 });
