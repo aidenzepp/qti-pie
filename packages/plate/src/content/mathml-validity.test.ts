@@ -51,6 +51,8 @@ const openText = (location: string, xml: string): Effect.Effect<Verdict> =>
 const brokenFormula = {
   "annotation-xml-text": 6,
   "apply-arity": 5,
+  "attribute-case": 7,
+  "attribute-unknown": 7,
   "bind-bvar": 2,
   "bvar-degree": 2,
   "cn-form": 4,
@@ -193,6 +195,139 @@ const expectAccepted = (verdict: Verdict): Accepted => {
  */
 const forall = (body: string): string =>
   `<m:bind><m:forall/><m:bvar><m:ci>x</m:ci></m:bvar>${body}</m:bind>`;
+
+/**
+ * Render an accepted item as the page a host serves, for the first instance.
+ *
+ * @param accepted The accepted item.
+ * @returns The page's HTML.
+ */
+const htmlOf = Effect.fnUntraced(function* htmlOf(accepted: Accepted) {
+  const configuration = yield* configure({});
+  const page = yield* Effect.fromResult(
+    render(redact(accepted), configuration, { instance: "q1" }),
+  );
+
+  return page.html;
+});
+
+/**
+ * The attribute names written on the tags inside every `math` element of a page, in document order.
+ *
+ * @param html The page's HTML.
+ * @returns The names, each as the page spells it.
+ */
+const mathAttributeNames = (html: string): readonly string[] =>
+  (html.match(/<math\b[\s\S]*?<\/math>/gu) ?? []).flatMap((formula) =>
+    (formula.match(/<[a-z][^>]*>/gu) ?? []).flatMap((tag) =>
+      Array.from(tag.matchAll(/\s(?<name>[^\s=>/]+)=/gu), (found) => found.groups?.["name"] ?? ""),
+    ),
+  );
+
+/**
+ * Assert that a hand-built formula opens refused and renders nothing, by the given facts.
+ *
+ * @param content The `math` element's content.
+ * @param detail The facts the refusal's detail must name.
+ * @param attributes The `math` element's own attributes.
+ * @returns The refusal.
+ */
+const expectFormulaRefused = (
+  content: string,
+  detail: { readonly [key: string]: string },
+  attributes = "",
+): Effect.Effect<Refusal> =>
+  Effect.map(openMath(content, attributes), (verdict) => {
+    const refusal = expectRefused(verdict, detail);
+
+    assert.deepStrictEqual(acceptedItem(verdict), Option.none(), "nothing renders");
+
+    return refusal;
+  });
+
+/**
+ * The attributes MathML 3 admits on every element, written the way a formula carries them: an `id`,
+ * a reference to the `anchor` id of the enclosing element, a `class`, the two links, and the
+ * deprecated `other`.
+ */
+const commonAttributes =
+  ' id="c1" xref="anchor" class="c" href="#sq" other="x" cdbase="http://www.openmath.org/cd"';
+
+/**
+ * One hand-built formula for each group of elements MathML 3 gives the same attributes, the
+ * element that carries `zz="1"` and the formula around it, in a place the element's own rules and
+ * its ancestors' admit, so the unknown attribute is the first defect. `math`, `mfenced` and
+ * `declare` are not here: `math` carries its attributes through {@link openMath}'s second argument,
+ * `mfenced` is rewritten into an `mrow` before the checks run, and `declare` has no valid place a
+ * hand-built formula reaches easily.
+ */
+const unknownAttributeVariants: readonly (readonly [string, string])[] = [
+  ["plus", '<m:apply><m:plus zz="1"/><m:ci>a</m:ci><m:ci>b</m:ci></m:apply>'],
+  [
+    "lowlimit",
+    '<m:apply><m:int/><m:bvar><m:ci>t</m:ci></m:bvar><m:lowlimit zz="1"><m:cn>0</m:cn></m:lowlimit><m:uplimit><m:cn>1</m:cn></m:uplimit><m:ci>t</m:ci></m:apply>',
+  ],
+  ["msqrt", '<m:msqrt zz="1"><m:mi>x</m:mi></m:msqrt>'],
+  ["mi", '<m:mi zz="1">x</m:mi>'],
+  ["ci", '<m:ci zz="1">x</m:ci>'],
+  [
+    "annotation",
+    '<m:semantics><m:mi>x</m:mi><m:annotation zz="1" encoding="text/plain">x</m:annotation></m:semantics>',
+  ],
+  [
+    "annotation-xml",
+    '<m:semantics><m:mi>x</m:mi><m:annotation-xml zz="1" encoding="application/xhtml+xml"><p>x</p></m:annotation-xml></m:semantics>',
+  ],
+  ["mtr", '<m:mtable><m:mtr zz="1"><m:mtd><m:mi>x</m:mi></m:mtd></m:mtr></m:mtable>'],
+  ["msubsup", '<m:msubsup zz="1"><m:mi>x</m:mi><m:mn>1</m:mn><m:mn>2</m:mn></m:msubsup>'],
+  ["mstyle", '<m:mstyle zz="1"><m:mi>x</m:mi></m:mstyle>'],
+  ["munderover", '<m:munderover zz="1"><m:mo>+</m:mo><m:mn>0</m:mn><m:mn>1</m:mn></m:munderover>'],
+  ["mover", '<m:mover zz="1"><m:mi>x</m:mi><m:mo>-</m:mo></m:mover>'],
+  ["mo", '<m:mo zz="1">+</m:mo>'],
+  ["munder", '<m:munder zz="1"><m:mi>x</m:mi><m:mo>-</m:mo></m:munder>'],
+  ["maction", '<m:maction zz="1"><m:mi>a</m:mi><m:mi>b</m:mi></m:maction>'],
+  ["mtable", '<m:mtable zz="1"><m:mtr><m:mtd><m:mi>x</m:mi></m:mtd></m:mtr></m:mtable>'],
+  ["mstack", '<m:mstack zz="1"><m:mn>1</m:mn></m:mstack>'],
+  ["mglyph", '<m:mglyph zz="1" alt="x"/>'],
+  ["mspace", '<m:mspace zz="1"/>'],
+  ["ms", '<m:ms zz="1">s</m:ms>'],
+  ["cn", '<m:cn zz="1">7</m:cn>'],
+  ["mfrac", '<m:mfrac zz="1"><m:mn>1</m:mn><m:mn>2</m:mn></m:mfrac>'],
+  [
+    "semantics",
+    '<m:semantics zz="1"><m:mi>x</m:mi><m:annotation encoding="text/plain">x</m:annotation></m:semantics>',
+  ],
+  ["csymbol", '<m:csymbol zz="1">f</m:csymbol>'],
+  ["interval", '<m:interval zz="1"><m:cn>0</m:cn><m:cn>1</m:cn></m:interval>'],
+  ["mtd", '<m:mtable><m:mtr><m:mtd zz="1"><m:mi>x</m:mi></m:mtd></m:mtr></m:mtable>'],
+  [
+    "mscarry",
+    '<m:mstack><m:mscarries><m:mscarry zz="1"><m:mn>1</m:mn></m:mscarry></m:mscarries><m:mn>19</m:mn></m:mstack>',
+  ],
+  [
+    "mscarries",
+    '<m:mstack><m:mscarries zz="1"><m:mscarry><m:mn>1</m:mn></m:mscarry></m:mscarries><m:mn>19</m:mn></m:mstack>',
+  ],
+  ["list", '<m:list zz="1"><m:ci>a</m:ci></m:list>'],
+  ["mpadded", '<m:mpadded zz="1"><m:mi>x</m:mi></m:mpadded>'],
+  ["mrow", '<m:mrow zz="1"><m:mi>x</m:mi></m:mrow>'],
+  ["malignmark", '<m:mrow><m:mi>x</m:mi><m:malignmark zz="1"/></m:mrow>'],
+  [
+    "maligngroup",
+    '<m:mtable><m:mtr><m:mtd><m:maligngroup zz="1"/><m:mi>x</m:mi></m:mtd></m:mtr></m:mtable>',
+  ],
+  ["msline", '<m:mstack><m:mn>1</m:mn><m:msline zz="1"/><m:mn>2</m:mn></m:mstack>'],
+  ["mlongdiv", '<m:mlongdiv zz="1"><m:mn>3</m:mn><m:mn>12</m:mn><m:mn>4</m:mn></m:mlongdiv>'],
+  ["menclose", '<m:menclose zz="1"><m:mi>x</m:mi></m:menclose>'],
+  ["msgroup", '<m:mstack><m:msgroup zz="1"><m:mn>1</m:mn></m:msgroup></m:mstack>'],
+  ["msrow", '<m:mstack><m:msrow zz="1"><m:mn>1</m:mn></m:msrow></m:mstack>'],
+  ["msub", '<m:msub zz="1"><m:mi>x</m:mi><m:mn>1</m:mn></m:msub>'],
+  ["msup", '<m:msup zz="1"><m:mi>x</m:mi><m:mn>2</m:mn></m:msup>'],
+  [
+    "share",
+    '<m:apply><m:plus/><m:apply id="sq"><m:abs/><m:ci>x</m:ci></m:apply><m:share zz="1" href="#sq"/></m:apply>',
+  ],
+];
 
 describe("I-18: MathML validity, the MathML 3 Recommendation's structural rules", () => {
   it.effect("[I-18] the valid fixture opens accepted, as m3e-05 left it", () =>
@@ -451,5 +586,294 @@ describe("I-18: MathML validity, the MathML 3 Recommendation's structural rules"
         assert.deepStrictEqual(acceptedItem(judged.verdict), Option.none(), "nothing renders");
         expectAccepted(yield* openMath('<m:mi class="lead" mathcolor="red">x</m:mi>'));
       }),
+  );
+
+  it.effect(
+    "[I-18] the valid fixture still opens accepted, and its HTML is what m3e-05b rendered",
+    () =>
+      Effect.gen(function* pin() {
+        const verdict = yield* openText(validLocation, yield* fixtureText(validLocation));
+        const html = yield* htmlOf(expectAccepted(verdict));
+        const names = mathAttributeNames(html);
+
+        assert.deepStrictEqual(
+          names,
+          [
+            ["display", "dir"],
+            ["display", "dir", "id", "href", "xref"],
+            ["display", "dir", "encoding", "type", "type"],
+            ["display", "dir"],
+            ["display", "dir"],
+            ["display", "dir", "encoding"],
+            [
+              "display",
+              "dir",
+              "scriptsizemultiplier",
+              "scriptlevel",
+              "actiontype",
+              "selection",
+              "width",
+            ],
+          ].flat(),
+          "the attributes the formulas render with, as m3e-05b rendered them",
+        );
+        for (const name of names) {
+          assert.match(name, /^(?:definitionURL|[a-z][a-z-]*)$/u, `${name} is lowercase`);
+        }
+      }),
+  );
+
+  it.effect("[I-18] STYLE, Style and sTyLe on a MathML element are refused as style", () =>
+    Effect.gen(function* styleCase() {
+      const judged = yield* openInvalid("attribute-case");
+
+      expectRefused(judged, { attribute: "style", element: "mi", section: "2.1.6" });
+      assert.deepStrictEqual(acceptedItem(judged.verdict), Option.none(), "nothing renders");
+      for (const spelling of ["Style", "sTyLe"]) {
+        yield* expectFormulaRefused(`<m:mi ${spelling}="color: red">x</m:mi>`, {
+          attribute: "style",
+          element: "mi",
+          section: "2.1.6",
+        });
+      }
+    }),
+  );
+
+  it.effect("[I-18] an event-handler attribute is refused in any case, and never rendered", () =>
+    Effect.gen(function* handlers() {
+      const judged = yield* openInvalid("attribute-unknown");
+
+      expectRefused(judged, { attribute: "onclick", element: "mi", section: "A.2" });
+      assert.deepStrictEqual(acceptedItem(judged.verdict), Option.none(), "nothing renders");
+      yield* expectFormulaRefused('<m:mi onClick="x">x</m:mi>', {
+        attribute: "onclick",
+        element: "mi",
+        section: "A.2",
+      });
+      yield* expectFormulaRefused('<m:mi ONLOAD="x">x</m:mi>', {
+        attribute: "onload",
+        element: "mi",
+        section: "A.2",
+      });
+      yield* expectFormulaRefused('<m:mo onmouseover="x">+</m:mo>', {
+        attribute: "onmouseover",
+        element: "mo",
+        section: "A.2",
+      });
+    }),
+  );
+
+  it.effect(
+    "[I-18] an attribute MathML 3 does not give the element is refused, and one it gives is admitted",
+    () =>
+      Effect.gen(function* allowlist() {
+        yield* expectFormulaRefused('<m:mrow mathvariant="bold"><m:mi>x</m:mi></m:mrow>', {
+          attribute: "mathvariant",
+          element: "mrow",
+          section: "A.2",
+        });
+        yield* expectFormulaRefused('<m:mi selection="1">x</m:mi>', {
+          attribute: "selection",
+          element: "mi",
+          section: "A.2",
+        });
+        yield* expectFormulaRefused('<m:mi display="block">x</m:mi>', {
+          attribute: "display",
+          element: "mi",
+          section: "A.2",
+        });
+        yield* expectFormulaRefused(
+          "<m:mi>x</m:mi>",
+          {
+            attribute: "foo",
+            element: "math",
+            section: "A.2",
+          },
+          ' foo="1"',
+        );
+        yield* expectFormulaRefused('<m:mi src="x.png">x</m:mi>', {
+          attribute: "src",
+          element: "mi",
+          section: "A.2",
+        });
+
+        expectAccepted(yield* openMath('<m:mi mathvariant="bold">x</m:mi>'));
+        expectAccepted(yield* openMath('<m:mrow dir="rtl"><m:mi>x</m:mi></m:mrow>'));
+        expectAccepted(yield* openMath("<m:mi>x</m:mi>"));
+        expectAccepted(
+          yield* openMath('<m:maction selection="1"><m:mi>a</m:mi><m:mi>b</m:mi></m:maction>'),
+        );
+        expectAccepted(
+          yield* openMath(
+            '<m:mtable><m:mtr><m:mtd columnalign="left"><m:mi>x</m:mi></m:mtd></m:mtr></m:mtable>',
+          ),
+        );
+        expectAccepted(
+          yield* openMath(
+            '<m:semantics><m:mi>x</m:mi><m:annotation encoding="text/plain">x</m:annotation></m:semantics>',
+          ),
+        );
+        expectAccepted(yield* openMath('<m:cn type="integer">7</m:cn>'));
+      }),
+  );
+
+  it.effect(
+    "[I-18] the common attributes and the deprecated names are admitted on every element",
+    () =>
+      Effect.gen(function* common() {
+        const carriers = {
+          apply: `<m:apply id="anchor"><m:plus/><m:apply${commonAttributes}><m:abs/><m:ci>a</m:ci></m:apply><m:ci>b</m:ci></m:apply>`,
+          lowlimit: `<m:apply id="anchor"><m:int/><m:bvar><m:ci>t</m:ci></m:bvar><m:lowlimit${commonAttributes}><m:cn>0</m:cn></m:lowlimit><m:uplimit><m:cn>12</m:cn></m:uplimit><m:ci>t</m:ci></m:apply>`,
+          mi: `<m:mrow id="anchor"><m:mi${commonAttributes}>x</m:mi></m:mrow>`,
+          sep: `<m:cn id="anchor" type="rational">3<m:sep${commonAttributes}/>4</m:cn>`,
+        };
+
+        for (const [carrier, content] of Object.entries(carriers)) {
+          const verdict = yield* openMath(content);
+
+          assert.strictEqual(
+            verdict.verdict,
+            "accepted",
+            `${carrier} admits the common attributes`,
+          );
+          expectAccepted(verdict);
+        }
+
+        expectAccepted(yield* openMath("<m:mi>x</m:mi>", ' mode="display" macros="x"'));
+        expectAccepted(yield* openMath('<m:mn fontsize="12pt" color="red">1</m:mn>'));
+        expectAccepted(
+          yield* openMath('<m:mstyle veryverythinmathspace="0"><m:mi>x</m:mi></m:mstyle>'),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-18] a mixed-case known attribute is admitted and rendered under its lowercase name",
+    () =>
+      Effect.gen(function* mixedCase() {
+        const variable = yield* htmlOf(
+          expectAccepted(yield* openMath('<m:mi MathVariant="bold">x</m:mi>')),
+        );
+
+        assert.include(variable, 'mathvariant="bold"');
+        assert.notInclude(variable, "MathVariant");
+
+        const definition = "http://www.openmath.org/cd/arith1#plus";
+        for (const spelling of ["DefinitionURL", "definitionurl"]) {
+          const html = yield* htmlOf(
+            expectAccepted(yield* openMath(`<m:ci ${spelling}="${definition}">f</m:ci>`)),
+          );
+
+          assert.include(
+            html,
+            `definitionURL="${definition}"`,
+            `${spelling} renders as definitionURL`,
+          );
+          assert.notInclude(html, `${spelling}="`, `${spelling} is not rendered as written`);
+        }
+      }),
+  );
+
+  it.effect("[I-18] a URL attribute is classified under its name as read", () =>
+    Effect.gen(function* urls() {
+      yield* expectFormulaRefused('<m:mi HREF="javascript:alert(1)">x</m:mi>', {
+        attribute: "href",
+        element: "mi",
+        section: "2.1.6",
+      });
+      yield* expectFormulaRefused(
+        "<m:mi>x</m:mi>",
+        {
+          attribute: "altimg",
+          element: "math",
+          section: "2.1.6",
+        },
+        ' Altimg="javascript:alert(1)"',
+      );
+      yield* expectFormulaRefused('<m:ci DEFINITIONURL="data:text/html,x">f</m:ci>', {
+        attribute: "definitionURL",
+        element: "ci",
+        section: "2.1.6",
+      });
+      yield* expectFormulaRefused('<m:mglyph SRC="java&#9;script:x" alt="x"/>', {
+        attribute: "src",
+        element: "mglyph",
+        section: "2.1.6",
+      });
+
+      const html = yield* htmlOf(
+        expectAccepted(yield* openMath('<m:mi HREF="https://example.invalid/x">x</m:mi>')),
+      );
+
+      assert.include(html, 'href="https://example.invalid/x"');
+      assert.notInclude(html, "HREF");
+    }),
+  );
+
+  it.effect("[I-18] a namespaced attribute is not part of the tree and is never rendered", () =>
+    Effect.gen(function* namespaced() {
+      const declared = ' xmlns:xlink="http://www.w3.org/1999/xlink"';
+      const variants: readonly (readonly [string, readonly string[]])[] = [
+        ['<m:mi xlink:href="javascript:alert(1)">x</m:mi>', ["xlink", "javascript"]],
+        ['<m:mi xml:lang="fr">x</m:mi>', ["xml:lang", 'lang="fr"']],
+      ];
+
+      for (const [content, absent] of variants) {
+        const html = yield* htmlOf(expectAccepted(yield* openMath(content, declared)));
+
+        assert.include(html, "<mi>x</mi>", "the element renders with no attribute");
+        for (const text of absent) {
+          assert.notInclude(html, text, `${text} is not rendered`);
+        }
+      }
+
+      const source = yield* fixtureText("src/content/mathml-validity.ts");
+
+      assert.include(source, "xlink:href", "the module's TSDoc names the limit");
+    }),
+  );
+
+  it.effect(
+    "[I-18] the first defect in document order wins when an unknown attribute and a structural defect both stand",
+    () =>
+      Effect.gen(function* order() {
+        const wrongMinus =
+          "<m:apply><m:minus/><m:ci>a</m:ci><m:ci>b</m:ci><m:ci>c</m:ci></m:apply>";
+
+        const first = expectRefused(yield* openMath(`<m:mi onclick="x">x</m:mi>${wrongMinus}`), {
+          attribute: "onclick",
+          element: "mi",
+          position: "1",
+          section: "A.2",
+        });
+        const second = expectRefused(yield* openMath(`${wrongMinus}<m:mi onclick="x">x</m:mi>`), {
+          element: "apply",
+          position: "1",
+          section: "4.4.2.6",
+        });
+
+        assert.strictEqual(first.detail["attribute"], "onclick");
+        assert.notProperty(second.detail, "attribute", "a structural rule names no attribute");
+      }),
+  );
+
+  it.effect("[I-18] an unknown attribute is refused on one element of each attribute group", () =>
+    Effect.gen(function* groups() {
+      yield* expectFormulaRefused(
+        "<m:mi>x</m:mi>",
+        {
+          attribute: "zz",
+          element: "math",
+          section: "A.2",
+        },
+        ' zz="1"',
+      );
+      for (const [element, content] of unknownAttributeVariants) {
+        const verdict = yield* openMath(content);
+
+        assert.strictEqual(verdict.verdict, "refused", `${element} refuses an unknown attribute`);
+        expectRefused(verdict, { attribute: "zz", element, section: "A.2" });
+      }
+    }),
   );
 });
