@@ -12,7 +12,7 @@ import { overlayPartsOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { documentLayerNames, overlayNames, writtenNames } from "#pantry/import/roster.ts";
 import { changeSetOf, documentRowsOf } from "#pantry/import/write.ts";
-import { Author } from "#pantry/qti/roles.ts";
+import { Author } from "#pantry/test/qti.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 
 /**

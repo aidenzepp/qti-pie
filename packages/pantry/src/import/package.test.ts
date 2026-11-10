@@ -38,9 +38,8 @@ import {
   settleCommitUnknown,
 } from "#pantry/import/package.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Author, AuthorApp } from "#pantry/test/qti.ts";
 import { Package } from "#pantry/qti/package.ts";
-import { Author } from "#pantry/qti/roles.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";

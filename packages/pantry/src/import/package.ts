@@ -25,9 +25,10 @@ import { readProgram } from "#pantry/import/program.ts";
 import { refusalOfLaws } from "#pantry/import/refusal.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { authorLogin } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
-import type { Author } from "#pantry/qti/roles.ts";
+import type { AuthorRole } from "#pantry/qti/roles.ts";
+import { qti } from "#pantry/qti/schema.ts";
 
 /**
  * The longest the retries of one database call run, in total.
@@ -204,14 +205,14 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
 ): Effect.fn.Return<
   Uuid,
   ImportRefused | PlatformError.PlatformError | ApplyError | OpenError | CommitUnresolved,
-  FileSystem.FileSystem | DbLayer<typeof Author>
+  FileSystem.FileSystem | DbLayer<AuthorRole>
 > {
   const schedule = options.schedule ?? retrySchedule;
   const wrap = options.wrapApply ?? (<A, E, R>(apply: Effect.Effect<A, E, R>) => apply);
   const program = yield* readProgram(dir);
   const { packageId } = program;
-  const changes = changeSetOf(AuthorApp.roles.author.role, program.inputs);
-  const db = yield* retried("Db.open", Db.open(AuthorApp.roles.author, {}), schedule);
+  const changes = changeSetOf(authorLogin(qti()).roles.author.role, program.inputs);
+  const db = yield* retried("Db.open", Db.open(authorLogin(qti()).roles.author, {}), schedule);
   const [elapsed, outcome] = yield* retried("db.apply", wrap(db.apply(changes, {})), schedule).pipe(
     Effect.catchTag("CommitUnknown", (commit) =>
       settleCommitUnknown(commit, packageId, db.get(Package, { id: packageId })),
