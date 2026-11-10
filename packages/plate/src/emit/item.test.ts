@@ -319,6 +319,7 @@ const interactionsIn = (nodes: readonly PayloadNode[]): readonly InteractionPayl
       case "element": {
         return interactionsIn(node.children);
       }
+      case "content":
       case "notice":
       case "text": {
         return [];

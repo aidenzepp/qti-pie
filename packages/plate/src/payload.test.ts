@@ -472,7 +472,12 @@ const interactionsIn = (nodes: readonly PayloadNode[]): readonly InteractionPayl
       return interactionsIn(node.children);
     }
 
-    return node.kind === "text" || node.kind === "notice" || isStubbed(node) ? [] : [node];
+    return node.kind === "text" ||
+      node.kind === "notice" ||
+      node.kind === "content" ||
+      isStubbed(node)
+      ? []
+      : [node];
   });
 
 /**
@@ -736,6 +741,7 @@ const referencingNode = (node: BodyNode, ids: string): BodyNode => {
         ),
       };
     }
+    case "content":
     case "inline-choice":
     case "printed-variable":
     case "template-block":

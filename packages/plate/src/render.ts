@@ -16,7 +16,11 @@
  */
 import { Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { emitBody, writesMalformedHeading } from "#plate/emit/body.ts";
+import { defaultView } from "#plate/content/contract.ts";
+import type { ContentRenderKit } from "#plate/content/contract.ts";
+import { contentNodes, renderContent, renderItemContent } from "#plate/content/modules.ts";
+import type { ContentPayload } from "#plate/content/modules.ts";
+import { emitBody, emitNodes, writesMalformedHeading } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { emitItem, emitStatus, itemPart } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
@@ -47,6 +51,7 @@ import type {
 import { drawInstance } from "#plate/seed.ts";
 import { noSupports } from "#plate/supports.ts";
 import type { Supports } from "#plate/supports.ts";
+import type { OutcomeView } from "#plate/vocabulary.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
@@ -65,8 +70,10 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * shown in, `answering` when absent, which the Root's `data-mode` names: `review` and `solution`
  * mark every interaction not editable, and `solution` shows the correct responses only when the
  * author passes them as `values`. `supports` are the accessibility supports the host enabled for
- * the candidate, `noSupports` when absent; every content module is a stub, so they change nothing
- * yet.
+ * the candidate, `noSupports` when absent, and `view` the view the item is shown to, one of QTI's
+ * six, the candidate's when absent: each content module's render decides by both what it shows of
+ * what {@link redact} kept under the same two, so a render passes the supports and the view its
+ * redaction took.
  */
 export interface Options {
   readonly assetBase?: string;
@@ -79,16 +86,19 @@ export interface Options {
   readonly posted?: Readonly<Record<string, readonly string[]>>;
   readonly supports?: Supports;
   readonly values?: Readonly<Record<string, ResponseValue>>;
+  readonly view?: OutcomeView;
 }
 
 /**
  * The author's further inputs to one {@link redact}, each optional: `supports`, the accessibility
- * supports the host enabled for the candidate, `noSupports` when absent, which will decide what
- * catalog content the redacted item holds; every content module is a stub, so they change nothing
- * yet.
+ * supports the host enabled for the candidate, `noSupports` when absent, which decide what catalog
+ * content the redacted item holds, and `view`, the view the item is shown to, the candidate's when
+ * absent, which decides which rubric blocks it holds: each content module's `redact` decides by
+ * both, so content a view or a support does not show never reaches the page.
  */
 export interface RedactOptions {
   readonly supports?: Supports;
+  readonly view?: OutcomeView;
 }
 
 /**
@@ -322,7 +332,14 @@ export const redact = (
   record?: RedactRecord,
   limits?: Pick<Configuration, "outputBudget">,
   options: RedactOptions = {},
-): Redacted => redactItem(document.item, record, limits, options.supports ?? noSupports);
+): Redacted =>
+  redactItem(
+    document.item,
+    record,
+    limits,
+    options.supports ?? noSupports,
+    options.view ?? defaultView,
+  );
 
 /**
  * Give a record keyed by response identifier as the map a view holds.
@@ -365,6 +382,7 @@ const viewOf = (instance: string, configuration: Configuration, options: Options
  * @param parts The resolved part overrides.
  * @param assetBase The author's asset base, which overrides the configuration's.
  * @param supports The supports the host enabled, `noSupports` when absent.
+ * @param view The view the item is shown to, the candidate's when absent.
  * @returns The emit state.
  */
 const stateOf = (
@@ -372,12 +390,14 @@ const stateOf = (
   parts: Resolved,
   assetBase?: string,
   supports: Supports = noSupports,
+  view: OutcomeView = defaultView,
 ): EmitState => ({
   assetBase: assetBase ?? configuration.assetBase,
   headingLevel: configuration.headingLevel,
   locale: configuration.locale,
   parts,
   supports,
+  view,
 });
 
 /**
@@ -419,20 +439,48 @@ const shippedRenderer =
   };
 
 /**
- * Construct the render function each interaction of a body is handed to, dispatching on its kind,
- * with its `modules`, which hands an interaction a module parses to its module's render, and its
- * `moduleContent`, which gives that interaction's content through its module, so the emitter
- * reads both without importing a module.
+ * Give the kit each content module's render reads: the emission of its content through the render
+ * function, with the body's id scoping, heading shift, URLs and Notice part, and the supports and
+ * the view the emit state holds.
  *
  * @param built The render's payload.
  * @param state The render's emit state.
- * @returns The function that renders one interaction through its module.
+ * @param renderInteraction The render function an interaction among the content is handed to.
+ * @returns The kit.
  */
-const interactionRenderer = (built: Payload, state: EmitState): RenderInteraction =>
-  Object.assign(shippedRenderer(built, state), {
+const contentKitOf = (
+  built: Payload,
+  state: EmitState,
+  renderInteraction: RenderInteraction,
+): ContentRenderKit => ({
+  nodes: (nodes) => emitNodes(nodes, built, state, renderInteraction),
+  supports: state.supports ?? noSupports,
+  view: state.view ?? defaultView,
+});
+
+/**
+ * Construct the render function each interaction of a body is handed to, dispatching on its kind,
+ * with its `modules`, which hands an interaction a module parses to its module's render, its
+ * `moduleContent`, which gives that interaction's content through its module, its `content`,
+ * which hands a body-placed content element's node to its module's render with the content kit,
+ * and its `contentNodes`, which gives that node's content, so the emitter reads all four without
+ * importing a module.
+ *
+ * @param built The render's payload.
+ * @param state The render's emit state.
+ * @returns The function that renders one interaction or content node through its module.
+ */
+const interactionRenderer = (built: Payload, state: EmitState): RenderInteraction => {
+  const renderer: RenderInteraction = Object.assign(shippedRenderer(built, state), {
+    content: (node: ContentPayload) =>
+      renderContent(node, state, contentKitOf(built, state, renderer)),
+    contentNodes,
     moduleContent,
     modules: (interaction: ModulePayload) => renderModule(interaction, built, state),
   });
+
+  return renderer;
+};
 
 /**
  * Render an item: the item Root around its body, as HTML.
@@ -522,12 +570,17 @@ export const render = (
     const instance = yield* options.instance === undefined
       ? Result.succeed(drawInstance())
       : checkedInstance(options.instance, "options.instance");
-    const state = stateOf(configuration, parts, options.assetBase, options.supports);
+    const state = stateOf(configuration, parts, options.assetBase, options.supports, options.view);
     const built = payload(item, viewOf(instance, configuration, options));
     const renderer = interactionRenderer(built, state);
     const body = yield* emitBody(built, state, renderer);
+    const content = yield* renderItemContent(
+      built.content,
+      state,
+      contentKitOf(built, state, renderer),
+    );
     const live = yield* itemPart(state.parts, "live", liveRegion, []);
-    const root = yield* emitItem(built, state, [...body, live]);
+    const root = yield* emitItem(built, state, [...body, ...content, live]);
 
     if (writesMalformedHeading(built.body, configuration.headingLevel, renderer)) {
       return yield* Result.fail(new InvalidHeadingLevel({ level: configuration.headingLevel }));

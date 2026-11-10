@@ -18,11 +18,10 @@
  * @module
  */
 import { Array as Arr, Brand, Option, Result } from "effect";
+import { checkIsland } from "#plate/content/modules.ts";
 import {
   attributePath,
-  mathmlNamespace,
   qtiNamespace,
-  ssmlNamespace,
   walk,
   xincludeNamespace,
   xmlNamespace,
@@ -637,6 +636,7 @@ const placeNode = (
       return { lifted: inner.lifted, nodes: [{ ...node, content: inner.nodes }] };
     }
 
+    case "content":
     case "printed-variable":
     case "text":
     case "unsupported": {
@@ -707,9 +707,12 @@ const complete = (built: Item, secured: Secured): Item => {
 
 /**
  * Collect every reason plate cannot judge a document: a root other than an item, a test, a section
- * or a stimulus, then in document order each MathML, SSML or XInclude element whose parent is
- * outside its namespace, each attribute whose value holds an unexpanded entity reference, and each
- * element with one among its children.
+ * or a stimulus, then in document order each island of a namespace outside QTI's, an element whose
+ * parent is outside its namespace, as the content module that owns the namespace judges it
+ * (`checkIsland` in `#plate/content/modules.ts`: MathML's and SSML's each leave the document
+ * unchecked for theirs), each XInclude element whose parent is outside its namespace, each
+ * attribute whose value holds an unexpanded entity reference, and each element with one among its
+ * children.
  *
  * An XInclude `include` is a reason in every root, a test's and a section's as an item's (E23): an
  * included fragment is judged in place, as its merged document holds it (reading 117), and plate
@@ -744,12 +747,8 @@ const uncheckedReasons = (
       reasons.push({ path, reason: "root" });
     }
 
-    if (island(mathmlNamespace)) {
-      reasons.push({ path, reason: "mathml" });
-    }
-
-    if (island(ssmlNamespace)) {
-      reasons.push({ path, reason: "ssml" });
+    if (element.namespace !== qtiNamespace && island(element.namespace)) {
+      reasons.push(...checkIsland(element, path));
     }
 
     if (island(xincludeNamespace)) {
