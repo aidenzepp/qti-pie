@@ -41,24 +41,17 @@ const Slot = Schema.Union([
 ]);
 
 /**
- * The part of grizzle's snapshot this module reads: each relation's `codes`, when it has them.
+ * The part of grizzle's snapshot this module reads: each roster's codes, by the roster's name,
+ * which `snapshot.json` records under `rosters` (`manifest.json` holds the rest of the snapshot).
  * grizzle's public index exports no reader for it, so a layout this does not know fails the
  * decode.
  */
 const CommittedSnapshot = Schema.fromJsonString(
-  Schema.Struct({
-    theory: Schema.Struct({
-      relations: Schema.Record(
-        Schema.String,
-        Schema.Struct({ codes: Schema.optionalKey(Schema.Array(Slot)) }),
-      ),
-    }),
-  }),
+  Schema.Struct({ rosters: Schema.Record(Schema.String, Schema.Array(Slot)) }),
 );
 
 /**
- * Each roster's live handles in code order, read from the text of a snapshot; holes are skipped,
- * and a relation without codes is not a roster.
+ * Each roster's live handles in code order, read from the text of a snapshot; holes are skipped.
  *
  * Fails with {@link SnapshotLoadError} when the text is not JSON of the layout grizzle writes, as
  * a git-lfs pointer file is not.
@@ -72,17 +65,11 @@ export const decodeCommittedRosters = (
 ): Effect.Effect<ReadonlyMap<string, readonly string[]>, SnapshotLoadError> =>
   Schema.decodeUnknownEffect(CommittedSnapshot)(text).pipe(
     Effect.map(
-      ({ theory }) =>
+      ({ rosters }) =>
         new Map(
-          Object.entries(theory.relations).flatMap(([name, { codes }]) =>
-            codes === undefined
-              ? []
-              : [
-                  [
-                    name,
-                    codes.flatMap((slot) => (slot.kind === "live" ? [slot.handle] : [])),
-                  ] as const,
-                ],
+          Object.entries(rosters).map(
+            ([name, codes]) =>
+              [name, codes.flatMap((slot) => (slot.kind === "live" ? [slot.handle] : []))] as const,
           ),
         ),
     ),

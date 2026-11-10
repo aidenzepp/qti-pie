@@ -121,8 +121,9 @@ export const integerForm = lexicalForm(pg.bigint);
  *
  * @see {@link https://www.w3.org/TR/xmlschema-2/#double | XML Schema Part 2, 3.2.5 double}
  */
-export const doublePattern =
-  "^(?:[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|-?INF|NaN)$";
+export const doublePattern = Compute.pattern(
+  "^(?:[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|-?INF|NaN)$",
+);
 
 /**
  * The positive values of {@link doublePattern}'s space, read off the form: a mantissa with no `-`
@@ -133,8 +134,9 @@ export const doublePattern =
  * though binary64 rounds it to 0: "positive" is read of the number the value names, not of its
  * nearest double.
  */
-export const positivePattern =
-  "^(?:\\+?(?:[0-9]*[1-9][0-9]*(?:\\.[0-9]*)?|[0-9]*\\.[0-9]*[1-9][0-9]*)(?:[Ee][+-]?[0-9]+)?|INF)$";
+export const positivePattern = Compute.pattern(
+  "^(?:\\+?(?:[0-9]*[1-9][0-9]*(?:\\.[0-9]*)?|[0-9]*\\.[0-9]*[1-9][0-9]*)(?:[Ee][+-]?[0-9]+)?|INF)$",
+);
 
 /**
  * A rounding operator, keyed by its node: one row for every `qti-equal-rounded` and every

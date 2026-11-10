@@ -68,7 +68,6 @@ import {
   check,
   closedId,
   Compute,
-  constant,
   contained,
   counted,
   drawn,
@@ -110,11 +109,16 @@ import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
 /**
+ * {@link namingPattern} as a `Compute.matches` pattern.
+ */
+const naming = Compute.pattern(namingPattern);
+
+/**
  * A collapsed identifier that names something: an NCName (`ncNamePattern`), `IdentifierDType`'s
  * lexical space, which `E1_derived` holds each written name to, so its pieces are its lexical
  * form's outer whitespace and nothing more.
  */
-const namePattern = `^${ncNamePattern}$`;
+const namePattern = Compute.pattern<string>(`^${ncNamePattern}$`);
 
 /**
  * The kinds that declare a variable: the `NodeKind` handles that are `DeclarationKind` handles too
@@ -756,7 +760,7 @@ const identifiers = select(Attribute, (a) =>
   a.and(
     a.eq(a.name, "identifier"),
     a.in(a.kind, declarationKinds),
-    Compute.matches(a.lexical, namingPattern),
+    Compute.matches(a.lexical, naming),
   ),
 );
 
@@ -845,7 +849,7 @@ const spelledFieldBaseTypes = select(Attribute, (a) =>
  * namingPattern}): the fields each of which has its {@link RecordFieldName}. Any other form is its
  * value domain's alone.
  */
-const namedFields = select(RecordField, (f) => Compute.matches(f.identifierLexical, namingPattern));
+const namedFields = select(RecordField, (f) => Compute.matches(f.identifierLexical, naming));
 
 /**
  * An outcome declaration's attribute that bounds or places its value on its normal scale.
@@ -1238,16 +1242,15 @@ export const declarationLawsByName = {
       on(DeclarationName, "node"),
     ),
     contained(
+      on(DeclarationName, "node", "document", "identifier", "declarationKind", "baseTypes"),
       on(
-        DeclarationName,
+        select(DeclarationIdentifier, (d) => d.eq(d.cardinalities, 1n)),
         "node",
         "document",
         "identifier",
         "declarationKind",
-        constant(1n),
         "baseTypes",
       ),
-      declarationIdentifierRef,
     ),
     contained(
       on(DeclarationName, "node", "cardinality"),

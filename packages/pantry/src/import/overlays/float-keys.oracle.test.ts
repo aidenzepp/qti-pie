@@ -290,7 +290,7 @@ const numberName = (value: number): string => {
  * Grizzle's former bounded form of `double precision` (`lexicalForm`, its zero runs unbounded):
  * the plants' test of a key that had a typed value under the deleted fallback.
  */
-const boundedForm = new RegExp(lexicalForm(pg["double precision"]), "u");
+const boundedForm = new RegExp(lexicalForm(pg["double precision"]).source, "u");
 
 /**
  * The law oracle's laws over the composed grammar, built once.

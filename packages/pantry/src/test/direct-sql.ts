@@ -1107,10 +1107,74 @@ const selects = (
   });
 
 /**
+ * The equalities a selection fixes its fields by: each conjunct of its predicate that equates a
+ * field to a literal or to another field, as `[field, operand]`, a field equated to a field both
+ * ways.
+ *
+ * @param expression - The predicate, or one of its conjuncts.
+ * @returns The equalities.
+ */
+const fixedBy = (
+  expression: Expression,
+): readonly (readonly [string, Extract<Expression, { readonly kind: "field" | "literal" }>])[] => {
+  if (expression.kind === "and") {
+    return expression.args.flatMap(fixedBy);
+  }
+
+  if (expression.kind !== "compare" || expression.op !== "eq") {
+    return [];
+  }
+
+  const { left, right } = expression;
+  if (left.kind === "field" && right.kind === "field") {
+    return [
+      [left.field, right],
+      [right.field, left],
+    ];
+  }
+
+  if (left.kind === "field" && right.kind === "literal") {
+    return [[left.field, right]];
+  }
+
+  return right.kind === "field" && left.kind === "literal" ? [[right.field, left]] : [];
+};
+
+/**
+ * Fill the fields a side's selection fixes on a fact a containment's source row meets there, where
+ * the fact states none: the containment holds the met row inside the selection, so each field the
+ * selection equates to a value holds it, and each it equates to another field holds that field's.
+ *
+ * @param side - The side.
+ * @param side.selection - Its selection's predicate, none for the relation itself.
+ * @param fact - The fact the source row meets.
+ * @returns The fields it filled.
+ */
+const fillFixed = (
+  { selection }: { readonly selection: Option.Option<Expression> },
+  fact: Record<string, Scalar>,
+): readonly string[] =>
+  Option.match(selection, {
+    onNone: () => [],
+    onSome: (predicate) =>
+      fixedBy(predicate).flatMap(([field, operand]) => {
+        const value = operand.kind === "field" ? fact[operand.field] : operand.value;
+        if (fact[field] !== undefined || value === undefined) {
+          return [];
+        }
+
+        fact[field] = value;
+
+        return [field];
+      }),
+  });
+
+/**
  * Each fact with the values its containments copy filled where it states none: across each of
  * {@link copies}, a left fact and the one right fact its key fields name hold each further pair
- * equal, so a value one of them states fills the other's. It repeats until no value moves, so a
- * value runs down a tree from its root, a root's from its `Document` row's.
+ * equal, so a value one of them states fills the other's, and the right fact holds every field its
+ * side's selection fixes ({@link fillFixed}). It repeats until no value moves, so a value runs down
+ * a tree from its root, a root's from its `Document` row's.
  *
  * @param stated - The facts.
  * @returns The facts, each with its copied values.
@@ -1123,10 +1187,12 @@ const copiedOf = (stated: readonly Stated[]): readonly Stated[] => {
   );
   const factsOf = (side: (typeof copies)[number]["to"]) =>
     facts.filter((fact, at) => stated[at]?.relation.name === side.relation && selects(side, fact));
+  const allOf = (side: (typeof copies)[number]["to"]) =>
+    facts.filter((_, at) => stated[at]?.relation.name === side.relation);
   const copyOnce = () =>
     across.flatMap(({ from, key, to, values }) => {
       const targets = new Map(
-        factsOf(to).map((fact) => [
+        allOf(to).map((fact) => [
           keyAt(
             fact,
             key.map(([, field]) => field),
@@ -1141,24 +1207,33 @@ const copiedOf = (stated: readonly Stated[]): readonly Stated[] => {
           ? targets.get(keyAt(fact, fields))
           : undefined;
 
-        return target === undefined
-          ? []
-          : values.flatMap(([field, other]) => {
-              const [here, there] = [fact[field], target[other]];
-              if (here === undefined && there !== undefined) {
-                fact[field] = there;
+        if (target === undefined) {
+          return [];
+        }
 
-                return [field];
-              }
+        const fixed = fillFixed(to, target);
 
-              if (there === undefined && here !== undefined) {
-                target[other] = here;
+        return selects(to, target)
+          ? [
+              ...fixed,
+              ...values.flatMap(([field, other]) => {
+                const [here, there] = [fact[field], target[other]];
+                if (here === undefined && there !== undefined) {
+                  fact[field] = there;
 
-                return [other];
-              }
+                  return [field];
+                }
 
-              return [];
-            });
+                if (there === undefined && here !== undefined) {
+                  target[other] = here;
+
+                  return [other];
+                }
+
+                return [];
+              }),
+            ]
+          : fixed;
       });
     });
   while (copyOnce().length > 0) {

@@ -159,7 +159,7 @@ const objects: ReadonlySet<string> = new Set(objectKinds);
  * A well-formed language tag as a whole text, the compared form of an `xml:lang` that states a
  * language (spec reading 151).
  */
-const languageTagForm = new RegExp(languageTagPattern, patternFlags);
+const languageTagForm = new RegExp(languageTagPattern.source, patternFlags);
 
 /**
  * The usage statistics, as a set.
