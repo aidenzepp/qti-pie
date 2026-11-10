@@ -610,6 +610,7 @@ const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
       background: attributeOf(element, "background"),
       foreground: attributeOf(element, "foreground"),
     })),
+    keywordTranslationLanguage: Option.flatMap(firstOf("keyword-translation"), langOf),
     languages: new Map(
       languageFeatures.flatMap((name): readonly (readonly [LanguageFeature, string])[] =>
         Option.match(Option.flatMap(firstOf(name), langOf), {
@@ -627,6 +628,7 @@ const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
     optional: sets.optional,
     prohibited: sets.prohibited,
     readAloud: Option.map(firstOf("spoken"), (element) => spokenOf(element).readingType),
+    signLanguage: Option.flatMap(firstOf("sign-language"), langOf),
     spoken: Option.map(firstOf("spoken"), spokenOf),
     suppressTts: noSupports.suppressTts,
     text: textAppearance.pipe(Option.map(textPreferencesOf)),

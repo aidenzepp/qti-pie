@@ -79,9 +79,14 @@ const refuse = (document: Uint8Array, selector?: PnpSelector): Effect.Effect<Inv
 const supportsOf = (pnp: PnpSupports): Supports => ({
   additionalTestingTime: pnp.additionalTestingTime,
   answerMasking: pnp.answerMasking,
+  braille: pnp.braille,
+  breaks: pnp.breaks,
   catalog: pnp.catalog,
   display: pnp.display,
+  keywordTranslationLanguage: pnp.keywordTranslationLanguage,
+  longDescriptionVisible: pnp.longDescriptionVisible,
   readAloud: pnp.readAloud,
+  signLanguage: pnp.signLanguage,
   suppressTts: pnp.suppressTts,
   tools: pnp.tools,
 });
@@ -167,14 +172,9 @@ describe("readPnp", () => {
         pnp.invertedColors,
         Option.some({ background: Option.some("#000000"), foreground: Option.some("#ffffff") }),
       );
-      assert.deepStrictEqual(
-        pnp.languages,
-        new Map([
-          ["item-translation", "fr"],
-          ["keyword-translation", "es"],
-          ["sign-language", "ase"],
-        ]),
-      );
+      assert.deepStrictEqual(pnp.languages, new Map([["item-translation", "fr"]]));
+      assert.deepStrictEqual(pnp.keywordTranslationLanguage, Option.some("es"));
+      assert.deepStrictEqual(pnp.signLanguage, Option.some("ase"));
       assert.isTrue(pnp.longDescriptionVisible);
       assert.deepStrictEqual(pnp.optional, new Set(["calculator-on-screen", "line-reader"]));
       assert.deepStrictEqual(pnp.atStart, new Set(["spoken"]));

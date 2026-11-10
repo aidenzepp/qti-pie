@@ -6,9 +6,11 @@
  * dormant until one is enabled: the fifteen predefined names of QTI's card `support` vocabulary
  * and its `ext:` extensions. The delivery layer holds the preferences a Personal Needs and
  * Preferences document gives, which is a separate AfA PNP 3.0 document QTI never references: the
- * additional testing time, answer masking, read-aloud, the display preferences and the tools. A
- * host fills it from a PNP, from a testing program's choice for every candidate, or by hand;
- * plate reads no PNP here.
+ * additional testing time, answer masking, read-aloud, the display preferences, the tools, and the
+ * preferences a renderer reads to choose and show catalog content (the braille preferences, the
+ * sign language, the keyword translation's language, breaks, and whether a long description shows
+ * visually). A host fills it from a PNP, from a testing program's choice for every candidate, or by
+ * hand; plate reads no PNP here.
  *
  * Beside the contract, {@link PnpSupports} widens it with the preferences a PNP gives that no
  * renderer reads yet, as `readPnp` reads them, and {@link noPnpSupports} sets none of them. When a
@@ -148,14 +150,39 @@ export interface Supports {
    */
   readonly answerMasking: boolean;
   /**
+   * The braille support's preferences, none when the braille support is off; a card entry's
+   * `data-braille-type` is matched against its braille type.
+   */
+  readonly braille: Option.Option<BraillePreferences>;
+  /**
+   * `environment`'s `breaks`.
+   */
+  readonly breaks: boolean;
+  /**
    * The catalog supports enabled, predefined or `ext:`: a card naming one shows its content.
    */
   readonly catalog: ReadonlySet<CatalogSupport | ExtensionSupport>;
   readonly display: DisplayPreferences;
   /**
+   * The language of `keyword-translation`, its `xml:lang` as written, none when the feature is
+   * off or names none; a keyword-translation card entry's `xml:lang` is matched against it.
+   */
+  readonly keywordTranslationLanguage: Option.Option<string>;
+  /**
+   * Whether `long-description` is shown rather than hidden visually: the negation of its
+   * `hide-visually`, which defaults to true.
+   */
+  readonly longDescriptionVisible: boolean;
+  /**
    * The spoken support's reading type, none when the spoken support is off.
    */
   readonly readAloud: Option.Option<ReadingType>;
+  /**
+   * The sign language chosen, `sign-language`'s `xml:lang` as written (a BCP 47 tag such as
+   * `ase`), none when the feature is off or names none; a sign-language card entry's `xml:lang` is
+   * matched against it.
+   */
+  readonly signLanguage: Option.Option<string>;
   /**
    * Whether text-to-speech is suppressed for the whole item, as `data-qti-suppress-tts` suppresses
    * it for the content it marks (A-40f).
@@ -171,6 +198,8 @@ export interface Supports {
 export const noSupports: Supports = {
   additionalTestingTime: Option.none(),
   answerMasking: false,
+  braille: Option.none(),
+  breaks: false,
   catalog: new Set(),
   display: {
     invertDisplayPolarity: false,
@@ -180,7 +209,10 @@ export const noSupports: Supports = {
     magnification: Option.none(),
     textAppearance: Option.none(),
   },
+  keywordTranslationLanguage: Option.none(),
+  longDescriptionVisible: false,
   readAloud: Option.none(),
+  signLanguage: Option.none(),
   suppressTts: false,
   tools: new Set(),
 };
@@ -381,14 +413,12 @@ export const calculatorTypes = ["basic", "graphing", "scientific", "standard"] a
 export type CalculatorType = (typeof calculatorTypes)[number] | PnpExtension;
 
 /**
- * The features whose `xml:lang` {@link PnpSupports.languages} keeps; `language-of-interface`'s
- * goes to {@link DisplayPreferences.languageOfInterface}.
+ * The features whose `xml:lang` {@link PnpSupports.languages} keeps: `language-of-interface`'s
+ * goes to {@link DisplayPreferences.languageOfInterface}, `keyword-translation`'s to
+ * {@link Supports.keywordTranslationLanguage} and `sign-language`'s to
+ * {@link Supports.signLanguage}.
  */
-export const languageFeatures = [
-  "item-translation",
-  "keyword-translation",
-  "sign-language",
-] as const;
+export const languageFeatures = ["item-translation"] as const;
 
 /**
  * A feature that names a language.
@@ -496,11 +526,6 @@ export interface PnpSupports extends Supports {
    * `activate-at-initiation-set` (row 7).
    */
   readonly atStart: ReadonlySet<PnpFeature>;
-  readonly braille: Option.Option<BraillePreferences>;
-  /**
-   * `environment`'s `breaks`.
-   */
-  readonly breaks: boolean;
   /**
    * Every feature the profile assigns and does not prohibit, the features the contract has no
    * field for (`captions`, `alternative-text`, `item-translation`, `encouragement`) included.
@@ -518,11 +543,6 @@ export interface PnpSupports extends Supports {
    * The `xml:lang` of each language feature, as written.
    */
   readonly languages: ReadonlyMap<LanguageFeature, string>;
-  /**
-   * Whether `long-description` is shown rather than hidden visually: the negation of its
-   * `hide-visually`, which defaults to true.
-   */
-  readonly longDescriptionVisible: boolean;
   /**
    * The features of `activate-as-option-set`.
    */
@@ -543,15 +563,12 @@ export interface PnpSupports extends Supports {
 export const noPnpSupports: PnpSupports = {
   ...noSupports,
   atStart: new Set(),
-  braille: Option.none(),
-  breaks: false,
   features: new Set(),
   hazards: new Set(),
   ignored: [],
   inputRequirements: new Set(),
   invertedColors: Option.none(),
   languages: new Map(),
-  longDescriptionVisible: false,
   optional: new Set(),
   prohibited: new Set(),
   spoken: Option.none(),
