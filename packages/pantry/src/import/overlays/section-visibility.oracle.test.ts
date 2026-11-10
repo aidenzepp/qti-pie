@@ -219,10 +219,10 @@ const situations = pipe(
 
 /**
  * The timeout, in milliseconds, of the one test here: a hang guard, never a budget. Measured
- * 2026-11-10: 247.6 s at a load average of 72 to 86, its slowest test. At a load average of 89 to
- * 103 it took 301 s, past half of this timeout.
+ * 2026-11-10: 301.3 s at a load average of 89 to 103, its slowest test. Measured 2026-11-10: 247.6
+ * s at a load average of 72 to 86, its lighter run.
  */
-const testTimeoutMs = 600_000;
+const testTimeoutMs = 660_000;
 
 layer(NodeServices.layer, { excludeTestServices: true })("a section's visibility", (it) => {
   it.effect(
