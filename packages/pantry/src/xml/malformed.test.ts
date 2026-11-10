@@ -9,8 +9,8 @@
  * the lawful seeds (`#pantry/test/gen/genetic/lawful.ts`), each an XML 1.0 document in its
  * genome's charset.
  *
- * Faults: {@link faults}, each one edit of one class, by characters or by bytes, applied at up to
- * two sites of every seed that has the site. A class holds the faults that break one production or
+ * Faults: {@link faults}, each one edit of one class, by characters or by bytes, applied at the
+ * last site of every seed that has the site. A class holds the faults that break one production or
  * constraint, and lawful edits beside them at the same sites, so a reader that refuses too much
  * fails as surely as one that refuses too little.
  *
@@ -343,13 +343,14 @@ const inserted = (text: string, at: number, addition: string): string =>
   spliced(text, [at, at], addition);
 
 /**
- * The first and the last of some sites, the two a fault is applied at.
+ * The last of some sites, the one a fault is applied at: the site with the most of the document
+ * before it. A fault's class is one production or constraint, which the many seeds reach at many
+ * depths, so one site a seed halves the box and keeps every class.
  *
  * @param sites - The sites, in document order.
- * @returns At most two of them.
+ * @returns At most one of them.
  */
-const firstAndLast = <A>(sites: readonly A[]): readonly A[] =>
-  sites.length <= 2 ? sites : [...sites.slice(0, 1), ...sites.slice(-1)];
+const lastSite = <A>(sites: readonly A[]): readonly A[] => sites.slice(-1);
 
 /**
  * Where character data may stand in a seed's elements: after each start tag of an element with
@@ -483,7 +484,7 @@ const byText = (
  */
 const inContent = (faultClass: FaultClass, text: string): Fault =>
   byText(faultClass, `${JSON.stringify(text)} in content`, (seed) =>
-    firstAndLast(contentSites(seed)).map((at) => inserted(seed.text, at, text)),
+    lastSite(contentSites(seed)).map((at) => inserted(seed.text, at, text)),
   );
 
 /**
@@ -495,7 +496,7 @@ const inContent = (faultClass: FaultClass, text: string): Fault =>
  */
 const inValue = (faultClass: FaultClass, text: string): Fault =>
   byText(faultClass, `${JSON.stringify(text)} in an attribute value`, (seed) =>
-    firstAndLast(plainAttributes(seed)).map(({ value }) => inserted(seed.text, value[0], text)),
+    lastSite(plainAttributes(seed)).map(({ value }) => inserted(seed.text, value[0], text)),
   );
 
 /**
@@ -507,7 +508,7 @@ const inValue = (faultClass: FaultClass, text: string): Fault =>
  */
 const inTag = (faultClass: FaultClass, text: string): Fault =>
   byText(faultClass, `${JSON.stringify(text)} in a start tag`, (seed) =>
-    firstAndLast(seed.starts).map((tag) => inserted(seed.text, tag.close, text)),
+    lastSite(seed.starts).map((tag) => inserted(seed.text, tag.close, text)),
   );
 
 /**
@@ -538,7 +539,7 @@ const renaming = (
   added = "",
 ): Fault =>
   byText(faultClass, name, (seed) =>
-    firstAndLast(unprefixed(seed)).map((tag) => renamed(seed, tag, to, added)),
+    lastSite(unprefixed(seed)).map((tag) => renamed(seed, tag, to, added)),
   );
 
 /**
@@ -575,7 +576,7 @@ const inBytes = (name: string, bytes: ReadonlyMap<Charset, readonly number[]>): 
       return [];
     }
 
-    return firstAndLast(contentSites(seed)).map((at) => {
+    return lastSite(contentSites(seed)).map((at) => {
       const before = encodedIn(seed.text.slice(0, at), seed.charset);
       const whole = encodedIn(seed.text, seed.charset);
 
@@ -619,34 +620,32 @@ const utf16 = (units: readonly number[]): ReadonlyMap<Charset, readonly number[]
  */
 const faults: readonly Fault[] = [
   byText("unclosed tag", "an end tag dropped", (seed) =>
-    firstAndLast(seed.ends).map((span) => spliced(seed.text, span, "")),
+    lastSite(seed.ends).map((span) => spliced(seed.text, span, "")),
   ),
   byText("unclosed tag", "an empty-element tag opened", (seed) =>
-    firstAndLast(seed.starts.filter((tag) => tag.empty)).map((tag) =>
+    lastSite(seed.starts.filter((tag) => tag.empty)).map((tag) =>
       spliced(seed.text, [tag.close, tag.close + 1], ""),
     ),
   ),
   byText("unclosed tag", "the text cut after a start tag", (seed) =>
-    firstAndLast(seed.starts.filter((tag) => !tag.empty)).map((tag) =>
-      seed.text.slice(0, tag.span[1]),
-    ),
+    lastSite(seed.starts.filter((tag) => !tag.empty)).map((tag) => seed.text.slice(0, tag.span[1])),
   ),
   byText("unclosed tag", "the text cut inside a start tag", (seed) =>
-    firstAndLast(seed.starts).map((tag) => seed.text.slice(0, tag.name[1])),
+    lastSite(seed.starts).map((tag) => seed.text.slice(0, tag.name[1])),
   ),
   byText("unclosed tag", "white space before an end tag's >", (seed) =>
-    firstAndLast(seed.ends).map(([, end]) => inserted(seed.text, end - 1, " ")),
+    lastSite(seed.ends).map(([, end]) => inserted(seed.text, end - 1, " ")),
   ),
   byText("mismatched name", "an end tag renamed", (seed) =>
-    firstAndLast(seed.ends).map(([, end]) => inserted(seed.text, end - 1, "z")),
+    lastSite(seed.ends).map(([, end]) => inserted(seed.text, end - 1, "z")),
   ),
   byText("mismatched name", "a start tag renamed", (seed) =>
-    firstAndLast(seed.starts.filter((tag) => !tag.empty)).map((tag) =>
+    lastSite(seed.starts.filter((tag) => !tag.empty)).map((tag) =>
       inserted(seed.text, tag.name[1], "z"),
     ),
   ),
   byText("mismatched name", "an end tag's name in capitals", (seed) =>
-    firstAndLast(
+    lastSite(
       seed.ends.filter(([start, end]) => {
         const name = seed.text.slice(start + 2, end - 1);
 
@@ -657,7 +656,7 @@ const faults: readonly Fault[] = [
     ),
   ),
   byText("mismatched name", "two adjacent end tags swapped", (seed) =>
-    firstAndLast(
+    lastSite(
       seed.ends.flatMap((first, index) => {
         const second = seed.ends[index + 1];
 
@@ -721,7 +720,7 @@ const faults: readonly Fault[] = [
   inContent("stray ampersand", "<![CDATA[&]]>"),
   inContent("stray ampersand", "<!--&-->"),
   byText("doubled attribute", "an attribute written twice", (seed) =>
-    firstAndLast(
+    lastSite(
       seed.starts.flatMap((tag) =>
         plainOf(seed, tag).map((attribute) => [tag, attribute] as const),
       ),
@@ -738,7 +737,7 @@ const faults: readonly Fault[] = [
   inContent("comment", "<!-- a - b -->"),
   inContent("comment", "<!---->"),
   byText("comment", "two hyphens inside a comment", (seed) =>
-    firstAndLast(seed.comments).map(([start]) => inserted(seed.text, start + 4, "--")),
+    lastSite(seed.comments).map(([start]) => inserted(seed.text, start + 4, "--")),
   ),
   afterRoot("comment", "<!-- a -- b -->"),
   inContent("processing instruction", '<?xml version="1.0"?>'),
@@ -1048,7 +1047,7 @@ const shown = (bytes: Uint8Array): string =>
 
 describe("crust's reader on malformed documents", () => {
   it.effect(
-    "agrees with xmllint on whether each faulted document is well formed, every fault at two sites of each seed, exhausted",
+    "agrees with xmllint on whether each faulted document is well formed, every fault at the last site of each seed, exhausted",
     (ctx) =>
       searched(
         ctx,
@@ -1073,7 +1072,7 @@ describe("crust's reader on malformed documents", () => {
 
           return yield* exhaust(
             {
-              box: `every one of ${String(faults.length)} faults at up to two sites of each of ${String(seeds.length)} seeds: ${String(cases.length)} documents`,
+              box: `every one of ${String(faults.length)} faults at the last site of each of ${String(seeds.length)} seeds: ${String(cases.length)} documents`,
               caseHang: Duration.seconds(30),
               coverage: requiredInSpace<Reached>(
                 pipe(

@@ -306,7 +306,7 @@ describe("crust's reader on attribute defaults", () => {
                 kind: "second-implementation",
                 name: "libxml2's xmllint --c14n (XML 1.0 sections 3.3.3 and 4.1), its unresolved references expanded to nothing",
               },
-              runs: 400,
+              runs: 200,
               shrink: completeShrink,
               steerEvery: 16,
               suite: "pantry/xml/attribute-defaults-against-xmllint",

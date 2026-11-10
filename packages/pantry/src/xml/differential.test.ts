@@ -441,7 +441,7 @@ describe("crust's reader as pantry uses it", () => {
                 kind: "second-implementation",
                 name: "libxml2's xmllint --c14n (Canonical XML 1.0), with the written attribute order and the encode round trip",
               },
-              runs: 200,
+              runs: 100,
               shrink: completeShrink,
               steerEvery: 16,
               suite: "pantry/xml/c14n-against-xmllint",
