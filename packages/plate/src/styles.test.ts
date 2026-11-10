@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Context, Effect, Layer, Option, Record as Rec } from "effect";
 import { partForSlot, partTable, rowFor } from "#plate/emit/parts.ts";
+import type { PartSpec } from "#plate/interactions/contract.ts";
 import { browserSupport } from "#plate/ledger/browser-support.ts";
 import { modules } from "#plate/model/interactions.ts";
 import { checkFloor, readWebFeatures } from "#plate/test/baseline.ts";
@@ -47,6 +48,19 @@ const textControls: readonly string[] = [marker.textEntryControl, marker.extende
  */
 const moduleOwners: ReadonlySet<string> = new Set(
   Object.values(modules).map((module) => module.owner),
+);
+
+/**
+ * The state attributes the interaction modules' parts carry, read from the table of modules beside
+ * their markers: each `data-*` attribute a part row merges, which a rule may test as it may test
+ * `data-mode`. A module that lands, and the block it adds to the stylesheet, change no line here.
+ */
+const moduleAttributes: ReadonlySet<string> = new Set(
+  Object.values(modules).flatMap((module): readonly string[] =>
+    Object.values<PartSpec>(module.parts).flatMap((part) =>
+      part.merged.filter((name) => name.startsWith("data-")),
+    ),
+  ),
 );
 
 /**
@@ -472,8 +486,8 @@ const strayReferences = (sheet: Sheet): readonly string[] =>
 
 /**
  * Find the names a selector may not use, at any depth: a marker no part carries (of the part table
- * or of an interaction module, {@link isPartMarker}), an attribute
- * outside {@link attributeNames}, a type outside the four, a class that is not a `qti-*` vocabulary
+ * or of an interaction module, {@link isPartMarker}), an attribute outside {@link attributeNames}
+ * and {@link moduleAttributes}, a type outside the four, a class that is not a `qti-*` vocabulary
  * class (so never `dark`), and `:root`.
  *
  * @param sheet The scanned sheet.
@@ -485,7 +499,9 @@ const strayNames = (sheet: Sheet): readonly string[] =>
     .flatMap(compoundsDeep)
     .flatMap((compound) => [
       ...compound.attributes.flatMap((test) => [
-        ...(attributeNames.has(test.name) ? [] : [`attribute ${test.name}`]),
+        ...(attributeNames.has(test.name) || moduleAttributes.has(test.name)
+          ? []
+          : [`attribute ${test.name}`]),
         ...(test.name === "data-slot" && !Option.exists(test.value, isPartMarker)
           ? [`marker ${Option.getOrElse(test.value, () => "")}`]
           : []),
