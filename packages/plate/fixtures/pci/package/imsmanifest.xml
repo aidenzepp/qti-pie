@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0p1_imscpv1p2_v1p0.xsd"
+  identifier="pci-fixture">
+  <metadata>
+    <schema>QTI Package</schema>
+    <schemaversion>3.0.1</schemaversion>
+  </metadata>
+  <organizations/>
+  <resources>
+    <resource identifier="pci-counter" type="imsqti_item_xmlv3p0" href="items/counter.xml">
+      <file href="items/counter.xml"/>
+      <file href="modules/module_resolution.js"/>
+      <file href="modules/counter.js"/>
+    </resource>
+  </resources>
+</manifest>

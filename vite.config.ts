@@ -42,12 +42,21 @@ export default defineConfig({
       "**/migrations/**",
       "README.md",
       "packages/*/README.md",
+      // A fixture package's JS modules (a PCI's AMD module, its JSON module resolution file) are
+      // data a test loads, not source.
+      "packages/plate/fixtures/**",
     ],
     jsdoc: { commentLineStrategy: "multiline", lineWrappingStyle: "balance" },
   },
   lint: {
     extends: [core, antiSlop],
-    ignorePatterns: ["dist/**", ".agents/**", ".claude/**", "**/migrations/**"],
+    ignorePatterns: [
+      "dist/**",
+      ".agents/**",
+      ".claude/**",
+      "**/migrations/**",
+      "packages/plate/fixtures/**",
+    ],
     jsPlugins: ["./tools/lint-plugin.mjs", "@stylistic/eslint-plugin"],
     // Keep source imports stable when files move: each package maps `#<package>/*` to its `src/` in package.json
     // `imports`, which Node resolves at run time and TypeScript resolves under nodenext.
