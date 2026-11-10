@@ -1,4 +1,4 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
@@ -7,6 +7,7 @@ import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
 import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/evaluate.ts";
 import { drawBelow, drawStream, responseLabel, templateLabel } from "#plate/engine/random.ts";
 import { checkTemplateDefaults } from "#plate/engine/template.ts";
+import type { ModelOf, Modules } from "#plate/model/interactions.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type { Item } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
@@ -14,6 +15,7 @@ import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import { score as scoreItem } from "#plate/score.ts";
+import { stubElement, stubKind } from "#plate/test/stub-kind.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
 
 /**
@@ -622,7 +624,89 @@ const responseDraw = (numAttempts: number, nth: number, seed = ""): bigint => {
   return drawn;
 };
 
+/**
+ * The module file of the stub kind, which {@link withUncounted} mocks.
+ */
+const stubFile = `#plate/interactions/${stubKind}.ts`;
+
+/**
+ * A node of the stub kind bound to `RESPONSE`, the bare node the table of modules holds for a stub:
+ * what an item's body holds for a module whose `countsAttempt` the engine reads through the hub.
+ * It goes with `stubKind` when the last stub lands: a landed module sets the fact on its own node.
+ */
+const stubNode: ModelOf<typeof stubKind> = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  kind: stubKind,
+  path: `qti-assessment-item/qti-item-body/${stubElement}`,
+  response: "RESPONSE",
+};
+
+/**
+ * Run an effect with the stub kind's module answering `countsAttempt` false for every submission,
+ * every module it imports loaded afresh, and the module restored after. The mock keeps the stub's
+ * every other member, so the item's body may hold {@link stubNode}, which no other step of the
+ * engine's path reaches.
+ *
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withUncounted = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(stubFile, async (importOriginal) => {
+      const actual = await importOriginal<Record<string, Modules[typeof stubKind]>>();
+
+      return Object.fromEntries(
+        Object.entries(actual).map(([name, module]) => [
+          name,
+          { ...module, countsAttempt: () => false },
+        ]),
+      );
+    });
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(stubFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
 describe("runAttempt", () => {
+  it.effect(
+    "leaves numAttempts where it was when an interaction's module says the submission counts no attempt, and still sets the responses and runs the rules",
+    () =>
+      withUncounted(
+        Effect.gen(function* uncounted() {
+          const engine = yield* Effect.promise(() => import("#plate/engine/attempt.ts"));
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const records = yield* Effect.promise(() => import("#plate/model/record.ts"));
+          const built = yield* Effect.fromResult(model.buildItem(countsAttempts));
+          const item: Item = { ...built, body: [...built.body, stubNode] };
+          const record = records.fresh(item, instance);
+
+          const first = yield* Effect.fromResult(
+            engine.runAttempt(item, record, { RESPONSE: identifierValue("true") }),
+          );
+          const second = yield* Effect.fromResult(
+            engine.runAttempt(item, first, { RESPONSE: identifierValue("false") }),
+          );
+
+          assert.deepStrictEqual(first, {
+            ...record,
+            attempt: "submitted",
+            numAttempts: 0,
+            outcomes: { ATTEMPTS: integerValue(0n), completionStatus: identifierValue("unknown") },
+            responses: { RESPONSE: identifierValue("true") },
+          });
+          assert.strictEqual(second.numAttempts, 0);
+          assert.deepStrictEqual(second.responses, { RESPONSE: identifierValue("false") });
+        }),
+      ),
+  );
+
   it.effect(
     "[I-9b] scores a BG007-shaped item: true gives 1, false 0 and NULL 0, though SCORE's default is 1",
     () =>
