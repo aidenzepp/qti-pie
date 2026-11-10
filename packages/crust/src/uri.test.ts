@@ -175,11 +175,4 @@ describe("isNamespaceName reads Namespaces in XML's namespace-name grammars", ()
       ),
     GENERATED_TIMEOUT_MS,
   );
-
-  it.effect("refuses the empty value, which is no namespace name under either edition", () =>
-    Effect.sync(() => {
-      assert.isFalse(isNamespaceName("", "1.0"));
-      assert.isFalse(isNamespaceName("", "1.1"));
-    }),
-  );
 });

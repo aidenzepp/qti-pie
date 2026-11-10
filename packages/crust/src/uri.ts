@@ -11,6 +11,7 @@
  * @see {@link https://www.rfc-editor.org/rfc/rfc3986#appendix-A | RFC 3986, Appendix A}
  * @see {@link https://www.rfc-editor.org/rfc/rfc3987#section-2.2 | RFC 3987, section 2.2}
  */
+import type { NamespacesVersion } from "#crust/namespaces.ts";
 
 /**
  * RFC 3986's `unreserved` as the body of a class: `ALPHA / DIGIT / "-" / "." / "_" / "~"`.
@@ -112,15 +113,16 @@ const namespaceNames = {
  * Test whether a namespace declaration's normalized value is a namespace name: a URI reference
  * under Namespaces in XML 1.0, an IRI reference under 1.1.
  *
- * The empty value is no reference this tests for; it undeclares the default namespace, or, in an
- * XML 1.0 document, breaks Namespaces' No Prefix Undeclaring, which the reader judges apart.
+ * The empty value matches both grammars, but Namespaces in XML gives it its own meaning: it
+ * undeclares the default namespace, or, in an XML 1.0 document, breaks No Prefix Undeclaring. So
+ * the reader judges an empty value apart and asks this only of one that is not empty.
  *
- * @param value - The normalized value, character references replaced and white space kept as
- *   section 3.3.3's normalization leaves it.
+ * @param value - The normalized value, not empty, character references replaced and white space
+ *   kept as section 3.3.3's normalization leaves it.
  * @param namespaces - The edition of Namespaces in XML the document is held to.
- * @returns Whether the value is a non-empty reference of the edition's grammar.
+ * @returns Whether the value is a reference of the edition's grammar.
  * @see {@link https://www.w3.org/TR/2009/REC-xml-names-20091208/#ns-decl | Namespaces in XML 1.0 (Third Edition), section 3}
  * @see {@link https://www.w3.org/TR/2006/REC-xml-names11-20060816/#ns-decl | Namespaces in XML 1.1 (Second Edition), section 3}
  */
-export const isNamespaceName = (value: string, namespaces: "1.0" | "1.1"): boolean =>
-  value !== "" && namespaceNames[namespaces].test(value);
+export const isNamespaceName = (value: string, namespaces: NamespacesVersion): boolean =>
+  namespaceNames[namespaces].test(value);
