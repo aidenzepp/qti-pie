@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="ei-graphic-associate" title="Farm paths" adaptive="false" time-dependent="false"
+  xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="pair">
+    <qti-correct-response>
+      <qti-value>H1 H3</qti-value>
+      <qti-value>H3 H4</qti-value>
+    </qti-correct-response>
+    <qti-mapping default-value="0">
+      <qti-map-entry map-key="H1 H3" mapped-value="1"/>
+      <qti-map-entry map-key="H3 H4" mapped-value="1"/>
+    </qti-mapping>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-graphic-associate-interaction response-identifier="RESPONSE" max-associations="3">
+      <img src="images/graphic-associate-map.svg" width="320" height="200"
+        alt="A farm with a well, a barn and an oak in a field"/>
+      <qti-associable-hotspot identifier="H1" shape="rect" coords="20,30,90,90" hotspot-label="Well" match-max="3"/>
+      <qti-associable-hotspot identifier="H2" shape="default" coords="0,0,320,200" hotspot-label="Anywhere else" match-max="3"/>
+      <qti-associable-hotspot identifier="H3" shape="circle" coords="170,70,30" hotspot-label="Barn" match-max="2"/>
+      <qti-associable-hotspot identifier="H4" shape="poly" coords="220,170,260,110,300,170" hotspot-label="Oak" match-max="3"/>
+    </qti-graphic-associate-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/map_response.xml"/>
+</qti-assessment-item>
