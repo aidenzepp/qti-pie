@@ -1572,6 +1572,78 @@
 /* end graphic-order-interaction */
 
 /* begin position-object-interaction (issue ei-12) */
+
+/*
+ * The Stage, the box the markers are positioned in: a one-column grid, so the stage image is a
+ * block in it with no line gap under it and the box is exactly the image's width, and each Root
+ * stands under the image in document order. An image wider than its line scrolls with the item.
+ */
+:where([data-slot="position-object-interaction-stage"]) {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: max-content;
+  justify-items: start;
+  gap: 1rem;
+}
+
+/* The Root lays the object and the positions side by side, and wraps them when the width is short. */
+:where([data-slot="position-object-interaction"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+/* The object image, as the candidate sees what is placed. */
+:where([data-slot="position-object-interaction-object"]) {
+  display: inline-grid;
+}
+
+/*
+ * The markers lie over the stage image, which the Stage's grid starts with: the `svg` is sized by
+ * its `width` and `height` attributes to the image's, placed at the Stage's start, and takes no
+ * pointer, so the inputs under it stay operable without script.
+ */
+:where([data-slot="position-object-interaction-markers"]) {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 1;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* The positions: the groups of inputs, one row each. */
+:where([data-slot="position-object-interaction-points"]) {
+  display: grid;
+  flex: 1 1 12rem;
+  gap: 0.5rem;
+}
+
+/* A position: a bordered row that holds its number and the two inputs. */
+:where([data-slot="position-object-interaction-point"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, oklch(0.922 0 0));
+  border-radius: var(--radius, 0.625rem);
+}
+
+/* The two inputs: wide enough for a coordinate of the stage's size. */
+:where([data-slot="position-object-interaction-x"]),
+:where([data-slot="position-object-interaction-y"]) {
+  inline-size: 6rem;
+}
+
+/* A Root the author disabled dims its positions, as a disabled Choice row is dimmed. */
+:where([data-slot="position-object-interaction"][data-disabled])
+  :where([data-slot="position-object-interaction-point"]) {
+  opacity: 0.5;
+}
+
 /* end position-object-interaction */
 
 /* begin select-point-interaction (issue ei-14) */
