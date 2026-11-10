@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="ei-graphic-order-subset" title="Pick the first sights" adaptive="false"
+  time-dependent="false" xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="ordered" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>H2</qti-value>
+      <qti-value>H1</qti-value>
+      <qti-value>H3</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-graphic-order-interaction response-identifier="RESPONSE" min-choices="2" max-choices="3">
+      <img src="images/graphic-order-map.svg" width="320" height="200"
+        alt="A harbour town with a house, a sun, a hill and a boat"/>
+      <qti-hotspot-choice identifier="H1" shape="rect" coords="30,40,100,90" hotspot-label="House"/>
+      <qti-hotspot-choice identifier="H2" shape="circle" coords="160,70,30" hotspot-label="Sun"/>
+      <qti-hotspot-choice identifier="H3" shape="poly" coords="220,110,260,50,300,110"/>
+      <qti-hotspot-choice identifier="H4" shape="default" coords="0,0,0,0" hotspot-label="Anywhere else"/>
+    </qti-graphic-order-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+</qti-assessment-item>
