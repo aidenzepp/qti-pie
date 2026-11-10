@@ -39,6 +39,7 @@ import {
   payload,
   postings,
   postingsIn,
+  printNodes,
   redactItem,
   redactStructure,
   templateShows,
@@ -4587,5 +4588,52 @@ describe("redactItem and payload on a module's container", () => {
       ),
       interactionsIn(payload(redacted, answering).body).map((interaction) => interaction.response),
     );
+  });
+});
+
+describe("the printer of test content", () => {
+  it("[W0-BF] printNodes prints a test outcome and leaves redactItem equal", () => {
+    const record: RedactRecord = { outcomes: { X: floatValue(2.675) }, templates: {} };
+    const path = `${bodyPath}/p`;
+    const placed: BodyNode = {
+      attributes: [],
+      children: [text("Total "), printed("X", `${path}/qti-printed-variable`)],
+      kind: "element",
+      path,
+      tag: "p",
+    };
+    const onItem = (given?: RedactRecord, limits?: { readonly outputBudget: number }) =>
+      redactItem({ ...item, body: [placed], unsupported: [] }, given, limits).body;
+
+    assert.deepStrictEqual(printNodes([placed], Option.some(record)), [
+      { attributes: [], children: texts("Total ", "2.675"), kind: "element", path, tag: "p" },
+    ]);
+    assert.deepStrictEqual(printNodes([placed], Option.some(record)), onItem(record));
+
+    const withheld = printNodes([placed], Option.some({ outcomes: {}, templates: {} }));
+
+    assert.deepStrictEqual(withheld, [
+      {
+        attributes: [],
+        children: [
+          text("Total "),
+          noticeOf("qti-printed-variable", `${path}/qti-printed-variable`),
+        ],
+        kind: "element",
+        path,
+        tag: "p",
+      },
+    ]);
+    assert.deepStrictEqual(withheld, onItem({ outcomes: {}, templates: {} }));
+
+    const limits = { outputBudget: 3 };
+
+    assert.deepStrictEqual(
+      printNodes([placed], Option.some(record), limits),
+      onItem(record, limits),
+    );
+    assert.deepStrictEqual(printNodes([placed], Option.some(record), limits), [
+      { attributes: [], children: texts("Total "), kind: "element", path, tag: "p" },
+    ]);
   });
 });
