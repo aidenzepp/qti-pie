@@ -11,10 +11,9 @@ import { fileURLToPath } from "node:url";
 import { sameLaw } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Predicate, Schema } from "effect";
-import { bucketOf } from "#pantry/import/refusal.ts";
 import type { LawNamesFile, RefusalLaw } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/test/qti.ts";
-import { schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
+import { bucketOf, schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The part of a migrations snapshot that gives each installed law its LawId: each level's laws,
@@ -88,7 +87,7 @@ const snapshotPath: string = fileURLToPath(import.meta.resolve("#migrations/qti/
 
 /**
  * The installed laws the committed snapshot describes, each with its LawId, grouped by bucket
- * (`#pantry/import/refusal.ts` `bucketOf`) for the search {@link lawIdOf} makes.
+ * (`#pantry/test/law-namer.ts` `bucketOf`) for the search {@link lawIdOf} makes.
  */
 const describedByBucket = Arr.groupBy(
   Schema.decodeUnknownSync(SnapshotLaws)(readFileSync(snapshotPath, "utf-8")).levels.flatMap(

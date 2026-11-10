@@ -104,15 +104,15 @@ export const known: readonly Known[] = [
       limit: "a forbidden ancestor",
     },
   },
-  // MERGE-OPEN: the known entry for decision 449's stated limit keyed "E1 derived,
-  // contained LomRecord(ownerParent, named) in LomResource(node, named)", can't be stated on Qti:
-  // 660a9d64 deleted LomResource and LomRecord.named, so no law of Qti states the containment, and
-  // its package (a resourcemetadata/xml resource href="test.xml" whose test.xml is
+  // Decision 449's stated limit keyed "E1 derived, contained LomRecord(ownerParent, named) in
+  // LomResource(node, named)" has no entry: Qti has no LomResource and LomRecord has no `named`
+  // field, so no law of Qti states the containment, and its package (a resourcemetadata/xml
+  // resource href="test.xml" whose test.xml is
   // `<manifest><resources><resource><metadata><lom xmlns="http://ltsc.ieee.org/xsd/LOM"/></metadata>
   // </resource></resources></manifest>`) shows no disagreement here. That record names no document,
   // since the query that names one (namingRecords) reads its resource's href, and the host leaves
   // rules over queries to the database. The limit's other class, the record's learning resource
-  // type, still shows, as the next entry.
+  // type, shows as the next entry.
   {
     files: [
       [
@@ -3952,7 +3952,7 @@ export const fixed: readonly Known[] = [
 <qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-item-body><xi:include href="rtest01-set01.xml"/></qti-item-body><qti-response-processing><xi:include href="rtest01-rules.xml"/></qti-response-processing></qti-assessment-item>`,
       ],
     ],
-    fix: "an include splices its target only where it may stand for the target's root (Inclusion.splices, IncludeRoot through Compute.singleton), so an item that includes itself in its body still heads its assembly, and its rule fragment's set-outcome-value is judged there",
+    fix: "an include splices its target only where it may stand for the target's root (Inclusion.splices, the root as a Compute.singleton within IncludeMember's set of the parent's family), so an item that includes itself in its body still heads its assembly, and its rule fragment's set-outcome-value is judged there",
     owner: "ASM",
     signature: { kind: "oracle-only-law", law: "Variable declared" },
   },

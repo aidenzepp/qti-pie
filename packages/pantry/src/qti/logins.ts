@@ -4,13 +4,14 @@
  * handed.
  *
  * The import's write program is declared with no rows, so that grizzle compiles it wherever it
- * compiles a workload: `grizzle generate`, `grizzle check` and every `DbLayer` startup. A schema
- * whose writes cannot compile then fails there, never at the first import (R87, whose
- * `BranchResolution.instanceEnd` made every import's ChangeSet refuse once a migrated schema ran
- * it). The declared program carries no package: a family member is written from an array or a
- * Stream, never from a query or a parameter, so `importPackage` still sends a ChangeSet built per
- * package (the W5 amendment's C19), which `db.apply` compiles for its call from the same
- * Description.
+ * compiles a workload: `grizzle generate`, which writes the compiled login as the served file
+ * `migrations/qti/served/author_app.json`, and `grizzle check`, which compiles it again and holds
+ * the file to it. A schema whose writes cannot compile then fails there, never at the first
+ * import (R87, whose `BranchResolution.instanceEnd` made every import's ChangeSet refuse once a
+ * migrated schema ran it). The runtime serves that file and compiles nothing
+ * (`#pantry/db/served.ts`). The declared program carries no package: it names each insert and none
+ * of its rows, so every import applies the served `importWrite` member to its own package's facts
+ * (`packageFactsOf` of `#pantry/import/write.ts`; the W5 amendment's C19).
  */
 import { insertableNamesOf, login, workload } from "@bjornpagen/grizzle";
 import { Function as Fn, pipe, Record as Rec, Struct } from "effect";
@@ -43,12 +44,13 @@ const noInputsOf = (qti: QtiSchema): PackageInputs =>
  *   pages, `packages` and `documents` (`#pantry/export/scan.ts` `authorReadsOf`), each compiled
  *   once when the login's `DbLayer` is built, its access paths earning their indexes (the W5
  *   amendment's C20);
- * - **the import's write program**: `changeSetOf`'s ChangeSet with no rows. grizzle compiles a
- *   ChangeSet from its Description, which names each insert and none of its rows, so this is the
- *   program every package's import compiles. It is declared to be compiled, never run: the schema's
- *   own compile already refuses a column or a relation no write fills, so compiling it guards the
- *   refusals of the write program itself, an insert outside the author role (`OutsideRole`) and a
- *   stratum no order of its statements keeps every key at (`UnorderableStratum`).
+ * - **the import's write program**: `changeSetOf`'s ChangeSet with no rows, the member `importWrite`.
+ *   grizzle compiles a ChangeSet from its Description, which names each insert and none of its
+ *   rows, so this is the program every package's import applies, compiled once into the served
+ *   file. Compiling it also guards the refusals of the write program itself: the schema's own
+ *   compile already refuses a column or a relation no write fills, and this one refuses an insert
+ *   outside the author role (`OutsideRole`) and a stratum no order of its statements keeps every
+ *   key at (`UnorderableStratum`).
  *
  * Built once per schema value. {@link authorLogin} holds them; a database test's probe login holds
  * them beside members of its own (`#pantry/test/served-members.ts`), over the same author role, so

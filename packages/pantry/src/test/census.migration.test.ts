@@ -1,11 +1,12 @@
 /**
- * The census of the committed migration chain (plan-qti-pie Q6.02): the migration folders the Qti
- * schema holds, the `_init` first and a later migration on top for each phase that has landed,
- * beside the snapshot's two files and `served/`, which holds the one file `grizzle generate` writes
- * for the author login (`#pantry/db/served.ts`), taken together by `#pantry/test/census.ts`, meet
- * fin.md §13's zero targets and hold the measured counts. It lands with the migrations it reads, so
- * it is a file of its own: the census's parser and its targets are `census.test.ts`'s, which need
- * no migration.
+ * The census of the committed migration chain (plan-qti-pie Q6.02): the two migration folders the
+ * Qti schema holds, the `_init` first and pantry-api-1 on top, beside the snapshot's two files and
+ * `served/`, which holds the one file `grizzle generate` writes for the author login
+ * (`#pantry/db/served.ts`), taken together by `#pantry/test/census.ts`, meet fin.md §13's zero
+ * targets, except its validate files and constraint triggers, which the measured counts hold
+ * instead (2 validate files and 97 constraint triggers across the chain, 96 of them in the
+ * database), and hold those counts. It lands with the migrations it reads, so it is a file of its
+ * own: the census's parser and its targets are `census.test.ts`'s, which need no migration.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
@@ -63,7 +64,7 @@ const membersOf = (kind: "closed" | "relation"): number =>
 
 describe("the committed migration chain", () => {
   it.effect(
-    "is the _init, its later migrations, the snapshot and the author login's served file, meets every zero target, and holds the measured counts",
+    "is the _init, its later migrations, the snapshot and the author login's served file, meets the zero targets but validate files and constraint triggers, and holds the measured counts",
     () =>
       // Oracle: the specification as a checker, fin.md §13's zero targets (the ones
       // `census.test.ts` states as predicates) and plan-qti-pie Q6.02's counts, over the committed

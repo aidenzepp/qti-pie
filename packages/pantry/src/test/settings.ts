@@ -55,6 +55,8 @@ export const leaseTestTimeoutMs = 49_000;
  * 211,019 ms. Under the served workload each page is its own call, against about 24 s for the
  * whole export round trip before it. The value is twice the measurement, rounded up to the next
  * 1,000, the rule `leaseTestTimeoutMs` uses. Raise it only on a new measurement recorded here.
+ * The per-call cost behind the measurement is open and untriaged in `docs/grizzle-findings.md`
+ * ("The export's per-page scan costs far more per call under the served workload").
  */
 export const exportPageSizesTestTimeoutMs = 423_000;
 
