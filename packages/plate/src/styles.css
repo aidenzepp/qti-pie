@@ -1077,6 +1077,24 @@
 /* end end-attempt-interaction */
 
 /* begin portable-custom-interaction (issue pci-03) */
+:where([data-slot="portable-custom-interaction"]) {
+  display: block;
+}
+
+:where([data-slot="portable-custom-interaction-markup"]) {
+  display: block;
+}
+
+:where([data-slot="portable-custom-interaction-notice"]) {
+  color: var(--muted-foreground, oklch(0.556 0 0));
+  font-style: italic;
+}
+
+/* The runtime (issue pci-04) hides the notice once the page's script runs the interaction. */
+:where([data-slot="portable-custom-interaction"][data-runtime])
+  :where([data-slot="portable-custom-interaction-notice"]) {
+  display: none;
+}
 /* end portable-custom-interaction */
 
 /* begin rubric-block (issue m3e-01) */
