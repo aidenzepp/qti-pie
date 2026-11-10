@@ -842,7 +842,7 @@ const wrongProblem = (scored: Scored): Result.Result<Option.Option<string>, stri
     return compare(got, maximum) === -1
       ? Option.none()
       : Option.some(
-          `the wrong response ${JSON.stringify(wrong.values.map((single) => String(single.value)))} scores ${got.value}, not below the maximum ${maximum.value}`,
+          `the wrong response ${JSON.stringify(wrong.values.map((single) => format(single)))} scores ${got.value}, not below the maximum ${maximum.value}`,
         );
   });
 

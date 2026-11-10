@@ -10,7 +10,10 @@
  *
  * @module
  */
+import { createHash } from "node:crypto";
 import { Option, Result } from "effect";
+import { defaultTreeAdapter, parse } from "parse5";
+import type { DefaultTreeAdapterTypes } from "parse5";
 import { themeText } from "#plate/dev/theme.ts";
 import type { Theme } from "#plate/dev/theme.ts";
 import { h, text } from "#plate/emit/node.ts";
@@ -18,11 +21,17 @@ import type { Element, Node } from "#plate/emit/node.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
 
 /**
- * The headers of every HTML page (rule `723e580c`): no script and no `'unsafe-inline'` in any
- * directive, posts only to this origin, and no caching. The stylesheets and the theme box's
- * redirect carry them too, a stylesheet with its own type. The policy stands behind `check`'s URL
- * pass: it refuses by default and allows only what a rendered item loads, so markup the pass let
- * through still cannot run script or post to another origin.
+ * A hash source of a content security policy: `'sha256-` the SHA-256 digest in base64, and `'`.
+ */
+export type StyleSource = `'sha256-${string}'`;
+
+/**
+ * The headers of every HTML page (rule `723e580c`) as a function of the item style elements the
+ * response carries: no script and nothing inline-allowing in any directive, posts only to this
+ * origin, and no caching. The stylesheets and the theme box's redirect carry them too, a
+ * stylesheet with its own type. The policy stands behind `check`'s URL pass: it refuses by
+ * default and allows only what a rendered item loads, so markup the pass let through still cannot
+ * run script or post to another origin.
  *
  * `object-src 'self'` lets an item's `object` load a package document from `/assets/`.
  * `frame-src 'self'` is there for Chromium, which also checks the document an `object` loads
@@ -32,6 +41,14 @@ import { toHtml } from "#plate/emit/serialise.ts";
  * list holds neither `frame-src` nor `child-src`. The nested document is sandboxed by its own
  * header ({@link assetHeaders}), not by this policy.
  *
+ * `style-src` is `'self'` and one hash source for each style element an item's HTML holds in the
+ * response, from {@link pageResponse}. The renderer gives a content module no nonce to write, so
+ * the page hashes the element's text instead, which needs no change to the renderer. The sources
+ * differ with the response's content and are never constant; without an item style element the
+ * list is `'self'` alone.
+ *
+ * @param styleSources The hash source of each style element the response carries, none by default.
+ * @returns The headers.
  * @see https://w3c.github.io/webappsec-csp/#directive-object-src (CSP Level 3, object-src, its note)
  * @see https://w3c.github.io/webappsec-csp/#effective-directive-for-a-request (object, embed: object-src)
  * @see https://w3c.github.io/webappsec-csp/#directive-fallback-list (object-src falls back to default-src only)
@@ -40,15 +57,27 @@ import { toHtml } from "#plate/emit/serialise.ts";
  * @see https://github.com/chromium/chromium/blob/3cb88deaf2150d76f4c414a90862f07440a404cc/content/browser/renderer_host/navigation_request.cc#L8405-L8423 (Chromium checks frame-src on every child navigation, an object's included)
  * @see https://github.com/chromium/chromium/blob/3cb88deaf2150d76f4c414a90862f07440a404cc/services/network/public/cpp/content_security_policy/content_security_policy.cc#L1281-L1308 (Chromium's frame-src falls back to child-src, then default-src)
  * @see https://github.com/mozilla-firefox/firefox/blob/935e9f7e39fcb9d738d3ac064905dcf4cc0c9cfc/dom/security/nsCSPUtils.cpp#L385-L388 (Firefox maps an object's load to object-src)
+ * @see https://w3c.github.io/webappsec-csp/#match-element-to-source-list (CSP Level 3: an inline element matches a hash source of its text)
  */
-export const pageHeaders = {
-  "cache-control": "no-store",
-  "content-security-policy":
-    "default-src 'none'; style-src 'self'; img-src 'self' https: http:; media-src 'self' https: http:; object-src 'self'; frame-src 'self'; script-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
-  "content-type": "text/html; charset=utf-8",
-  "referrer-policy": "no-referrer",
-  "x-content-type-options": "nosniff",
-} as const satisfies Readonly<Record<string, string>>;
+export const pageHeaders = (styleSources: readonly StyleSource[] = []) =>
+  ({
+    "cache-control": "no-store",
+    "content-security-policy": [
+      "default-src 'none'",
+      `style-src ${["'self'", ...styleSources].join(" ")}`,
+      "img-src 'self' https: http:",
+      "media-src 'self' https: http:",
+      "object-src 'self'",
+      "frame-src 'self'",
+      "script-src 'none'",
+      "base-uri 'none'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ].join("; "),
+    "content-type": "text/html; charset=utf-8",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+  }) as const satisfies Readonly<Record<string, string>>;
 
 /**
  * The directive of {@link pageHeaders}' policy that refuses every script.
@@ -326,4 +355,79 @@ export const pageHtml = (shown: Page, chrome: Chrome): string => {
   }
 
   return `<!doctype html>${html}`;
+};
+
+/**
+ * Give the text of each style element in a parsed tree, as the browser's DOM holds it: the
+ * element's text nodes joined, with the parser's own normalisation (line breaks as `\n`, NUL as
+ * U+FFFD) already applied. An element inside a `template` is not live and has no entry.
+ *
+ * @param parent The node to search below.
+ * @returns The text of each style element below `parent`, in document order.
+ */
+const styleTexts = (parent: DefaultTreeAdapterTypes.ParentNode): readonly string[] =>
+  defaultTreeAdapter.getChildNodes(parent).flatMap((node) =>
+    defaultTreeAdapter.isElementNode(node)
+      ? [
+          ...(defaultTreeAdapter.getTagName(node) === "style"
+            ? [
+                defaultTreeAdapter
+                  .getChildNodes(node)
+                  .flatMap((child) =>
+                    defaultTreeAdapter.isTextNode(child)
+                      ? [defaultTreeAdapter.getTextNodeContent(child)]
+                      : [],
+                  )
+                  .join(""),
+              ]
+            : []),
+          ...styleTexts(node),
+        ]
+      : [],
+  );
+
+/**
+ * Give the hash source that admits an inline style element with a text: `'sha256-` the SHA-256 of
+ * the text in UTF-8, in base64, and `'`.
+ *
+ * @param content The element's text content.
+ * @returns The source.
+ */
+const styleSourceOf = (content: string): StyleSource =>
+  `'sha256-${createHash("sha256").update(content, "utf-8").digest("base64")}'`;
+
+/**
+ * Give the hash source of each distinct style element a written page holds, once each, in
+ * document order. The page is read with a spec-compliant HTML parser, as the browser reads it, so
+ * the text hashed is the text the browser's check hashes: character references are not decoded
+ * in a `style` of HTML, line breaks and NUL are normalised, and markup that only reads like an
+ * element (escaped text, a comment, a `textarea`'s text) is not one.
+ *
+ * Every page the playground writes goes through here, so a page with no `<style` in it, which
+ * cannot hold a style element, is not parsed.
+ *
+ * @param html The page's HTML as it is sent.
+ * @returns The sources, none when the page holds no style element.
+ */
+const styleSources = (html: string): readonly StyleSource[] =>
+  /<style/iu.test(html) ? [...new Set(styleTexts(parse(html)).map(styleSourceOf))] : [];
+
+/**
+ * Answer a page as the playground does: its HTML with the status and headers it carries over
+ * {@link pageHeaders}, whose `style-src` admits each style element the written page holds by the
+ * hash of its text, so a response admits its own item's style elements and no other.
+ *
+ * @param shown The page.
+ * @param chrome The stored appearance and the theme box's return path.
+ * @returns The response.
+ * @throws {VoidElementChildren} When the page's nodes break one of the serialiser's rules, a
+ *   defect in the playground's code (see {@link written}).
+ */
+export const pageResponse = (shown: Page, chrome: Chrome): Response => {
+  const html = pageHtml(shown, chrome);
+
+  return new Response(html, {
+    headers: { ...pageHeaders(styleSources(html)), ...shown.headers },
+    status: shown.status,
+  });
 };

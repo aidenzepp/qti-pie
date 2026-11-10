@@ -28,7 +28,7 @@ import { message } from "#plate/messages.ts";
 import { valueOf, xsBooleanOf } from "#plate/model/attributes.ts";
 import type { IntegerOrRef, TemplateRule } from "#plate/model/expression.ts";
 import { modules } from "#plate/model/interactions.ts";
-import { buildItem } from "#plate/model/item.ts";
+import { buildItem, stimulusBody } from "#plate/model/item.ts";
 import type {
   AreaMapping,
   BodyNode,
@@ -474,13 +474,12 @@ const templatingItem = (
   });
 
 /**
- * The seven shapes of template processing `check` accepts whose first attempt reads or sets a
+ * The four shapes of template processing `check` accepts whose first attempt reads or sets a
  * name the engine does not hold while template processing runs (review `079e8c44` P1-1), each with
  * its declarations, its one rule, the name it marks and the declarations' own marks: a read of
  * `QTI_CONTEXT`; a read of a context variable through `qti-variable`, then through `qti-default`;
- * a read of a template variable of cardinality `record`; a set of one of base type `file`; a
- * `qti-set-correct-response` of a `file` response; and a `qti-set-default-value` of a `file`
- * outcome.
+ * and a read of a template variable of cardinality `record`. A `file` declaration is held
+ * (`[W0-AY]`), so a set of one is {@link fileTemplating}, not a shape here.
  */
 const unheldTemplating: readonly {
   readonly declarations: readonly SourceElement[];
@@ -528,29 +527,40 @@ const unheldTemplating: readonly {
     rule: templateSetting("qti-set-template-value", "B", isNullOf(variableElement("R"))),
     unheld: "R",
   },
+];
+
+/**
+ * The three shapes of template processing over a `file` declaration that `[W0-AY]` holds, each
+ * with its declarations, its one rule and the name it sets: a `qti-set-template-value` of a `file`
+ * template variable; a `qti-set-correct-response` of a `file` response; and a
+ * `qti-set-default-value` of a `file` outcome. Before `[W0-AY]` each was a shape of
+ * {@link unheldTemplating}, marked `base-type="file"`.
+ */
+const fileTemplating: readonly {
+  readonly declarations: readonly SourceElement[];
+  readonly rule: SourceElement;
+  readonly set: string;
+}[] = [
   {
     declarations: [scoreDeclaration, templateDeclaration("F", "single", "file")],
-    marks: [{ feature: 'base-type="file"', path: `${root}/qti-template-declaration` }],
     rule: templateSetting("qti-set-template-value", "F", el("qti-null")),
-    unheld: "F",
+    set: "F",
   },
   {
     declarations: [
       declaration("qti-response-declaration", "RF", "file", "single"),
       scoreDeclaration,
     ],
-    marks: [{ feature: 'base-type="file"', path: `${root}/qti-response-declaration` }],
     rule: templateSetting("qti-set-correct-response", "RF", el("qti-null")),
-    unheld: "RF",
+    set: "RF",
   },
   {
     declarations: [
       scoreDeclaration,
       declaration("qti-outcome-declaration", "OF", "file", "single"),
     ],
-    marks: [{ feature: 'base-type="file"', path: `${root}/qti-outcome-declaration[2]` }],
     rule: templateSetting("qti-set-default-value", "OF", el("qti-null")),
-    unheld: "OF",
+    set: "OF",
   },
 ];
 
@@ -1117,8 +1127,9 @@ const fewerDeclarations = 1000;
 const growthTimeoutMs = 60_000;
 
 /**
- * An item with `count` template declarations of base type `file` and an empty body. The model does
- * not hold a `file` declaration, so each is one unsupported feature at its own path.
+ * An item with `count` template declarations of cardinality `record` and an empty body. The model
+ * does not hold a `record` template declaration, so each is one unsupported feature at its own
+ * path. (Before `[W0-AY]` these were `file` declarations, which the model holds now.)
  *
  * @param count How many declarations the item holds.
  * @returns The document at `items/test.xml`.
@@ -1128,8 +1139,7 @@ const templated = (count: number): SourceDocument =>
     body: [],
     declarations: Array.from({ length: count }, (_, index) =>
       el("qti-template-declaration", [
-        attr("base-type", "file"),
-        attr("cardinality", "single"),
+        attr("cardinality", "record"),
         attr("identifier", `T${index}`),
       ]),
     ),
@@ -3307,9 +3317,9 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    '[Q-20] builds no record-bound control for a record response the model does not hold, one with a file field: its Text Entry is the notice cardinality="record"',
+    "[Q-20] [W0-AY] holds a record response with a file field, its field a file single of the written name, and builds the record-bound Text Entry with no mark",
     () =>
-      Effect.gen(function* fileRecordIsNotice() {
+      Effect.gen(function* fileRecordIsHeld() {
         const built = yield* Effect.fromResult(
           buildItem(
             item({
@@ -3324,27 +3334,43 @@ describe("buildItem", () => {
             }),
           ),
         );
-        const path = `${body}/qti-text-entry-interaction`;
 
-        assert.isUndefined(built.records);
-        assert.deepStrictEqual(built.body, [
-          { feature: 'cardinality="record"', kind: "unsupported", path },
-        ]);
-        assert.deepStrictEqual(built.unsupported, [
-          {
-            feature: 'cardinality="record"',
-            path: `${root}/qti-response-declaration`,
-            shown: "mark",
-          },
-          { feature: 'cardinality="record"', path, shown: "notice" },
-        ]);
+        assert.deepStrictEqual(
+          built.records,
+          new Map<string, RecordDeclaration>([
+            [
+              "UPLOAD",
+              {
+                correct: Option.some<RecordValue>({
+                  cardinality: "record",
+                  fields: [
+                    {
+                      identifier: "content",
+                      value: { baseType: "file", value: { name: "a.txt", size: 0, type: "" } },
+                    },
+                  ],
+                }),
+                defaultValue: Option.none(),
+                identifier: "UPLOAD",
+              },
+            ],
+          ]),
+        );
+        assert.isUndefined(built.unheld);
+        assert.deepStrictEqual(
+          built.body.map((node) =>
+            node.kind === "text-entry" ? [node.baseType, node.cardinality] : node.kind,
+          ),
+          [["string", "record"]],
+        );
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 
   it.effect(
-    "[I-1] keeps a record response declaration of a file field, or of base type file, unheld and marked, and holds one of modelled fields",
+    "[I-1] [W0-AY] holds a record response declaration of a file field, and one of base type file, as it holds one of other fields, none marked",
     () =>
-      Effect.gen(function* keepsFileRecordUnheld() {
+      Effect.gen(function* holdsFileRecords() {
         const built = yield* Effect.fromResult(
           buildItem(
             item({
@@ -3378,44 +3404,79 @@ describe("buildItem", () => {
             }),
           ),
         );
-        const response = `${root}/qti-response-declaration`;
 
+        assert.isUndefined(built.unheld);
+        assert.deepStrictEqual([...(built.records?.keys() ?? [])], ["UPLOADS", "FILED", "HELD"]);
         assert.deepStrictEqual(
-          built.unheld,
-          new Map<string, UnheldDeclaration>([
-            [
-              "UPLOADS",
+          built.records?.get("UPLOADS")?.correct,
+          Option.some<RecordValue>({
+            cardinality: "record",
+            fields: [
+              { identifier: "name", value: { baseType: "string", value: "a.txt" } },
               {
-                baseType: Option.none(),
-                cardinality: "record",
-                declaresCorrect: true,
-                identifier: "UPLOADS",
-                kind: "response",
+                identifier: "content",
+                value: { baseType: "file", value: { name: "a.txt", size: 0, type: "" } },
               },
             ],
-            [
-              "FILED",
-              {
-                baseType: Option.some("file"),
-                cardinality: "record",
-                declaresCorrect: false,
-                identifier: "FILED",
-                kind: "response",
-              },
-            ],
-          ]),
+          }),
         );
-        assert.deepStrictEqual([...(built.records?.keys() ?? [])], ["HELD"]);
+        assert.deepStrictEqual(built.records?.get("FILED"), {
+          correct: Option.none(),
+          defaultValue: Option.none(),
+          identifier: "FILED",
+        });
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[W0-AY] holds a response declaration of base type file as a response, with its correct response and no mark, and a file outcome as an outcome",
+    () =>
+      Effect.gen(function* holdsFileDeclarations() {
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [el("qti-upload-interaction", [attr("response-identifier", "UPLOAD")])],
+              declarations: [
+                declaration("qti-response-declaration", "UPLOAD", "file", "single"),
+                declaration("qti-response-declaration", "KEYED", "file", "single", [
+                  values("qti-correct-response", "answer.txt"),
+                ]),
+                declaration("qti-outcome-declaration", "FILES", "file", "multiple"),
+              ],
+            }),
+          ),
+        );
+        const path = `${body}/qti-upload-interaction`;
+
+        assert.deepStrictEqual([...built.responses.keys()], ["UPLOAD", "KEYED"]);
+        assert.deepStrictEqual(built.responses.get("UPLOAD")?.baseType, "file");
+        assert.deepStrictEqual(built.responses.get("UPLOAD")?.cardinality, "single");
+        assert.deepStrictEqual(built.responses.get("UPLOAD")?.correct, Option.none());
+        assert.deepStrictEqual(
+          built.responses.get("KEYED")?.correct,
+          Option.some<Value>({
+            baseType: "file",
+            cardinality: "single",
+            values: [{ baseType: "file", value: { name: "answer.txt", size: 0, type: "" } }],
+          }),
+        );
+        assert.deepStrictEqual([...built.outcomes.keys()], ["FILES"]);
+        assert.deepStrictEqual(built.outcomes.get("FILES")?.baseType, "file");
+        assert.isUndefined(built.unheld);
+        // The Upload interaction is still the notice it was: holding its response is not
+        // implementing it.
+        assert.deepStrictEqual(built.body, [
+          { feature: "qti-upload-interaction", kind: "unsupported", path },
+        ]);
         assert.deepStrictEqual(built.unsupported, [
-          { feature: 'cardinality="record"', path: `${response}[1]`, shown: "mark" },
-          { feature: 'base-type="file"', path: `${response}[2]`, shown: "mark" },
-          { feature: 'cardinality="record"', path: `${response}[2]`, shown: "mark" },
+          { feature: "qti-upload-interaction", path, shown: "notice" },
         ]);
       }),
   );
 
   it.effect(
-    "[I-1] [I-2] [T-9] holds each file and record declaration's identifier, base type, cardinality and kind in unheld, a response's with whether it declares a correct response, and no modelled one",
+    "[I-1] [I-2] [T-9] [W0-AY] holds each record declaration's identifier, base type, cardinality and kind in unheld, a response's with whether it declares a correct response, and no modelled one, a file one included",
     () =>
       Effect.gen(function* holdsUnheldDeclarations() {
         const built = yield* Effect.fromResult(
@@ -3444,27 +3505,7 @@ describe("buildItem", () => {
 
         assert.deepStrictEqual(
           built.unheld,
-          new Map([
-            [
-              "UPLOAD",
-              {
-                baseType: Option.some("file"),
-                cardinality: "single",
-                declaresCorrect: false,
-                identifier: "UPLOAD",
-                kind: "response",
-              },
-            ],
-            [
-              "KEYED",
-              {
-                baseType: Option.some("file"),
-                cardinality: "single",
-                declaresCorrect: true,
-                identifier: "KEYED",
-                kind: "response",
-              },
-            ],
+          new Map<string, UnheldDeclaration>([
             [
               "DETAIL",
               {
@@ -3484,15 +3525,6 @@ describe("buildItem", () => {
               },
             ],
             [
-              "FILES",
-              {
-                baseType: Option.some("file"),
-                cardinality: "multiple",
-                identifier: "FILES",
-                kind: "outcome",
-              },
-            ],
-            [
               "ROW",
               {
                 baseType: Option.none(),
@@ -3503,8 +3535,8 @@ describe("buildItem", () => {
             ],
           ]),
         );
-        assert.deepStrictEqual([...built.responses.keys()], ["RESPONSE"]);
-        assert.deepStrictEqual([...built.outcomes.keys()], ["SCORE"]);
+        assert.deepStrictEqual([...built.responses.keys()], ["UPLOAD", "KEYED", "RESPONSE"]);
+        assert.deepStrictEqual([...built.outcomes.keys()], ["FILES", "SCORE"]);
         assert.deepStrictEqual([...built.templates.keys()], ["T"]);
       }),
   );
@@ -3679,7 +3711,7 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-9a] reads a duration qti-value as seconds in a double, INF, NaN and a negative included, marks a file outcome, and refuses PT1M30.5S as value-type",
+    "[I-9a] [W0-AY] reads a duration qti-value as seconds in a double, INF, NaN and a negative included, holds a file outcome beside it unmarked, and refuses PT1M30.5S as value-type",
     () =>
       Effect.gen(function* readsDurations() {
         const cases: readonly (readonly [string, number])[] = [
@@ -3705,7 +3737,7 @@ describe("buildItem", () => {
             ),
           );
 
-          assert.deepStrictEqual([...built.outcomes.keys()], ["TIME"], written);
+          assert.deepStrictEqual([...built.outcomes.keys()], ["TIME", "UPLOAD"], written);
           assert.deepStrictEqual(
             built.outcomes.get("TIME")?.defaultValue,
             Option.some({
@@ -3715,17 +3747,8 @@ describe("buildItem", () => {
             }),
             written,
           );
-          assert.deepStrictEqual(
-            built.unsupported,
-            [
-              {
-                feature: 'base-type="file"',
-                path: `${root}/qti-outcome-declaration[2]`,
-                shown: "mark",
-              },
-            ],
-            written,
-          );
+          assert.deepStrictEqual(built.outcomes.get("UPLOAD")?.defaultValue, Option.none());
+          assert.deepStrictEqual(built.unsupported, [], written);
         }
 
         const refusal = yield* Effect.flip(
@@ -4787,7 +4810,7 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-9a] marks inline rules that read or set completionStatus where the item declares a variable by that name the model does not hold",
+    "[I-9a] [W0-AY] marks inline rules that read or set completionStatus where the item declares a variable by that name the model does not hold, a record now that file is held",
     () =>
       Effect.gen(function* marksDeclaredCompletionStatus() {
         const rules = [
@@ -4812,8 +4835,7 @@ describe("buildItem", () => {
                 declarations: [
                   declaration("qti-outcome-declaration", "STATUS", "identifier", "single"),
                   el("qti-template-declaration", [
-                    attr("base-type", "file"),
-                    attr("cardinality", "single"),
+                    attr("cardinality", "record"),
                     attr("identifier", "completionStatus"),
                   ]),
                 ],
@@ -4824,7 +4846,7 @@ describe("buildItem", () => {
           assert.deepStrictEqual(built.processing, Option.none(), `rule ${String(index)}`);
           assert.deepStrictEqual(
             built.unsupported.map((entry) => entry.feature),
-            ['base-type="file"', "variable:completionStatus"],
+            ['cardinality="record"', "variable:completionStatus"],
             `rule ${String(index)}`,
           );
         }
@@ -5053,6 +5075,20 @@ describe("buildItem", () => {
         ],
         unheld,
       );
+    }
+  });
+
+  it("[W0-AY] accepts template processing that sets a file template variable, a file correct response or a file default, and runs both processings with no mark", () => {
+    for (const { declarations, rule, set } of fileTemplating) {
+      const verdict = check(templatingItem(declarations, rule), tables, Option.none());
+      const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+        assert.fail(`${set}: the item is ${verdict.verdict}, not accepted.`),
+      );
+
+      assert.strictEqual(verdict.verdict, "accepted", set);
+      assert.isTrue(Option.isSome(accepted.item.templateProcessing), `${set}: template processing`);
+      assert.isTrue(Option.isSome(accepted.item.processing), `${set}: response processing`);
+      assert.deepStrictEqual(accepted.unsupported, [], set);
     }
   });
 
@@ -5879,6 +5915,145 @@ describe("buildItem, catalog references", () => {
         });
         assert.deepStrictEqual(built.unsupported, [
           { feature: "data-catalog-idref", path: `${body}/p`, shown: "mark" },
+        ]);
+      }),
+  );
+});
+
+describe("buildItem, stimulus references", () => {
+  it.effect(
+    "[W0-AR] the body walk keeps data-stimulus-idref as the element's stimulus key, keeps the attribute among the element's attributes, and gives an element without one no stimulus key",
+    () =>
+      Effect.gen(function* keepsStimulusIdref() {
+        const built = yield* Effect.fromResult(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "div",
+                  [attr("id", "passage"), attr("data-stimulus-idref", "S1")],
+                  [el("p", [], [text("Loading the passage.")])],
+                ),
+                el("div", [], [text("No stimulus.")]),
+              ],
+              declarations: [],
+            }),
+          ),
+        );
+
+        assert.deepStrictEqual(built.body[0], {
+          attributes: [
+            { name: "id", value: "passage" },
+            { name: "data-stimulus-idref", value: "S1" },
+          ],
+          children: [
+            {
+              attributes: [],
+              children: [{ kind: "text", text: "Loading the passage." }],
+              kind: "element",
+              path: `${body}/div[1]/p`,
+              tag: "p",
+            },
+          ],
+          kind: "element",
+          path: `${body}/div[1]`,
+          stimulus: "S1",
+          tag: "div",
+        });
+        assert.isFalse(Object.hasOwn(built.body[1] ?? {}, "stimulus"));
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+});
+
+/**
+ * Construct a stimulus document at `passages/s.xml` whose body holds the given children.
+ *
+ * @param children The children of its `qti-stimulus-body`.
+ * @returns The document.
+ */
+const stimulus = (children: readonly SourceChild[]): SourceDocument =>
+  doc(
+    "passages/s.xml",
+    el(
+      "qti-assessment-stimulus",
+      [attr("identifier", "s"), attr("title", "S")],
+      [el("qti-stimulus-body", [], children)],
+    ),
+  );
+
+describe("stimulusBody", () => {
+  it.effect(
+    "[W0-AR] reads the one stimulus body as the item body is read, with its marks and notices in document order",
+    () =>
+      Effect.gen(function* readsStimulusBody() {
+        const read = yield* Effect.fromResult(
+          stimulusBody(
+            stimulus([
+              el("p", [attr("base", "x/", xmlNamespace)], [text("Shore.")]),
+              el("qti-fake-widget", [], [text("Dropped.")]),
+            ]),
+          ),
+        );
+
+        assert.deepStrictEqual(read.body, [
+          {
+            attributes: [],
+            children: [{ kind: "text", text: "Shore." }],
+            kind: "element",
+            path: "qti-assessment-stimulus/qti-stimulus-body/p",
+            tag: "p",
+          },
+          {
+            feature: "qti-fake-widget",
+            kind: "unsupported",
+            path: "qti-assessment-stimulus/qti-stimulus-body/qti-fake-widget",
+          },
+        ]);
+        assert.deepStrictEqual(read.unsupported, [
+          {
+            feature: "xml:base",
+            path: "qti-assessment-stimulus/qti-stimulus-body/p",
+            shown: "mark",
+          },
+          {
+            feature: "qti-fake-widget",
+            path: "qti-assessment-stimulus/qti-stimulus-body/qti-fake-widget",
+            shown: "notice",
+          },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[W0-AR] gives an interaction in a stimulus body its notice, keyed by its element, in place of binding it",
+    () =>
+      Effect.gen(function* stimulusInteraction() {
+        const read = yield* Effect.fromResult(
+          stimulusBody(
+            stimulus([
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "RESPONSE")],
+                [el("qti-simple-choice", [attr("identifier", "A")], [text("A")])],
+              ),
+            ]),
+          ),
+        );
+
+        assert.deepStrictEqual(read.body, [
+          {
+            feature: "qti-choice-interaction",
+            kind: "unsupported",
+            path: "qti-assessment-stimulus/qti-stimulus-body/qti-choice-interaction",
+          },
+        ]);
+        assert.deepStrictEqual(read.unsupported, [
+          {
+            feature: "qti-choice-interaction",
+            path: "qti-assessment-stimulus/qti-stimulus-body/qti-choice-interaction",
+            shown: "notice",
+          },
         ]);
       }),
   );

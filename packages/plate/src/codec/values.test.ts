@@ -82,6 +82,25 @@ const singleInput = (baseType: string, values: readonly object[]) => ({
   values,
 });
 
+/**
+ * What a stored file single may carry, each field possibly absent or of the wrong type, so a test
+ * may hand {@link ValueSchema} a file that is not a file.
+ */
+interface StoredFileInput {
+  readonly name?: unknown;
+  readonly size?: unknown;
+  readonly type?: unknown;
+}
+
+/**
+ * Construct untyped input for {@link ValueSchema}: one single of base type `file` holding `file`.
+ *
+ * @param file The file's fields, possibly not a file's name, size and type.
+ * @returns The input object.
+ */
+const fileInput = (file: StoredFileInput) =>
+  singleInput("file", [{ baseType: "file", value: file }]);
+
 describe("ValueSchema", () => {
   it.effect("encodes and decodes through its Schema", () =>
     Effect.gen(function* valueRoundTrips() {
@@ -249,7 +268,62 @@ describe("ValueSchema", () => {
     }
   });
 
-  it("refuses a value of another base type, an invalid value and two values in a single", () => {
+  it.effect("[W0-AY] the codec stores and reads a file single", () =>
+    Effect.gen(function* fileRoundTrips() {
+      const photo: Single = {
+        baseType: "file",
+        value: { name: "photo.png", size: 4, type: "image/png" },
+      };
+      const original = value("file", "single", [photo]);
+      const encoded = yield* Schema.encodeEffect(ValueSchema)(original);
+
+      assert.deepStrictEqual(encoded, {
+        baseType: "file",
+        cardinality: "single",
+        values: [{ baseType: "file", value: { name: "photo.png", size: 4, type: "image/png" } }],
+      });
+      assert.deepStrictEqual(yield* Schema.decodeUnknownEffect(ValueSchema)(encoded), original);
+
+      // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the file survives JSON text, the form a host stores.
+      const handedBack: unknown = JSON.parse(JSON.stringify(encoded));
+      assert.deepStrictEqual(yield* Schema.decodeUnknownEffect(ValueSchema)(handedBack), original);
+
+      const valid = Schema.is(ValueSchema);
+      assert.isTrue(valid(fileInput({ name: "", size: 0, type: "" })), "a nameless empty file");
+      assert.isTrue(valid(fileInput({ name: "a b.txt", size: 1, type: "text/plain" })));
+      assert.isFalse(
+        valid(fileInput({ name: "photo.png", size: -1, type: "image/png" })),
+        "a negative size",
+      );
+      assert.isFalse(
+        valid(fileInput({ name: "photo.png", size: 1.5, type: "image/png" })),
+        "a fractional size",
+      );
+      assert.isFalse(
+        valid(fileInput({ name: "photo.png", size: 2 ** 53, type: "image/png" })),
+        "an unsafe size",
+      );
+      assert.isFalse(
+        valid(fileInput({ name: "a\u0000b", size: 1, type: "" })),
+        "a name XML cannot carry",
+      );
+      assert.isFalse(
+        valid(fileInput({ name: "photo.png", size: 1, type: "image" })),
+        "a type with no subtype",
+      );
+      assert.isFalse(
+        valid(fileInput({ name: "photo.png", size: 1, type: "image/png; q=1" })),
+        "a type with a parameter",
+      );
+      assert.isFalse(valid(fileInput({ name: "photo.png", size: 1 })), "a missing type");
+      assert.isFalse(
+        valid(singleInput("file", [{ baseType: "file", value: "photo.png" }])),
+        "a name alone",
+      );
+    }),
+  );
+
+  it("[W0-AY] refuses a value of another base type, an invalid value and two values in a single", () => {
     const valid = Schema.is(ValueSchema);
     assert.isTrue(valid(singleInput("integer", [{ baseType: "integer", value: 1n }])));
     assert.isTrue(valid(singleInput("integer", [{ baseType: "integer", value: 2n ** 53n + 1n }])));
@@ -268,7 +342,8 @@ describe("ValueSchema", () => {
     assert.isTrue(valid(singleInput("duration", [])));
     assert.isTrue(valid(singleInput("duration", [{ baseType: "duration", value: 90.5 }])));
     assert.isFalse(valid(singleInput("duration", [{ baseType: "duration", value: "PT1M" }])));
-    assert.isFalse(valid(singleInput("file", [])));
+    assert.isTrue(valid(singleInput("file", [])));
+    assert.isFalse(valid(singleInput("file", [{ baseType: "string", value: "a.txt" }])));
     assert.isFalse(valid({ baseType: "identifier", cardinality: "record", values: [] }));
   });
 
@@ -305,15 +380,15 @@ const posted: RecordValue = {
 /**
  * Records {@link RecordValueSchema} refuses, by what is wrong with each, typed as the plain record
  * would be had it been built by hand: an identifier that is not an NCName, an identifier written
- * twice, a field of base type `file`, which the value model holds no value of, and a field holding
- * the empty string, which is NULL, and a NULL field is no field.
+ * twice, a field of base type `file` holding text where a file is its name, size and type, and a
+ * field holding the empty string, which is NULL, and a NULL field is no field.
  */
 const malformedRecords = {
   "a field holding the empty string": {
     cardinality: "record",
     fields: [{ identifier: "stringValue", value: { baseType: "string", value: "" } }],
   },
-  "a field of base type file": {
+  "a field of base type file holding text": {
     cardinality: "record",
     fields: [{ identifier: "upload", value: { baseType: "file", value: "a.txt" } }],
   },
@@ -336,6 +411,7 @@ describe("RecordValueSchema", () => {
     () =>
       Effect.gen(function* recordRoundTrips() {
         const encoded = yield* Schema.encodeEffect(RecordValueSchema)(posted);
+        const integerField = encoded.fields[1]?.value;
 
         assert.deepStrictEqual(
           encoded.fields.map((field) => [field.identifier, field.value.value]),
@@ -345,7 +421,10 @@ describe("RecordValueSchema", () => {
             ["floatValue", "INF"],
           ],
         );
-        assert.strictEqual(String(encoded.fields[1]?.value.value).length, 400);
+        assert.strictEqual(
+          integerField?.baseType === "integer" ? integerField.value.length : -1,
+          400,
+        );
 
         // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the record survives JSON text, the form a host stores.
         const handedBack: unknown = JSON.parse(JSON.stringify(encoded));

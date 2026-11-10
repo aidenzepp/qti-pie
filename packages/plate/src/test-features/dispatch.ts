@@ -2,9 +2,10 @@
  * The delegations the hubs consult the test-feature table through, each the one site of its hub:
  * {@link featureAt} and {@link parseFeature} for the test model, {@link sequencedBy} for the session's
  * start, {@link gatedBy} for its moves and submissions, {@link enteredBy} for each place it lands on,
- * and {@link deliveredBy} for the package. Each takes the table, so a test can hand one holding a
- * module that has landed, and each folds the modules in the table's order. This is a browser
- * module, reached from the session: it value-imports from `effect` only `Option`.
+ * {@link deliveredBy} for the package, and {@link presentedBy} for the session's views. Each takes
+ * the table, so a test can hand one holding a module that has landed, and each folds the modules in
+ * the table's order. This is a browser module, reached from the session: it value-imports from
+ * `effect` only `Option`.
  *
  * @module
  */
@@ -17,8 +18,10 @@ import type {
   EnterVerdict,
   FeatureRefusal,
   GateContext,
+  PresentContext,
   SequenceContext,
   SequencePlace,
+  TestContent,
   TestFeatureKey,
   TestFeatureModule,
   TimedScope,
@@ -143,3 +146,19 @@ export const deliveredBy = (features: TestFeatureTable, context: DeliveryContext
 
   return test;
 };
+
+/**
+ * Give the content the modules present at a place: each module's `present` nodes, kept with the
+ * module's key, in the table's order and each module's nodes in the order it gave them.
+ *
+ * @param features The table.
+ * @param context The place, the session and the test.
+ * @returns The content to show at the place, none when no module presents any.
+ */
+export const presentedBy = (
+  features: TestFeatureTable,
+  context: PresentContext,
+): readonly TestContent[] =>
+  features.flatMap((module) =>
+    module.present(context).map((node): TestContent => ({ key: module.key, node })),
+  );
