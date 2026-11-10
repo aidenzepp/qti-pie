@@ -1098,6 +1098,64 @@
 /* end associate-interaction */
 
 /* begin order-interaction (issue ei-06) */
+
+/* The Order Root, a custom element: a block, so the source list and the positions stack. */
+:where([data-slot="order-interaction"]) {
+  display: block;
+}
+
+/* The Order Prompt takes the look of Choice's and Extended Text's. */
+:where([data-slot="order-interaction-prompt"]) {
+  display: block;
+  margin-block-end: 0.75rem;
+  font-weight: 500;
+}
+
+/* The source list of choices still to place: no bullets, and space between the rows. */
+:where([data-slot="order-interaction-choices"]) {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+/* An authored horizontal orientation lays the source list out in a row. */
+:where(
+  [data-slot="order-interaction"][data-orientation="horizontal"]
+    [data-slot="order-interaction-choices"]
+) {
+  grid-auto-flow: column;
+  justify-content: start;
+}
+
+/* A source list with no choice left, which holds nothing to read or reach, takes no room. */
+:where([data-slot="order-interaction-choices"]:not(:has([data-slot="order-interaction-choice"]))) {
+  display: none;
+}
+
+/* A choice still to place: a bordered box, as a Choice row is. */
+:where([data-slot="order-interaction-choice"]) {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, oklch(0.922 0 0));
+  border-radius: var(--radius, 0.625rem);
+}
+
+/* The ordered list keeps its native numbers, so each position's number is programmatic. */
+:where([data-slot="order-interaction-ordered"]) {
+  margin: 0;
+  padding-inline-start: 2rem;
+}
+
+/* A position: a dashed box at least 24 CSS px tall (WCAG 2.2, 2.5.8), empty until a choice is in it. */
+:where([data-slot="order-interaction-slot"]) {
+  min-block-size: 2.75rem;
+  margin-block-end: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed var(--border, oklch(0.922 0 0));
+  border-radius: var(--radius, 0.625rem);
+}
+
 /* end order-interaction */
 
 /* begin graphic-associate-interaction (issue ei-08) */
