@@ -1,19 +1,9 @@
 import { Option, Result } from "effect";
 import { qnameOf } from "#crust/names.ts";
 import type { QName } from "#crust/names.ts";
+import { XML_NAMESPACE, XMLNS_NAMESPACE } from "#crust/tree.ts";
 import type { Attribute, Element } from "#crust/tree.ts";
 import { isNamespaceName } from "#crust/uri.ts";
-
-/**
- * The namespace name the `xml` prefix is bound to by definition (Namespaces in XML 1.0, section 3).
- */
-const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace";
-
-/**
- * The namespace name of the namespace declarations themselves, which the `xmlns` prefix is bound
- * to by definition (Namespaces in XML 1.0, section 3).
- */
-const XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/";
 
 /**
  * The edition of Namespaces in XML a document is held to: 1.1 for an XML 1.1 document, 1.0 for any

@@ -16,6 +16,7 @@ import { array, boolean, constant, element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { keep, swarm, swarmChoice } from "@grizzle/testing/swarm";
 import type { Swarm } from "@grizzle/testing/swarm";
+import { XML_NAMESPACE, XMLNS_NAMESPACE } from "#crust/tree.ts";
 import type { Attribute, Child, Element, Misc, XmlDocument } from "#crust/tree.ts";
 
 /**
@@ -38,11 +39,6 @@ export const caseHang = Duration.seconds(30);
 export const GENERATED_TIMEOUT_MS = 60_000;
 
 /**
- * The namespace name every namespace declaration's attribute is in.
- */
-const XMLNS = "http://www.w3.org/2000/xmlns/";
-
-/**
  * The namespace bindings in scope at an element, from prefix to namespace name; the empty prefix
  * is the default namespace, and an empty name means none.
  */
@@ -53,7 +49,7 @@ type Scope = ReadonlyMap<string, string>;
  */
 const ROOT_SCOPE: Scope = new Map([
   ["", ""],
-  ["xml", "http://www.w3.org/XML/1998/namespace"],
+  ["xml", XML_NAMESPACE],
 ]);
 
 /**
@@ -233,10 +229,17 @@ const declarationsOf =
 
       return [
         prefix === ""
-          ? { local: "xmlns", namespace: XMLNS, prefix: "", qname: "xmlns", references: [], value }
+          ? {
+              local: "xmlns",
+              namespace: XMLNS_NAMESPACE,
+              prefix: "",
+              qname: "xmlns",
+              references: [],
+              value,
+            }
           : {
               local: prefix,
-              namespace: XMLNS,
+              namespace: XMLNS_NAMESPACE,
               prefix: "xmlns",
               qname: `xmlns:${prefix}`,
               references: [],
@@ -588,7 +591,7 @@ export const situationsOf = (root: Element): ReadonlySet<TreeSituation> => {
     }
 
     for (const attribute of held.attributes) {
-      reached.add(attribute.namespace === XMLNS ? "declaration" : "attribute");
+      reached.add(attribute.namespace === XMLNS_NAMESPACE ? "declaration" : "attribute");
       if (attribute.references.length > 0) {
         reached.add("reference");
       }
@@ -772,7 +775,7 @@ export const labelled = (tree: PlaneTree): Element => {
     if (at % 3 === 1) {
       declarations.push({
         local: "p",
-        namespace: XMLNS,
+        namespace: XMLNS_NAMESPACE,
         prefix: "xmlns",
         qname: "xmlns:p",
         references: [],
@@ -783,7 +786,7 @@ export const labelled = (tree: PlaneTree): Element => {
     if (at % 4 === 2) {
       declarations.push({
         local: "xmlns",
-        namespace: XMLNS,
+        namespace: XMLNS_NAMESPACE,
         prefix: "",
         qname: "xmlns",
         references: [],

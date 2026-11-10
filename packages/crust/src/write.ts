@@ -1,9 +1,10 @@
 import { Effect, Option } from "effect";
 import { codePointOf, unwritableIn } from "#crust/charset.ts";
 import type { EncodeError } from "#crust/errors.ts";
+import { attributeValue, characterReference, miscMarkup } from "#crust/markup.ts";
 import { tour } from "#crust/tour.ts";
-import type { Step } from "#crust/tour.ts";
-import type { Attribute, Child, Element, XmlDocument, XmlDeclaration } from "#crust/tree.ts";
+import type { Leaf, Step } from "#crust/tour.ts";
+import type { Element, XmlDocument, XmlDeclaration } from "#crust/tree.ts";
 
 /**
  * How the writer treats code points above the highest one the label's encoder represents.
@@ -17,60 +18,10 @@ interface WriteOptions {
 }
 
 /**
- * The characters an attribute value always escapes, with the reference each becomes.
- */
-const attributeEscapes: ReadonlyMap<string, string> = new Map([
-  ["&", "&amp;"],
-  ["<", "&lt;"],
-  ['"', "&quot;"],
-  ["\t", "&#x9;"],
-  ["\n", "&#xA;"],
-  ["\r", "&#xD;"],
-]);
-
-/**
- * The text of a numeric character reference to `codePoint`.
- */
-const characterReference = (codePoint: number): string =>
-  `&#x${codePoint.toString(16).toUpperCase()};`;
-
-/**
  * Whether `character` lies above the threshold; with no threshold nothing does.
  */
 const isAbove = (character: string, threshold: number): boolean =>
   codePointOf(character) > threshold;
-
-/**
- * Escape an attribute value, writing each code point above `threshold` as a character reference.
- */
-const escapeAttribute = (value: string, threshold: number): string => {
-  let escaped = "";
-
-  for (const character of value) {
-    escaped += isAbove(character, threshold)
-      ? characterReference(codePointOf(character))
-      : (attributeEscapes.get(character) ?? character);
-  }
-
-  return escaped;
-};
-
-/**
- * Render an attribute value with each recorded entity reference as `&name;` and the text between
- * them escaped.
- */
-const renderValue = (attribute: Attribute, threshold: number): string => {
-  let rendered = "";
-  let position = 0;
-
-  for (const reference of attribute.references) {
-    rendered += escapeAttribute(attribute.value.slice(position, reference.offset), threshold);
-    rendered += `&${reference.name};`;
-    position = reference.offset + reference.name.length + 2;
-  }
-
-  return rendered + escapeAttribute(attribute.value.slice(position), threshold);
-};
 
 /**
  * Escape a plain text run: `&`, `<`, the `>` that ends `]]>`, and CR; code points above `threshold`
@@ -143,27 +94,23 @@ const renderCdata = (value: string, threshold: number): string => {
 };
 
 /**
- * Render a node that holds no other node: a text run, a comment, a processing instruction or an
- * entity reference.
+ * Render a node that holds no other node: a plain text run escaped as the content it continues, a
+ * CDATA run, a comment, a processing instruction or an entity reference.
  *
  * @param node - The node to render.
  * @param threshold - The highest code point a text run writes as itself.
+ * @param before - The last two characters of the plain text run written just before, empty when
+ *   anything else came before.
  * @returns The node's markup.
  */
-const renderLeaf = (node: Exclude<Child, Element>, threshold: number): string => {
+const renderLeaf = (node: Leaf, threshold: number, before: string): string => {
   if (node.kind === "text") {
-    return node.cdata ? renderCdata(node.value, threshold) : escapeText(node.value, threshold, "");
+    return node.cdata
+      ? renderCdata(node.value, threshold)
+      : escapeText(node.value, threshold, before);
   }
 
-  if (node.kind === "comment") {
-    return `<!--${node.text}-->`;
-  }
-
-  if (node.kind === "pi") {
-    return `<?${node.target}${node.data === "" ? "" : ` ${node.data}`}?>`;
-  }
-
-  return `&${node.name};`;
+  return node.kind === "entityRef" ? `&${node.name};` : miscMarkup(node);
 };
 
 /**
@@ -175,7 +122,7 @@ const renderLeaf = (node: Exclude<Child, Element>, threshold: number): string =>
  */
 const renderAttributes = (element: Element, threshold: number): string =>
   element.attributes
-    .map((attribute) => ` ${attribute.qname}="${renderValue(attribute, threshold)}"`)
+    .map((attribute) => ` ${attribute.qname}="${attributeValue(attribute, threshold)}"`)
     .join("");
 
 /**
@@ -184,11 +131,13 @@ const renderAttributes = (element: Element, threshold: number): string =>
  *
  * @param step - The step.
  * @param threshold - The highest code point a text run or an attribute value writes as itself.
+ * @param before - The last two characters of the plain text run written just before, empty when
+ *   anything else came before.
  * @returns The step's markup.
  */
-const renderStep = (step: Step, threshold: number): string => {
+const renderStep = (step: Step, threshold: number, before: string): string => {
   if (step.kind === "leaf") {
-    return renderLeaf(step.node, threshold);
+    return renderLeaf(step.node, threshold, before);
   }
 
   const { element } = step;
@@ -200,27 +149,25 @@ const renderStep = (step: Step, threshold: number): string => {
 };
 
 /**
- * Render a node and everything below it, in document order, by its {@link tour}, so a tree of any
- * depth or width renders without recursion.
+ * Render an element and everything below it, in document order, by its {@link tour}, so a tree of
+ * any depth or width renders without recursion.
  *
  * Adjacent plain text runs are one stretch of content, so each run is escaped knowing the last two
  * characters of the plain run just before it ({@link escapeText}).
  *
- * @param node - The node to render.
+ * @param root - The element to render.
  * @param threshold - The highest code point a text run or an attribute value writes as itself.
- * @returns The node's markup.
+ * @returns The element's markup.
  */
-const renderNode = (node: Child, threshold: number): string => {
+const renderElement = (root: Element, threshold: number): string => {
   const parts: string[] = [];
   let before = "";
-  for (const step of tour(node)) {
-    if (step.kind === "leaf" && step.node.kind === "text" && !step.node.cdata) {
-      parts.push(escapeText(step.node.value, threshold, before));
-      before = (before + step.node.value).slice(-2);
-    } else {
-      parts.push(renderStep(step, threshold));
-      before = "";
-    }
+  for (const step of tour(root)) {
+    parts.push(renderStep(step, threshold, before));
+    before =
+      step.kind === "leaf" && step.node.kind === "text" && !step.node.cdata
+        ? (before + step.node.value).slice(-2)
+        : "";
   }
 
   return parts.join("");
@@ -277,10 +224,10 @@ export const writeXml = (
     onNone: () => "",
     onSome: (value) => `${value}\n`,
   });
-  const prolog = doc.prolog.map((misc) => `${renderNode(misc, threshold)}\n`).join("");
-  const epilog = doc.epilog.map((misc) => `\n${renderNode(misc, threshold)}`).join("");
+  const prolog = doc.prolog.map((misc) => `${miscMarkup(misc)}\n`).join("");
+  const epilog = doc.epilog.map((misc) => `\n${miscMarkup(misc)}`).join("");
 
   return Effect.succeed(
-    `${declaration}${doctype}${prolog}${renderNode(doc.root, threshold)}${epilog}`,
+    `${declaration}${doctype}${prolog}${renderElement(doc.root, threshold)}${epilog}`,
   );
 };

@@ -1,12 +1,9 @@
 import { Array as Arr } from "effect";
+import { attributeValue, miscMarkup } from "#crust/markup.ts";
 import { tour } from "#crust/tour.ts";
 import type { Leaf } from "#crust/tour.ts";
-import type { Attribute, Element, Misc, XmlDocument } from "#crust/tree.ts";
-
-/**
- * The namespace name that every namespace declaration's attribute is in.
- */
-const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
+import { XML_NAMESPACE, XMLNS_NAMESPACE } from "#crust/tree.ts";
+import type { Element, XmlDocument } from "#crust/tree.ts";
 
 /**
  * The namespace declarations in scope, from prefix to namespace name; the default namespace is the
@@ -65,42 +62,13 @@ const escapeText = (value: string): string =>
     .replaceAll("\r", "&#xD;");
 
 /**
- * Escape `&`, `<`, `"`, TAB, LF and CR the way canonical XML writes an attribute value.
- */
-const escapeAttribute = (value: string): string =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("\t", "&#x9;")
-    .replaceAll("\n", "&#xA;")
-    .replaceAll("\r", "&#xD;");
-
-/**
- * Render an attribute value with each recorded entity reference as `&name;` and the text between
- * them escaped.
- */
-const renderValue = (attribute: Attribute): string => {
-  let rendered = "";
-  let position = 0;
-
-  for (const reference of attribute.references) {
-    rendered += escapeAttribute(attribute.value.slice(position, reference.offset));
-    rendered += `&${reference.name};`;
-    position = reference.offset + reference.name.length + 2;
-  }
-
-  return rendered + escapeAttribute(attribute.value.slice(position));
-};
-
-/**
  * The scope an element's own declarations make on top of its parent's.
  */
 const scopeOf = (element: Element, parent: Scope): Scope => {
   const declared = new Map(parent);
 
   for (const attribute of element.attributes) {
-    if (attribute.namespace === xmlnsNamespace) {
+    if (attribute.namespace === XMLNS_NAMESPACE) {
       declared.set(attribute.prefix === "xmlns" ? attribute.local : "", attribute.value);
     }
   }
@@ -127,22 +95,16 @@ const renderNamespaces = (scope: Scope, parent: Scope): string =>
  */
 const renderAttributes = (element: Element): string =>
   element.attributes
-    .filter((attribute) => attribute.namespace !== xmlnsNamespace)
+    .filter((attribute) => attribute.namespace !== XMLNS_NAMESPACE)
     .toSorted(
       (left, right) =>
         compareCodePoints(left.namespace, right.namespace) ||
         compareCodePoints(left.local, right.local),
     )
-    .map((attribute) => ` ${attribute.qname}="${renderValue(attribute)}"`)
+    .map(
+      (attribute) => ` ${attribute.qname}="${attributeValue(attribute, Number.POSITIVE_INFINITY)}"`,
+    )
     .join("");
-
-/**
- * Render a comment or a processing instruction.
- */
-const renderMisc = (item: Misc): string =>
-  item.kind === "comment"
-    ? `<!--${item.text}-->`
-    : `<?${item.target}${item.data === "" ? "" : ` ${item.data}`}?>`;
 
 /**
  * Render a node that holds no other node: a text run escaped, an entity reference as `&name;`, or
@@ -160,7 +122,7 @@ const renderLeaf = (node: Leaf): string => {
     return `&${node.name};`;
   }
 
-  return renderMisc(node);
+  return miscMarkup(node);
 };
 
 /**
@@ -170,7 +132,7 @@ const renderLeaf = (node: Leaf): string => {
  * section 2.3 omits the namespace node "with local name xml, which defines the xml prefix, if its
  * string value is http://www.w3.org/XML/1998/namespace".
  */
-const outermost: Scope = new Map([["xml", "http://www.w3.org/XML/1998/namespace"]]);
+const outermost: Scope = new Map([["xml", XML_NAMESPACE]]);
 
 /**
  * Render an element, its namespace axis, its attribute axis and its children, always with a
@@ -219,8 +181,8 @@ const renderElement = (root: Element): string => {
  * @returns The canonical form's bytes.
  */
 export const canonicalize = (doc: XmlDocument): Uint8Array => {
-  const prolog = doc.prolog.map((item) => `${renderMisc(item)}\n`).join("");
-  const epilog = doc.epilog.map((item) => `\n${renderMisc(item)}`).join("");
+  const prolog = doc.prolog.map((item) => `${miscMarkup(item)}\n`).join("");
+  const epilog = doc.epilog.map((item) => `\n${miscMarkup(item)}`).join("");
 
   return new TextEncoder().encode(`${prolog}${renderElement(doc.root)}${epilog}`);
 };

@@ -1,6 +1,18 @@
 import type { Option } from "effect";
 
 /**
+ * The namespace name the `xml` prefix is bound to by definition (Namespaces in XML 1.0, section 3),
+ * which an `xml:` attribute is in.
+ */
+export const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace";
+
+/**
+ * The namespace name the `xmlns` prefix is bound to by definition (Namespaces in XML 1.0, section
+ * 3), which every namespace declaration's attribute is in.
+ */
+export const XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/";
+
+/**
  * A parsed XML document: the decode label, the optional declaration and doctype, the comments and
  * processing instructions around the root element, and the root itself.
  *
@@ -40,7 +52,7 @@ export interface XmlDeclaration {
 export interface Element {
   /**
    * The attributes in document order, namespace declarations included; a declaration's `namespace`
-   * is `http://www.w3.org/2000/xmlns/`.
+   * is {@link XMLNS_NAMESPACE}.
    */
   readonly attributes: readonly Attribute[];
   readonly children: readonly Child[];
