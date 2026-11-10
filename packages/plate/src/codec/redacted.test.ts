@@ -587,6 +587,7 @@ const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
     }
 
     switch (node.kind) {
+      case "container":
       case "element": {
         return { ...node, children: withoutPaths(node.children), path: "" };
       }
@@ -666,6 +667,7 @@ const pathsOf = (nodes: readonly BodyNode[]): readonly string[] =>
     }
 
     switch (node.kind) {
+      case "container":
       case "element": {
         return [node.path, ...pathsOf(node.children)];
       }
@@ -1850,6 +1852,43 @@ describe("the codec and catalog references", () => {
           Result.getOrThrow(render(decoded, configuration, { instance })).html,
           Result.getOrThrow(render(redacted, configuration, { instance })).html,
         );
+      }),
+  );
+});
+
+describe("the codec on a module's container", () => {
+  it.effect(
+    "decodeRedacted refuses a container naming a kind whose module declares no container: InvalidRedacted at stage decode, naming the kind",
+    () =>
+      Effect.gen(function* refusesUndeclaredContainer() {
+        const error = yield* failureOf(
+          decodeRedacted(withNode({ children: [], kind: "container", module: "slider" }, false)),
+        );
+
+        assert.strictEqual(error._tag, "InvalidRedacted");
+        assert.strictEqual(error.stage, "decode");
+        assert.include(error.issue, "slider");
+        assert.include(error.issue, "declares no container");
+      }),
+  );
+
+  it.effect(
+    "encodeRedacted refuses a body built by hand that holds such a container: InvalidRedacted at stage encode",
+    () =>
+      Effect.gen(function* refusesUndeclaredContainerOut() {
+        const node: BodyNode = {
+          children: [{ kind: "text", text: "inside" }],
+          kind: "container",
+          module: "slider",
+          path: "qti-assessment-item/qti-item-body/qti-slider-stage",
+        };
+        const redacted = redact(acceptForTest(choiceItem));
+        const error = yield* failureOf(
+          encodeRedacted(brandRedacted({ ...redacted, body: [...redacted.body, node] })),
+        );
+
+        assert.strictEqual(error._tag, "InvalidRedacted");
+        assert.strictEqual(error.stage, "encode");
       }),
   );
 });
