@@ -604,18 +604,32 @@ const namesVariableKind = (outcome: ApplyOutcome<unknown>): boolean =>
         (law.kind === "check" && law.relation === "VariableRef" && law.name === "Variable_kind"),
     );
 
+/**
+ * One expression kind of each arity class, the first `OperatorArity` row of each (min, max) pair,
+ * beside its row's place, which numbers its node: the `Arity` CHECK reads a kind's two counts, so
+ * a class's other kinds restate its cases.
+ */
+const arityClasses = OperatorArity.rows.flatMap((row, index, rows) =>
+  rows.findIndex(({ max, min }) => max === row.max && min === row.min) === index
+    ? [{ index, row }]
+    : [],
+);
+
 describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
   layer(AuthorAppLayer)("the expression and processing laws, judged by PostgreSQL", (it) => {
     it.effect(
-      "refuses an expression of each kind at min − 1 and max + 1 operands by Arity, and keeps it at min and max",
+      "refuses an expression of each arity class at min − 1 and max + 1 operands by Arity, and keeps it at min and max",
       () =>
         // Oracle: PostgreSQL, the `Arity` CHECK, against `OperatorArity` (the ASI XSD's counts).
-        // Bound: every kind, at min − 1 where min > 0, min, max (min + 3 for an unbounded kind)
-        // and max + 1 where bounded; each operand of no known type, which every other row law
-        // keeps.
+        // Bound: one kind of each (min, max) class, at min − 1 where min > 0, min, max (min + 3
+        // for an unbounded kind) and max + 1 where bounded; each operand of no known type, which
+        // every other row law keeps.
         Effect.gen(function* arity() {
           const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
-          for (const [index, { kind, max, min }] of OperatorArity.rows.entries()) {
+          for (const {
+            index,
+            row: { kind, max, min },
+          } of arityClasses) {
             const top = max === int8Max ? min + 3n : max;
             const counts = [
               ...(min > 0n ? [min - 1n] : []),
