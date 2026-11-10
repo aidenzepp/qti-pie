@@ -101,6 +101,7 @@ export const known: readonly Known[] = [
           ],
         },
       },
+      limit: "a forbidden ancestor",
     },
   },
   // MERGE-OPEN: the known entry for decision 449's stated limit keyed "E1 derived,
@@ -1455,29 +1456,6 @@ export const known: readonly Known[] = [
   {
     files: [
       [
-        "choice.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"/>',
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/><resource type="resourcemetadata/xml" href="meta/choice.xml"/></resources></manifest>',
-      ],
-      [
-        "meta/choice.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"><metadata><imsmd:lom><imsmd:general><imsmd:title/></imsmd:general></imsmd:lom></metadata></resource></resources></manifest>',
-      ],
-    ],
-    fix: "a stated limit (spec reading 1): a record file whose root is a cp:manifest still has its resource-owned record read, and path-rename resolves the record's href against the record file's folder, so it leaves that href unrewritten and the import's renamed twin reads the record as naming nothing and loses LomObjectTitle (family J, decision 449's shape); RootOfType refuses both copies on both sides; lifted by reading no record a record file's cp:resource owns",
-    noised: { noise: "path-rename", salt: 490 },
-    owner: "decision 463",
-    signature: { kind: "noise-moved", noise: "path-rename", side: "import" },
-  },
-  {
-    files: [
-      [
         "imsmanifest.xml",
         "xml",
         '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="items/media/pic.png"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
@@ -1512,50 +1490,6 @@ export const known: readonly Known[] = [
     noised: { noise: "resource-order", salt: 90 },
     owner: "decision 463",
     signature: { kind: "noise-moved", noise: "resource-order", side: "oracle" },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
-      ],
-      [
-        "section.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-rubric-block><qti-content-body><div><qti-portable-custom-interaction><qti-context-variable identifier="CTX"/></qti-portable-custom-interaction></div></qti-content-body></qti-rubric-block></qti-assessment-section>',
-      ],
-      [
-        "test.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>',
-      ],
-    ],
-    fix: "a stated limit (spec reading 1): a context variable in a portable custom interaction in a section document's rubric, where N6 ancestry bans the interaction, writes no reference on the import's side (its context references are written for an item or test root alone), while the law oracle reads it and raises Context variable reference; N6 ancestry refuses it on both sides; lifted by the law oracle reading no context reference where N6 ancestry bans its interaction, as the import does",
-    owner: "decision 463",
-    signature: { kind: "oracle-only-law", law: "Context variable reference" },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
-      ],
-      [
-        "rtest01/rtest01-fragment.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-hottext-interaction><p><qti-hottext><xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="rtest01-fragment.xml"/></qti-hottext></p></qti-hottext-interaction></div>',
-      ],
-      [
-        "test.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-selection select="K語𝔸語é𝔸語xx語語𝔸ééx𝔸é𝔸xxééx𝔸xéxé語éx𝔸é語éé語xéx𝔸x語x語éx語é𝔸xxx語語éé語é語語𝔸x𝔸𝔸xx語𝔸x𝔸x語𝔸x語é𝔸x𝔸x語é𝔸éxééé語語xéé𝔸x𝔸é𝔸é語xéééx語é𝔸é語x𝔸語𝔸語語é𝔸語語éxé語éé語éé𝔸xééx𝔸x𝔸é語𝔸𝔸𝔸x語語x語𝔸語𝔸𝔸é𝔸𝔸éé𝔸xx語語x語xé𝔸語xx𝔸𝔸éx𝔸語x語𝔸語ééx𝔸éxx𝔸x語語語é語語𝔸éé語ééx語éééx𝔸語語x𝔸éé語x𝔸𝔸語é𝔸é𝔸xx語x語xééx語éxx語xx𝔸ééééx語語xé𝔸x𝔸é𝔸éxéx語éx語x𝔸ééx語xx語x語𝔸ééé語éx語𝔸語éx語𝔸ééxéé語é𝔸éé語𝔸x語é語xxx語éxé語語語x𝔸𝔸é𝔸𝔸x語語xx語𝔸𝔸語𝔸語語𝔸é語x𝔸x𝔸x語x𝔸xxé𝔸𝔸xx𝔸語x𝔸𝔸xé𝔸xé𝔸é𝔸x𝔸語ééé𝔸語é語𝔸xéx語é𝔸𝔸éé𝔸𝔸𝔸x語éxxxx𝔸𝔸é語語𝔸語語éé𝔸x𝔸𝔸語語xé𝔸𝔸é𝔸é𝔸𝔸x𝔸𝔸éx𝔸𝔸x𝔸語𝔸xxx𝔸𝔸xééé語語語xx語ééé語éxxéx𝔸é𝔸語éx語éx語xé𝔸𝔸é𝔸語é語éxéx𝔸𝔸𝔸𝔸é語é𝔸é𝔸𝔸éé語𝔸語𝔸語𝔸語語𝔸x語xé語語éx語𝔸x語語éééééé𝔸éé語é語éxx語é語x𝔸語語x𝔸語𝔸語é語𝔸éééxéé𝔸é語é𝔸𝔸語𝔸𝔸ééxé𝔸語é𝔸𝔸éxx語語𝔸𝔸𝔸語xéé𝔸xxéééxx語𝔸x語é𝔸語x𝔸語xx𝔸x語é𝔸語語𝔸xéx𝔸𝔸語𝔸éé語xx𝔸語é𝔸é𝔸𝔸é𝔸éxxxéx𝔸é語ééé𝔸é𝔸語é語𝔸𝔸é𝔸é𝔸x語x𝔸x語𝔸語éé𝔸xx語語x語𝔸𝔸語語é𝔸ééé𝔸𝔸xx𝔸x語é語x語é語éx語é語éé語𝔸𝔸𝔸x𝔸𝔸x語ééé𝔸語𝔸𝔸éé語x語𝔸𝔸xééx𝔸xé語語é語𝔸語x語𝔸éé𝔸𝔸éé𝔸x𝔸é𝔸語語xé語𝔸x語語xx𝔸xé𝔸éxx語x語𝔸𝔸語𝔸x𝔸𝔸語語é𝔸x語𝔸語x𝔸𝔸x語x語𝔸xx語x語𝔸é𝔸éxéé𝔸語é𝔸𝔸x語éx𝔸éx𝔸𝔸x𝔸é語𝔸𝔸語x𝔸éxéx語𝔸語éé語語ééxé𝔸語語語𝔸語xé語語x𝔸x𝔸é語語語𝔸𝔸xé語x語語é𝔸𝔸é語語éé語語x𝔸語𝔸é語é語xéx語xxé語é𝔸x𝔸語x語é語語𝔸x語語語xéé語語x𝔸𝔸語語語語é𝔸語𝔸語𝔸xx𝔸𝔸x𝔸𝔸語語𝔸é語𝔸𝔸𝔸x語é語éé語xéééé語語é𝔸語𝔸x語éx語𝔸xééé語é𝔸x𝔸éx語𝔸語x𝔸語語語𝔸éx𝔸𝔸𝔸𝔸𝔸x𝔸xé語é語x語𝔸é語𝔸éé𝔸𝔸𝔸𝔸語éx語éx語𝔸éx"/></qti-assessment-section></qti-test-part></qti-assessment-test>',
-      ],
-    ],
-    fix: "issue #67 (decision 467): the import writes a SectionSelection row only for an integer select, so a non-integer select past the key-text bound is never keyed, while the law oracle bounds SectionSelection.selectLexical, as the schema's Test overlay copies every select; the inclusion cycle is incidental, and value domain refuses it on both sides; closed by stating the integer condition in the schema (#67)",
-    owner: "decision 467",
-    signature: { kind: "oracle-only-law", law: "Key text bound", limit: "an inclusion cycle" },
   },
   {
     files: [
@@ -1615,6 +1549,73 @@ export const known: readonly Known[] = [
  * fixed it, the fix, and the package that showed it, which must never show it again.
  */
 export const fixed: readonly Known[] = [
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+      ],
+      [
+        "rtest01/rtest01-fragment.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-hottext-interaction><p><qti-hottext><xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="rtest01-fragment.xml"/></qti-hottext></p></qti-hottext-interaction></div>',
+      ],
+      [
+        "test.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-selection select="K語𝔸語é𝔸語xx語語𝔸ééx𝔸é𝔸xxééx𝔸xéxé語éx𝔸é語éé語xéx𝔸x語x語éx語é𝔸xxx語語éé語é語語𝔸x𝔸𝔸xx語𝔸x𝔸x語𝔸x語é𝔸x𝔸x語é𝔸éxééé語語xéé𝔸x𝔸é𝔸é語xéééx語é𝔸é語x𝔸語𝔸語語é𝔸語語éxé語éé語éé𝔸xééx𝔸x𝔸é語𝔸𝔸𝔸x語語x語𝔸語𝔸𝔸é𝔸𝔸éé𝔸xx語語x語xé𝔸語xx𝔸𝔸éx𝔸語x語𝔸語ééx𝔸éxx𝔸x語語語é語語𝔸éé語ééx語éééx𝔸語語x𝔸éé語x𝔸𝔸語é𝔸é𝔸xx語x語xééx語éxx語xx𝔸ééééx語語xé𝔸x𝔸é𝔸éxéx語éx語x𝔸ééx語xx語x語𝔸ééé語éx語𝔸語éx語𝔸ééxéé語é𝔸éé語𝔸x語é語xxx語éxé語語語x𝔸𝔸é𝔸𝔸x語語xx語𝔸𝔸語𝔸語語𝔸é語x𝔸x𝔸x語x𝔸xxé𝔸𝔸xx𝔸語x𝔸𝔸xé𝔸xé𝔸é𝔸x𝔸語ééé𝔸語é語𝔸xéx語é𝔸𝔸éé𝔸𝔸𝔸x語éxxxx𝔸𝔸é語語𝔸語語éé𝔸x𝔸𝔸語語xé𝔸𝔸é𝔸é𝔸𝔸x𝔸𝔸éx𝔸𝔸x𝔸語𝔸xxx𝔸𝔸xééé語語語xx語ééé語éxxéx𝔸é𝔸語éx語éx語xé𝔸𝔸é𝔸語é語éxéx𝔸𝔸𝔸𝔸é語é𝔸é𝔸𝔸éé語𝔸語𝔸語𝔸語語𝔸x語xé語語éx語𝔸x語語éééééé𝔸éé語é語éxx語é語x𝔸語語x𝔸語𝔸語é語𝔸éééxéé𝔸é語é𝔸𝔸語𝔸𝔸ééxé𝔸語é𝔸𝔸éxx語語𝔸𝔸𝔸語xéé𝔸xxéééxx語𝔸x語é𝔸語x𝔸語xx𝔸x語é𝔸語語𝔸xéx𝔸𝔸語𝔸éé語xx𝔸語é𝔸é𝔸𝔸é𝔸éxxxéx𝔸é語ééé𝔸é𝔸語é語𝔸𝔸é𝔸é𝔸x語x𝔸x語𝔸語éé𝔸xx語語x語𝔸𝔸語語é𝔸ééé𝔸𝔸xx𝔸x語é語x語é語éx語é語éé語𝔸𝔸𝔸x𝔸𝔸x語ééé𝔸語𝔸𝔸éé語x語𝔸𝔸xééx𝔸xé語語é語𝔸語x語𝔸éé𝔸𝔸éé𝔸x𝔸é𝔸語語xé語𝔸x語語xx𝔸xé𝔸éxx語x語𝔸𝔸語𝔸x𝔸𝔸語語é𝔸x語𝔸語x𝔸𝔸x語x語𝔸xx語x語𝔸é𝔸éxéé𝔸語é𝔸𝔸x語éx𝔸éx𝔸𝔸x𝔸é語𝔸𝔸語x𝔸éxéx語𝔸語éé語語ééxé𝔸語語語𝔸語xé語語x𝔸x𝔸é語語語𝔸𝔸xé語x語語é𝔸𝔸é語語éé語語x𝔸語𝔸é語é語xéx語xxé語é𝔸x𝔸語x語é語語𝔸x語語語xéé語語x𝔸𝔸語語語語é𝔸語𝔸語𝔸xx𝔸𝔸x𝔸𝔸語語𝔸é語𝔸𝔸𝔸x語é語éé語xéééé語語é𝔸語𝔸x語éx語𝔸xééé語é𝔸x𝔸éx語𝔸語x𝔸語語語𝔸éx𝔸𝔸𝔸𝔸𝔸x𝔸xé語é語x語𝔸é語𝔸éé𝔸𝔸𝔸𝔸語éx語éx語𝔸éx"/></qti-assessment-section></qti-test-part></qti-assessment-test>',
+      ],
+    ],
+    fix: "issue #67 (decision 467), closed by 74db65bd: the import writes a SectionSelection row whatever its select holds, and SelectForm's pattern law refuses a form that names no integer, so a non-integer select past the key-text bound is keyed and bounded on the import's side as the law oracle bounds SectionSelection.selectLexical; the inclusion cycle is incidental, and value domain refuses it on both sides",
+    owner: "decision 467",
+    signature: { kind: "oracle-only-law", law: "Key text bound", limit: "an inclusion cycle" },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+      ],
+      [
+        "section.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-rubric-block><qti-content-body><div><qti-portable-custom-interaction><qti-context-variable identifier="CTX"/></qti-portable-custom-interaction></div></qti-content-body></qti-rubric-block></qti-assessment-section>',
+      ],
+      [
+        "test.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>',
+      ],
+    ],
+    fix: "no longer shown since the merge of #96 (9cf1cc67) onto our model: a section document's context variable is written as one of its names (SectionContextName, #pantry/qti/interactions.ts) and resolved under each placement, in a rubric's portable custom interaction too, so the import's rows break Context variable reference where the law oracle raises it; N6 ancestry refuses it on both sides",
+    owner: "decision 463",
+    signature: { kind: "oracle-only-law", law: "Context variable reference" },
+  },
+  {
+    files: [
+      [
+        "choice.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"/>',
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/><resource type="resourcemetadata/xml" href="meta/choice.xml"/></resources></manifest>',
+      ],
+      [
+        "meta/choice.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"><metadata><imsmd:lom><imsmd:general><imsmd:title/></imsmd:general></imsmd:lom></metadata></resource></resources></manifest>',
+      ],
+    ],
+    fix: "no longer shown on the host since the merge of #96 (9cf1cc67) onto 660a9d64's model: LomObjectTitle is stated only over queries (ListedTitle in MatchedTitle, #pantry/qti/queries.ts), which the host never judges, so neither copy's import summary names it and the renamed twin moves no host verdict; the database judges the record a record file names (#pantry/import/record-naming.db.test.ts), and RootOfType refuses both copies on both sides; it must not show again unless the host judges that law",
+    noised: { noise: "path-rename", salt: 490 },
+    owner: "decision 463",
+    signature: { kind: "noise-moved", noise: "path-rename", side: "import" },
+  },
   {
     files: [
       [

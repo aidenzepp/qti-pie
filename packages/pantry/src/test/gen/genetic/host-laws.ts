@@ -360,22 +360,19 @@ const checkLaws: ReadonlyMap<Law, LawName> = new Map(
 );
 
 /**
- * The names of the checks of `Qti` the host reads (`#pantry/test/predicates.ts` `checksOf`), each
- * over a relation whose rows it holds.
- */
-const readChecks: ReadonlySet<string> = new Set(checksOf(Qti.statements).map(({ name }) => name));
-
-/**
  * Every law a check of `Qti` states that the host does not read, so its database verdict the host
- * never knows: the checks `Qti` states, a check over a derived relation among them, less those
- * {@link readChecks} holds.
+ * never knows: each check statement `#pantry/test/predicates.ts` `checksOf` does not read, a check
+ * over a derived relation among them. It is judged per statement, never by the check's name: two
+ * checks of one law share a name, as "Condition type" states one over `Expression`, which the host
+ * reads, and its placed twin over the `PlacedReferenceType` query, which it does not, and the law
+ * is unread for the one it cannot judge.
  */
 const unreadChecks: ReadonlySet<LawName> = new Set(
   Qti.statements.flatMap((statement) =>
     Option.match(Schema.decodeUnknownOption(StoredCheck)(statement), {
       onNone: () => [],
       onSome: ({ desc }) =>
-        readChecks.has(desc.name) ? [] : Option.toArray(lawOfCheck(desc.name)),
+        checksOf([statement]).length > 0 ? [] : Option.toArray(lawOfCheck(desc.name)),
     }),
   ),
 );

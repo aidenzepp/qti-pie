@@ -932,7 +932,9 @@ const unconstructedCase = (
  *   (TEST_SEED=2144430066, the rotating stream's case 199), from 4d7eed2f, which stated "Table
  *   headers" without naming it among the unconstructed. The other three are the reds Aiden found at
  *   1ee51d8d (PR #46, comment 6701102861): a table's thead, a td under ssml:audio and a table-less
- *   tfoot.
+ *   tfoot. The thead's is kept as a td a table holds, the nearest a search finds: the generator
+ *   draws a table's thead (7 of 4,000 trees), but no search of 20,000 cases drew one whose td names
+ *   a header.
  * - One writes a qti-equal whose tolerance is empty, which holds no value where a tolerance holds one
  *   or two (reading 121): Aiden's red at TEST_SEED=3952699438, with "Equal tolerance" stated over a
  *   lexical form drawn without reading but not named among the unconstructed.
@@ -940,35 +942,42 @@ const unconstructedCase = (
  *   177): the free suite's red at 9b91f27e, replayed here at TEST_SEED=593086602, from c91aec18,
  *   which stated "Data SSML" over a lexical form drawn without reading but did not name it among
  *   the unconstructed.
+ *
+ * A tape is the generator's draws, each an index into the candidates it reads from the grammar in
+ * that grammar's order, so a tape keeps its tree only while that order holds. 6202ba48, b6825a0a
+ * and a6023964 restated the generator's reads (`followPairsOf`, `symbolRowsOf`, `admittedOf`), and
+ * every tape recorded before them drew another tree (the first, an address of a's with no td), so
+ * each is re-recorded: a search with its law constructed, failing only on a tree of the case's
+ * shape, shrunk. Each note keeps the seed of its red.
  */
 const unconstructedCases: readonly Kept<GeneratedXdm, Situation>[] = [
   unconstructedCase(
-    "0.2.0.3.3.0.0.3.3.3.d.3.d.0.0.0.1.0.0.4.3.1.0.e.0.2.0.a3.0.0.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.gw.0.2.0.0.1.0.0.0.0.0.0.0.0.1.p.1.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.57b.0.2.0.0.1.0.0.0.0.0.0.0.0.0.0.0.2.0.0.0.0.0.0.2.0.0.2.0.3.0.0.0.0.0.0.0.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1dk.0.2.0.0.0.0.0.0.0.2.0.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.1.1j.1.0.0.0.0.0.0",
+    "7.1.0.0.9.9.0.0.0.2.f.0.0.0.0.0.1.0.0.2.1.1.3.1.2.2.0.0.1.2.0.0.0.0.1.0.0.0.0.0.0.0.4.1.0.0.0.0.0.0.0.5.1.0.0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.0.0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.1.0.0.0.1.0.0.0.w3.0.1.0.0.2.0.0.0.0.0.0.0.1.1.0.0.0.2bf.1.0.1.0.0.0.3.0.0.0.1.0.0.1.0.0.0.6.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.0.0.2.0.0.0.0.0.0.0.2.p.1.0.0.0.0.1.2.0.0.0.0.0.0.0.6.0.0.0.0.0.p.1.0.0.0.0.0.0.0.0.0.0.2.0.1i.0.1.0.0.0.0.0",
     "a td no table holds names a header (TEST_SEED=2144430066)",
     "Table headers",
   ),
   unconstructedCase(
-    "6.2.0.3.3.0.3.0.0.d.3.d.d.d.3.0.0.4.3.0.0.8.0.1.0.7sc.1.0.3.0.0.0.0.0.0.2.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.0.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.1i.0.1.0.0.0.0.0.0.0",
-    "a td in a table's thead names a header no th of the table has (TEST_SEED=1119914124)",
+    "0.2.0.0.3.0.3.3.0.8.d.d.3.3.0.0.1.0.0.0.1.1.0.3.0.2.0.0.353.1.0.0.0.0.0.0.0.0.2.0.2.0.15.1.0.0.0.0.0.0.0.0.0.3.0.0.1.1.0.0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0.0.5.0.0.0.0.0.0.0.0.1.0.0.1.0.0.0.0.0.0.0.0.0.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.0.1.1j.1.0.0.0.0.0.0.0.0.0.0.0",
+    "a td in a table names a header no th of the table has (TEST_SEED=1119914124)",
     "Table headers",
   ),
   unconstructedCase(
-    "0.1.0.0.9.9.0.0.9.f.0.0.0.0.0.0.0.2.1.2.3.4.2.4.0.5dq.0.2.0.1i.0.0.0.0.1.p.0.0.0.29.1.1.0.0.0.0.0.fy.0.0.6.p.0.0.0.4j.0.0.7.p.0.0.0.1tj.1.1.0.0.0.0.1.0.0.0.0.0.1.0.0.1.0.0.0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.3td.0.0.4.0.0.0.0.5.0.0.0.0.0.0.0.0.0.0.0.0.0.0.p.0.0.0.0.0.0.4.0.0.0.0.0.0.0.0.0.0.p.0.0.0.44w.0.1.1j.1.0.0.0",
+    "3.1.0.0.0.0.0.0.9.f.0.0.0.0.9.0.1.0.0.3.1.0.3.0.0.1.0.2o0.1.2.3.0.0.7.0.0.0.0.0.0.0.0.0.0.0.0.2bd.1.0.2.0.1i.0.1.0.0.0.0.0.0.0.0.0.0.0",
     "a td under ssml:audio, which no table holds, names a header (TEST_SEED=4046452640)",
     "Table headers",
   ),
   unconstructedCase(
-    "8.1.0.0.0.9.0.9.9.c.2.c.0.9.0.0.0.0.3.1.1.3.0.2.1.0.1c1.1.1.3.0.0.0.0.0.0.0.3.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.4.0.0.1.0.3.0.0.0.0.0.0.1.0.0.1.0.0.0.0.0.0.0.0.0.4.0.18.1.1.0.0.1.0.0.0.0.0.0.0.1.0.0.0.0.0.0.5.0.0.0.0.1.0.0.0.0.0.1.0.0.0.0.1.1.0.0.1.0.0.0.0.0.0.2.0.0.0.0.0.0.0.0.0.0.1.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.0.0.0.0.0.0.1.1.0.0.0.0.0.1.1.1.0.0.0.0.0.0.1.0.1.0.1.0.0.0.0.0.0.0.0.1.0.0.0.0.0.1.0.1.0.0.0.0.0.0.1.0.1.0.0.0.0.0.1.0.1.0.0.0.0.0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0.1.0.3.0.0.0.0.0.0.0.0.0.0.3.0.0.0.0.3.0.0.0.0.0.0.0.0.4.0.0.0.0.0.0.1.0.0.0.0.0.1.0.1.0.0.1.0.0.0.0.0.0.0.1.1.0.0.0.0.0.1.0.2.0.0.0.0.1.0.0.1.0.0.0.0.0.0.0.0.0.p.1.0.0.1ve.0.0.0.0.0.1.0.0.1.0.0.0.0.0.0.0.0.0.1.0.2.0.1i.0.1.0.0.0.0.0.0",
+    "a.2.0.0.0.0.0.3.3.3.3.3.1.3.0.0.0.2.3.3.0.0.8.0.2.0.2p5.0.2.2.0.0.0.0.0.0.0.0.0.0.0.1ve.0.0.1.0.1.0.2.0.0.2.1.0.0.0.0.0.0.2.0.0.6u.2.0.2.0.0.0.0.0.0.0.0.0.0.2fw.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.1.1j.1.0.0.0.0.0.0.0",
     "a td under a tfoot no table holds names a header (TEST_SEED=1912931461)",
     "Table headers",
   ),
   unconstructedCase(
-    "0.2.0.3.3.0.3.0.3.d.0.0.3.0.0.0.1.0.0.2.1.0.0.1.0.1.0.865.1.0.0.0.0.0.0.0.1en.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0",
+    "a.2.0.3.3.0.0.3.0.d.3.0.2.0.3.0.0.2.3.0.0.3.2.0.0.42k.0.1.0.0.0.0.0.0.0.0.0.1.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.lg.1.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0",
     "a qti-equal writes an empty tolerance (TEST_SEED=3952699438)",
     "Equal tolerance",
   ),
   unconstructedCase(
-    "6.1.0.0.0.0.0.9.0.9.0.0.9.0.0.0.1.0.0.3.1.1.3.0.0.1.0.aa.0.2.0.0.0.0.5t.0.0.0.0.0.x8.0.0.0.0.0.0.2.0.3.0.0.1i.0.0.0.0.0.0.0.0.0",
+    "0.1.0.0.0.0.0.0.9.f.0.0.0.9.0.0.1.0.0.0.1.1.0.0.0.0.0.0.17f.0.1.1k.0.0",
     "a pre writes an empty data-ssml (TEST_SEED=593086602)",
     "Data SSML",
   ),
