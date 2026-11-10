@@ -44,6 +44,8 @@ import { parseHtml } from "#plate/test/round-trip.ts";
 const prewiredSlots: ReadonlySet<string> = new Set([
   "choice-interaction-mask",
   "choice-interaction-mask-toggle",
+  "item-comment",
+  "item-comment-label",
 ]);
 
 /**
@@ -59,6 +61,8 @@ const specRows = [
   ["item", "messages", "item-messages", "ul"],
   ["item", "message", "item-message", "li"],
   ["item", "notice", "item-notice", "span"],
+  ["item", "comment", "item-comment", "textarea"],
+  ["item", "commentLabel", "item-comment-label", "label"],
   ["choice-interaction", "root", "choice-interaction", "fieldset"],
   ["choice-interaction", "prompt", "choice-interaction-prompt", "qti-prompt"],
   ["choice-interaction", "choices", "choice-interaction-choices", "ul"],
@@ -182,6 +186,13 @@ const indicator = (props: Attributes, children: readonly Node[]) => h("span", pr
  */
 const badge = (props: Attributes) => h("span", props, [text("new")]);
 
+/**
+ * A replacement for either of the item's comment parts.
+ *
+ * @returns A `textarea` with no attributes.
+ */
+const commentReplacement = (): Element => h("textarea", {});
+
 describe("partTable", () => {
   it("holds every row of the spec's table once, with its slot and default element", () => {
     assert.strictEqual(partTable.length, specRows.length);
@@ -203,6 +214,8 @@ describe("partTable", () => {
       "messages",
       "message",
       "notice",
+      "comment",
+      "commentLabel",
     ]);
   });
 
@@ -286,6 +299,45 @@ describe("the interaction modules", () => {
         assert.isTrue(checked.has(row.interaction), row.slot);
       }
     }
+  });
+});
+
+describe("the item's comment rows", () => {
+  it("[W0-BG] the item owner has the comment and its label, each found through its marker", () => {
+    assert.deepStrictEqual(Option.getOrUndefined(partForSlot("item-comment")), {
+      interaction: "item",
+      part: "comment",
+    });
+    assert.deepStrictEqual(Option.getOrUndefined(partForSlot("item-comment-label")), {
+      interaction: "item",
+      part: "commentLabel",
+    });
+  });
+
+  it("[W0-BG] the comment is a textarea and its label a label, each merging only what the module connects", () => {
+    const comment = rowFor("item", "comment");
+    const label = rowFor("item", "commentLabel");
+
+    assert.strictEqual(comment.element, "textarea");
+    assert.deepStrictEqual(comment.merged, [
+      "id",
+      "name",
+      "readonly",
+      "aria-describedby",
+      "disabled",
+    ]);
+    assert.strictEqual(label.element, "label");
+    assert.deepStrictEqual(label.merged, ["for", "id"]);
+  });
+
+  it("[W0-BG] a host can replace either row, since both are known item parts", () => {
+    assert.isTrue(
+      Result.isSuccess(
+        resolveOverrides({
+          item: { comment: commentReplacement, commentLabel: commentReplacement },
+        }),
+      ),
+    );
   });
 });
 

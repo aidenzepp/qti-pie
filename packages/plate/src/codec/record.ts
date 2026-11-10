@@ -17,13 +17,15 @@ import type { ItemRecord } from "#plate/model/record.ts";
 /**
  * The version of every stored form this renderer writes, the session record's and the test
  * session's, and the only version it reads. The two forms share it, so a change to either form
- * moves both, and a form whose fields did not change still names the new version. Version 5 adds
- * `locked` to each item of the stored session and `expired` to the session, the facts an expired
- * timed scope leaves (`expireScope` in `#plate/session/expire.ts`); the record's fields did not
- * change. The `renderer/m3f/main` branch holds a version 5 of its own for another change, so the
- * merge that joins the two moves this once more.
+ * moves both, and a form whose fields did not change still names the new version. Version 6 adds
+ * `comment` to each item of the stored session, the candidate's comment that the comment seam
+ * keeps (`commentModule` in `#plate/session/comment.ts`), left out of the stored form when the item
+ * holds none; the record's fields did not change. Version 5 added `locked` to each item of the
+ * stored session and `expired` to the session, the facts an expired timed scope leaves
+ * (`expireScope` in `#plate/session/expire.ts`). The `renderer/m3f/main` branch holds a version 5
+ * of its own for another change, which the merge that joins it reconciles with this one.
  */
-export const storedVersion = 5;
+export const storedVersion = 6;
 
 /**
  * The fields of one item's session, as {@link ItemRecord} has them.
@@ -64,7 +66,7 @@ export const ItemRecordSchema = Schema.Struct({
 );
 
 /**
- * One item's session in the form the host stores: JSON-safe data that names its version, `5`,
+ * One item's session in the form the host stores: JSON-safe data that names its version, `6`,
  * with every integer written as its decimal digits, so no integer is rounded on the way through
  * the host, and the floats JSON has no number for written by name: the infinities as `"INF"` and
  * `"-INF"`, NaN as `"NaN"` and negative zero as `"-0"`. A record response's value sits in
@@ -184,7 +186,7 @@ export const encodeRecord = (record: ItemRecord): Result.Result<StoredRecord, In
  * @param input The stored record, as the host returned it: the {@link StoredRecord}
  *   {@link encodeRecord} wrote, after any JSON round trip. An integer written as a JSON number is
  *   refused, and so is a record that names no version or another version than
- *   {@link storedVersion}, 5: a version-3 record among them, refused for its version before its
+ *   {@link storedVersion}, 6: a version-3 record among them, refused for its version before its
  *   fields are read, though it lacks only `records`.
  * @returns The record, or {@link InvalidRecord} at stage `decode` naming what does not fit, the
  *   version found when that is what does not fit.

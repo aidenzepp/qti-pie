@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { begin } from "#plate/begin.ts";
 import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
@@ -27,6 +27,7 @@ import { results } from "#plate/results/results.ts";
 import type { ResultContext, ResultsInput } from "#plate/results/results.ts";
 import { score } from "#plate/score.ts";
 import { advance } from "#plate/session/advance.ts";
+import type { CommentModule } from "#plate/session/comment.ts";
 import type {
   Responses,
   SessionItem,
@@ -622,6 +623,7 @@ const sessionItem = (
   sequenceIndex: number,
   changes: Partial<SessionItem> = {},
 ): SessionItem => ({
+  comment: Option.none(),
   datestamp: updated,
   duration: 0,
   firstOutcomes: Option.none(),
@@ -2543,6 +2545,169 @@ describe("results, the default normal-minimum of a QTI 3.0.1 outcome (reading 14
             test: { BAND: "0", FLOOR: "-1", TOTAL: "0" },
           },
         ]);
+      }),
+    { tags: ["results-xsd"] },
+  );
+});
+
+/**
+ * The module file the comment seam is consulted through, which {@link withComment} swaps.
+ */
+const commentFile = "#plate/session/comment.ts";
+
+/**
+ * A test-only comment module that keeps a non-blank posted comment when the item allows one and
+ * reports what it kept.
+ */
+const reportingKept: CommentModule = {
+  implemented: true,
+  keep: (posted, allowed, kept) =>
+    posted.pipe(
+      Option.filter((comment) => allowed && comment.trim() !== ""),
+      Option.orElse(() => kept),
+    ),
+  part: () => Result.succeed(Option.none()),
+  report: (kept) => kept,
+};
+
+/**
+ * Run an effect with a module in place of the comment stub, every module that imports it loaded
+ * afresh, and the stub restored after.
+ *
+ * @param module The module to register.
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withComment = <A, E>(
+  module: CommentModule,
+  effect: Effect.Effect<A, E>,
+): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(commentFile, () => ({ commentModule: module }));
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(commentFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
+ * Give the local names of an element's child elements, in document order.
+ *
+ * @param element The element.
+ * @returns Each child element's local name.
+ */
+const childNames = (element: SourceElement): readonly string[] =>
+  element.children.flatMap((child) => (child.kind === "element" ? [child.local] : []));
+
+/**
+ * Post a comment on the first of two items, the first of whose refs allows a comment, and read
+ * what the session keeps, its stored form hands back, and the results write. The modules it reads
+ * are imported afresh, so the comment module in force is the one {@link withComment} registered,
+ * the stub when none.
+ *
+ * @returns The session after the step, what decoding its stored form gives, the stored form, the
+ *   results document's text, and each item result's child elements' names and `candidateComment`
+ *   texts.
+ */
+const commenting = Effect.fnUntraced(function* commenting() {
+  const single = yield* fixtureItem("p1-single-choice.xml", "tests/items/p1-single-choice.xml");
+  const test = yield* acceptTest("commenting", [
+    part("P1", individual, [
+      [
+        '<qti-assessment-item-ref identifier="one" href="items/p1-single-choice.xml">',
+        '<qti-item-session-control allow-comment="true"/></qti-assessment-item-ref>',
+      ].join(""),
+      ref("two", "p1-single-choice.xml"),
+    ]),
+  ]);
+  const items = new Map([
+    ["one", single],
+    ["two", single],
+  ]);
+  const configuration = yield* configure({});
+  const start = yield* Effect.promise(() => import("#plate/session/start.ts"));
+  const control = yield* Effect.promise(() => import("#plate/session/control.ts"));
+  const codec = yield* Effect.promise(() => import("#plate/codec/session.ts"));
+  const reporting = yield* Effect.promise(() => import("#plate/results/results.ts"));
+  const begun = yield* Effect.fromResult(
+    start.startTest(test, items, configuration, {
+      instance,
+      now: new Date(started),
+      seed: processingSeed,
+    }),
+  );
+  const recorded = yield* Effect.fromResult(
+    start.recordStep(
+      begun,
+      { comment: "A note", intent: { kind: "next" } },
+      new Date(updated),
+      control.sessionControls(test.test),
+    ),
+  );
+  const stored = yield* Effect.fromResult(codec.encodeSession(recorded));
+  const decoded = yield* Effect.fromResult(codec.decodeSession(stored, test));
+  const xml = yield* Effect.fromResult(
+    reporting.results({ context, items, kind: "test", session: stored, test }),
+  );
+  const { root } = yield* readSource("result.xml", new TextEncoder().encode(xml));
+  const itemResults = childrenNamed(root, "itemResult");
+
+  return {
+    comments: itemResults.map((result) =>
+      childrenNamed(result, "candidateComment").map((comment) =>
+        comment.children.map((child) => (child.kind === "text" ? child.text : "")).join(""),
+      ),
+    ),
+    decoded,
+    names: itemResults.map(childNames),
+    recorded,
+    stored,
+    xml,
+  };
+});
+
+describe("results, the comment seam", () => {
+  it.effect(
+    "[W0-BG] a posted comment is kept on the session item when the item allows it, survives the codec, and reaches the results after the outcome variables",
+    () =>
+      Effect.gen(function* commentReported() {
+        const scenario = yield* withComment(reportingKept, commenting());
+        const [first = [], second = []] = scenario.names;
+
+        assert.deepStrictEqual(
+          scenario.recorded.items.map((item) => item.comment),
+          [Option.some("A note"), Option.none()],
+        );
+        assert.deepStrictEqual(scenario.decoded, scenario.recorded);
+        assert.isTrue(first.includes("outcomeVariable"));
+        assert.strictEqual(first.at(-1), "candidateComment");
+        assert.isAbove(first.indexOf("candidateComment"), first.lastIndexOf("outcomeVariable"));
+        assert.deepStrictEqual(scenario.comments, [["A note"], []]);
+        assert.notInclude(second, "candidateComment");
+        yield* assertValid(scenario.xml);
+      }),
+    { tags: ["results-xsd"] },
+  );
+
+  it.effect(
+    "[W0-BG] the stub keeps nothing and reports nothing",
+    () =>
+      Effect.gen(function* stubbed() {
+        const scenario = yield* commenting();
+
+        assert.deepStrictEqual(
+          scenario.recorded.items.map((item) => item.comment),
+          [Option.none(), Option.none()],
+        );
+        assert.isFalse(scenario.stored.items.some((item) => "comment" in item));
+        assert.deepStrictEqual(scenario.comments, [[], []]);
+        assert.isFalse(scenario.names.some((names) => names.includes("candidateComment")));
+        yield* assertValid(scenario.xml);
       }),
     { tags: ["results-xsd"] },
   );

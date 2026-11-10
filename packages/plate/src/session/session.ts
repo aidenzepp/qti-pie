@@ -41,6 +41,12 @@ export interface SessionPart {
  */
 export interface SessionItem {
   /**
+   * The comment the candidate left on the item, as the comment module (`#plate/session/comment.ts`)
+   * keeps it after each step; none until a step posts one the module keeps, and none for every
+   * item while the module is a stub. A result reports it as the item result's `candidateComment`.
+   */
+  readonly comment: Option.Option<string>;
+  /**
    * When the last transition that changed this item happened, in ISO 8601 UTC.
    */
   readonly datestamp: string;
@@ -154,14 +160,17 @@ export type Intent =
   | { readonly kind: "submit-part" };
 
 /**
- * What one request carries: the intent, and the responses to save on the current item with it,
- * when it carries any.
+ * What one request carries: the intent, and the responses and the comment to save on the current
+ * item with it, when it carries any.
  *
- * The responses are saved only while the current item is open. A closed item, one whose view is
- * `disabled`, takes no responses: `advance` carries out the step's intent and ignores its
- * responses, so a host may post a closed item's form as rendered, or pass what it decoded from it.
+ * The responses and the comment are saved only while the current item is open. A closed item, one
+ * whose view is `disabled`, takes neither: `advance` carries out the step's intent and ignores its
+ * responses and its comment, so a host may post a closed item's form as rendered, or pass what it
+ * decoded from it. The comment is the text `decodeComment` (`#plate/form/comment.ts`) reads from
+ * the post; the comment module decides whether the item keeps it.
  */
 export interface Step {
+  readonly comment?: string;
   readonly intent: Intent;
   readonly responses?: Responses;
 }

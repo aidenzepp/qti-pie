@@ -35,7 +35,16 @@ interface ShippedPartsOf {
     | "root";
   "extended-text-interaction": "control" | "prompt" | "root";
   "inline-choice-interaction": "control" | "label" | "option" | "placeholder" | "root";
-  item: "live" | "message" | "messages" | "notice" | "root" | "status" | "statusHeading";
+  item:
+    | "comment"
+    | "commentLabel"
+    | "live"
+    | "message"
+    | "messages"
+    | "notice"
+    | "root"
+    | "status"
+    | "statusHeading";
   "test-navigation":
     | "end"
     | "item"
@@ -577,6 +586,24 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     merged: ["role"],
     part: "notice",
     tagClass: "phrasing-container",
+  },
+  {
+    defaults: {},
+    element: "textarea",
+    interaction: "item",
+    listOwner: false,
+    merged: ["id", "name", "readonly", "aria-describedby", "disabled"],
+    part: "comment",
+    tagClass: "textarea",
+  },
+  {
+    defaults: {},
+    element: "label",
+    interaction: "item",
+    listOwner: false,
+    merged: ["for", "id"],
+    part: "commentLabel",
+    tagClass: "inline-label",
   },
   {
     defaults: {},

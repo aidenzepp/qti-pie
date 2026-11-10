@@ -49,6 +49,7 @@ import type {
   View,
 } from "#plate/payload.ts";
 import { drawInstance } from "#plate/seed.ts";
+import { commentModule } from "#plate/session/comment.ts";
 import { noSupports } from "#plate/supports.ts";
 import type { Supports } from "#plate/supports.ts";
 import type { OutcomeView } from "#plate/vocabulary.ts";
@@ -73,10 +74,14 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * the candidate, `noSupports` when absent, and `view` the view the item is shown to, one of QTI's
  * six, the candidate's when absent: each content module's render decides by both what it shows of
  * what {@link redact} kept under the same two, so a render passes the supports and the view its
- * redaction took.
+ * redaction took. `comment` is the comment the session holds for the item, which a session item's
+ * view (`ItemView.comment`) gives: the comment module (`#plate/session/comment.ts`) writes the
+ * comment part from it, after the body and before the live region, when the configuration's
+ * `allowComment` is set.
  */
 export interface Options {
   readonly assetBase?: string;
+  readonly comment?: string;
   readonly disabled?: boolean;
   readonly instance?: string;
   readonly messages?: readonly ValidationMessage[];
@@ -501,8 +506,9 @@ const interactionRenderer = (built: Payload, state: EmitState): RenderInteractio
  * lowercase UUID v4 (`drawInstance`, from `crypto.getRandomValues`, never derived from the seed;
  * not `crypto.randomUUID`, which a browser gives only in a secure context, so a page served over
  * plain HTTP lacks it), builds the payload from the redacted item and the options, and emits the
- * body and the Root, which holds the body and then the empty Live part the runtime announces into.
- * A shuffled Choice is presented in the order the configuration's `seed`, the
+ * body and the Root, which holds the body, the item's own content, the comment part when the
+ * comment module (`#plate/session/comment.ts`) writes one, and then the empty Live part the runtime
+ * announces into. A shuffled Choice is presented in the order the configuration's `seed`, the
  * instance and its response key give. The Root's `data-mode` names `options.mode`. It writes no
  * form, submit control, title or record. Given the same instance, configuration and inputs, it
  * gives the same HTML, and it returns the instance it used.
@@ -591,8 +597,23 @@ export const render = (
       state,
       contentKitOf(built, state, renderer),
     );
+    const comment = yield* commentModule.part(
+      {
+        allowed: configuration.allowComment,
+        finished: built.finished,
+        instance,
+        kept: Option.fromUndefinedOr(options.comment),
+        locale: state.locale,
+      },
+      state,
+    );
     const live = yield* itemPart(state.parts, "live", liveRegion, []);
-    const root = yield* emitItem(built, state, [...body, ...content, live]);
+    const root = yield* emitItem(built, state, [
+      ...body,
+      ...content,
+      ...Option.toArray(comment),
+      live,
+    ]);
 
     if (writesMalformedHeading(built.body, configuration.headingLevel, renderer)) {
       return yield* Result.fail(new InvalidHeadingLevel({ level: configuration.headingLevel }));

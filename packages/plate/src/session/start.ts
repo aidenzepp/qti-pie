@@ -31,6 +31,7 @@ import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
 import type { Value } from "#plate/model/values.ts";
 import { defaultOutputBudget } from "#plate/output-budget.ts";
 import { drawSeed } from "#plate/seed.ts";
+import { commentModule } from "#plate/session/comment.ts";
 import {
   attemptLimits,
   itemConfiguration,
@@ -159,6 +160,12 @@ export class ItemNotInSession extends Data.TaggedError("ItemNotInSession")<{
  * page only what `render` writes.
  */
 export interface ItemView {
+  /**
+   * The comment the item holds, as the comment module (`#plate/session/comment.ts`) keeps it: the
+   * host passes it to `render` as `Options.comment`, so the item shows the comment it holds. None
+   * for every item while the module is a stub.
+   */
+  readonly comment: Option.Option<string>;
   /**
    * The number of items in the session.
    */
@@ -1022,6 +1029,7 @@ export const startTest = (
           deliverable(items, test.test.identifier, ref.identifier, namedDocument(test.test, ref)),
           (accepted) => {
             const item: SessionItem = {
+              comment: Option.none(),
               datestamp,
               duration: 0,
               firstOutcomes: Option.none(),
@@ -1098,13 +1106,20 @@ const addedDuration = (duration: number, updated: string, now: Date): number => 
  *
  * The step's responses, when it carries any, become the item's saved responses; the interval since
  * the session's last transition is added to the item's duration, since the current item is shown
- * in answering mode; the item's datestamp and the session's `updated` become `now`. A closed test
- * has no current item and is returned unchanged. This is the one place a step is saved: the moves
- * and the submissions call it first.
+ * in answering mode; the item's datestamp and the session's `updated` become `now`. The item's
+ * comment is what the comment module (`#plate/session/comment.ts`) keeps, given the step's comment,
+ * whether the item's session control allows one and the comment the item held. A closed test has
+ * no current item and is returned unchanged. This is the one place a step is saved: the moves and
+ * the submissions call it first.
+ *
+ * The item's session control is not in the session, so a caller that lets a comment be kept passes
+ * the test's controls (`sessionControls`); with none, no item allows a comment.
  *
  * @param session The session.
- * @param step The request: its intent, and the responses posted with it.
+ * @param step The request: its intent, and the responses and the comment posted with it.
  * @param now The time of the transition.
+ * @param controls The test's session controls by item ref, from `sessionControls`; none by
+ *   default, under which the comment module is told the item does not allow a comment.
  * @returns The session with the step saved; {@link ItemNotInSession} for a session whose position
  *   is past its items; {@link InvalidTime} for an invalid `now`.
  */
@@ -1112,6 +1127,7 @@ export const recordStep = (
   session: TestSession,
   step: Step,
   now: Date,
+  controls?: ReadonlyMap<string, SessionControl>,
 ): Result.Result<TestSession, InvalidTime | ItemNotInSession> =>
   Result.gen(function* recordOne() {
     const datestamp = yield* datestampOf(now, "now");
@@ -1121,11 +1137,13 @@ export const recordStep = (
 
     const [index, item] = yield* itemAtPosition(session);
     const saved = step.responses === undefined ? item.saved : Option.some(step.responses);
+    const allowed = controls?.get(item.ref)?.allowComment ?? false;
 
     return {
       ...session,
       items: withItem(session, index, {
         ...item,
+        comment: commentModule.keep(Option.fromUndefinedOr(step.comment), allowed, item.comment),
         datestamp,
         duration: addedDuration(item.duration, session.updated, now),
         saved,
@@ -1237,6 +1255,7 @@ const viewOf = (
   item: SessionItem,
 ): Result.Result<ItemView, UnknownItemRef> =>
   Result.map(inspect(index, session, configuration, item), (inspected) => ({
+    comment: item.comment,
     configuration: inspected.configuration,
     count: session.items.length,
     disabled: inspected.closed,
