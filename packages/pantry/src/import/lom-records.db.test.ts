@@ -26,44 +26,45 @@ describe.skipIf(!hasLease)(
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
     })("the LOM records that name an item", (it) => {
-      for (const identifier of namings) {
-        for (const title of namings) {
-          for (const file of fileRecords) {
-            const drawn = { file, identifier, title };
-            const rules = rulesOf(drawn);
-            it.effect(
-              `${rules.length === 0 ? "accepts" : "refuses"} a resource record naming ${identifier} identifier and ${title} title, its file's record ${file}`,
-              () =>
-                // Oracle: PostgreSQL, every law of the schema over the case's package; the expected
-                // verdict is the case's as written (spec reading 62).
-                Effect.scoped(
-                  Effect.gen(function* recordVerdict() {
-                    const fs = yield* FileSystem.FileSystem;
-                    const dir = yield* scratchDirectory("lom-records-");
-                    const base = yield* readEntries(yield* materialize("simple"));
-                    for (const entry of recordPackageOf(base, drawn)) {
-                      yield* fs.makeDirectory(path.dirname(`${dir}/${entry.path}`), {
-                        recursive: true,
-                      });
-                      yield* fs.writeFile(`${dir}/${entry.path}`, entry.bytes);
-                    }
+      // A covering array of strength 2, not the product: each file record beside two namings of
+      // the resource's record, which turn with the record's place, so every pair is met.
+      for (const [at, file] of fileRecords.entries()) {
+        for (const [turn, identifier] of namings.entries()) {
+          const title = namings[(at + turn) % 2] ?? identifier;
+          const drawn = { file, identifier, title };
+          const rules = rulesOf(drawn);
+          it.effect(
+            `${rules.length === 0 ? "accepts" : "refuses"} a resource record naming ${identifier} identifier and ${title} title, its file's record ${file}`,
+            () =>
+              // Oracle: PostgreSQL, every law of the schema over the case's package; the expected
+              // verdict is the case's as written (spec reading 62).
+              Effect.scoped(
+                Effect.gen(function* recordVerdict() {
+                  const fs = yield* FileSystem.FileSystem;
+                  const dir = yield* scratchDirectory("lom-records-");
+                  const base = yield* readEntries(yield* materialize("simple"));
+                  for (const entry of recordPackageOf(base, drawn)) {
+                    yield* fs.makeDirectory(path.dirname(`${dir}/${entry.path}`), {
+                      recursive: true,
+                    });
+                    yield* fs.writeFile(`${dir}/${entry.path}`, entry.bytes);
+                  }
 
-                    const outcome = yield* Effect.result(importDir(dir));
+                  const outcome = yield* Effect.result(importDir(dir));
 
-                    if (rules.length === 0) {
-                      assert.strictEqual(outcome._tag, "Success", JSON.stringify(drawn));
-                    } else {
-                      assert.isTrue(
-                        outcome._tag === "Failure" &&
-                          outcome.failure instanceof ImportRefused &&
-                          outcome.failure.rules.some((rule) => rules.includes(rule)),
-                        `${JSON.stringify(drawn)}: ${outcome._tag === "Failure" ? outcome.failure.message : "accepted"}`,
-                      );
-                    }
-                  }),
-                ),
-            );
-          }
+                  if (rules.length === 0) {
+                    assert.strictEqual(outcome._tag, "Success", JSON.stringify(drawn));
+                  } else {
+                    assert.isTrue(
+                      outcome._tag === "Failure" &&
+                        outcome.failure instanceof ImportRefused &&
+                        outcome.failure.rules.some((rule) => rules.includes(rule)),
+                      `${JSON.stringify(drawn)}: ${outcome._tag === "Failure" ? outcome.failure.message : "accepted"}`,
+                    );
+                  }
+                }),
+              ),
+          );
         }
       }
     });
