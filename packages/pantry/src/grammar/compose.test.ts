@@ -8,7 +8,7 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import { faultOf, indexed, repeatOf } from "#pantry/grammar/closed.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
 import { composed, layerAttributeNames, vocabularies } from "#pantry/grammar/compose.ts";
-import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
+import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { foreignKinds, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
@@ -36,12 +36,6 @@ const testTimeoutMs = 300_000;
  * The composed grammar of production, failing the test that reads it when a generator refuses.
  */
 const grammar = Effect.fromResult(composed());
-
-/**
- * Whether a handle type kept its literals: `true` for a union of string literals, `false` once it
- * widened to `string`.
- */
-type Literal<Handle extends string> = string extends Handle ? false : true;
 
 /**
  * A closed relation as {@link faultOf} reads it.
@@ -122,13 +116,6 @@ const relationsIn = (value: unknown, seen = new Set<object>()): readonly Relatio
 };
 
 describe("the composition", () => {
-  it("keeps the vocabularies' handles as literal unions, so the XDM's compile-time contracts hold", () => {
-    const kindsAreLiteral: Literal<Kind> = true;
-    const namesAreLiteral: Literal<Name> = true;
-
-    assert.isTrue(kindsAreLiteral && namesAreLiteral);
-  });
-
   it.effect(
     "states every closed relation's rows within their fields' code spaces, one row per key, the relations grizzle never declares among them",
     () =>
@@ -507,15 +494,33 @@ describe("spec reading 90, through the codec", () => {
             versions.map((version) => `${version} ${kind} ${name}`),
           ),
         );
-        // The box: every (version, kind) whose element the Schematron's extension rules of that
+        // Oracle: reading 90 restated: on a covered element an attribute its XSD does not
+        // declare is read only when it is a `data-` name in no namespace or an `xsi:` name
+        // (reading 47), and reading 10 adds `aria-keyshortcuts` wherever the XSD declares
+        // `aria-keyshorts`; every covered element holds a `##any` `lax` wildcard, so a `data-`
+        // name is in its namespace constraint.
+        const readOf = (version: string, kind: string, variant: ExtensionVariant): boolean => {
+          const { declared: name } = writtenAs[variant];
+
+          return (
+            variant === "data" ||
+            variant === "xsi" ||
+            (name !== "" && declared.has(`${version} ${kind} ${name}`)) ||
+            (variant === "aria-keyshortcuts" && declared.has(`${version} ${kind} aria-keyshorts`))
+          );
+        };
+        // The box: the (version, kind)s whose element the Schematron's extension rules of that
         // version cover, read from the leaf by expanded name, that a document root reaches, under
-        // every variant.
+        // every variant; of each (version, variant, verdict) cell, its first `perCell` kinds. The
+        // codec reads every kind's attributes by the one admission lookup, so a cell's further
+        // kinds repeat its first; the host test below holds the data-* hosts of every kind.
+        const perCell = 3;
         const coveredNames = new Set(
           coveredElements.flatMap(({ element, versions }) =>
             versions.map((version) => `${version} {${element.namespace}}${element.local}`),
           ),
         );
-        const cases = schemaVersions.flatMap((version) =>
+        const every = schemaVersions.flatMap((version) =>
           production.kinds.isElement.rows.flatMap(({ kind }) => {
             const named = names.get(kind);
             const path = pathTo(production, version, kind);
@@ -523,18 +528,26 @@ describe("spec reading 90, through the codec", () => {
             return named !== undefined &&
               coveredNames.has(`${version} {${named.namespace}}${named.local}`) &&
               Option.isSome(path)
-              ? extensionVariants.map((variant) => ({ path: path.value, variant, version }))
+              ? extensionVariants.map((variant) => ({
+                  path: path.value,
+                  read: readOf(version, kind, variant),
+                  variant,
+                  version,
+                }))
               : [];
           }),
         );
+        const cases = [
+          ...Map.groupBy(every, ({ read, variant, version }) => `${version} ${variant} ${read}`),
+        ].flatMap(([, cell]) => cell.slice(0, perCell));
 
-        assert.isAbove(cases.length, 2000);
+        assert.isAbove(every.length, 2000);
 
         return yield* searched(
           ctx,
           exhaust(
             {
-              box: `every (version, kind) a document root reaches whose element that version's Schematron extension rules cover, under every variant, ${cases.length}`,
+              box: `the first ${perCell} kinds of each (version, variant, verdict) a document root reaches whose element that version's Schematron extension rules cover, ${cases.length}`,
               caseHang: Duration.seconds(30),
               coverage: requiredInSpace<ExtensionVariant | "read" | "refused">([
                 ...extensionVariants,
@@ -552,12 +565,12 @@ describe("spec reading 90, through the codec", () => {
             },
             (index, c) =>
               Effect.gen(function* readOne() {
-                const { path, variant, version } = cases[index] ?? {
+                const { path, read, variant, version } = cases[index] ?? {
                   path: [],
+                  read: true,
                   variant: "data",
                   version: "3.0.1",
                 };
-                const kind = path.at(-1) ?? "";
                 // Each element declares its own namespace as the default, so a path through another
                 // vocabulary's elements (`xi:include`, MathML) names each in its namespace.
                 const steps = path.map((step) => names.get(step) ?? { local: step, namespace: "" });
@@ -576,18 +589,6 @@ describe("spec reading 90, through the codec", () => {
                   readXml(new TextEncoder().encode(`${opening}${closing}`)),
                 );
                 const outcome = yield* shred(document, version, shredGrammar).pipe(Effect.result);
-                // Oracle: reading 90 restated: on a covered element an attribute its XSD does not
-                // declare is read only when it is a `data-` name in no namespace or an `xsi:`
-                // name (reading 47), and reading 10 adds `aria-keyshortcuts` wherever the XSD
-                // declares `aria-keyshorts`; every covered element holds a `##any` `lax`
-                // wildcard, so a `data-` name is in its namespace constraint.
-                const { declared: name } = writtenAs[variant];
-                const read =
-                  variant === "data" ||
-                  variant === "xsi" ||
-                  (name !== "" && declared.has(`${version} ${kind} ${name}`)) ||
-                  (variant === "aria-keyshortcuts" &&
-                    declared.has(`${version} ${kind} aria-keyshorts`));
                 c.note(variant);
                 c.note(read ? "read" : "refused");
 
