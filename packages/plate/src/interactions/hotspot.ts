@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { HotspotInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every Hotspot part in the part table.
@@ -39,7 +38,7 @@ const notImplemented = (): never => {
 /**
  * The Hotspot module, a stub.
  */
-export const hotspotModule: InteractionModule<"hotspot", HotspotInteraction, never> = {
+export const hotspotModule: InteractionModule<"hotspot", ModuleInteraction<"hotspot">, never> = {
   /**
    * The responses Hotspot binds, which `postings` reads: not implemented; issue m3d-07 fills it.
    */

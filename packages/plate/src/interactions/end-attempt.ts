@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { EndAttemptInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every End Attempt part in the part table.
@@ -39,7 +38,11 @@ const notImplemented = (): never => {
 /**
  * The End Attempt module, a stub.
  */
-export const endAttemptModule: InteractionModule<"end-attempt", EndAttemptInteraction, never> = {
+export const endAttemptModule: InteractionModule<
+  "end-attempt",
+  ModuleInteraction<"end-attempt">,
+  never
+> = {
   /**
    * The responses End Attempt binds, which `postings` reads: not implemented; issue ei-02 fills it.
    */

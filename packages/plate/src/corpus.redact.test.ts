@@ -8,7 +8,7 @@ import { formatPrinted } from "#plate/engine/format.ts";
 import { integerOf } from "#plate/engine/numbers.ts";
 import { own } from "#plate/engine/refs.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
-import { isStubbed } from "#plate/model/interactions.ts";
+import { isStubbed, mapRegions, regionsOf } from "#plate/model/interactions.ts";
 import type {
   BodyElement,
   BodyNode,
@@ -1017,7 +1017,7 @@ const noticeStep = (
   node: BodyNode,
 ): NoticeStep => {
   if (isStubbed(node)) {
-    return { ...quietStep, runs: [[Option.getOrElse(node.prompt, () => []), true]] };
+    return { ...quietStep, runs: regionsOf(node).map((region) => [region.nodes, true]) };
   }
 
   switch (node.kind) {
@@ -1173,11 +1173,7 @@ const fieldsFit = (
 const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
   nodes.map((node): BodyNode => {
     if (isStubbed(node)) {
-      return {
-        ...node,
-        path: "",
-        prompt: node.prompt.pipe(Option.map((prompt) => withoutPaths(prompt))),
-      };
+      return { ...mapRegions(node, (region) => withoutPaths(region.nodes)), path: "" };
     }
 
     switch (node.kind) {
@@ -1314,7 +1310,7 @@ const choicePartsOf = (choices: readonly SimpleChoice[], path: string): readonly
 const templatePartsOf = (nodes: readonly BodyNode[]): readonly TemplatePart[] =>
   nodes.flatMap((node): readonly TemplatePart[] => {
     if (isStubbed(node)) {
-      return Option.toArray(node.prompt).flatMap((lead) => templatePartsOf(lead));
+      return regionsOf(node).flatMap((region) => templatePartsOf(region.nodes));
     }
 
     switch (node.kind) {

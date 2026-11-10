@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { SelectPointInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every Select Point part in the part table.
@@ -39,7 +38,11 @@ const notImplemented = (): never => {
 /**
  * The Select Point module, a stub.
  */
-export const selectPointModule: InteractionModule<"select-point", SelectPointInteraction, never> = {
+export const selectPointModule: InteractionModule<
+  "select-point",
+  ModuleInteraction<"select-point">,
+  never
+> = {
   /**
    * The responses Select Point binds, which `postings` reads: not implemented; issue ei-14 fills
    * it.

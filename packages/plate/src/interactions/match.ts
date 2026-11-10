@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { MatchInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every Match part in the part table.
@@ -39,7 +38,7 @@ const notImplemented = (): never => {
 /**
  * The Match module, a stub.
  */
-export const matchModule: InteractionModule<"match", MatchInteraction, never> = {
+export const matchModule: InteractionModule<"match", ModuleInteraction<"match">, never> = {
   /**
    * The responses Match binds, which `postings` reads: not implemented; issue m3d-11 fills it.
    */

@@ -8,8 +8,7 @@
  * @module
  */
 import { NotImplemented } from "#plate/interactions/contract.ts";
-import type { InteractionModule } from "#plate/interactions/contract.ts";
-import type { PositionObjectInteraction } from "#plate/model/item.ts";
+import type { InteractionModule, ModuleInteraction } from "#plate/interactions/contract.ts";
 
 /**
  * The owner of every Position Object part in the part table.
@@ -41,7 +40,7 @@ const notImplemented = (): never => {
  */
 export const positionObjectModule: InteractionModule<
   "position-object",
-  PositionObjectInteraction,
+  ModuleInteraction<"position-object">,
   never
 > = {
   /**

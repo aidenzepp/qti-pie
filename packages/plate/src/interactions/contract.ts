@@ -9,6 +9,16 @@
  * `validate` what `validateInlineChoice` does, `bindings` what `postings` reads of an interaction,
  * and the other members the per-kind facts the hubs inline today, each named where it is read.
  *
+ * A module owns its kind's model node: it declares the node's type, over the fields every module's
+ * node shares ({@link ModuleInteraction}), and the item model's `Interaction` union and the hubs'
+ * `ModelOf<K>` (`#plate/model/interactions.ts`) read that type from the table of modules, so no hub
+ * and no shared file names a kind's fields. Its `parse` reads the element through the kit the body
+ * walk hands it ({@link ReaderKit}): the attribute readers, the body walk for the element's content
+ * (its Prompt, its choices' content) with the module's own elements, such as a `qti-gap`, let
+ * through as elements where the walk writes a notice for any other `qti-*` element, the marks it
+ * records, and the declaration its `response-identifier` names. Its `redact` copies its node's
+ * content through the kit the payload hands it ({@link RedactKit}).
+ *
  * Each of the other kinds is a stub module beside this file: `implemented` is false, its `parts`
  * holds no row, its `parse` gives the notice an unknown QTI interaction element gives, so the
  * verdicts and the HTML stay what they were, and its `payloadSchema` refuses its kind, as the
@@ -21,9 +31,10 @@
  * `stubSteps` for a model node, its `regionsOf` and `mapRegions` for the content a node holds, and
  * its `renderModule` and `moduleContent` for a payload node. A module that lands fills only its own
  * file: its payload node reaches the payload as a `ModulePayload` (`#plate/payload.ts`), its JSON
- * form through its `payloadSchema`, each of its parts through {@link partRow}, and its parts reach
- * a host's overrides and the `data-slot` lookup through the names `#plate/model/interactions.ts`
- * hands the part table as it loads.
+ * form through its `payloadSchema`, each of its parts through {@link partRow}, its own elements
+ * through the render function it hands `emitNodes` (`nestedInteraction` in `#plate/emit/body.ts`),
+ * and its parts reach a host's overrides and the `data-slot` lookup through the names
+ * `#plate/model/interactions.ts` hands the part table as it loads.
  *
  * @module
  */
@@ -31,7 +42,7 @@ import { Data } from "effect";
 import type { Option, Result, Schema } from "effect";
 import type { SchemaKit } from "#plate/codec/redacted.ts";
 import type { Configuration } from "#plate/configuration.ts";
-import type { SourceElement } from "#plate/document/source.ts";
+import type { SourceChild, SourceElement } from "#plate/document/source.ts";
 import type { Attributes, Element } from "#plate/emit/node.ts";
 import { slotFor } from "#plate/emit/parts.ts";
 import type { InteractionKey, PartKey, PartRow } from "#plate/emit/parts.ts";
@@ -39,10 +50,12 @@ import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import type { Malformed } from "#plate/form/encoding.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { Region } from "#plate/model/interactions.ts";
-import type { BodyNode, Interaction, StubbedInteraction, Unsupported } from "#plate/model/item.ts";
+import type { BodyNode, Interaction, Unsupported } from "#plate/model/item.ts";
+import type { AttributeReaders } from "#plate/model/reader.ts";
 import type { ResponseValue, Value } from "#plate/model/values.ts";
 import type { EmitState, Payload, PayloadNode, ValidationMessage } from "#plate/payload.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
+import type { BaseType, Cardinality } from "#plate/vocabulary.ts";
 
 /**
  * An interaction kind, as the item model names it.
@@ -50,14 +63,9 @@ import type { Refusal } from "#plate/validate/refusal.ts";
 export type InteractionKind = Interaction["kind"];
 
 /**
- * A kind plate parses through an interaction module beside this file, one of the seventeen beside
- * the four the hubs hold inline.
- */
-export type ModuleKind = StubbedInteraction["kind"];
-
-/**
- * The module kinds, each once: a record over {@link ModuleKind}, so a kind added to it or taken
- * from it changes this table or fails to compile.
+ * The module kinds, each once: the one place that names them. The table of modules in
+ * `#plate/model/interactions.ts` is a record over {@link ModuleKind}, so a kind added here or taken
+ * from here changes that table or fails to compile.
  */
 const moduleKinds = {
   associate: true,
@@ -77,7 +85,13 @@ const moduleKinds = {
   "select-point": true,
   slider: true,
   upload: true,
-} as const satisfies { readonly [K in ModuleKind]: true };
+} as const;
+
+/**
+ * A kind plate parses through an interaction module beside this file, one of the seventeen beside
+ * the four the hubs hold inline.
+ */
+export type ModuleKind = keyof typeof moduleKinds;
 
 /**
  * Tell whether a kind is a {@link ModuleKind}, whatever node names it.
@@ -109,8 +123,113 @@ export type PartSpec = Omit<PartRow, "interaction" | "legendOwner" | "part" | "s
 export type PartPlacement = Partial<Omit<PartRow, "interaction" | "part" | "slot">>;
 
 /**
- * What the body walk hands a module's `parse`: the element's path, and the one way to replace the
- * element by its notice, which also records the feature on the verdict.
+ * The fields every module kind's model node shares, which the hubs read of any interaction: the
+ * kind, the element path, the response it binds (`response-identifier`, which every QTI interaction
+ * carries) and the author's names for it. A module declares its node over these; a stub's node is
+ * these alone, which the model never holds, since a stub's `parse` gives the notice.
+ *
+ * @template K The kind.
+ */
+export interface ModuleInteraction<K extends ModuleKind> {
+  /**
+   * The author's `aria-label`, which names the interaction when it has no Prompt.
+   */
+  readonly ariaLabel: Option.Option<string>;
+  /**
+   * The author's `aria-labelledby`, an IDREFS value as written, which names the interaction when it
+   * has no Prompt.
+   */
+  readonly ariaLabelledby: Option.Option<string>;
+  readonly kind: K;
+  readonly path: string;
+  /**
+   * The identifier of the response it binds, `response-identifier`, read as `identifierOf` reads
+   * it.
+   */
+  readonly response: string;
+}
+
+/**
+ * The response declaration an interaction's `response-identifier` names, as the kit gives it: its
+ * identifier, and its base type and cardinality as written, each none when absent or outside the
+ * vocabulary, which the validator refuses first. A module binds its kind by them, as the body walk
+ * binds the four shipped kinds, and gives the notice for a binding it does not render.
+ */
+export interface BoundDeclaration {
+  readonly baseType: Option.Option<BaseType>;
+  readonly cardinality: Option.Option<Cardinality>;
+  /**
+   * The declaration element itself, for what a module reads of it beyond the type, such as its
+   * `qti-correct-response`.
+   */
+  readonly element: SourceElement;
+  readonly identifier: string;
+}
+
+/**
+ * What a module's `parse` reads the body walk's content with: the kit the walk hands it beside the
+ * attribute readers ({@link AttributeReaders}), so a module reads its element the way the body walk
+ * reads the four shipped kinds, and never re-implements the walk or imports its readers.
+ */
+export interface ReaderKit extends AttributeReaders {
+  /**
+   * The declaration the element's `response-identifier` names, none when it names none the item
+   * declares, which the shipped kinds refuse as `undeclared-response`.
+   */
+  readonly bound: Option.Option<BoundDeclaration>;
+  /**
+   * Read the content of the element's first child of one name, such as its `qti-prompt`, as the
+   * body walk reads a Prompt: the child's marks recorded, its children walked.
+   *
+   * @param element The element.
+   * @param local The child's local name in the QTI namespace.
+   * @returns The child's content, none when the element has no such child, or a refusal.
+   */
+  readonly content: (
+    element: SourceElement,
+    local: string,
+  ) => Result.Result<Option.Option<readonly BodyNode[]>, Refusal>;
+  /**
+   * Record a feature the module reads but does not render as a mark on the verdict, at an element.
+   *
+   * @param element The element that carries the feature.
+   * @param feature The feature's key, as the verdict names it.
+   */
+  readonly mark: (element: SourceElement, feature: string) => void;
+  /**
+   * Record the marks the vocabulary's `renders.marks` place on a body element, as the body walk
+   * records them on each element it reads; a module calls it once for the element it reads, after
+   * it has decided not to give the notice.
+   *
+   * @param element The element.
+   */
+  readonly markElement: (element: SourceElement) => void;
+  /**
+   * Read children of an element as body nodes, the way the body walk reads the item body: text as
+   * itself, HTML elements with their subtrees, MathML, printed variables and template content
+   * intact, and any other `qti-*` element as a notice, except those the module owns, which are read
+   * as elements, their attributes as written and their children walked the same way, so a
+   * `qti-gap` inside a paragraph reaches the module's content and the payload, the codec and the
+   * emitter carry it as an element.
+   *
+   * @param parent The element whose children are read.
+   * @param options Which children (all of them by default), and the local names of the `qti-*`
+   *   elements the module owns, none by default.
+   * @returns The body nodes, in document order, or a refusal.
+   */
+  readonly nodes: (
+    parent: SourceElement,
+    options?: {
+      readonly children?: readonly SourceChild[];
+      readonly own?: readonly string[];
+    },
+  ) => Result.Result<readonly BodyNode[], Refusal>;
+}
+
+/**
+ * What the body walk hands a module's `parse`: the element's path, the one way to replace the
+ * element by its notice, which also records the feature on the verdict, and the kit it reads the
+ * element with.
  */
 export interface ParseContext {
   /**
@@ -124,6 +243,25 @@ export interface ParseContext {
    * The element path of the element being parsed.
    */
   readonly path: string;
+  /**
+   * The kit the element and its content are read with.
+   */
+  readonly read: ReaderKit;
+}
+
+/**
+ * What the payload hands a module's `redact`: the copy of body nodes into payload nodes the payload
+ * makes of every content it copies, so a module's content, its Prompt or a choice's, reaches the
+ * payload as a Choice's does.
+ */
+export interface RedactKit {
+  /**
+   * Copy body nodes into payload nodes, in order, as the payload copies a Prompt's.
+   *
+   * @param nodes The body nodes.
+   * @returns The payload nodes.
+   */
+  readonly nodes: (nodes: readonly BodyNode[]) => readonly PayloadNode[];
 }
 
 /**
@@ -162,7 +300,8 @@ export type OwnRegion = Omit<Region, "owner">;
  * One interaction kind's module.
  *
  * @template K The kind, as the item model names it.
- * @template I The kind's model node.
+ * @template I The kind's model node, over the fields every module's node shares
+ *   ({@link ModuleInteraction}); the item model's union of module nodes is read from it.
  * @template P The kind's payload node, `never` for a stub, which has none yet. It names the response
  *   it binds, as every QTI interaction's `response-identifier` names one.
  * @template Part The kind's part keys, `never` for a stub, which has no row.
@@ -170,8 +309,8 @@ export type OwnRegion = Omit<Region, "owner">;
  *   `payloadSchema` refuses every value.
  */
 export interface InteractionModule<
-  K extends InteractionKind,
-  I,
+  K extends ModuleKind,
+  I extends ModuleInteraction<K>,
   P extends { readonly response: string },
   Part extends string = never,
   J = never,
@@ -238,9 +377,9 @@ export interface InteractionModule<
    */
   readonly payloadSchema: (kit: SchemaKit) => Schema.Codec<I, J>;
   /**
-   * Copy the model node into the payload node the page may know.
+   * Copy the model node into the payload node the page may know, its content through the kit.
    */
-  readonly redact: (interaction: I) => P;
+  readonly redact: (interaction: I, kit: RedactKit) => P;
   /**
    * The regions of the model node's own content, in document order, as `regionsOf` gives them:
    * its Prompt and every other content it holds, each with the choice whose content it is. None
