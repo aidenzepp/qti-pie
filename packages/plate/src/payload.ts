@@ -2318,6 +2318,13 @@ export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): Readonly
  * `entryName(instance, identifier)`. {@link postings} does not see `render`'s `names` option, so a
  * host that passes `names` to `render` must decode each response under the name it passed there,
  * not under the binding's `name`.
+ *
+ * A response of any posted base type but `point` posts one entry per value under that name. A
+ * `point` response posts two entries per value, `<name>.x` and `<name>.y` (`pointEntryNames` in
+ * `#plate/form/encoding.ts`), one whole number in each, x then y, so a module renders
+ * `name="<entry>.x"` and `name="<entry>.y"` for each value and `decode` pairs them by position. A
+ * `boolean` response posts one entry whose value is `true` or `false`; an absent entry is no
+ * response.
  */
 export interface Posting {
   readonly binding: Binding;
@@ -2333,9 +2340,10 @@ export interface Posting {
 /**
  * Give the binding a response travels through the form under: a `RecordBinding` for a record
  * response, a `ValueBinding` for a response of a base type an interaction posts (`isPosted`: the
- * identifier, string, integer and float of the shipped kinds, and the `pair` and `directedPair` of
- * the interactions that put identifiers into targets), and none for a response of any other base
- * type, which no Control posts.
+ * identifier, string, integer and float of the shipped kinds, the `pair` and `directedPair` of the
+ * interactions that put identifiers into targets, the `point` of those that place a point on an
+ * image, and End Attempt's `boolean`), and none for a response of any other base type, which no
+ * Control posts.
  *
  * @param response The response's binding as the page knows it.
  * @param name The entry name its Controls post under.
@@ -2444,7 +2452,9 @@ export const postingsIn = (
  * @param instance The instance token the render used, one `checkInstance` passes.
  * @returns The postings: a response no interaction binds, or of a base type no interaction posts
  *   (`isPosted`), has none. A pair response's values decode one per posted entry, as the pair's two
- *   identifiers separated by a space.
+ *   identifiers separated by a space. A point response's values decode one per pair of posted
+ *   entries, `<name>.x` and `<name>.y`, and a boolean response's from the one entry holding `true`
+ *   or `false` ({@link Posting}).
  */
 export const postings = (redacted: Redacted, instance: string): readonly Posting[] =>
   postingsIn(redacted, instance);

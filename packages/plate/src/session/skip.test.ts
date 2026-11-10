@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
+import { modules } from "#plate/model/interactions.ts";
 import { IntentRefused, advance } from "#plate/session/advance.ts";
 import type { AdvanceFailure } from "#plate/session/advance.ts";
 import type { TestSession } from "#plate/session/session.ts";
@@ -47,18 +48,29 @@ const itemXml = (identifier: string, declaration: string, body: string): string 
   ].join("");
 
 /**
- * An item whose only response an Order binds, which M2 shows as a notice: no rendered control can
- * post it.
+ * The kind of {@link stubItem}'s one interaction: one whose module is a stub, the last planned to
+ * land, so a module that lands never meets it. The item's element is read from that module in the
+ * table of modules, so the fixture changes with this one line when the kind lands.
  */
-const orderItem = itemXml(
+const stubKind = "select-point" as const;
+
+/**
+ * The `RESPONSE` declaration of {@link stubItem}: the base type {@link stubKind} binds under QTI
+ * 3.0, which no module's contract carries, so it changes beside `stubKind`. Its cardinality is
+ * `multiple` because the binding rule checks the element's choice count against the declaration
+ * before any module reads it: a `single` declaration needs `max-choices="1"` on the element, where
+ * `multiple` binds the bare element, so the fixture carries nothing of the kind but its name.
+ */
+const stubDeclaration = 'cardinality="multiple" base-type="point"';
+
+/**
+ * An item whose only response an interaction of {@link stubKind} binds, which plate shows as a
+ * notice while its module is a stub: no rendered control can post it.
+ */
+const stubItem = itemXml(
   "held",
-  'cardinality="ordered" base-type="identifier"',
-  [
-    '<qti-order-interaction response-identifier="RESPONSE">',
-    '<qti-simple-choice identifier="A">A</qti-simple-choice>',
-    '<qti-simple-choice identifier="B">B</qti-simple-choice>',
-    "</qti-order-interaction>",
-  ].join(""),
+  stubDeclaration,
+  `<${modules[stubKind].element} response-identifier="RESPONSE"/>`,
 );
 
 /**
@@ -218,10 +230,10 @@ const proceeds = (given: Delivery, configuration: Configuration): void => {
 
 describe("the skip test under allow-skipping false", () => {
   it.effect(
-    "[T-4] lets next and submit-item pass an item whose only response an Order, shown as a notice, binds",
+    "[T-4] lets next and submit-item pass an item whose only response a stub interaction, shown as a notice, binds",
     () =>
-      Effect.gen(function* orderNotice() {
-        const given = yield* delivery(orderItem);
+      Effect.gen(function* stubNotice() {
+        const given = yield* delivery(stubItem);
         const configuration = yield* configure({});
         const { item } = heldOf(given);
 
