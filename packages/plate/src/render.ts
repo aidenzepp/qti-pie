@@ -18,10 +18,15 @@ import { Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import { defaultView } from "#plate/content/contract.ts";
 import type { ContentRenderKit } from "#plate/content/contract.ts";
-import { contentNodes, renderContent, renderItemContent } from "#plate/content/modules.ts";
+import {
+  attachedBy,
+  contentNodes,
+  renderContent,
+  renderItemContent,
+} from "#plate/content/modules.ts";
 import type { ContentPayload } from "#plate/content/modules.ts";
 import { emitBody, emitNodes, writesMalformedHeading } from "#plate/emit/body.ts";
-import type { AttachCatalog, RenderInteraction } from "#plate/emit/body.ts";
+import type { ReferencingElement, RenderInteraction } from "#plate/emit/body.ts";
 import type { Node } from "#plate/emit/node.ts";
 import { emitItem, emitStatus, itemPart } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
@@ -461,16 +466,6 @@ const contentKitOf = (
 });
 
 /**
- * The default answer to `RenderInteraction.attach`: no catalog presenter attaches anything, so an
- * element that references a catalog renders as any other, with no minted id and no following
- * nodes. The catalog module's answer, which presents the active cards of the catalog for the
- * supports the host enabled, replaces it.
- *
- * @returns No nodes.
- */
-const attachNothing: AttachCatalog = () => Result.succeed([]);
-
-/**
  * Construct the render function each interaction of a body is handed to, dispatching on its kind,
  * with its `modules`, which hands an interaction a module parses to its module's render, its
  * `moduleContent`, which gives that interaction's content through its module, its `content`,
@@ -478,7 +473,8 @@ const attachNothing: AttachCatalog = () => Result.succeed([]);
  * its `contentNodes`, which gives that node's content, its `containers`, which hands a module's
  * container and its children's output to the module's container render, so the emitter reads all
  * five without importing a module, and its `attach`, which answers an element's catalog reference
- * with nothing ({@link attachNothing}).
+ * with what the item-placed modules the payload holds nodes of attach, folded (`attachedBy`), with
+ * the content kit: the empty answer, which leaves the HTML unchanged, while none attaches.
  *
  * @param built The render's payload.
  * @param state The render's emit state.
@@ -486,7 +482,8 @@ const attachNothing: AttachCatalog = () => Result.succeed([]);
  */
 const interactionRenderer = (built: Payload, state: EmitState): RenderInteraction => {
   const renderer: RenderInteraction = Object.assign(shippedRenderer(built, state), {
-    attach: attachNothing,
+    attach: (reference: ReferencingElement) =>
+      attachedBy(built.content, reference, state, contentKitOf(built, state, renderer)),
     containers: (node: ContainerPayload, children: readonly Node[]) =>
       renderContainer(node, children, built, state),
     content: (node: ContentPayload) =>
