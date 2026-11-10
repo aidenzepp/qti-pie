@@ -38,6 +38,7 @@ import { checkTree, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml, roundTrips } from "#plate/test/round-trip.ts";
+import { stubKind } from "#plate/test/stub-kind.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
@@ -51,6 +52,7 @@ const fixtures = {
   fractions: "qtiv3-examples/packaging/pci/src/fractions_deps_2.xml",
   hotspot: "QTI3_BPIG_Examples/items/QTI3-hotspot.xml",
   mathml: "QTI3_BPIG_Examples/items/MathML.xml",
+  selectPoint: "QTI3_BPIG_Examples/items/select-point-item_1.xml",
 } as const;
 
 /**
@@ -60,6 +62,15 @@ const fixtures = {
  * and editing nothing shared, so no test writes the verdict a stub's kind earns.
  */
 const hotspotVerdict: Verdict["verdict"] = modules.hotspot.implemented
+  ? "accepted"
+  : "accepted-with-unsupported";
+
+/**
+ * The verdict `open` gives the select-point fixture, whose one interaction is of the stub kind
+ * (`#plate/test/stub-kind.ts`), read the same way: `accepted-with-unsupported` while that module is
+ * a stub, `accepted` once it renders.
+ */
+const stubVerdict: Verdict["verdict"] = modules[stubKind].implemented
   ? "accepted"
   : "accepted-with-unsupported";
 
@@ -473,6 +484,7 @@ describe("the vertical witness over the fixtures", { tags: ["corpus"] }, () => {
         [fixtures.fractions, "refused"],
         [fixtures.mathml, "unchecked"],
         [fixtures.hotspot, hotspotVerdict],
+        [fixtures.selectPoint, stubVerdict],
         [fixtures.bg007, "accepted"],
         [fixtures.bg010, "accepted"],
         [fixtures.bg011, "accepted"],
@@ -515,12 +527,15 @@ describe("the vertical witness over the fixtures", { tags: ["corpus"] }, () => {
       }),
     );
 
-    it.effect("[I-7] [I-8] the hotspot item renders each state with its one notice", () =>
+    it.effect("[I-7] [I-8] the stub-kind item renders each state with its one notice", () =>
+      // The stub kind's fixture, not the hotspot item: this case's point is that an interaction a
+      // stub module shows as a notice leaves the rest of the item rendering, so it names the kind
+      // the table of modules holds as a stub the longest, and no module that lands meets it.
       checkRenders({
         counts: { controls: 0, labels: 0, prompts: 0 },
-        location: fixtures.hotspot,
-        markers: ["H"],
-        posted: ["R"],
+        location: fixtures.selectPoint,
+        markers: ["93 111"],
+        posted: ["50 50"],
       }),
     );
   });
@@ -594,10 +609,13 @@ describe("the vertical witness over the fixtures", { tags: ["corpus"] }, () => {
     );
 
     it.effect(
-      "[I-9b] [keyboard] the hotspot item shows one notice, posts its other entries, and scores 0",
+      "[I-9b] [keyboard] the stub-kind item shows one notice, posts its other entries, and scores 0",
       () =>
-        Effect.gen(function* hotspot() {
-          const { accepted } = yield* acceptFixture(fixtures.hotspot);
+        Effect.gen(function* stubItem() {
+          // The stub kind's fixture, not the hotspot item: the point is that an item whose only
+          // interaction is a notice still posts the host's entries and scores, so it names the kind
+          // the table of modules holds as a stub the longest.
+          const { accepted } = yield* acceptFixture(fixtures.selectPoint);
           const configuration = yield* configure({});
           const rendered = yield* Effect.fromResult(
             render(redact(accepted), configuration, { instance }),

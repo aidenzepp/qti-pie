@@ -507,8 +507,12 @@ const authored: readonly Authored[] = [
      * `accepted`. Its declaration is the one `skip.test.ts`'s stub item binds under, `multiple`
      * cardinality of `point`, because the binding rule reads the element's `max-choices` (unwritten,
      * `0`) against the declaration before any module does, so the bare element binds. The correct
-     * response is the one the `match_correct` template requires of every declaration. When Select
-     * Point lands, W0-AQ retires this row with the other stub-kind tests.
+     * response is the one the `match_correct` template requires of every declaration. Retirement:
+     * when Select Point lands while the table of modules still holds a stub, this row moves to that
+     * kind (its element from the table, its declaration to the base type it binds); when the last
+     * stub lands, this row is deleted, since no authored item can then show an item Notice, and
+     * whoever deletes it settles the stylesheet's Notice compounds, which the `[Q-12]` compound test
+     * then finds no element for.
      */
     bytes: itemBytes(
       "witness-select-point",
