@@ -30,7 +30,9 @@ describe("document/read.ts", () => {
 
         assert.strictEqual(refusal.rule, "reader-refused");
         assert.strictEqual(Option.getOrUndefined(refusal.readerRule), "undeclared-entity");
-        assert.deepStrictEqual(refusal.location, { kind: "document" });
+        // The first `&nbsp;` in the file; it declares no entity, so the substituted text the reader
+        // counts in keeps the source's lines and columns.
+        assert.deepStrictEqual(refusal.location, { column: 59, kind: "position", line: 1085 });
         assert.strictEqual(refusal.document, location);
         assert.include(refusal.detail["detail"], '"nbsp"');
       }),
@@ -46,6 +48,19 @@ describe("document/read.ts", () => {
       assert.strictEqual(refusal.location.kind === "position" ? refusal.location.line : 0, 1);
       assert.isTrue(Option.isNone(refusal.readerRule));
       assert.property(refusal.detail, "message");
+    }),
+  );
+
+  it.effect("a document nested 257 deep is refused under element-depth at a line and column", () =>
+    Effect.gen(function* tooDeep() {
+      const refusal = yield* Effect.flip(
+        readSource("hand-built.xml", bytesOf(`${"<a>".repeat(256)}\n<a>${"</a>".repeat(257)}`)),
+      );
+
+      assert.strictEqual(refusal.rule, "reader-refused");
+      assert.strictEqual(Option.getOrUndefined(refusal.readerRule), "element-depth");
+      // Where the parser stands after the 257th start tag, as crust places the refusal.
+      assert.deepStrictEqual(refusal.location, { column: 3, kind: "position", line: 2 });
     }),
   );
 

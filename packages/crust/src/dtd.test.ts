@@ -1,8 +1,9 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { lexProlog, substitute } from "#crust/dtd.ts";
 import type { AttlistEntry, ValuePiece } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
+import { assertRefusal } from "#crust/test/refusal.ts";
 
 /**
  * Lex `text` and return its general-entity table as `[name, replacement]` pairs in declaration
@@ -800,6 +801,102 @@ describe("the expansion budget", () => {
 
       assert.instanceOf(error, ReaderRefusal);
       assert.strictEqual(error.rule, "entity-expansion");
+    }),
+  );
+});
+
+/**
+ * Run `effect` and count how many times it scans a text for line breaks, which finding a line and
+ * column does and nothing else in the prolog's lexer does.
+ *
+ * @param effect - The lexing to watch.
+ * @returns The number of scans, once `effect` succeeds.
+ */
+const lineScans = <A, E>(effect: Effect.Effect<A, E>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => vi.spyOn(String.prototype, "matchAll")),
+    (spy) =>
+      effect.pipe(
+        Effect.map(
+          () =>
+            spy.mock.calls.filter(
+              ([pattern]) =>
+                pattern instanceof RegExp && pattern.source === String.raw`\r\n|[\n\r]`,
+            ).length,
+        ),
+      ),
+    (spy) =>
+      Effect.sync(() => {
+        spy.mockRestore();
+      }),
+  );
+
+describe("a refusal from the internal subset", () => {
+  it.effect("is placed at a default's reference to an entity the subset declares after it", () =>
+    Effect.gen(function* placesEarlyReference() {
+      const error = yield* refusalOf(
+        '<!DOCTYPE a [\n<!ATTLIST a d CDATA "1&e;2">\n<!ENTITY e "x">\n]><a/>',
+      );
+
+      assertRefusal(error, "undeclared-entity", Option.some({ column: 23, line: 2 }));
+    }),
+  );
+
+  it.effect("is placed at a default's reference to an entity the subset never declares", () =>
+    Effect.gen(function* placesUndeclaredReference() {
+      const error = yield* refusalOf('<!DOCTYPE a [\n<!ATTLIST a d CDATA "1&e;2">\n]><a/>');
+
+      assertRefusal(error, "undeclared-entity", Option.some({ column: 23, line: 2 }));
+    }),
+  );
+
+  it.effect("is placed at the percent sign of a parameter entity that names itself", () =>
+    Effect.gen(function* placesParameterCycle() {
+      const error = yield* refusalOf('<!DOCTYPE a [\n<!ENTITY % p "&#37;p;">\n  %p;\n]><a/>');
+
+      assertRefusal(error, "entity-cycle", Option.some({ column: 3, line: 3 }));
+    }),
+  );
+
+  it.effect("is placed at a default's reference that opens entities 21 deep", () =>
+    Effect.gen(function* placesDeepDefault() {
+      let subset = '<!ENTITY e0 "x">';
+      for (let n = 1; n <= 20; n += 1) {
+        subset += `<!ENTITY e${n} "&e${n - 1};">`;
+      }
+      const error = yield* refusalOf(
+        `<!DOCTYPE a [\n${subset}\n<!ATTLIST a d CDATA "&e20;">\n]><a/>`,
+      );
+
+      assertRefusal(error, "entity-expansion", Option.some({ column: 22, line: 3 }));
+    }),
+  );
+
+  it.effect("is placed at the percent sign of a parameter entity that opens 21 deep", () =>
+    Effect.gen(function* placesDeepParameter() {
+      let subset = '<!ENTITY % p0 "<!-- c -->">';
+      for (let n = 1; n <= 20; n += 1) {
+        subset += `<!ENTITY % p${n} "&#37;p${n - 1};">`;
+      }
+      const error = yield* refusalOf(`<!DOCTYPE a [\n${subset}\n\n  %p20;\n]><a/>`);
+
+      assertRefusal(error, "entity-expansion", Option.some({ column: 3, line: 4 }));
+    }),
+  );
+
+  it.effect("finds no line or column while the subset is admitted, only for a refusal", () =>
+    Effect.gen(function* findsNoPositionUntilRefused() {
+      const scans = yield* lineScans(
+        lexProlog(
+          `<!DOCTYPE a SYSTEM "a.dtd" [\n<!ENTITY e "x">\n<!ENTITY % p "<!-- c -->">\n${"%p;\n".repeat(2000)}<!ATTLIST a d CDATA "${"&e;&u;".repeat(2000)}">\n]><a/>`,
+        ),
+      );
+      const refused = yield* lineScans(
+        Effect.flip(lexProlog('<!DOCTYPE a [\n<!ATTLIST a d CDATA "1&e;2">\n]><a/>')),
+      );
+
+      assert.strictEqual(scans, 0);
+      assert.strictEqual(refused, 1);
     }),
   );
 });
