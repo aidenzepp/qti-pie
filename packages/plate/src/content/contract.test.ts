@@ -1,22 +1,15 @@
+import { readdirSync } from "node:fs";
 import { assert, describe, it, vi } from "@effect/vitest";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
-import { catalogInfoModule } from "#plate/content/catalog-info.ts";
-import { companionMaterialsModule } from "#plate/content/companion-materials.ts";
 import { ContentNotImplemented } from "#plate/content/contract.ts";
 import type {
+  ContentFeatureId,
   ContentModule,
   ItemContentModule,
   ItemParseContext,
   Placement,
 } from "#plate/content/contract.ts";
-import { feedbackBlockModule } from "#plate/content/feedback-block.ts";
-import { feedbackInlineModule } from "#plate/content/feedback-inline.ts";
-import { mathmlModule } from "#plate/content/mathml.ts";
-import { modalFeedbackModule } from "#plate/content/modal-feedback.ts";
-import { rubricModule } from "#plate/content/rubric.ts";
-import { stimulusRefModule } from "#plate/content/stimulus-ref.ts";
-import { stylesheetModule } from "#plate/content/stylesheet.ts";
 import { attr, doc, el, mathmlNamespace, qtiNamespace, text } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
@@ -43,124 +36,172 @@ interface MarkRecording {
 }
 
 /**
- * What a stub module must declare, beside the module as this test reads it.
+ * A content module as this test reads it, its node types erased to `unknown`, so a step of one
+ * that is not implemented can be handed a placeholder node it never reads.
  */
-interface Expected {
-  readonly element: string;
-  readonly feature: readonly string[];
+type AnyContentModule = ContentModule<string, unknown, unknown>;
+
+/**
+ * An item-placed content module as this test reads it, its node types erased.
+ */
+type AnyItemModule = ItemContentModule<string, unknown, unknown>;
+
+/**
+ * A content module this test found, beside the specifier and export name it is imported by, which
+ * `vi.doMock` replaces it through.
+ *
+ * @template M The module's type.
+ */
+interface Found<M extends AnyContentModule = AnyContentModule> {
+  readonly exported: string;
+  readonly module: M;
+  readonly specifier: string;
+}
+
+/**
+ * What an element's module declares, whether or not it is implemented: none of it changes when the
+ * module lands.
+ */
+interface Declared {
+  readonly feature: readonly ContentFeatureId[];
   readonly namespace: string;
-  readonly notice: string;
+  /**
+   * Whether the module has the normalisation hook.
+   */
+  readonly normalises: boolean;
   readonly placement: Placement;
 }
 
 /**
- * One stub module as this test reads it, its node types erased.
+ * What each content element's module declares, by the element's local name.
  */
-interface Stub {
-  readonly expected: Expected;
-  readonly module: ContentModule<string, never>;
-}
+const declared = {
+  math: { feature: ["I-18"], namespace: mathmlNamespace, normalises: true, placement: "body" },
+  "qti-assessment-stimulus-ref": {
+    feature: ["I-4"],
+    namespace: qtiNamespace,
+    normalises: false,
+    placement: "item",
+  },
+  "qti-catalog-info": {
+    feature: ["I-14"],
+    namespace: qtiNamespace,
+    normalises: false,
+    placement: "item",
+  },
+  "qti-companion-materials-info": {
+    feature: ["I-13"],
+    namespace: qtiNamespace,
+    normalises: false,
+    placement: "item",
+  },
+  "qti-feedback-block": {
+    feature: [],
+    namespace: qtiNamespace,
+    normalises: false,
+    placement: "body",
+  },
+  "qti-feedback-inline": {
+    feature: [],
+    namespace: qtiNamespace,
+    normalises: false,
+    placement: "body",
+  },
+  "qti-modal-feedback": {
+    feature: ["I-10"],
+    namespace: qtiNamespace,
+    normalises: false,
+    placement: "item",
+  },
+  "qti-rubric-block": {
+    feature: ["I-11"],
+    namespace: qtiNamespace,
+    normalises: false,
+    placement: "body",
+  },
+  "qti-stylesheet": {
+    feature: ["I-6"],
+    namespace: qtiNamespace,
+    normalises: false,
+    placement: "item",
+  },
+} satisfies Readonly<Record<string, Declared>>;
 
 /**
- * The QTI name a body walk gives a MathML `math` element's notice.
+ * {@link declared}, looked up by an element's local name.
  */
-const mathNotice = `{${mathmlNamespace}}math`;
+const declarations = new Map(Object.entries(declared));
 
 /**
- * Each stub module beside what it must declare, in the brief's order.
+ * Tell whether an export is a content module: an object naming its element and placement and
+ * saying whether it is implemented.
+ *
+ * @param value The export.
+ * @returns Whether it is a content module.
  */
-const stubs: readonly Stub[] = [
-  {
-    expected: {
-      element: "qti-rubric-block",
-      feature: ["I-11"],
-      namespace: qtiNamespace,
-      notice: "qti-rubric-block",
-      placement: "body",
-    },
-    module: rubricModule,
-  },
-  {
-    expected: {
-      element: "qti-feedback-inline",
-      feature: [],
-      namespace: qtiNamespace,
-      notice: "qti-feedback-inline",
-      placement: "body",
-    },
-    module: feedbackInlineModule,
-  },
-  {
-    expected: {
-      element: "qti-feedback-block",
-      feature: [],
-      namespace: qtiNamespace,
-      notice: "qti-feedback-block",
-      placement: "body",
-    },
-    module: feedbackBlockModule,
-  },
-  {
-    expected: {
-      element: "qti-modal-feedback",
-      feature: ["I-10"],
-      namespace: qtiNamespace,
-      notice: "qti-modal-feedback",
-      placement: "item",
-    },
-    module: modalFeedbackModule,
-  },
-  {
-    expected: {
-      element: "qti-companion-materials-info",
-      feature: ["I-13"],
-      namespace: qtiNamespace,
-      notice: "qti-companion-materials-info",
-      placement: "item",
-    },
-    module: companionMaterialsModule,
-  },
-  {
-    expected: {
-      element: "qti-stylesheet",
-      feature: ["I-6"],
-      namespace: qtiNamespace,
-      notice: "qti-stylesheet",
-      placement: "item",
-    },
-    module: stylesheetModule,
-  },
-  {
-    expected: {
-      element: "qti-catalog-info",
-      feature: ["I-14"],
-      namespace: qtiNamespace,
-      notice: "qti-catalog-info",
-      placement: "item",
-    },
-    module: catalogInfoModule,
-  },
-  {
-    expected: {
-      element: "qti-assessment-stimulus-ref",
-      feature: ["I-4"],
-      namespace: qtiNamespace,
-      notice: "qti-assessment-stimulus-ref",
-      placement: "item",
-    },
-    module: stimulusRefModule,
-  },
-  {
-    expected: {
-      element: "math",
-      feature: ["I-18"],
-      namespace: mathmlNamespace,
-      notice: mathNotice,
-      placement: "body",
-    },
-    module: mathmlModule,
-  },
-];
+const isContentModule = (value: unknown): value is AnyContentModule =>
+  Predicate.isObject(value) &&
+  Predicate.isString(value["element"]) &&
+  Predicate.isBoolean(value["implemented"]) &&
+  (value["placement"] === "body" || value["placement"] === "item");
+
+/**
+ * Read the content modules one file exports.
+ *
+ * @param file The file's name in `src/content/`.
+ * @returns Each content module it exports, beside its specifier and export name.
+ */
+const modulesIn = async (file: string): Promise<readonly Found[]> => {
+  const specifier = `#plate/content/${file}`;
+  const loaded: unknown = await import(specifier);
+
+  return Predicate.isObject(loaded)
+    ? Object.entries(loaded).flatMap(([exported, value]) =>
+        isContentModule(value) ? [{ exported, module: value, specifier }] : [],
+      )
+    : [];
+};
+
+/**
+ * The content modules each file of `src/content/` beside this test exports, in file order.
+ */
+const foundPerFile = await Promise.all(
+  readdirSync(new URL("./", import.meta.url))
+    .filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts") && file !== "contract.ts")
+    .toSorted()
+    .map(modulesIn),
+);
+
+/**
+ * Every content module, read from the files of `src/content/` beside this test, in file order: each
+ * module that lands is found here as it is, so no case names one.
+ */
+const contentModules: readonly Found[] = foundPerFile.flat();
+
+/**
+ * The content modules that are not implemented, each a stub whose `parse` gives the notice or the
+ * mark.
+ */
+const stubs = contentModules.filter(({ module }) => !module.implemented);
+
+/**
+ * The item-placed content modules, implemented or not.
+ */
+const itemModules: readonly Found<AnyItemModule>[] = contentModules.flatMap((found) =>
+  found.module.placement === "item"
+    ? [{ exported: found.exported, module: found.module, specifier: found.specifier }]
+    : [],
+);
+
+/**
+ * Give the feature the body walk's notice names for an element it does not read: its local name in
+ * QTI's namespace, `{namespace}local` in another.
+ *
+ * @param module The element's module.
+ * @returns The feature.
+ */
+const noticeOf = (module: AnyContentModule): string =>
+  module.namespace === qtiNamespace ? module.element : `{${module.namespace}}${module.element}`;
 
 /**
  * Construct a parse context that records every notice it is asked for.
@@ -221,63 +262,71 @@ const notImplementedBy = (step: () => void): Option.Option<string> => {
 };
 
 /**
- * Construct an element of a stub's own name and namespace, with no attributes and no children.
+ * Construct an element of a module's own name and namespace, with no attributes and no children.
  *
- * @param expected What the stub must declare.
+ * @param module The module.
  * @returns The element.
  */
-const elementOf = (expected: Expected): SourceElement =>
-  el(expected.element, [], [], expected.namespace);
+const elementOf = (module: AnyContentModule): SourceElement =>
+  el(module.element, [], [], module.namespace);
 
-describe("the stub content modules", () => {
-  it("are nine, one per element", () => {
-    assert.strictEqual(stubs.length, 9);
-    assert.strictEqual(new Set(stubs.map(({ module }) => module.element)).size, 9);
+describe("the content modules", () => {
+  it("are nine, one per element, each declared", () => {
+    const elements = contentModules.map(({ module }) => module.element);
+
+    assert.strictEqual(contentModules.length, 9);
+    assert.strictEqual(new Set(elements).size, 9);
+    assert.deepStrictEqual(elements.toSorted(), Object.keys(declared).toSorted());
   });
 
-  it("declare their element, namespace, placement and Appendix A features, and are not implemented", () => {
-    for (const { expected, module } of stubs) {
-      assert.strictEqual(module.element, expected.element);
-      assert.strictEqual(module.namespace, expected.namespace, expected.element);
-      assert.strictEqual(module.placement, expected.placement, expected.element);
-      assert.deepStrictEqual(module.feature, expected.feature, expected.element);
-      assert.isFalse(module.implemented, expected.element);
+  it("declare their namespace, placement, Appendix A features and normalisation hook", () => {
+    for (const { module } of contentModules) {
+      const expected = declarations.get(module.element);
+
+      assert.isDefined(expected, module.element);
+      assert.strictEqual(module.namespace, expected?.namespace, module.element);
+      assert.strictEqual(module.placement, expected?.placement, module.element);
+      assert.deepStrictEqual(module.feature, expected?.feature, module.element);
+      assert.strictEqual(module.normalise !== undefined, expected?.normalises, module.element);
     }
   });
+});
 
-  it("parse a body element as the unsupported node naming it, recorded once, as the body walk gives any element it does not read", () => {
-    for (const { expected, module } of stubs) {
+describe("a content module not implemented", () => {
+  it("parses a body element as the unsupported node naming it, recorded once, as the body walk gives any element it does not read", () => {
+    for (const { module } of stubs) {
       if (module.placement === "body") {
-        const path = `qti-assessment-item/qti-item-body/${expected.notice}`;
+        const notice = noticeOf(module);
+        const path = `qti-assessment-item/qti-item-body/${notice}`;
         const { context, noticed } = recording(path);
-        const unsupported: Unsupported = { feature: expected.notice, kind: "unsupported", path };
+        const unsupported: Unsupported = { feature: notice, kind: "unsupported", path };
 
         assert.deepStrictEqual(
-          module.parse(elementOf(expected), context),
+          module.parse(elementOf(module), context),
           Result.succeed(unsupported),
-          expected.element,
+          module.element,
         );
-        assert.deepStrictEqual(noticed, [expected.notice], expected.element);
+        assert.deepStrictEqual(noticed, [notice], module.element);
       }
     }
   });
 
-  it("parse an item element as none, its mark recorded once, as the item root's walk records any element it does not read", () => {
-    for (const { expected, module } of stubs) {
+  it("parses an item element as none, its mark recorded once, as the item root's walk records any element it does not read", () => {
+    for (const { module } of stubs) {
       if (module.placement === "item") {
-        const { context, marked } = markRecording(`qti-assessment-item/${expected.element}`);
+        const { context, marked } = markRecording(`qti-assessment-item/${module.element}`);
 
         assert.deepStrictEqual(
-          module.parse(elementOf(expected), context),
+          module.parse(elementOf(module), context),
           Result.succeed(Option.none()),
-          expected.element,
+          module.element,
         );
-        assert.deepStrictEqual(marked, [expected.element], expected.element);
+        assert.deepStrictEqual(marked, [module.element], module.element);
       }
     }
   });
 
-  it.effect("throw ContentNotImplemented, naming the element, from every step past parse", () =>
+  it.effect("throws ContentNotImplemented, naming the element, from every step past parse", () =>
     Effect.gen(function* everyStep() {
       const configuration = yield* configure({});
       const state: EmitState = {
@@ -287,20 +336,18 @@ describe("the stub content modules", () => {
         parts: yield* Effect.fromResult(resolveOverrides()),
       };
 
-      for (const { expected, module } of stubs) {
+      for (const { module } of stubs) {
         const steps: (readonly [string, () => void])[] = [
           [
             "redact",
             () => {
-              // oxlint-disable-next-line anti-slop/no-reflect-apply -- a stub's model node type is never, as it has none, so no typed call can hand it one; the step throws before it reads the placeholder handed here.
-              Reflect.apply(module.redact, undefined, [{}]);
+              module.redact({});
             },
           ],
           [
             "render",
             () => {
-              // oxlint-disable-next-line anti-slop/no-reflect-apply -- a stub's payload node type is never, as it has none, so no typed call can hand it one; the step throws before it reads the placeholder handed here.
-              Reflect.apply(module.render, undefined, [{}, state, noSupports]);
+              module.render({}, state, noSupports);
             },
           ],
         ];
@@ -309,7 +356,7 @@ describe("the stub content modules", () => {
           steps.push([
             "normalise",
             () => {
-              normalise(elementOf(expected));
+              normalise(elementOf(module));
             },
           ]);
         }
@@ -317,57 +364,27 @@ describe("the stub content modules", () => {
         for (const [name, step] of steps) {
           assert.deepStrictEqual(
             notImplementedBy(step),
-            Option.some(expected.element),
-            `${expected.element} ${name}`,
+            Option.some(module.element),
+            `${module.element} ${name}`,
           );
         }
       }
     }),
   );
-
-  it("give the MathML stub, alone, the normalisation hook", () => {
-    assert.deepStrictEqual(
-      stubs
-        .filter(({ module }) => module.normalise !== undefined)
-        .map(({ module }) => module.element),
-      ["math"],
-    );
-  });
 });
 
 describe("the body walk", () => {
   it.effect(
-    "dispatches each body content element to its stub, which gives the notice it gave before",
+    "dispatches each body element of a module not implemented to that module, which gives the notice it gave before, in the body or in a paragraph",
     () =>
       Effect.gen(function* walkBody() {
+        const placed = stubs.flatMap(({ module }) => (module.placement === "body" ? [module] : []));
+        const elements = (): SourceElement[] => placed.map(elementOf);
+        const notices = placed.map(noticeOf);
         const body = el(
           "qti-item-body",
           [],
-          [
-            el("p", [], [text("Read the passage.")]),
-            el(
-              "qti-rubric-block",
-              [attr("use", "instructions"), attr("view", "candidate")],
-              [el("p", [], [text("Rubric.")])],
-            ),
-            el("qti-feedback-block", [
-              attr("identifier", "HINT"),
-              attr("outcome-identifier", "FEEDBACK"),
-              attr("show-hide", "show"),
-            ]),
-            el(
-              "p",
-              [],
-              [
-                el("qti-feedback-inline", [
-                  attr("identifier", "HINT"),
-                  attr("outcome-identifier", "FEEDBACK"),
-                  attr("show-hide", "show"),
-                ]),
-                el("math", [], [], mathmlNamespace),
-              ],
-            ),
-          ],
+          [el("p", [], [text("Read the passage.")]), ...elements(), el("p", [], elements())],
         );
         const item = yield* Effect.fromResult(
           buildItem(
@@ -384,119 +401,65 @@ describe("the body walk", () => {
 
         assert.deepStrictEqual(
           item.unsupported.map(({ feature, shown }) => [feature, shown]),
-          [
-            ["qti-rubric-block", "notice"],
-            ["qti-feedback-block", "notice"],
-            ["qti-feedback-inline", "notice"],
-            [mathNotice, "notice"],
-          ],
+          [...notices, ...notices].map((notice) => [notice, "notice"]),
         );
         assert.deepStrictEqual(
           item.body.flatMap((node) => (node.kind === "unsupported" ? [node.feature] : [])),
-          ["qti-rubric-block", "qti-feedback-block"],
+          notices,
         );
       }),
   );
 });
 
-/**
- * An item-placed stub as the item root's walk test reads it: the module, the specifier and export
- * name it is imported by, and the attributes a hand-built item gives its element.
- */
-interface ItemStub {
-  readonly attributes: ReturnType<typeof attr>[];
-  readonly exported: string;
-  readonly module: ItemContentModule<string, never>;
-  readonly specifier: string;
-}
-
-/**
- * The five item-placed stubs, in the brief's order.
- */
-const itemStubs: readonly ItemStub[] = [
-  {
-    attributes: [
-      attr("identifier", "HINT"),
-      attr("outcome-identifier", "FEEDBACK"),
-      attr("show-hide", "show"),
-    ],
-    exported: "modalFeedbackModule",
-    module: modalFeedbackModule,
-    specifier: "#plate/content/modal-feedback.ts",
-  },
-  {
-    attributes: [],
-    exported: "companionMaterialsModule",
-    module: companionMaterialsModule,
-    specifier: "#plate/content/companion-materials.ts",
-  },
-  {
-    attributes: [attr("href", "style.css"), attr("type", "text/css")],
-    exported: "stylesheetModule",
-    module: stylesheetModule,
-    specifier: "#plate/content/stylesheet.ts",
-  },
-  {
-    attributes: [],
-    exported: "catalogInfoModule",
-    module: catalogInfoModule,
-    specifier: "#plate/content/catalog-info.ts",
-  },
-  {
-    attributes: [attr("identifier", "passage"), attr("href", "passage.xml")],
-    exported: "stimulusRefModule",
-    module: stimulusRefModule,
-    specifier: "#plate/content/stimulus-ref.ts",
-  },
-];
-
 describe("the item root's walk", () => {
-  for (const { attributes, exported, module, specifier } of itemStubs) {
-    it.effect(
-      `dispatches ${module.element} to its stub, which records the mark the walk recorded before`,
-      () =>
-        Effect.gen(function* walkRoot() {
-          const parsed: string[] = [];
-          const counting: ItemContentModule<string, never> = {
-            ...module,
-            parse: (source, context) => {
-              parsed.push(source.local);
+  for (const { exported, module, specifier } of itemModules) {
+    if (!module.implemented) {
+      it.effect(
+        `dispatches ${module.element}, whose module is not implemented, to that module, which records the mark the walk recorded before`,
+        () =>
+          Effect.gen(function* walkRoot() {
+            const parsed: string[] = [];
+            const counting: AnyItemModule = {
+              ...module,
+              parse: (source, context) => {
+                parsed.push(source.local);
 
-              return module.parse(source, context);
-            },
-          };
-          vi.resetModules();
-          vi.doMock(specifier, () => ({ [exported]: counting }));
+                return module.parse(source, context);
+              },
+            };
+            vi.resetModules();
+            vi.doMock(specifier, () => ({ [exported]: counting }));
 
-          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
-          const item = yield* Effect.fromResult(
-            model.buildItem(
-              doc(
-                "item.xml",
-                el(
-                  "qti-assessment-item",
-                  [attr("identifier", "item"), attr("title", "Item")],
-                  [el(module.element, attributes), el("qti-item-body", [], [])],
+            const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+            const item = yield* Effect.fromResult(
+              model.buildItem(
+                doc(
+                  "item.xml",
+                  el(
+                    "qti-assessment-item",
+                    [attr("identifier", "item"), attr("title", "Item")],
+                    [el(module.element, []), el("qti-item-body", [], [])],
+                  ),
                 ),
               ),
-            ),
-          );
+            );
 
-          assert.deepStrictEqual(parsed, [module.element]);
-          assert.deepStrictEqual(
-            item.unsupported.map(({ feature, path, shown }) => [feature, path, shown]),
-            [[module.element, `qti-assessment-item/${module.element}`, "mark"]],
-          );
-          assert.isUndefined(item.content);
-        }).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              vi.doUnmock(specifier);
-              vi.resetModules();
-            }),
+            assert.deepStrictEqual(parsed, [module.element]);
+            assert.deepStrictEqual(
+              item.unsupported.map(({ feature, path, shown }) => [feature, path, shown]),
+              [[module.element, `qti-assessment-item/${module.element}`, "mark"]],
+            );
+            assert.isUndefined(item.content);
+          }).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                vi.doUnmock(specifier);
+                vi.resetModules();
+              }),
+            ),
           ),
-        ),
-    );
+      );
+    }
   }
 });
 
@@ -510,25 +473,22 @@ interface LandedNode {
 }
 
 describe("the item model", () => {
-  for (const { attributes, exported, module, specifier } of itemStubs) {
+  for (const { exported, module, specifier } of itemModules) {
     for (const count of [1, 2]) {
       it.effect(
         `holds the node a landed module reads from each of ${String(count)} ${module.element}, in document order, by its element`,
         () =>
           Effect.gen(function* holdNodes() {
-            const landing = {
+            const landing: AnyItemModule = {
               ...module,
-              parse: (
-                source: SourceElement,
-                context: ItemParseContext,
-              ): Result.Result<Option.Option<LandedNode>> =>
+              parse: (source, context): Result.Result<Option.Option<LandedNode>> =>
                 Result.succeed(Option.some({ element: source.local, path: context.path })),
             };
             vi.resetModules();
             vi.doMock(specifier, () => ({ [exported]: landing }));
 
             const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
-            const parts = Array.from({ length: count }, () => el(module.element, attributes));
+            const parts = Array.from({ length: count }, () => el(module.element, []));
             const item = yield* Effect.fromResult(
               model.buildItem(
                 doc(

@@ -22,8 +22,7 @@ import type { EmitState, Payload, ValidationMessage } from "#plate/payload.ts";
 
 /**
  * Build one item part through its row and the embedder's replacement, if any, with its
- * `data-slot` marker beside the attributes it is given: the Root, the Status parts here, and the
- * body's Notice.
+ * `data-slot` marker beside the attributes it is given: the Root and the Status parts here.
  *
  * @param parts The resolved part overrides.
  * @param part The item part.

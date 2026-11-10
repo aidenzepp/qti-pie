@@ -1,51 +1,29 @@
+import { readdirSync } from "node:fs";
 import { assert, describe, it, vi } from "@effect/vitest";
-import { Effect, Option, Result, pipe } from "effect";
+import { Effect, Option, Predicate, Result, pipe } from "effect";
 import { configure } from "#plate/configuration.ts";
-import type { Configuration } from "#plate/configuration.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import { h } from "#plate/emit/node.ts";
 import type { Attributes, PartFunction } from "#plate/emit/node.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
-import { associateModule } from "#plate/interactions/associate.ts";
-import { NotImplemented, partRow } from "#plate/interactions/contract.ts";
-import type { InteractionModule, ParseContext, PartSpec } from "#plate/interactions/contract.ts";
-import { drawingModule } from "#plate/interactions/drawing.ts";
-import { endAttemptModule } from "#plate/interactions/end-attempt.ts";
-import { gapMatchModule } from "#plate/interactions/gap-match.ts";
-import { graphicAssociateModule } from "#plate/interactions/graphic-associate.ts";
-import { graphicGapMatchModule } from "#plate/interactions/graphic-gap-match.ts";
-import { graphicOrderModule } from "#plate/interactions/graphic-order.ts";
-import { hotspotModule } from "#plate/interactions/hotspot.ts";
-import { hottextModule } from "#plate/interactions/hottext.ts";
-import { matchModule } from "#plate/interactions/match.ts";
-import { mediaModule } from "#plate/interactions/media.ts";
-import { orderModule } from "#plate/interactions/order.ts";
-import { portableCustomModule } from "#plate/interactions/portable-custom.ts";
-import { positionObjectModule } from "#plate/interactions/position-object.ts";
-import { selectPointModule } from "#plate/interactions/select-point.ts";
-import { sliderModule } from "#plate/interactions/slider.ts";
-import { uploadModule } from "#plate/interactions/upload.ts";
+import { NotImplemented, isModuleKind, partRow } from "#plate/interactions/contract.ts";
+import type {
+  FeatureId,
+  InteractionModule,
+  ModuleKind,
+  ParseContext,
+  PartSpec,
+} from "#plate/interactions/contract.ts";
 import type {
   BodyNode,
   GapMatchInteraction,
   StubInteraction,
-  StubbedInteraction,
   Unsupported,
 } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { EmitState, Payload, PayloadNode } from "#plate/payload.ts";
-
-/**
- * What every stub step is handed beside its kind's placeholder node.
- */
-interface StepInputs {
-  readonly configuration: Configuration;
-  readonly payload: Payload;
-  readonly state: EmitState;
-  readonly value: Value;
-}
 
 /**
  * A parse context and the features its notices named, in order.
@@ -56,22 +34,89 @@ interface Recording {
 }
 
 /**
- * One stub module as this test reads it, its kind's types erased: what it declares, its parse on
- * its own element, and every step past parse, each run on its kind's placeholder node.
+ * An interaction module as this test reads it, its kind's types erased: its model node `unknown`,
+ * its payload node any node that names its response, so a step of one that is not implemented can
+ * be handed a placeholder node it never reads.
  */
-interface Stub {
-  readonly declared: {
-    readonly element: string;
-    readonly feature: string;
-    readonly implemented: boolean;
-    readonly kind: string;
-    readonly owner: string;
-    readonly parts: readonly string[];
-  };
-  readonly expected: { readonly feature: string; readonly kind: string };
-  readonly parse: (context: ParseContext) => Result.Result<unknown, unknown>;
-  readonly steps: (inputs: StepInputs) => readonly (readonly [string, () => void])[];
-}
+type AnyModule = InteractionModule<
+  ModuleKind,
+  unknown,
+  { readonly response: string },
+  string,
+  unknown
+>;
+
+/**
+ * The Appendix A feature each module kind declares, whether or not its module is implemented: it
+ * does not change when the module lands.
+ */
+const features = {
+  associate: "Q-1",
+  drawing: "Q-3",
+  "end-attempt": "Q-4",
+  "gap-match": "Q-6",
+  "graphic-associate": "Q-7",
+  "graphic-gap-match": "Q-8",
+  "graphic-order": "Q-9",
+  hotspot: "Q-10",
+  hottext: "Q-11",
+  match: "Q-13",
+  media: "Q-14",
+  order: "Q-15",
+  "portable-custom": "Q-16",
+  "position-object": "Q-17",
+  "select-point": "Q-18",
+  slider: "Q-19",
+  upload: "Q-21",
+} as const satisfies { readonly [K in ModuleKind]: FeatureId };
+
+/**
+ * Tell whether an export is an interaction module: an object naming its kind and element and
+ * saying whether it is implemented.
+ *
+ * @param value The export.
+ * @returns Whether it is an interaction module.
+ */
+const isInteractionModule = (value: unknown): value is AnyModule =>
+  Predicate.isObject(value) &&
+  Predicate.isString(value["kind"]) &&
+  Predicate.isString(value["element"]) &&
+  Predicate.isBoolean(value["implemented"]);
+
+/**
+ * Read the interaction modules one file exports.
+ *
+ * @param file The file's name in `src/interactions/`.
+ * @returns Each interaction module it exports.
+ */
+const modulesIn = async (file: string): Promise<readonly AnyModule[]> => {
+  const specifier = `#plate/interactions/${file}`;
+  const loaded: unknown = await import(specifier);
+
+  return Predicate.isObject(loaded) ? Object.values(loaded).filter(isInteractionModule) : [];
+};
+
+/**
+ * The interaction modules each file of `src/interactions/` beside this test exports, in file
+ * order.
+ */
+const foundPerFile = await Promise.all(
+  readdirSync(new URL("./", import.meta.url))
+    .filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts") && file !== "contract.ts")
+    .toSorted()
+    .map(modulesIn),
+);
+
+/**
+ * Every interaction module, read from the files of `src/interactions/` beside this test, in file
+ * order: each module that lands is found here as it is, so no case names one.
+ */
+const modules: readonly AnyModule[] = foundPerFile.flat();
+
+/**
+ * The interaction modules that are not implemented, each a stub whose `parse` gives the notice.
+ */
+const stubs = modules.filter((module) => !module.implemented);
 
 /**
  * Construct a QTI interaction element with no attributes and no children.
@@ -88,136 +133,21 @@ const elementNamed = (local: string): SourceElement => ({
 });
 
 /**
- * Read a stub module for this test: its declarations, its parse, and its steps on a placeholder
- * node of its kind, which no hub ever hands it.
+ * Construct a placeholder node of a module's kind, which no hub ever hands a stub: a stub's steps
+ * throw before they read it.
  *
- * @param module The stub module.
- * @param kind The kind it must declare.
- * @param feature The Appendix A feature it must declare.
- * @returns The stub as this test reads it.
+ * @param module The module.
+ * @returns The node.
  */
-const stubOf = <K extends StubbedInteraction["kind"]>(
-  module: InteractionModule<K, StubInteraction<K>, never>,
-  kind: string,
-  feature: string,
-): Stub => {
-  const node: StubInteraction<K> = {
-    ariaLabel: Option.none(),
-    ariaLabelledby: Option.none(),
-    class: "",
-    kind: module.kind,
-    path: `qti-assessment-item/qti-item-body/${module.element}`,
-    prompt: Option.none(),
-    response: "RESPONSE",
-  };
-
-  return {
-    declared: {
-      element: module.element,
-      feature: module.feature,
-      implemented: module.implemented,
-      kind: module.kind,
-      owner: module.owner,
-      parts: Object.keys(module.parts),
-    },
-    expected: { feature, kind },
-    parse: (context) => module.parse(elementNamed(module.element), context),
-    steps: ({ configuration, payload, state, value }) => [
-      [
-        "bindings",
-        () => {
-          module.bindings(node);
-        },
-      ],
-      [
-        "connect",
-        () => {
-          // oxlint-disable-next-line anti-slop/no-reflect-apply -- a stub's payload node type is never, as it has none, so no typed call can hand it one; the step throws before it reads the placeholder handed here.
-          Reflect.apply(module.connect, undefined, [node, payload, configuration.locale]);
-        },
-      ],
-      [
-        "controls",
-        () => {
-          module.controls(node);
-        },
-      ],
-      [
-        "nullValue",
-        () => {
-          module.nullValue(node);
-        },
-      ],
-      [
-        "redact",
-        () => {
-          module.redact(node);
-        },
-      ],
-      [
-        "render",
-        () => {
-          // oxlint-disable-next-line anti-slop/no-reflect-apply -- a stub's payload node type is never, as it has none, so no typed call can hand it one; the step throws before it reads the placeholder handed here.
-          Reflect.apply(module.render, undefined, [node, payload, state]);
-        },
-      ],
-      [
-        "restore",
-        () => {
-          module.restore(node, value);
-        },
-      ],
-      [
-        "sequence",
-        () => {
-          module.sequence(node, Option.none(), "q1");
-        },
-      ],
-      [
-        "solution",
-        () => {
-          module.solution(node, value);
-        },
-      ],
-      [
-        "unnamed",
-        () => {
-          module.unnamed(node, true);
-        },
-      ],
-      [
-        "validate",
-        () => {
-          module.validate(node, value, configuration);
-        },
-      ],
-    ],
-  };
-};
-
-/**
- * Each stub module beside the kind and the Appendix A feature it must declare, in the brief's
- * order.
- */
-const stubs: readonly Stub[] = [
-  stubOf(gapMatchModule, "gap-match", "Q-6"),
-  stubOf(graphicGapMatchModule, "graphic-gap-match", "Q-8"),
-  stubOf(hotspotModule, "hotspot", "Q-10"),
-  stubOf(hottextModule, "hottext", "Q-11"),
-  stubOf(matchModule, "match", "Q-13"),
-  stubOf(associateModule, "associate", "Q-1"),
-  stubOf(orderModule, "order", "Q-15"),
-  stubOf(graphicAssociateModule, "graphic-associate", "Q-7"),
-  stubOf(graphicOrderModule, "graphic-order", "Q-9"),
-  stubOf(positionObjectModule, "position-object", "Q-17"),
-  stubOf(selectPointModule, "select-point", "Q-18"),
-  stubOf(drawingModule, "drawing", "Q-3"),
-  stubOf(sliderModule, "slider", "Q-19"),
-  stubOf(mediaModule, "media", "Q-14"),
-  stubOf(uploadModule, "upload", "Q-21"),
-  stubOf(endAttemptModule, "end-attempt", "Q-4"),
-  stubOf(portableCustomModule, "portable-custom", "Q-16"),
-];
+const placeholderOf = (module: AnyModule): StubInteraction<ModuleKind> => ({
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  class: "",
+  kind: module.kind,
+  path: `qti-assessment-item/qti-item-body/${module.element}`,
+  prompt: Option.none(),
+  response: "RESPONSE",
+});
 
 /**
  * Construct a parse context that records every notice it is asked for.
@@ -255,69 +185,143 @@ const notImplementedBy = (step: () => void): Option.Option<string> => {
     : Option.none();
 };
 
-describe("the stub interaction modules", () => {
-  it("are seventeen, one per kind", () => {
-    assert.strictEqual(stubs.length, 17);
-    assert.strictEqual(new Set(stubs.map((stub) => stub.declared.kind)).size, 17);
+describe("the interaction modules", () => {
+  it("are seventeen, one per module kind", () => {
+    const kinds = modules.map((module) => module.kind);
+
+    assert.strictEqual(modules.length, 17);
+    assert.strictEqual(new Set(kinds).size, 17);
+    assert.isTrue(kinds.every(isModuleKind));
   });
 
   it("declare each kind's Appendix A feature, owner and QTI element name", () => {
-    for (const { declared, expected } of stubs) {
-      assert.strictEqual(declared.kind, expected.kind);
-      assert.strictEqual(declared.feature, expected.feature, expected.kind);
-      assert.strictEqual(declared.owner, `${expected.kind}-interaction`, expected.kind);
-      assert.strictEqual(declared.element, `qti-${expected.kind}-interaction`, expected.kind);
+    for (const module of modules) {
+      assert.strictEqual(module.feature, features[module.kind], module.kind);
+      assert.strictEqual(module.owner, `${module.kind}-interaction`, module.kind);
+      assert.strictEqual(module.element, `qti-${module.kind}-interaction`, module.kind);
+    }
+  });
+});
+
+describe("an interaction module not implemented", () => {
+  it("holds no part row", () => {
+    for (const module of stubs) {
+      assert.deepStrictEqual(Object.keys(module.parts), [], module.kind);
     }
   });
 
-  it("are not implemented, and hold no part row", () => {
-    for (const { declared, expected } of stubs) {
-      assert.isFalse(declared.implemented, expected.kind);
-      assert.deepStrictEqual(declared.parts, [], expected.kind);
-    }
-  });
-
-  it("parse their element as the unsupported node naming it, recorded once, as any unknown QTI element is", () => {
-    for (const { declared, expected, parse } of stubs) {
-      const path = `qti-assessment-item/qti-item-body/${declared.element}`;
+  it("parses its element as the unsupported node naming it, recorded once, as any unknown QTI element is", () => {
+    for (const module of stubs) {
+      const path = `qti-assessment-item/qti-item-body/${module.element}`;
       const { context, noticed } = recording(path);
-      const unsupported: Unsupported = { feature: declared.element, kind: "unsupported", path };
+      const unsupported: Unsupported = { feature: module.element, kind: "unsupported", path };
 
-      assert.deepStrictEqual(parse(context), Result.succeed(unsupported), expected.kind);
-      assert.deepStrictEqual(noticed, [declared.element], expected.kind);
+      assert.deepStrictEqual(
+        module.parse(elementNamed(module.element), context),
+        Result.succeed(unsupported),
+        module.kind,
+      );
+      assert.deepStrictEqual(noticed, [module.element], module.kind);
     }
   });
 
-  it.effect("throw NotImplemented, naming the feature, from every step past parse", () =>
+  it.effect("throws NotImplemented, naming the feature, from every step past parse", () =>
     Effect.gen(function* everyStep() {
       const configuration = yield* configure({});
-      const inputs: StepInputs = {
-        configuration,
-        payload: {
-          body: [],
-          finished: false,
-          instance: "q1",
-          lang: "en",
-          messages: [],
-          mode: "answering",
-          notices: [],
-          title: "",
-        },
-        state: {
-          assetBase: "",
-          headingLevel: 1,
-          locale: configuration.locale,
-          parts: yield* Effect.fromResult(resolveOverrides()),
-        },
-        value: { baseType: "identifier", cardinality: "single", values: [] },
+      const payload: Payload = {
+        body: [],
+        finished: false,
+        instance: "q1",
+        lang: "en",
+        messages: [],
+        mode: "answering",
+        notices: [],
+        title: "",
       };
+      const state: EmitState = {
+        assetBase: "",
+        headingLevel: 1,
+        locale: configuration.locale,
+        parts: yield* Effect.fromResult(resolveOverrides()),
+      };
+      const value: Value = { baseType: "identifier", cardinality: "single", values: [] };
 
-      for (const { declared, expected, steps } of stubs) {
-        for (const [name, step] of steps(inputs)) {
+      for (const module of stubs) {
+        const node = placeholderOf(module);
+        const steps: readonly (readonly [string, () => void])[] = [
+          [
+            "bindings",
+            () => {
+              module.bindings(node);
+            },
+          ],
+          [
+            "connect",
+            () => {
+              module.connect(node, payload, configuration.locale);
+            },
+          ],
+          [
+            "controls",
+            () => {
+              module.controls(node);
+            },
+          ],
+          [
+            "nullValue",
+            () => {
+              module.nullValue(node);
+            },
+          ],
+          [
+            "redact",
+            () => {
+              module.redact(node);
+            },
+          ],
+          [
+            "render",
+            () => {
+              module.render(node, payload, state);
+            },
+          ],
+          [
+            "restore",
+            () => {
+              module.restore(node, value);
+            },
+          ],
+          [
+            "sequence",
+            () => {
+              module.sequence(node, Option.none(), "q1");
+            },
+          ],
+          [
+            "solution",
+            () => {
+              module.solution(node, value);
+            },
+          ],
+          [
+            "unnamed",
+            () => {
+              module.unnamed(node, true);
+            },
+          ],
+          [
+            "validate",
+            () => {
+              module.validate(node, value, configuration);
+            },
+          ],
+        ];
+
+        for (const [name, step] of steps) {
           assert.deepStrictEqual(
             notImplementedBy(step),
-            Option.some(declared.feature),
-            `${expected.kind} ${name}`,
+            Option.some(module.feature),
+            `${module.kind} ${name}`,
           );
         }
       }
