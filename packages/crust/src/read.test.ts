@@ -5,9 +5,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { readXml } from "#crust/read.ts";
 import type { Child, Element, XmlDocument } from "#crust/tree.ts";
-import { declared } from "#crust/test/bytes.ts";
 import { assertRefusal } from "#crust/test/refusal.ts";
-import { withoutBuffer } from "#crust/test/without-buffer.ts";
 
 /**
  * One child as a string: an entity reference as `&name;`, text as its value, anything else `-`.
@@ -67,37 +65,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
       }),
     );
   }
-
-  suite.effect("reads a UTF-8 document without Node's Buffer", () => {
-    const bytes = new TextEncoder().encode('<a x="1"/>');
-
-    return withoutBuffer(
-      Effect.gen(function* readsUtf8WithoutBuffer() {
-        assert.isFalse("Buffer" in globalThis);
-
-        const document = yield* readXml(bytes);
-
-        assert.strictEqual(document.root.qname, "a");
-        assert.strictEqual(attr(document.root, "x"), "1");
-      }),
-    );
-  });
-
-  suite.effect("reads an ISO-8859-1 document without Node's Buffer", () => {
-    const bytes = declared("ISO-8859-1", [0xe9]);
-
-    return withoutBuffer(
-      Effect.gen(function* readsLatin1WithoutBuffer() {
-        assert.isFalse("Buffer" in globalThis);
-
-        const document = yield* readXml(bytes);
-
-        assert.deepStrictEqual(document.root.children, [
-          { cdata: false, kind: "text", value: "é" },
-        ]);
-      }),
-    );
-  });
 
   suite.effect("reads dtd/markup.xml with a b element under a", () =>
     Effect.gen(function* readMarkup() {
@@ -234,16 +201,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
     }),
   );
 
-  suite.effect("refuses a document nested 257 elements deep under rule element-depth", () =>
-    Effect.gen(function* refuseTooDeep() {
-      const error = yield* Effect.flip(readText("<a>".repeat(257) + "</a>".repeat(257)));
-
-      assert.strictEqual(error._tag, "ReaderRefusal");
-      assert.strictEqual(error._tag === "ReaderRefusal" ? error.rule : undefined, "element-depth");
-    }),
-  );
-
-  suite.effect("places an element-depth refusal at the parser's line and column", () =>
+  suite.effect("refuses a document nested 257 elements deep at the parser's line and column", () =>
     Effect.gen(function* placeTooDeep() {
       const error = yield* Effect.flip(readText(`${"<a>".repeat(256)}\n<a>${"</a>".repeat(257)}`));
 

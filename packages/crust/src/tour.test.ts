@@ -1,24 +1,20 @@
-/* oxlint-disable unicorn/text-encoding-identifier-case -- The XML 1.0 section 4.3.3 label spellings (`ISO-8859-1`, `US-ASCII`, `UTF-8`) are the labels `exportCharset` takes and returns, not identifiers passed to a Node encoding API. */
 /**
- * The tour every walk of crust's trees reads, held to a recursive one, and the walks that read it
- * at depths and widths recursion cannot reach.
+ * The tour every walk of crust's trees reads, held to a recursive one.
  *
  * The oracle (`stepsOf`) is the tour's definition written as recursion: an element opens, its
  * children's tours follow in order, and it closes; a leaf is one step. It is exhausted over every
- * labelled plane tree of 1 to 7 nodes. The deep and wide trees then hold `exportCharset`, whose
- * inspection reads the tour, to the label it must pick: a chain or a row of 100,000 elements, with
- * an unwritable comment at its far end or none.
+ * labelled plane tree of 1 to 7 nodes. The walks that read the tour at depths and widths recursion
+ * cannot reach are `scale.test.ts`'s.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { searched } from "@grizzle/testing/vitest";
-import { Effect, Formatter, Option } from "effect";
-import { exportCharset } from "#crust/charset.ts";
+import { Effect, Formatter } from "effect";
 import { caseHang, labelled, PLANE_TREES_TO_7, planeTreeUpTo } from "#crust/test/trees.ts";
 import { preorder, tour } from "#crust/tour.ts";
 import type { Step } from "#crust/tour.ts";
-import type { Child, Element, XmlDocument } from "#crust/tree.ts";
+import type { Child } from "#crust/tree.ts";
 
 /**
  * The oracle: a node's tour, by recursion.
@@ -89,81 +85,4 @@ describe("the tour", () => {
         ),
       ),
   );
-});
-
-/**
- * How many elements the deep and the wide trees hold.
- */
-const SIZE = 100_000;
-
-/**
- * An element of no namespace with no attributes.
- *
- * @param qname - Its name.
- * @param children - Its children.
- * @returns The element.
- */
-const element = (qname: string, children: readonly Child[]): Element => ({
-  attributes: [],
-  children,
-  kind: "element",
-  local: qname,
-  namespace: "",
-  prefix: "",
-  qname,
-});
-
-/**
- * A chain of `depth` elements, each the only child of the one above, the deepest holding `bottom`.
- *
- * @param depth - The elements in the chain.
- * @param bottom - The deepest element's children.
- * @returns The chain's top element.
- */
-const chain = (depth: number, bottom: readonly Child[]): Element => {
-  let top = element("a", bottom);
-  for (let at = 1; at < depth; at += 1) {
-    top = element("a", [top]);
-  }
-
-  return top;
-};
-
-/**
- * A document of `root` alone, read under ISO-8859-1.
- *
- * @param root - The root element.
- * @returns The document.
- */
-const documentOf = (root: Element): XmlDocument => ({
-  charset: "ISO-8859-1",
-  declaration: Option.none(),
-  doctype: Option.none(),
-  epilog: [],
-  prolog: [],
-  root,
-});
-
-/**
- * A comment no single-byte label can write.
- */
-const unwritable: Child = { kind: "comment", text: "€" };
-
-describe("exportCharset", () => {
-  it(`inspects a chain and a row of ${SIZE} elements, keeping a single-byte label unless an unwritable comment sits at the far end`, () => {
-    const deep = chain(SIZE, []);
-    const deepUnwritable = chain(SIZE, [unwritable]);
-    const wide = element(
-      "r",
-      Array.from({ length: SIZE }, () => element("a", [])),
-    );
-    const wideUnwritable = element("r", [...wide.children, unwritable]);
-
-    for (const label of ["ISO-8859-1", "US-ASCII"]) {
-      assert.strictEqual(exportCharset(label, documentOf(deep)), label);
-      assert.strictEqual(exportCharset(label, documentOf(wide)), label);
-      assert.strictEqual(exportCharset(label, documentOf(deepUnwritable)), "UTF-8");
-      assert.strictEqual(exportCharset(label, documentOf(wideUnwritable)), "UTF-8");
-    }
-  });
 });
