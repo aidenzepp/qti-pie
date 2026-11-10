@@ -37,6 +37,15 @@ const sessionExclusions = {
 const isDomModule = (path: string): boolean => path.endsWith(".dom.ts");
 
 /**
+ * Whether a path is a React module (`*.tsx`): the DOM program alone types it, since the root
+ * program excludes plate's `.tsx`, and it loads React, so it is never a browser root.
+ *
+ * @param path A path under the package.
+ * @returns True for the suffix.
+ */
+const isReactModule = (path: string): boolean => path.endsWith(".tsx");
+
+/**
  * Whether a path is in the DOM program: a module that runs in a page (`*.dom.ts`) or a test that
  * runs inside one (`*.dom.test.ts`).
  *
@@ -170,12 +179,13 @@ interface DomImport {
 }
 
 /**
- * List the imports of DOM-program modules (`*.dom.ts`) that modules under `src/` outside the DOM
- * program make, type-only declarations and names included. The root program's `exclude` does not
- * stop an import from pulling a DOM module into it, where its DOM names then fail to type-check
- * with no message that says why. Only `src/` is read: the package's `scripts/`, its top-level
- * `hosts/` and its Vite configs are not, so an import there is refused by the root `tsc` alone. A
- * declaration {@link readImports} cannot classify, and a dynamic `import(…)`, are not seen.
+ * List the imports of DOM-program modules (`*.dom.ts`, and the React modules, `*.tsx`) that modules
+ * under `src/` outside the DOM program make, type-only declarations and names included. The root
+ * program's `exclude` does not stop an import from pulling a DOM module into it, where its DOM
+ * names then fail to type-check with no message that says why. Only `src/` is read: the package's
+ * `scripts/`, its top-level `hosts/` and its Vite configs are not, so an import there is refused by
+ * the root `tsc` alone. A declaration {@link readImports} cannot classify, and a dynamic
+ * `import(…)`, are not seen.
  *
  * @param sources The modules' sources, by path under the package (`src/<x>`).
  * @returns Each such import, by module in the order given and then by line.
@@ -185,7 +195,9 @@ const domImports = (sources: ReadonlyMap<string, string>): readonly DomImport[] 
     inDomProgram(module)
       ? []
       : readImports(source).imports.flatMap(({ line, specifier }) =>
-          isDomModule(resolvePlate(specifier) ?? "") ? [{ line, module, specifier }] : [],
+          [isDomModule, isReactModule].some((inPage) => inPage(resolvePlate(specifier) ?? ""))
+            ? [{ line, module, specifier }]
+            : [],
         ),
   );
 
@@ -234,13 +246,17 @@ describe("the browser modules", () => {
 });
 
 describe("the DOM program", () => {
-  it("has its modules imported by no module under src/ outside it, type-only imports included", () => {
-    const offender = 'import type { Y } from "#plate/y.dom.ts";\n';
+  it("has its modules, the React modules included, imported by no module under src/ outside it, type-only imports included", () => {
+    const offender =
+      'import type { Y } from "#plate/y.dom.ts";\nimport { Z } from "#plate/react/z.tsx";\n';
 
     assert.deepStrictEqual(domImports(modules), []);
     assert.deepStrictEqual(
       domImports(new Map([...modules, ["src/x.ts", offender], ["src/x.dom.test.ts", offender]])),
-      [{ line: 1, module: "src/x.ts", specifier: "#plate/y.dom.ts" }],
+      [
+        { line: 1, module: "src/x.ts", specifier: "#plate/y.dom.ts" },
+        { line: 2, module: "src/x.ts", specifier: "#plate/react/z.tsx" },
+      ],
     );
   });
 });

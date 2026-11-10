@@ -356,11 +356,13 @@ describe("the core, from src/index.ts", () => {
     assert.deepStrictEqual(exportedAmong(new Map([["acceptMarkedTest", acceptMarkedTest]])), []);
   });
 
-  it("publishes src/index.ts as the exports map's only script module", () => {
-    assert.deepStrictEqual(
-      Object.entries(readManifest().exports).filter(([, target]) => /\.[cm]?[jt]s$/u.test(target)),
-      [[".", "./src/index.ts"]],
-    );
+  it('publishes the core at ".", the React layer at "./react", the runtime at "./runtime" and the style sheet, and nothing else', () => {
+    assert.deepStrictEqual(readManifest().exports, {
+      ".": "./src/index.ts",
+      "./react": "./src/react.tsx",
+      "./runtime": "./src/runtime.dom.ts",
+      "./styles.css": "./src/styles.css",
+    });
   });
 
   it("holds playwright-core and playwright at exactly 1.64.1 and @vitest/browser-playwright at exactly 5.1.0 among the devDependencies, never the dependencies", () => {

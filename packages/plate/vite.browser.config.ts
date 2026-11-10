@@ -11,10 +11,10 @@ const { prewarm: _prewarm, ...provider } = playwright();
 
 /**
  * The browser files' run (`test:browser`), in one run and one report, as two projects: the
- * Node-driven files (`src/**\/*.browser.test.ts`, project `node`), one at a time in one worker,
- * and the in-page files (`src/**\/*.dom.test.ts`, project `page`), inside Chromium and WebKit
- * headless under Vitest's browser mode with the Playwright provider. The unit run
- * (`vite.config.ts`) excludes both.
+ * Node-driven files (`src/**\/*.browser.test.ts`, project `node`), one at a time in one worker, and
+ * the in-page files (`src/**\/*.dom.test.ts` and `src/**\/*.dom.test.tsx`, project `page`), inside
+ * Chromium and WebKit headless under Vitest's browser mode with the Playwright provider. The unit
+ * run (`vite.config.ts`) excludes both.
  *
  * The in-page project's server binds `127.0.0.1`, with the port left to Vitest (63315, or the next
  * free port up), so it is never `::1` or every interface, as Vite's default `localhost` may be, and
@@ -48,7 +48,7 @@ export default defineConfig({
             instances: [{ browser: "chromium" }, { browser: "webkit" }],
             provider,
           },
-          include: ["src/**/*.dom.test.ts"],
+          include: ["src/**/*.dom.test.ts", "src/**/*.dom.test.tsx"],
           name: "page",
         },
       },
