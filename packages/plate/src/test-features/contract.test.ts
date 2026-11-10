@@ -122,6 +122,20 @@ const found: readonly AnyModule[] = foundPerFile.flat();
 const stubs = testFeatures.filter((module) => !module.implemented);
 
 /**
+ * The table with every module a stub built from its own declaration, whatever the default table
+ * holds: the witness of what a stub leaves as it was, which stays one when a module lands.
+ */
+const stubbed: TestFeatureTable = testFeatures.map((module) =>
+  stub({
+    element: module.element,
+    feature: module.feature,
+    issue: module.issue,
+    key: module.key,
+    namespace: module.namespace,
+  }),
+);
+
+/**
  * Construct an element of a module's own name and namespace, with no attributes and no children.
  *
  * @param module The module.
@@ -250,9 +264,9 @@ const landedTimeLimits: TestFeatureModule<"qti-time-limits", TimeLimitsNode> = {
 };
 
 /**
- * The table with the landed module in the stub's place.
+ * The table of stubs with the landed module in the time-limits stub's place.
  */
-const landed: TestFeatureTable = testFeatures.map((module) =>
+const landed: TestFeatureTable = stubbed.map((module) =>
   module.key === "qti-time-limits" ? landedTimeLimits : module,
 );
 
@@ -385,24 +399,24 @@ describe("a test-feature module not implemented", () => {
   it.effect("leaves the sequence, every intent and the delivered test as they are", () =>
     Effect.gen(function* noEffect() {
       const { session } = yield* startedSession;
-      const test = built(testOf(["a", "b"]), testFeatures);
+      const test = built(testOf(["a", "b"]), stubbed);
       const places = placesOf(test);
 
-      assert.deepStrictEqual(sequencedBy(testFeatures, { places, seed: "seed", test }), places);
+      assert.deepStrictEqual(sequencedBy(stubbed, { places, seed: "seed", test }), places);
       for (const intent of [
         { kind: "next" },
         { kind: "submit-item" },
         { kind: "end-part" },
       ] as const) {
         assert.deepStrictEqual(
-          gatedBy(testFeatures, { intent, now: Option.none(), session, test }),
+          gatedBy(stubbed, { intent, now: Option.none(), session, test }),
           Option.none(),
           intent.kind,
         );
       }
 
       assert.strictEqual(
-        deliveredBy(testFeatures, { documents: new Map(), source: testOf([]), test }),
+        deliveredBy(stubbed, { documents: new Map(), source: testOf([]), test }),
         test,
       );
     }),
@@ -419,7 +433,7 @@ describe("a test-feature module not implemented", () => {
 describe("a test-feature module that has landed", () => {
   it("reaches the model: buildTest holds its node under its key and records no mark for it, where the stub marked it", () => {
     const source = testOf(["a"], [timeLimits(60)]);
-    const withStub = built(source, testFeatures);
+    const withStub = built(source, stubbed);
     const withLanded = built(source, landed);
     const path = "qti-assessment-test/qti-test-part/qti-assessment-section/qti-time-limits";
     const nodes: LandedNodes | undefined = withLanded.features;
@@ -433,7 +447,7 @@ describe("a test-feature module that has landed", () => {
   });
 
   it("reaches the session's start: the sequence is what its sequence hook gives", () => {
-    const test = built(testOf(["a", "b", "c"]), testFeatures);
+    const test = built(testOf(["a", "b", "c"]), stubbed);
     const places = placesOf(test);
 
     assert.deepStrictEqual(
@@ -448,7 +462,7 @@ describe("a test-feature module that has landed", () => {
       Effect.gen(function* gatedMove() {
         const { session, test } = yield* startedSession;
         const decide = yield* Effect.fromResult(moveTargets(test, session, landed));
-        const asToday = yield* Effect.fromResult(moveTargets(test, session));
+        const asToday = yield* Effect.fromResult(moveTargets(test, session, stubbed));
         const refused = decide({ kind: "next" });
         const allowed = asToday({ kind: "next" });
 
@@ -472,7 +486,7 @@ describe("a test-feature module that has landed", () => {
   );
 
   it("reaches the package's delivery: the delivered test is what its deliver hook gives", () => {
-    const test = built(testOf(["a"]), testFeatures);
+    const test = built(testOf(["a"]), stubbed);
 
     assert.strictEqual(
       deliveredBy(landed, { documents: new Map(), source: testOf([]), test }).title,

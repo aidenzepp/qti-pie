@@ -2,6 +2,7 @@ import { Option } from "effect";
 import type { Element } from "#plate/emit/node.ts";
 import { partForSlot, promptMarkupFor, splitTokens } from "#plate/emit/parts.ts";
 import type { InteractionKey, PartName, PartOf } from "#plate/emit/parts.ts";
+import { isModuleKind } from "#plate/interactions/contract.ts";
 
 /**
  * The checks `checkTree` runs, in the order it reports their violations.
@@ -536,11 +537,12 @@ export const isFocusable = (element: Element, tree: Element): boolean =>
   );
 
 /**
- * Decide whether an Extended Text Root that holds several Controls is the group its Prompt names
- * (Q10): `role="group"`, and `aria-labelledby` naming the Prompt's `id` alone, so the group's name
- * is the Prompt's text. Each Control is then named within the group, not by the Prompt.
+ * Decide whether a Root is the group its Prompt names: `role="group"`, and `aria-labelledby` naming
+ * the Prompt's `id` alone, so the group's name is the Prompt's text. It is how an Extended Text
+ * Root that holds several Controls is named (Q10), each Control then named within the group, not by
+ * the Prompt, and how any interaction module's Root names its group ({@link isModuleOwner}).
  *
- * @param root The Extended Text Root.
+ * @param root The Root.
  * @param prompt The Prompt the Root owns.
  * @param tree The tree both sit in.
  * @returns Whether the Prompt names the Root's group.
@@ -557,6 +559,18 @@ const promptNamesTextGroup = (root: Element, prompt: Element, tree: Element): bo
     nameOf(root, tree) === textOf(prompt)
   );
 };
+
+/**
+ * Tell whether an interaction's owner is an interaction module's: `<kind>-interaction` for one of
+ * the kinds {@link isModuleKind} names. Such a Root may be the group its Prompt names
+ * ({@link promptNamesTextGroup}), whatever Controls it holds.
+ *
+ * @param interaction The owner of a Root.
+ * @returns Whether it is `<kind>-interaction` for a module kind.
+ */
+const isModuleOwner = (interaction: InteractionKey): boolean =>
+  interaction.endsWith("-interaction") &&
+  isModuleKind(interaction.slice(0, interaction.length - "-interaction".length));
 
 /**
  * Decide whether a Choice Root and its Prompt take one of the two markups the operator ruled
@@ -714,6 +728,13 @@ const rules = {
 
       if (interaction.value === "choice-interaction") {
         return promptNamesGroup(root.element, prompt.element, tree) ? [] : [root];
+      }
+
+      if (
+        isModuleOwner(interaction.value) &&
+        promptNamesTextGroup(root.element, prompt.element, tree)
+      ) {
+        return [];
       }
 
       const controls = owned.filter((visit) => isPart(visit.element, interaction.value, "control"));

@@ -420,6 +420,7 @@ export const mapRegions = (
  * kind added to the body or taken from it changes this table or fails to compile.
  */
 const contentKinds = {
+  content: true,
   element: true,
   "printed-variable": true,
   "template-block": true,
@@ -460,6 +461,7 @@ export const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction
       case "template-inline": {
         return interactionsIn(node.content);
       }
+      case "content":
       case "printed-variable":
       case "text":
       case "unsupported": {
