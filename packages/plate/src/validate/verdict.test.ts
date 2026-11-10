@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
+import { configure } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
 import {
@@ -21,12 +22,16 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { h } from "#plate/emit/node.ts";
+import type { Element, Node } from "#plate/emit/node.ts";
+import { rowFor } from "#plate/emit/parts.ts";
 import { isStubbed, modules as interactionModules } from "#plate/model/interactions.ts";
 import type { BodyElement, BodyNode, InlineChoiceInteraction, Item } from "#plate/model/item.ts";
 import type { Test } from "#plate/model/test.ts";
 import { InvalidValue } from "#plate/model/values.ts";
 import type { Redacted } from "#plate/payload.ts";
-import { redact } from "#plate/render.ts";
+import { redact, render } from "#plate/render.ts";
+import { parseHtml } from "#plate/test/round-trip.ts";
 import { allowedEffectNames, readImports, sourceModules, valueNames } from "#plate/test/imports.ts";
 import { stubBaseType, stubCardinality, stubElement } from "#plate/test/stub-kind.ts";
 import { open } from "#plate/validate/open.ts";
@@ -796,6 +801,141 @@ describe("check, E3: attributes only a wildcard admits", () => {
 
     assert.deepStrictEqual(refusalsOf(refused), [
       { location: { kind: "path", path: `${bodyPath}/p/A` }, rule: "unknown-element" },
+    ]);
+  });
+});
+
+/**
+ * Find the elements of a rendered tree that have a tag.
+ *
+ * @param nodes The nodes to search.
+ * @param tag The tag.
+ * @returns Each element with that tag, in document order.
+ */
+const elementsNamed = (nodes: readonly Node[], tag: string): readonly Element[] =>
+  nodes.flatMap((node): readonly Element[] =>
+    node.kind === "element"
+      ? [...(node.tag === tag ? [node] : []), ...elementsNamed(node.children, tag)]
+      : [],
+  );
+
+/**
+ * Render an accepted item with the default configuration and read the HTML back as a tree.
+ *
+ * @param accepted The accepted item.
+ * @returns The rendered tree, an effect that fails only if the render does.
+ */
+const renderedTree = (accepted: Accepted): Effect.Effect<readonly Node[], unknown> =>
+  Effect.gen(function* rendered() {
+    const configuration = yield* configure({});
+    const html = yield* Effect.fromResult(
+      render(redact(accepted), configuration, { instance: "d24" }),
+    );
+
+    return parseHtml(html.html);
+  });
+
+describe("check, D24: author data-* attributes pass through except plate's reserved names", () => {
+  it("[W0-AU] the body walk keeps an author data-* on a body element, with no attribute: mark", () => {
+    const accepted = acceptedOf(
+      verdictOf(item([body([el("p", [attr("data-author-note", "x")], [text("Hi")])])])),
+      "accepted",
+    );
+
+    assert.deepStrictEqual(namesOf(bodyElement(accepted, `${bodyPath}/p`)), ["data-author-note"]);
+    assert.deepStrictEqual(bodyElement(accepted, `${bodyPath}/p`).attributes, [
+      { name: "data-author-note", value: "x" },
+    ]);
+    assert.deepStrictEqual(accepted.unsupported, []);
+  });
+
+  it.effect(
+    "[W0-AU] a reserved author name is dropped, not refused, and plate's own marker stands",
+    () =>
+      Effect.gen(function* reservedDropped() {
+        const accepted = acceptedOf(
+          verdictOf(
+            item([
+              body([
+                el("p", [attr("data-slot", "mine"), attr("data-author-note", "x")], [text("Hi")]),
+              ]),
+            ]),
+          ),
+          "accepted-with-unsupported",
+        );
+        const kept = bodyElement(accepted, `${bodyPath}/p`);
+
+        assert.deepStrictEqual(namesOf(kept), ["data-author-note"]);
+        assert.deepStrictEqual(
+          accepted.unsupported.filter((mark) => mark.feature.startsWith("attribute:")),
+          [{ feature: "attribute:data-slot", path: `${bodyPath}/p`, shown: "mark" }],
+        );
+
+        const tree = yield* renderedTree(accepted);
+        const [paragraph] = elementsNamed(tree, "p");
+        const [itemRoot] = elementsNamed(tree, "qti-assessment-item");
+
+        assert.deepStrictEqual(paragraph?.attrs, { "data-author-note": "x" });
+        assert.strictEqual(itemRoot?.attrs["data-slot"], rowFor("item", "root").slot);
+      }),
+  );
+
+  it("[W0-AU] data-qti-* names are reserved by prefix: dropped and marked, never refused", () => {
+    const accepted = acceptedOf(
+      verdictOf(
+        item([body([el("p", [], [el("span", [attr("data-qti-custom", "1")], [text("Hi")])])])]),
+      ),
+      "accepted-with-unsupported",
+    );
+
+    assert.deepStrictEqual(namesOf(bodyElement(accepted, `${bodyPath}/p/span`)), []);
+    assert.deepStrictEqual(
+      accepted.unsupported.filter((mark) => mark.feature.startsWith("attribute:")),
+      [{ feature: "attribute:data-qti-custom", path: `${bodyPath}/p/span`, shown: "mark" }],
+    );
+  });
+
+  it.effect("[W0-AU] the kept attribute reaches the HTML unchanged", () =>
+    Effect.gen(function* keptInHtml() {
+      const accepted = acceptedOf(
+        verdictOf(item([body([el("p", [attr("data-author-note", "x")], [text("Hi")])])])),
+        "accepted",
+      );
+      const tree = yield* renderedTree(accepted);
+
+      assert.deepStrictEqual(elementsNamed(tree, "p"), [
+        h("p", { "data-author-note": "x" }, [{ kind: "text", text: "Hi" }]),
+      ]);
+    }),
+  );
+
+  it("[W0-AU] E3 keeps a non-reserved data-* outside the body too, and reads nothing from it", () => {
+    const plain = acceptedOf(verdictOf(item([body([el("p", [], [text("Hi")])])])), "accepted");
+    const marked = acceptedOf(
+      verdictOf(item([body([el("p", [], [text("Hi")])])], [attr("data-x", "1")])),
+      "accepted",
+    );
+
+    assert.deepStrictEqual(marked.unsupported, []);
+    assert.deepStrictEqual(marked.item, plain.item);
+  });
+
+  it("[W0-AU] E3 still removes and marks a reserved name outside the body, and a name the reading's form refuses stays a refusal", () => {
+    const accepted = acceptedOf(
+      verdictOf(
+        item([body([el("p", [], [text("Hi")])])], [attr("data-slot", "x"), attr("data-x", "1")]),
+      ),
+      "accepted-with-unsupported",
+    );
+
+    assert.deepStrictEqual(
+      accepted.unsupported.filter((mark) => mark.feature.startsWith("attribute:")),
+      [{ feature: "attribute:data-slot", path: root, shown: "mark" }],
+    );
+
+    const refused = verdictOf(item([body([el("p", [attr("data-A", "x")], [text("Hi")])])]));
+    assert.deepStrictEqual(refusalsOf(refused), [
+      { location: { kind: "path", path: `${bodyPath}/p/@data-A` }, rule: "unknown-attribute" },
     ]);
   });
 });

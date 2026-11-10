@@ -5,6 +5,7 @@ import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
 import type { PartRow } from "#plate/emit/parts.ts";
+import { toHtml } from "#plate/emit/serialise.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import type {
   BodyNode,
@@ -520,6 +521,89 @@ describe("applyPart, I3", () => {
         assert.strictEqual(error.cause, "root-not-allowed");
         assert.strictEqual(error.interaction, "text-entry-interaction");
         assert.strictEqual(error.part, "control");
+      }),
+  );
+});
+
+/**
+ * A test-only row of a part inside an `svg`, as Graphic Order's Badge is: the Notice's row with an
+ * SVG `text` element that only an SVG element may replace.
+ */
+const badgeRow: PartRow = {
+  ...rowFor("item", "notice"),
+  element: "text",
+  merged: [],
+  tagClass: "svg-content",
+};
+
+/**
+ * A test-only row of the `svg` that opens a picture under an HTML parent, as an Outline is: the
+ * Badge's row with the `svg` element only.
+ */
+const outlineRow: PartRow = { ...badgeRow, element: "svg", tagClass: "svg" };
+
+describe("applyPart, the SVG tag classes (I3)", () => {
+  it.effect("[W0-SVG-PARTS] refuses a strong for an svg-content part as root-not-allowed", () =>
+    Effect.gen(function* strongForBadge() {
+      const error = yield* Effect.flip(
+        Effect.fromResult(
+          applyPart(badgeRow, { "data-slot": badgeRow.slot }, [text("1")], as("strong")),
+        ),
+      );
+      assert.strictEqual(error._tag, "PartSwapRefused");
+      assert.strictEqual(error.cause, "root-not-allowed");
+      assert.strictEqual(error.interaction, "item");
+      assert.strictEqual(error.part, "notice");
+    }),
+  );
+
+  it.effect(
+    "[W0-SVG-PARTS] keeps a tspan replacement of an svg-content part, with the handed text below it",
+    () =>
+      Effect.gen(function* tspanForBadge() {
+        const handed = text("1");
+        const result = yield* Effect.fromResult(
+          applyPart(badgeRow, { "data-slot": badgeRow.slot }, [handed], as("tspan")),
+        );
+        assert.strictEqual(result.tag, "tspan");
+        assert.strictEqual(result.attrs["data-slot"], badgeRow.slot);
+        assert.strictEqual(result.children.length, 1);
+        assert.strictEqual(result.children[0], handed);
+      }),
+  );
+
+  it.effect(
+    "[W0-SVG-PARTS] refuses a div for an svg part as root-not-allowed, and keeps an svg replacement",
+    () =>
+      Effect.gen(function* divForOutline() {
+        const handed = h("rect", {});
+        const props: Attributes = { "data-slot": outlineRow.slot };
+        const error = yield* Effect.flip(
+          Effect.fromResult(applyPart(outlineRow, props, [handed], as("div"))),
+        );
+        assert.strictEqual(error._tag, "PartSwapRefused");
+        assert.strictEqual(error.cause, "root-not-allowed");
+        assert.strictEqual(error.interaction, "item");
+        assert.strictEqual(error.part, "notice");
+
+        const kept = yield* Effect.fromResult(applyPart(outlineRow, props, [handed], as("svg")));
+        assert.strictEqual(kept.tag, "svg");
+        assert.strictEqual(kept.children.length, 1);
+        assert.strictEqual(kept.children[0], handed);
+      }),
+  );
+
+  it.effect(
+    "[W0-SVG-PARTS] the HTML parser moves a strong out of an svg to its next sibling, the mechanism the class guards",
+    () =>
+      Effect.gen(function* strongLeavesSvg() {
+        const html = yield* Effect.fromResult(
+          toHtml(h("svg", {}, [h("text", {}, [text("1")]), h("strong", {}, [text("2")])])),
+        );
+        assert.deepStrictEqual(parseHtml(html), [
+          h("svg", {}, [h("text", {}, [text("1")])]),
+          h("strong", {}, [text("2")]),
+        ]);
       }),
   );
 });
