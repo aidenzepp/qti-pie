@@ -1431,27 +1431,13 @@ const builtInReferrers = builtIns.flatMap(({ declaration, root, variable }) => {
 
 /**
  * State that a reference by `identifier` to a built-in variable names one its element may: a
- * kind whose `ReferenceDeclaration` admits the built-in's declaration kind.
+ * kind whose `ReferenceDeclaration` admits the built-in's declaration kind. A placed reference's
+ * root is its assembly's.
  *
- * @param v - The row.
+ * @param v - The row, a reference or a placed one.
  * @returns The predicate.
  */
-const namesAllowedBuiltIn = (v: VariableRefRow) =>
-  v.or(
-    v.ne(v.attribute, "identifier"),
-    v.ne(v.resolution, "builtIn"),
-    ...builtInReferrers.map(({ kinds, root, variable }) =>
-      v.and(v.eq(v.rootKind, root), v.eq(v.identifier, variable), v.in(v.kind, kinds)),
-    ),
-  );
-
-/**
- * {@link namesAllowedBuiltIn} over a placed reference, whose root is its assembly's.
- *
- * @param v - The row.
- * @returns The predicate.
- */
-const placesAllowedBuiltIn = (v: PlacedVariableRefRow) =>
+const namesAllowedBuiltIn = (v: VariableRefRow | PlacedVariableRefRow) =>
   v.or(
     v.ne(v.attribute, "identifier"),
     v.ne(v.resolution, "builtIn"),
@@ -3076,7 +3062,7 @@ export const expressionLawsByName = {
       on(namedPlacedVariables, "kind", "attribute", "declarationKind"),
       on(ReferenceDeclaration, "kind", "attribute", "declaration"),
     ),
-    check("Variable_kind", PlacedVariableRef, placesAllowedBuiltIn),
+    check("Variable_kind", PlacedVariableRef, namesAllowedBuiltIn),
   ],
   "Weighted base": [
     check("Weighted_base", ExpressionAttribute, (x) =>

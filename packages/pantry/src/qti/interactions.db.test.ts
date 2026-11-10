@@ -60,6 +60,7 @@ import {
   Slider,
   PrintedVariableRef,
 } from "#pantry/qti/interactions.ts";
+import { nilUuid } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/own.ts";
 
 import { bitsText } from "#pantry/test/bits.ts";
@@ -314,12 +315,6 @@ const hotspotOf = (fields: Partial<Fact<typeof Hotspot>> = {}) =>
     version: "3.0.1",
     ...fields,
   }) satisfies Fact<typeof Hotspot>;
-
-/**
- * The nil uuid, which names no declaration: a case writes it where the import once wrote it, to
- * show the database refuses it as a declaration.
- */
-const nilUuid = "00000000-0000-0000-0000-000000000000";
 
 /**
  * A stray feedback block's outcome reference.

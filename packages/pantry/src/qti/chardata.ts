@@ -4,9 +4,10 @@
  * rulings of 2026-11-06).
  *
  * A node's own characters are one place, `Node.chars` (`#pantry/qti/node.ts`): a text or whitespace
- * node's text, an entity reference's `&name;`, empty elsewhere. So {@link Text}, {@link Whitespace}
- * and {@link EntityRef} are selections of `Node` by kind, and each arm's law is a row check over
- * `chars`: no second copy of the text exists, and no containment over unbounded text is needed to
+ * node's text, an entity reference's `&name;`, empty elsewhere. So a text, a whitespace run and an
+ * entity reference are rows of `Node` by kind, and each arm's law is a row check over `chars`
+ * ({@link textChars}, {@link whitespaceChars}, {@link entityRefChars}): no second copy of the text
+ * exists, and no containment over unbounded text is needed to
  * prove one, which a B-tree entry could not hold. The string value that TextDomain judges is
  * `Node`'s `Monoid.concat` fold over those characters (Q5.05's law).
  *
@@ -143,23 +144,6 @@ export const whitespaceChars = Compute.pattern("^[ \\t\\n\\r]+$");
  * @see {@link https://www.w3.org/TR/xml/#NT-EntityRef | XML 1.0, EntityRef}
  */
 export const entityRefChars = Compute.pattern(`^&${ncName};$`);
-
-/**
- * The nodes of kind `text`, whose characters are {@link textChars}. A selection of `Node`, since a
- * text's characters are its node's `chars`.
- */
-export const Text = select(Node, (n) => n.eq(n.kind, "text"));
-
-/**
- * The nodes of kind `ws`, whose characters are {@link whitespaceChars}.
- */
-export const Whitespace = select(Node, (n) => n.eq(n.kind, "ws"));
-
-/**
- * The nodes of kind `entityRef`, whose characters are {@link entityRefChars}: the reference's
- * name is read from `chars` by the pattern.
- */
-export const EntityRef = select(Node, (n) => n.eq(n.kind, "entityRef"));
 
 /**
  * XML 1.0's `Char` less `-`: a comment's character that no `-` may precede within it.

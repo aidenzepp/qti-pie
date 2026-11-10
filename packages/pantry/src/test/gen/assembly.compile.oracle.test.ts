@@ -22,8 +22,8 @@
  * The list is a complete key: a ChangeSet's compiled program depends only on its Description and
  * the schema, never on the rows bound at run time, so two packages with one list have one program.
  * The compile reads the committed snapshot, as `grizzle generate` does, and the import's write
- * program is also declared in the author login's workload (`#pantry/qti/own-login.ts`
- * `importWork`). The probe login holds an author role of its own
+ * program is also declared in the author login's workload (`#pantry/qti/logins.ts`'s
+ * `importWrite`). The probe login holds an author role of its own
  * ({@link probeAuthor}), since grizzle puts a role in one login only.
  */
 import { login, workload } from "@bjornpagen/grizzle";

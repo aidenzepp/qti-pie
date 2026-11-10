@@ -977,20 +977,6 @@ const reservedBaseTypeLaws = reservedBaseTypes.map((reserved) =>
 );
 
 /**
- * The typed-value patterns, stated once in `#pantry/qti/expression-types.ts` as `BaseTypePattern`'s
- * rows and re-exported here under their names: the base types a value domain judges
- * (`domainValues`), boolean's, point's and the pairs' own patterns, and the base types every text
- * is a value of (`unjudgedBaseTypes`).
- */
-export {
-  booleanValuePattern,
-  domainValues,
-  pairValuePattern,
-  pointValuePattern,
-  unjudgedBaseTypes,
-} from "#pantry/qti/expression-types.ts";
-
-/**
  * State `Typed_value` over a value of a set that is no record's: its text is a lexical form of its
  * declaration's base type, by `BaseTypePattern`, the one pattern per base type that a base value's
  * text and a map key are judged by too; every text of a base type of `unjudgedBaseTypes` is one, so

@@ -104,6 +104,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
+import type { Identity } from "#pantry/grammar/install.ts";
 import {
   AttributeCountOf,
   AttributeGrammar,
@@ -130,7 +131,7 @@ import { openClasses } from "#pantry/grammar/kinds.ts";
 import { handlePrefixes } from "#pantry/model/xdm.ts";
 import { NamespacePrefix, OpenElementName } from "#pantry/qti/chardata.ts";
 import { keyText, localNameBytes, namespaceText } from "#pantry/qti/limits.ts";
-import { Chars, holdsCheckedText, Node, universalDomains } from "#pantry/qti/node.ts";
+import { Chars, holdsCheckedText, nilUuid, Node, universalDomains } from "#pantry/qti/node.ts";
 import { dataName } from "#pantry/vocab/open.ts";
 
 /**
@@ -202,12 +203,6 @@ export const OpenLocal = str.bytes(localNameBytes, str.regex(`^[${ncStart}][${nc
  * Exported for `src/import/refusal.ts`, which names its pattern law.
  */
 export const EntityName = str.regex(`^[${ncStart}][${ncChar}]*$`);
-
-/**
- * The nil uuid: the start of the owner-axis copy of `document`, which every member's owner
- * replaces.
- */
-const nilUuid = "00000000-0000-0000-0000-000000000000";
 
 /**
  * One attribute of an element, at its slot among the element's attributes in source order, which
@@ -429,18 +424,31 @@ export const domainOf = (a: NamedRow) => AttributeGrammar.at("domain", attribute
 const open = (a: AttributeRow) => a.in(a.name, openClasses);
 
 /**
+ * State that an attribute's domain is of one of `identities` (`ID`, `IDREF`, `IDREFS`): its domain
+ * has a `ValueIdentity` row naming one of them. A name its element's governor does not admit has no
+ * domain and a domain of no identity no `ValueIdentity` row, so the statement is false of either.
+ *
+ * @param a - The row.
+ * @param identities - The identity types.
+ * @returns The predicate.
+ */
+export const identityIn = (
+  a: AttributeRow,
+  identities: readonly (typeof Identity.handles)[number][],
+) =>
+  a.and(
+    ValueIdentity.has(domainOf(a)),
+    a.in(ValueIdentity.at("identity", domainOf(a)), identities),
+  );
+
+/**
  * State that an attribute's domain is an `xs:IDREF` or `xs:IDREFS` one, whose tokens are `Idref`
- * rows: its domain has a `ValueIdentity` row naming one of them. A domain of no identity has no
- * row, so the statement is false of it.
+ * rows.
  *
  * @param a - The row.
  * @returns The predicate.
  */
-const carriesIdrefs = (a: AttributeRow) =>
-  a.and(
-    ValueIdentity.has(domainOf(a)),
-    a.in(ValueIdentity.at("identity", domainOf(a)), ["IDREF", "IDREFS"]),
-  );
+const carriesIdrefs = (a: AttributeRow) => identityIn(a, ["IDREF", "IDREFS"]);
 
 /**
  * The closed `AttributeName` handles whose names are in a namespace with a handle prefix

@@ -23,17 +23,19 @@ import {
 import { readProgram } from "#pantry/import/program.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import {
-  booleanValuePattern,
   contextVariable,
-  domainValues,
   itemSessionVariables,
-  pairValuePattern,
-  pointValuePattern,
   reservedBaseTypes,
   sessionVariables,
   testSessionVariables,
-  unjudgedBaseTypes,
 } from "#pantry/qti/declarations.ts";
+import {
+  booleanValuePattern,
+  domainValues,
+  pairValuePattern,
+  pointValuePattern,
+  unjudgedBaseTypes,
+} from "#pantry/qti/expression-types.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";

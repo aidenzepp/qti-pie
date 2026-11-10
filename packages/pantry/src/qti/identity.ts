@@ -132,8 +132,6 @@ import {
 import type { RowScalars } from "@bjornpagen/grizzle";
 import { languageTag } from "#pantry/grammar/attributes.ts";
 import {
-  AttributeGrammar,
-  AttributeModelOf,
   AttributeName,
   Governor,
   Identity,
@@ -143,11 +141,11 @@ import {
   toolLabelKinds,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { Attribute, Idref, namingPattern, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, Idref, identityIn, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { ObjectLang } from "#pantry/qti/metadata.ts";
-import { admitsHere, Node, nodeRef } from "#pantry/qti/node.ts";
+import { admitsHere, nilUuid, Node, nodeRef } from "#pantry/qti/node.ts";
 import { ManifestId, ResourceId } from "#pantry/qti/package.ts";
 import { Instance } from "#pantry/qti/tests.ts";
 import { recordDocumentTypes } from "#pantry/vocab/terms/metadata.ts";
@@ -184,12 +182,6 @@ export const statedLanguagePattern = Compute.pattern<string>(
  * A same-document fragment reference: `#` and one or more characters (MathML 3 §4.2.7).
  */
 const shareFragmentPattern = Compute.pattern("^#.+$");
-
-/**
- * The nil uuid: the start of the owner-axis copy of `document`, which every member's owner
- * replaces.
- */
-const nilUuid = "00000000-0000-0000-0000-000000000000";
 
 /**
  * The schema version whose item root's own `label` asks for the root's tools (spec reading 128):
@@ -690,23 +682,6 @@ type AttributeRow = RowScalars<typeof Attribute>;
  * An `Identity` handle: `ID`, `IDREF` or `IDREFS`.
  */
 type IdentityHandle = (typeof Identity.handles)[number];
-
-/**
- * State that an attribute's identity type is one of `identities`: its value domain under its
- * element's governor has a `ValueIdentity` row, and that row names one of them. A domain of no
- * identity has no row, so the statement is false of it; a name the governor does not admit has no
- * domain, so the statement is absent there, and AL1 refuses the attribute.
- *
- * @param a - The row.
- * @param identities - The identity types.
- * @returns The predicate.
- */
-const identityIn = (a: AttributeRow, identities: readonly IdentityHandle[]) => {
-  const model = AttributeModelOf.at("model", a.version, a.governor);
-  const domain = AttributeGrammar.at("domain", model, a.name);
-
-  return a.and(ValueIdentity.has(domain), a.in(ValueIdentity.at("identity", domain), identities));
-};
 
 /**
  * A `Node` or {@link IdentityText} row as a selection reads it: the fields an element's governor is

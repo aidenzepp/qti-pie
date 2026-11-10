@@ -141,10 +141,11 @@ export const Chars = str.regex(charsPattern);
 export const EndCharacter = str.regex("^.?$", "su");
 
 /**
- * The nil uuid: the parent copy's start, which only the root's own value ever replaces, since the
- * owner axis holds the root to itself.
+ * The nil uuid: the start of every accumulated uuid copy along an owner axis, which a member's
+ * owner replaces (on `Node` only the root's own value, since the owner axis holds the root to
+ * itself). No row stores it: a member's copy is its owner's.
  */
-const nilUuid = "00000000-0000-0000-0000-000000000000";
+export const nilUuid = "00000000-0000-0000-0000-000000000000";
 
 /**
  * One node of a document: an element, a run of character data, a comment, an instruction, an entity

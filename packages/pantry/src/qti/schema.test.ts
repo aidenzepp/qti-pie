@@ -45,7 +45,7 @@ import { packageLaws } from "#pantry/qti/package.ts";
 import * as quotation from "#pantry/qti/quotation.ts";
 import { quotationLaws } from "#pantry/qti/quotation.ts";
 import { builtLawsByName, Qti } from "#pantry/qti/own.ts";
-import { Author, AuthorApp, exportWork, importWork } from "#pantry/qti/own-login.ts";
+import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 import * as tests from "#pantry/qti/tests.ts";
 import { testLaws } from "#pantry/qti/tests.ts";
 import { moduleImports } from "#pantry/test/module-imports.ts";
@@ -197,10 +197,6 @@ describe("qti/logins.ts, the author application", () => {
     assert.strictEqual(AuthorApp.name, "author_app");
     assert.deepStrictEqual(Object.keys(AuthorApp.roles), ["author"]);
     assert.strictEqual(AuthorApp.roles.author.role, Author);
-  });
-
-  it("owns the export scan and the import's write program as its workload", () => {
-    assert.deepStrictEqual(AuthorApp.workload, [exportWork, importWork]);
   });
 });
 

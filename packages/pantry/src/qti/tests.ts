@@ -94,7 +94,7 @@ import {
 import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
+import { nilUuid, Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
 import { Entry, hrefPaths, Reference } from "#pantry/qti/package.ts";
 import {
   testKind,
@@ -149,12 +149,6 @@ export const tokenNames = [
   "source-identifier",
   "target-identifier",
 ] as const satisfies readonly Name[];
-
-/**
- * The nil uuid: the start of an accumulated uuid copy, which every member's owner replaces, and the
- * document the host writes for what no item holds, an LTI link's item.
- */
-export const nilUuid = "00000000-0000-0000-0000-000000000000";
 
 /**
  * A selection's `select` once its whitespace is split off: an integer's lexical form, which
