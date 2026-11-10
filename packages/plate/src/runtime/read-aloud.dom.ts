@@ -20,6 +20,13 @@
  * item's live region (`liveRegionOf`), never by moving focus. The strings are this module's, in
  * English (D7).
  *
+ * The synthesis keeps its paused state across `cancel()`, and an utterance queued while it is
+ * paused does not sound until `resume()` clears the state. So every exit from `paused` (a `play`, a
+ * `stop`, a `teardown`) calls `cancel()` and then `resume()`: the cancel flushes what the pause
+ * held, and the resume leaves the page's synthesis unpaused for the next reading and for whatever
+ * else on the page speaks (A-40b, issue m4-04b, GitHub issue #221). An exit from `speaking` calls
+ * `cancel()` alone, and `idle` calls nothing.
+ *
  * A browser module: it value-imports from `effect` only `Option`.
  *
  * @module
@@ -63,7 +70,9 @@ export interface ReadAloudUtterance {
 export interface ReadAloudSynthesis {
   /**
    * Drop every queued utterance and silence the one sounding; the engine then treats their `end`
-   * and `error` events as over.
+   * and `error` events as over. It does not change the paused state: a synthesis paused before the
+   * cancel stays paused after it, and an utterance queued then does not sound until `resume`
+   * (A-40b, issue m4-04b, GitHub issue #221).
    */
   readonly cancel: () => void;
   /**
@@ -71,7 +80,7 @@ export interface ReadAloudSynthesis {
    */
   readonly pause: () => void;
   /**
-   * Let a held reading go on.
+   * Let a held reading go on: clear the paused state, which `cancel` leaves in place.
    */
   readonly resume: () => void;
   /**
@@ -133,10 +142,11 @@ export interface ReadAloud {
   readonly pause: () => void;
   /**
    * Start reading: the item's plan is read from its DOM now, so content changed since attach is
-   * spoken as it stands; a reading in progress is cancelled and this one starts from the beginning.
-   * A segment the content withholds from computer read-aloud (`data-qti-suppress-tts`) is skipped,
-   * and so is a pause segment, since the Web Speech API has no pause to queue and the gap between
-   * utterances stands in.
+   * spoken as it stands; a reading in progress is cancelled and this one starts from the beginning,
+   * and from the paused state the synthesis resumes after the cancel, so this reading sounds
+   * (A-40b, issue m4-04b, GitHub issue #221). A segment the content withholds from computer
+   * read-aloud (`data-qti-suppress-tts`) is skipped, and so is a pause segment, since the Web
+   * Speech API has no pause to queue and the gap between utterances stands in.
    *
    * @param from The element the reading starts at, in document order; every segment before it is
    *   skipped. Absent, or outside the item, the reading starts at the item's beginning.
@@ -149,12 +159,15 @@ export interface ReadAloud {
   readonly state: ReadAloudState;
   /**
    * End the reading, when speaking or paused: the synthesis cancels its queue and the state is
-   * `idle`. The next `play` starts from the beginning.
+   * `idle`. From the paused state the synthesis then resumes, so it is left unpaused (A-40b, issue
+   * m4-04b, GitHub issue #221). The next `play` starts from the beginning.
    */
   readonly stop: () => void;
   /**
-   * Silence the reading and release the controller, before the item's markup is replaced. It
-   * announces nothing, since the host is discarding the item's live region with the item.
+   * Silence the reading and release the controller, before the item's markup is replaced. From the
+   * paused state the synthesis cancels and then resumes, so the page's synthesis is left unpaused
+   * for whatever speaks next (A-40b, issue m4-04b, GitHub issue #221). It announces nothing, since
+   * the host is discarding the item's live region with the item.
    */
   readonly teardown: () => void;
 }
@@ -356,11 +369,26 @@ export const readAloud = (itemRoot: HTMLElement, options: ReadAloudOptions): Rea
     region.announce(announcements[next]);
   };
 
+  /**
+   * Leave the current reading: advance the run, so the events of the utterances it queued change
+   * nothing, and flush the synthesis. From `speaking` the synthesis cancels alone. From `paused` it
+   * cancels and then resumes, since `cancel()` keeps the paused state and what the next reading
+   * queues would not sound under it (A-40b, issue m4-04b, GitHub issue #221). From `idle` it calls
+   * nothing.
+   *
+   * @param synthesis The synthesis to flush.
+   */
   const cancel = (synthesis: ReadAloudSynthesis): void => {
     run += 1;
 
-    if (state !== "idle") {
-      synthesis.cancel();
+    if (state === "idle") {
+      return;
+    }
+
+    synthesis.cancel();
+
+    if (state === "paused") {
+      synthesis.resume();
     }
   };
 

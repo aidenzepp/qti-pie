@@ -118,7 +118,7 @@ interface FakeUtterance extends ReadAloudUtterance {
 
 /**
  * A recording fake of the Web Speech API: the calls made on it, in order, the utterances spoken,
- * and a way to end them.
+ * whether it is paused, and a way to end the utterances.
  */
 interface FakeSynthesis {
   /**
@@ -129,6 +129,12 @@ interface FakeSynthesis {
    * Fire `end` on every utterance spoken so far, in order, as an engine does when it finishes.
    */
   readonly finish: () => void;
+  /**
+   * Whether the synthesis is in the paused state, as the Web Speech API keeps it: `pause` sets it,
+   * `resume` clears it, and `cancel` leaves it as it is, so a queued utterance does not sound
+   * while it stands.
+   */
+  readonly paused: () => boolean;
   /**
    * The utterances spoken, in order.
    */
@@ -150,6 +156,7 @@ const fakeSynthesis = (): FakeSynthesis => {
   const calls: string[] = [];
   const spokenUtterances: FakeUtterance[] = [];
   const made = new Map<ReadAloudUtterance, FakeUtterance>();
+  let paused = false;
 
   return {
     calls,
@@ -160,6 +167,7 @@ const fakeSynthesis = (): FakeSynthesis => {
         }
       }
     },
+    paused: () => paused,
     spoken: spokenUtterances,
     synthesis: {
       cancel: () => {
@@ -167,9 +175,11 @@ const fakeSynthesis = (): FakeSynthesis => {
       },
       pause: () => {
         calls.push("pause");
+        paused = true;
       },
       resume: () => {
         calls.push("resume");
+        paused = false;
       },
       speak: (utterance) => {
         calls.push("speak");
@@ -624,6 +634,171 @@ describe(server.browser, () => {
         controller.teardown();
         unmount(root);
       }),
+    );
+
+    it.effect(
+      "[A-40b] play after pause resumes synthesis before speaking, so the new utterances sound",
+      () =>
+        Effect.gen(function* playAfterPause() {
+          const root = mount(yield* renderedFixture);
+          const fake = fakeSynthesis();
+          const controller = readAloud(root, {
+            supports: computerReadAloud,
+            synthesis: fake.synthesis,
+            utterance: fake.utterance,
+          });
+
+          controller.play();
+          controller.pause();
+          assert.isTrue(fake.paused());
+
+          const callsAtPause = fake.calls.length;
+          const spokenAtPause = fake.spoken.length;
+
+          controller.play();
+          assert.deepStrictEqual(fake.calls.slice(callsAtPause), [
+            "cancel",
+            "resume",
+            ...wholeReading.map(() => "speak"),
+          ]);
+          assert.isFalse(fake.paused());
+          assert.deepStrictEqual(fake.texts().slice(spokenAtPause), wholeReading);
+          assert.strictEqual(controller.state, "speaking");
+
+          controller.teardown();
+          unmount(root);
+        }),
+    );
+
+    it.effect(
+      "[A-40b] stop from the paused state leaves synthesis unpaused: cancel, then resume",
+      () =>
+        Effect.gen(function* stopFromPaused() {
+          const root = mount(yield* renderedFixture);
+          const fake = fakeSynthesis();
+          const controller = readAloud(root, {
+            supports: computerReadAloud,
+            synthesis: fake.synthesis,
+            utterance: fake.utterance,
+          });
+
+          controller.play();
+          controller.pause();
+          assert.isTrue(fake.paused());
+
+          const callsAtPause = fake.calls.length;
+
+          controller.stop();
+          assert.deepStrictEqual(fake.calls.slice(callsAtPause), ["cancel", "resume"]);
+          assert.isFalse(fake.paused());
+          assert.strictEqual(controller.state, "idle");
+
+          yield* Effect.promise(frames);
+          assert.strictEqual(liveText(root), "Stopped");
+
+          controller.teardown();
+          unmount(root);
+        }),
+    );
+
+    it.effect("[A-40b] teardown from the paused state leaves synthesis unpaused", () =>
+      Effect.gen(function* teardownFromPaused() {
+        const root = mount(yield* renderedFixture);
+        const fake = fakeSynthesis();
+        const controller = readAloud(root, {
+          supports: computerReadAloud,
+          synthesis: fake.synthesis,
+          utterance: fake.utterance,
+        });
+
+        controller.play();
+        controller.pause();
+        assert.isTrue(fake.paused());
+        yield* Effect.promise(frames);
+
+        const announced = liveText(root);
+        const callsAtPause = fake.calls.length;
+
+        assert.strictEqual(announced, "Paused");
+
+        controller.teardown();
+        assert.deepStrictEqual(fake.calls.slice(callsAtPause), ["cancel", "resume"]);
+        assert.isFalse(fake.paused());
+        assert.strictEqual(controller.state, "idle");
+
+        yield* Effect.promise(frames);
+        assert.strictEqual(liveText(root), announced, "a teardown announces nothing");
+
+        unmount(root);
+      }),
+    );
+
+    it.effect("[A-40b] pause, stop, play speaks from the beginning, unpaused", () =>
+      Effect.gen(function* pauseStopPlay() {
+        const root = mount(yield* renderedFixture);
+        const before = snapshot(root);
+        const fake = fakeSynthesis();
+        const controller = readAloud(root, {
+          supports: computerReadAloud,
+          synthesis: fake.synthesis,
+          utterance: fake.utterance,
+        });
+
+        controller.play();
+        controller.pause();
+        controller.stop();
+
+        const spokenAtStop = fake.spoken.length;
+
+        controller.play();
+        assert.deepStrictEqual(fake.texts().slice(spokenAtStop), wholeReading);
+        assert.isFalse(fake.paused());
+        assert.strictEqual(controller.state, "speaking");
+
+        yield* Effect.promise(frames);
+        assert.strictEqual(snapshot(root), before);
+
+        controller.teardown();
+        unmount(root);
+      }),
+    );
+
+    it.effect(
+      "[A-40b] an exit from speaking cancels alone: stop and teardown while speaking call no resume",
+      () =>
+        Effect.gen(function* exitFromSpeaking() {
+          const root = mount(yield* renderedFixture);
+          const fake = fakeSynthesis();
+          const controller = readAloud(root, {
+            supports: computerReadAloud,
+            synthesis: fake.synthesis,
+            utterance: fake.utterance,
+          });
+
+          controller.play();
+
+          const callsAtPlay = fake.calls.length;
+
+          controller.stop();
+          assert.deepStrictEqual(fake.calls.slice(callsAtPlay), ["cancel"]);
+          assert.isFalse(fake.paused());
+
+          const callsAtStop = fake.calls.length;
+
+          controller.teardown();
+          assert.deepStrictEqual(fake.calls.slice(callsAtStop), [], "idle calls nothing");
+
+          controller.play();
+
+          const callsAtSecondPlay = fake.calls.length;
+
+          controller.teardown();
+          assert.deepStrictEqual(fake.calls.slice(callsAtSecondPlay), ["cancel"]);
+          assert.isFalse(fake.paused());
+          assert.notInclude(fake.calls, "resume");
+
+          unmount(root);
+        }),
     );
 
     it("[A-40b] the runtime entry exports readAloud", () => {
