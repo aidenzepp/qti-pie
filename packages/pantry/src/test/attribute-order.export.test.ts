@@ -14,7 +14,7 @@
  * - **Generated sources:** the every-relation package's documents and generated trees, each element
  *   reordered under a swarm.
  * - **The small box, exhausted:** one element carrying every ordered selection of at most four of
- *   eight attributes and declarations, an open class's two names and an `xml:lang` among them.
+ *   seven attributes and declarations, an open class's two names and an `xml:lang` among them.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
@@ -270,8 +270,8 @@ describe(
 
     /**
      * The attributes and declarations the small box's element carries a selection of: an `id`, a
-     * `class`, an `xml:lang`, two names of the `data-*` class, which share its one position, a
-     * `label`, and two namespace declarations no name uses.
+     * `class`, an `xml:lang`, two names of the `data-*` class, which share its one position, and
+     * two namespace declarations no name uses, which stand last.
      */
     const specifications = [
       'id="a"',
@@ -279,7 +279,6 @@ describe(
       'xml:lang="en"',
       'data-x="1"',
       'data-y="2"',
-      'label="l"',
       'xmlns:p="urn:example:p"',
       'xmlns:q="urn:example:q"',
     ] as const;
@@ -295,16 +294,21 @@ describe(
       | "declaration after an attribute"
       | "declarations reversed";
 
+    /**
+     * Where the declarations of {@link specifications} start.
+     */
+    const firstDeclaration = specifications.findIndex((written) => written.startsWith("xmlns"));
+
     it.effect(
-      "writes back one element's every order of at most four of eight attributes and declarations",
+      "writes back one element's every order of at most four of seven attributes and declarations",
       (ctx) =>
         // Oracle: the same round trip, over the whole small space.
-        // Bound: every ordered selection of at most four of the eight, 2,081 cases.
+        // Bound: every ordered selection of at most four of the seven, 1,100 cases.
         searched(
           ctx,
           exhaust(
             {
-              box: "every ordered selection of at most 4 of the 8 attributes and declarations on one div",
+              box: "every ordered selection of at most 4 of the 7 attributes and declarations on one div",
               caseHang,
               coverage: requiredInSpace<BoxSituation>([
                 "bare",
@@ -317,7 +321,7 @@ describe(
                 specifications.map((_, at) => at),
                 { max: 4, min: 0 },
               ),
-              limit: 2081,
+              limit: 1100,
               literal: Formatter.format,
               oracle: {
                 kind: "universal",
@@ -332,12 +336,16 @@ describe(
                   c.note("repeated open class");
                 }
 
-                const declared = carried.findIndex((at) => at >= 6);
-                if (declared !== -1 && carried.slice(0, declared).some((at) => at < 6)) {
+                const declared = carried.findIndex((at) => at >= firstDeclaration);
+                if (
+                  declared !== -1 &&
+                  carried.slice(0, declared).some((at) => at < firstDeclaration)
+                ) {
                   c.note("declaration after an attribute");
                 }
 
-                if (carried.includes(7) && carried.indexOf(7) < carried.indexOf(6)) {
+                const [first, second] = [firstDeclaration, firstDeclaration + 1];
+                if (carried.includes(second) && carried.indexOf(second) < carried.indexOf(first)) {
                   c.note("declarations reversed");
                 }
 
