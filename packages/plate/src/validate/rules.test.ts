@@ -7089,16 +7089,19 @@ describe("align-54 Data-SSML: a data-ssml value is Data-SSML JSON (the operator'
     );
   });
 
-  it("align-54 Data-SSML P3: accepts a data-ssml that is Data-SSML JSON, keeping the span's data-ssml mark", () => {
+  it("align-54 Data-SSML P3: accepts a data-ssml that is Data-SSML JSON, and the span's data-ssml passes through unmarked", () => {
     const source = spoken('{"sub":{"alias":"messenger RNA"}}');
     const verdict = check(source, tables, Option.none());
 
     assert.deepStrictEqual(judged(source), []);
+    // `data-ssml` is not a mark (decision D22, 2026-11-10): the verdict is `accepted` with no
+    // unsupported entry, because the attribute reaches the rendered HTML on its `span`. On a wrong
+    // `accepted-with-unsupported` the assertion shows the unsupported entries instead.
     assert.deepStrictEqual(
       verdict.verdict === "accepted-with-unsupported" && verdict.kind === "item"
         ? verdict.accepted.unsupported
         : verdict.verdict,
-      [{ feature: "data-ssml", path: spokenSpan, shown: "mark" }],
+      "accepted",
     );
   });
 

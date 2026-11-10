@@ -700,6 +700,27 @@ describe("emitBody", () => {
   );
 
   it.effect(
+    "[D22] data-ssml and data-qti-suppress-tts reach the HTML as written, so the browser's read-aloud engine finds them",
+    () =>
+      Effect.gen(function* speechAttributes() {
+        const ssml = '{"say-as":{"interpret-as":"characters"}}';
+        const nodes = yield* emit([
+          el("p", { "data-ssml": ssml }, [
+            txt("Read "),
+            el("span", { "data-qti-suppress-tts": "true" }, [txt("QTI")]),
+          ]),
+        ]);
+
+        assert.deepStrictEqual(nodes, [
+          h("p", { "data-ssml": ssml }, [
+            text("Read "),
+            h("span", { "data-qti-suppress-tts": "true" }, [text("QTI")]),
+          ]),
+        ]);
+      }),
+  );
+
+  it.effect(
     "[I-8] an event-handler attribute is dropped, so the serialiser writes the element",
     () =>
       Effect.gen(function* handlers() {
