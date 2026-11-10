@@ -655,10 +655,11 @@ describe("time limits", () => {
          * one, with `role="status"`.
          *
          * @param shown The session.
+         * @param from The delivery the session was started from.
          * @returns The region's text.
          */
-        const noticeOf = (shown: TestSession): string => {
-          const notice = theElement(rendered(given, configuration, shown), "data-time", "notice");
+        const noticeOf = (shown: TestSession, from: Delivery = given): string => {
+          const notice = theElement(rendered(from, configuration, shown), "data-time", "notice");
           assert.strictEqual(notice.attrs["role"], "status");
 
           return textIn(notice);
@@ -671,9 +672,30 @@ describe("time limits", () => {
         assert.deepStrictEqual(timeIn(given, warned).timeLeft, Option.some(45));
         assert.notStrictEqual(noticeOf(warned), "");
 
+        // Issue m3f-01b: past the part's max-time with no late submission, the part expires.
         const expired = stayed(given, configuration, warned, 310);
-        assert.deepStrictEqual(timeIn(given, expired).timeLeft, Option.some(0));
-        assert.notStrictEqual(noticeOf(expired), "");
+        assert.deepStrictEqual(expired.expired, [{ identifier: "N", kind: "part" }]);
+        assert.deepStrictEqual(
+          expired.parts.map((part) => part.status),
+          ["ended"],
+        );
+        assert.strictEqual(expired.status, "closed");
+
+        const lateGiven = yield* delivery(
+          "nonlinear",
+          retimed(
+            '<qti-time-limits min-time="200" max-time="300"/>',
+            '<qti-time-limits min-time="200" max-time="300" allow-late-submission="true"/>',
+          ),
+        );
+        const lateExpired = stayed(
+          lateGiven,
+          configuration,
+          started(lateGiven, configuration),
+          310,
+        );
+        assert.deepStrictEqual(timeIn(lateGiven, lateExpired).timeLeft, Option.some(0));
+        assert.notStrictEqual(noticeOf(lateExpired, lateGiven), "");
       }),
   );
 
