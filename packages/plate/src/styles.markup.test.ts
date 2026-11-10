@@ -201,12 +201,36 @@ const namesModulePart = (compound: Compound): boolean =>
   );
 
 /**
+ * The select-then-place state attributes, which the runtime's select-then-place driver
+ * (`#plate/runtime/select-place-driver.dom.ts`) writes on any kind's tokens and targets after the
+ * SSR, which never writes them: `aria-pressed` on a token, `data-cursor` on the target the arrow
+ * keys have reached, and `aria-disabled` on a token or target a move refuses. No emitted markup
+ * carries them, so a compound that tests one is witnessed by the driver's own tests, not here.
+ */
+const selectPlaceStates: ReadonlySet<string> = new Set([
+  "aria-disabled",
+  "aria-pressed",
+  "data-cursor",
+]);
+
+/**
+ * Tell whether a compound names a select-then-place state: an attribute test on one of the
+ * {@link selectPlaceStates}.
+ *
+ * @param compound The compound.
+ * @returns Whether it tests a state the driver writes at run time.
+ */
+const namesSelectPlaceState = (compound: Compound): boolean =>
+  compound.attributes.some((test) => selectPlaceStates.has(test.name));
+
+/**
  * Find the compounds of a sheet that no element of the trees has.
  *
  * Every compound of every selector counts, descending into the selectors of `:where`, `:is` and
  * `:has` and skipping `:not`'s. Combinators, pseudo-classes and pseudo-elements are not matched,
  * and a compound that names nothing else (`:where(…)` itself, a bare `::before`) matches, as does
- * one that names a part of an interaction module ({@link namesModulePart}).
+ * one that names a part of an interaction module ({@link namesModulePart}) or a select-then-place
+ * state the runtime writes ({@link namesSelectPlaceState}).
  *
  * @param sheet The scanned sheet.
  * @param trees The markup the sheet styles.
@@ -217,7 +241,9 @@ const unmatched = (sheet: Sheet, trees: readonly Node[]): readonly SheetCompound
 
   return matchable(sheet).filter(
     ({ compound }) =>
-      !namesModulePart(compound) && !elements.some((element) => has(element, compound)),
+      !namesModulePart(compound) &&
+      !namesSelectPlaceState(compound) &&
+      !elements.some((element) => has(element, compound)),
   );
 };
 
@@ -294,6 +320,24 @@ describe("unmatched", () => {
         [["qti-underline", "qti-italic"]],
       );
     }),
+  );
+
+  it.effect(
+    "does not report a compound that tests a select-then-place state, which the runtime writes after the SSR, and reports another attribute no element has",
+    () =>
+      Effect.gen(function* selectPlaceState() {
+        const choice = rowFor("choice-interaction", "choice").slot;
+        const states = yield* scanSheet(
+          `:where([data-slot="${choice}"] [aria-pressed="true"]) { color: red }\n:where([data-cursor]) { color: red }\n:where([aria-disabled="true"]) { color: red }`,
+        );
+        const other = yield* scanSheet('[aria-grabbed="true"] { color: red }');
+
+        assert.deepStrictEqual(unmatched(states, [choiceList()]), []);
+        assert.deepStrictEqual(
+          unmatched(other, [choiceList()]).map((entry) => entry.compound.attributes[0]?.name),
+          ["aria-grabbed"],
+        );
+      }),
   );
 
   it.effect("reports an attribute test whose operator is not =", () =>
