@@ -1,4 +1,3 @@
-import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
@@ -12,7 +11,6 @@ import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kin
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { expandedNameOf, typeHandle, typePrefixes, xsiTypesOf } from "#pantry/grammar/xsi.ts";
 import type { ContentModel, ExpandedName, TypeDerivation } from "#pantry/vocab/inventory/types.ts";
-import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import { typeDerivations } from "#pantry/vocab/inventory/models.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import { namespaceNameOf, xsNamespace } from "#pantry/vocab/namespaces.ts";
@@ -28,6 +26,7 @@ import {
 } from "#pantry/test/gen/grammar.ts";
 import type { Content, Probe, ProbeDocument, XsdSet } from "#pantry/test/gen/grammar.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
+import { xsdCached } from "#pantry/test/xsd-catalog.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -225,22 +224,12 @@ describe("XsiType", () => {
 });
 
 /**
- * Whether every pinned XSD is in the cache; without them the xmllint differential is skipped.
- */
-const cached = await Effect.runPromise(
-  checkCache().pipe(
-    Effect.as(true),
-    Effect.catchTag("XsdSourceMissing", () => Effect.succeed(false)),
-    Effect.provide(NodeServices.layer),
-  ),
-);
-
-/**
  * The schema sets the differential walks, each with its version and the target namespace of its
- * type probes.
+ * type probes: 3.0.1's ASI and content-packaging sets. The 3.0.0 ASI set derives the same types by
+ * the same rule, and the line between the versions' types is xsi-versions.test.ts's, so a third
+ * `xmllint` run over 18 MB would repeat this one.
  */
 const typedSchemas: readonly (readonly [SourcePath, SchemaVersion, string])[] = [
-  ["imsqti_asiv3p0_v1p0.xsd", "3.0.0", "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"],
   ["imsqti_asiv3p0p1_v1p0.xsd", "3.0.1", "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"],
   [
     "imsqtiv3p0p1_imscpv1p2_v1p0.xsd",
@@ -338,7 +327,7 @@ const typeProbesOf = (input: {
   ].map((handle) => ({ children: [], kind, parent, type: Option.some(nameOfHandle(handle)) }));
 };
 
-describe.skipIf(!cached)("XsiType against xmllint", () => {
+describe.skipIf(!xsdCached)("XsiType against xmllint", () => {
   it.effect(
     "admits an xsi:type on a strictly assessed element exactly when xmllint does: every probed kind, its declared type, the first and last types the IR derives from it, xs:anyType and a type it does not derive",
     (ctx) =>
