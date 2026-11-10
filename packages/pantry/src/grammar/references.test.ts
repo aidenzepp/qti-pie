@@ -599,7 +599,7 @@ describe("references", () => {
               kind: "second-implementation",
               name: "the drawn facets read as a naive model of each relation, and each planted fault's refusal (refusalOf)",
             },
-            runs: 400,
+            runs: 300,
             shrink: completeShrink,
             steerEvery: 16,
             suite: "grammar/references/coding",

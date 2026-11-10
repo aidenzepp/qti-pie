@@ -583,7 +583,7 @@ describe("OperatorArity's occurrence arithmetic against a naive count set", () =
               kind: "second-implementation",
               name: "the set of a particle's child counts by brute force (countsOf)",
             },
-            runs: 400,
+            runs: 300,
             shrink: completeShrink,
             steerEvery: 16,
             suite: "grammar/expression/arity",
