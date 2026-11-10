@@ -5508,13 +5508,18 @@ describe("buildItem", () => {
 });
 
 /**
- * How many accepted corpus items have a `qti-template-processing` child of their root: the BPIG
- * examples' `adaptiveTemplate`, `template_digging` and `template_image` and the packaging examples'
- * `SineRule-001`, `SineRule-002-maths`, `adaptive_template` and `template_image`, each twice, as a
- * file and inside its zip. `SineRule-001`'s `qti-custom-operator` is marked and gives NULL, since
- * plate runs no extension, so its marks stop neither processing.
+ * How many accepted corpus items have a `qti-template-processing` child of their root, each twice,
+ * as a file and inside its zip: the BPIG examples' `adaptiveTemplate`,
+ * `Example04-feedbackBlock-templateBlock`, `mc_calc3`, `mc_calc5`, `stat2`, `template_digging` and
+ * `template_image` (14); BBQsTest's `SineRule-001` and `SineRule-002-maths` (4); feedbackTest's
+ * `Example03-feedbackBlock-solution-random` and `Example04-feedbackBlock-templateBlock` (4); and
+ * the packaging items' `adaptive_template`, `Example03-feedbackBlock-solution-random`,
+ * `Example04-feedbackBlock-templateBlock`, `mc_calc3`, `mc_calc5`, `mc_stat2` and `template_image`
+ * (14). `SineRule-001`'s `qti-custom-operator` is marked and gives NULL, since plate runs no
+ * extension, so its marks stop neither processing. The 22 of them that hold a `math` element were
+ * `unchecked`, and so uncounted, until the MathML content module judged them (issue m3e-05).
  */
-const templatedCorpusItems = 14;
+const templatedCorpusItems = 36;
 
 /**
  * The time the corpus count may take: it opens every corpus document once, as the sweeps do.
@@ -5586,7 +5591,7 @@ describe("buildItem over the corpus", { tags: ["corpus"] }, () => {
   );
 
   it.effect(
-    "[I-5] runs template processing and response processing in each of the 14 accepted corpus items whose root holds a qti-template-processing",
+    "[I-5] runs template processing and response processing in each of the 36 accepted corpus items whose root holds a qti-template-processing",
     () =>
       Effect.gen(function* templatedCorpus() {
         const found: { readonly item: Item; readonly location: string }[] = [];
