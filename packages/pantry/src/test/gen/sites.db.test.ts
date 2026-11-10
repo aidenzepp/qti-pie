@@ -10,9 +10,9 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { drawn, explore } from "@grizzle/testing/explore";
-import { completeShrink } from "@grizzle/testing/shrink";
+import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
+import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
@@ -21,10 +21,11 @@ import { importDir } from "#pantry/test/import-dir.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import {
+  hrefCases,
   outsideRulesOfBox,
   rulesOfBox,
-  siteBox,
   siteLiteral,
+  siteNames,
   sitePackage,
 } from "#pantry/test/gen/sites.ts";
 import type { SiteBox } from "#pantry/test/gen/sites.ts";
@@ -81,39 +82,60 @@ const importJudged = (box: SiteBox) =>
     );
   }).pipe(Effect.scoped);
 
+/**
+ * The package whose every site is listed: the every-relation package itself.
+ */
+const allListed: SiteBox = { fragment: "listed", rules: "listed", section: "listed" };
+
+/**
+ * Each site alone in each case but listed, the other two listed: one package per row of the case
+ * table (`ruleOfCase`), built, not drawn.
+ */
+const singleFaults: readonly SiteBox[] = siteNames.flatMap((name) =>
+  hrefCases.flatMap((href): readonly SiteBox[] =>
+    href === "listed" ? [] : [{ ...allListed, [name]: href }],
+  ),
+);
+
 describe.skipIf(!hasLease)("test/gen/sites.ts, on the lease", { timeout: 3_600_000 }, () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
   })("each package of the site box imported and judged by PostgreSQL", (it) => {
     it.effect(
-      "gives every package of the site box the law oracle's verdict, and an include that places nothing include-target or the fragment's outside rule",
+      "gives each site's every faulted case the law oracle's verdict, and an include that places nothing include-target or the fragment's outside rule",
       (ctx) =>
         // Oracle: the specification as a checker, reading 115 and §7.5 per case (`ruleOfCase`),
         // and a second implementation, the law oracle over the same entries.
-        // Bound: 32 of the 125 packages of the site box (the every-relation package's three sites,
-        // each listed, naming an absent file, an entry listed as no document or a file outside the
-        // package, or writing no href), drawn from the run's seed; `sites.test.ts` exhausts the box
-        // on the host.
+        // Bound: every site of the every-relation package alone in each of its 4 faulted cases
+        // (naming an absent file, an entry listed as no document or a file outside the package, or
+        // writing no href), the other two listed: 12 packages, every row of the case table,
+        // exhausted; `sites.test.ts` exhausts the 125 packages of the whole box on the host, and
+        // the all-listed package is the every-relation package every lease file accepts.
         searched(
           ctx,
-          explore(
+          exhaust(
             {
+              box: "each site alone in each faulted case, the others listed",
               caseHang: Duration.seconds(120),
-              concurrency: 1,
               coverage: noCoverage,
-              draw: drawn(siteBox),
-              kept: [],
-              literal: siteLiteral,
+              generator: int(0, singleFaults.length - 1),
+              limit: singleFaults.length,
+              literal: (at) => {
+                const box = singleFaults[at];
+
+                return box === undefined ? String(at) : siteLiteral(box);
+              },
               oracle: {
                 kind: "second-implementation",
                 name: "the law oracle over the same entries",
               },
-              runs: 32,
-              shrink: completeShrink,
-              steerEvery: 16,
               suite: "pantry/test/gen-sites-db-box",
             },
-            importJudged,
+            (at) => {
+              const box = singleFaults[at];
+
+              return box === undefined ? Effect.void : importJudged(box);
+            },
           ),
         ),
     );
