@@ -1980,6 +1980,7 @@ describe("the public surface", () => {
         "openPackage",
         "partition",
         "permits",
+        "postedStrings",
         "postings",
         "readPnp",
         "redact",

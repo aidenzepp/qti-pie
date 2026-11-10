@@ -20,7 +20,8 @@ export interface EntryRow {
 /**
  * Read an entry's bytes as a grizzle `bytes` value, a `Uint8Array` over an `ArrayBuffer`: a view of
  * the same bytes where they lie in one, which a file the platform reads always does, and a copy
- * where they lie in a `SharedArrayBuffer`. grizzle copies the value again when it admits the row.
+ * where they lie in a `SharedArrayBuffer`. grizzle copies the value once more, into its
+ * statement's binary array, as it sends the row.
  *
  * @param bytes - The entry's bytes as read.
  * @returns The same bytes over an `ArrayBuffer`.

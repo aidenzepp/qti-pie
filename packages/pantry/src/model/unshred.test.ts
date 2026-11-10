@@ -10,7 +10,8 @@ import { Array as Arr, Effect, Exit, Formatter, Option, Result } from "effect";
 import { exportCharset } from "@qti-pie/crust/charset.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
-import { namesOf, shredGrammarOf } from "#pantry/model/composed.ts";
+import { shredGrammarOf } from "#pantry/model/composed.ts";
+import { names } from "#pantry/model/names.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { toXmlDocument, unshred } from "#pantry/model/unshred.ts";
@@ -40,11 +41,6 @@ const grammar = Result.getOrThrow(composed());
  * The grammar shred reads through, projected once.
  */
 const shredGrammar = shredGrammarOf(grammar);
-
-/**
- * The names unshred writes under, projected once.
- */
-const names = namesOf(grammar);
 
 /**
  * The trees every property is checked over: the one generator's, over the composed grammar.

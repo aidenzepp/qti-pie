@@ -565,10 +565,15 @@ const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
   const textAppearance = firstOf("text-appearance");
   const display: DisplayPreferences = {
     invertDisplayPolarity: features.has("invert-display-polarity"),
+    invertedColors: Option.map(firstOf("invert-display-polarity"), (element) => ({
+      background: attributeOf(element, "background"),
+      foreground: attributeOf(element, "foreground"),
+    })),
     keywordEmphasis: features.has("keyword-emphasis"),
     languageOfInterface: Option.firstSomeOf(elementsOf("language-of-interface").map(langOf)),
     layoutSingleColumn: features.has("layout-single-column"),
     magnification: Option.flatMap(firstOf("magnification"), magnificationOf),
+    text: textAppearance.pipe(Option.map(textPreferencesOf)),
     textAppearance: textAppearance.pipe(
       Option.flatMap((element) => {
         const backgroundColor = childText(element, "background-color");
@@ -586,6 +591,7 @@ const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
       firstOf("additional-testing-time"),
       additionalTestingTimeOf,
     ),
+    alternativeText: features.has("alternative-text"),
     answerMasking: features.has("answer-masking"),
     atStart: sets.atStart,
     braille: Option.map(firstOf("braille"), brailleOf),
@@ -595,6 +601,7 @@ const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
       ),
       () => false,
     ),
+    captions: features.has("captions"),
     catalog: new Set(
       catalogSupports.filter((support): support is CatalogSupport => features.has(support)),
     ),
@@ -606,10 +613,6 @@ const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
       inputRequirementValues,
       elementsOf("input-requirements").map(textOf),
     ),
-    invertedColors: Option.map(firstOf("invert-display-polarity"), (element) => ({
-      background: attributeOf(element, "background"),
-      foreground: attributeOf(element, "foreground"),
-    })),
     keywordTranslationLanguage: Option.flatMap(firstOf("keyword-translation"), langOf),
     languages: new Map(
       languageFeatures.flatMap((name): readonly (readonly [LanguageFeature, string])[] =>
@@ -631,7 +634,6 @@ const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
     signLanguage: Option.flatMap(firstOf("sign-language"), langOf),
     spoken: Option.map(firstOf("spoken"), spokenOf),
     suppressTts: noSupports.suppressTts,
-    text: textAppearance.pipe(Option.map(textPreferencesOf)),
     toolSettings: {
       calculatorType: Option.flatMap(firstOf("calculator-on-screen"), (element) =>
         Option.flatMap(attributeOf(element, "calculator-type"), (value) =>
