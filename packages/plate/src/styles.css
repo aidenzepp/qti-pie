@@ -1164,4 +1164,11 @@
 /* end vocabulary */
 
 /* begin m3f (issue m3f-01) */
+/*
+ * The Time part: tabular figures, so the time left and the min-time keep their width as a host
+ * counts them down. It sets no display, so a hidden part stays hidden.
+ */
+:where([data-slot="test-navigation-time"]) {
+  font-variant-numeric: tabular-nums;
+}
 /* end m3f */
