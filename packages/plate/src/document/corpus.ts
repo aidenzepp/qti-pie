@@ -114,7 +114,7 @@ const requireRoot = (root: string): Effect.Effect<void, CorpusMissing> => {
  *   {@link CorpusFileUnreadable} when the path leaves the root or names no readable file, and a
  *   `ConfigError` when neither `PLATE_CORPUS_DIR` nor `HOME` is set.
  */
-export const readCorpusFile = Effect.fn("readCorpusFile")(function* readCorpusFile(
+export const readCorpusFile = Effect.fn("plate.readCorpusFile")(function* readCorpusFile(
   relative: string,
 ): Effect.fn.Return<Uint8Array, CorpusMissing | CorpusFileUnreadable | Config.ConfigError> {
   yield* Effect.annotateCurrentSpan("corpus.path", relative);
@@ -185,4 +185,4 @@ export const corpusDocuments: Effect.Effect<
     )
     .filter((member) => !member.startsWith(`${qti2Folder}/`))
     .toSorted();
-}).pipe(Effect.withSpan("corpusDocuments"));
+}).pipe(Effect.withSpan("plate.corpusDocuments"));
