@@ -126,6 +126,17 @@ export interface PortableCustomInteraction extends ModuleInteraction<"portable-c
    */
   readonly contextVariables: readonly string[];
   /**
+   * The children of each HTML `template` of the markup, in document order, each read as body
+   * content, which the render copies inert.
+   *
+   * The name is not `templates`: the redacted JSON form carries this field under the same name,
+   * and `templates` is a key the redaction sweep refuses at any depth of a redacted item, as the
+   * name of an item's template declarations and a record's template values, which a page must
+   * never hold. This field holds neither: it is the author's inert `template` content, which the
+   * PCI activates (Q-16, issue pci-03b).
+   */
+  readonly inertTemplates: readonly (readonly BodyNode[])[];
+  /**
    * The content of the one `qti-interaction-markup` but for its `template` elements, read as the
    * body walk reads the item body; empty for an empty markup.
    */
@@ -137,11 +148,6 @@ export interface PortableCustomInteraction extends ModuleInteraction<"portable-c
   readonly modules: Option.Option<PortableCustomModules>;
   readonly properties: readonly PortableCustomProperty[];
   readonly prompt: Option.Option<readonly BodyNode[]>;
-  /**
-   * The children of each HTML `template` of the markup, in document order, each read as body
-   * content, which the render copies inert.
-   */
-  readonly templates: readonly (readonly BodyNode[])[];
   /**
    * The `template-identifier` of each `qti-template-variable`, in document order.
    */
@@ -184,10 +190,19 @@ export interface PortableCustomPayload {
    * `entryName(instance, response)`, which the Root carries as `data-entry-name`.
    */
   readonly formName: string;
+  /**
+   * The content of each HTML `template` of the markup, copied through the payload's kit, which the
+   * render writes inert.
+   *
+   * The name is not `templates`, for the reason {@link PortableCustomInteraction.inertTemplates}
+   * gives: the redaction sweep refuses that key at any depth of a redacted item, and this field
+   * holds the author's inert content, no template declaration and no template value (Q-16, issue
+   * pci-03b).
+   */
+  readonly inertTemplates: readonly (readonly PayloadNode[])[];
   readonly markup: readonly PayloadNode[];
   readonly prompt: Option.Option<readonly PayloadNode[]>;
   readonly response: string;
-  readonly templates: readonly (readonly PayloadNode[])[];
   readonly typeIdentifier: string;
 }
 
@@ -213,6 +228,15 @@ export interface PortableCustomJson {
   readonly cardinality?: string;
   readonly class: string;
   readonly contextVariables: readonly string[];
+  /**
+   * The content of each HTML `template` of the markup, in the body's JSON form.
+   *
+   * The key is not `templates`, for the reason {@link PortableCustomInteraction.inertTemplates}
+   * gives: the redaction sweep refuses that key at any depth of a redacted item's JSON, and this
+   * key holds the author's inert content, no template declaration and no template value (Q-16,
+   * issue pci-03b).
+   */
+  readonly inertTemplates: readonly (readonly unknown[])[];
   readonly kind: "portable-custom";
   readonly markup: readonly unknown[];
   readonly module?: string;
@@ -224,7 +248,6 @@ export interface PortableCustomJson {
   readonly properties: readonly PortableCustomProperty[];
   readonly prompt?: readonly unknown[];
   readonly response: string;
-  readonly templates: readonly (readonly unknown[])[];
   readonly templateVariables: readonly string[];
   readonly typeIdentifier: string;
 }
@@ -302,11 +325,11 @@ const rows = {
  * {@link connect}: one set per Template, in the templates' order.
  */
 interface Connected {
+  readonly inertTemplates: readonly Attributes[];
   readonly markup: Attributes;
   readonly notice: Attributes;
   readonly prompt: Attributes;
   readonly root: Attributes;
-  readonly templates: readonly Attributes[];
   readonly [part: string]: Attributes | readonly Attributes[];
 }
 
@@ -409,13 +432,16 @@ const markupOf = (
   read: ReaderKit,
   pci: SourceElement,
 ): Result.Result<
-  { readonly markup: readonly BodyNode[]; readonly templates: readonly (readonly BodyNode[])[] },
+  {
+    readonly inertTemplates: readonly (readonly BodyNode[])[];
+    readonly markup: readonly BodyNode[];
+  },
   Refusal
 > =>
   Result.gen(function* readMarkup() {
     const [found] = read.childrenNamed(pci, "qti-interaction-markup");
     if (found === undefined) {
-      return { markup: [], templates: [] };
+      return { inertTemplates: [], markup: [] };
     }
 
     read.markElement(found);
@@ -426,13 +452,13 @@ const markupOf = (
       children: found.children.filter((child) => !(child.kind === "element" && isTemplate(child))),
       own,
     });
-    const templates: (readonly BodyNode[])[] = [];
+    const inertTemplates: (readonly BodyNode[])[] = [];
     for (const template of read.elementsOf(found).filter(isTemplate)) {
       read.markElement(template);
-      templates.push(yield* read.nodes(template, { own }));
+      inertTemplates.push(yield* read.nodes(template, { own }));
     }
 
-    return { markup, templates };
+    return { inertTemplates, markup };
   });
 
 /**
@@ -547,6 +573,7 @@ const connect = (interaction: PortableCustomPayload, payload: Payload): Connecte
   const promptId = scopedId(payload.instance, interaction.response, "prompt");
 
   return {
+    inertTemplates: interaction.inertTemplates.map(() => ({ "data-slot": rows.template.slot })),
     markup: { "data-slot": rows.markup.slot },
     notice: { "data-slot": rows.notice.slot },
     prompt: { "data-slot": rows.prompt.slot, id: promptId },
@@ -563,7 +590,6 @@ const connect = (interaction: PortableCustomPayload, payload: Payload): Connecte
       "data-pci-type": interaction.typeIdentifier,
       "data-slot": rows.root.slot,
     },
-    templates: interaction.templates.map(() => ({ "data-slot": rows.template.slot })),
   };
 };
 
@@ -615,7 +641,7 @@ export const portableCustomModule: InteractionModule<
   /**
    * The nodes the render writes as content: the markup, then each template's content.
    */
-  content: (interaction) => [...interaction.markup, ...interaction.templates.flat()],
+  content: (interaction) => [...interaction.markup, ...interaction.inertTemplates.flat()],
   /**
    * No Control: without script the server renders none, so the renderer numbers none (Q10).
    */
@@ -657,7 +683,7 @@ export const portableCustomModule: InteractionModule<
       const typeIdentifier = yield* read.requiredValue(pci, "custom-interaction-type-identifier");
       const prompt = yield* read.content(pci, "qti-prompt");
       const modules = modulesOf(read, pci);
-      const { markup, templates } = yield* markupOf(read, pci);
+      const { inertTemplates, markup } = yield* markupOf(read, pci);
       const templateVariables = yield* identifiersOf(
         read,
         pci,
@@ -683,6 +709,7 @@ export const portableCustomModule: InteractionModule<
         cardinality: read.bound.pipe(Option.flatMap((bound) => bound.cardinality)),
         class: Option.getOrElse(read.valueOf(pci, "class"), () => ""),
         contextVariables,
+        inertTemplates,
         kind: "portable-custom",
         markup,
         module: read.valueOf(pci, "module"),
@@ -692,7 +719,6 @@ export const portableCustomModule: InteractionModule<
         properties: propertiesOf(pci),
         response,
         templateVariables,
-        templates,
         typeIdentifier,
       };
     }),
@@ -709,6 +735,7 @@ export const portableCustomModule: InteractionModule<
       cardinality: OptionalText,
       class: Schema.String,
       contextVariables: Schema.Array(Schema.String),
+      inertTemplates: Schema.Array(BodyNodes),
       kind: Schema.Literal("portable-custom"),
       markup: BodyNodes,
       module: OptionalText,
@@ -730,7 +757,6 @@ export const portableCustomModule: InteractionModule<
       properties: Schema.Array(Schema.Struct({ name: Schema.String, value: Schema.String })),
       response: Schema.String,
       templateVariables: Schema.Array(Schema.String),
-      templates: Schema.Array(BodyNodes),
       typeIdentifier: Schema.String,
     }),
   /**
@@ -751,10 +777,10 @@ export const portableCustomModule: InteractionModule<
       templateVariables: interaction.templateVariables,
     },
     formName: kit.formName(interaction.response),
+    inertTemplates: interaction.inertTemplates.map((nodes) => kit.nodes(nodes)),
     markup: kit.nodes(interaction.markup),
     prompt: interaction.prompt.pipe(Option.map((nodes) => kit.nodes(nodes))),
     response: interaction.response,
-    templates: interaction.templates.map((nodes) => kit.nodes(nodes)),
     typeIdentifier: interaction.typeIdentifier,
   }),
   /**
@@ -766,7 +792,7 @@ export const portableCustomModule: InteractionModule<
       Option.toArray,
     ),
     regionOf("content", interaction.markup),
-    ...interaction.templates.map((nodes) => regionOf("content", nodes)),
+    ...interaction.inertTemplates.map((nodes) => regionOf("content", nodes)),
   ],
   /**
    * Render the Root holding the Prompt, the Markup with its Templates, and the Notice, each part
@@ -791,12 +817,12 @@ export const portableCustomModule: InteractionModule<
           ),
         ),
       );
-      const templates = yield* Result.all(
-        interaction.templates.map((nodes, index) =>
+      const templateParts = yield* Result.all(
+        interaction.inertTemplates.map((nodes, index) =>
           Result.flatMap(emit(nodes), (emitted) =>
             applyPart(
               rows.template,
-              props.templates[index] ?? { "data-slot": rows.template.slot },
+              props.inertTemplates[index] ?? { "data-slot": rows.template.slot },
               emitted,
               replacement("template"),
             ),
@@ -806,7 +832,7 @@ export const portableCustomModule: InteractionModule<
       const markup = yield* applyPart(
         rows.markup,
         props.markup,
-        [...(yield* emit(interaction.markup)), ...templates],
+        [...(yield* emit(interaction.markup)), ...templateParts],
         replacement("markup"),
       );
       const notice = yield* applyPart(
@@ -833,9 +859,9 @@ export const portableCustomModule: InteractionModule<
 
     return {
       ...interaction,
+      inertTemplates: interaction.inertTemplates.map((nodes, index) => after[index + 1] ?? nodes),
       markup: after[0] ?? interaction.markup,
       prompt,
-      templates: interaction.templates.map((nodes, index) => after[index + 1] ?? nodes),
     };
   },
   /**
