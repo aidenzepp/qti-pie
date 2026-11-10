@@ -19,6 +19,8 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    Limits that refuse valid content:
    - **Key-text bound** (`key-text-bound`): a text a key holds is at most 2,587 UTF-8 bytes, what a PostgreSQL B-tree
      entry leaves it beside the widest key's other columns (reading 133, with its copies in readings 2 and 60).
+   - **Regex-text bound** (`regex-text-bound`): an attribute's value is at most 268,435,454 UTF-8 bytes, the
+     longest text PostgreSQL's regular expressions read (reading 178).
    - **Element depth** (`element-depth`): at most 256 elements are open at once, the bound `@qti-pie/crust`'s reader
      keeps for pantry and plate alike (`defaultElementDepth`, as in `xmllint`). XML and QTI set no depth; the bound
      protects the recursive walks over a read tree, and nesting that deep is outlandish and absent from the official
@@ -3615,3 +3617,26 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      identifier response of ordered cardinality, so no verdict moves. This binds pantry and plate alike. It matches
      reading 165 of PR #55. (Decided 2026-11-09 by the overseer under the operator's delegation, decision 448, overseer
      mail f74ee547.)
+
+<!-- Readings 173 to 177 arrive with PR #55, which lands first (decision 485), so this reading is numbered 178. -->
+
+178. **An attribute's value holds at most 268,435,454 UTF-8 bytes: a stated limit of the representation, not a law of
+     QTI.** No QTI specification bounds the length of an attribute's value, and XML bounds none (reading 94). pantry's
+     representation still refuses one past a bound, because `Attribute.lexical`'s domain checks every value it stores
+     against its pattern with PostgreSQL's `~`, and `~` reads no longer text: `RE_execute` widens its subject into one
+     `pg_wchar` per byte and one more (`palloc_array(pg_wchar, dat_len + 1)`, PostgreSQL 19rc1 `regexp.c:332`), and
+     `palloc` refuses a size past `MaxAllocSize`, `0x3fffffff` (`memutils.h`), so a subject holds at most
+     `floor(MaxAllocSize / sizeof(pg_wchar)) - 1` bytes, 268,435,454, whatever its characters. The field's type is
+     grizzle's byte refinement, `str.bytes(regexTextBytes, str.regex(charsPattern))` (`src/qti/attributes.ts`
+     `Lexical`, `src/qti/limits.ts` `regexTextBytes`, which `limits.test.ts` holds to grizzle's own refusal one byte
+     past it), so a longer value is refused by the oracle's "Regex text bound" (rule `regex-text-bound`) and by the
+     database under the same rule. It changes no verdict: a longer value already failed to store, with a raw "invalid
+     memory alloc request size" that neither the refusal nor the oracle named, and now fails by name; the largest XML
+     file in 1EdTech's official packages is 162,515 bytes. Such a value is outlandish and absent from the official
+     packages, so it sits on reading 1's list under the operator's rule of 2026-11-07. It reverses the findings note
+     "`Attribute.lexical` is unbounded by design" (`docs/grizzle-findings.md`) and keeps its intent: the field holds
+     any value PostgreSQL can check. The bound also lets a rule over a query read the field with `Compute.matches`,
+     which grizzle refuses over a text its type does not bound within this limit. An element's text (`Node.chars`)
+     has the same ceiling, not yet stated, which the issue the Mind files tracks. What would lift it (reading 91):
+     PostgreSQL's regular expressions reading a longer subject. This binds pantry alone. (Proposed in pantry-api phase
+     1, 2026-11-10, for the operator; decision 484.)

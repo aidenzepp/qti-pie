@@ -125,6 +125,8 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "Node key":
     "a second row of one id (xdm.ts secondParent) also moves the slots and intervals the fold laws read, N5 fold and N7 last slot among them, which rank ahead of reachability; folds.oracle.test.ts holds the variant to its law",
   "PCI module source": "its mutation is not written yet",
+  "Regex text bound":
+    "breaking it takes an attribute of more than 268,435,454 UTF-8 bytes, and a package carrying one through the oracle's parse does not fit a test's memory; regex-text-bound.oracle.test.ts holds the oracle's predicate at the bound and one byte past it",
   "T2 root":
     "a second self-parented root also breaks E1's derived fields, which rank ahead of reachability; folds.oracle.test.ts holds the variant to its law",
 };
