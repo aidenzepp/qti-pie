@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  identifier="nonlinear" title="A nonlinear timed test">
+  <qti-time-limits min-time="300" max-time="600"/>
+  <qti-test-part identifier="N" navigation-mode="nonlinear" submission-mode="individual">
+    <qti-time-limits min-time="200" max-time="300"/>
+    <qti-assessment-section identifier="S1" title="A held section" visible="true">
+      <qti-time-limits min-time="100"/>
+      <qti-assessment-item-ref identifier="N1" href="choice.xml">
+        <qti-time-limits min-time="60"/>
+      </qti-assessment-item-ref>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="S2" title="An unheld section" visible="true">
+      <qti-assessment-item-ref identifier="N2" href="choice.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+</qti-assessment-test>
