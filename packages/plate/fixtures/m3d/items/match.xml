@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m3d-match" title="Tools of the trades" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="directedPair">
+    <qti-correct-response>
+      <qti-value>TROWEL GARDENER</qti-value>
+      <qti-value>ANVIL SMITH</qti-value>
+      <qti-value>LOOM WEAVER</qti-value>
+    </qti-correct-response>
+    <qti-mapping lower-bound="0" upper-bound="3" default-value="0">
+      <qti-map-entry map-key="TROWEL GARDENER" mapped-value="1"/>
+      <qti-map-entry map-key="ANVIL SMITH" mapped-value="1"/>
+      <qti-map-entry map-key="LOOM WEAVER" mapped-value="1"/>
+    </qti-mapping>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-match-interaction response-identifier="RESPONSE" max-associations="3"
+      data-first-column-header="Tool"
+      data-max-selections-message="Make three matches at most."
+      data-min-selections-message="Make at least one match.">
+      <qti-prompt>Match each tool with the trade that uses it.</qti-prompt>
+      <qti-simple-match-set>
+        <qti-simple-associable-choice identifier="TROWEL" match-max="2">Trowel</qti-simple-associable-choice>
+        <qti-simple-associable-choice identifier="ANVIL" match-max="1">Anvil</qti-simple-associable-choice>
+        <qti-simple-associable-choice identifier="LOOM" match-max="1">Loom</qti-simple-associable-choice>
+      </qti-simple-match-set>
+      <qti-simple-match-set>
+        <qti-simple-associable-choice identifier="GARDENER" match-max="1">Gardener</qti-simple-associable-choice>
+        <qti-simple-associable-choice identifier="SMITH" match-max="1">Blacksmith</qti-simple-associable-choice>
+        <qti-simple-associable-choice identifier="WEAVER" match-max="1">Weaver</qti-simple-associable-choice>
+        <qti-simple-associable-choice identifier="MASON" match-max="1">Mason</qti-simple-associable-choice>
+      </qti-simple-match-set>
+    </qti-match-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/map_response.xml"/>
+</qti-assessment-item>
