@@ -36,6 +36,7 @@
  *
  * @module
  */
+import { Data } from "effect";
 import type { ModuleInteraction, ModuleKind } from "#plate/interactions/contract.ts";
 import type { ModelOf } from "#plate/model/interactions.ts";
 import { containerKinds, modules } from "#plate/model/interactions.ts";
@@ -144,8 +145,24 @@ const bareStub = stubOrder.find(isBareStub);
  */
 export const hasStub = bareStub !== undefined;
 
+/**
+ * The refusal to load when every kind of {@link stubOrder} has landed. It is thrown at load time,
+ * never returned: the module has no caller to return to, and the condition is a defect of the
+ * repository's state (two test rows outliving their premise), not a failure a caller can cause.
+ * It is a tagged class and not a bare `Error` because the "throw no bare Error" pin of
+ * `src/browser.test.ts` scans every non-test module under `src/`, this one included. It carries
+ * {@link noBareStub} as its message, so the run-time refusal and the compile-time one say the same
+ * thing.
+ */
+class NoBareStub extends Data.TaggedError("NoBareStub")<{
+  /**
+   * The rows to delete, as {@link noBareStub} names them.
+   */
+  readonly message: string;
+}> {}
+
 if (bareStub === undefined) {
-  throw new Error(noBareStub);
+  throw new NoBareStub({ message: noBareStub });
 }
 
 /**
