@@ -8,6 +8,7 @@ import { h, when } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
 import type { ValueBinding } from "#plate/form/encoding.ts";
+import type { ModuleEntry, RedactKit } from "#plate/interactions/contract.ts";
 import { encodeRedacted } from "#plate/codec/redacted.ts";
 import { interactionsIn as bodyInteractions, isStubbed } from "#plate/model/interactions.ts";
 import type { ModelOf, Modules } from "#plate/model/interactions.ts";
@@ -29,7 +30,7 @@ import type {
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
-import { format, nullOf } from "#plate/model/values.ts";
+import { format, isRecordValue, nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import {
   choiceOrder,
@@ -38,6 +39,7 @@ import {
   isRedacted,
   payload,
   postings,
+  postingsIn,
   redactItem,
   redactStructure,
   templateShows,
@@ -58,7 +60,6 @@ import type {
 import { redact, render } from "#plate/render.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
-import type { RedactKit } from "#plate/interactions/contract.ts";
 import { stubElement, stubKind } from "#plate/test/stub-kind.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptForTest, acceptedItem, check } from "#plate/validate/verdict.ts";
@@ -3012,6 +3013,79 @@ const withAbsentFalse = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E>
   );
 
 /**
+ * The single integer the toy module's `entry` reads `{"n":<integer>}` as.
+ *
+ * @param n The integer.
+ * @returns The value.
+ */
+const toyInteger = (n: bigint): Value => ({
+  baseType: "integer",
+  cardinality: "single",
+  values: [{ baseType: "integer", value: n }],
+});
+
+/**
+ * A module's entry in the shape pci-05's will have: `decode` reads `{"n":<integer>}` as a single
+ * integer and empty text as its NULL, and refuses any other text; `encode` writes that JSON.
+ */
+const toyEntry: ModuleEntry = {
+  decode: (postedText) => {
+    if (postedText === "") {
+      return Result.succeed(nullOf("integer", "single"));
+    }
+
+    const n = /^\{"n":(?<n>-?\d+)\}$/u.exec(postedText)?.groups?.["n"];
+
+    return n === undefined
+      ? Result.fail('post {"n":<integer>}, as the toy control gives it')
+      : Result.succeed(toyInteger(BigInt(n)));
+  },
+  encode: (encoded) => {
+    const [first] = isRecordValue(encoded) ? [] : encoded.values;
+
+    return first === undefined ? "" : `{"n":${format(first)}}`;
+  },
+};
+
+/**
+ * Run an effect with the stub kind's module binding its one response and declaring
+ * {@link toyEntry} as its `entry`, every module it imports loaded afresh, and the module restored
+ * after. The mock keeps the stub's every other member, so a node of the kind reaches `postingsIn`,
+ * which reads only `bindings`, `absentValue` and `entry` of it.
+ *
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withEntry = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(stubFile, async (importOriginal) => {
+      const actual = await importOriginal<Record<string, Modules[typeof stubKind]>>();
+
+      return Object.fromEntries(
+        Object.entries(actual).map(([name, module]) => [
+          name,
+          {
+            ...module,
+            bindings: (interaction: { readonly response: string }) => [
+              { base: Option.none(), response: interaction.response },
+            ],
+            entry: () => toyEntry,
+          },
+        ]),
+      );
+    });
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(stubFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
  * The responses of the smaller item the growth check reads, each bound to its own Text Entry,
  * before it reads one with {@link growthFactor} times as many.
  */
@@ -3252,6 +3326,74 @@ describe("postings", () => {
           );
         }),
       ),
+  );
+
+  it.effect(
+    "[W0-PCIJSON] postings gives a response its module's binding when the first interaction that binds it declares entry",
+    () =>
+      withEntry(
+        Effect.gen(function* moduleBindingPosting() {
+          const payloads = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const form = yield* Effect.promise(() => import("#plate/form/encoding.ts"));
+          const responses = [
+            { baseType: "integer", cardinality: "single", identifier: "R" },
+            { baseType: "identifier", cardinality: "single", identifier: "CAPITAL" },
+          ] as const;
+          const [moduleBound, capital, ...others] = payloads.postingsIn(
+            { body: [{ ...stubNode, response: "R" }, choice], responses },
+            instance,
+          );
+
+          assert.lengthOf(others, 0);
+          assert.deepStrictEqual(capital, postingOf("CAPITAL", "identifier", 10));
+
+          const { binding, identifier, options } = moduleBound ?? assert.fail("R has no posting.");
+
+          assert.strictEqual(identifier, "R");
+          assert.deepStrictEqual(options, { base: 10 });
+          if (!("kind" in binding)) {
+            assert.fail("R's binding is not its module's.");
+          }
+
+          assert.strictEqual(binding.kind, "module");
+          assert.strictEqual(binding.cardinality, "single");
+          assert.strictEqual(binding.name, entryName(instance, "R"));
+          assert.deepStrictEqual(
+            Result.getSuccess(form.decode([[binding.name, '{"n":7}']], binding, options)),
+            Option.some(toyInteger(7n)),
+          );
+          assert.deepStrictEqual(form.encode(toyInteger(7n), binding), [[binding.name, '{"n":7}']]);
+
+          // A Choice alone binds its response under the lexical forms, as today.
+          const [plain, ...rest] = payloads.postingsIn(
+            { body: [choice], responses: [responses[1]] },
+            instance,
+          );
+
+          assert.lengthOf(rest, 0);
+          assert.deepStrictEqual(plain, postingOf("CAPITAL", "identifier", 10));
+        }),
+      ),
+  );
+
+  it.effect("[W0-PCIJSON] a module binding wins for a base type no control posts", () =>
+    withEntry(
+      Effect.gen(function* moduleBindingOfDuration() {
+        const payloads = yield* Effect.promise(() => import("#plate/payload.ts"));
+        const redaction = {
+          body: [{ ...stubNode, response: "R" }],
+          responses: [{ baseType: "duration", cardinality: "single", identifier: "R" }],
+        } as const;
+        const [posting, ...others] = payloads.postingsIn(redaction, instance);
+
+        assert.lengthOf(others, 0);
+        assert.strictEqual(posting?.identifier, "R");
+        assert.isTrue(posting !== undefined && "kind" in posting.binding);
+
+        // The control: no posting under the lexical forms, since no control posts a duration.
+        assert.deepStrictEqual(postingsIn(redaction, instance), []);
+      }),
+    ),
   );
 
   it("gives no posting to a declared response no interaction binds, so a post carries nothing over its record value", () => {
