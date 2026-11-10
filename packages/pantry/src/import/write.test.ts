@@ -29,14 +29,7 @@ import { ownViewOf } from "#pantry/import/fold.ts";
 import { unionOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { ImportProgram } from "#pantry/import/program.ts";
-import {
-  documentRowsOf,
-  domainOrdered,
-  idrefPiecesOf,
-  nodeIdsOf,
-  patternInputs,
-  rootInsertOf,
-} from "#pantry/import/write.ts";
+import { documentRowsOf, idrefPiecesOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type {
   AttributeInsert,
   DocumentLayerRows,
@@ -1036,80 +1029,6 @@ describe("unionOf", () => {
       ),
     ),
   );
-});
-
-/**
- * A flat row as a pattern reads it: its pattern's input, and its place in its keyed set.
- */
-interface PatternRow {
-  readonly baseType: string;
-  readonly place: string;
-}
-
-/**
- * Every list of up to 5 rows over 3 pattern inputs, each placed by its index.
- */
-const patternCases: Gen<readonly PatternRow[]> = (source) =>
-  source
-    .draw(array(element(["float", "identifier", "integer"]), { max: 5, min: 0 }))
-    .map((baseType, place) => ({ baseType, place: String(place) }));
-
-describe("domainOrdered", () => {
-  it.effect(
-    "orders rows into one run per pattern input, each run in the keyed set's order, losing none",
-    (ctx) =>
-      // Oracle: the specification as a checker, the tier-1 addendum's import order: the output is
-      // a permutation of the input, each input value's rows are one contiguous run, and within a
-      // run the input order holds (a stable sort).
-      // Bound: every list of up to 5 rows over 3 inputs, (3⁶ − 1) / 2 = 364 cases.
-      searched(
-        ctx,
-        exhaust(
-          {
-            box: "every list of up to 5 rows whose pattern input is float, identifier or integer",
-            caseHang: Duration.seconds(10),
-            coverage: noCoverage,
-            generator: patternCases,
-            limit: 400,
-            literal: (value) => Formatter.format(value),
-            oracle: { kind: "specification", name: "a stable grouping by pattern input" },
-            suite: "import/write-pattern-order",
-          },
-          (rows) =>
-            Effect.sync(() => {
-              const ordered = domainOrdered(rows, ["baseType"]);
-              const runs = ordered
-                .map(({ baseType }) => baseType)
-                .filter((baseType, at, all) => at === 0 || all[at - 1] !== baseType);
-
-              assert.sameMembers([...ordered], [...rows]);
-              assert.strictEqual(new Set(runs).size, runs.length);
-              for (const baseType of new Set(runs)) {
-                assert.deepStrictEqual(
-                  ordered.filter((row) => row.baseType === baseType),
-                  rows.filter((row) => row.baseType === baseType),
-                );
-              }
-            }),
-        ),
-      ),
-  );
-
-  it("names each pattern input as a field of its relation's rows", () => {
-    // Oracle: the specification as a checker, the checks that read a per-row pattern by a field
-    // (Q5.08's `Typed_value` on `TypedValue` by base type, Q5.10's `Literal_lexical` by type code and
-    // `ExpressionAttribute`'s `E1_derived` by attribute and base type), the fields held by the
-    // compiler against each relation's `Addition` (`changeSetOf` sorts by them).
-    const inputs: { readonly [Relation in keyof typeof patternInputs]: readonly string[] } =
-      patternInputs;
-
-    assert.sameMembers(Object.keys(inputs), [
-      "ExpressionAttribute",
-      "LiteralTyped",
-      "TypedValue",
-      "UsageValueBaseType",
-    ]);
-  });
 });
 
 /**

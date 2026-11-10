@@ -28,7 +28,7 @@
  */
 import { Bits, ChangeSet } from "@bjornpagen/grizzle";
 import type { Addition, InsertAllRowsOf, Uuid } from "@bjornpagen/grizzle";
-import { Array as Arr, Option, Order, Struct } from "effect";
+import { Option, Struct } from "effect";
 import {
   attributeRows,
   AttributeSlot,
@@ -914,75 +914,6 @@ export const documentRowsOf = (document: {
 };
 
 /**
- * The row type of one input of a package's ChangeSet.
- */
-type RowOf<Name extends keyof PackageInputs> =
-  PackageInputs[Name] extends ReadonlyMap<string, infer Row> ? Row : never;
-
-/**
- * The fields each flat relation's CHECK reads a per-row pattern by, the pattern's inputs: the
- * relations whose rows are sorted by them before the write, so that rows of one pattern are one run
- * of their statement and PostgreSQL's backend, which caches 32 compiled regexes, compiles each
- * pattern once per run (the tier-1 addendum's import order: 1.4 to 4.9 µs a grouped row against
- * about 80 µs in arbitrary order).
- *
- * A nested family's rows are grizzle's to order: a family write orders each statement's rows by
- * pattern (grizzle `72f7d037`, `write/family/pattern-order.ts:106-112`; README, "Limits"), so the
- * `Attribute` statement, whose `value_domain` reads a pattern per domain, and `Node`'s TextDomain
- * need no table here. grizzle orders no flat relation's rows, which is this table's.
- *
- * `TypedValue`'s `Typed_value` reads the pattern of its base type's domain (Q5.08),
- * `Literal_lexical` its type code's and `ExpressionAttribute`'s `E1_derived` its attribute's and
- * base type's (Q5.10), and `UsageValueBaseType`'s `Usage_typed_value` its base type's (spec reading
- * 105). A relation joins this table when a check over it reads a pattern by a field.
- */
-export const patternInputs = {
-  ExpressionAttribute: ["attribute", "baseType"],
-  LiteralTyped: ["typeCode"],
-  TypedValue: ["baseType"],
-  UsageValueBaseType: ["baseType"],
-} as const satisfies Partial<Readonly<Record<keyof PackageInputs, readonly string[]>>>;
-
-/**
- * Order rows by the values of their pattern inputs, stably: rows with equal inputs form one run,
- * and keep their own order within it.
- *
- * @param rows - The rows, in the order their keyed set holds them.
- * @param fields - The fields the pattern is read by, most significant first.
- * @returns The rows, sorted.
- */
-export const domainOrdered = <const F extends string, R extends Readonly<Record<F, string>>>(
-  rows: Iterable<R>,
-  fields: readonly F[],
-): readonly R[] =>
-  Arr.sort(
-    [...rows],
-    Order.mapInput(Order.Array(Order.String), (row: R) => fields.map((field) => row[field])),
-  );
-
-/**
- * The rows of each relation of {@link patternInputs}, sorted by their pattern's inputs; the
- * `satisfies` holds the record to the table, so a relation the table gains is sorted here or fails
- * to compile.
- *
- * @param inputs - The package's inputs.
- * @returns Each pattern relation's rows, sorted.
- */
-const patternOrdered = (inputs: PackageInputs) =>
-  ({
-    ExpressionAttribute: domainOrdered(
-      inputs.ExpressionAttribute.values(),
-      patternInputs.ExpressionAttribute,
-    ),
-    LiteralTyped: domainOrdered(inputs.LiteralTyped.values(), patternInputs.LiteralTyped),
-    TypedValue: domainOrdered(inputs.TypedValue.values(), patternInputs.TypedValue),
-    UsageValueBaseType: domainOrdered(
-      inputs.UsageValueBaseType.values(),
-      patternInputs.UsageValueBaseType,
-    ),
-  }) satisfies { readonly [Name in keyof typeof patternInputs]: readonly RowOf<Name>[] };
-
-/**
  * The rows of a keyed set, in the order it holds them, as a ChangeSet's insert takes a relation's
  * facts: a type-level function, so `Struct.map` gives each relation its own row type.
  */
@@ -1000,17 +931,15 @@ const rowsOfSet = Struct.lambda<RowsOfSet>((set) => [...set.values()]);
 
 /**
  * Read one package's facts, the rows of each relation of its inputs as `insertAll` takes them: each
- * keyed set's rows, those of {@link patternInputs} sorted by their pattern's inputs. They are what
- * the author login's `importWrite` member applies (`db.workload.importWrite.apply(facts, {})`),
- * which grizzle checks as each relation's insert checks its rows.
+ * keyed set's rows, in the order the set holds them. They are what the author login's `importWrite`
+ * member applies (`db.workload.importWrite.apply(facts, {})`), which grizzle checks as each
+ * relation's insert checks its rows. The rows are a set: no order of them changes what the write
+ * holds or which law refuses it.
  *
  * @param inputs - The package's inputs.
  * @returns The facts, one array of rows per relation.
  */
-export const packageFactsOf = (inputs: PackageInputs) => ({
-  ...Struct.map(rowsOfSet)(inputs),
-  ...patternOrdered(inputs),
-});
+export const packageFactsOf = (inputs: PackageInputs) => Struct.map(rowsOfSet)(inputs);
 
 /**
  * Build one package's ChangeSet: one step over the author role, each relation of the package's
@@ -1023,7 +952,7 @@ export const packageFactsOf = (inputs: PackageInputs) => ({
  *
  * The `Node` insert carries each document's tree, its attributes and namespace declarations, and
  * their families nested; the `Package` insert its record. Every other input is its keyed set's
- * rows, flat, those of {@link patternInputs} sorted by their pattern's inputs.
+ * rows, flat.
  *
  * The caller passes the role, the one its database was opened on: describing the author role costs
  * about 2 s and 271 MB (measured 2026-11-06 at load average 27), and a caller that only builds
