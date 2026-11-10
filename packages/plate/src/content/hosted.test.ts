@@ -828,12 +828,15 @@ describe("a module whose node a body element docks", () => {
           const tide = '<section data-stimulus="S1"><p>The tide turns.</p></section>';
           const night = '<section data-stimulus="S2"><p>Night falls.</p></section>';
 
-          assert.include(html, `<div id="q1-stimulus-S1-0">${tide}</div>`);
+          assert.include(html, `<div data-stimulus-idref="S1" id="q1-stimulus-S1-0">${tide}</div>`);
           assert.strictEqual(html.split(tide).length, 2);
           assert.strictEqual(html.split(night).length, 2);
           assert.notInclude(html, "Loading.");
-          assert.isBelow(html.indexOf(night), html.indexOf("<div id="));
-          assert.isBelow(html.indexOf("<div id="), html.indexOf("After the passage."));
+          assert.isBelow(html.indexOf(night), html.indexOf('<div data-stimulus-idref="S1"'));
+          assert.isBelow(
+            html.indexOf('<div data-stimulus-idref="S1"'),
+            html.indexOf("After the passage."),
+          );
           assert.isBelow(html.indexOf("After the passage."), html.indexOf("item-live"));
           assert.isBelow(html.indexOf("<qti-assessment-item"), html.indexOf(night));
         }),
@@ -857,7 +860,10 @@ describe("a module whose node a body element docks", () => {
           );
 
           assert.isFalse("content" in redacted);
-          assert.include(html, "<div><p>Loading.</p></div><p>After the passage.</p>");
+          assert.include(
+            html,
+            '<div data-stimulus-idref="S1"><p>Loading.</p></div><p>After the passage.</p>',
+          );
           assert.notInclude(html, "data-stimulus=");
           assert.notInclude(html, "q1-stimulus-");
         }),

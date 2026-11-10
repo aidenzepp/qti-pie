@@ -2637,7 +2637,7 @@ describe("render, an element that names a stimulus", () => {
           Result.getOrThrow(render(decoded, configuration, { instance })).html,
           expected,
         );
-        assert.include(expected, "<div>Loading.</div>");
+        assert.include(expected, '<div data-stimulus-idref="S1">Loading.</div>');
       }),
   );
 });

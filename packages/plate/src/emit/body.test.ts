@@ -1738,7 +1738,7 @@ describe("emitBody, the stimulus dock hook", () => {
         );
 
         assert.deepStrictEqual(nodes, [
-          h("div", { id: "i1--passage" }, [
+          h("div", { "data-stimulus-idref": "S1", id: "i1--passage" }, [
             h("p", { "data-docked-in": "i1--passage" }, [text("S1")]),
           ]),
           h("p", {}, [text("After.")]),
@@ -1766,13 +1766,13 @@ describe("emitBody, the stimulus dock hook", () => {
         );
 
         assert.deepStrictEqual(nodes, [
-          h("div", { id: "i1-stimulus-S1-0" }, [
+          h("div", { "data-stimulus-idref": "S1", id: "i1-stimulus-S1-0" }, [
             h("p", { "data-docked-in": "i1-stimulus-S1-0" }, [text("S1")]),
           ]),
-          h("div", { id: "i1-stimulus-S1-1" }, [
+          h("div", { "data-stimulus-idref": "S1", id: "i1-stimulus-S1-1" }, [
             h("p", { "data-docked-in": "i1-stimulus-S1-1" }, [text("S1")]),
           ]),
-          h("div", {}, [text("third")]),
+          h("div", { "data-stimulus-idref": "S2" }, [text("third")]),
         ]);
         assert.deepStrictEqual(
           handed.map(({ id }) => id),
