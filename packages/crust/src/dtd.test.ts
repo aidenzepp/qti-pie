@@ -3,6 +3,7 @@ import { Effect, Option } from "effect";
 import { lexProlog, substitute } from "#crust/dtd.ts";
 import type { AttlistEntry, ValuePiece } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
+import { assertRefusal } from "#crust/test/refusal.ts";
 
 /**
  * Lex `text` and return its general-entity table as `[name, replacement]` pairs in declaration
@@ -805,23 +806,6 @@ describe("the expansion budget", () => {
 });
 
 /**
- * Asserts that `error` is a `ReaderRefusal` under `rule` positioned at `line` and `column`.
- */
-const assertPositioned = (
-  error: ReaderRefusal | WellFormednessError,
-  rule: ReaderRefusal["rule"],
-  line: number,
-  column: number,
-) => {
-  assert.instanceOf(error, ReaderRefusal);
-  assert.strictEqual(error._tag === "ReaderRefusal" && error.rule, rule);
-  assert.deepStrictEqual(
-    error._tag === "ReaderRefusal" ? error.position : Option.none(),
-    Option.some({ column, line }),
-  );
-};
-
-/**
  * Run `effect` and count how many times it scans a text for line breaks, which finding a line and
  * column does and nothing else in the prolog's lexer does.
  *
@@ -854,7 +838,7 @@ describe("a refusal from the internal subset", () => {
         '<!DOCTYPE a [\n<!ATTLIST a d CDATA "1&e;2">\n<!ENTITY e "x">\n]><a/>',
       );
 
-      assertPositioned(error, "undeclared-entity", 2, 23);
+      assertRefusal(error, "undeclared-entity", Option.some({ column: 23, line: 2 }));
     }),
   );
 
@@ -862,7 +846,7 @@ describe("a refusal from the internal subset", () => {
     Effect.gen(function* placesUndeclaredReference() {
       const error = yield* refusalOf('<!DOCTYPE a [\n<!ATTLIST a d CDATA "1&e;2">\n]><a/>');
 
-      assertPositioned(error, "undeclared-entity", 2, 23);
+      assertRefusal(error, "undeclared-entity", Option.some({ column: 23, line: 2 }));
     }),
   );
 
@@ -870,7 +854,7 @@ describe("a refusal from the internal subset", () => {
     Effect.gen(function* placesParameterCycle() {
       const error = yield* refusalOf('<!DOCTYPE a [\n<!ENTITY % p "&#37;p;">\n  %p;\n]><a/>');
 
-      assertPositioned(error, "entity-cycle", 3, 3);
+      assertRefusal(error, "entity-cycle", Option.some({ column: 3, line: 3 }));
     }),
   );
 
@@ -884,7 +868,7 @@ describe("a refusal from the internal subset", () => {
         `<!DOCTYPE a [\n${subset}\n<!ATTLIST a d CDATA "&e20;">\n]><a/>`,
       );
 
-      assertPositioned(error, "entity-expansion", 3, 22);
+      assertRefusal(error, "entity-expansion", Option.some({ column: 22, line: 3 }));
     }),
   );
 
@@ -896,7 +880,7 @@ describe("a refusal from the internal subset", () => {
       }
       const error = yield* refusalOf(`<!DOCTYPE a [\n${subset}\n\n  %p20;\n]><a/>`);
 
-      assertPositioned(error, "entity-expansion", 4, 3);
+      assertRefusal(error, "entity-expansion", Option.some({ column: 3, line: 4 }));
     }),
   );
 
