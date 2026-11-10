@@ -31,25 +31,7 @@ import type {
   DeclarationCardinality,
   DeclarationIdentifier,
 } from "#pantry/qti/declarations.ts";
-import { itemKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
-import {
-  adaptiveName,
-  ariaNames,
-  bindingAttributes,
-  choiceKinds,
-  countDefault,
-  gapKind,
-  hotspotKinds,
-  hottextKind,
-  modulesKind,
-  pciKind,
-  readAttributes,
-  references,
-  referringRoots,
-  sliderKind,
-  unfragmentedRoots,
-} from "#pantry/qti/interactions.ts";
 import type {
   AriaElement,
   AriaRange,
@@ -108,6 +90,23 @@ import type {
   TemplateRefCardinality,
   TemplateRefDeclaration,
 } from "#pantry/qti/interactions.ts";
+import { itemKind } from "#pantry/vocab/terms/tests.ts";
+import {
+  adaptiveName,
+  ariaNames,
+  bindingAttributes,
+  choiceKinds,
+  countDefault,
+  gapKind,
+  hotspotKinds,
+  hottextKind,
+  modulesKind,
+  pciKind,
+  readAttributes,
+  references,
+  referringRoots,
+  sliderKind,
+} from "#pantry/vocab/terms/interactions.ts";
 
 /**
  * The ids a document's rows are written under: each node's, drawn by the number `flatten` gives
@@ -329,6 +328,13 @@ const valueOf = (
  * ({@link isNcName}). Any other value names nothing, and its value domain refuses it alone (spec
  * reading 152).
  *
+ * The test is the one `namedBinding` of `#pantry/qti/interactions.ts` states, and the schema holds
+ * that selection forward only: each binding it selects has its `BindingName` and, in an item, its
+ * `BoundVariable`, and no law refuses a row beyond them. A row for a value that is no NCName would
+ * stand, and "Binding declared" would judge it beside the value domain, which reading 152 rules
+ * out. So the test stays here for as long as both relations are written rows, not queries over
+ * the selection.
+ *
  * @param context - The document.
  * @param node - The element.
  * @param name - The attribute's name.
@@ -370,16 +376,15 @@ const tupleOf = (context: Context, node: NodeRow<Composed>) => ({
  */
 const namedOf = (context: Omit<Context, "itemMode" | "named">): Pick<Context, "named"> => ({
   named: context.rows.nodes.flatMap((node) =>
-    Option.toArray(
-      declarationOf(node.kind, (name) => Option.getOrUndefined(lexicalOf(context, node.id, name))),
-    ).flatMap((declaration) =>
-      Option.toArray(declaration.name).map(({ pieces }) => ({
-        baseType: declaration.baseType,
-        cardinality: declaration.cardinality,
-        declarationKind: declaration.declarationKind,
-        identifier: pieces.name,
-        node: node.id,
-      })),
+    Option.toArray(declarationOf(node.kind, (name) => lexicalOf(context, node.id, name))).flatMap(
+      (declaration) =>
+        Option.toArray(declaration.name).map(({ pieces }) => ({
+          baseType: declaration.baseType,
+          cardinality: declaration.cardinality,
+          declarationKind: declaration.declarationKind,
+          identifier: pieces.name,
+          node: node.id,
+        })),
     ),
   ),
 });
@@ -1126,6 +1131,14 @@ const ariaOf = (context: Context) => {
  * one (spec reading 159). A value that is no NCName names nothing and has neither, so its value
  * domain refuses it alone (spec reading 152).
  *
+ * The NCName test decides which value is a reference, as each relation's source does
+ * (`referenceSources` of `#pantry/qti/interactions.ts`), and the schema holds the source forward
+ * only, so no law refuses a row beyond it. No law refuses what the test leaves out, either: a
+ * printed variable's `base` and `index` hold an `xs:integer` literal or a variable's name, so
+ * `base="10"` is lawful and names nothing, and a row for it would break "Printed variable
+ * reference" on a package the database must accept. So the test stays here for as long as each
+ * relation is written rows, not a query over its source.
+ *
  * @param context - The document.
  * @param read - The document's read attributes.
  * @param reference - The relation's attributes and kinds.
@@ -1207,24 +1220,23 @@ const referencesOf = (
 /**
  * Build a section document's or an included fragment's references of one class: each read
  * attribute of the class's names and kinds that names a variable ({@link isNcName}), unresolved,
- * since neither declares anything; each resolves once per assembly that places the document.
+ * since neither declares anything; each resolves once per assembly that places the document (spec
+ * readings 5 and 117). The NCName test stays for the reasons {@link referencesOf} gives, each
+ * relation's source being `sectionSources` of `#pantry/qti/interactions.ts`.
  *
  * @param context - The document.
  * @param read - The document's read attributes.
  * @param classes - The class's attributes and kinds.
- * @param resolving - The root kinds of the documents that make no such reference of their own:
- *   {@link referringRoots}, whose references resolve in their own declarations, or
- *   {@link unfragmentedRoots} for a class only a fragment's references are.
- * @returns The rows, keyed by (node, attribute), none in a document `resolving` names.
+ * @returns The rows, keyed by (node, attribute), none in an item or a test
+ *   ({@link referringRoots}), whose references resolve in their own declarations.
  */
 const sectionNamesOf = (
   context: Context,
   read: ReturnType<typeof interactionAttributesOf>,
   classes: readonly (typeof references)[keyof typeof references][],
-  resolving: readonly string[],
 ): ReadonlyMap<string, Addition<typeof SectionFeedbackName>> =>
   new Map(
-    resolving.every((root) => root !== context.rootKind)
+    referringRoots.every((root) => root !== context.rootKind)
       ? [...read.values()].flatMap((row) =>
           isNcName(row.value) &&
           classes.some(
@@ -1255,13 +1267,14 @@ const sectionNamesOf = (
 const sectionFeedbacks = [references.feedback] as const;
 
 /**
- * A fragment's template variable references: its template elements' and choices'
- * `template-identifier`.
+ * A section document's or a fragment's template variable references: its template elements' and
+ * choices' `template-identifier`.
  */
 const sectionTemplates = [references.template] as const;
 
 /**
- * A fragment's context variable references: its `qti-context-variable`s' `identifier`.
+ * A section document's or a fragment's context variable references: its
+ * `qti-context-variable`s' `identifier`.
  */
 const sectionContexts = [references.context] as const;
 
@@ -1350,10 +1363,10 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
         ? [[context.document, { document: context.document }]]
         : [],
     ),
-    SectionContextName: sectionNamesOf(context, read, sectionContexts, unfragmentedRoots),
-    SectionFeedbackName: sectionNamesOf(context, read, sectionFeedbacks, referringRoots),
-    SectionPrintedName: sectionNamesOf(context, read, sectionPrints, referringRoots),
-    SectionTemplateName: sectionNamesOf(context, read, sectionTemplates, unfragmentedRoots),
+    SectionContextName: sectionNamesOf(context, read, sectionContexts),
+    SectionFeedbackName: sectionNamesOf(context, read, sectionFeedbacks),
+    SectionPrintedName: sectionNamesOf(context, read, sectionPrints),
+    SectionTemplateName: sectionNamesOf(context, read, sectionTemplates),
     Slider: slidersOf(context),
     TemplateRef: templates.references,
     TemplateRefCardinality: kindedOf(templates),
@@ -1629,8 +1642,8 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
  *   `DeclarationBaseType` rows).
  * @param input.cardinalities - Every declaration's cardinality, where it has one (Q5.08's
  *   `DeclarationCardinality` rows).
- * @param input.contexts - Every fragment's context variable references ({@link rowsOf}'s
- *   `SectionContextName`).
+ * @param input.contexts - Every section document's and fragment's context variable references
+ *   ({@link rowsOf}'s `SectionContextName`).
  * @param input.declarations - Every named declaration of the package (Q5.08's
  *   `DeclarationIdentifier` rows).
  * @param input.feedbacks - Every section document's and fragment's feedback references
@@ -1639,8 +1652,8 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
  *   `assembledRowsOf`).
  * @param input.prints - Every section document's and fragment's printed variable references
  *   ({@link rowsOf}'s `SectionPrintedName`).
- * @param input.templates - Every fragment's template variable references ({@link rowsOf}'s
- *   `SectionTemplateName`).
+ * @param input.templates - Every section document's and fragment's template variable references
+ *   ({@link rowsOf}'s `SectionTemplateName`).
  * @returns The rows.
  */
 export const sectionRowsOf = (input: {

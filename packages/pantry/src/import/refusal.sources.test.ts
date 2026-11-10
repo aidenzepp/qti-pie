@@ -121,54 +121,6 @@ const sources: ReadonlyMap<string, string> = new Map([
   ),
 ]);
 
-/**
- * A violation the guard knows of: who owns it, the fix that clears it, and its offences exactly.
- */
-interface Known {
-  /**
-   * The change that clears it, which deletes the entry.
-   */
-  readonly fix: string;
-  /**
-   * Its offences, as {@link offencesOf} words them.
-   */
-  readonly offences: readonly string[];
-  /**
-   * Who owns the fix.
-   */
-  readonly owner: string;
-}
-
-/**
- * The violations the guard knows of, by law: each a law whose only carrier is a sentence of the
- * information model's §2, struck by the coordinator's ruling of 2026-11-07, whose source stands
- * until the schema change that strikes it lands. The list only shrinks: an entry whose law no
- * longer offends exactly as stated fails as stale.
- */
-const known: ReadonlyMap<string, Known> = new Map([
-  [
-    "BindingFit",
-    {
-      fix: "re-cite the law to the class descriptions' binding sentences; the qti-order-interaction row, whose one carrier was §2.4.1.2, is gone (spec reading 172)",
-      offences: [
-        "BindingFit: #Main2p4 stands in §2.4 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
-        "BindingFit: §2.4 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
-        "BindingFit: §2.4.1.1 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
-        "BindingFit: #ChoiceInt stands in §2.4.1.1 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
-      ],
-      owner: "OL A1, schema slot 10",
-    },
-  ],
-]);
-
-/**
- * The law or record an offence is of: its words before the first `: `.
- *
- * @param offence - The offence.
- * @returns Its law's name.
- */
-const lawOf = (offence: string): string => offence.slice(0, offence.indexOf(": "));
-
 describe.skipIf(!held)("the law sources' citations", () => {
   it("are judged against the renderings they were read from", () => {
     for (const { document, read } of cached) {
@@ -210,8 +162,8 @@ describe.skipIf(!held)("the law sources' citations", () => {
     // A line stands in the section of the heading at or before it: the duration sentence of
     // §2.2.2.2, a variable mapping's source of §7.48.1, the table of contents in none.
     for (const [line, section] of [
-      [8468, Option.some("2.2.2.2")],
-      [71_657, Option.some("7.48.1")],
+      [4656, Option.some("2.2.2.2")],
+      [80_470, Option.some("7.48.1")],
       [1790, Option.none()],
     ] as const) {
       assert.deepStrictEqual(model?.sectionOfLine(line), section, `info.txt:${line}`);
@@ -219,23 +171,7 @@ describe.skipIf(!held)("the law sources' citations", () => {
   });
 
   it("each cite a heading that exists, in a section its specification marks normative", () => {
-    assert.deepStrictEqual(
-      offencesOf(sources, sections).filter((offence) => !known.has(lawOf(offence))),
-      [],
-    );
-  });
-
-  it("know only violations that still stand, exactly as stated", () => {
-    // Stale check: a known law that no longer offends, or offends otherwise, fails here, so its
-    // fix deletes the entry with the law.
-    const offences = offencesOf(sources, sections);
-    for (const [law, { offences: stated }] of known) {
-      assert.deepStrictEqual(
-        offences.filter((offence) => lawOf(offence) === law),
-        stated,
-        `${law}: a known violation that no longer stands as stated`,
-      );
-    }
+    assert.deepStrictEqual(offencesOf(sources, sections), []);
   });
 
   it("refuse a citation of a non-normative section, an anchor no heading holds, a line no section holds and an unread specification", () => {
@@ -248,8 +184,8 @@ describe.skipIf(!held)("the law sources' citations", () => {
           ["Overview", `${model}#Main2p12 (§2.12: 'Fragments are packaged as separate resources')`],
           ["Dangling", `${model}#Data_BaseType (§5.130)`],
           ["Unread", "https://www.imsglobal.org/spec/qti/v9p0/info#Data_SetValue"],
-          ["Lined", "the duration of an item (info.txt:8468, and :999999)"],
-          ["Held", `${model}#Data_SetValue (§5.130 and §5.130.2, the expression), info.txt:71657`],
+          ["Lined", "the duration of an item (info.txt:4656, and :999999)"],
+          ["Held", `${model}#Data_SetValue (§5.130 and §5.130.2, the expression), info.txt:80470`],
         ]),
         sections,
       ),
@@ -258,7 +194,7 @@ describe.skipIf(!held)("the law sources' citations", () => {
         "Overview: §2.12 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
         "Dangling: #Data_BaseType names no heading of the QTI 3.0 information model",
         "Unread: https://www.imsglobal.org/spec/qti/v9p0/info#Data_SetValue is no specification whose sections can be judged",
-        "Lined: info.txt:8468 stands in §2.2.2.2 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
+        "Lined: info.txt:4656 stands in §2.2.2.2 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
         "Lined: info.txt:999999 stands in no section of the QTI 3.0 information model",
       ],
     );
