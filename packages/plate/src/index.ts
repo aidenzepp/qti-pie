@@ -128,7 +128,7 @@ export {
 
 export { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
 
-export type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
+export type { FileValue, RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 
 export type {
   NavigationItem,
@@ -196,6 +196,8 @@ export { advance, IntentRefused, StepResponseMisfit } from "#plate/session/advan
 
 export type { CommentFacts, CommentModule } from "#plate/session/comment.ts";
 
+export { renderTestContent } from "#plate/session/content.ts";
+
 export { UnknownItemRef } from "#plate/session/control.ts";
 
 export { allowedIntents } from "#plate/session/intents.ts";
@@ -260,7 +262,15 @@ export { catalogSupports, noPnpSupports, noSupports, toolPreferences } from "#pl
 
 export type { QtiContext } from "#plate/test-features/context-declaration.ts";
 
-export type { FeatureRefusal, TestFeatureKey, TimedScope } from "#plate/test-features/contract.ts";
+export type {
+  FeatureRefusal,
+  PresentContext,
+  PresentPlace,
+  TestContent,
+  TestContentRenderKit,
+  TestFeatureKey,
+  TimedScope,
+} from "#plate/test-features/contract.ts";
 
 export type { ResourceMetadata } from "#plate/test-features/metadata.ts";
 

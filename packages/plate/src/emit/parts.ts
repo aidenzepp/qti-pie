@@ -19,8 +19,9 @@ import type { sliderModule } from "#plate/interactions/slider.ts";
 import type { uploadModule } from "#plate/interactions/upload.ts";
 
 /**
- * The part keys of the four interactions plate renders, of the item chrome and of the test chrome,
- * a part's name with a lower-case first letter.
+ * The part keys of the four interactions plate renders, of the item chrome and of the test chrome
+ * (its navigation and the content a test shows beside its items), a part's name with a lower-case
+ * first letter.
  */
 interface ShippedPartsOf {
   "choice-interaction":
@@ -45,6 +46,7 @@ interface ShippedPartsOf {
     | "root"
     | "status"
     | "statusHeading";
+  "test-content": "root";
   "test-navigation":
     | "end"
     | "item"
@@ -113,7 +115,8 @@ type PartsOf = ContentPartsOf & ShippedPartsOf & StubPartsOf;
 
 /**
  * The owner of a group of parts: the item chrome, one of the interactions plate renders, the test
- * chrome's navigation, `test-navigation`, or a content slot.
+ * chrome's navigation, `test-navigation`, the content a test shows beside its items,
+ * `test-content`, or a content slot.
  *
  * It is also the first key of {@link PartOverrides}.
  */
@@ -1019,6 +1022,15 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     part: "time",
     tagClass: "flow-container",
   },
+  {
+    defaults: {},
+    element: "div",
+    interaction: "test-content",
+    listOwner: false,
+    merged: ["id"],
+    part: "root",
+    tagClass: "flow-container",
+  },
   /**
    * Modal Feedback's root (issue m5-01): a native `dialog`, shown by its `open` attribute without
    * script. A `dialog` is flow content.
@@ -1165,10 +1177,11 @@ export class PartTableDefect extends Data.TaggedError("PartTableDefect")<{
  * hand.
  *
  * @param interaction The component: an interaction, `item` for the host chrome,
- *   `test-navigation` for the test chrome, or a content slot's owner.
+ *   `test-navigation` for the test chrome, `test-content` for the content a test shows, or a
+ *   content slot's owner.
  * @param part The part.
  * @returns The marker: `choice-interaction`, `choice-interaction-indicator`, `item-status-heading`,
- *   `test-navigation-item-button`, `modal-feedback-close`.
+ *   `test-navigation-item-button`, `test-content`, `modal-feedback-close`.
  */
 export const slotFor = (interaction: InteractionKey, part: PartKey): string =>
   part === "root"
@@ -1177,8 +1190,8 @@ export const slotFor = (interaction: InteractionKey, part: PartKey): string =>
 
 /**
  * The part table, one row per part of the item chrome, each interaction plate renders here, the
- * test chrome's navigation and the content slots, in {@link rows}' order, each with its derived
- * marker.
+ * test chrome's navigation, the content a test shows and the content slots, in {@link rows}'
+ * order, each with its derived marker.
  *
  * An interaction module's rows live in its module, not here: a module gives each part's
  * `PartSpec` in its `parts`, and its render places the part through `partRow`

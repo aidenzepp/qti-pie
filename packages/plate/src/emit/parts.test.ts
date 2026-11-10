@@ -119,6 +119,7 @@ const prewiredSlots: ReadonlySet<string> = new Set([
   "choice-interaction-mask-toggle",
   "item-comment",
   "item-comment-label",
+  "test-content",
   ...contentRows.map((row) => row.slot),
 ]);
 
@@ -175,6 +176,7 @@ const specRows = [
   ["test-navigation", "submit", "test-navigation-submit", "button"],
   ["test-navigation", "end", "test-navigation-end", "button"],
   ["test-navigation", "time", "test-navigation-time", "div"],
+  ["test-content", "root", "test-content", "div"],
 ] as const;
 
 /**
@@ -580,6 +582,31 @@ describe("the test-navigation rows", () => {
   it("owns no list joint rule, as the item chrome's Messages own none", () => {
     for (const part of navigationParts) {
       assert.isFalse(rowFor("test-navigation", part).listOwner, part);
+    }
+  });
+});
+
+describe("the test-content owner", () => {
+  it("[W0-BF] the test-content owner has its root row", () => {
+    const rows = partTable.filter((row) => row.interaction === "test-content");
+
+    assert.deepStrictEqual(Option.getOrUndefined(partForSlot("test-content")), {
+      interaction: "test-content",
+      part: "root",
+    });
+    assert.deepStrictEqual(
+      rows.map((row) => row.part),
+      ["root"],
+    );
+    assert.strictEqual(rowFor("test-content", "root").slot, "test-content");
+    assert.strictEqual(rowFor("test-content", "root").element, "div");
+    assert.deepStrictEqual(rowFor("test-content", "root").defaults, {});
+    assert.deepStrictEqual(rowFor("test-content", "root").merged, ["id"]);
+    assert.isFalse(rowFor("test-content", "root").listOwner);
+    assert.isTrue(allows(rowFor("test-content", "root"), h("div", {})));
+    assert.isTrue(allows(rowFor("test-content", "root"), h("aside", {})));
+    for (const tag of [...controls, ...links, ...lists]) {
+      assert.isFalse(allows(rowFor("test-content", "root"), h(tag, {})), tag);
     }
   });
 });

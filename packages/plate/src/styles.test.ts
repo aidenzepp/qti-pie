@@ -750,6 +750,7 @@ const prewiredSlots: ReadonlySet<string> = new Set([
   "choice-interaction-mask-toggle",
   "item-comment",
   "item-comment-label",
+  "test-content",
   "test-navigation-time",
   ...partTable.filter((row) => contentOwners.has(row.interaction)).map((row) => row.slot),
 ]);
