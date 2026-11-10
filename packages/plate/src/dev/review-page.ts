@@ -8,13 +8,15 @@
  * A review or solution page is served only while `permits` allows it for item `n`, and is rendered
  * with `itemView`'s instance, configuration and record for that item, so a shuffled Choice shows
  * the order the candidate saw and a templated item the values its template processing drew. Review
- * shows the candidate's values; solution shows the values `solution` gives from the item's record,
- * its template-set correct responses among them, which the author passes to `render` as `values`,
- * the only place a correct response reaches a page (T-k under A; the solution page is the part a
- * ruling of B drops). The summary is a page builder, {@link summaryPage}: the session page shows it
- * once the test has closed, and it is not routed here; after the items it lists the test's outcomes
- * as the last outcome processing left them. The results document reports the session under the
- * store's `s-` id, which the Results XSD takes as an NCName.
+ * shows the candidate's values, and, where `permits` also allows the solution, marks each answer
+ * against the values `solution` gives from the item's record, passed to `render` as `solution`;
+ * solution shows those values, its template-set correct responses among them, which the author
+ * passes to `render` as `values`. Those two are the only places a correct response reaches a page
+ * (T-k under A; the solution page is the part a ruling of B drops). The summary is a page builder,
+ * {@link summaryPage}: the session page shows it once the test has closed, and it is not routed
+ * here; after the items it lists the test's outcomes as the last outcome processing left them. The
+ * results document reports the session under the store's `s-` id, which the Results XSD takes as an
+ * NCName.
  *
  * The route returns the frame's {@link Page} for every HTML answer, so the playground's handler
  * writes it with the stylesheets, the theme box and the page headers, and a `Response` only for the
@@ -45,6 +47,7 @@ import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
 import { isNullResponse } from "#plate/model/values.ts";
 import { redact, render, renderStatus } from "#plate/render.ts";
+import type { Options } from "#plate/render.ts";
 import { results } from "#plate/results/results.ts";
 import { resultValues } from "#plate/results/values.ts";
 import type { TestSession } from "#plate/session/session.ts";
@@ -175,7 +178,9 @@ const itemTitle = (
  * and record, so its ids, a shuffled Choice's order and a templated item's values are the ones the
  * candidate saw, and without `disabled`: the mode alone makes it read-only, so a Choice's controls
  * are disabled and a text Control is `readonly`, still a tab stop. Review shows the candidate's
- * values; solution shows `solution(document, view.record)`.
+ * values, marked against `solution(document, view.record)` when `permits` allows the item's
+ * solution too, as its item session control's `show-solution` decides; solution shows
+ * `solution(document, view.record)`.
  *
  * @param playground The playground, whose configuration the item is read with.
  * @param sitting The session and its test.
@@ -209,15 +214,17 @@ const itemPage = (
         { heading: mode, instance: view.instance },
         view.configuration,
       );
+      const correct = solution(document, view.record);
+      const shown: Options = {
+        assetBase: itemAssetBase(sitting, document),
+        instance: view.instance,
+        mode,
+        values: mode === "review" ? view.values : correct,
+      };
       const item = yield* render(
         redact(document, view.page, view.configuration),
         view.configuration,
-        {
-          assetBase: itemAssetBase(sitting, document),
-          instance: view.instance,
-          mode,
-          values: mode === "review" ? view.values : solution(document, view.record),
-        },
+        mode === "review" && allowed.success.solution ? { ...shown, solution: correct } : shown,
       );
       const { locale } = view.configuration;
 

@@ -16,7 +16,7 @@ import { emptyTheme } from "#plate/dev/theme.ts";
 import { readSource } from "#plate/document/read.ts";
 import { walk } from "#plate/document/source.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
-import { scopedId } from "#plate/emit/parts.ts";
+import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -384,6 +384,19 @@ const checkedValues = (controls: readonly Element[]): readonly string[] =>
   );
 
 /**
+ * Read the Marks a page holds under one marker, as `<data-answer>: <words>`, sorted.
+ *
+ * @param elements The page's elements.
+ * @param marker The Mark's `data-slot` marker.
+ * @returns Each Mark, sorted.
+ */
+const marksOn = (elements: readonly Element[], marker: string): readonly string[] =>
+  elements
+    .filter((element) => element.attrs["data-slot"] === marker)
+    .map((mark) => `${String(mark.attrs["data-answer"])}: ${textOf(mark)}`)
+    .toSorted();
+
+/**
  * Deliver the fixture test from a package cache: start a session, take it through its steps to its
  * close, start a second session and leave it open, and store both as the playground's session
  * pages do.
@@ -625,6 +638,38 @@ describe("routeReview", () => {
             checkedValues(controlsNamed(elements, name)),
             mode === "review" ? ["A"] : ["C"],
             target,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "marks review against the item's solution where its session control allows the solution, and marks nothing where it forbids it",
+    () =>
+      Effect.gen(function* markedReview() {
+        const { closed, playground } = yield* delivered;
+        const page = (n: number) => {
+          const target = `/sessions/${closed.id}/review/${n}`;
+
+          return ask(playground, target).pipe(Effect.map((outcome) => shown(outcome, target)));
+        };
+        const choice = yield* page(1);
+        const text = yield* page(2);
+
+        assert.deepStrictEqual(
+          marksOn(choice.elements, rowFor("choice-interaction", "mark").slot),
+          ["missed: Right answer", "wrong: Your answer, wrong"],
+        );
+        assert.deepStrictEqual(
+          marksOn(text.elements, rowFor("text-entry-interaction", "mark").slot),
+          ["missed: Right answer: seven", "wrong: Your answer, wrong"],
+        );
+        for (const n of [4, 5]) {
+          const { elements } = yield* page(n);
+
+          assert.isTrue(
+            elements.every((element) => element.attrs["data-answer"] === undefined),
+            `item ${String(n)} forbids the solution, so its review is unmarked`,
           );
         }
       }),
