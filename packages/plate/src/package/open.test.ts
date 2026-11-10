@@ -5062,12 +5062,14 @@ describe("package/open.ts", () => {
 
             assert.strictEqual(verdict.verdict, "accepted-with-unsupported", reference);
             assert.deepStrictEqual(test.test.outcomeProcessing, { kind: "marked" }, reference);
+            // The delivered test is assembled from the section document it places (issue m3f-03),
+            // so no section ref is marked and the section document's item ref is among its items.
             assert.deepStrictEqual(
               test.unsupported.map((feature) => feature.feature),
-              ["qti-assessment-section-ref", `variable:${reference}`],
+              [`variable:${reference}`],
               reference,
             );
-            assert.deepStrictEqual([...items.keys()], ["ITEM0"], reference);
+            assert.deepStrictEqual([...items.keys()], ["ITEM0", "I1"], reference);
           }
         }),
     );
@@ -7663,7 +7665,17 @@ describe("package/open.ts", () => {
             const verdict = yield* openCounting(name, own, "other", before, "");
             const { alone, delivered } = deliveredAndAlone(verdict);
 
-            assert.strictEqual(delivered, alone, name);
+            // The delivered test is assembled from the section document it places (issue m3f-03),
+            // so it is no longer the document's own, which keeps the section ref marked; its own
+            // reads run unmarked in both.
+            const aloneMarks = alone.unsupported.map((feature) => feature.feature);
+            assert.include(aloneMarks, "qti-assessment-section-ref", name);
+            assert.deepStrictEqual(
+              delivered.unsupported.map((feature) => feature.feature),
+              aloneMarks.filter((feature) => feature !== "qti-assessment-section-ref"),
+              name,
+            );
+            assert.strictEqual(alone.test.outcomeProcessing.kind, "runs", name);
             assert.strictEqual(delivered.test.outcomeProcessing.kind, "runs", name);
             assert.deepStrictEqual(variableMarks(delivered), [], name);
           }

@@ -35,7 +35,8 @@
  *   section documents are held to plate's assembly limit, 2,048 placements and 4 MiB placed: past
  *   either, the package is refused `assembly-limit` and no test is judged, a stated limit and not a
  *   rule of QTI. That reach is the test's own parts, sections and item refs and each placed
- *   document's. Through that reach:
+ *   document's, and the same placements assemble the document the test is delivered from (see
+ *   below). Through that reach:
  *
  *   - Each part's, section's and item ref's identifier is given once: one a section document gives
  *     again after the test or a document reached before it gave it is `duplicate-identifier` at that
@@ -113,25 +114,33 @@
  * (`package-path-outside`, `check: "document-entry"`, reading 102), and a resource of another type
  * whose `href` does names an external link the package does not hold. The package's verdict follows
  * from its parts: `refused` when anything is refused, `unchecked` when nothing is and some document
- * is, then `accepted-with-unsupported` when some document is or some test is delivered with an item
- * ref or processing the package marks (see below), and `accepted` otherwise. Only an accepting
- * package's documents are delivered. A test is delivered with the model its document's own verdict
- * holds, except that each of its item refs that names an LTI link is marked `lti-link` at it and
- * left out, since plate launches no LTI link, its outcome processing then `marked` with each
- * outcome-only expression in it marked by its name, since such an expression would count the
- * delivered items alone, and one whose processing reads, through an item ref,
- * an item's context variable or any variable of an LTI link is delivered with that processing
- * marked, `variable:<name>` at it: its outcome processing `marked`, and each template default that
- * reads one left out, so its template variable starts at its declared default. The test document's
- * own verdict cannot carry those marks, since the document is judged without its items, and it
- * keeps its own; the package's verdict carries them, so a read of the built-in `QTI_CONTEXT`, which
- * marks no item, still makes the package `accepted-with-unsupported`. Like `open`, it runs over the
- * shared reader and the Schema-decoded tables, so it stays server-side.
+ * is, then `accepted-with-unsupported` when some delivered test holds a mark, or some document
+ * other than a delivered test and a section document a test places is accepted with unsupported
+ * features, and `accepted` otherwise. Only an accepting package's documents are delivered. A test
+ * is delivered assembled from the section documents it places (`#plate/package/assemble.ts`; S-9,
+ * P-2; issue m3f-03): its model is built from the document in which each section ref that places
+ * a document is replaced by that document's root section, recursively, so the placed sections'
+ * items are the test's items, in place, each placement its own instance, and no section ref is
+ * marked; a test that places nothing keeps the model its document's own verdict holds. A section
+ * document a test places is delivered inside that test, so its own root mark does not mark the
+ * package, and a test's own section-ref marks do not either; a test opened alone through `open`
+ * has no package, so its section refs stay marked and nothing is placed. Each item ref of the
+ * delivered test that names an LTI link is marked `lti-link` at it and left out, since plate
+ * launches no LTI link, its outcome processing then `marked` with each outcome-only expression in
+ * it marked by its name, since such an expression would count the delivered items alone, and one
+ * whose processing reads, through an item ref, an item's context variable or any variable of an LTI
+ * link is delivered with that processing marked, `variable:<name>` at it: its outcome processing
+ * `marked`, and each template default that reads one left out, so its template variable starts at
+ * its declared default. The test document's own verdict cannot carry those marks, since the
+ * document is judged without its items, and it keeps its own; the package's verdict carries them,
+ * so a read of the built-in `QTI_CONTEXT`, which marks no item, still makes the package
+ * `accepted-with-unsupported`. Like `open`, it runs over the shared reader and the Schema-decoded
+ * tables, so it stays server-side.
  *
  * @module
  * @see https://www.imsglobal.org/content/packaging/cpv1p2pd2/imscp_infov1p2pd2.html
  */
-import { Brand, Effect, Option, Result } from "effect";
+import { Brand, Data, Effect, Option, Result } from "effect";
 import type { Array as Arr } from "effect";
 import {
   directoryOf,
@@ -173,9 +182,10 @@ import type {
 } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import { itemRefsIn, occurrenceOf } from "#plate/model/item-refs.ts";
-import { withLtiLinks, withUnheldReads } from "#plate/model/test.ts";
+import { buildTest, withLtiLinks, withUnheldReads } from "#plate/model/test.ts";
 import type { LtiLink, Test, UnheldRead } from "#plate/model/test.ts";
 import { isLanguageTag, isNcName, trimXmlSpace } from "#plate/model/values.ts";
+import { assembleTest } from "#plate/package/assemble.ts";
 import { readManifest, resourceLom } from "#plate/package/manifest.ts";
 import type { LomGeneral, LomValues, Manifest, ManifestResource } from "#plate/package/manifest.ts";
 import { checkFiles, fileLocation, manifestFile, packageFiles } from "#plate/package/store.ts";
@@ -213,29 +223,36 @@ export interface ItemRefEntry {
 }
 
 /**
- * One test of an accepted package, with each of its item refs resolved to the item it names.
+ * One test of an accepted package, assembled from the section documents it places, with each of
+ * its item refs resolved to the item it names.
  */
 export interface PackageTest {
   /**
-   * The item of each of its item refs, keyed by the item ref's identifier, in document order: what
-   * `startTest` takes as its items. Each item's `document` is its location in the package,
-   * `<package location>/<path>`, which is the location `startTest` resolves the ref's `href` to,
-   * by one rule on both sides: against the test's location (RFC 3986, section 5.2), each path
-   * segment's percent escapes decoded, a malformed escape left as written, then its dot segments
-   * removed, and its query and fragment set aside. `openPackage` resolves an item ref through the
-   * `xml:base` in scope (reading 103), but a test `check` accepts holds none above an item ref, as
-   * no test element declares `xml:base` (reading 90), so for an accepted test the base is the
-   * test's location on both sides.
+   * The item of each item ref of the assembled test, the test document's own and each placed
+   * section document's, keyed by the item ref's identifier, in document order: what `startTest`
+   * takes as its items. Each item's `document` is its location in the package, `<package
+   * location>/<path>`. `openPackage` resolves each item ref's `href` against the `xml:base` in
+   * scope (reading 103), else against the document that writes the ref, the test's or the placed
+   * section document's; `startTest` resolves it against the test's location (RFC 3986, section
+   * 5.2), each path segment's percent escapes decoded, a malformed escape left as written, then its
+   * dot segments removed, and its query and fragment set aside. A test `check` accepts holds no
+   * `xml:base` above an item ref, as no test element declares one (reading 90), so for the test's
+   * own item refs the base is the test's location on both sides; a placed section document's item
+   * refs agree with `startTest` when its folder stands as deep in the package as the test's.
    */
   readonly items: ReadonlyMap<string, Accepted>;
   /**
-   * The test, as its document's own verdict accepts it, or, when one of its item refs names an LTI
-   * link or its processing reads, through an item ref, an item's context variable or any variable
-   * of an LTI link, with each such item ref marked `lti-link` at it and left out, then that
+   * The test, as the model built from its assembled document (`#plate/package/assemble.ts`; S-9,
+   * P-2; issue m3f-03): the test document with each section ref that places a section document
+   * replaced by that document's root section, recursively, so the placed sections and their items
+   * stand in the test as if written inline and no section ref is marked. A test that places
+   * nothing is the test as its document's own verdict accepts it. When one of its item refs names
+   * an LTI link or its processing reads, through an item ref, an item's context variable or any
+   * variable of an LTI link, each such item ref is marked `lti-link` at it and left out, then that
    * processing marked: the outcome processing `marked` and each template default that reads one
-   * left out, each read `variable:<name>` at the processing element, after the document's own
-   * marks. The test document is judged without its items, so its own verdict cannot carry those
-   * marks, and keeps its own.
+   * left out, each read `variable:<name>` at the processing element, after the model's own marks.
+   * The test document is judged without its items and without its section documents, so its own
+   * verdict cannot carry these, and keeps its own.
    */
   readonly test: AcceptedTest;
 }
@@ -344,9 +361,14 @@ export interface PackageResource {
  *   refused. `refusals` holds every refusal that refuses it: the package's own, then each refused
  *   document's, in the manifest's order, each document once.
  * - `unchecked`: nothing is refused and some document is unchecked.
- * - `accepted-with-unsupported`: nothing is refused or unchecked and some document is accepted with
- *   unsupported features. A package carries no mark of its own in M2.
- * - `accepted`: every document is accepted.
+ * - `accepted-with-unsupported`: nothing is refused or unchecked, and some delivered test holds a
+ *   mark, or some document other than a delivered test and a section document a test places is
+ *   accepted with unsupported features. A delivered test's marks are those of the test assembled
+ *   from the section documents it places, so a section ref a test places marks neither the test nor
+ *   the package, and a placed section document's own root mark, "delivered alone by no stage", is
+ *   met by the test that delivers it. A package carries no mark of its own in M2.
+ * - `accepted`: every document is accepted, or is a test or a placed section document delivered
+ *   without a mark.
  *
  * `resources` lists every resource with its document's verdict beneath the package's; it is empty
  * when the manifest is not read. `location` is the package's location.
@@ -5512,12 +5534,20 @@ const wholeOf = (source: SourceDocument): ReadonlyMap<string, ReadVariable> =>
  * their variable mappings', their template defaults', the references', those of the test's
  * processing that only its typed reach gives, then its branch rules', each in document order; the
  * reads through its item refs in the test document's processing of a variable the engine holds no
- * value of; and the refusals of the section documents it reaches, judged under it.
+ * value of; the refusals of the section documents it reaches, judged under it; and its assembly,
+ * which the delivered test is built from.
  */
 interface TestJudgement {
   /**
+   * The test's assembly ({@link assemble}): its placements, the test's own first, and each
+   * placement's section refs with the placement each places, from which the delivered test's
+   * document is assembled ({@link deliveryOf}; S-9, P-2; issue m3f-03).
+   */
+  readonly assembly: Assembly;
+  /**
    * Each of the test document's own item refs that names an LTI link, which the delivered test
-   * marks and leaves out (reading 110).
+   * marks and leaves out (reading 110). The delivered test, assembled, marks the placed section
+   * documents' too ({@link deliveryOf}).
    */
   readonly links: readonly LtiLink[];
   readonly reached: readonly ReachedSection[];
@@ -6087,6 +6117,7 @@ const judgeTest = (
   }
 
   return {
+    assembly,
     links: own.links,
     reached,
     reads,
@@ -6223,13 +6254,15 @@ const byDocument = <A>(
 
 /**
  * Give the test a package delivers, through the test-feature modules: `deliveredBy` over the test
- * as the package marked it, its document and the package's documents, so a module that places a
- * section document or an included fragment reads them from here. The test is re-accepted only when
- * a module or the marks changed it.
+ * as the package marked it, the document it was built from (the assembled document, for a test that
+ * places a section document; {@link deliveryOf}) and the package's documents, so a module that
+ * places an included fragment reads them from here. The test is re-accepted only when a module,
+ * the marks or the assembly changed it.
  *
  * @param test The test, as its document's own verdict accepted it.
- * @param marked The test as the package marked it: the same test when it marked nothing.
- * @param source The test's document.
+ * @param marked The test as the package marked it: the same test when it marked and assembled
+ *   nothing.
+ * @param source The document the marked test was built from.
  * @param documents The package's documents the reader read, by path.
  * @returns The test to deliver.
  */
@@ -6245,29 +6278,148 @@ const deliveredTest = (
 };
 
 /**
+ * A defect of the assembly: the test model refuses the document assembled from a test and the
+ * section documents it places, though every document in it passed `check` and the judging accepted
+ * the package (S-9; issue m3f-03). A checked test document and checked section documents assemble
+ * into a document the model builds, so the refusal is the assembly's own, never the package's, and
+ * is thrown rather than reported as a package refusal.
+ */
+class AssemblyDefect extends Data.TaggedError("AssemblyDefect")<{
+  readonly document: string;
+  readonly refusal: Refusal;
+}> {
+  /**
+   * The test document and the model's refusal of its assembled document.
+   */
+  override get message(): string {
+    return `plate could not build the test assembled from ${JSON.stringify(this.document)} and the section documents it places: the test model refused it with ${this.refusal.rule} at ${JSON.stringify(this.refusal.location)}, which no checked package should give. Report this as a defect of plate's section assembly.`;
+  }
+}
+
+/**
+ * What one test of an accepted package is delivered from: its model before the package's marks,
+ * the document that model was built from, the item each of its item refs names, by identifier,
+ * its item refs that name an LTI link, and its reads of a variable the engine holds no value of,
+ * each at its path in that document.
+ */
+interface Delivery {
+  readonly items: ReadonlyMap<string, string>;
+  readonly links: readonly LtiLink[];
+  readonly reads: readonly UnheldRead[];
+  readonly source: SourceDocument;
+  readonly test: Test;
+}
+
+/**
+ * Give what a test is delivered from, assembled from the section documents it places
+ * (`assembleTest` in `#plate/package/assemble.ts`; S-9 Section References, P-2 Nested Section
+ * Instances; issue m3f-03): a test whose assembly places nothing is delivered from its own
+ * document and model, as its verdict accepted it, with its own item refs' items. A test that
+ * places a section document is delivered from the assembled document, in which each section ref
+ * that places a document is replaced by that document's root section, recursively, and its model is
+ * `buildTest` over it, so every path the model and the test-feature modules record is the
+ * assembled document's, and `PackageTest.items` holds the item of every item ref the assembled test
+ * holds, each resolved against the document that writes it, as the judging resolved it
+ * ({@link structureIn}). The test's LTI links are then every item ref of the assembled document
+ * that names one, at its path there, and each read the judging found in the test document is moved
+ * to its path in the assembled document.
+ *
+ * An assembled document that nests deeper than the shared reader lets any document nest
+ * (`assemblyDepthLimit`, 256 elements open at once), or that holds more placements of section
+ * documents, every instance counted, than the judging's assembly limit counts for a test
+ * (`assemblyInstanceLimit`, 2,048), is not built: the test model and the session recurse over a
+ * document's elements within the reader's depth, and a chain of documents that each place the next
+ * twice multiplies its instances past any session, so the test is delivered as a test opened alone
+ * is, from its own document with its section refs marked and nothing placed, a stated limit of the
+ * delivery. The package's judging, which places and judges every section document within the
+ * assembly limit, is not affected.
+ *
+ * @param test The test, as its document's own verdict accepted it.
+ * @param source The test's document.
+ * @param judged What judging the test gave: its assembly, its own item refs' items, its own LTI
+ *   links and its reads.
+ * @param documents The package's documents the reader read, by path.
+ * @returns What the test is delivered from.
+ * @throws {AssemblyDefect} When the test model refuses the assembled document, which a checked
+ *   package cannot cause.
+ */
+const deliveryOf = (
+  test: AcceptedTest,
+  source: SourceDocument,
+  judged: Pick<TestJudgement, "assembly" | "links" | "reads" | "refs">,
+  documents: ReadonlyMap<string, SourceDocument>,
+): Delivery => {
+  const { children, placements } = judged.assembly;
+  const placed = [...children.values()].flat();
+  const own: Delivery = {
+    items: judged.refs,
+    links: judged.links,
+    reads: judged.reads,
+    source,
+    test: test.test,
+  };
+  if (placed.length === 0) {
+    return own;
+  }
+
+  const assembled = Option.getOrUndefined(
+    assembleTest({
+      documents,
+      itemRefs: placements.flatMap((placement) => placement.structure.itemRefs),
+      sectionRefs: placed.map(({ placement, site }) => ({
+        element: site.element,
+        path: placement.path,
+      })),
+      test: source,
+    }),
+  );
+  if (assembled === undefined) {
+    return own;
+  }
+
+  const built = buildTest(assembled.document);
+  if (Result.isFailure(built)) {
+    throw new AssemblyDefect({ document: source.location, refusal: built.failure });
+  }
+
+  return {
+    items: assembled.items,
+    links: assembled.links,
+    reads: judged.reads.map((read) => ({
+      ...read,
+      path: assembled.paths.get(read.path) ?? read.path,
+    })),
+    source: assembled.document,
+    test: built.success,
+  };
+};
+
+/**
  * Build the contents of an accepted package from its judged documents.
  *
- * Each test is delivered as its document's own verdict accepted it, unless one of its item refs
- * names an LTI link or its processing reads, through an item ref, a variable the engine holds no
- * value of. Each such item ref is then marked `lti-link` and left out, with each expression of its
- * outcome processing that counts over the test's items marked and that processing `marked`
- * (`withLtiLinks` in `#plate/model/test.ts`, read from the test's document, which every judged
- * document holds), and each such processing marked (`withUnheldReads`), the outcome processing
- * `marked` and each template default that reads one left out. The test-feature modules then give
- * the test delivered ({@link deliveredTest}): every stub gives it unchanged.
+ * Each test is delivered from the document assembled from its section documents
+ * ({@link deliveryOf}): as its document's own verdict accepted it when it places none, and
+ * otherwise as the model built from the assembled document, in which every placed section's items
+ * are the test's own. Each item ref that names an LTI link is then marked `lti-link` and left out,
+ * with each expression of its outcome processing that counts over the test's items marked and that
+ * processing `marked` (`withLtiLinks` in `#plate/model/test.ts`, read from the document the model
+ * was built from), and each processing that reads a variable the engine holds no value of is marked
+ * (`withUnheldReads`), the outcome processing `marked` and each template default that reads one
+ * left out. The test-feature modules then give the test delivered ({@link deliveredTest}): every
+ * stub gives it unchanged.
  *
  * @param manifest The manifest.
  * @param documents The package's documents, every judged one accepted.
- * @param tests What judging each test gave, its item paths, by item ref identifier, its item refs
- *   that name an LTI link, and its reads of a variable the engine holds no value of, keyed by the
- *   test's path.
+ * @param tests What judging each test gave, its assembly, its item paths, by item ref identifier,
+ *   its item refs that name an LTI link, and its reads of a variable the engine holds no value of,
+ *   keyed by the test's path.
  * @param location The package's location.
  * @returns The contents.
  */
 const contentsOf = (
   manifest: Manifest,
   documents: ReadonlyMap<string, Document>,
-  tests: ReadonlyMap<string, Pick<TestJudgement, "links" | "reads" | "refs">>,
+  tests: ReadonlyMap<string, Pick<TestJudgement, "assembly" | "links" | "reads" | "refs">>,
   location: string,
 ): PackageContents => {
   /**
@@ -6319,23 +6471,26 @@ const contentsOf = (
           ),
         ]).pipe(
           Option.map(([test, source]): PackageTest => {
-            const links = tests.get(path)?.links ?? [];
-            const reads = tests.get(path)?.reads ?? [];
+            const judged = tests.get(path);
+            const delivery: Delivery =
+              judged === undefined
+                ? { items: new Map(), links: [], reads: [], source, test: test.test }
+                : deliveryOf(test, source, judged, sources);
+            const { links, reads } = delivery;
             const marked =
               links.length === 0 && reads.length === 0
-                ? test.test
-                : withUnheldReads(withLtiLinks(test.test, links, source), reads);
+                ? delivery.test
+                : withUnheldReads(withLtiLinks(delivery.test, links, delivery.source), reads);
 
             return {
               items: new Map(
-                [...(tests.get(path)?.refs ?? new Map<string, string>())].flatMap(
-                  ([identifier, itemPath]) =>
-                    Option.toArray(
-                      itemAt(itemPath).pipe(Option.map((item) => [identifier, item] as const)),
-                    ),
+                [...delivery.items].flatMap(([identifier, itemPath]) =>
+                  Option.toArray(
+                    itemAt(itemPath).pipe(Option.map((item) => [identifier, item] as const)),
+                  ),
                 ),
               ),
-              test: deliveredTest(test, marked, source, sources),
+              test: deliveredTest(test, marked, delivery.source, sources),
             };
           }),
         ),
@@ -6454,7 +6609,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
     factsOf: directoryFacts(foldersOf([...kinds.keys(), ...sectionPaths])),
     kinds,
   };
-  const tests = new Map<string, Pick<TestJudgement, "links" | "reads" | "refs">>();
+  const tests = new Map<string, Pick<TestJudgement, "assembly" | "links" | "reads" | "refs">>();
   const assembled = assembleTests(manifest, documents, refTargets, sectionPaths, held, location);
   const testRefusals: Refusal[] = [];
   // Each test's section refusals beyond those an earlier test gave, counted once across the tests.
@@ -6539,13 +6694,29 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
     return { location, resources, verdict: "unchecked" };
   }
 
+  const contents = contentsOf(manifest, documents, tests, location);
+  const delivered = [...contents.tests.values()];
+  const deliveredAt = new Set(delivered.map((entry) => entry.test.document));
+  // A delivered test's marks are the delivered test's, built from its assembled document: its
+  // own verdict marks each section ref it places, which the delivery holds inline. A section
+  // document a test places is delivered inside that test, so its own root mark, "delivered alone
+  // by no stage", does not mark the package; one no test places is still undelivered.
+  const marked = [...documents].some(([path, document]) =>
+    Option.exists(
+      document.verdict,
+      (verdict) =>
+        verdict.verdict === "accepted-with-unsupported" &&
+        !(verdict.kind === "test" && deliveredAt.has(verdict.document)) &&
+        !(verdict.kind === "section" && reached.has(path)),
+    ),
+  );
+
   return {
-    accepted: acceptPackage(contentsOf(manifest, documents, tests, location)),
+    accepted: acceptPackage(contents),
     location,
     resources,
     verdict:
-      verdicts.some((verdict) => verdict.verdict === "accepted-with-unsupported") ||
-      [...tests.values()].some((judged) => judged.links.length > 0 || judged.reads.length > 0)
+      marked || delivered.some((entry) => entry.test.unsupported.length > 0)
         ? "accepted-with-unsupported"
         : "accepted",
   };

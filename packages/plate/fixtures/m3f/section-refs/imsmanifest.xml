@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0p1_imscpv1p2_v1p0.xsd"
+  identifier="m3f-section-refs">
+  <metadata>
+    <schema>QTI Package</schema>
+    <schemaversion>3.0.1</schemaversion>
+  </metadata>
+  <organizations/>
+  <resources>
+    <resource identifier="section-refs-test" type="imsqti_test_xmlv3p0" href="tests/test.xml">
+      <file href="tests/test.xml"/>
+      <dependency identifierref="section-a"/>
+      <dependency identifierref="item-one"/>
+    </resource>
+    <resource identifier="section-a" type="imsqti_section_xmlv3p0" href="sections/a.xml">
+      <file href="sections/a.xml"/>
+      <dependency identifierref="section-b"/>
+      <dependency identifierref="item-two"/>
+    </resource>
+    <resource identifier="section-b" type="imsqti_section_xmlv3p0" href="sections/b.xml">
+      <file href="sections/b.xml"/>
+      <dependency identifierref="item-three"/>
+    </resource>
+    <resource identifier="item-one" type="imsqti_item_xmlv3p0" href="items/one.xml">
+      <file href="items/one.xml"/>
+    </resource>
+    <resource identifier="item-two" type="imsqti_item_xmlv3p0" href="items/two.xml">
+      <file href="items/two.xml"/>
+    </resource>
+    <resource identifier="item-three" type="imsqti_item_xmlv3p0" href="items/three.xml">
+      <file href="items/three.xml"/>
+    </resource>
+  </resources>
+</manifest>
