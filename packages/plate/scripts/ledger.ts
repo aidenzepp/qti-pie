@@ -16,14 +16,22 @@
  * `browser.json`, while the browser run's setup records its engines and their versions in
  * `browser-run.json`; opens every member of `corpusDocuments` and writes `verdicts.json` and
  * `verdicts.txt`; derives the ledger from both runs' results and the browser-run record, and checks
- * its honesty over those results; writes `ledger.json` and `ledger.txt`; and prints the paths, the
- * headline counts, and each engine's version with its counts. The outputs go to `PLATE_LEDGER_DIR`,
+ * its honesty over those results; writes `ledger.json` and `ledger.txt`; writes the browser
+ * runtime's size, measured module by module (`src/ledger/runtime-size.ts`), as `runtime-size.json`
+ * and `runtime-size.txt`; and prints the paths, the headline counts, each engine's version with its
+ * counts, and one line about the runtime's size. The outputs go to `PLATE_LEDGER_DIR`,
  * `work/ledger` in the package when it is not set. Both runs get `PLATE_REQUIRE_CACHES=1`, whatever
  * the command inherited, so a test whose cache is missing fails instead of being skipped, and the
  * command never passes without every cache the tests read. It exits non-zero when either run
  * failed, a test failed or the honesty check found a problem, after writing what it could; and
  * when a run's report or the browser-run record is missing or unreadable, after writing the
  * verdicts, with a message that names the file.
+ *
+ * The runtime's size is information, never a gate: the line says how the total gzip size changed
+ * since the `runtime-size.json` an earlier run wrote, when `PLATE_RUNTIME_SIZE_BASELINE` names one,
+ * and flags a jump in plain terms, and no size and no jump changes the exit code. The measurement
+ * is made before the runs start, and the command stops there, with a message that names the
+ * module, only when a runtime module cannot be read or compiled.
  */
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 import { spawn } from "node:child_process";
@@ -46,7 +54,16 @@ import type { PassRecord, SessionNote } from "#plate/ledger/passes.ts";
 import { decodeReport, ledger, Ledger, rowStates, tagsOf } from "#plate/ledger/report.ts";
 import type { ReportOutsideRoot, TestResult } from "#plate/ledger/report.ts";
 import { BrowserRun, browserRunFile, standsInForSafari } from "#plate/ledger/runs.ts";
+import {
+  loadBaseline,
+  runtimeSize,
+  RuntimeSizeSchema,
+  runtimeSizeText,
+  sizeJump,
+} from "#plate/ledger/runtime-size.ts";
+import type { Baseline, RuntimeSize, SizeJump } from "#plate/ledger/runtime-size.ts";
 import { ledgerText, verdictLines } from "#plate/ledger/view.ts";
+import { sourceModules } from "#plate/test/imports.ts";
 import { open } from "#plate/validate/open.ts";
 import { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { describeRefusal, unsupportedFeatures } from "#plate/validate/verdict.ts";
@@ -86,9 +103,16 @@ const runFiles = [unitReport, browserReport, browserRunFile] as const;
 
 /**
  * The file names the command writes, in the order it writes them: the verdict report, then the
- * ledger. The test report, `vitest.json`, is the test run's.
+ * ledger, then the runtime's size. The test report, `vitest.json`, is the test run's.
  */
-export const outputNames = ["verdicts.json", "verdicts.txt", "ledger.json", "ledger.txt"] as const;
+export const outputNames = [
+  "verdicts.json",
+  "verdicts.txt",
+  "ledger.json",
+  "ledger.txt",
+  "runtime-size.json",
+  "runtime-size.txt",
+] as const;
 
 /**
  * The flags the `test` script appends to `NODE_OPTIONS`, so the command runs the tests as
@@ -244,6 +268,13 @@ const encodeVerdicts = Schema.encodeEffect(
 const encodeLedger = Schema.encodeEffect(Schema.fromJsonString(Ledger, { space: 2 }));
 
 /**
+ * Encode the runtime's size as `runtime-size.json`'s text, which `RuntimeSizeSchema` decodes.
+ */
+const encodeRuntimeSize = Schema.encodeEffect(
+  Schema.fromJsonString(RuntimeSizeSchema, { space: 2 }),
+);
+
+/**
  * Decode `browser-run.json`'s text into the browser-run record.
  */
 const decodeRun = Schema.decodeEffect(Schema.fromJsonString(BrowserRun));
@@ -253,6 +284,11 @@ const decodeRun = Schema.decodeEffect(Schema.fromJsonString(BrowserRun));
  * holds the runs' reports and the browser-run record, and takes the outputs.
  */
 export interface LedgerBuild {
+  /**
+   * What the runtime's size is compared with, `loadBaseline` from `#plate/ledger/runtime-size.ts`.
+   */
+  readonly baseline: Baseline;
+
   /**
    * The browser run's exit code; anything but 0 makes the command's exit code 1.
    */
@@ -286,7 +322,7 @@ export interface LedgerBuild {
 
   /**
    * The folder that holds `vitest.json`, `browser.json` and `browser-run.json`, and receives the
-   * four outputs, created when absent.
+   * outputs, created when absent.
    */
   readonly output: string;
 
@@ -299,6 +335,12 @@ export interface LedgerBuild {
    * The package directory the tests ran in, which the report's test files are read relative to.
    */
   readonly root: string;
+
+  /**
+   * The browser runtime's size, `runtimeSize` from `#plate/ledger/runtime-size.ts` over the
+   * package's sources, which `runtime-size.json` and `runtime-size.txt` hold.
+   */
+  readonly runtime: RuntimeSize;
 
   /**
    * Each test file's text, keyed by its path relative to {@link LedgerBuild.root}.
@@ -333,6 +375,12 @@ export interface LedgerOutcome {
   readonly failed: readonly TestResult[];
 
   /**
+   * How the runtime's size compares with the baseline, as `runtime-size.txt` ends and the summary
+   * prints. It never reaches {@link LedgerOutcome.exitCode}.
+   */
+  readonly jump: SizeJump;
+
+  /**
    * The ledger derived from the run, as `ledger.json` and `ledger.txt` hold it.
    */
   readonly ledger: Ledger;
@@ -347,6 +395,11 @@ export interface LedgerOutcome {
    * with its ID passed in the run, unless the static check already named that claim.
    */
   readonly problems: readonly HonestyProblem[];
+
+  /**
+   * The browser runtime's size, as `runtime-size.json` holds it.
+   */
+  readonly runtime: RuntimeSize;
 
   /**
    * The unit run's exit code, as the build was given it.
@@ -466,11 +519,13 @@ const unbackedInRun = (
 /**
  * Build the ledger from the finished unit and browser runs: open every corpus document and write
  * the verdict report, then read both runs' reports and the browser-run record, derive the ledger
- * from both runs' results and the record, check its honesty, and write the ledger.
+ * from both runs' results and the record, check its honesty, and write the ledger, then compare the
+ * runtime's size with the baseline and write `runtime-size.json` and `runtime-size.txt`.
  *
  * The corpus is read through `corpusDocuments` and `readCorpusFile`, so `PLATE_CORPUS_DIR` or
  * `HOME` decides it. The verdict report is written before any report is read, so a run that left
- * no report still leaves the verdicts. Nothing is printed and no exit code is set.
+ * no report still leaves the verdicts. The runtime's size is information: it adds two outputs and
+ * never changes the exit code. Nothing is printed and no exit code is set.
  *
  * @param input The inputs, the output folder and the runs' exit codes.
  * @returns What was found and written; {@link ReportUnreadable} when `vitest.json` cannot be read,
@@ -494,7 +549,14 @@ export const buildLedger = Effect.fn("buildLedger")(function* buildLedger(
   | Schema.SchemaError
 > {
   const written = outputNames.map((name) => path.join(input.output, name));
-  const [verdictsJson = "", verdictsTxt = "", ledgerJson = "", ledgerTxt = ""] = written;
+  const [
+    verdictsJson = "",
+    verdictsTxt = "",
+    ledgerJson = "",
+    ledgerTxt = "",
+    runtimeJson = "",
+    runtimeTxt = "",
+  ] = written;
 
   yield* makeDirectory(input.output);
 
@@ -556,12 +618,19 @@ export const buildLedger = Effect.fn("buildLedger")(function* buildLedger(
   yield* writeOutput(ledgerJson, `${yield* encodeLedger(built)}\n`);
   yield* writeOutput(ledgerTxt, ledgerText(built, browserSupport, input.notes));
 
+  const jump = sizeJump(input.baseline, input.runtime);
+
+  yield* writeOutput(runtimeJson, `${yield* encodeRuntimeSize(input.runtime)}\n`);
+  yield* writeOutput(runtimeTxt, runtimeSizeText(input.runtime, jump));
+
   const failed = results.filter((result) => result.state === "failed");
 
   yield* Effect.annotateCurrentSpan({
     "ledger.documents": members.length,
     "ledger.failed": failed.length,
     "ledger.problems": problems.length,
+    "ledger.runtime.gzip": input.runtime.total.gzip,
+    "ledger.runtime.jump": jump.flagged,
   });
 
   return {
@@ -574,9 +643,11 @@ export const buildLedger = Effect.fn("buildLedger")(function* buildLedger(
         ? 0
         : 1,
     failed,
+    jump,
     ledger: built,
     output: input.output,
     problems,
+    runtime: input.runtime,
     testExit: input.testExit,
     verdicts,
     written,
@@ -594,8 +665,8 @@ const levelWord = (level: string): string => `${level.slice(0, 1).toUpperCase()}
 /**
  * Write what a build wrote and found, the text the command prints: the outputs' paths, the
  * documents by verdict, each level's headline, each engine of the browser run with its version and
- * counts (WebKit's with the sentence that it stands in for Safari), each failed test, each run's
- * exit code when it was not 0, and each honesty problem.
+ * counts (WebKit's with the sentence that it stands in for Safari), the line about the runtime's
+ * size, each failed test, each run's exit code when it was not 0, and each honesty problem.
  *
  * @param outcome The build's outcome.
  * @returns The lines, each ending in a line feed.
@@ -622,6 +693,7 @@ export const summary = (outcome: LedgerOutcome): string => {
       (run) =>
         `Browser run, ${run.engine} ${run.version}: ${String(run.passed)} passed, ${String(run.failed)} failed.${run.engine === "webkit" ? ` ${standsInForSafari}.` : ""}`,
     ),
+    outcome.jump.line,
     ...outcome.failed.map((test) => `Failed: ${test.file} > ${test.fullName}`),
     ...(outcome.testExit === 0
       ? []
@@ -935,13 +1007,29 @@ export const prepareOutput = Effect.fn("prepareOutput")(function* prepareOutput(
 });
 
 /**
- * The command: read the inputs that do not depend on the runs, run the unit tests and then the
- * browser tests, build the ledger, print what was written and found, and set the exit code.
+ * Measure the browser runtime from the package's sources, as `src/ledger/runtime-size.ts` does.
+ *
+ * @returns The measurement; `RuntimeSizeFailed` when a runtime module is missing from the sources
+ *   or cannot be compiled.
+ */
+const measureRuntime = Effect.sync(sourceModules).pipe(
+  Effect.flatMap((modules) => Effect.fromResult(runtimeSize(modules))),
+  Effect.withSpan("measureRuntime"),
+);
+
+/**
+ * The command: read the inputs that do not depend on the runs, among them the runtime's size and
+ * its baseline, run the unit tests and then the browser tests, build the ledger, print what was
+ * written and found, and set the exit code. A runtime module that cannot be measured stops the
+ * command before the runs, with the failure's message and exit code 1; no size and no jump ever
+ * changes the exit code.
  */
 const program = Effect.gen(function* ledgerCommand() {
   const output = yield* ledgerDirectory;
   const conf = yield* readConf;
   const sources = yield* readSources(packageDirectory);
+  const runtime = yield* measureRuntime;
+  const baseline = yield* loadBaseline;
   const vp = yield* findVp(packageDirectory);
   const home = yield* Config.NonEmptyString("HOME");
   const nodeOptions = yield* Config.String("NODE_OPTIONS").pipe(Config.withDefault(""));
@@ -953,6 +1041,7 @@ const program = Effect.gen(function* ledgerCommand() {
   const testExit = yield* runTests(testCommand(input));
   const browserExit = yield* runTests(browserCommand({ ...input, home }));
   const exitCode = yield* settle({
+    baseline,
     browserExit,
     claims,
     conf,
@@ -962,6 +1051,7 @@ const program = Effect.gen(function* ledgerCommand() {
     output,
     records: passes,
     root: packageDirectory,
+    runtime,
     sources,
     testExit,
   });
@@ -969,7 +1059,18 @@ const program = Effect.gen(function* ledgerCommand() {
   yield* Effect.sync(() => {
     process.exitCode = exitCode;
   });
-}).pipe(Effect.withSpan("ledger"));
+}).pipe(
+  Effect.catchTag("RuntimeSizeFailed", (failure) =>
+    Console.error(failure.message).pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          process.exitCode = 1;
+        }),
+      ),
+    ),
+  ),
+  Effect.withSpan("ledger"),
+);
 
 if (import.meta.main) {
   await Effect.runPromise(program);

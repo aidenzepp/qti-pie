@@ -2,13 +2,15 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
-import { ConfigProvider, Console, Effect, Schema } from "effect";
+import { ConfigProvider, Console, Effect, Result, Schema } from "effect";
 import { browserSupport } from "#plate/ledger/browser-support.ts";
 import { generateFeatures } from "#plate/ledger/features.ts";
 import type { SessionNote } from "#plate/ledger/passes.ts";
 import { Ledger } from "#plate/ledger/report.ts";
 import { browserRunFile, standsInForSafari } from "#plate/ledger/runs.ts";
 import type { BrowserRun } from "#plate/ledger/runs.ts";
+import { runtimeSize, RuntimeSizeSchema, runtimeSizeText } from "#plate/ledger/runtime-size.ts";
+import type { Baseline, RuntimeSize } from "#plate/ledger/runtime-size.ts";
 import { ledgerText } from "#plate/ledger/view.ts";
 import {
   browserCommand,
@@ -208,14 +210,47 @@ const notes: readonly SessionNote[] = [
 ];
 
 /**
+ * The fixture runtime: an entry and the one module it loads, small enough that the build's tests
+ * do not depend on the real runtime's size.
+ */
+const runtimeModules: ReadonlyMap<string, string> = new Map([
+  [
+    "src/runtime.dom.ts",
+    'import { contract } from "#plate/runtime/contract.dom.ts";\n\nexport const upgrade = (root: ParentNode): number => contract + root.childNodes.length;\n',
+  ],
+  ["src/runtime/contract.dom.ts", "export const contract: number = 1;\n"],
+]);
+
+/**
+ * Measure {@link runtimeModules}, failing the test with the measurement's message when it cannot.
+ *
+ * @returns The fixture runtime's measurement.
+ */
+const measureFixtureRuntime = (): RuntimeSize => {
+  const result = runtimeSize(runtimeModules);
+
+  if (Result.isFailure(result)) {
+    return assert.fail(result.failure.message);
+  }
+
+  return result.success;
+};
+
+/**
+ * The fixture runtime's measurement, which every build is given.
+ */
+const fixtureRuntime = measureFixtureRuntime();
+
+/**
  * Build the input of one build over the fixtures.
  *
  * @param output The output folder, which holds the fixture reports and run record.
  * @param testExit The unit run's exit code.
  * @param browserExit The browser run's exit code.
- * @returns The input.
+ * @returns The input, with no baseline for the runtime's size.
  */
 const fixture = (output: string, testExit = 0, browserExit = 0): LedgerBuild => ({
+  baseline: { kind: "none" },
   browserExit,
   claims: [{ id: "I-19", source: "a member-only checklist" }],
   conf: fixtureConf,
@@ -225,6 +260,7 @@ const fixture = (output: string, testExit = 0, browserExit = 0): LedgerBuild => 
   output,
   records: [],
   root: scratch,
+  runtime: fixtureRuntime,
   sources: new Map([[testFile, testSource]]),
   testExit,
 });
@@ -291,13 +327,18 @@ const decodeLedger = Schema.decodeUnknownSync(Schema.fromJsonString(Ledger));
 const decodeVerdicts = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(VerdictEntry)));
 
 /**
+ * Decode the runtime's size a build wrote.
+ */
+const decodeRuntime = Schema.decodeUnknownSync(Schema.fromJsonString(RuntimeSizeSchema));
+
+/**
  * The basic level's headline when the claim's test passes and nothing fails: I-19 limited, Q-2
  * covered.
  */
 const honestBasic = { covered: 1, excluded: 0, limited: 1, "unsupported-with-notice": 0 };
 
 /**
- * Assert that a build wrote all four outputs.
+ * Assert that a build wrote every output.
  *
  * @param outcome The build's outcome.
  */
@@ -324,7 +365,7 @@ afterAll(() => {
 });
 
 describe("scripts/ledger.ts", () => {
-  it.effect("writes the four outputs with the expected headlines, and exits 0", () =>
+  it.effect("writes the outputs with the expected headlines, and exits 0", () =>
     Effect.gen(function* honestBuild() {
       const output = outputWith("honest", unitPassing);
       const outcome = yield* build(fixture(output));
@@ -392,7 +433,76 @@ describe("scripts/ledger.ts", () => {
     }),
   );
 
-  it.effect("exits non-zero when a test failed, after writing the four outputs", () =>
+  it.effect(
+    "[runtime-size] the ledger writes runtime-size.json and runtime-size.txt beside the ledger, and prints the jump's line",
+    () =>
+      Effect.gen(function* sizedBuild() {
+        const output = outputWith("runtime-size", unitPassing);
+        const outcome = yield* build(fixture(output));
+
+        assertWritten(outcome);
+        assert.strictEqual(outcome.exitCode, 0);
+        assert.deepStrictEqual(outputNames.slice(4), ["runtime-size.json", "runtime-size.txt"]);
+        assert.deepStrictEqual(outcome.runtime, fixtureRuntime);
+        assert.deepStrictEqual(
+          decodeRuntime(readOutput(output, "runtime-size.json")),
+          outcome.runtime,
+        );
+        assert.strictEqual(
+          readOutput(output, "runtime-size.txt"),
+          runtimeSizeText(outcome.runtime, outcome.jump),
+        );
+        assert.include(outcome.jump.line, "no baseline given");
+        assert.isFalse(outcome.jump.flagged);
+
+        const lines = summary(outcome).split("\n");
+
+        assert.include(lines, outcome.jump.line);
+        assert.strictEqual(
+          lines[lines.findLastIndex((line) => line.startsWith("Browser run, ")) + 1],
+          outcome.jump.line,
+        );
+      }),
+  );
+
+  it.effect("[runtime-size] a flagged jump leaves an honest build's exit code 0", () =>
+    Effect.gen(function* flaggedBuild() {
+      const baseline: Baseline = {
+        kind: "given",
+        path: "work/old/runtime-size.json",
+        size: {
+          ...fixtureRuntime,
+          total: {
+            ...fixtureRuntime.total,
+            gzip: Math.max(1, Math.floor(fixtureRuntime.total.gzip / 10)),
+          },
+        },
+      };
+      const outcome = yield* build({
+        ...fixture(outputWith("runtime-jump", unitPassing)),
+        baseline,
+      });
+
+      assertWritten(outcome);
+      assert.isTrue(outcome.jump.flagged);
+      assert.isTrue(outcome.jump.line.startsWith("Runtime size: JUMP:"));
+      assert.strictEqual(outcome.exitCode, 0);
+      assert.deepStrictEqual(outcome.problems, []);
+      assert.deepStrictEqual(outcome.failed, []);
+      assert.include(summary(outcome), outcome.jump.line);
+
+      const { exitCode, printed } = yield* settled({
+        ...fixture(outputWith("runtime-jump-settled", unitPassing)),
+        baseline,
+      });
+
+      assert.strictEqual(exitCode, 0);
+      assert.deepStrictEqual(printed.error, []);
+      assert.include(String(printed.log[0]), "Runtime size: JUMP:");
+    }),
+  );
+
+  it.effect("exits non-zero when a test failed, after writing the outputs", () =>
     Effect.gen(function* failingBuild() {
       const output = outputWith(
         "failing",

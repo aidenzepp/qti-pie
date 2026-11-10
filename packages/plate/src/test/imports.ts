@@ -12,7 +12,9 @@
  * `export type`): under `verbatimModuleSyntax`, `import { type A } from "x"` is kept as
  * `import {} from "x"`.
  *
- * Test support: nothing outside `src/test/` and test files imports it.
+ * Test support: nothing outside `src/test/` and test files imports it, except
+ * `src/ledger/runtime-size.ts`, which measures the browser runtime over {@link valueClosure}, the
+ * same value-import closure the browser boundary test checks.
  *
  * @module
  */
