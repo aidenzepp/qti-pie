@@ -271,6 +271,27 @@ const landed: TestFeatureTable = stubbed.map((module) =>
 );
 
 /**
+ * The scope the expiring module below answers every submission with.
+ */
+const expiredSection = { identifier: "S1", kind: "section" } as const;
+
+/**
+ * The table of stubs with a time-limits module whose `gate` answers `expire` for the section `S1`
+ * to every `submit-item`, as the landed module will once that section's time has run out.
+ */
+const expiring: TestFeatureTable = stubbed.map((module) =>
+  module.key === "qti-time-limits"
+    ? {
+        ...landedTimeLimits,
+        gate: (context) =>
+          context.intent.kind === "submit-item"
+            ? Option.some({ kind: "expire", scope: expiredSection })
+            : Option.none(),
+      }
+    : module,
+);
+
+/**
  * The nodes a test built under {@link landed} holds, typed from the table.
  */
 type LandedNodes = TestFeatureNodes<AnyTestFeature | typeof landedTimeLimits>;
@@ -420,6 +441,33 @@ describe("a test-feature module not implemented", () => {
         test,
       );
     }),
+  );
+
+  it.effect(
+    "reaches the gate with an expiry: gatedBy passes an expire verdict through as the module gave it, and lets a move through",
+    () =>
+      Effect.gen(function* expires() {
+        const { session, test } = yield* startedSession;
+
+        assert.deepStrictEqual(
+          gatedBy(expiring, {
+            intent: { kind: "submit-item" },
+            now: Option.none(),
+            session,
+            test: test.test,
+          }),
+          Option.some({ kind: "expire", scope: expiredSection }),
+        );
+        assert.deepStrictEqual(
+          gatedBy(expiring, {
+            intent: { kind: "next" },
+            now: Option.none(),
+            session,
+            test: test.test,
+          }),
+          Option.none(),
+        );
+      }),
   );
 
   it("names its key and the issue that fills it in TestFeatureNotImplemented", () => {
