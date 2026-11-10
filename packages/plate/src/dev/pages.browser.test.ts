@@ -10,9 +10,12 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll } from "@effect/vitest";
-import { ConfigProvider, Effect, Option, Schema } from "effect";
+import { ConfigProvider, Effect, Layer, Option, Schema } from "effect";
 import type { Locator, Page } from "playwright-core";
-import { verdictCache } from "#plate/dev/listing.ts";
+import { verdictCache, Verdicts } from "#plate/dev/listing.ts";
+import { Packages } from "#plate/dev/packages.ts";
+import { playgroundCaches } from "#plate/dev/page.ts";
+import type { PlaygroundLayer } from "#plate/dev/page.ts";
 import { corpusDocuments } from "#plate/document/corpus.ts";
 import type { Element } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
@@ -55,6 +58,28 @@ const slots = {
  * file.
  */
 const verdicts = Effect.runSync(verdictCache());
+
+/**
+ * The Layer of a playground over the corpus that shares {@link verdicts}, with a package cache of
+ * its own.
+ */
+const sharedVerdicts: PlaygroundLayer = Layer.merge(
+  Layer.succeed(Verdicts, verdicts),
+  Packages.layer,
+);
+
+/**
+ * The Layer of a playground with caches of its own whose ledger page reads `ledger.json` from a
+ * folder.
+ *
+ * @param folder `PLATE_LEDGER_DIR`.
+ * @returns The Layer.
+ */
+const ledgerLayer = (folder: string): PlaygroundLayer =>
+  Layer.merge(
+    playgroundCaches,
+    ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_LEDGER_DIR: folder })),
+  );
 
 /**
  * The scratch folder this file owns, under the package's git-ignored `work/browser-test/`.
@@ -309,7 +334,7 @@ const indicatorColour = Effect.fn("indicatorColour")(function* indicatorColour(p
 });
 
 eachEngine((it) => {
-  it.layer(playgroundLayer({ verdicts }))("the walk, pages", (pages) => {
+  it.layer(playgroundLayer({}, sharedVerdicts))("the walk, pages", (pages) => {
     pages.effect(
       "the listing at / links every member once, its verdict headings' counts sum to the set's size, BG007 sits under accepted and CAT/test.xml under refused",
       () =>
@@ -475,7 +500,7 @@ eachEngine((it) => {
   });
 
   // Its own playground, so the theme it stores stays out of the other cases' pages.
-  it.layer(playgroundLayer({ verdicts }))("the theme box", (box) => {
+  it.layer(playgroundLayer({}, sharedVerdicts))("the theme box", (box) => {
     box.effect(
       "a theme with :root and .dark applied gives the root the :root --primary; with Dark ticked, html carries class dark, --primary is the .dark value, and a ticked Choice's Indicator changes colour",
       () =>
@@ -501,61 +526,59 @@ eachEngine((it) => {
     );
   });
 
-  it.layer(
-    playgroundLayer({
-      provider: ConfigProvider.fromUnknown({ PLATE_LEDGER_DIR: noLedgerFolder }),
-    }),
-  )("the ledger page before the one command", (before) => {
-    before.effect(
-      "/ledger with PLATE_LEDGER_DIR at an empty folder says to run the one command",
-      () =>
-        withPage({ javaScriptEnabled: false }, (page) =>
-          Effect.gen(function* noLedger() {
-            yield* open(page, "/ledger");
+  it.layer(playgroundLayer({}, ledgerLayer(noLedgerFolder)))(
+    "the ledger page before the one command",
+    (before) => {
+      before.effect(
+        "/ledger with PLATE_LEDGER_DIR at an empty folder says to run the one command",
+        () =>
+          withPage({ javaScriptEnabled: false }, (page) =>
+            Effect.gen(function* noLedger() {
+              yield* open(page, "/ledger");
 
-            assert.deepStrictEqual(
-              yield* Effect.promise(() => page.locator("main code").allTextContents()),
-              [ledgerCommand],
-            );
-            assert.strictEqual(
-              yield* Effect.promise(() => page.locator("article, table").count()),
-              0,
-            );
-          }),
-        ),
-    );
-  });
+              assert.deepStrictEqual(
+                yield* Effect.promise(() => page.locator("main code").allTextContents()),
+                [ledgerCommand],
+              );
+              assert.strictEqual(
+                yield* Effect.promise(() => page.locator("article, table").count()),
+                0,
+              );
+            }),
+          ),
+      );
+    },
+  );
 
-  it.layer(
-    playgroundLayer({
-      provider: ConfigProvider.fromUnknown({ PLATE_LEDGER_DIR: ledgerFolder }),
-    }),
-  )("the ledger page after the one command", (after) => {
-    after.effect(
-      "/ledger with PLATE_LEDGER_DIR at a folder holding a ledger shows the view: its levels and their headlines",
-      () =>
-        withPage({ javaScriptEnabled: false }, (page) =>
-          Effect.gen(function* ledgerPage() {
-            const view = childElements(ledgerHtml(fixtureLedger));
-            const article = page.locator("article");
+  it.layer(playgroundLayer({}, ledgerLayer(ledgerFolder)))(
+    "the ledger page after the one command",
+    (after) => {
+      after.effect(
+        "/ledger with PLATE_LEDGER_DIR at a folder holding a ledger shows the view: its levels and their headlines",
+        () =>
+          withPage({ javaScriptEnabled: false }, (page) =>
+            Effect.gen(function* ledgerPage() {
+              const view = childElements(ledgerHtml(fixtureLedger));
+              const article = page.locator("article");
 
-            yield* open(page, "/ledger");
+              yield* open(page, "/ledger");
 
-            assert.strictEqual(yield* Effect.promise(() => article.count()), 1);
-            assert.deepStrictEqual(
-              (yield* Effect.promise(() =>
-                article.locator(":scope > :is(h1, h2)").allTextContents(),
-              )).map(collapsed),
-              view.filter((element) => element.tag === "h1" || element.tag === "h2").map(textOf),
-            );
-            assert.deepStrictEqual(
-              (yield* Effect.promise(() => article.locator(":scope > p").allTextContents())).map(
-                collapsed,
-              ),
-              view.filter((element) => element.tag === "p").map(textOf),
-            );
-          }),
-        ),
-    );
-  });
+              assert.strictEqual(yield* Effect.promise(() => article.count()), 1);
+              assert.deepStrictEqual(
+                (yield* Effect.promise(() =>
+                  article.locator(":scope > :is(h1, h2)").allTextContents(),
+                )).map(collapsed),
+                view.filter((element) => element.tag === "h1" || element.tag === "h2").map(textOf),
+              );
+              assert.deepStrictEqual(
+                (yield* Effect.promise(() => article.locator(":scope > p").allTextContents())).map(
+                  collapsed,
+                ),
+                view.filter((element) => element.tag === "p").map(textOf),
+              );
+            }),
+          ),
+      );
+    },
+  );
 });

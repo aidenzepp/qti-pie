@@ -1,7 +1,7 @@
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
-import { ConfigProvider, Effect } from "effect";
-import { createHandler } from "#plate/dev/page.ts";
+import { ConfigProvider, Effect, Layer } from "effect";
+import { createHandler, playgroundCaches } from "#plate/dev/page.ts";
 import type { Handler } from "#plate/dev/page.ts";
 import { testField } from "#plate/dev/packages.ts";
 import { encodeIntent, intentName } from "#plate/form/intent.ts";
@@ -63,7 +63,13 @@ interface Answered {
  * @returns Its Fetch handler.
  */
 const fixturePlayground = (): Handler =>
-  createHandler({ provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: fixturesRoot }) });
+  createHandler(
+    {},
+    Layer.merge(
+      playgroundCaches,
+      ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: fixturesRoot })),
+    ),
+  );
 
 /**
  * Send one request to the handler, a form post when it carries fields.
