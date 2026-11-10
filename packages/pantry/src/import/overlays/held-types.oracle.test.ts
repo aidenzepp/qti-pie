@@ -10,10 +10,16 @@
  * the expression's type into the reference row such a setter lacks, and its rows broke "E1
  * derived" beside the oracle's AL3 or value domain.
  *
+ * The held type itself is a query the database derives (`HeldType` of `#pantry/qti/queries.ts`),
+ * which the import writes no row of, and `Set_type` and `Lookup_type` over it are rules over that
+ * query, which the database alone judges: the host judges no statement over a derived relation. So
+ * this box holds the import's references and the laws over its stored rows to the oracle, and the
+ * oracle's `Set type` and `Lookup type` stand unjudged here ({@link databaseJudged}).
+ *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`), which
  * holds the two to one verdict: no case shows a disagreement but a class a lane's open fix owns
- * (`known`).
+ * (`known`) or a law the database alone judges.
  *
  * Bound: every setter and the lookup, by each of seven identifiers, over an expression that fits
  * its declared variable and one that does not: 70 packages, exhausted.
@@ -30,10 +36,18 @@ import { lookupKind, setKinds } from "#pantry/grammar/expression.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
-import { judgeOne, shownDisagreement, signatureOf } from "#pantry/test/gen/genetic/judge.ts";
+import { judgeOne, recordsClassOf, shownDisagreement } from "#pantry/test/gen/genetic/judge.ts";
+import type { Signature } from "#pantry/test/gen/genetic/judge.ts";
 import { known } from "#pantry/test/gen/genetic/known.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
+
+/**
+ * The timeout, in milliseconds, this file's test states: a hang guard, never a budget. Measured
+ * 2026-11-08: 133.7 s at a load average of 63.9 to 65.5, its one test, past the free project's
+ * 60 s.
+ */
+const testTimeoutMs = 300_000;
 
 /**
  * The oracle's law tables over the installed grammar.
@@ -46,9 +60,22 @@ const laws = lawsOf(grammar);
 const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
 /**
- * The classes of disagreement the known table records, each waiting on its owner's fix.
+ * The oracle's laws over a held type, which the database judges over its query and the host does
+ * not: `Set type` (P20) and `Lookup type` (P22).
  */
-const recorded: ReadonlySet<string> = new Set(Object.keys(known));
+const databaseJudged: readonly Signature[] = [
+  { kind: "oracle-only-law", law: "Lookup type" },
+  { kind: "oracle-only-law", law: "Set type" },
+];
+
+/**
+ * The classes of disagreement the known table records, each waiting on its owner's fix, and the
+ * laws the database alone judges here.
+ */
+const recorded: readonly Signature[] = [
+  ...known.map(({ signature }) => signature),
+  ...databaseJudged,
+];
 
 /**
  * A setter or the lookup.
@@ -226,7 +253,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                   assert.deepStrictEqual(
                     judgment.disagreements
-                      .filter((disagreement) => !recorded.has(signatureOf(disagreement)))
+                      .filter((disagreement) => !recordsClassOf(recorded, disagreement))
                       .map(shownDisagreement),
                     [],
                     message,
@@ -235,6 +262,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             );
           }),
         ),
+      testTimeoutMs,
     );
   },
 );

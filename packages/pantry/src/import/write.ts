@@ -25,27 +25,22 @@
  * the tree and every overlay builder name each node by one id ({@link NodeIds}).
  */
 import { Bits, ChangeSet } from "@bjornpagen/grizzle";
-import type { Addition, Uuid } from "@bjornpagen/grizzle";
+import type { Addition, InsertAllRowsOf, Uuid } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Order, Struct } from "effect";
-import { patternFlags } from "#pantry/grammar/domains.ts";
 import {
   attributeRows,
   AttributeSlot,
-  boundedDomains,
   Flag,
   KindNamespace,
   openElementClasses,
   Position,
-  ValueDomainOf,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
-import { contextAt, contextsOf } from "#pantry/import/context.ts";
-import { foldAt, foldOf, governorOf, textDomainOf } from "#pantry/import/fold.ts";
+import { contextsOf } from "#pantry/import/context.ts";
+import { foldAt, foldOf, governorOf } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
-import type { PackageRecord } from "#pantry/import/record.ts";
-import type { OverlayRows } from "#pantry/import/overlays/index.ts";
 import type { documentLayer } from "#pantry/import/roster.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { endsOf } from "#pantry/model/folds.ts";
@@ -61,14 +56,13 @@ import type {
 import type {
   Attribute,
   AttributeEntity,
-  DoubleValue,
   Idref,
   OpenAttributeName,
-  TextDoubleValue,
 } from "#pantry/qti/attributes.ts";
 import type { Document, Namespace } from "#pantry/qti/chardata.ts";
 import type { Node } from "#pantry/qti/node.ts";
-import type { Author } from "#pantry/qti/roles.ts";
+import type { AuthorRole } from "#pantry/qti/roles.ts";
+import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
  * The ids one document's rows are written under, and where it stands in its package: every overlay
@@ -101,11 +95,12 @@ export interface NodeIds {
    */
   readonly entryAt: (path: string) => boolean;
   /**
-   * The document's type, the type of the resource that lists it, `none` for the manifest, which is
-   * no resource's document (spec reading 146): every node of the document copies it
-   * (`Node.documentType`), so a law can tell the manifest's elements from another document's.
+   * The document's type: `manifest` for the manifest, which is no resource's document (spec
+   * readings 146 and 176), else the type of the resource that lists it. Every node of the document
+   * copies it (`Node.documentType`), so a law can tell the manifest's elements from another
+   * document's.
    */
-  readonly documentType: ListedDocument["resourceType"];
+  readonly documentType: ListedDocument["documentType"];
   /**
    * The id of the node or attribute numbered `index` by `flatten`: the nodes in document order from
    * the document node's 0, then the attributes, so every caller that flattens the document under
@@ -140,13 +135,13 @@ export interface NodeIds {
 }
 
 /**
- * A document as the importer lists it, one per path: its path, its tree as shred gives it, and the
- * type of the resource that names it, `none` for the manifest, which is no resource's document
- * (spec reading 146).
+ * A document as the importer lists it, one per path: its path, its tree as shred gives it, and its
+ * type: `manifest` for the manifest, which is no resource's document (spec readings 146 and 176),
+ * else the type of the resource that names it.
  */
 export interface ListedDocument {
+  readonly documentType: Addition<typeof Document>["documentType"];
   readonly path: string;
-  readonly resourceType: Addition<typeof Document>["resourceType"];
   readonly tree: XdmDocument<Composed>;
 }
 
@@ -215,47 +210,46 @@ export const nodeIdsOf = (
   const packageId = mint();
   const listed = documents.map((document) => ({ document, idOf: drawnBy(mint) }));
   const placed = new Map<string, NodeId>();
-  const targets = new Map<string, Omit<ListedTarget, "context">>();
   for (const { document, idOf } of listed) {
     if (!placed.has(document.path)) {
       placed.set(document.path, idOf(0));
-    }
-
-    if (document.resourceType !== "none" && !targets.has(document.path)) {
-      targets.set(document.path, { node: idOf(0), rootKind: document.tree.root.kind });
     }
   }
 
   const documentAt = (path: string): Option.Option<NodeId> =>
     Option.fromUndefinedOr(placed.get(path));
-  const { assembled, contexts, targeted } = contextsOf(
-    listed.map(({ document: { path, resourceType, tree }, idOf }) => ({
+  const judged = contextsOf(
+    listed.map(({ document, idOf }) => ({
+      document,
       idOf,
-      named: resourceType !== "none",
-      path,
-      tree,
+      named: document.documentType !== "manifest",
+      path: document.path,
+      tree: document.tree,
     })),
   );
+  const targets = new Map<string, ListedTarget>();
+  for (const { context, listed: target } of judged) {
+    if (target.named && !targets.has(target.path)) {
+      targets.set(target.path, { context, node: target.idOf(0), rootKind: target.tree.root.kind });
+    }
+  }
+
   const targetAt = (path: string): Option.Option<ListedTarget> =>
-    Option.map(Option.fromUndefinedOr(targets.get(path)), ({ node, rootKind }) => ({
-      context: contextAt(contexts, node),
-      node,
-      rootKind,
-    }));
+    Option.fromUndefinedOr(targets.get(path));
 
   return {
-    documents: listed.map(({ document, idOf }) => ({
+    documents: judged.map(({ assembled, context, listed: { document, idOf }, targeted }) => ({
       ids: {
-        assembled: assembled.has(idOf(0)),
-        context: contextAt(contexts, idOf(0)),
+        assembled,
+        context,
         documentAt,
-        documentType: document.resourceType,
+        documentType: document.documentType,
         entryAt,
         idOf,
         package: packageId,
         path: document.path,
         targetAt,
-        targeted: targeted.has(idOf(0)),
+        targeted,
       },
       listed: document,
     })),
@@ -280,21 +274,10 @@ export type IdrefInsert = Omit<Addition<typeof Idref>, "attribute" | "node">;
 export type OpenNameInsert = Omit<Addition<typeof OpenAttributeName>, "attribute" | "node">;
 
 /**
- * A bounded attribute's typed value, as its attribute's family nests it.
- */
-export type DoubleValueInsert = Omit<Addition<typeof DoubleValue>, "attribute" | "node">;
-
-/**
- * A bounded text's typed value, as its element's family nests it.
- */
-export type TextDoubleValueInsert = Omit<Addition<typeof TextDoubleValue>, "node">;
-
-/**
  * An attribute as its element's family nests it: its written fields but the `node` the nesting
- * supplies, and its four families at their count fields.
+ * supplies, and its three families at their count fields.
  */
 export type AttributeInsert = Omit<Addition<typeof Attribute>, "node"> & {
-  readonly doubleValue: readonly DoubleValueInsert[];
   readonly entities: readonly EntityInsert[];
   readonly idrefs: readonly IdrefInsert[];
   readonly openName: readonly OpenNameInsert[];
@@ -318,7 +301,6 @@ export type NodeFields = Omit<Addition<typeof Node>, "document" | "parent">;
 export type NodeMember = NodeFields & {
   readonly attributes: readonly AttributeInsert[];
   readonly children: readonly NodeMember[];
-  readonly doubleValue: readonly TextDoubleValueInsert[];
   readonly namespaces: readonly NamespaceInsert[];
 };
 
@@ -330,28 +312,33 @@ export type NodeRoot = NodeMember & { readonly document: Addition<typeof Node>["
 
 /**
  * The document layer's flat rows of one or more documents, each a keyed set by its node's id: the
- * `Document` row of each document node, each comment's, instruction's and doctype's row, and each
- * foreign element's expanded name, one keyed set per relation of `documentLayer`
+ * `Document` row of each document node, each comment's, instruction's and doctype's row, each
+ * foreign element's expanded name, and each element's named governing type, one keyed set per
+ * relation of `documentLayer`
  * (`#pantry/import/roster.ts`). A text, whitespace or entity reference node keeps its characters on
  * its `Node` row (`chars`).
  */
 export type DocumentLayerRows = {
   readonly [Name in keyof typeof documentLayer]: ReadonlyMap<
     string,
-    Addition<(typeof documentLayer)[Name]>
+    Addition<QtiSchema["relations"][Name]>
   >;
 };
 
 /**
- * Every input of one package's ChangeSet, each a keyed set: the `Package` row with its record
- * nested, each document's `Node` root with its tree nested, both keyed by their id, the document
- * layer's flat rows, and every overlay's.
+ * Every input of one package's ChangeSet, a keyed set of each relation `insertAll` takes over `Qti`
+ * (`writtenNames` of `#pantry/import/roster.ts`), its rows typed as grizzle's `InsertAllRowsOf`
+ * types that insert's: the `Package` row with its record nested and each document's `Node` root
+ * with its tree nested, both keyed by their id, the document layer's flat rows
+ * ({@link DocumentLayerRows}), and every overlay's (`OverlayRows`). `readProgram` builds it from
+ * those, so each builder's row types are held to grizzle's here.
  */
-export type PackageInputs = DocumentLayerRows &
-  OverlayRows & {
-    readonly Node: ReadonlyMap<string, NodeRoot>;
-    readonly Package: ReadonlyMap<string, PackageRecord>;
-  };
+export type PackageInputs = {
+  readonly [Name in keyof InsertAllRowsOf<QtiSchema>]: ReadonlyMap<
+    string,
+    InsertAllRowsOf<QtiSchema>[Name][number]
+  >;
+};
 
 /**
  * A `Position` handle, a node's content-automaton state.
@@ -421,24 +408,12 @@ const positionHandle = (state: number): PositionHandle => {
 };
 
 /**
- * The domains a bound judges ({@link boundedDomains}), each with its lexical space as the host
- * reads it: its pattern, read with {@link patternFlags} as AL1 reads it.
- */
-const boundedPatterns: ReadonlyMap<string, RegExp> = new Map(
-  ValueDomainOf.rows
-    .filter(({ domain }) => boundedDomains.some((bounded) => bounded === domain))
-    .map(({ domain, pattern }) => [domain, new RegExp(pattern, patternFlags)] as const),
-);
-
-/**
  * What the host writes of an attribute its governor admits, read once from the attribute grammar
- * (`AttributeGrammar`, `AttributeSlotOf`) and its domain's rows: its slot's position, whether its
- * domain is an `xs:IDREF` or `xs:IDREFS` (`ValueIdentity`), so it holds its IDREF pieces, and its
- * domain's lexical space where a bound judges the domain ({@link boundedPatterns}).
+ * (`AttributeGrammar`) and its domain's rows: its slot's position, whether its domain is an
+ * `xs:IDREF` or `xs:IDREFS` (`ValueIdentity`), so it holds its IDREF pieces.
  */
 interface AdmittedAttribute {
   readonly idrefs: boolean;
-  readonly lexicalSpace: Option.Option<RegExp>;
   readonly position: (typeof attributeRows)[number]["position"];
 }
 
@@ -452,44 +427,11 @@ const attributeGrammarAt: ReadonlyMap<string, AdmittedAttribute> = new Map(
         keyOf(version, governor, name),
         {
           idrefs: idrefDomains.has(domain),
-          lexicalSpace: Option.fromUndefinedOr(boundedPatterns.get(domain)),
           position,
         },
       ] as const,
   ),
 );
-
-/**
- * The whitespace `xs:double`'s `collapse` reads around a value: XML's `S`.
- */
-const doubleSpace = /^[\t\n\r ]+|[\t\n\r ]+$/gu;
-
-/**
- * The values of `xs:double`'s three special literals in XML Schema 1.0, the edition QTI 3.0's XSDs
- * are written in (spec reading 71): `INF`, `-INF` and `NaN`. `+INF` is XML Schema 1.1's, outside
- * 1.0's lexical space, so the domain's pattern refuses it and no value of it is read.
- */
-const specialDoubles: ReadonlyMap<string, number> = new Map([
-  ["INF", Number.POSITIVE_INFINITY],
-  ["-INF", Number.NEGATIVE_INFINITY],
-  ["NaN", Number.NaN],
-]);
-
-/**
- * Read an `xs:double` literal's value, the reader of an attribute's or a text's double (a map
- * key's is grizzle's `Compute.parseDouble`, `#pantry/qti/mapping.ts` `MapKeyFloat`): its
- * whitespace collapsed, then a special literal's value, else the IEEE double nearest the decimal it
- * writes, which JavaScript's `Number` rounds to as XML Schema 1.1 Part 2 §3.3.5.2 does, a magnitude
- * below 2^-1075 rounding to a zero of its sign.
- *
- * @param lexical - The literal, in `xs:double`'s lexical space after collapsing.
- * @returns Its value.
- */
-export const doubleOf = (lexical: string): number => {
-  const text = lexical.replaceAll(doubleSpace, "");
-
-  return specialDoubles.get(text) ?? Number(text);
-};
 
 /**
  * The whitespace an IDREFS value separates its tokens by, XML's `S`.
@@ -624,9 +566,8 @@ interface GatheredAttribute {
 /**
  * A node below the document node as the walk gathers it: its row; its attributes and namespace
  * declarations, in slot order; its characters, `chars`, a text or whitespace node's own and an
- * entity reference's `&name;`, empty for a node that holds none; `text`, its children's characters
- * in document order, its string value where its text is checked, which a bounded text's typed value
- * is read from; and its namespace name where it is a foreign element.
+ * entity reference's `&name;`, empty for a node that holds none; and its namespace name where it is
+ * a foreign element.
  */
 interface Gathered {
   readonly attributes: GatheredAttribute[];
@@ -634,7 +575,6 @@ interface Gathered {
   foreignNamespace: Option.Option<string>;
   readonly namespaces: FlatRows<Composed>["namespaces"][number][];
   readonly node: NodeRow<Composed>;
-  text: string;
 }
 
 /**
@@ -660,7 +600,6 @@ const gatheredOf = (rows: FlatRows<Composed>): Iterable<Gathered> => {
                 foreignNamespace: Option.none(),
                 namespaces: [],
                 node,
-                text: "",
               },
             ] as const,
           ],
@@ -697,12 +636,6 @@ const gatheredOf = (rows: FlatRows<Composed>): Iterable<Gathered> => {
     ownerIn(nodes, node, "an open element name").foreignNamespace = Option.some(namespace);
   }
 
-  for (const { chars, node } of nodes.values()) {
-    if (node.parent !== self) {
-      ownerIn(nodes, node.parent, `node ${node.id}, its child`).text += chars;
-    }
-  }
-
   return nodes.values();
 };
 
@@ -713,21 +646,17 @@ const gatheredOf = (rows: FlatRows<Composed>): Iterable<Gathered> => {
  * @param element - Its element, gathered: its version, kind, governing type and namespace name.
  * @returns The attribute: its slot under its element's governor (empty for a name the governor
  *   does not admit, which AL1 refuses), its IDREF pieces where its domain is an `xs:IDREF` or
- *   `xs:IDREFS`, its typed value where its domain is bounded and its lexical form is in the
- *   domain's lexical space, its entity references and its open name.
+ *   `xs:IDREFS`, its entity references and its open name. A bounded value has no row: the
+ *   database reads it from the lexical form (`Double_bound`, `#pantry/qti/attributes.ts`).
  */
 const attributeOf = (attribute: GatheredAttribute, element: Gathered): AttributeInsert => {
   const { row } = attribute;
   const { governs, kind, version } = element.node;
-  const admitted = Option.flatMap(governorOf(version, kind, governs), (governor) =>
-    Option.fromUndefinedOr(attributeGrammarAt.get(keyOf(version, governor, row.name))),
+  const admitted = Option.fromUndefinedOr(
+    attributeGrammarAt.get(keyOf(version, governorOf(version, kind, governs), row.name)),
   );
-  const lexicalSpace = admitted.pipe(Option.flatMap((admits) => admits.lexicalSpace));
 
   return {
-    doubleValue: Option.exists(lexicalSpace, (space) => space.test(row.lexical))
-      ? [{ value: doubleOf(row.lexical) }]
-      : [],
     entities: attribute.entities.map(({ name, offset }) => ({ name, offset })),
     id: row.id,
     idrefs: Option.exists(admitted, ({ idrefs }) => idrefs) ? idrefPiecesOf(row.lexical) : [],
@@ -761,21 +690,19 @@ interface WrittenMember {
  *
  * @param gathered - The node, gathered with its own rows.
  * @param folded - Its fold (`foldOf`): its ancestry, its nearest interaction and its state.
- * @param documentType - The type of the resource that lists its document.
+ * @param documentType - Its document's type.
  * @returns The member, with the list its children are nested in.
  */
 const memberOf = (
   gathered: Gathered,
   folded: Folded,
-  documentType: ListedDocument["resourceType"],
+  documentType: ListedDocument["documentType"],
 ): WrittenMember => {
   const { node } = gathered;
   const { kind, version } = node;
   const ends = endsOf(gathered.chars);
   const children: NodeMember[] = [];
-  const textSpace = Option.flatMap(textDomainOf(version, kind, node.governs), (domain) =>
-    Option.fromUndefinedOr(boundedPatterns.get(domain)),
-  );
+  const governor = governorOf(version, kind, node.governs);
 
   return {
     children,
@@ -785,11 +712,8 @@ const memberOf = (
       chars: gathered.chars,
       children,
       documentType,
-      doubleValue: Option.exists(textSpace, (space) => space.test(gathered.text))
-        ? [{ value: doubleOf(gathered.text) }]
-        : [],
       first: ends.first,
-      governs: node.governs,
+      governor,
       id: node.id,
       kind,
       last: ends.last,
@@ -816,7 +740,8 @@ const memberOf = (
  *   document node's are its context's, its state 0;
  * - `chars`, a text or whitespace node's characters and an entity reference's `&name;`, empty
  *   elsewhere, `first` and `last`, the first and last code points of `chars` (`endsOf`);
- * - `governs` and `prefix`, an element's own, `none` and empty for any other node;
+ * - `governor`, what its attributes and text are read under (`governorOf`, its kind's own for a node
+ *   no named type governs), and `prefix`, an element's own, empty for any other node;
  * - `documentType`, the document's type (`NodeIds.documentType`), every node's alike, which its
  *   `Document` row and the tree's owner axis prove.
  *
@@ -845,9 +770,8 @@ export const rootInsertOf = (
     children: rootChildren,
     document: self,
     documentType,
-    doubleValue: [],
     first: "",
-    governs: "none",
+    governor: "document",
     id: self,
     kind: "document",
     last: "",
@@ -880,8 +804,12 @@ export const rootInsertOf = (
 /**
  * Write a document's flat rows of the document layer: its `Document` row, its XML declaration's
  * `XmlDecl`, `EncodingDecl` and `SdDecl` rows where it writes each, each comment's, instruction's
- * and doctype's row, and each foreign element's `OpenElementName` row with its node's tuple (C18)
- * and its parent's kind and namespace name, the document node's none.
+ * and doctype's row, each foreign element's `OpenElementName` row with its node's tuple (C18) and
+ * its parent's kind and namespace name, the document node's none, and the named governing type of
+ * each element a named type governs: a vocabulary element's `ElementType`, and a foreign element's
+ * `OpenElementType` with its parent's namespace name, each with its node's governor
+ * (`governorOf`); and, for a document a resource lists, its `ResourceDocument`, the type of that
+ * resource, which the manifest has none of (spec reading 176).
  *
  * @param document - The document as the importer lists it.
  * @param ids - The ids its rows are written under, whether it is in an assembly, and the context
@@ -906,6 +834,23 @@ export const documentRowsOf = (
     parent.id === self
       ? noNamespace
       : elementNamespaceOf(parent.kind, Option.fromUndefinedOr(foreignNamespace.get(parent.id)));
+  const typed = rows.nodes.flatMap((row) =>
+    Option.toArray(
+      row.governs.pipe(
+        Option.map((type) => ({
+          fields: {
+            document: self,
+            governor: governorOf(row.version, row.kind, row.governs),
+            kind: row.kind,
+            node: row.id,
+            type,
+            version: row.version,
+          },
+          row,
+        })),
+      ),
+    ),
+  );
 
   return {
     Comment: new Map(rows.comments.map(({ node, value }) => [node, { node, value }] as const)),
@@ -918,17 +863,22 @@ export const documentRowsOf = (
           assembled: ids.assembled,
           contextNearest: context.nearest,
           contextNearestKind: context.nearestKind,
+          documentType: document.documentType,
           nodeChildren: BigInt(
             rows.nodes.filter((node) => node.parent === self && node.id !== self).length,
           ),
           package: ids.package,
           path: document.path,
-          resourceType: document.resourceType,
           rootKind: document.tree.root.kind,
           version: document.tree.version,
         },
       ],
     ]),
+    ElementType: new Map(
+      typed.flatMap(({ fields, row }) =>
+        foreignKinds.has(row.kind) ? [] : [[row.id, fields] as const],
+      ),
+    ),
     EncodingDecl: new Map(rows.encodingDecls.map((row) => [row.node, row] as const)),
     OpenElementName: new Map(
       rows.openElementNames.map(({ local, namespace, node }) => {
@@ -939,7 +889,6 @@ export const documentRowsOf = (
           node,
           {
             document: self,
-            governs: row.governs,
             kind: row.kind,
             local,
             namespace,
@@ -954,7 +903,41 @@ export const documentRowsOf = (
         ] as const;
       }),
     ),
+    OpenElementType: new Map(
+      typed.flatMap(({ fields, row }) =>
+        foreignKinds.has(row.kind)
+          ? [
+              [
+                row.id,
+                {
+                  ...fields,
+                  parentNamespace: namespaceOf(
+                    ownerIn(byId, row.parent, `node ${row.id}, its child`),
+                  ),
+                },
+              ] as const,
+            ]
+          : [],
+      ),
+    ),
     Pi: new Map(rows.pis.map(({ data, node, target }) => [node, { data, node, target }] as const)),
+    ResourceDocument: new Map(
+      document.documentType === "manifest"
+        ? []
+        : [
+            [
+              self,
+              {
+                documentType: document.documentType,
+                node: self,
+                package: ids.package,
+                path: document.path,
+                rootKind: document.tree.root.kind,
+                type: document.documentType,
+              },
+            ],
+          ],
+    ),
     SdDecl: new Map(rows.sdDecls.map((row) => [row.node, row] as const)),
     XmlDecl: new Map(rows.xmlDecls.map((row) => [row.node, row] as const)),
   };
@@ -1045,26 +1028,39 @@ interface RowsOfSet extends Struct.Lambda {
 const rowsOfSet = Struct.lambda<RowsOfSet>((set) => [...set.values()]);
 
 /**
+ * Read one package's facts, the rows of each relation of its inputs as `insertAll` takes them: each
+ * keyed set's rows, those of {@link patternInputs} sorted by their pattern's inputs. They are what
+ * the author login's `importWrite` member applies (`db.workload.importWrite.apply(facts, {})`),
+ * which grizzle checks as each relation's insert checks its rows.
+ *
+ * @param inputs - The package's inputs.
+ * @returns The facts, one array of rows per relation.
+ */
+export const packageFactsOf = (inputs: PackageInputs) => ({
+  ...Struct.map(rowsOfSet)(inputs),
+  ...patternOrdered(inputs),
+});
+
+/**
  * Build one package's ChangeSet: one step over the author role, each relation of the package's
  * inputs inserted once, by its key (grizzle's `insertAll`, which types and checks each key's rows
  * as that relation's own insert), every owner in the same stratum as its whole family (the W5
  * amendment's A, C19). A ChangeSet is canonical, its members sorted by relation, so the order of
- * the inserts is no part of it.
+ * the inserts is no part of it. The author login declares it with no rows as its `importWrite`
+ * member (`#pantry/qti/logins.ts`), the program `grizzle generate` compiles once into the login's
+ * served file; each import applies that member to its own facts ({@link packageFactsOf}).
  *
  * The `Node` insert carries each document's tree, its attributes and namespace declarations, and
  * their families nested; the `Package` insert its record. Every other input is its keyed set's
  * rows, flat, those of {@link patternInputs} sorted by their pattern's inputs.
  *
- * The caller passes the role, the one its database was opened on: describing `Author` costs about
- * 2 s and 271 MB when `#pantry/qti/roles.ts` loads (measured 2026-11-06 at load average 27), and
- * a caller that only builds rows, such as the dry run, never needs it.
+ * The caller passes the role, the one its database was opened on: describing the author role costs
+ * about 2 s and 271 MB (measured 2026-11-06 at load average 27), and a caller that only builds
+ * rows, such as the dry run, never needs it.
  *
- * @param author - The author role, `Author` of `#pantry/qti/roles.ts`.
+ * @param author - The author role (`#pantry/qti/roles.ts` `authorRoleOf`), its login's.
  * @param inputs - The package's inputs.
  * @returns The ChangeSet, compiled by `db.apply` for the one call that applies it.
  */
-export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
-  ChangeSet.empty(author).insertAll({
-    ...Struct.map(rowsOfSet)(inputs),
-    ...patternOrdered(inputs),
-  });
+export const changeSetOf = (author: AuthorRole, inputs: PackageInputs) =>
+  ChangeSet.empty(author).insertAll(packageFactsOf(inputs));

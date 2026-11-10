@@ -20,16 +20,25 @@
  *   text the oracle finds past its bound in a field of a relation the import writes, no field the
  *   database fills, is in that field's rows.
  */
-import { Cause, Effect, Exit, FileSystem, Formatter, Option, Result } from "effect";
+import {
+  Array as Arr,
+  Cause,
+  Effect,
+  Equivalence,
+  Exit,
+  FileSystem,
+  Formatter,
+  Option,
+} from "effect";
 import type { Path, PlatformError } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
+import { sameLaw } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
-import { noType } from "#pantry/grammar/xsi.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { ImportRefused, refusalOfLaws } from "#pantry/import/refusal.ts";
+import { refusalOf } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
@@ -51,7 +60,9 @@ import { writePackage } from "#pantry/test/gen/every-relation.ts";
 import { filledKeyTextFields, keyCopies } from "#pantry/test/key-copies.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { boundBroken, judge, ruleOf } from "#pantry/test/oracle.ts";
-import type { Breach, Judgment as OracleJudgment, Laws } from "#pantry/test/oracle.ts";
+import type { Breach, LawName, Judgment as OracleJudgment, Laws } from "#pantry/test/oracle.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
+import { refusedOf } from "#pantry/test/law-names.ts";
 
 /**
  * One way the import and the oracle disagree on a package:
@@ -60,14 +71,16 @@ import type { Breach, Judgment as OracleJudgment, Laws } from "#pantry/test/orac
  * - `codec-rule`: both refuse before any row, under two rules;
  * - `codec-import-only`: the import refuses before any row under a rule the oracle does not name;
  * - `codec-oracle-only`: the oracle's codec refuses, and the import builds every row;
- * - `import-only-law`: the import's rows break a law the oracle says the package meets;
+ * - `import-only-law`: the import's rows break a law the oracle says the package meets: by its name,
+ *   the first law of it they break (`broken`, as an `invariant-rejected` outcome names it), and its
+ *   witness;
  * - `oracle-only-law`: the oracle raises a law the import's rows were judged to hold;
  * - `dangling-uuid`: a row names a uuid the program did not mint;
  * - `noise-moved`: a side's verdict moved when the package took a noise no law reads
  *   (`#pantry/test/gen/genetic/noise.ts`);
- * - `lone-refusal`: the oracle breaks one law alone, and the refusal the import names over the laws
- *   its rows break (`refusalOfLaws`, as the database's outcome names it) is under another rule than
- *   that law's, or carries another witness than the outcome's.
+ * - `lone-refusal`: the oracle breaks one law alone, and the most specific rule of the refusal the
+ *   import names over the laws its rows break (`refusalOf`, as the database's outcome names it) is
+ *   another rule than that law's, or the refusal carries another witness than the outcome's.
  *
  * Any of them may carry the stated limit its package falls under ({@link limitOf}), which
  * {@link signatureOf} keys it by where its plain signature is a fixed entry's.
@@ -76,7 +89,7 @@ export type Disagreement = (
   | {
       readonly importRule: string;
       readonly kind: "lone-refusal";
-      readonly law: string;
+      readonly law: LawName;
       readonly laws: string;
       readonly rule: string;
       readonly witness: string;
@@ -90,7 +103,12 @@ export type Disagreement = (
       readonly side: "import" | "oracle";
     }
   | { readonly detail: string; readonly kind: "import-died" | "oracle-died" }
-  | { readonly field: string; readonly kind: "dangling-uuid" }
+  | {
+      readonly field: string;
+      readonly kind: "dangling-uuid";
+      readonly relation: string;
+      readonly value: string;
+    }
   | { readonly importRule: string; readonly kind: "codec-rule"; readonly oracleRule: string }
   | {
       readonly importRule: string;
@@ -99,6 +117,7 @@ export type Disagreement = (
     }
   | { readonly kind: "codec-oracle-only"; readonly oracleRule: string }
   | {
+      readonly broken: Law;
       readonly kind: "import-only-law";
       readonly law: string;
       readonly rule: string;
@@ -107,7 +126,7 @@ export type Disagreement = (
   | {
       readonly keys: string;
       readonly kind: "oracle-only-law";
-      readonly law: string;
+      readonly law: LawName;
       readonly rule: string;
     }
 ) & { readonly limit?: Limit };
@@ -294,40 +313,92 @@ export const limitOf = (breaches: readonly Breach[], genome: Genome): Option.Opt
 };
 
 /**
+ * A class of disagreement, which a run keeps one candidate of and the known table records an entry
+ * of (`#pantry/test/gen/genetic/known.ts`): a disagreement's kind and the law or the rules it
+ * names, never its witness.
+ *
+ * - `import-only-law`: grizzle's law the rows break, as an `invariant-rejected` outcome names it, its
+ *   selections included, so two statements of one law name (`E1 derived` above all, stated by many
+ *   statements, each its own writer) are two classes, and so are two that differ by their
+ *   selections alone;
+ * - `oracle-only-law`: the law the oracle raises, by its name;
+ * - `lone-refusal`: the lone law, the rule the import named and its witness;
+ * - `dangling-uuid`: the uuid field;
+ * - The codec's: the rules each side refused under;
+ * - `noise-moved`: the side and the noise;
+ * - `import-died`, `oracle-died`: the first line of how the side died, cut to 120 characters.
+ *
+ * Any of them may carry the stated limit its disagreement carries ({@link limitOf}): a class under
+ * a limit is another class than its plain one.
+ */
+export type Signature = (
+  | {
+      readonly importRule: string;
+      readonly kind: "lone-refusal";
+      readonly law: LawName;
+      readonly witness: string;
+    }
+  | { readonly detail: string; readonly kind: "import-died" | "oracle-died" }
+  | { readonly field: string; readonly kind: "dangling-uuid"; readonly relation: string }
+  | { readonly importRule: string; readonly kind: "codec-import-only" }
+  | { readonly importRule: string; readonly kind: "codec-rule"; readonly oracleRule: string }
+  | { readonly kind: "codec-oracle-only"; readonly oracleRule: string }
+  | { readonly kind: "import-only-law"; readonly law: Law }
+  | { readonly kind: "noise-moved"; readonly noise: Noise; readonly side: "import" | "oracle" }
+  | { readonly kind: "oracle-only-law"; readonly law: LawName }
+) & { readonly limit?: Limit };
+
+/**
  * Key a disagreement by its class without its stated limit, as {@link signatureOf} does.
  *
  * @param disagreement - The disagreement.
  * @returns Its plain signature.
  */
-const plainSignatureOf = (disagreement: Disagreement): string => {
+const plainSignatureOf = (disagreement: Disagreement): Signature => {
   switch (disagreement.kind) {
     case "import-died":
     case "oracle-died": {
-      return `${disagreement.kind}: ${disagreement.detail.split("\n")[0]?.slice(0, 120) ?? ""}`;
+      return {
+        detail: disagreement.detail.split("\n")[0]?.slice(0, 120) ?? "",
+        kind: disagreement.kind,
+      };
     }
     case "dangling-uuid": {
-      return `${disagreement.kind}: ${disagreement.field.split(" = ")[0] ?? ""}`;
+      return {
+        field: disagreement.field,
+        kind: disagreement.kind,
+        relation: disagreement.relation,
+      };
     }
     case "codec-rule": {
-      return `${disagreement.kind}: import ${disagreement.importRule}, oracle ${disagreement.oracleRule}`;
+      return {
+        importRule: disagreement.importRule,
+        kind: disagreement.kind,
+        oracleRule: disagreement.oracleRule,
+      };
     }
     case "codec-import-only": {
-      return `${disagreement.kind}: ${disagreement.importRule}`;
+      return { importRule: disagreement.importRule, kind: disagreement.kind };
     }
     case "codec-oracle-only": {
-      return `${disagreement.kind}: ${disagreement.oracleRule}`;
+      return { kind: disagreement.kind, oracleRule: disagreement.oracleRule };
     }
     case "import-only-law": {
-      return `${disagreement.kind}: ${disagreement.law}, ${disagreement.witness.split(": ")[0] ?? ""}`;
+      return { kind: disagreement.kind, law: disagreement.broken };
     }
     case "oracle-only-law": {
-      return `${disagreement.kind}: ${disagreement.law}`;
+      return { kind: disagreement.kind, law: disagreement.law };
     }
     case "noise-moved": {
-      return `${disagreement.kind}: the ${disagreement.side}'s verdict under ${disagreement.noise}`;
+      return { kind: disagreement.kind, noise: disagreement.noise, side: disagreement.side };
     }
     case "lone-refusal": {
-      return `${disagreement.kind}: ${disagreement.law} named ${disagreement.importRule}, witness ${disagreement.witness}`;
+      return {
+        importRule: disagreement.importRule,
+        kind: disagreement.kind,
+        law: disagreement.law,
+        witness: disagreement.witness,
+      };
     }
     default: {
       return disagreement satisfies never;
@@ -336,25 +407,128 @@ const plainSignatureOf = (disagreement: Disagreement): string => {
 };
 
 /**
- * Key a disagreement by its class: its kind and the law or rules it names, and for a law the
- * import's rows break the statement that broke it (one law, `E1 derived` above all, is stated by
- * many statements, each its own writer), never its witness, so a run keeps one candidate per
- * class.
+ * Key a disagreement by its class ({@link Signature}).
  *
- * A disagreement that carries a stated limit ({@link limitOf}) is keyed `<signature> (under
- * <limit>)`. `judgeOne` gives it one only where its plain signature is a key of
+ * A disagreement that carries a stated limit ({@link limitOf}) is keyed by its plain signature and
+ * the limit. `judgeOne` gives it one only where its plain signature is a class of
  * `#pantry/test/gen/genetic/known.ts` `fixed`, so no signature sits in both tables: a known class
  * under a limit is recorded apart, and the fixed entry keeps guarding the cause it closed, which
- * shows again under its plain key wherever no limit holds.
+ * shows again under its plain signature wherever no limit holds.
  *
  * @param disagreement - The disagreement.
  * @returns Its signature.
  */
-export const signatureOf = (disagreement: Disagreement): string => {
+export const signatureOf = (disagreement: Disagreement): Signature => {
   const plain = plainSignatureOf(disagreement);
 
-  return disagreement.limit === undefined ? plain : `${plain} (under ${disagreement.limit})`;
+  return disagreement.limit === undefined ? plain : { ...plain, limit: disagreement.limit };
 };
+
+/**
+ * Whether two signatures are one class: two of `import-only-law` when grizzle's `sameLaw` holds
+ * them one law (as `#pantry/import/refusal.ts` `lawNameOf` matches a law to the one `Qti` states)
+ * and they carry one stated limit or none, two of any other kind when their kind and every field,
+ * the limit included, are the same.
+ *
+ * @param left - A signature.
+ * @param right - Another.
+ * @returns Whether they are one class.
+ */
+export const sameSignature: Equivalence.Equivalence<Signature> = (left, right) =>
+  left.kind === "import-only-law" || right.kind === "import-only-law"
+    ? left.kind === "import-only-law" &&
+      right.kind === "import-only-law" &&
+      left.limit === right.limit &&
+      (left.law === right.law || sameLaw(left.law, right.law))
+    : Equivalence.Record(Equivalence.strictEqual<unknown>())(left, right);
+
+/**
+ * Whether a disagreement is of a class one of `signatures` records.
+ *
+ * @param signatures - The classes recorded.
+ * @param disagreement - The disagreement.
+ * @returns Whether its class is among them.
+ */
+export const recordsClassOf = (
+  signatures: readonly Signature[],
+  disagreement: Disagreement,
+): boolean => {
+  const signature = signatureOf(disagreement);
+
+  return signatures.some((recorded) => sameSignature(recorded, signature));
+};
+
+/**
+ * Whether a disagreement is of a class one of `signatures` records, under any stated limit or
+ * under none: its plain signature is recorded. A fixed entry's cause shows again under a limit too.
+ *
+ * @param signatures - The plain classes recorded.
+ * @param disagreement - The disagreement.
+ * @returns Whether its plain class is among them.
+ */
+export const recordsPlainClassOf = (
+  signatures: readonly Signature[],
+  disagreement: Disagreement,
+): boolean => {
+  const signature = plainSignatureOf(disagreement);
+
+  return signatures.some((recorded) => sameSignature(recorded, signature));
+};
+
+/**
+ * Write a signature as a report line without its stated limit, as {@link shownSignature} does.
+ *
+ * @param signature - The signature.
+ * @returns The line.
+ */
+const shownPlainSignature = (signature: Signature): string => {
+  switch (signature.kind) {
+    case "import-died":
+    case "oracle-died": {
+      return `${signature.kind}: ${signature.detail}`;
+    }
+    case "dangling-uuid": {
+      return `${signature.kind}: ${signature.relation}.${signature.field}`;
+    }
+    case "codec-rule": {
+      return `${signature.kind}: import ${signature.importRule}, oracle ${signature.oracleRule}`;
+    }
+    case "codec-import-only": {
+      return `${signature.kind}: ${signature.importRule}`;
+    }
+    case "codec-oracle-only": {
+      return `${signature.kind}: ${signature.oracleRule}`;
+    }
+    case "import-only-law": {
+      return `${signature.kind}: ${Formatter.format(signature.law)}`;
+    }
+    case "oracle-only-law": {
+      return `${signature.kind}: ${signature.law}`;
+    }
+    case "noise-moved": {
+      return `${signature.kind}: the ${signature.side}'s verdict under ${signature.noise}`;
+    }
+    case "lone-refusal": {
+      return `${signature.kind}: ${signature.law} named ${signature.importRule}, witness ${signature.witness}`;
+    }
+    default: {
+      return signature satisfies never;
+    }
+  }
+};
+
+/**
+ * Write a signature as a report line: its kind, then the law, the rules or the field it names, a
+ * law in full as grizzle names it, its selections included, and the stated limit it is under, if
+ * any.
+ *
+ * @param signature - The signature.
+ * @returns The line.
+ */
+export const shownSignature = (signature: Signature): string =>
+  signature.limit === undefined
+    ? shownPlainSignature(signature)
+    : `${shownPlainSignature(signature)} (under ${signature.limit})`;
 
 /**
  * Write a disagreement as a report line: its class, then what each side said.
@@ -369,7 +543,7 @@ export const shownDisagreement = (disagreement: Disagreement): string => {
       return `${disagreement.kind}: ${disagreement.detail}`;
     }
     case "dangling-uuid": {
-      return `dangling-uuid: the import writes ${disagreement.field}, an id it never minted`;
+      return `dangling-uuid: the import writes ${disagreement.relation}.${disagreement.field} = ${disagreement.value}, an id it never minted`;
     }
     case "codec-rule": {
       return `codec-rule: the import refuses before any row under ${disagreement.importRule}, the oracle's codec under ${disagreement.oracleRule}`;
@@ -545,7 +719,7 @@ const importSideOf = (
       const failure = Cause.findErrorOption(cause);
 
       return Option.isSome(failure) && failure.value instanceof ImportRefused
-        ? { kind: "refused", rule: failure.value.rule }
+        ? { kind: "refused", rule: failure.value.rules.join("|") }
         : { detail: Cause.pretty(cause), kind: "died" };
     },
     onSuccess: (program): ImportSide => ({
@@ -564,7 +738,8 @@ const importSideOf = (
  * @returns The feature, `o:value domain arm <domain> <facets or pattern>`.
  */
 const domainArmOf = (breach: Breach, grammar: ComposedGrammar): Feature => {
-  const { governs = noType, kind = "", lexical = "", name = "", version = "3.0.0" } = breach.keys;
+  const { kind = "", lexical = "", name = "", version = "3.0.0" } = breach.keys;
+  const governs = Option.fromNullishOr(breach.keys["governs"]);
   const admitted = schemaVersions.find((held) => held === version) ?? "3.0.0";
   const handle = Option.getOrUndefined(
     Option.map(
@@ -650,7 +825,8 @@ const importFeatures = (side: ImportSide): Feature[] => {
       return [
         "i:built",
         ...[...side.host.broken].map(
-          ([law, witness]): Feature => `i:${lawTable[law].rule} @ ${witness.split(" ")[0] ?? ""}`,
+          ([law, { witness }]): Feature =>
+            `i:${lawTable[law].rule} @ ${witness.split(" ")[0] ?? ""}`,
         ),
         ...(side.host.overLong.size > 0 ? ["i:key-text-bound @ bound" as const] : []),
         ...(side.host.dangling.length > 0 ? ["i:dangling @ uuid" as const] : []),
@@ -740,20 +916,26 @@ const rowDisagreements = (
   host: HostVerdict,
 ): readonly Disagreement[] => {
   const raised = new Set<string>(breaches.map(({ law }) => law));
-  const importOnly = [...host.broken].flatMap(([law, witness]): readonly Disagreement[] =>
-    raised.has(law) ? [] : [{ kind: "import-only-law", law, rule: lawTable[law].rule, witness }],
+  const importOnly = [...host.broken].flatMap(
+    ([law, { law: broken, witness }]): readonly Disagreement[] =>
+      raised.has(law)
+        ? []
+        : [{ broken, kind: "import-only-law", law, rule: lawTable[law].rule, witness }],
   );
-  const overLong: readonly Disagreement[] =
-    host.overLong.size > 0 && !raised.has("Key text bound")
-      ? [
+  const overLong: readonly Disagreement[] = raised.has("Key text bound")
+    ? []
+    : Option.match(Arr.head([...host.overLong.values()]), {
+        onNone: () => [],
+        onSome: (broken) => [
           {
+            broken,
             kind: "import-only-law",
             law: "Key text bound",
             rule: "key-text-bound",
-            witness: `a text past ${[...host.overLong].join(", ")}'s bound`,
+            witness: `a text past ${[...host.overLong.keys()].join(", ")}'s bound`,
           },
-        ]
-      : [];
+        ],
+      });
   const shown = new Set<string>();
   const oracleOnly = breaches.flatMap((breach): readonly Disagreement[] => {
     const field = breach.keys["field"] ?? "";
@@ -783,7 +965,12 @@ const rowDisagreements = (
   });
 
   return [
-    ...host.dangling.map((field): Disagreement => ({ field, kind: "dangling-uuid" })),
+    ...host.dangling.map(({ field, relation, value }): Disagreement => ({
+      field,
+      kind: "dangling-uuid",
+      relation,
+      value,
+    })),
     ...importOnly,
     ...overLong,
     ...oracleOnly,
@@ -807,11 +994,13 @@ const witnessOf = (refused: ImportRefused): string =>
 
 /**
  * Judge the refusal the import names for a package whose oracle breaks one law alone: the import's
- * rows break laws on the host, and `refusalOfLaws` names the refusal over them and the lone law
- * (which the database breaks too, by a statement the host may not evaluate, so it stands as its
- * check, named by the law) as it names the database's outcome. Its rule must be the lone law's,
- * and its witness the outcome's: a rule some other broken law ranks before in precedence is a
- * refusal the oracle does not predict.
+ * rows break laws on the host, and `refusalOf` names the refusal over them and the lone law (which
+ * the database breaks too, by a statement the host may not evaluate, so it stands as its check,
+ * named by the law) as it names the database's outcome. The most specific of its rules, by the
+ * precedence it lists them in, must be the lone law's, and its witness the outcome's: a rule some
+ * other broken law ranks before in precedence is a refusal the oracle does not predict. The import
+ * no longer singles out one rule, so this models the ruling it made before, until the class goes
+ * with the host judge.
  *
  * @param breaches - The oracle's breaches.
  * @param host - The host's verdict over the import's rows.
@@ -830,36 +1019,34 @@ const loneRefusal = (
   }
 
   const rule = ruleOf(lone);
-  const laws = [
-    { kind: "check", name: lone.replaceAll(" ", "_"), relation: "Node" } satisfies Law,
-    ...host.brokenLaws,
-  ] as const;
+  const planted = {
+    kind: "check",
+    name: lone.replaceAll(" ", "_"),
+    relation: "Node",
+  } satisfies Law;
+  const laws = [planted, ...host.brokenLaws] as const;
+  const refused = refusalOf(
+    {
+      kind: "every",
+      laws: [refusedOf(planted), ...host.brokenLaws.map((law) => refusedOf(law))],
+    },
+    unreported,
+    grammar,
+  );
+  const importRule = Option.getOrElse(Arr.head(refused.rules), () => "none");
 
-  return Result.match(refusalOfLaws(laws, unreported, grammar), {
-    onFailure: (unowned): readonly Disagreement[] => [
-      {
-        importRule: "none",
-        kind: "lone-refusal",
-        law: lone,
-        laws: unowned.laws.join("; "),
-        rule,
-        witness: "none",
-      },
-    ],
-    onSuccess: (refused): readonly Disagreement[] =>
-      refused.rule === rule && witnessOf(refused) === unreported.kind
-        ? []
-        : [
-            {
-              importRule: refused.rule,
-              kind: "lone-refusal",
-              law: lone,
-              laws: laws.map((law) => Formatter.format(law)).join("; "),
-              rule,
-              witness: witnessOf(refused),
-            },
-          ],
-  });
+  return importRule === rule && witnessOf(refused) === unreported.kind
+    ? []
+    : [
+        {
+          importRule,
+          kind: "lone-refusal",
+          law: lone,
+          laws: laws.map((law) => Formatter.format(law)).join("; "),
+          rule,
+          witness: witnessOf(refused),
+        },
+      ];
 };
 
 /**
@@ -882,17 +1069,21 @@ const summaryOf = (oracle: OracleSide, side: ImportSide): Summary => {
   const laws = [
     ...broken.keys(),
     ...(overLong.size > 0 ? ["key text bound"] : []),
-    ...dangling.map((field) => field.split(" = ")[0] ?? ""),
+    ...dangling.map(({ field, relation }) => `${relation}.${field}`),
   ];
 
   return { import: `built ${laws.toSorted().join(", ")}`, oracle: ofOracle };
 };
 
 /**
- * The signatures of the fixed entries, each a cause a fix closed: a disagreement whose plain
- * signature is one of them carries its stated limit, where it has one.
+ * Whether a plain signature is a fixed entry's class, a cause a fix closed: a disagreement of one
+ * carries its stated limit, where it has one.
+ *
+ * @param signature - The plain signature.
+ * @returns Whether a fixed entry records it.
  */
-const fixedKeys: ReadonlySet<string> = new Set(Object.keys(fixed));
+const fixedClass = (signature: Signature): boolean =>
+  fixed.some((entry) => sameSignature(entry.signature, signature));
 
 /**
  * Judge one candidate both ways and compare.
@@ -945,7 +1136,7 @@ export const judgeOne = Effect.fnUntraced(function* judgeOne(
     Option.match(limit, {
       onNone: () => disagreement,
       onSome: (under) =>
-        fixedKeys.has(signatureOf(disagreement)) ? { ...disagreement, limit: under } : disagreement,
+        fixedClass(signatureOf(disagreement)) ? { ...disagreement, limit: under } : disagreement,
     });
 
   return {

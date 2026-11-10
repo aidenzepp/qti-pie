@@ -16,8 +16,8 @@ import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { cellKinds } from "#pantry/qti/html.ts";
 import type { CellHeaders, HeaderToken, TableHeader, TableScope } from "#pantry/qti/html.ts";
+import { cellKinds } from "#pantry/vocab/terms/html.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes' and attributes', drawn by
@@ -168,6 +168,15 @@ const tableWalkOf = (
  * (spec reading 156). Each element on the walk up from either to its nearest `table` has its
  * `TableScope`. A text past `keyText`'s bound keeps its row, which `keyText` refuses under "Key
  * text bound". A document with no such cell gives no row.
+ *
+ * The NCName test decides whether a `TableHeader` row exists, so it stays until the relation is a
+ * query over its source, `headerIds` in `#pantry/qti/html.ts` (the constraint-engine plan's B9, at
+ * the grizzle cutover). Writing a row for every `th`'s `id` instead breaks the reading. The row's
+ * copy back into `namingIdAttributes` and `DocumentId` ("E1 derived") would refuse it beside the
+ * value domain that reading 156 says refuses the `id` alone. And a cell's `headers` token naming
+ * that `id` would find the row and hold "Table headers", which the reading says refuses it.
+ * `documentIdOf` (`#pantry/import/overlays/identity.ts`) keeps the same test for the reading's
+ * other half.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.

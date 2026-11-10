@@ -9,6 +9,7 @@
  * does not defer it, judged at the end of the member's INSERT, so the writer sends the owner first.
  * An owner axis grizzle defers is judged only where a case sets it immediate.
  */
+import { roleNameOf, schemaNameOf } from "@bjornpagen/grizzle";
 import type { AnyRelation, DbConnection } from "@bjornpagen/grizzle";
 import { NodeFileSystem } from "@effect/platform-node";
 import { assert } from "@effect/vitest";
@@ -16,22 +17,31 @@ import { Array as Arr, Effect, Match, Option, Predicate, Redacted, Schema } from
 import { Client } from "pg";
 import type { DatabaseError, QueryResultRow } from "pg";
 import { loginConnection } from "#pantry/db/connection.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti, QtiBase } from "#pantry/qti/own.ts";
+import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 
 /**
- * The author login's PostgreSQL role, `<schema>__<login>`.
+ * The author login's PostgreSQL role, the one its session logs in as.
  */
-const authorAppRole = "qti__author_app";
+const authorAppRole = roleNameOf(AuthorApp);
 
 /**
- * The author role's PostgreSQL role, which is also the schema of its views.
+ * The author role's PostgreSQL role, the one a direct writer's `SET ROLE` names, which holds
+ * SELECT, INSERT and DELETE on every table of `Qti` it writes whole, every stored relation's
+ * (grizzle's README, "Exactly what a role holds").
  */
-export const authorRole = "qti__author";
+export const authorRole = roleNameOf(Author);
 
 /**
- * The PostgreSQL schema of `Qti`'s tables.
+ * The author role's own PostgreSQL schema, which holds a view of each of its relations.
  */
-export const qtiSchema = "qti";
+export const authorViews = schemaNameOf(Author);
+
+/**
+ * The PostgreSQL schema of `Qti`'s tables, its stored level's (`#pantry/qti/base.ts`): grizzle
+ * installs each level in a schema of its own, and every table is the stored level's.
+ */
+export const qtiSchema = schemaNameOf(QtiBase);
 
 /**
  * The password a connection authenticates with, read once.
@@ -49,7 +59,7 @@ const passwordText = (password: DbConnection["password"]) =>
  * with its scope: a direct SQL writer.
  */
 export const loginSession = Effect.gen(function* loginSession() {
-  const connection = yield* loginConnection(authorAppRole);
+  const connection = (yield* loginConnection)(authorAppRole);
   const password = yield* passwordText(connection.password);
   const client = new Client({
     database: connection.database,
@@ -416,8 +426,9 @@ export const judged = (
  * accepted.
  *
  * @param verdict - The server's error, none for an accepted row.
- * @param constraint - The constraint the refusal names: PostgreSQL's spelling of a check's name,
- *   or a key's or foreign key's name as the catalog holds it.
+ * @param constraint - The constraint the refusal names: a row check's installed name, as
+ *   `#pantry/test/judged-laws.ts` `checkConstraintOf` derives it, or a key's or foreign key's name
+ *   as the catalog holds it.
  * @param refused - Whether the law refuses the rows.
  * @param label - The case, for a failure's message.
  * @param code - The SQLSTATE of the refusal: 23514, a CHECK's, unless the law is a key.
@@ -957,12 +968,13 @@ export interface Stated {
 }
 
 /**
- * A relation's table, as grizzle converts a declared name.
+ * A relation's table, as grizzle converts a declared name: the table a direct writer writes a
+ * relation's rows to, and a case reads a constraint of it from.
  *
  * @param relation - The relation's name.
  * @returns The table.
  */
-const tableOf = (relation: string): string => columnOf(relation);
+export const tableOf = (relation: string): string => columnOf(relation);
 
 /**
  * The text of a fact's values at some fields, the key a family groups its members by.
@@ -1108,9 +1120,17 @@ const selects = (
 
 /**
  * Each fact with the values its containments copy filled where it states none: across each of
- * {@link copies}, a left fact and the one right fact its key fields name hold each further pair
- * equal, so a value one of them states fills the other's. It repeats until no value moves, so a
- * value runs down a tree from its root, a root's from its `Document` row's.
+ * {@link copies}, a left fact its side's selection holds and the one right fact its key fields
+ * name hold each further pair equal, so a value one of them states fills the other's. It repeats
+ * until no value moves, so a value runs down a tree from its root, a root's from its `Document`
+ * row's.
+ *
+ * The right fact is the one the key names, whatever the right side's selection reads: the key is
+ * its relation's primary key, so it names one row, and the containment holds that row in the
+ * selection. A target that fixes fields beyond its terms, the document node `Document` copies into
+ * (`#pantry/qti/chardata.ts`, its `governor`, `kind`, `parentKind`, `start` and `document`), says
+ * those of the row it names and never picks among rows, so a fact that leaves them unstated takes
+ * its copies as one that states them does.
  *
  * @param stated - The facts.
  * @returns The facts, each with its copied values.
@@ -1121,12 +1141,12 @@ const copiedOf = (stated: readonly Stated[]): readonly Stated[] => {
   const across = copies.filter(
     ({ from, to }) => names.has(from.relation) && names.has(to.relation),
   );
-  const factsOf = (side: (typeof copies)[number]["to"]) =>
-    facts.filter((fact, at) => stated[at]?.relation.name === side.relation && selects(side, fact));
+  const factsOf = (relation: string) =>
+    facts.filter((_, at) => stated[at]?.relation.name === relation);
   const copyOnce = () =>
     across.flatMap(({ from, key, to, values }) => {
       const targets = new Map(
-        factsOf(to).map((fact) => [
+        factsOf(to.relation).map((fact) => [
           keyAt(
             fact,
             key.map(([, field]) => field),
@@ -1135,31 +1155,33 @@ const copiedOf = (stated: readonly Stated[]): readonly Stated[] => {
         ]),
       );
 
-      return factsOf(from).flatMap((fact) => {
-        const fields = key.map(([field]) => field);
-        const target = fields.every((field) => fact[field] !== undefined)
-          ? targets.get(keyAt(fact, fields))
-          : undefined;
+      return factsOf(from.relation)
+        .filter((fact) => selects(from, fact))
+        .flatMap((fact) => {
+          const fields = key.map(([field]) => field);
+          const target = fields.every((field) => fact[field] !== undefined)
+            ? targets.get(keyAt(fact, fields))
+            : undefined;
 
-        return target === undefined
-          ? []
-          : values.flatMap(([field, other]) => {
-              const [here, there] = [fact[field], target[other]];
-              if (here === undefined && there !== undefined) {
-                fact[field] = there;
+          return target === undefined
+            ? []
+            : values.flatMap(([field, other]) => {
+                const [here, there] = [fact[field], target[other]];
+                if (here === undefined && there !== undefined) {
+                  fact[field] = there;
 
-                return [field];
-              }
+                  return [field];
+                }
 
-              if (there === undefined && here !== undefined) {
-                target[other] = here;
+                if (there === undefined && here !== undefined) {
+                  target[other] = here;
 
-                return [other];
-              }
+                  return [other];
+                }
 
-              return [];
-            });
-      });
+                return [];
+              });
+        });
     });
   while (copyOnce().length > 0) {
     // Each pass fills at least one value a pass before left empty, so the loop ends.

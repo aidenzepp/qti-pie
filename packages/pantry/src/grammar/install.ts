@@ -13,17 +13,18 @@
  * `grizzle check` decodes, the one form grizzle writes (README, "Closed relations"); a generator
  * builds the rows and the generators' tests review them.
  *
- * `Follow` and `Last` are keyed by their automaton ({@link ContentModel}), and `Symbol` by its
- * shared model ({@link SharedModel}), as the content grammar generates them (`content.ts`): a
- * family reads its model through {@link ContentModelOf} or {@link SharedModelOf}, so each is stated
- * one to one.
+ * `FollowSetOf`, which states `Last` as its `ends`, is keyed by its automaton
+ * ({@link ContentModel}), `FollowMember` by its follow set ({@link FollowSet}), `SymbolSetOf` by
+ * its shared model ({@link SharedModel}) and `SymbolMember` by its symbol set ({@link SymbolSet}):
+ * a family reads its model through {@link ContentModelOf} or {@link SharedModelOf}, and a state its
+ * set through {@link FollowSetOf}, so each is stated one to one.
  *
  * Where grizzle's surface differs from the generators' shapes, the declaration restates the
  * relation and says why:
  *
  * - A generator's dependent `fin` coordinate is a slot, `slot(closedId(Position), fin(O, n))`, over a
- *   count relation O over the model ({@link ModelPositions}, {@link SharedPositions}), so each
- *   model's block holds its own positions and no other's (README, "Closed relations").
+ *   count relation O over the model ({@link ModelPositions}), so each model's block holds its own
+ *   positions and no other's (README, "Closed relations").
  * - A lexical form's code is a `<Roster>Lexical` payload, and a one-position law a function over
  *   (version, parent) ({@link CountedOf}, {@link BarredOf}). A singleton set is no relation's row:
  *   a schema module writes `Compute.singleton(id)`, and a handle's membership in a set is
@@ -37,7 +38,6 @@
  */
 import { closed, closedId, fin, natural, pg, slot, str } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Result } from "effect";
-import { committedRosters, inCommittedOrder } from "#pantry/db/codes.ts";
 import type { Flag as FlagHandle } from "#pantry/grammar/ancestry.ts";
 import { attributeCounts } from "#pantry/grammar/attributes.ts";
 import type { AttributeCount } from "#pantry/grammar/attributes.ts";
@@ -71,18 +71,18 @@ export const grammar: ComposedGrammar = Result.getOrThrowWith(composed(), (refus
 
 /**
  * Take a generated roster's handles as a nonempty list, the form a grizzle roster declares, in the
- * order grizzle accepts: the handles the committed snapshot holds for the roster, in their code
- * order, then the handles new since the snapshot, in the generator's order (`inCommittedOrder`).
+ * generator's order, which is the order grizzle codes them in: a roster's codes follow its declared
+ * order, and this package's migrations are drafted from zero (one `_init`), so no install of it
+ * holds another history. Loading this module reads no snapshot.
  *
- * @param name - The roster's name: its declared name, which keys the snapshot's codes, and the
- *   defect's message.
+ * @param name - The roster's name, which the defect's message names.
  * @param handles - The handles in the generator's order.
- * @returns The same handles, typed nonempty and ordered by the committed codes.
+ * @returns The same handles, typed nonempty.
  * @throws {Error} When the generator gave the roster no handle, which no vocabulary list does.
  */
 const nonEmpty = <H extends string>(name: string, handles: readonly H[]): readonly [H, ...H[]] => {
   if (Arr.isReadonlyArrayNonEmpty(handles)) {
-    return inCommittedOrder(committedRosters.get(name) ?? [], handles);
+    return handles;
   }
 
   throw new Error(
@@ -91,13 +91,15 @@ const nonEmpty = <H extends string>(name: string, handles: readonly H[]): readon
 };
 
 /**
- * Narrow a generator's value to a handle of one of its rosters.
+ * Narrow a generator's value to a handle of one of its rosters: the generators type their rows by
+ * the IR's strings, and grizzle's declared rows hold each roster's handle type, which this test of
+ * the roster proves. A value outside the roster is a fault of the generated rows, which the
+ * composition's tests find (`faultOf`, `compose.test.ts`) and grizzle's `closedRows` refuses too.
  *
  * @param roster - The generated roster the value's field ranges over.
  * @param value - The value a generated row holds.
  * @returns The value as the roster's handle.
- * @throws {Error} When the roster lacks it, which `closed.ts` refuses before a generator returns a
- *   row.
+ * @throws {Error} When the roster lacks it: a defect of the generator that stated the row.
  */
 const memberOf = <H extends string>(roster: GeneratedRoster<H>, value: string): H => {
   if (roster.has(value)) {
@@ -137,10 +139,13 @@ const handleLookup = <H extends string>(
 };
 
 /**
- * The text type of a closed relation's open text payloads: any text, as XML Schema's `xs:string`
- * reads one, line terminators included.
+ * Any text, line ends included, as XML Schema's `xs:string` reads one: the type of a closed
+ * relation's open text payloads, of every text no law reads, and the language every byte-bounded
+ * text cuts (`#pantry/qti/limits.ts`). Its pattern is a tautology, so grizzle installs a field of
+ * it as plain text, with no domain and no pattern law (`physical/ddl/domains.ts` `structuralRegex`
+ * of the vendored engine). It is declared once, here, so grizzle analyzes the pattern once.
  */
-const anyText = str.regex("^.*$", "su");
+export const anyText = str.regex("^.*$", "su");
 
 // Handle lists (C8): membership is `Compute.in`, so these sets are lists, never installed.
 
@@ -190,15 +195,10 @@ export const toolLabelKinds: readonly Kind[] = toolLabelKindsOf({
 // Rosters, each a generator's in code order. Codes are history: a vocabulary appends.
 
 /**
- * The null object of a roster whose value may be absent: the handle a row takes where it has none,
- * which no lexical form spells.
+ * The `DocumentType` handle of the package's manifest, the IMS Content Packaging manifest document,
+ * which is no resource's (spec readings 146 and 176).
  */
-const none = "none";
-
-/**
- * The `ResourceType` handle of a document no resource lists, the manifest.
- */
-const noResourceType = none;
+const manifestDocument = "manifest";
 
 /**
  * The `SchemaVersion` roster: the QTI 3.0 schema versions, a key digit of every relation that
@@ -225,8 +225,9 @@ export const AttributeName = closed(
 );
 
 /**
- * The `TypeName` roster: `none`, then the pinned XSDs' named types, each its namespace's prefix and
- * its local name (`typeHandle` of `xsi.ts`).
+ * The `TypeName` roster: the pinned XSDs' named types, each its namespace's prefix and its local
+ * name (`typeHandle` of `xsi.ts`). No handle stands for no type: an element no named type governs
+ * has no row of the relation that holds its type (`ElementType`, `OpenElementType`).
  */
 export const TypeName = closed("TypeName", nonEmpty("TypeName", grammar.xsi.typeName.handles));
 
@@ -259,14 +260,40 @@ export const Cardinality = closed(
 const asCardinality = handleLookup("Cardinality", Cardinality.handles);
 
 /**
- * The `ResourceType` roster: `none`, the null object of the manifest's own `Document` row, at code
- * 0, then the 21 types a `cp:resource` may name, each spelled as its lexical form (`package.ts`).
- * No `RootOfType` or `ResourceTypeLexical` row names `none`, and a lexical form no handle spells
- * is outside the attribute's value domain, so a resource that carries it is refused.
+ * The `ResourceType` roster: the 21 types a `cp:resource` may name, each spelled as its lexical
+ * form (`package.ts`). A lexical form no handle spells is outside the attribute's value domain, so
+ * a resource that carries it is refused. No handle stands for no type: a resource whose `type`
+ * spells none has no `ResourceTyped` row, and an item ref whose href names no resource has no
+ * `ItemRefTarget` (a missing value is a row of its own relation, or no row).
  */
 export const ResourceType = closed(
   "ResourceType",
-  nonEmpty("ResourceType", [noResourceType, ...grammar.package.resourceType.handles]),
+  nonEmpty("ResourceType", grammar.package.resourceType.handles),
+);
+
+/**
+ * The `DocumentType` roster: the type of a document of a package, which every node and attribute of
+ * the document copies: `manifest`, the package's manifest document, then the 21 types a
+ * `cp:resource` may name, the type of the resource that lists the document (IMS Content Packaging
+ * 1.2 sets the manifest apart from the resources it declares; spec reading 176). Every document is
+ * one or the other, so the type is total and names no absence.
+ */
+export const DocumentType = closed(
+  "DocumentType",
+  nonEmpty("DocumentType", [manifestDocument, ...grammar.package.resourceType.handles]),
+);
+
+/**
+ * `ResourceDocumentType`: resource type → document type, the type of the documents a resource of
+ * the type lists, spelled as the resource type is: a document a resource lists holds the type of
+ * that resource, a row of its own (`ResourceDocument`), and its `DocumentType` by this function.
+ * `none` names no resource, and has no row.
+ */
+export const ResourceDocumentType = closed.relation(
+  "ResourceDocumentType",
+  { documentType: closedId(DocumentType), type: closedId(ResourceType) },
+  ["type"],
+  grammar.package.resourceType.handles.map((type) => ({ documentType: type, type })),
 );
 
 /**
@@ -407,7 +434,7 @@ export const BoundZero = closed(
 
 /**
  * The `ContentModel` roster: every distinct content automaton, named by its first family's parent
- * kind, `Follow` and `Last` keyed by it (the content grammar's own key, `content.ts`).
+ * kind, `FollowSetOf` and `Last` keyed by it (the content grammar's own key, `content.ts`).
  */
 export const ContentModel = closed(
   "ContentModel",
@@ -424,14 +451,36 @@ export const SharedModel = closed(
 );
 
 /**
- * `ContentModelOf`: (version, parent) → model, total, the automaton a parent's children follow in
- * the version, read by N5b and N7 as `ContentModelOf.at("model", version, parentKind)`.
+ * The `AdmissionMap` roster: every distinct admission map of a family, as the content grammar
+ * numbers them (`#pantry/grammar/content.ts`): the children a family admits at their positions,
+ * each distinct map stated once (rule 0: identical facts are one fact), so its 1,288 families hold
+ * 190 maps. `ContentModelOf` names each family's map, and `AdmissionIn` each map's children, so
+ * the (version, parent, child) → position function `Admission` is, ChildGrammar once, is read as
+ * `AdmissionIn(ContentModelOf.admission(version, parent), child)`. A family that admits no child
+ * holds the empty map, which `AdmissionIn` holds no row of.
+ */
+export const AdmissionMap = closed(
+  "AdmissionMap",
+  nonEmpty("AdmissionMap", grammar.content.admissionMaps.handles),
+);
+
+/**
+ * `ContentModelOf`: (version, parent) → (model, admission), total, the automaton a parent's
+ * children follow in the version, read by N5b and N7 as `ContentModelOf.at("model", version,
+ * parentKind)`, and the family's admission map, read by N5 as `ContentModelOf.at("admission",
+ * version, parentKind)` ({@link AdmissionIn}).
  */
 export const ContentModelOf = closed.relation(
   "ContentModelOf",
-  { model: closedId(ContentModel), parent: closedId(NodeKind), version: closedId(SchemaVersion) },
+  {
+    admission: closedId(AdmissionMap),
+    model: closedId(ContentModel),
+    parent: closedId(NodeKind),
+    version: closedId(SchemaVersion),
+  },
   ["version", "parent"],
-  grammar.content.contentModelOf.rows.map(({ model, parent, version }) => ({
+  grammar.content.contentModelOf.rows.map(({ admission, model, parent, version }) => ({
+    admission,
     model,
     parent: memberOf(grammar.kinds.nodeKind, parent),
     version,
@@ -442,7 +491,7 @@ export const ContentModelOf = closed.relation(
 
 /**
  * `ModelPositions`: model → positions, the number of content positions of each automaton, its start
- * 0 included, so the model of a family with no model, or an empty one, has 1. `Follow`'s and
+ * 0 included, so the model of a family with no model, or an empty one, has 1. `FollowSetOf`'s and
  * `Last`'s slots are its counts (README, "Closed relations").
  */
 export const ModelPositions = closed.relation(
@@ -456,73 +505,81 @@ export const ModelPositions = closed.relation(
 );
 
 /**
- * `SharedPositions`: model → positions, the number of content positions of each shared model, its
- * start 0 included.
- */
-export const SharedPositions = closed.relation(
-  "SharedPositions",
-  { model: closedId(SharedModel), positions: natural },
-  ["model"],
-  grammar.content.sharedModelPositions.rows.map(({ model, positions }) => ({
-    model,
-    positions: BigInt(positions),
-  })),
-);
-
-/**
  * A content position of an automaton, a slot of its model's `ModelPositions` count.
  */
 const familyPosition = slot(closedId(Position), fin(ModelPositions, "positions"));
 
-/**
- * A content position of a shared model, a slot of its `SharedPositions` count.
- */
-const modelPosition = slot(closedId(Position), fin(SharedPositions, "positions"));
-
 // The content grammar (N5, N7).
 
 /**
- * `ChildGrammar`: (version, parent, child) → position, the child kind's position in its parent's
- * content model, 0 for character data and for a kind several positions name. Its key set is
- * admission (`Admission` in `compose.ts`).
+ * `AdmissionIn`: (map, child) → position, each admission map's children at their positions in
+ * their parent's content model, 0 for character data and for a kind several positions name: the
+ * function `Admission` states per family (`compose.ts`), stated per map ({@link AdmissionMap}).
  */
-export const ChildGrammar = closed.relation(
-  "ChildGrammar",
-  {
-    child: closedId(NodeKind),
-    parent: closedId(NodeKind),
-    position: closedId(Position),
-    version: closedId(SchemaVersion),
-  },
-  ["version", "parent", "child"],
-  grammar.admission.rows.map(({ child, parent, position, version }) => ({
+export const AdmissionIn = closed.relation(
+  "AdmissionIn",
+  { child: closedId(NodeKind), map: closedId(AdmissionMap), position: closedId(Position) },
+  ["map", "child"],
+  grammar.content.admissionIn.rows.map(({ child, map, position }) => ({
     child: memberOf(grammar.kinds.nodeKind, child),
-    parent: memberOf(grammar.kinds.nodeKind, parent),
+    map,
     position,
-    version,
   })),
 );
 
 /**
- * `Follow`: the set of (model, from, to) where a child at position `to` may follow one at `from`,
- * `from` 0 the start, in the content model's automaton.
+ * The states, as `model state`, at which a family of a content model may end: the content grammar's
+ * `Last`, 0 where a family may be empty. Each is a state of its model, so `FollowSetOf`, keyed by
+ * every state, states it as its `ends` payload, and no relation of its own repeats the keys.
  */
-export const Follow = closed.relation(
-  "Follow",
-  { from: familyPosition, model: closedId(ContentModel), to: familyPosition },
-  ["model", "from", "to"],
-  grammar.content.follow.rows.map(({ from, model, to }) => ({ from, model, to })),
+const endingStates: ReadonlySet<string> = new Set(
+  grammar.content.last.rows.map(({ model, position }) => `${model} ${position}`),
 );
 
 /**
- * `Last`: the set of (model, position) where a family of the content model may end, 0 when it may
- * be empty.
+ * The `FollowSet` roster: every distinct follow set of a content model's state, numbered from 0
+ * (`content.ts`): `FollowSetOf` names one per state, and `FollowMember` holds each set's positions
+ * once, however many states of however many models share it.
  */
-export const Last = closed.relation(
-  "Last",
-  { model: closedId(ContentModel), position: familyPosition },
-  ["model", "position"],
-  grammar.content.last.rows.map(({ model, position }) => ({ model, position })),
+export const FollowSet = closed(
+  "FollowSet",
+  nonEmpty("FollowSet", grammar.content.followSets.handles),
+);
+
+/**
+ * `FollowSetOf`: (model, from) → (set, ends), total over each content model's states, `from` 0 the
+ * start: the set of the positions a child may take after one at `from`, in the model's automaton,
+ * and whether a family may end at `from` (the content grammar's `Last`). N5 reads
+ * `FollowMember.row(FollowSetOf.at("set", model, was))`, which holds exactly the positions the
+ * automaton's transitions from `was` reach, and N7 `FollowSetOf.at("ends", model, lastState)`,
+ * which holds exactly where `Last` held `(model, lastState)`.
+ */
+export const FollowSetOf = closed.relation(
+  "FollowSetOf",
+  {
+    ends: pg.boolean,
+    from: familyPosition,
+    model: closedId(ContentModel),
+    set: closedId(FollowSet),
+  },
+  ["model", "from"],
+  grammar.content.followSetOf.rows.map(({ from, model, set }) => ({
+    ends: endingStates.has(`${model} ${from}`),
+    from,
+    model,
+    set,
+  })),
+);
+
+/**
+ * `FollowMember`: the set of (set, to) where a follow set holds position `to`. The empty set, a
+ * state nothing follows, has no row.
+ */
+export const FollowMember = closed.relation(
+  "FollowMember",
+  { set: closedId(FollowSet), to: closedId(Position) },
+  ["set", "to"],
+  grammar.content.followMember.rows.map(({ set, to }) => ({ set, to })),
 );
 
 /**
@@ -541,19 +598,41 @@ export const SharedModelOf = closed.relation(
 );
 
 /**
- * `Symbol`: the set of (model, kind, position) where a shared model names the kind at the position,
- * so the state decides which (N5c). Each (version, parent) family reads its model through
- * `SharedModelOf`.
+ * The `SymbolSet` roster: every distinct set of positions a shared model names a kind at, as the
+ * content grammar numbers them (`#pantry/grammar/content.ts`): 3,282 (model, kind) pairs hold 333
+ * sets, so N5 reads a shared kind's positions as `SymbolMember.row(SymbolSetOf.at("set", model,
+ * kind))`.
  */
-export const Symbol = closed.relation(
-  "Symbol",
-  { kind: closedId(NodeKind), model: closedId(SharedModel), position: modelPosition },
-  ["model", "kind", "position"],
-  grammar.content.symbol.rows.map(({ kind, model, position }) => ({
+export const SymbolSet = closed(
+  "SymbolSet",
+  nonEmpty("SymbolSet", grammar.content.symbolSets.handles),
+);
+
+/**
+ * `SymbolSetOf`: (model, kind) → set, the positions a shared model names the kind at, so the state
+ * decides which (N5c), for each kind several positions of the model name. Each (version, parent)
+ * family reads its model through `SharedModelOf`; a kind of no row is named at one position or
+ * none, which a law reads through `SymbolSetOf.has`.
+ */
+export const SymbolSetOf = closed.relation(
+  "SymbolSetOf",
+  { kind: closedId(NodeKind), model: closedId(SharedModel), set: closedId(SymbolSet) },
+  ["model", "kind"],
+  grammar.content.symbolSetOf.rows.map(({ kind, model, set }) => ({
     kind: memberOf(grammar.kinds.nodeKind, kind),
     model,
-    position,
+    set,
   })),
+);
+
+/**
+ * `SymbolMember`: the set of (set, position) where a symbol set holds the position.
+ */
+export const SymbolMember = closed.relation(
+  "SymbolMember",
+  { position: closedId(Position), set: closedId(SymbolSet) },
+  ["set", "position"],
+  grammar.content.symbolMember.rows,
 );
 
 /**
@@ -755,7 +834,7 @@ export const StrictlyHeld = closed.relation(
  * @param set - `Enters`, `Banned` or `Needs`.
  * @returns Its (kind, flag) rows.
  */
-const kindFlags = (set: ComposedGrammar["ancestry"]["enters"]) =>
+const kindFlags = (set: ComposedGrammar["ancestry"]["banned"]) =>
   set.rows.map(({ flag, kind }) => ({ flag, kind: memberOf(grammar.kinds.nodeKind, kind) }));
 
 /**
@@ -793,7 +872,7 @@ export const Needs = closed.relation(
 
 /**
  * `XsiType`: the set of (version, kind, type) where an element of the kind may name the type in
- * `xsi:type`, validly derived from its declared type, `none` its declared type's absence.
+ * `xsi:type`, validly derived from its declared type, the declared type among them.
  */
 export const XsiType = closed.relation(
   "XsiType",
@@ -802,6 +881,21 @@ export const XsiType = closed.relation(
   grammar.xsi.xsiType.rows.map(({ kind, type, version }) => ({
     kind: memberOf(grammar.kinds.nodeKind, kind),
     type,
+    version,
+  })),
+);
+
+/**
+ * `AnonymousType`: the set of (version, kind) whose content model declares an anonymous type, so
+ * an element of the kind stands with no named governing type and has no `XsiType` row: no named
+ * type derives from an anonymous one.
+ */
+export const AnonymousType = closed.relation(
+  "AnonymousType",
+  { kind: closedId(NodeKind), version: closedId(SchemaVersion) },
+  ["version", "kind"],
+  grammar.xsi.anonymousType.rows.map(({ kind, version }) => ({
+    kind: memberOf(grammar.kinds.nodeKind, kind),
     version,
   })),
 );
@@ -819,16 +913,17 @@ const governorAt: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * State `GoverningOf`'s rows, total on every (version, kind, governs) a node may hold:
+ * State `GoverningOf`'s rows, on every (version, kind, governs) a law admits an element's named
+ * governing type at:
  *
  * - Each `XsiType` row, governed by the grammar's governor of the triple, else by the kind itself;
  * - Each foreign kind under every type, by its simple governor where the grammar holds one, else by
- *   the kind;
- * - Each kind that is no element, under `none`, by the kind.
+ *   the kind.
+ *
+ * A node no named type governs reads no row: its governor is its kind's own ({@link KindGovernor}).
  *
  * @returns The rows, each (version, kind, governs) once.
- * @throws {Error} When two of the three sources give one triple two governors, which none does
- *   today.
+ * @throws {Error} When the two sources give one triple two governors, which none does today.
  */
 const governingRows = () => {
   const rows = new Map<
@@ -871,18 +966,17 @@ const governingRows = () => {
         add(version, kind, type);
       }
     }
-
-    for (const kind of nonElementKinds) {
-      add(version, kind, none);
-    }
   }
 
   return [...rows.values()];
 };
 
 /**
- * `GoverningOf`: (version, kind, governs) → governor, what an element of the kind under the type
- * reads its attributes and text by, total on every triple a node may hold.
+ * `GoverningOf`: (version, kind, governs) → governor, what an element of the kind under the named
+ * type reads its attributes and text by, at every triple a law admits the type at. A law reads it
+ * where an element's type is a row of its own (`ElementType`, `OpenElementType`), and states the
+ * kind's own governor where the triple is absent ({@link KindGovernor}): an `xsi:type` naming a
+ * type its kind's declared type does not derive, which `XsiType derived` refuses.
  */
 export const GoverningOf = closed.relation(
   "GoverningOf",
@@ -897,12 +991,23 @@ export const GoverningOf = closed.relation(
 );
 
 /**
+ * `KindGovernor`: kind → governor, each kind's own `Governor` handle, what a node no named type
+ * governs reads its attributes and text by: a node that is no element, an element of an anonymous
+ * declared type, and a foreign element its `xsi:type` gives no type.
+ */
+export const KindGovernor = closed.relation(
+  "KindGovernor",
+  { governor: closedId(Governor), kind: closedId(NodeKind) },
+  ["kind"],
+  grammar.kinds.nodeKind.handles.map((kind) => ({ governor: asGovernor(kind), kind })),
+);
+
+/**
  * The attribute grammar as the generators state it, a row per (version, governor, name): each
  * attribute an element may carry under its governor in the version, with its value domain, its use
  * and its slot among the names the (version, governor) admits, slots 0 to n − 1. A kind's own rows
  * are the grammar's `AttributeGrammar`, a governing type's its `GovernedAttribute`. The installed
- * relations restate it by attribute model and slot ({@link AttributeGrammar},
- * {@link AttributeSlotOf}); the host reads these rows.
+ * relations restate it by attribute model ({@link AttributeGrammar}); the host reads these rows.
  */
 export const attributeRows = [
   ...grammar.attributes.admission.rows.map(({ domain, kind, name, position, use, version }) => ({
@@ -967,7 +1072,7 @@ const attributeModels = (() => {
 
 /**
  * The `AttributeModel` roster: every distinct attribute grammar of a (version, governor), named by
- * its first governor, {@link AttributeGrammar} and {@link AttributeSlotOf} keyed by it.
+ * its first governor, {@link AttributeGrammar} keyed by it.
  */
 export const AttributeModel = closed(
   "AttributeModel",
@@ -1003,8 +1108,8 @@ export const AttributeModelOf = closed.relation(
 );
 
 /**
- * `AttributeSlots`: model → slots, the number of attributes each model admits, the slots 0 to
- * n − 1 of {@link AttributeGrammar}'s blocks (README, "Closed relations").
+ * `AttributeSlots`: model → slots, the number of attributes each model admits, whose slots 0 to
+ * n − 1 key {@link Required}'s and {@link CountedSlot}'s blocks (README, "Closed relations").
  */
 export const AttributeSlots = closed.relation(
   "AttributeSlots",
@@ -1022,9 +1127,11 @@ export const AttributeSlots = closed.relation(
 const modelSlot = slot(closedId(AttributeSlot), fin(AttributeSlots, "slots"));
 
 /**
- * `AttributeGrammar`: (model, slot) → (name, domain, use), each attribute a model admits at its
- * slot, keyed by the model's own slots as `Follow` is by its model's positions, so each model's
- * block holds its own attributes and no other's: its name, its value domain and its use.
+ * `AttributeGrammar`: (model, name) → (slot, domain, use), each attribute a model admits: its slot
+ * among the model's names, one of the slots 0 to n − 1 of its `AttributeSlots` count, its value
+ * domain and its use. Every law reads an element's attribute by its name (AL1, AL2's slot and the
+ * value domain), so the relation is keyed by name: an unadmitted name reads no row, and
+ * `AttributeGrammar.row(model)` is the set of the model's names.
  */
 export const AttributeGrammar = closed.relation(
   "AttributeGrammar",
@@ -1032,10 +1139,10 @@ export const AttributeGrammar = closed.relation(
     domain: closedId(ValueDomain),
     model: closedId(AttributeModel),
     name: closedId(AttributeName),
-    slot: modelSlot,
+    slot: closedId(AttributeSlot),
     use: closedId(Use),
   },
-  ["model", "slot"],
+  ["model", "name"],
   attributeModels.models.flatMap(({ handle, rows }) =>
     rows.map(({ domain, name, position, use }) => ({
       domain,
@@ -1043,28 +1150,6 @@ export const AttributeGrammar = closed.relation(
       name,
       slot: position,
       use,
-    })),
-  ),
-);
-
-/**
- * `AttributeSlotOf`: (model, name) → slot, the slot of each name a model admits, the index an
- * element's attribute is read through by name (AL1, AL2's slot and the value domain); an
- * unadmitted name reads no row, and `AttributeSlotOf.row(model)` is the set of the model's names.
- */
-export const AttributeSlotOf = closed.relation(
-  "AttributeSlotOf",
-  {
-    model: closedId(AttributeModel),
-    name: closedId(AttributeName),
-    slot: closedId(AttributeSlot),
-  },
-  ["model", "name"],
-  attributeModels.models.flatMap(({ handle, rows }) =>
-    rows.map(({ name, position }) => ({
-      model: asAttributeModel(handle),
-      name,
-      slot: position,
     })),
   ),
 );
@@ -1134,7 +1219,7 @@ const countedModels = (() => {
   }
 
   return [...counts].map(([model, { max, min, names }]) => {
-    const slots = AttributeSlotOf.rows
+    const slots = AttributeGrammar.rows
       .filter((row) => row.model === model && names.includes(row.name))
       .map(({ slot: at }) => at);
 
@@ -1189,8 +1274,8 @@ export const ValueDomainOf = closed.relation(
 /**
  * `DoubleBound`: domain → (facet, value), the lower bound of each domain whose typed value carries
  * one, a double's or a float's (`DoubleBound` of `#pantry/grammar/domains.ts`). No pattern states
- * it, since whether a literal clears it turns on IEEE rounding; `DoubleValue`'s bound law reads it
- * (`#pantry/qti/attributes.ts`).
+ * it, since whether a literal clears it turns on IEEE rounding; the bound law reads it on the
+ * database's parse of the form (`#pantry/qti/attributes.ts`).
  */
 export const DoubleBound = closed.relation(
   "DoubleBound",
@@ -1204,14 +1289,14 @@ export const DoubleBound = closed.relation(
  * no `ValueDomainOf` row and no pattern, and no lexical form is in it (`emptyDomains` of the
  * attribute grammar): `xs:NOTATION`'s in the pinned grammar, the text domain of a foreign element
  * whose `xsi:type` names it (C47). A law refuses a value of one by `¬in(domain, emptyDomains)`,
- * since grizzle admits no pattern no text matches (`scalar/regex/admit.ts:121`).
+ * since grizzle admits no pattern no text matches (`scalar/regex/admit.ts:98-102`, `matchPattern`).
  */
 export const emptyDomains: readonly (typeof ValueDomain.handles)[number][] =
   grammar.attributes.emptyDomains.map((domain) => asValueDomain(domain));
 
 /**
  * The domains whose typed value a bound judges: each with a {@link DoubleBound} row, whose
- * attributes carry a `DoubleValue`.
+ * attributes' and texts' forms the bound law parses as doubles.
  */
 export const boundedDomains: readonly (typeof ValueDomain.handles)[number][] =
   grammar.attributes.doubleBound.rows.map(({ domain }) => asValueDomain(domain));
@@ -1306,8 +1391,9 @@ export const KindByNameUnder = closed.relation(
  * `namespace}local`, of spec reading 6's roots its strict wildcards assess against the global
  * declarations of its documents' schema set (C13, `cp:manifest` under `drd:accessForAllResource`),
  * `^$` where there is none. Such a root is stored as a foreign element and governed by no type, and
- * Strictly held lets it stand: `¬StrictlyHeld(version, parentKind, kind) ∨ governs ≠ none ∨
- * Compute.matches(Compute.concat(Compute.concat(namespace, "}"), local),
+ * Strictly held lets it stand: the foreign elements that need a type, which hold an
+ * `OpenElementType`, are those with `StrictlyHeld(version, parentKind, kind) ∧
+ * ¬Compute.matches(Compute.concat(Compute.concat(namespace, "}"), local),
  * HeldRootsUnder.at("names", version, parentKind))`.
  */
 export const HeldRootsUnder = closed.relation(
@@ -1324,10 +1410,10 @@ export const HeldRootsUnder = closed.relation(
 /**
  * `TypeAvailable`: type → namespaces, total over `TypeName`: the pattern of the vocabulary
  * namespaces under whose elements an element's `xsi:type` may name the type, every namespace for
- * `none` and XML Schema's own types (spec readings 60 and 81; C15, C36). An element whose parent's
- * namespace is no vocabulary's stands in documents of every schema set, so it may name any type:
- * the law over a foreign element's `governs` is `Compute.matches(parentNamespace,
- * TypeAvailable.at("namespaces", governs)) ∨ ¬Compute.matches(parentNamespace,
+ * XML Schema's own types (spec readings 60 and 81; C15, C36). An element whose parent's namespace
+ * is no vocabulary's stands in documents of every schema set, so it may name any type: the law
+ * over a foreign element's `OpenElementType` is `Compute.matches(parentNamespace,
+ * TypeAvailable.at("namespaces", type)) ∨ ¬Compute.matches(parentNamespace,
  * vocabularyNamespacePattern)`.
  */
 export const TypeAvailable = closed.relation(
@@ -1591,7 +1677,7 @@ export const RootOfType = closed.relation(
 
 /**
  * The `IncludeParent` roster: every kind whose content model holds an explicit `xi:include`, the
- * parents an include of the information model's Table 9.4.1 stands under. Keying `IncludeRoot` by
+ * parents an include of the information model's Table 9.4.1 stands under. Keying `IncludeSetOf` by
  * it rather than by `NodeKind` keeps the constant at the parents that hold one.
  */
 export const IncludeParent = closed(
@@ -1614,21 +1700,40 @@ export const IncludeParentKind = closed.relation(
 );
 
 /**
- * `IncludeRoot`: the set of (version, include parent, kind), each kind an include under the parent
- * stands for: the alternatives of its particle's choice group (`#pantry/grammar/include.ts`).
+ * The `IncludeSet` roster: every distinct set of kinds an include stands for, as the include
+ * grammar numbers them (`#pantry/grammar/include.ts`): 155 families hold 21 sets, so a law reads an
+ * include's kinds as `IncludeMember.row(IncludeSetOf.at("set", version, parent))`.
  */
-export const IncludeRoot = closed.relation(
-  "IncludeRoot",
+export const IncludeSet = closed(
+  "IncludeSet",
+  nonEmpty("IncludeSet", grammar.include.includeSet.handles),
+);
+
+/**
+ * `IncludeSetOf`: (version, include parent) → set, the kinds an include under the parent stands
+ * for, for each family that holds one; a law reads a family of none through `IncludeSetOf.has`.
+ */
+export const IncludeSetOf = closed.relation(
+  "IncludeSetOf",
   {
-    kind: closedId(NodeKind),
     parent: closedId(IncludeParent),
+    set: closedId(IncludeSet),
     version: closedId(SchemaVersion),
   },
-  ["version", "parent", "kind"],
-  grammar.include.includeRoot.rows.map(({ kind, parent, version }) => ({
+  ["version", "parent"],
+  grammar.include.includeSetOf.rows,
+);
+
+/**
+ * `IncludeMember`: the set of (set, kind) where an include set holds the kind.
+ */
+export const IncludeMember = closed.relation(
+  "IncludeMember",
+  { kind: closedId(NodeKind), set: closedId(IncludeSet) },
+  ["set", "kind"],
+  grammar.include.includeMember.rows.map(({ kind, set }) => ({
     kind: memberOf(grammar.kinds.nodeKind, kind),
-    parent,
-    version,
+    set,
   })),
 );
 
@@ -1817,16 +1922,13 @@ export const CardinalityLexical = closed.relation(
 );
 
 /**
- * `ResourceTypeLexical`: code → lexical, each resource type's lexical form; `none` has none, since
- * nothing writes it from a lexical form.
+ * `ResourceTypeLexical`: code → lexical, each resource type's lexical form.
  */
 export const ResourceTypeLexical = closed.relation(
   "ResourceTypeLexical",
   { code: closedId(ResourceType), lexical: anyText },
   ["code"],
-  ResourceType.handles
-    .filter((code) => code !== noResourceType)
-    .map((code) => ({ code, lexical: code })),
+  ResourceType.handles.map((code) => ({ code, lexical: code })),
 );
 
 /**
