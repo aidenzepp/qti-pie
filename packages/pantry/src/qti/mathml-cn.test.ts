@@ -23,7 +23,7 @@ import {
 } from "#pantry/qti/mathml-cn.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { identityOf } from "#pantry/test/key-copies.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 /**
  * How long building a schema over every relation of `Qti` may take: its statements are planned

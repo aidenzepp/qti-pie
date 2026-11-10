@@ -3,7 +3,7 @@
  * writing every one of them (plan §1.8; the W5 amendment's A, the privilege ruling).
  */
 import { role, wholeEntriesOf, writableNamesOf } from "@bjornpagen/grizzle";
-import { Qti } from "#pantry/qti/schema.ts";
+import { qti } from "#pantry/qti/schema.ts";
 
 /**
  * The author role: a full role over `Qti`, holding every stored relation and every roster whole
@@ -13,4 +13,6 @@ import { Qti } from "#pantry/qti/schema.ts";
  * is `writableNamesOf(Qti)`, the stored relations in the schema's order. No relation is `mutable`,
  * so the role holds no UPDATE: each package is inserted once.
  */
-export const Author = role(Qti, "author", wholeEntriesOf(Qti), { write: writableNamesOf(Qti) });
+export const Author = role(qti(), "author", wholeEntriesOf(qti()), {
+  write: writableNamesOf(qti()),
+});

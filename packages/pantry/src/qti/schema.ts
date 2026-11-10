@@ -1,13 +1,14 @@
 /**
- * The `Qti` schema, composed by name: every roster and closed relation `install.ts` declares, every
- * stored relation of the `src/qti/` modules, and every module's laws, each array once (plan §1.1,
- * the W5 amendment's §C).
+ * The `Qti` schema's builder, {@link qti}: it composes by name every roster and closed relation
+ * `install.ts` declares, every stored relation of the `src/qti/` modules, and every module's laws,
+ * each array once (plan §1.1, the W5 amendment's §C), on its first call and never at load.
  *
  * No relation is `mutable`: qti-pie writes each package once, every owner inserted with its whole
  * family in one ChangeSet step (the W5 amendment's A). A module joins the composition when it
  * lands; `schema.test.ts` lists the modules composed and checks each law array is here once.
  */
 import { schema } from "@bjornpagen/grizzle";
+import { Option } from "effect";
 import {
   AttributeCountOf,
   AttributeGrammar,
@@ -540,30 +541,76 @@ const moduleLaws: readonly (readonly QtiStatement[])[] = [
 const qtiLaws = moduleLaws.flat();
 
 /**
- * The QTI 3.0 schema: the grammar's rosters and closed relations, then each module's relations,
- * each under its own name, and every module's laws.
+ * Compose the QTI 3.0 schema: the grammar's rosters and closed relations, then each module's
+ * relations, each under its own name, and every module's laws.
+ *
+ * @returns The composed `Qti` schema.
  */
-export const Qti = schema(
-  "Qti",
-  {
-    ...grammarRosters,
-    ...grammarRelations,
-    ...nodeRelations,
-    ...chardataRelations,
-    ...attributeRelations,
-    ...packageRelations,
-    ...identityRelations,
-    ...declarationRelations,
-    ...testRelations,
-    ...mappingRelations,
-    ...interactionRelations,
-    ...expressionRelations,
-    ...metadataRelations,
-    ...htmlRelations,
-    ...quotationRelations,
-    ...operatorRelations,
-    ...mathmlRelations,
-    ...catalogRelations,
-  },
-  qtiLaws,
-);
+const buildQti = () =>
+  schema(
+    "Qti",
+    {
+      ...grammarRosters,
+      ...grammarRelations,
+      ...nodeRelations,
+      ...chardataRelations,
+      ...attributeRelations,
+      ...packageRelations,
+      ...identityRelations,
+      ...declarationRelations,
+      ...testRelations,
+      ...mappingRelations,
+      ...interactionRelations,
+      ...expressionRelations,
+      ...metadataRelations,
+      ...htmlRelations,
+      ...quotationRelations,
+      ...operatorRelations,
+      ...mathmlRelations,
+      ...catalogRelations,
+    },
+    qtiLaws,
+  );
+
+/**
+ * The composed QTI 3.0 schema, as {@link qti} returns it: the root level an installation's other
+ * levels are over.
+ */
+export type QtiSchema = ReturnType<typeof buildQti>;
+
+/**
+ * The options {@link qti} builds the schema with. Phase 1 holds none: every call gives the one
+ * schema.
+ */
+export type QtiOptions = Readonly<Record<never, never>>;
+
+/**
+ * The schema {@link qti} built on its first call, or nothing before it.
+ */
+let built: Option.Option<QtiSchema> = Option.none();
+
+/**
+ * Build the QTI 3.0 schema on the first call and return that one value on every call, so loading
+ * this module composes nothing and a caller pays for the composition only when it asks.
+ *
+ * @param _options - The schema's options, empty in phase 1: every call returns the same schema.
+ * @returns The composed `Qti` schema.
+ */
+export const qti = (_options: QtiOptions = {}): QtiSchema => {
+  if (Option.isSome(built)) {
+    return built.value;
+  }
+
+  const composed = buildQti();
+  built = Option.some(composed);
+
+  return composed;
+};
+
+/**
+ * Decide whether {@link qti} has built the schema yet: a probe for the tests that hold loading a
+ * module to composing nothing. It is never exported from the package entry.
+ *
+ * @returns Whether the schema has been built.
+ */
+export const qtiBuilt = (): boolean => Option.isSome(built);

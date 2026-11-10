@@ -36,7 +36,7 @@ import type { NodeMember, NodeRoot, PackageInputs } from "#pantry/import/write.t
 import { readPackage } from "#pantry/package/read.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { materialize, materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";

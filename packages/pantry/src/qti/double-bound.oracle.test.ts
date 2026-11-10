@@ -24,7 +24,7 @@ import { Duration, Effect, Formatter, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge as hostJudge } from "#pantry/test/host-judge.ts";
 import { judgedLaws } from "#pantry/test/judged-laws.ts";

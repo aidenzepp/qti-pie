@@ -13,7 +13,7 @@
 import { Schema } from "effect";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 /**
  * A family statement as grizzle keeps it: its member relation and the terms of its group key, and

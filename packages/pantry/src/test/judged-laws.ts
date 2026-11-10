@@ -12,7 +12,7 @@
 import { lawsByStatement } from "@bjornpagen/grizzle";
 import type { Law, LawSide } from "@bjornpagen/grizzle";
 import { Array as Arr, Formatter, Function as Fn } from "effect";
-import type { Qti } from "#pantry/qti/schema.ts";
+import type { QtiSchema } from "#pantry/qti/schema.ts";
 import { containmentsIn, judgedOf } from "#pantry/test/key-copies.ts";
 import type { Containment, JudgedLaw } from "#pantry/test/key-copies.ts";
 
@@ -91,7 +91,7 @@ const statedAs = <Judged extends { readonly law: Law }>(
  * `lawsByStatement` compiles the schema's law model, which takes seconds, so this is memoized by
  * the schema: {@link judgedLaws} and {@link containmentsOf} share one compile.
  */
-const statementLawsOf = Fn.memoize((schema: typeof Qti) => {
+const statementLawsOf = Fn.memoize((schema: QtiSchema) => {
   const lawsOfStatement = lawsByStatement(schema);
 
   return schema.statements.map((statement) => ({ laws: lawsOfStatement(statement), statement }));
@@ -105,8 +105,8 @@ const statementLawsOf = Fn.memoize((schema: typeof Qti) => {
  * @param schema - The schema, `Qti`.
  * @returns The laws.
  */
-export const judgedLaws: (schema: typeof Qti) => readonly JudgedLaw[] = Fn.memoize(
-  (schema: typeof Qti): readonly JudgedLaw[] =>
+export const judgedLaws: (schema: QtiSchema) => readonly JudgedLaw[] = Fn.memoize(
+  (schema: QtiSchema): readonly JudgedLaw[] =>
     statementLawsOf(schema).flatMap(({ laws, statement }) =>
       judgedOf(statement).map((judged) => statedAs(judged, laws)),
     ),
@@ -122,7 +122,7 @@ export const judgedLaws: (schema: typeof Qti) => readonly JudgedLaw[] = Fn.memoi
  * @param from - The source relation.
  * @returns The containments, in statement order.
  */
-export const containmentsOf = (schema: typeof Qti, from: string): readonly Containment[] =>
+export const containmentsOf = (schema: QtiSchema, from: string): readonly Containment[] =>
   statementLawsOf(schema).flatMap(({ laws, statement }) =>
     containmentsIn(statement, from).map((containment) => statedAs(containment, laws)),
   );

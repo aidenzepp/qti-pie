@@ -26,7 +26,7 @@
 import type { Law, LawSide } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, pipe, Predicate, Result, Schema } from "effect";
 import { keyText } from "#pantry/qti/limits.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 /**
  * The fields of an `Attribute` row the oracle knows before the database writes it: its owner's

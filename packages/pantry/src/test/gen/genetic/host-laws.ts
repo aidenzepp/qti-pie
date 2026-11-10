@@ -34,7 +34,7 @@ import { lawNameOf, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { identityOf, keyTextFields } from "#pantry/test/key-copies.ts";
 
 /**

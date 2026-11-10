@@ -16,7 +16,7 @@ import { Array as Arr, Effect, Match, Option, Predicate, Redacted, Schema } from
 import { Client } from "pg";
 import type { DatabaseError, QueryResultRow } from "pg";
 import { loginConnection } from "#pantry/db/connection.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 /**
  * The author login's PostgreSQL role, `<schema>__<login>`.

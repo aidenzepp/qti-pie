@@ -17,7 +17,7 @@ import { Option, Schema } from "effect";
 import { lawNameOf } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 /**
  * A key law over plain fields: its name, its relation, its fields, in order, and the rows it keys:
