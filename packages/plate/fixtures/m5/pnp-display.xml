@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A hand-written AfA PNP 3.0 profile in the schema's spellings: the display preferences rows A-17, A-20, A-26, A-30b and A-42b name, each assigned and named in the at-start set, so each is on when the test begins. -->
+<access-for-all-pnp xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <high-contrast/>
+  <invert-display-polarity foreground="#ffffff" background="#000000"/>
+  <layout-single-column/>
+  <magnification>
+    <all-content zoom-amount="2.5"/>
+  </magnification>
+  <text-appearance>
+    <color-theme>black-cream</color-theme>
+    <font-size>1.6</font-size>
+    <font-face>
+      <font-name>Atkinson Hyperlegible</font-name>
+      <font-name>Verdana</font-name>
+      <generic-font-face>sans serif</generic-font-face>
+    </font-face>
+    <line-height>1.8</line-height>
+    <letter-spacing>2</letter-spacing>
+    <word-spacing>4</word-spacing>
+  </text-appearance>
+  <activate-at-initialization-set>
+    <high-contrast/>
+    <invert-display-polarity/>
+    <layout-single-column/>
+    <magnification/>
+    <text-appearance/>
+  </activate-at-initialization-set>
+</access-for-all-pnp>

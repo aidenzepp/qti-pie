@@ -1208,6 +1208,261 @@
 /* end keyword-emphasis */
 
 /* begin display (issue m5-12) */
+
+/*
+ * The display preferences the item Root carries as data attributes (D25): a bounded value is
+ * applied here, one rule for each step of the scale the Root hook writes, and a value no scale
+ * bounds, such as a colour a host passed or a font family a candidate named, is the host's to apply
+ * from the same attribute. The sheet states no custom property and the Root no inline style, so a
+ * page served with style-src 'self' keeps every preference.
+ */
+
+/*
+ * Inverted polarity: with no colour given, the Root takes the card pair swapped; the foreground and
+ * background a host passed are the host's to apply, both of them. A control the sheet colours from
+ * the tokens keeps the host's colours.
+ */
+:where(
+  [data-slot="item"][data-polarity="inverted"]:not(
+      [data-polarity-foreground],
+      [data-polarity-background]
+    )
+) {
+  color: var(--card, oklch(1 0 0));
+  background-color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/*
+ * Single column: the Root flows one column. The vocabulary's own column classes are not named here
+ * yet, so a row of columns keeps its layout until the layout styles of issue m3e-06 stack it.
+ */
+:where([data-slot="item"][data-layout="single-column"]) {
+  column-count: 1;
+  column-width: auto;
+}
+
+/* Font size, a factor of the item's own size or points; it follows a magnification's size. */
+:where([data-slot="item"][data-font-size="0.75em"]) {
+  font-size: 0.75em;
+}
+
+:where([data-slot="item"][data-font-size="1em"]) {
+  font-size: 1em;
+}
+
+:where([data-slot="item"][data-font-size="1.25em"]) {
+  font-size: 1.25em;
+}
+
+:where([data-slot="item"][data-font-size="1.5em"]) {
+  font-size: 1.5em;
+}
+
+:where([data-slot="item"][data-font-size="2em"]) {
+  font-size: 2em;
+}
+
+:where([data-slot="item"][data-font-size="2.5em"]) {
+  font-size: 2.5em;
+}
+
+:where([data-slot="item"][data-font-size="3em"]) {
+  font-size: 3em;
+}
+
+:where([data-slot="item"][data-font-size="10pt"]) {
+  font-size: 13.333px;
+}
+
+:where([data-slot="item"][data-font-size="12pt"]) {
+  font-size: 16px;
+}
+
+:where([data-slot="item"][data-font-size="14pt"]) {
+  font-size: 18.667px;
+}
+
+:where([data-slot="item"][data-font-size="18pt"]) {
+  font-size: 24px;
+}
+
+:where([data-slot="item"][data-font-size="24pt"]) {
+  font-size: 32px;
+}
+
+:where([data-slot="item"][data-font-size="36pt"]) {
+  font-size: 48px;
+}
+
+/* Line height, a multiple of the font size. */
+:where([data-slot="item"][data-line-height="1"]) {
+  line-height: 1;
+}
+
+:where([data-slot="item"][data-line-height="1.15"]) {
+  line-height: 1.15;
+}
+
+:where([data-slot="item"][data-line-height="1.25"]) {
+  line-height: 1.25;
+}
+
+:where([data-slot="item"][data-line-height="1.5"]) {
+  line-height: 1.5;
+}
+
+:where([data-slot="item"][data-line-height="1.75"]) {
+  line-height: 1.75;
+}
+
+:where([data-slot="item"][data-line-height="2"]) {
+  line-height: 2;
+}
+
+:where([data-slot="item"][data-line-height="2.5"]) {
+  line-height: 2.5;
+}
+
+:where([data-slot="item"][data-line-height="3"]) {
+  line-height: 3;
+}
+
+/* Letter spacing and word spacing, in pixels. */
+:where([data-slot="item"][data-letter-spacing="0.5px"]) {
+  letter-spacing: 0.5px;
+}
+
+:where([data-slot="item"][data-letter-spacing="1px"]) {
+  letter-spacing: 1px;
+}
+
+:where([data-slot="item"][data-letter-spacing="2px"]) {
+  letter-spacing: 2px;
+}
+
+:where([data-slot="item"][data-letter-spacing="3px"]) {
+  letter-spacing: 3px;
+}
+
+:where([data-slot="item"][data-letter-spacing="4px"]) {
+  letter-spacing: 4px;
+}
+
+:where([data-slot="item"][data-letter-spacing="6px"]) {
+  letter-spacing: 6px;
+}
+
+:where([data-slot="item"][data-word-spacing="1px"]) {
+  word-spacing: 1px;
+}
+
+:where([data-slot="item"][data-word-spacing="2px"]) {
+  word-spacing: 2px;
+}
+
+:where([data-slot="item"][data-word-spacing="4px"]) {
+  word-spacing: 4px;
+}
+
+:where([data-slot="item"][data-word-spacing="8px"]) {
+  word-spacing: 8px;
+}
+
+:where([data-slot="item"][data-word-spacing="16px"]) {
+  word-spacing: 16px;
+}
+
+/* The generic family, which a host's named family comes before. */
+:where([data-slot="item"][data-font-generic="cursive"]) {
+  font-family: cursive;
+}
+
+:where([data-slot="item"][data-font-generic="fantasy"]) {
+  font-family: fantasy;
+}
+
+:where([data-slot="item"][data-font-generic="monospace"]) {
+  font-family: monospace;
+}
+
+:where([data-slot="item"][data-font-generic="sans-serif"]) {
+  font-family: sans-serif;
+}
+
+:where([data-slot="item"][data-font-generic="serif"]) {
+  font-family: serif;
+}
+
+/*
+ * The colour themes, the first word the text colour and the second the background's. Each pair
+ * holds a contrast of 7:1 or more; the item's own colours are the default, and the reverse swaps
+ * the card pair. An ext: theme is the host's.
+ */
+:where([data-slot="item"][data-color-theme="default-reverse"]) {
+  color: var(--card, oklch(1 0 0));
+  background-color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+:where([data-slot="item"][data-color-theme="black-cream"]) {
+  color: #000000;
+  background-color: #fffdd0;
+}
+
+:where([data-slot="item"][data-color-theme="black-cyan"]) {
+  color: #000000;
+  background-color: #00ffff;
+}
+
+:where([data-slot="item"][data-color-theme="black-rose"]) {
+  color: #000000;
+  background-color: #ffc0cb;
+}
+
+:where([data-slot="item"][data-color-theme="blue-yellow"]) {
+  color: #0000cd;
+  background-color: #ffff00;
+}
+
+:where([data-slot="item"][data-color-theme="cream-black"]) {
+  color: #fffdd0;
+  background-color: #000000;
+}
+
+:where([data-slot="item"][data-color-theme="cyan-black"]) {
+  color: #00ffff;
+  background-color: #000000;
+}
+
+:where([data-slot="item"][data-color-theme="darkgray-medgray"]) {
+  color: #333333;
+  background-color: #c8c8c8;
+}
+
+:where([data-slot="item"][data-color-theme="high-contrast"]) {
+  color: #000000;
+  background-color: #ffffff;
+}
+
+:where([data-slot="item"][data-color-theme="high-contrast-reverse"]) {
+  color: #ffffff;
+  background-color: #000000;
+}
+
+:where([data-slot="item"][data-color-theme="medgray-darkgray"]) {
+  color: #c8c8c8;
+  background-color: #333333;
+}
+
+:where([data-slot="item"][data-color-theme="rose-black"]) {
+  color: #ffc0cb;
+  background-color: #000000;
+}
+
+:where([data-slot="item"][data-color-theme="yellow-blue"]) {
+  color: #ffff00;
+  background-color: #000080;
+}
+
 /* end display */
 
 /* begin vocabulary (issue m3e-06) */
