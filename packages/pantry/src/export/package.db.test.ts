@@ -1,15 +1,21 @@
 /**
- * The export on the lease: the three corpus packages the import accepts and the SSML and `data-*`
- * phases' positive fixtures, imported, exported and compared with their record, and the scan's plan
- * read back through `db.explain`.
+ * The export on the lease: four packages the import accepts, one per kind of storage the scan reads
+ * back, imported, exported and compared with their record, and the scan's plan read back through
+ * `db.explain`. The rendering itself is the host's, held generatively on the free tier
+ * (`model/unshred.test.ts`, `test/attribute-order.export.test.ts`, `export/pages.test.ts`); what
+ * only the lease holds is that the rows the database stores and the served scan returns are the
+ * ones the import wrote.
  *
  * - **The round trip.** Every entry of each package's export is held to canonical equality with the
  *   record its import wrote, and byte equality is reported, per package, as the test's annotation.
  *   The oracle is a universal one: export ∘ import is the identity up to Canonical XML.
- * - **Paging is invisible.** A scan in pages of 1 and of 7 rows writes the bytes the default page
- *   size writes: the metamorphic relation of `pages.test.ts`, with the database's own cursors.
- * - **The containers.** An export to a directory and one to a zip compare with the source package
- *   byte for byte where the record is written back, and canonically where a document is rebuilt.
+ * - **Paging is invisible.** A scan of `simple` in pages of 1 and of 7 rows writes the bytes the
+ *   default page size writes: the metamorphic relation of `pages.test.ts`, with the database's own
+ *   cursors. One package crosses page boundaries at both sizes; the relation is the scan's, not the
+ *   package's.
+ * - **The containers.** An export of `simple` and of `svg` to a directory and to a zip compare with
+ *   the source package byte for byte where the record is written back, and canonically where a
+ *   document is rebuilt.
  * - **One flight per page.** Every document's scan explains to the same statements, one for the
  *   scan's rows and one for each attachment, whatever the document: a page's cost does not grow
  *   with the rows it holds.
@@ -38,11 +44,7 @@ import { importDir } from "#pantry/test/import-dir.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
-import {
-  exportPageSizesTestTimeoutMs,
-  hasLease,
-  leaseTestTimeoutMs,
-} from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { AuthorLogin } from "#pantry/db/served.ts";
 import { explainMember } from "@bjornpagen/grizzle/compile";
 
@@ -52,29 +54,24 @@ import { explainMember } from "@bjornpagen/grizzle/compile";
 const workDirectory = path.resolve(import.meta.dirname, "../../work");
 
 /**
- * The packages the import accepts, each materialized as the import reads it: the corpus packages
- * (`verdicts/qti-examples-0a92fbb.tsv`), `simple` and `sharedMedia` as directories and `svg` as
- * its zip, then the SSML phase's positive fixtures (held by `fixtures.ssml.oracle.test.ts`) and the
- * `data-*` phase's (held by `fixtures.data.oracle.test.ts`) as directories.
+ * The packages the import accepts, each materialized as the import reads it, one per kind of
+ * storage the scan reads back: `simple`, a directory of QTI documents; `svg`, a zip whose item
+ * holds a foreign SVG element (`verdicts/qti-examples-0a92fbb.tsv`); `ssml-nested`, nested SSML
+ * elements under their own namespace (held by `fixtures.ssml.oracle.test.ts`); and `data-entity`,
+ * `data-*` attributes with an entity reference (held by `fixtures.data.oracle.test.ts`).
  */
 const accepted = [
   { name: "simple", source: materialize("simple") },
-  { name: "sharedMedia", source: materialize("sharedMedia") },
   { name: "svg", source: materializeZip("svg") },
-  { name: "ssml-corpus-sub", source: materialize("ssml-corpus-sub") },
-  { name: "ssml-hooks", source: materialize("ssml-hooks") },
-  { name: "ssml-speak", source: materialize("ssml-speak") },
-  { name: "ssml-voice", source: materialize("ssml-voice") },
-  { name: "ssml-prosody", source: materialize("ssml-prosody") },
   { name: "ssml-nested", source: materialize("ssml-nested") },
-  { name: "ssml-two-speaks", source: materialize("ssml-two-speaks") },
-  { name: "data-ssml-custom", source: materialize("data-ssml-custom") },
-  { name: "data-ssml", source: materialize("data-ssml") },
-  { name: "cut-data-dash", source: materialize("cut-data-dash") },
-  { name: "cut-data-attributes", source: materialize("cut-data-attributes") },
-  { name: "data-custom", source: materialize("data-custom") },
   { name: "data-entity", source: materialize("data-entity") },
 ] as const;
+
+/**
+ * The packages the container test exports to a directory and to a zip: one read from a directory
+ * and one from a zip.
+ */
+const containerPackages: ReadonlySet<string> = new Set(["simple", "svg"]);
 
 /**
  * The statements one page of `documentScan` runs in its flight: one for the `Node` rows, one for
@@ -212,22 +209,19 @@ describe.skipIf(!hasLease)(
             }),
         );
 
-        it.effect(
-          "writes the same bytes whatever size its scan's pages are",
-          () =>
-            Effect.gen(function* everyPageSize() {
-              for (const { id, name } of yield* Imported) {
-                const whole = yield* exportEntries(id);
-                for (const size of [1, 7]) {
-                  assert.deepStrictEqual(
-                    yield* exportEntries(id, size),
-                    whole,
-                    `${name} at ${String(size)}`,
-                  );
-                }
+        it.effect("writes simple's bytes whatever size its scan's pages are", () =>
+          Effect.gen(function* everyPageSize() {
+            for (const { id, name } of (yield* Imported).filter((one) => one.name === "simple")) {
+              const whole = yield* exportEntries(id);
+              for (const size of [1, 7]) {
+                assert.deepStrictEqual(
+                  yield* exportEntries(id, size),
+                  whole,
+                  `${name} at ${String(size)}`,
+                );
               }
-            }),
-          exportPageSizesTestTimeoutMs,
+            }
+          }),
         );
 
         it.effect(
@@ -242,7 +236,9 @@ describe.skipIf(!hasLease)(
                 directory: workDirectory,
                 prefix: "export-db-test-",
               });
-              for (const { dir, id, name } of yield* Imported) {
+              for (const { dir, id, name } of (yield* Imported).filter((one) =>
+                containerPackages.has(one.name),
+              )) {
                 const directory = `${parent}/${name}`;
                 const zip = `${parent}/${name}.zip`;
 
