@@ -40,6 +40,7 @@ import type { NavigationOptions, NavigationState } from "#plate/navigation.ts";
 import { compounds, scanSheet } from "#plate/test/css.ts";
 import type { AttributeTest, Compound, Sheet } from "#plate/test/css.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { hasStub, stubBaseType, stubCardinality, stubKind } from "#plate/test/stub-kind.ts";
 import { styledClasses } from "#plate/vocabulary.ts";
 import type { ClassOwner } from "#plate/vocabulary.ts";
 
@@ -433,6 +434,35 @@ const expectedVerdict = (item: Authored): "accepted" | "accepted-with-unsupporte
     : "accepted";
 
 /**
+ * The stub witness: an item of the stub kind `#plate/test/stub-kind.ts` derives from the table of
+ * modules, which plate shows as an item Notice, so the stylesheet's compounds that name one keep an
+ * element to match after Order lands and its row's verdict turns `accepted`. Its element, its
+ * declaration and its name all come from that file, so the row follows the stub kind with no edit.
+ * The declaration is `multiple` cardinality of `point`, because the binding rule reads the
+ * element's `max-choices` (unwritten, `0`) against the declaration before any module does, so the
+ * bare element binds. The correct response is one `point` value, the shape the `match_correct`
+ * template requires of every declaration. {@link authored} includes the row only while
+ * {@link hasStub}: when no stub remains, no authored item can show an item Notice, and the
+ * `[Q-12]` compound test finds no element for the stylesheet's Notice compounds, which whoever
+ * lands the last core settles.
+ */
+const stubWitness: Authored = {
+  bytes: itemBytes(
+    `witness-${stubKind}`,
+    `<qti-response-declaration base-type="${stubBaseType}" cardinality="${stubCardinality}" identifier="RESPONSE">
+  <qti-correct-response>
+   <qti-value>120 80</qti-value>
+  </qti-correct-response>
+ </qti-response-declaration>`,
+    `<p>Mark where the spider waits on its web.</p>
+  <${modules[stubKind].element} response-identifier="RESPONSE"/>`,
+  ),
+  kinds: [stubKind],
+  location: `witness/${stubKind}.xml`,
+  posted: {},
+};
+
+/**
  * The items the witness renders: both Choice cardinalities, prompt shapes and orientations, a Text
  * Entry inside a `p`, an Extended Text with a prompt, an Inline Choice with a Label and one
  * without, and two interactions whose modules are stubs, so the stylesheet's Notice rules keep an
@@ -551,34 +581,7 @@ const authored: readonly Authored[] = [
     location: "witness/order.xml",
     posted: {},
   },
-  {
-    /*
-     * A Select Point, the stub planned to land last: this row keeps a stub witness, and so an item
-     * Notice for the compounds that name one, after Order lands and its row's verdict turns
-     * `accepted`. Its declaration is the one `skip.test.ts`'s stub item binds under, `multiple`
-     * cardinality of `point`, because the binding rule reads the element's `max-choices` (unwritten,
-     * `0`) against the declaration before any module does, so the bare element binds. The correct
-     * response is the one the `match_correct` template requires of every declaration. Retirement:
-     * when Select Point lands while the table of modules still holds a stub, this row moves to that
-     * kind (its element from the table, its declaration to the base type it binds); when the last
-     * stub lands, this row is deleted, since no authored item can then show an item Notice, and
-     * whoever deletes it settles the stylesheet's Notice compounds, which the `[Q-12]` compound test
-     * then finds no element for.
-     */
-    bytes: itemBytes(
-      "witness-select-point",
-      `<qti-response-declaration base-type="point" cardinality="multiple" identifier="RESPONSE">
-  <qti-correct-response>
-   <qti-value>120 80</qti-value>
-  </qti-correct-response>
- </qti-response-declaration>`,
-      `<p>Mark where the spider waits on its web.</p>
-  <${modules["select-point"].element} response-identifier="RESPONSE"/>`,
-    ),
-    kinds: ["select-point"],
-    location: "witness/select-point.xml",
-    posted: {},
-  },
+  ...(hasStub ? [stubWitness] : []),
 ];
 
 /**
