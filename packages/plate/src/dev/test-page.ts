@@ -211,7 +211,7 @@ const confirmHref = (id: string): string => `${sessionHref(id)}/confirm`;
  * @returns The redirect.
  */
 const seeOther = (location: string): Response =>
-  new Response(null, { headers: { ...pageHeaders, location }, status: 303 });
+  new Response(null, { headers: { ...pageHeaders(), location }, status: 303 });
 
 /**
  * Construct the 303 that sends a browser to a session's page.
@@ -351,8 +351,8 @@ const itemTitle = (view: ItemView, state: Shown["state"], testTitle: string): st
  * order, as the item page's form does: a browser opens that page at the region. The form carries
  * `autocomplete="off"`, so a browser restores no checked Choice control over the stored values,
  * and `novalidate`, so every check is the server's; it is named by the page's heading. The item is
- * rendered with the current item's instance, configuration and disabled state, and the navigation
- * in the default order of its part's modes.
+ * rendered with the current item's instance, configuration and disabled state, and the reader of
+ * its package's files, and the navigation in the default order of its part's modes.
  *
  * @param sitting The session and its test.
  * @param view The current item.
@@ -381,6 +381,7 @@ const itemPage = (sitting: Sitting, view: ItemView, shown: Shown): Page => {
           ...shown.options,
           assetBase: itemAssetBase(sitting, document),
           disabled: view.disabled,
+          files: sitting.package.files,
           instance: view.instance,
         },
       );
@@ -705,8 +706,10 @@ const sessionPage = (
  * on the item it was posted from, and the store keeps the session as it was.
  *
  * Only the current item's entries are read, through its own bindings; a response that does not
- * decode is refused with its item's message, as a refused post is, before anything is saved. A
- * closed item posts nothing, so its post carries no responses and the session keeps its own. A
+ * decode is refused with its item's message, as a refused post is, before anything is saved. The
+ * item's comment, when the post carries one, goes to `advance` as the step's `comment` beside the
+ * responses. A closed item posts nothing, so its post carries no responses or comment and the
+ * session keeps its own. A
  * post to a closed test goes back to the page, which shows the summary. A post that is not a form,
  * or carries no intent `decodeIntent` reads, is a 400.
  *
@@ -777,7 +780,11 @@ const postSession = Effect.fn("playground.session.post")(function* postSession(
     : intent.value;
   const step: Step = view.disabled
     ? { intent: carried }
-    : { intent: carried, responses: valuesOf(post) };
+    : {
+        ...Option.match(post.comment, { onNone: () => ({}), onSome: (comment) => ({ comment }) }),
+        intent: carried,
+        responses: valuesOf(post),
+      };
   const now = DateTime.toDateUtc(yield* DateTime.now);
 
   return Result.match(

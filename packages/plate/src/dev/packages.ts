@@ -13,6 +13,11 @@
  * embeds runs in the same sandbox. It reads the file under the key `openPackage` judged it by, and
  * never through a link out of the package's root.
  *
+ * An accepted package also holds the texts of its text files, the stylesheets among them, read
+ * when the package is opened under the same key and the same root: its entry's `files` gives a
+ * render the text of a path the package holds and none for any other, so a content module reads a
+ * package-relative stylesheet and no file outside the package.
+ *
  * The route returns the frame's {@link Page} for every HTML answer, so the playground's handler
  * writes it with the stylesheets, the theme box and the page headers, and a `Response` only for a
  * file. Every page is built through `h`, so a package's names and titles are escaped.
@@ -59,9 +64,24 @@ export interface PackageSource {
 }
 
 /**
- * One package with the verdict `openPackage` gave it.
+ * The reader of an opened package's files, in the shape of `Options.files` of `#plate/render.ts`:
+ * the text of a package-relative path, none when the package holds no such file.
+ *
+ * It holds the package's accepted text files only: a stylesheet, an HTML document, a text track or
+ * an SVG image the package lists, as UTF-8. A QTI document is withheld by the verdict, as it is
+ * from the files route, so its path reads as none; so does any path that is not a key of the
+ * package, `../` ones included, and any file that is not UTF-8.
+ */
+export type PackageFileReader = (path: string) => Option.Option<string>;
+
+/**
+ * One package with the verdict `openPackage` gave it, and the reader of its files.
  */
 export interface PackageEntry extends PackageSource {
+  /**
+   * The reader of the package's text files; it reads none for a package that is not accepted.
+   */
+  readonly files: PackageFileReader;
   readonly verdict: PackageVerdict;
 }
 
@@ -308,14 +328,34 @@ const realPathOf = (
   Effect.tryPromise({ catch: unreadable(source, full), try: () => realpath(full) });
 
 /**
- * Find the key a package's directory holds a file under: the path from its root, as the directory
- * walk finds it, that `openPackage` kept for the file's normal form.
+ * Find the keys a package's directory holds its files under: each file's path in normal form, with
+ * the path from its root, as the directory walk finds it, that `openPackage` kept for that normal
+ * form.
  *
  * {@link openDirectory} gives `openPackage` the walk's paths in the walk's order, and
  * `packageFiles` keeps, of two keys with one normal form, the first, so the same walk through
  * `packageFiles` gives the key whose bytes were judged. A walk that finds a key `packageFiles`
- * refuses, such as a file named `foo\secret.png` (reading 138), gives no key, so no file of that
+ * refuses, such as a file named `foo\secret.png` (reading 138), gives no keys, so no file of that
  * package is read, and never one through a link `foo`.
+ *
+ * @param source The package.
+ * @returns The key of each file by its normal form, none when the walk finds a key `packageFiles`
+ *   refuses.
+ */
+const heldKeys = (
+  source: PackageSource,
+): Effect.Effect<ReadonlyMap<string, string>, PackageUnreadable> =>
+  filesUnder(source.root, `restore the package's directory ${source.root}`).pipe(
+    Effect.map((paths) =>
+      Result.match(packageFiles(new Map(paths.map((key) => [key, key])), source.location), {
+        onFailure: () => new Map<string, string>(),
+        onSuccess: (held) => held,
+      }),
+    ),
+  );
+
+/**
+ * Find the key a package's directory holds a file under, through {@link heldKeys}.
  *
  * @param source The package.
  * @param file The file's path in normal form.
@@ -325,14 +365,7 @@ const heldKey = (
   source: PackageSource,
   file: string,
 ): Effect.Effect<Option.Option<string>, PackageUnreadable> =>
-  filesUnder(source.root, `restore the package's directory ${source.root}`).pipe(
-    Effect.map((paths) =>
-      Result.match(packageFiles(new Map(paths.map((key) => [key, key])), source.location), {
-        onFailure: () => Option.none(),
-        onSuccess: (held) => Option.fromUndefinedOr(held.get(file)),
-      }),
-    ),
-  );
+  heldKeys(source).pipe(Effect.map((keys) => Option.fromUndefinedOr(keys.get(file))));
 
 /**
  * Read a file of a package by its key, only when its real path lies inside the package's real
@@ -379,6 +412,83 @@ export const openDirectory: PackageOpener = Effect.fn("packages.openDirectory")(
     return yield* openPackage(source.location, new Map(files));
   },
 );
+
+/**
+ * Whether the files route serves a file's type as text: a `text/` type, or SVG, which is XML text.
+ *
+ * @param file The file's path.
+ * @returns Whether the package's reader holds the file's text.
+ */
+const isTextFile = (file: string): boolean => {
+  const type = assetTypes.get(path.posix.extname(file).toLowerCase());
+
+  return type !== undefined && (type.startsWith("text/") || type === "image/svg+xml");
+};
+
+/**
+ * Read the text files of an accepted package, each under its key and from inside the package's
+ * real root as the files route does, and decode each as UTF-8.
+ *
+ * The files are the package's accepted files of a type {@link isTextFile} calls text, so a QTI
+ * document is not read. A file that is not valid UTF-8 is left out, and a package that is not
+ * accepted holds none.
+ *
+ * @param source The package.
+ * @param verdict The package's verdict.
+ * @returns Each text by its path in normal form.
+ */
+const readTexts = Effect.fnUntraced(function* readTexts(
+  source: PackageSource,
+  verdict: PackageVerdict,
+): Effect.fn.Return<ReadonlyMap<string, string>, PackageUnreadable> {
+  if (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") {
+    return new Map<string, string>();
+  }
+
+  const wanted = [...verdict.accepted.files].filter(isTextFile);
+  const keys = wanted.length === 0 ? new Map<string, string>() : yield* heldKeys(source);
+  const read = yield* Effect.forEach(
+    wanted,
+    Effect.fnUntraced(function* textOf(file: string) {
+      const key = keys.get(file);
+      const bytes = key === undefined ? Option.none() : yield* readInside(source, key);
+
+      return bytes.pipe(
+        Option.flatMap((held) =>
+          Result.match(
+            Result.try(() => new TextDecoder("utf-8", { fatal: true }).decode(held)),
+            { onFailure: () => Option.none<string>(), onSuccess: Option.some },
+          ),
+        ),
+        Option.map((content) => [file, content] as const),
+      );
+    }),
+    { concurrency: 8 },
+  );
+
+  return new Map(read.flatMap((held) => (Option.isSome(held) ? [held.value] : [])));
+});
+
+/**
+ * Give an opened package's entry: its source, its verdict, and the reader over the texts of its
+ * files.
+ *
+ * @param source The package.
+ * @param verdict The package's verdict.
+ * @returns The entry.
+ */
+const entryOf = Effect.fnUntraced(function* entryOf(
+  source: PackageSource,
+  verdict: PackageVerdict,
+): Effect.fn.Return<PackageEntry, PackageUnreadable> {
+  const texts = yield* readTexts(source, verdict);
+
+  return {
+    ...source,
+    files: (file) => Option.fromUndefinedOr(texts.get(file)),
+    verdict,
+  };
+});
 
 /**
  * Find the packages: every `*.zip.d` directory under the corpus root, at any depth, in the order of
@@ -428,15 +538,11 @@ export const packageCache = (opener: PackageOpener = openDirectory): Effect.Effe
     Effect.flatMap((sources) =>
       Effect.all(
         sources.map((source) =>
-          keptOnSuccess(Effect.suspend(() => opener(source))).pipe(
-            Effect.map(
-              (opened) =>
-                [
-                  source.id,
-                  opened.pipe(Effect.map((verdict): PackageEntry => ({ ...source, verdict }))),
-                ] as const,
+          keptOnSuccess(
+            Effect.suspend(() => opener(source)).pipe(
+              Effect.flatMap((verdict) => entryOf(source, verdict)),
             ),
-          ),
+          ).pipe(Effect.map((opened) => [source.id, opened] as const)),
         ),
       ),
     ),

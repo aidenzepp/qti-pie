@@ -10,6 +10,7 @@
  * @module
  */
 import { Effect, Option, Result } from "effect";
+import { decodeComment } from "#plate/form/comment.ts";
 import { decode, Malformed, partition } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
@@ -20,10 +21,14 @@ import type { Responses } from "#plate/session/session.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
- * What one post carries for an item: each posted response decoded, the strings posted for each,
- * and the responses whose entries do not decode.
+ * What one post carries for an item: the comment the candidate posted with it, each posted
+ * response decoded, the strings posted for each, and the responses whose entries do not decode.
+ *
+ * The comment is none when the post holds no comment entry for the item, more than one, or one
+ * that is a file; it is no response, so it is in none of the other fields.
  */
 export interface Post {
+  readonly comment: Option.Option<string>;
   readonly decoded: Readonly<Record<string, Malformed | ResponseValue>>;
   readonly malformed: ReadonlySet<string>;
   readonly posted: Readonly<Record<string, readonly string[]>>;
@@ -57,6 +62,9 @@ export const entriesOf = Effect.fnUntraced(function* entriesOf(
  * nothing on the page. A response no interaction binds has no posting, so the post carries nothing
  * for it: `checkResponses` treats it as NULL and `score` keeps its record value.
  *
+ * The item's comment is read from the same own entries, by `decodeComment`, and is no response:
+ * it is in none of `decoded`, `malformed` and `posted`.
+ *
  * @param document The accepted item.
  * @param instance The item instance.
  * @param entries The posted entries.
@@ -80,6 +88,7 @@ export const postOf = (
   );
 
   return {
+    comment: decodeComment(own, instance),
     decoded,
     malformed: new Set(
       Object.entries(decoded).flatMap(([response, value]) =>
