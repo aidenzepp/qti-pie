@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:m="http://www.w3.org/1998/Math/MathML"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m3e-mathml-xref-target" title="The tide gauge's rules" adaptive="false" time-dependent="false"
+  xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string">
+    <qti-correct-response>
+      <qti-value>22</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <p>The gauge at the harbour mouth reads the tide height h in metres. Its rule book writes the height
+      as a piecewise function of the hour t, the sum of three readings, and a few sums the keeper checks
+      by hand.</p>
+    <m:math display="block">
+      <m:apply>
+        <m:eq/>
+        <m:ci>h</m:ci>
+        <m:piecewise>
+          <m:piece>
+            <m:cn>0</m:cn>
+            <m:apply><m:lt/><m:ci>t</m:ci><m:cn>0</m:cn></m:apply>
+          </m:piece>
+          <m:otherwise>
+            <m:apply><m:plus/><m:ci>a</m:ci><m:ci>b</m:ci><m:ci>c</m:ci></m:apply>
+          </m:otherwise>
+        </m:piecewise>
+      </m:apply>
+    </m:math>
+    <m:math display="block">
+      <m:bind>
+        <m:forall/>
+        <m:bvar><m:ci>x</m:ci></m:bvar>
+        <m:apply>
+          <m:geq/>
+          <m:apply>
+            <m:plus/>
+            <m:apply id="sq"><m:power/><m:ci>x</m:ci><m:cn>2</m:cn></m:apply>
+            <m:share href="#sq"/>
+          </m:apply>
+          <m:cn xref="nowhere">0</m:cn>
+        </m:apply>
+      </m:bind>
+    </m:math>
+    <m:math display="block">
+      <m:apply>
+        <m:times/>
+        <m:semantics>
+          <m:ci>k</m:ci>
+          <m:annotation encoding="text/plain">k</m:annotation>
+        </m:semantics>
+        <m:cn type="rational">3<m:sep/>4</m:cn>
+        <m:cn type="hexdouble">7ff0000000000000</m:cn>
+      </m:apply>
+    </m:math>
+    <m:math display="block">
+      <m:apply>
+        <m:int/>
+        <m:bvar><m:ci>t</m:ci></m:bvar>
+        <m:lowlimit><m:cn>0</m:cn></m:lowlimit>
+        <m:uplimit><m:cn>12</m:cn></m:uplimit>
+        <m:apply><m:root/><m:degree><m:cn>3</m:cn></m:degree><m:ci>t</m:ci></m:apply>
+      </m:apply>
+    </m:math>
+    <m:math display="block">
+      <m:apply>
+        <m:plus/>
+        <m:apply><m:selector/><m:ci>v</m:ci><m:cn>1</m:cn></m:apply>
+        <m:apply><m:minus/><m:ci>a</m:ci></m:apply>
+        <m:apply><m:moment/><m:degree><m:cn>3</m:cn></m:degree><m:momentabout><m:mean/></m:momentabout><m:cn>6</m:cn><m:cn>4</m:cn><m:cn>2</m:cn><m:cn>5</m:cn><m:cn>3</m:cn></m:apply>
+      </m:apply>
+    </m:math>
+    <m:math display="block">
+      <m:semantics>
+        <m:mfrac><m:mn>3</m:mn><m:mn>4</m:mn></m:mfrac>
+        <m:annotation-xml encoding="application/xhtml+xml">
+          <p>three quarters</p>
+        </m:annotation-xml>
+      </m:semantics>
+    </m:math>
+    <m:math display="block">
+      <m:mstyle scriptsizemultiplier="0.5" scriptlevel="+1">
+        <m:maction actiontype="toggle" selection="1">
+          <m:mi>s</m:mi>
+          <m:mi>w</m:mi>
+        </m:maction>
+        <m:mspace width="1em"/>
+        <m:mtable>
+          <m:mtr>
+            <m:mtd><m:maligngroup/><m:mi>x</m:mi><m:mo>=</m:mo><m:mn>1</m:mn></m:mtd>
+          </m:mtr>
+          <m:mtr>
+            <m:mtd><m:mrow><m:maligngroup/><m:mi>y</m:mi><m:mo>=</m:mo><m:mn>2</m:mn></m:mrow></m:mtd>
+          </m:mtr>
+        </m:mtable>
+        <m:mstack>
+          <m:mscarries><m:mscarry><m:mn>1</m:mn></m:mscarry><m:none/></m:mscarries>
+          <m:mn>19</m:mn>
+          <m:msrow><m:mo>+</m:mo><m:mn>3</m:mn></m:msrow>
+          <m:msline/>
+          <m:mn>22</m:mn>
+        </m:mstack>
+      </m:mstyle>
+    </m:math>
+    <p>What does the stack sum to?
+      <qti-text-entry-interaction response-identifier="RESPONSE" expected-length="4"/></p>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+</qti-assessment-item>

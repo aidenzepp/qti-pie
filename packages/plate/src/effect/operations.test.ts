@@ -2,6 +2,8 @@ import { assert, describe, expectTypeOf, it } from "@effect/vitest";
 import { Effect, Layer, Option, Result } from "effect";
 import { SecureRandom } from "effect/crypto";
 import type { Configuration as PlainConfiguration } from "#plate/configuration.ts";
+import { anyElement } from "#plate/content/contract.ts";
+import { bodyModules } from "#plate/content/modules.ts";
 import { Configuration } from "#plate/effect/configuration.ts";
 import {
   acceptedItem,
@@ -112,12 +114,20 @@ const testXml = (refs: readonly string[]): string =>
   ].join("");
 
 /**
- * Write the text of a hand-built item whose body holds MathML, which plate cannot judge, so `check`
- * leaves it unchecked.
+ * The content module whose `check` still leaves a document holding an island of its namespace
+ * unchecked, read from the content modules table, as `validate/verdict.test.ts` reads it. The
+ * constant moves to the next such stub when that kind lands (issue m4-02), and the test that uses
+ * it needs another source of an unchecked verdict once no content module leaves one.
  */
-const mathXml = [
-  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="math" title="math" adaptive="false" time-dependent="false">',
-  '<qti-item-body><p>Solve <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>x</mi></math></p></qti-item-body>',
+const uncheckedStub = bodyModules[anyElement];
+
+/**
+ * Write the text of a hand-built item whose body holds an island of the unchecked content kind
+ * ({@link uncheckedStub}), which plate cannot judge, so `check` leaves it unchecked.
+ */
+const uncheckedXml = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="unchecked" title="unchecked" adaptive="false" time-dependent="false">',
+  `<qti-item-body><p>Solve <speak xmlns="${uncheckedStub.namespace}">x</speak></p></qti-item-body>`,
   "</qti-assessment-item>",
 ].join("");
 
@@ -754,7 +764,7 @@ describe("the ./effect mirrors", () => {
       Effect.gen(function* acceptedItemRefused() {
         const { testVerdict } = yield* fixture();
         const broken = yield* verdictOf("tests/broken.xml", "<qti-assessment-item");
-        const unchecked = yield* verdictOf("tests/math.xml", mathXml);
+        const unchecked = yield* verdictOf("tests/unchecked.xml", uncheckedXml);
 
         assert.strictEqual(broken.verdict, "refused");
         assert.deepStrictEqual(yield* refusedOf(broken), {
@@ -771,7 +781,7 @@ describe("the ./effect mirrors", () => {
           verdict: "accepted",
         });
         assert.deepStrictEqual(yield* refusedOf(unchecked), {
-          document: "tests/math.xml",
+          document: "tests/unchecked.xml",
           kind: "item",
           refusals: [],
           verdict: "unchecked",
