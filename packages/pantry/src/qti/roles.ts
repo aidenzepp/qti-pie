@@ -1,6 +1,7 @@
 /**
  * The author role: the one world qti-pie opens, holding every stored relation of `Qti` whole and
- * inserting into every one of them (plan §1.8; the W5 amendment's A, the privilege ruling).
+ * inserting into every one of them (plan §1.8), by Bjorn's ruling of 2026-11-10 that the author
+ * role holds SELECT and INSERT only, no UPDATE and no DELETE.
  */
 import { role, wholeEntriesOf, writableNamesOf } from "@bjornpagen/grizzle";
 import type { QtiSchema } from "#pantry/qti/schema.ts";
