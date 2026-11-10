@@ -632,21 +632,27 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
     );
 
     it.effect(
-      "accepts qti-ordering's QTI-named and no-namespace elements, an xs: type or none, a typed element under a strict slot and a root its set declares there, by every law of the rows themselves",
+      "accepts qti-ordering's QTI-named and no-namespace elements, an xs: type or none, a typed element under a strict slot and a root its set declares there, by every law of the rows themselves, the Strictly held containment among them",
       () =>
         // Oracle: PostgreSQL, the row's domains and CHECKs (`Foreign_element_class`,
-        // `OpenElementName_canonical`, `XsiType_available` and `MathML_foreign_element`), with
-        // every foreign key deferred and none set immediate: upstream's spec reading 61 admits
-        // each in `qti-ordering`'s slot.
+        // `OpenElementName_canonical`, `XsiType_available` and `MathML_foreign_element`), and the
+        // Strictly held containment, its deferred foreign key from `open_element_name` to
+        // `open_element_type` set immediate, every other foreign key deferred: upstream's spec
+        // reading 61 admits each in `qti-ordering`'s slot.
         // Bound: `qti-variable` in QTI's namespace and `foo` in none under `qti-ordering`, each
-        // governed by no type; a foreign element under `qti-selection` governed by `xs:string`;
-        // one under a foreign parent governed by a content-packaging type, which stands since its
-        // parent's namespace is no vocabulary's (reading 81's recorded limit); and `cp:manifest`
+        // governed by no type, which meet the CHECKs and, their lax slot holding no element
+        // strictly, fall outside the containment's side; a foreign element under `qti-selection`
+        // governed by `xs:string`; one under a foreign parent governed by a content-packaging
+        // type, which stands since its parent's namespace is no vocabulary's (reading 81's
+        // recorded limit); and, meeting the containment with the key immediate, `cp:manifest`
         // under `drd:accessForAllResource`'s strict slot with no type, a root its set declares
-        // (C13, `HeldRootsUnder`); and one under `qti-companion-materials-info`'s strict slot
-        // governed by `xs:string`, which assesses it (reading 60).
+        // and so outside `StrictlyHeld`'s side (C13, `HeldRootsUnder`), and one under
+        // `qti-companion-materials-info`'s strict slot governed by `xs:string`, which assesses it
+        // (reading 60), its `OpenElementType` row the key's target.
         Effect.gen(function* lawful() {
           const client = yield* loginSession;
+          const keys = yield* foreignKeysBetween(client, "open_element_name", "open_element_type");
+          assert.isNotEmpty(keys, "open_element_name references open_element_type");
           for (const row of [
             lawfulNameRows({
               governs: Option.none(),
@@ -693,7 +699,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
               parentNamespace: namespaceOf("drd:accessForAllResource"),
             }),
           ]) {
-            const refused = Option.getOrUndefined(yield* judged(client, statedInserts(row)));
+            const refused = Option.getOrUndefined(yield* judged(client, statedInserts(row), keys));
 
             assert.isUndefined(refused, refused?.message);
           }
