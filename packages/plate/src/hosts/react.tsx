@@ -100,7 +100,10 @@ const floatOf = (stored: number | "-0" | "-INF" | "INF" | "NaN"): number => {
 };
 
 /**
- * Write the score a stored record holds, as the candidate reads it in the locale.
+ * Write the score a stored record holds, as the candidate reads it in the locale. A duration is
+ * written as its seconds, as a float is; a file as its name, the one field text carries. Exported
+ * for its test, which hands it a record no accepted item gives (`open` holds `SCORE` to a float);
+ * the package's `src/index.ts` does not export it.
  *
  * @param accepted The accepted item.
  * @param stored The record `score` returned.
@@ -108,7 +111,7 @@ const floatOf = (stored: number | "-0" | "-INF" | "INF" | "NaN"): number => {
  * @returns The single value of `SCORE`, or none when the item has no response processing or
  *   `SCORE` is absent or NULL, which makes the page say the response was recorded.
  */
-const scoreText = (
+export const scoreText = (
   accepted: Accepted,
   stored: StoredRecord,
   locale: string,
@@ -136,6 +139,9 @@ const scoreText = (
     case "string":
     case "uri": {
       return String(single.value);
+    }
+    case "file": {
+      return single.value.name;
     }
     default: {
       return single satisfies never;
