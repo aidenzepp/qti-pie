@@ -97,8 +97,8 @@ describe.skipIf(!hasLease)("import/overlays/select-forms.db.test.ts, on the leas
         `refuses a selection's row whose select is ${JSON.stringify(form)} by SelectForm's pattern law alone`,
         () =>
           // Oracle: PostgreSQL, `SectionSelection.select_form`'s domain CHECK as the statement
-          // casts the form, and grizzle's `patternLawsOf`, the field's law its installation lists
-          // with that CHECK. Bound: the every-relation package, which PostgreSQL accepts whole
+          // casts the form, and the field's pattern law as grizzle's `lawsOf` lists it, the law its
+          // installation lists with that CHECK. Bound: the every-relation package, which PostgreSQL accepts whole
           // (`#pantry/import/pattern-laws.db.test.ts`), its one selection's row holding the form.
           Effect.gen(function* ownLaw() {
             const dir = yield* scopedPackage(

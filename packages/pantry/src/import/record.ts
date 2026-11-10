@@ -4,9 +4,9 @@
  *
  * The record is every entry's bytes as read, so the model is rebuildable from it, and it is the
  * write's one sequence over a package: grizzle draws each entry's `at` from its place in the
- * nesting and the package's `entries` from their number, and chunks a family past one statement's
- * transport bounds into consecutive statements of the one transaction (fin.md §4.5a), so the
- * importer never splits a package.
+ * nesting and the package's `entries` from their number, and writes the family in one statement,
+ * its rows past one Bind message through a carrier, a temporary table of the write's own (README,
+ * "Sizes"; grizzle `164aeb06`), so the importer never splits a package.
  */
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import type { PackageFile } from "#pantry/package/read.ts";

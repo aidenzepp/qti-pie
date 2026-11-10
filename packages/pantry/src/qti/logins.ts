@@ -2,14 +2,14 @@
  * The login that opens a connection: the author application, over the author role, with the export
  * scan and the import's write program as its workload, built over any `Qti` schema value.
  *
- * The import's write program is declared with no rows, so that grizzle compiles it wherever it
- * compiles a workload: `grizzle generate`, `grizzle check` and every `DbLayer` startup. A schema
- * whose writes cannot compile then fails there, never at the first import (R87, whose
- * `BranchResolution.instanceEnd` made every import's ChangeSet refuse once a migrated schema ran
- * it). The declared program carries no package: a family member is written from an array or a
- * Stream, never from a query or a parameter, so `importPackage` still sends a ChangeSet built per
- * package (the W5 amendment's C19), which `db.apply` compiles for its call from the same
- * Description.
+ * The import's write program is the login's `importWrite` member, declared with an empty array for
+ * each relation an import writes, so each is an array member that takes a package's rows with each
+ * call (README, "Reading": `db.workload.<name>`). `grizzle generate` compiles it into the login's
+ * served file and `grizzle check` holds the committed file to it, so a schema whose writes cannot
+ * compile fails there, never at the first import (R87, whose `BranchResolution.instanceEnd` made
+ * every import's ChangeSet refuse once a migrated schema ran it). `importPackage` applies it to
+ * each package's facts (`packageFactsOf` of `#pantry/import/write.ts`), and the layer loads it
+ * compiling nothing.
  */
 import { insertableNamesOf, login, paged, workload } from "@bjornpagen/grizzle";
 import { pipe, Record as Rec, Struct } from "effect";
@@ -67,10 +67,9 @@ export const authorWorkloadsOf = (qti: QtiSchema, author: AuthorRole) => {
  *   `packageOf`, the `Package` row by its key, a key member whose handle's `get` the export reads
  *   to refuse an id no package has and the import reads back after a commit with no answer, so
  *   every read pantry runs is a member of the workload;
- * - **the import's write program**: `changeSetOf`'s ChangeSet with no rows. grizzle compiles a
- *   ChangeSet from its Description, which names each insert and none of its rows, so this is the
- *   program every package's import compiles. It is declared to be compiled, never run: the schema's
- *   own compile already refuses a column or a relation no write fills, so compiling it guards the
+ * - **the import's write program**: `changeSetOf`'s ChangeSet with no rows, every insert an array
+ *   member, which each import applies to its package's facts (`importWrite`). The schema's own
+ *   compile already refuses a column or a relation no write fills, so compiling it guards the
  *   refusals of the write program itself, an insert outside the author role (`OutsideRole`) and a
  *   stratum no order of its statements keeps every key at (`UnorderableStratum`).
  *
@@ -84,7 +83,7 @@ export const authorWorkloadsOf = (qti: QtiSchema, author: AuthorRole) => {
  * @param qti - The `Qti` schema, built for an install's policy or none
  *   (`#pantry/qti/schema.ts` `qtiSchema`).
  * @returns The login.
- * @see https://github.com/bjornpagen/grizzle/blob/4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a/packages/engine/src/program/names.ts#L61-L76
+ * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/engine/src/program/names.ts#L61-L76
  */
 export const authorAppOf = (qti: QtiSchema) => {
   const author = authorRoleOf(qti);

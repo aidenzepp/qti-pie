@@ -956,9 +956,10 @@ type RowOf<Name extends keyof PackageInputs> =
  * pattern once per run (the tier-1 addendum's import order: 1.4 to 4.9 µs a grouped row against
  * about 80 µs in arbitrary order).
  *
- * A nested family's rows are written in the nesting's order, each owner's members in slot order
- * (grizzle's `write/family/nesting.ts`), so the `Attribute` statement, whose `value_domain` reads
- * a pattern per domain, and `Node`'s TextDomain keep document order: no caller can sort them.
+ * A nested family's rows are grizzle's to order: a family write orders each statement's rows by
+ * pattern (grizzle `72f7d037`, `write/family/pattern-order.ts:106-112`; README, "Limits"), so the
+ * `Attribute` statement, whose `value_domain` reads a pattern per domain, and `Node`'s TextDomain
+ * need no table here. grizzle orders no flat relation's rows, which is this table's.
  *
  * `TypedValue`'s `Typed_value` reads the pattern of its base type's domain (Q5.08),
  * `Literal_lexical` its type code's and `ExpressionAttribute`'s `E1_derived` its attribute's and
@@ -1060,7 +1061,8 @@ export const packageFactsOf = (inputs: PackageInputs) => ({
  *
  * @param author - The author role (`#pantry/qti/roles.ts` `authorRoleOf`), its login's.
  * @param inputs - The package's inputs.
- * @returns The ChangeSet, compiled by `db.apply` for the one call that applies it.
+ * @returns The ChangeSet: with no rows, the program of the login's `importWrite` member, which
+ *   `grizzle generate` compiles.
  */
 export const changeSetOf = (author: AuthorRole, inputs: PackageInputs) =>
   ChangeSet.empty(author).insertAll(packageFactsOf(inputs));
