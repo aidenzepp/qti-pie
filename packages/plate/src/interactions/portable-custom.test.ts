@@ -482,8 +482,8 @@ describe("the Portable Custom Interaction module", () => {
 
       assert.strictEqual(written.module, "counter");
       assert.deepStrictEqual(written.modules, {
-        modules: [{ id: "counter", primaryPath: "../modules/counter" }],
-        primaryConfiguration: "../modules/module_resolution.js",
+        modules: [{ id: "counter", primaryPath: "modules/counter" }],
+        primaryConfiguration: "modules/module_resolution.js",
       });
       assert.strictEqual(written.responseIdentifier, response);
       assert.deepStrictEqual(written.properties, { maxCount: "5", "start_value-2": "0" });

@@ -18,8 +18,8 @@
       custom-interaction-type-identifier="urn:qti-pie:pci:counter"
       data-max-count="5" data-start_value-2="0">
       <qti-prompt>Press the button three times.</qti-prompt>
-      <qti-interaction-modules primary-configuration="../modules/module_resolution.js">
-        <qti-interaction-module id="counter" primary-path="../modules/counter"/>
+      <qti-interaction-modules primary-configuration="modules/module_resolution.js">
+        <qti-interaction-module id="counter" primary-path="modules/counter"/>
       </qti-interaction-modules>
       <qti-interaction-markup>
         <p>Each press adds one to the count.</p>
