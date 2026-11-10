@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Option } from "effect";
+import { ConfigProvider, Effect, Fiber, Latch, Option } from "effect";
 import { groupVerdicts, verdictCache, verdictOrder } from "#plate/dev/listing.ts";
 import type { Opener } from "#plate/dev/listing.ts";
 import { CorpusFileUnreadable } from "#plate/document/corpus.ts";
@@ -26,6 +26,26 @@ const scratch = path.resolve(
 const members = ["a/one.xml", "a/two.xml", "b/three.xml", "root.xml"];
 
 /**
+ * A second scratch corpus root beside {@link scratch}, for the bounded reads: it holds more members
+ * than the bound, so the bound, not the member count, limits how many opens run at once.
+ */
+const boundedScratch = `${scratch}-bounded`;
+
+/**
+ * The members {@link boundedScratch} holds, in the document set's order: twelve, numbered so the
+ * set's sorted order is their numbering.
+ */
+const boundedMembers = Array.from(
+  { length: 12 },
+  (_, index) => `m${String(index).padStart(2, "0")}.xml`,
+);
+
+/**
+ * The most member opens the verdict cache runs at once.
+ */
+const openBound = 8;
+
+/**
  * Provide the scratch corpus root to an effect, through `PLATE_CORPUS_DIR`.
  *
  * @param effect The effect.
@@ -34,6 +54,19 @@ const members = ["a/one.xml", "a/two.xml", "b/three.xml", "root.xml"];
 const inScratch = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
   effect.pipe(
     Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: scratch }))),
+  );
+
+/**
+ * Provide {@link boundedScratch} to an effect, through `PLATE_CORPUS_DIR`.
+ *
+ * @param effect The effect.
+ * @returns The effect, reading the bounded scratch root.
+ */
+const inBoundedScratch = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  effect.pipe(
+    Effect.provide(
+      ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: boundedScratch })),
+    ),
   );
 
 /**
@@ -69,10 +102,15 @@ beforeAll(() => {
     mkdirSync(path.dirname(path.join(scratch, member)), { recursive: true });
     writeFileSync(path.join(scratch, member), "<unread/>");
   }
+  mkdirSync(boundedScratch, { recursive: true });
+  for (const member of boundedMembers) {
+    writeFileSync(path.join(boundedScratch, member), "<unread/>");
+  }
 });
 
 afterAll(() => {
   rmSync(scratch, { force: true, recursive: true });
+  rmSync(boundedScratch, { force: true, recursive: true });
 });
 
 describe("dev/listing.ts", () => {
@@ -142,6 +180,49 @@ describe("dev/listing.ts", () => {
       ]);
       assert.deepStrictEqual(opened, members);
     }),
+  );
+
+  it.effect(
+    "bounded corpus reads: the verdicts open more than one member at once and at most 8, in the set's order",
+    () =>
+      Effect.gen(function* boundedReads() {
+        const latch = yield* Latch.make();
+        let inFlight = 0;
+        let most = 0;
+        const cache = yield* verdictCache((member) =>
+          Effect.gen(function* heldOpen() {
+            inFlight += 1;
+            most = Math.max(most, inFlight);
+            yield* latch.await;
+            inFlight -= 1;
+            const verdict: Verdict = {
+              document: member,
+              kind: "none",
+              reasons: [],
+              verdict: "unchecked",
+            };
+
+            return verdict;
+          }),
+        );
+
+        // List the set first, opening no member, so every open below starts in the forked fiber's
+        // first run and holds on the latch until it opens.
+        yield* inBoundedScratch(cache.verdictOf("absent.xml"));
+
+        const reading = yield* Effect.forkChild(inBoundedScratch(cache.verdicts), {
+          startImmediately: true,
+        });
+        yield* latch.open;
+        const verdicts = yield* Fiber.join(reading);
+
+        assert.isAbove(most, 1);
+        assert.isAtMost(most, openBound);
+        assert.deepStrictEqual(
+          verdicts.map((verdict) => verdict.document),
+          boundedMembers,
+        );
+      }),
   );
 
   it("groups by verdict in the listing's order, then by top folder, each member once", () => {

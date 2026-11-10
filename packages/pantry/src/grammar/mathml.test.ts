@@ -71,6 +71,7 @@ import {
 } from "#pantry/test/gen/relaxng.ts";
 import type { MathClasses } from "#pantry/test/gen/relaxng.ts";
 import { fileScratchDirectory } from "#pantry/test/scratch.ts";
+import { cacheDirectory, relaxNgPath } from "#pantry/test/spec-cache/pins.ts";
 import { xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
@@ -91,12 +92,9 @@ const grammar = Effect.fromResult(composed());
 const foreignNamespace = "urn:x-mathml-test-foreign";
 
 /**
- * The directory of the cached MathML 3 RelaxNG, in XML syntax, fetched once from
- * https://www.w3.org/Math/RelaxNG/mathml3/ beside its compact syntax.
+ * The directory of the cached MathML 3 RelaxNG, in XML syntax ({@link relaxNgPath}).
  */
-const relaxNgDirectory = Config.NonEmptyString("HOME").pipe(
-  Config.map((home) => `${home}/.cache/gr8des/mathml3-rng`),
-);
+const relaxNgDirectory = cacheDirectory.pipe(Config.map((cache) => `${cache}/${relaxNgPath}`));
 
 /**
  * The folder the xmllint tests write their instances to, `packages/pantry/work/mathml-rng-*`, the

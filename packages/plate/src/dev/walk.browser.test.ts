@@ -1,6 +1,7 @@
 import { assert } from "@effect/vitest";
 import { ConfigProvider, Effect, Layer } from "effect";
 import type { Locator, Page } from "playwright-core";
+import { playgroundCaches } from "#plate/dev/page.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
 import {
@@ -54,9 +55,13 @@ const choicesPlaygroundLayer = Layer.unwrap(
   Effect.gen(function* overWalkCorpus() {
     const { directory } = yield* WalkCorpus;
 
-    return playgroundLayer({
-      provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory }),
-    });
+    return playgroundLayer(
+      {},
+      Layer.merge(
+        playgroundCaches,
+        ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory })),
+      ),
+    );
   }),
 ).pipe(Layer.provideMerge(walkCorpusLayer));
 

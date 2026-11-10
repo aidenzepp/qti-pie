@@ -121,22 +121,24 @@ describe("the logic family's reader specs and kind rules", () => {
     "[I-9a] build an item whose inline processing holds a qti-and tree, with processing some",
     () =>
       Effect.gen(function* buildsAndTree() {
-        const built = yield* buildItem(
-          passedItem(
-            expressionElement(
-              "and",
-              [],
-              [
-                truthElement(true),
-                expressionElement(
-                  "or",
-                  [],
-                  [truthElement(false), expressionElement("not", [], [truthElement(false)])],
-                ),
-                anyNElement(" 1 ", "TWO", [truthElement(true)]),
-              ],
+        const built = yield* Effect.fromResult(
+          buildItem(
+            passedItem(
+              expressionElement(
+                "and",
+                [],
+                [
+                  truthElement(true),
+                  expressionElement(
+                    "or",
+                    [],
+                    [truthElement(false), expressionElement("not", [], [truthElement(false)])],
+                  ),
+                  anyNElement(" 1 ", "TWO", [truthElement(true)]),
+                ],
+              ),
+              [integerOutcome("TWO", "2")],
             ),
-            [integerOutcome("TWO", "2")],
           ),
         );
 
@@ -292,7 +294,7 @@ describe("the logic family's reader specs and kind rules", () => {
             attr("identifier", "T"),
           ]),
         ]);
-        const built = yield* buildItem(document);
+        const built = yield* Effect.fromResult(buildItem(document));
         const rules = Option.getOrElse(built.processing, () => assert.fail("no processing"));
         const passedAt = (min: bigint) =>
           Effect.fromResult(

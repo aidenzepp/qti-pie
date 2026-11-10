@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import * as plateEffect from "#plate/effect.ts";
 import * as plate from "#plate/index.ts";
 import { PartlessTestDefect } from "#plate/navigation.ts";
 import * as packageEntry from "#plate/package/index.ts";
 import { acceptPackageForTest } from "#plate/package/open.ts";
-import { brandRedacted } from "#plate/payload.ts";
+import { brandRedacted, isRedacted } from "#plate/payload.ts";
 import {
   missingModule,
   readImports,
@@ -289,34 +290,80 @@ const modules = sourceModules();
 const closure = valueClosure(modules, ["src/index.ts"]);
 
 /**
- * List the exports of the public script entries, `src/index.ts`, `src/validate/open.ts` and
- * `src/package/index.ts`, that are one of some named values, by its own name or under any other.
- *
- * @param named The values, by the name each is declared with.
- * @returns `<entry>.<name>` for each name an entry exports one of them under, empty when none
- *   exports one.
+ * The seams that make an accepted root, an `AcceptedPackage` or a `Redacted` without `check`,
+ * `openPackage` or `redact`, the predicate that reads a `Redacted`'s mark, and the defect no
+ * accepted test can raise: no published entry exports one (ledger security note).
  */
-const exportedAmong = (named: ReadonlyMap<string, unknown>): readonly string[] => {
+const seams: ReadonlyMap<string, unknown> = new Map<string, unknown>([
+  ["acceptForTest", acceptForTest],
+  ["acceptPackageForTest", acceptPackageForTest],
+  ["acceptSectionForTest", acceptSectionForTest],
+  ["acceptStimulusForTest", acceptStimulusForTest],
+  ["acceptTestForTest", acceptTestForTest],
+  ["brandRedacted", brandRedacted],
+  ["isRedacted", isRedacted],
+  ["PartlessTestDefect", PartlessTestDefect],
+]);
+
+/**
+ * List a published entry's exports that are one of some named values, by its own name or under
+ * any other.
+ *
+ * @param entry The entry's exports, by name.
+ * @param named The values, by the name each is declared with.
+ * @returns The names the entry exports one of them under, empty when it exports none.
+ */
+const exportedAmong = (
+  entry: ReadonlyMap<string, unknown>,
+  named: ReadonlyMap<string, unknown>,
+): readonly string[] => {
   const values = new Set(named.values());
 
-  const surfaces: readonly (readonly [string, object])[] = [
-    ["index", plate],
-    ["open", openEntry],
-    ["package", packageEntry],
-  ];
-
-  return surfaces.flatMap(([entry, surface]) =>
-    Object.entries(surface).flatMap(([name, value]) =>
-      named.has(name) || values.has(value) ? [`${entry}.${name}`] : [],
-    ),
+  return [...entry].flatMap(([name, value]) =>
+    named.has(name) || values.has(value) ? [name] : [],
   );
 };
 
 /**
- * The committed JSON modules the serving entry may load, each with what reads it while a host
- * serves items. Any other JSON its closure reaches is a table serving never reads, loaded and
- * parsed on every cold start for nothing: the full XSD tables and the package tables among them,
- * which only the checking entries read.
+ * The public entry's exports, by name.
+ */
+const plateExports: ReadonlyMap<string, unknown> = new Map(Object.entries(plate));
+
+/**
+ * The `./effect` entry's exports, by name.
+ */
+const plateEffectExports: ReadonlyMap<string, unknown> = new Map(Object.entries(plateEffect));
+
+/**
+ * The published script entries' exports, each by its entry: `src/index.ts` as `.`,
+ * `src/effect.ts` as `./effect`, `src/validate/open.ts` as `./open` and `src/package/index.ts` as
+ * `./package`.
+ */
+const publishedEntries: ReadonlyMap<string, ReadonlyMap<string, unknown>> = new Map([
+  [".", plateExports],
+  ["./effect", plateEffectExports],
+  ["./open", new Map(Object.entries(openEntry))],
+  ["./package", new Map(Object.entries(packageEntry))],
+]);
+
+/**
+ * List the exports of every published entry ({@link publishedEntries}) that are one of some named
+ * values, by its own name or under any other.
+ *
+ * @param named The values, by the name each is declared with.
+ * @returns `<entry> <name>` for each name an entry exports one of them under, empty when none
+ *   exports one.
+ */
+const publishedAmong = (named: ReadonlyMap<string, unknown>): readonly string[] =>
+  [...publishedEntries].flatMap(([entry, exports]) =>
+    exportedAmong(exports, named).map((name) => `${entry} ${name}`),
+  );
+
+/**
+ * The committed JSON modules the serving entries, `.` and `./effect`, may load, each with what
+ * reads it while a host serves items. Any other JSON their closure reaches is a table serving never
+ * reads, loaded and parsed on every cold start for nothing: the full XSD tables and the package
+ * tables among them, which only the checking entries read.
  */
 const servedTables = {
   "src/model/blocks.generated.json":
@@ -373,35 +420,24 @@ describe("the core, from src/index.ts", () => {
     );
   });
 
-  it("exports from neither entry a test seam, brand constructor or defect, under any name (ledger security note)", () => {
-    // The seams that make an accepted root, an `AcceptedPackage` or a `Redacted` without `check`,
-    // `openPackage` or `redact`, and the defect no accepted test can raise.
-    const seams: ReadonlyMap<string, unknown> = new Map<string, unknown>([
-      ["acceptForTest", acceptForTest],
-      ["acceptPackageForTest", acceptPackageForTest],
-      ["acceptSectionForTest", acceptSectionForTest],
-      ["acceptStimulusForTest", acceptStimulusForTest],
-      ["acceptTestForTest", acceptTestForTest],
-      ["brandRedacted", brandRedacted],
-      ["PartlessTestDefect", PartlessTestDefect],
-    ]);
-
-    assert.includeMembers(Object.keys(plate), ["openAdmitted", "redact"]);
+  it("exports from no published entry a test seam, brand constructor, mark predicate or defect, under any name (ledger security note)", () => {
+    assert.includeMembers([...plateExports.keys()], ["openAdmitted", "redact"]);
     assert.includeMembers(Object.keys(openEntry), ["open"]);
     assert.includeMembers(Object.keys(packageEntry), ["openPackage"]);
-    assert.deepStrictEqual(exportedAmong(seams), []);
+    assert.deepStrictEqual(publishedAmong(seams), []);
   });
 
   it("exports no marked-test seam, openPackage's constructor of an accepted test it marked, under any name (ledger D9-15)", () => {
     // `acceptMarkedTest` brands an `AcceptedTest` without `check`, so only `openPackage` calls it.
-    assert.deepStrictEqual(exportedAmong(new Map([["acceptMarkedTest", acceptMarkedTest]])), []);
+    assert.deepStrictEqual(publishedAmong(new Map([["acceptMarkedTest", acceptMarkedTest]])), []);
   });
 
-  it("publishes src/index.ts, src/validate/open.ts and src/package/index.ts as the exports map's only script modules", () => {
+  it("[effect entry boundary] publishes src/index.ts as ., src/effect.ts as ./effect, src/validate/open.ts as ./open and src/package/index.ts as ./package, the exports map's only script modules", () => {
     assert.deepStrictEqual(
       Object.entries(readManifest().exports).filter(([, target]) => /\.[cm]?[jt]s$/u.test(target)),
       [
         [".", "./src/index.ts"],
+        ["./effect", "./src/effect.ts"],
         ["./open", "./src/validate/open.ts"],
         ["./package", "./src/package/index.ts"],
       ],
@@ -489,5 +525,41 @@ describe("the core, from src/index.ts", () => {
     assert.notProperty(dependencies, "playwright-core");
     assert.notProperty(dependencies, "playwright");
     assert.notProperty(dependencies, "@vitest/browser-playwright");
+  });
+});
+
+describe("the ./effect entry, from src/effect.ts", () => {
+  it("[effect entry boundary] loads no dev playground, example host, ledger, test support, corpus reader, Node built-in, parse5, playwright, the test runner, pantry or grizzle", () => {
+    assert.deepStrictEqual(crossings(modules, ["src/effect.ts"]), []);
+  });
+
+  it("[effect entry boundary] loads no committed JSON but the securing tables and the block table, as the serving entry does", () => {
+    assert.deepStrictEqual(unservedTables(modules, ["src/effect.ts"]), []);
+  });
+
+  it("refuses the full XSD tables on the ./effect entry once it re-exports open (the plant)", () => {
+    const planted = new Map(modules);
+    planted.set(
+      "src/effect.ts",
+      `${modules.get("src/effect.ts") ?? ""}\nexport { open } from "#plate/validate/open.ts";\n`,
+    );
+
+    assert.deepStrictEqual(unservedTables(planted, ["src/effect.ts"]), [
+      "src/validate/tables.generated.json",
+    ]);
+  });
+
+  it("[effect entry boundary] exports no test seam, brand constructor, mark predicate, marked-test seam or defect, under any name", () => {
+    assert.includeMembers(
+      [...plateEffectExports.keys()],
+      ["openAdmitted", "redact", "Configuration"],
+    );
+    assert.deepStrictEqual(
+      exportedAmong(
+        plateEffectExports,
+        new Map([...seams, ["acceptMarkedTest", acceptMarkedTest]]),
+      ),
+      [],
+    );
   });
 });

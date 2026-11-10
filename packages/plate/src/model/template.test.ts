@@ -188,12 +188,14 @@ describe("templateRules", () => {
     "[I-5] reads qti-set-template-value, qti-set-correct-response and qti-set-default-value into their target and expression",
     () =>
       Effect.gen(function* readsSettingRules() {
-        const built = yield* buildItem(
-          templated([
-            setting("qti-set-template-value", "T", integerElement("3")),
-            setting("qti-set-correct-response", "RESPONSE", variableElement("T")),
-            setting("qti-set-default-value", "SCORE", integerElement("0")),
-          ]),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            templated([
+              setting("qti-set-template-value", "T", integerElement("3")),
+              setting("qti-set-correct-response", "RESPONSE", variableElement("T")),
+              setting("qti-set-default-value", "SCORE", integerElement("0")),
+            ]),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -212,44 +214,46 @@ describe("templateRules", () => {
     "[I-5] reads a qti-template-condition into its branches in order and its qti-template-else as otherwise",
     () =>
       Effect.gen(function* readsCondition() {
-        const built = yield* buildItem(
-          templated([
-            el(
-              "qti-template-condition",
-              [],
-              [
-                el(
-                  "qti-template-if",
-                  [],
-                  [
-                    booleanElement("false"),
-                    setting("qti-set-template-value", "T", integerElement("1")),
-                  ],
-                ),
-                el(
-                  "qti-template-else-if",
-                  [],
-                  [
-                    booleanElement("true"),
-                    setting("qti-set-template-value", "T", integerElement("2")),
-                    el("qti-exit-template"),
-                  ],
-                ),
-                el(
-                  "qti-template-else",
-                  [],
-                  [
-                    el(
-                      "qti-template-condition",
-                      [],
-                      [el("qti-template-if", [], [booleanElement("true")])],
-                    ),
-                    setting("qti-set-template-value", "T", integerElement("3")),
-                  ],
-                ),
-              ],
-            ),
-          ]),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            templated([
+              el(
+                "qti-template-condition",
+                [],
+                [
+                  el(
+                    "qti-template-if",
+                    [],
+                    [
+                      booleanElement("false"),
+                      setting("qti-set-template-value", "T", integerElement("1")),
+                    ],
+                  ),
+                  el(
+                    "qti-template-else-if",
+                    [],
+                    [
+                      booleanElement("true"),
+                      setting("qti-set-template-value", "T", integerElement("2")),
+                      el("qti-exit-template"),
+                    ],
+                  ),
+                  el(
+                    "qti-template-else",
+                    [],
+                    [
+                      el(
+                        "qti-template-condition",
+                        [],
+                        [el("qti-template-if", [], [booleanElement("true")])],
+                      ),
+                      setting("qti-set-template-value", "T", integerElement("3")),
+                    ],
+                  ),
+                ],
+              ),
+            ]),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -280,17 +284,19 @@ describe("templateRules", () => {
     "[I-5] reads a qti-template-constraint into its expression and a qti-exit-template into an exit, in document order",
     () =>
       Effect.gen(function* readsConstraintAndExit() {
-        const built = yield* buildItem(
-          templated([
-            setting("qti-set-template-value", "T", integerElement("4")),
-            el(
-              "qti-template-constraint",
-              [],
-              [el("qti-match", [], [variableElement("T"), integerElement("4")])],
-            ),
-            el("qti-exit-template"),
-            setting("qti-set-template-value", "U", integerElement("5")),
-          ]),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            templated([
+              setting("qti-set-template-value", "T", integerElement("4")),
+              el(
+                "qti-template-constraint",
+                [],
+                [el("qti-match", [], [variableElement("T"), integerElement("4")])],
+              ),
+              el("qti-exit-template"),
+              setting("qti-set-template-value", "U", integerElement("5")),
+            ]),
+          ),
         );
 
         assert.deepStrictEqual(
@@ -312,7 +318,7 @@ describe("templateRules", () => {
     "[I-5] reads an empty qti-template-processing as template processing with no rule",
     () =>
       Effect.gen(function* readsEmpty() {
-        const built = yield* buildItem(templated([]));
+        const built = yield* Effect.fromResult(buildItem(templated([])));
 
         assert.deepStrictEqual(built.templateProcessing, Option.some([]));
       }),
@@ -345,8 +351,10 @@ describe("templateRules", () => {
         ];
 
         for (const { element, feature, path } of cases) {
-          const built = yield* buildItem(
-            templated([setting("qti-set-template-value", "T", integerElement("1")), element]),
+          const built = yield* Effect.fromResult(
+            buildItem(
+              templated([setting("qti-set-template-value", "T", integerElement("1")), element]),
+            ),
           );
 
           assert.deepStrictEqual(built.templateProcessing, Option.none(), feature);
@@ -359,19 +367,21 @@ describe("templateRules", () => {
     "[I-5] marks record-set at a qti-set-default-value and a qti-set-correct-response of a record response, in place of variable:<identifier>, and runs no template processing",
     () =>
       Effect.gen(function* marksRecordSet() {
-        const built = yield* buildItem(
-          templated(
-            [
-              setting("qti-set-default-value", "ANSWER", el("qti-null")),
-              setting("qti-set-template-value", "T", integerElement("1")),
-              setting("qti-set-correct-response", "ANSWER", el("qti-null")),
-            ],
-            [
-              el("qti-response-declaration", [
-                attr("cardinality", "record"),
-                attr("identifier", "ANSWER"),
-              ]),
-            ],
+        const built = yield* Effect.fromResult(
+          buildItem(
+            templated(
+              [
+                setting("qti-set-default-value", "ANSWER", el("qti-null")),
+                setting("qti-set-template-value", "T", integerElement("1")),
+                setting("qti-set-correct-response", "ANSWER", el("qti-null")),
+              ],
+              [
+                el("qti-response-declaration", [
+                  attr("cardinality", "record"),
+                  attr("identifier", "ANSWER"),
+                ]),
+              ],
+            ),
           ),
         );
 
@@ -387,17 +397,19 @@ describe("templateRules", () => {
     "[I-5] leaves a read of QTI_CONTEXT through qti-field-value marked variable:QTI_CONTEXT, never record-set, in template and in response processing",
     () =>
       Effect.gen(function* marksContextField() {
-        const built = yield* buildItem(
-          templated(
-            [setting("qti-set-template-value", "T", contextField())],
-            [],
-            [
-              el(
-                "qti-response-processing",
-                [],
-                [setting("qti-set-outcome-value", "SCORE", contextField())],
-              ),
-            ],
+        const built = yield* Effect.fromResult(
+          buildItem(
+            templated(
+              [setting("qti-set-template-value", "T", contextField())],
+              [],
+              [
+                el(
+                  "qti-response-processing",
+                  [],
+                  [setting("qti-set-outcome-value", "SCORE", contextField())],
+                ),
+              ],
+            ),
           ),
         );
 
@@ -466,8 +478,10 @@ describe("templateRules", () => {
         ];
 
         for (const { element, feature, path } of cases) {
-          const built = yield* buildItem(
-            templated([setting("qti-set-template-value", "T", integerElement("1")), element]),
+          const built = yield* Effect.fromResult(
+            buildItem(
+              templated([setting("qti-set-template-value", "T", integerElement("1")), element]),
+            ),
           );
 
           assert.deepStrictEqual(built.templateProcessing, Option.none(), path);
@@ -481,7 +495,9 @@ describe("templateRules", () => {
     () =>
       Effect.gen(function* refusesBadValue() {
         const refusal = yield* Effect.flip(
-          buildItem(templated([setting("qti-set-template-value", "T", integerElement("abc"))])),
+          Effect.fromResult(
+            buildItem(templated([setting("qti-set-template-value", "T", integerElement("abc"))])),
+          ),
         );
 
         assert.strictEqual(refusal.rule, "value-type");

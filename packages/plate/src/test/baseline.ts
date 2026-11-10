@@ -19,7 +19,7 @@ import type { Use } from "#plate/test/css.ts";
  * Where the web-features data is cached:
  * `.cache/gr8des/renderer-research/web/web-features-data.json` under `HOME`.
  */
-export const webFeaturesPath: Config.Config<string> = Config.String("HOME").pipe(
+export const webFeaturesPath: Config.Config<string> = Config.NonEmptyString("HOME").pipe(
   Config.map((home) => `${home}/.cache/gr8des/renderer-research/web/web-features-data.json`),
 );
 

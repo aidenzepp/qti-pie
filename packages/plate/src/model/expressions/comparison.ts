@@ -14,7 +14,7 @@
  *
  * @module
  */
-import { Effect, Option } from "effect";
+import { Option, Result } from "effect";
 import { enumerated, valueOf, xmlWhitespaceRun, xsBoolean } from "#plate/model/attributes.ts";
 import {
   accepts,
@@ -192,7 +192,7 @@ export const comparisonRules: FamilyRules<
 const matchReader: ReaderSpec<"match"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "match", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "match", operands })),
 };
 
 /**
@@ -210,7 +210,7 @@ const equalReader: ReaderSpec<"equal"> = {
   _tag: "generic",
   arity: "two",
   attributes: (context, element) =>
-    Effect.gen(function* readEqualAttributes() {
+    Result.gen(function* readEqualAttributes() {
       const toleranceMode = Option.getOrElse(
         yield* enumerated(context.walk, element, "tolerance-mode", toleranceModes),
         () => "exact" as const,
@@ -253,7 +253,7 @@ const equalReader: ReaderSpec<"equal"> = {
 const gtReader: ReaderSpec<"gt"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "gt", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "gt", operands })),
 };
 
 /**
@@ -262,7 +262,7 @@ const gtReader: ReaderSpec<"gt"> = {
 const gteReader: ReaderSpec<"gte"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "gte", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "gte", operands })),
 };
 
 /**
@@ -271,7 +271,7 @@ const gteReader: ReaderSpec<"gte"> = {
 const ltReader: ReaderSpec<"lt"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "lt", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "lt", operands })),
 };
 
 /**
@@ -280,7 +280,7 @@ const ltReader: ReaderSpec<"lt"> = {
 const lteReader: ReaderSpec<"lte"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "lte", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "lte", operands })),
 };
 
 /**
@@ -289,7 +289,7 @@ const lteReader: ReaderSpec<"lte"> = {
 const durationLtReader: ReaderSpec<"duration-lt"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "duration-lt", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "duration-lt", operands })),
 };
 
 /**
@@ -298,7 +298,7 @@ const durationLtReader: ReaderSpec<"duration-lt"> = {
 const durationGteReader: ReaderSpec<"duration-gte"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "duration-gte", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "duration-gte", operands })),
 };
 
 /**

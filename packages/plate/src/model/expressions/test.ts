@@ -23,7 +23,7 @@
  *
  * @module
  */
-import { Effect, Option } from "effect";
+import { Option, Result } from "effect";
 import type { SourceElement } from "#plate/document/source.ts";
 import {
   elementsOf,
@@ -180,7 +180,7 @@ const countReader = <K extends CountKind>(
   _tag: "generic",
   arity: "none",
   attributes: (_context, element) =>
-    Effect.succeed((operands) => build(filtersOf(element), operands)),
+    Result.succeed((operands) => build(filtersOf(element), operands)),
 });
 
 /**
@@ -205,7 +205,7 @@ const boundReader = <K extends "outcome-maximum" | "outcome-minimum">(
   _tag: "generic",
   arity: "none",
   attributes: (context, element) =>
-    Effect.map(
+    Result.map(
       identifierAttribute(context.walk, element, "outcome-identifier"),
       (outcomeIdentifier) => (operands) =>
         build(
@@ -228,7 +228,7 @@ const boundReader = <K extends "outcome-maximum" | "outcome-minimum">(
 const testVariablesReader: ReaderSpec<"test-variables"> = {
   _tag: "custom",
   read: (context, element) =>
-    Effect.gen(function* readTestVariables() {
+    Result.gen(function* readTestVariables() {
       if (elementsOf(element).length > 0) {
         return yield* context.unread(element);
       }

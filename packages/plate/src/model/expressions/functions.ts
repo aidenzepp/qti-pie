@@ -13,7 +13,7 @@
  *
  * @module
  */
-import { Effect } from "effect";
+import { Result } from "effect";
 import type { SourceElement } from "#plate/document/source.ts";
 import { listed, requiredAttribute } from "#plate/model/attributes.ts";
 import {
@@ -119,8 +119,8 @@ const operatorName = <const T extends string>(
   context: ReaderContext,
   element: SourceElement,
   allowed: readonly T[],
-): Effect.Effect<T, Refusal> =>
-  Effect.flatMap(requiredAttribute(context.walk, element, "name"), (attribute) =>
+): Result.Result<T, Refusal> =>
+  Result.flatMap(requiredAttribute(context.walk, element, "name"), (attribute) =>
     listed(context.walk, element, "name", attribute, allowed),
   );
 
@@ -131,7 +131,7 @@ const mathOperatorReader: ReaderSpec<"math-operator"> = {
   _tag: "generic",
   arity: "some",
   attributes: (context, element) =>
-    Effect.map(operatorName(context, element, mathOperatorNames), (name) => (operands) => ({
+    Result.map(operatorName(context, element, mathOperatorNames), (name) => (operands) => ({
       kind: "math-operator",
       name,
       operands,
@@ -145,7 +145,7 @@ const mathConstantReader: ReaderSpec<"math-constant"> = {
   _tag: "generic",
   arity: "none",
   attributes: (context, element) =>
-    Effect.map(operatorName(context, element, mathConstantNames), (name) => (operands) => ({
+    Result.map(operatorName(context, element, mathConstantNames), (name) => (operands) => ({
       kind: "math-constant",
       name,
       operands,
@@ -159,7 +159,7 @@ const statsOperatorReader: ReaderSpec<"stats-operator"> = {
   _tag: "generic",
   arity: "one",
   attributes: (context, element) =>
-    Effect.map(operatorName(context, element, statsOperatorNames), (name) => (operands) => ({
+    Result.map(operatorName(context, element, statsOperatorNames), (name) => (operands) => ({
       kind: "stats-operator",
       name,
       operands,
@@ -172,7 +172,7 @@ const statsOperatorReader: ReaderSpec<"stats-operator"> = {
 const powerReader: ReaderSpec<"power"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "power", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "power", operands })),
 };
 
 /**

@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { assert } from "@effect/vitest";
-import { ConfigProvider, Effect, Result } from "effect";
+import { ConfigProvider, Effect, Layer, Result } from "effect";
+import { playgroundCaches } from "#plate/dev/page.ts";
 import { textOf } from "#plate/test/accessibility.ts";
 import {
   Engine,
@@ -115,9 +116,13 @@ eachEngine((it, name) => {
             }),
           ).pipe(
             Effect.provide(
-              playgroundLayer({
-                provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory }),
-              }),
+              playgroundLayer(
+                {},
+                Layer.merge(
+                  playgroundCaches,
+                  ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory })),
+                ),
+              ),
             ),
           );
 

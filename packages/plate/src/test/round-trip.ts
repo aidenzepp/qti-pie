@@ -1,3 +1,4 @@
+import { Result } from "effect";
 import { defaultTreeAdapter, parseFragment } from "parse5";
 import type { DefaultTreeAdapterTypes } from "parse5";
 import { h, text } from "#plate/emit/node.ts";
@@ -136,16 +137,20 @@ const sameNode = (left: Node, right: Node): boolean => {
  * It is true when `parseHtml(toHtml(node))` is exactly one node that equals `node` read in HTML's
  * text model (adjacent text merged, empty text dropped, a `true` attribute as `""`). It is false
  * when the parser restructures the tree (a `div` inside a `p`, a `tr` with no `tbody`) or changes
- * its text (a CR, which the parser turns into a line feed).
+ * its text (a CR, which the parser turns into a line feed), and when {@link toHtml} refuses the
+ * tree (a void element with children, or any other rule its `MarkupRefused` names), since a tree
+ * it does not write cannot survive.
  *
  * @param node The tree to write and read back.
  * @returns Whether the tree survives a write and a parse unchanged.
- * @throws {VoidElementChildren} When `node` or a descendant is a void element with children, or
- *   any other refusal {@link toHtml} documents, for a tree that breaks that refusal's rule.
  */
-export const roundTrips = (node: Node): boolean => {
-  const parsed = parseHtml(toHtml(node));
-  const [only] = parsed;
+export const roundTrips = (node: Node): boolean =>
+  Result.match(toHtml(node), {
+    onFailure: () => false,
+    onSuccess: (html) => {
+      const parsed = parseHtml(html);
+      const [only] = parsed;
 
-  return parsed.length === 1 && only !== undefined && sameNode(only, normalise(node));
-};
+      return parsed.length === 1 && only !== undefined && sameNode(only, normalise(node));
+    },
+  });

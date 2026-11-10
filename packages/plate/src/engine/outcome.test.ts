@@ -921,16 +921,18 @@ describe("testScopeOf over built models", () => {
     "[T-9] the outcome interpreter's scope of a session reads an item's file and record declarations as NULL of their type, and never splits a test's context name",
     () =>
       Effect.gen(function* builtScope() {
-        const item = yield* buildItem(unheldItem);
-        const plain = yield* buildTest(testDocument([]));
-        const contextual = yield* buildTest(
-          testDocument([
-            el("qti-context-declaration", [
-              attr("base-type", "float"),
-              attr("cardinality", "single"),
-              attr("identifier", "ITEM1.SCORE"),
+        const item = yield* Effect.fromResult(buildItem(unheldItem));
+        const plain = yield* Effect.fromResult(buildTest(testDocument([])));
+        const contextual = yield* Effect.fromResult(
+          buildTest(
+            testDocument([
+              el("qti-context-declaration", [
+                attr("base-type", "float"),
+                attr("cardinality", "single"),
+                attr("identifier", "ITEM1.SCORE"),
+              ]),
             ]),
-          ]),
+          ),
         );
         const items = new Map([["ITEM1", acceptForTest(item)]]);
         const started = fresh(item, "sitting.1");
@@ -968,38 +970,40 @@ describe("testScopeOf over built models", () => {
     "[T-9] testScopeOf holds each file or record response of an item with whether it declares a correct response, and no outcome",
     () =>
       Effect.gen(function* unheldResponsesScope() {
-        const item = yield* buildItem(
-          doc(
-            "items/ITEM1.xml",
-            el(
-              "qti-assessment-item",
-              [attr("identifier", "ITEM1"), attr("title", "Item one")],
-              [
-                el(
-                  "qti-response-declaration",
-                  [
-                    attr("base-type", "identifier"),
+        const item = yield* Effect.fromResult(
+          buildItem(
+            doc(
+              "items/ITEM1.xml",
+              el(
+                "qti-assessment-item",
+                [attr("identifier", "ITEM1"), attr("title", "Item one")],
+                [
+                  el(
+                    "qti-response-declaration",
+                    [
+                      attr("base-type", "identifier"),
+                      attr("cardinality", "single"),
+                      attr("identifier", "RESPONSE"),
+                    ],
+                    [el("qti-correct-response", [], [el("qti-value", [], [text("A")])])],
+                  ),
+                  el("qti-response-declaration", [
+                    attr("base-type", "file"),
                     attr("cardinality", "single"),
-                    attr("identifier", "RESPONSE"),
-                  ],
-                  [el("qti-correct-response", [], [el("qti-value", [], [text("A")])])],
-                ),
-                el("qti-response-declaration", [
-                  attr("base-type", "file"),
-                  attr("cardinality", "single"),
-                  attr("identifier", "FR"),
-                ]),
-                el("qti-outcome-declaration", [
-                  attr("cardinality", "record"),
-                  attr("identifier", "R"),
-                ]),
-                el("qti-item-body"),
-              ],
+                    attr("identifier", "FR"),
+                  ]),
+                  el("qti-outcome-declaration", [
+                    attr("cardinality", "record"),
+                    attr("identifier", "R"),
+                  ]),
+                  el("qti-item-body"),
+                ],
+              ),
             ),
           ),
         );
         const scope = testScopeOf(
-          yield* buildTest(testDocument([])),
+          yield* Effect.fromResult(buildTest(testDocument([]))),
           new Map([["ITEM1", acceptForTest(item)]]),
           { items: [sessionItem(fresh(item, "sitting.1"), 1, true)] },
           new Map(),
@@ -1017,41 +1021,43 @@ describe("testScopeOf over built models", () => {
     "[I-1] [T-9] testScopeOf gives the record responses the item model holds as the entry's records, never as unheld, and reads a record response through its item ref as the record its item's record holds",
     () =>
       Effect.gen(function* recordResponsesScope() {
-        const item = yield* buildItem(
-          doc(
-            "items/ITEM1.xml",
-            el(
-              "qti-assessment-item",
-              [attr("identifier", "ITEM1"), attr("title", "Item one")],
-              [
-                el(
-                  "qti-response-declaration",
-                  [attr("cardinality", "record"), attr("identifier", "KEYED")],
-                  [
-                    el(
-                      "qti-correct-response",
-                      [],
-                      [
-                        el(
-                          "qti-value",
-                          [attr("base-type", "string"), attr("field-identifier", "stringValue")],
-                          [text("12")],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                el("qti-response-declaration", [
-                  attr("cardinality", "record"),
-                  attr("identifier", "OPEN"),
-                ]),
-                el("qti-item-body"),
-              ],
+        const item = yield* Effect.fromResult(
+          buildItem(
+            doc(
+              "items/ITEM1.xml",
+              el(
+                "qti-assessment-item",
+                [attr("identifier", "ITEM1"), attr("title", "Item one")],
+                [
+                  el(
+                    "qti-response-declaration",
+                    [attr("cardinality", "record"), attr("identifier", "KEYED")],
+                    [
+                      el(
+                        "qti-correct-response",
+                        [],
+                        [
+                          el(
+                            "qti-value",
+                            [attr("base-type", "string"), attr("field-identifier", "stringValue")],
+                            [text("12")],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  el("qti-response-declaration", [
+                    attr("cardinality", "record"),
+                    attr("identifier", "OPEN"),
+                  ]),
+                  el("qti-item-body"),
+                ],
+              ),
             ),
           ),
         );
         const scope = testScopeOf(
-          yield* buildTest(testDocument([])),
+          yield* Effect.fromResult(buildTest(testDocument([]))),
           new Map([["ITEM1", acceptForTest(item)]]),
           { items: [sessionItem(fresh(item, "sitting.1"), 1, true)] },
           new Map(),
@@ -1078,9 +1084,9 @@ describe("testScopeOf over built models", () => {
     "align-54 untimed duration D7: a test's outcome processing reads the duration of an item that is not time dependent through its item ref as the single float a time-dependent item's is, and a run reads the two alike (readings 29 and 150)",
     () =>
       Effect.gen(function* durationThroughItemRef() {
-        const test = yield* buildTest(testDocument([]));
+        const test = yield* Effect.fromResult(buildTest(testDocument([])));
         const scopes = yield* Effect.forEach(["false", "true"], (timeDependent) =>
-          Effect.map(buildItem(durationItem(timeDependent)), (item) =>
+          Effect.map(Effect.fromResult(buildItem(durationItem(timeDependent))), (item) =>
             testScopeOf(
               test,
               new Map([["ITEM1", acceptForTest(item)]]),
@@ -1238,16 +1244,18 @@ describe("runOutcomes over a record response through its item ref", () => {
     "[T-9] a test's outcome processing reads a record response through its item ref: its field, whether it is NULL, its correct response's field and whether it matches, NULL before an answer",
     () =>
       Effect.gen(function* recordThroughItemRef() {
-        const item = yield* buildItem(recordItemDocument);
-        const test = yield* buildTest(
-          testDocument([
-            recordCaseOutcome("FIELD", "float"),
-            recordCaseOutcome("EMPTY", "boolean"),
-            recordCaseOutcome("KEY", "float"),
-            recordCaseOutcome("MATCHED", "boolean"),
-            recordCaseOutcome("OUTNULL", "boolean"),
-            recordCaseOutcome("TPLNULL", "boolean"),
-          ]),
+        const item = yield* Effect.fromResult(buildItem(recordItemDocument));
+        const test = yield* Effect.fromResult(
+          buildTest(
+            testDocument([
+              recordCaseOutcome("FIELD", "float"),
+              recordCaseOutcome("EMPTY", "boolean"),
+              recordCaseOutcome("KEY", "float"),
+              recordCaseOutcome("MATCHED", "boolean"),
+              recordCaseOutcome("OUTNULL", "boolean"),
+              recordCaseOutcome("TPLNULL", "boolean"),
+            ]),
+          ),
         );
         const items = new Map([["ITEM1", acceptForTest(item)]]);
         const started = fresh(item, "sitting.1");
@@ -1295,8 +1303,8 @@ describe("runOutcomes over a record response through its item ref", () => {
     "[T-9] a value read of a record response through its item ref, qti-sum over it in a test checked apart, fails RecordOperandError naming it",
     () =>
       Effect.gen(function* valueReadOfRecord() {
-        const item = yield* buildItem(recordItemDocument);
-        const test = yield* buildTest(testDocument([]));
+        const item = yield* Effect.fromResult(buildItem(recordItemDocument));
+        const test = yield* Effect.fromResult(buildTest(testDocument([])));
         const scope = testScopeOf(
           test,
           new Map([["ITEM1", acceptForTest(item)]]),

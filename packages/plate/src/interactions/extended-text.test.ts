@@ -643,7 +643,7 @@ describe("renderExtendedText", () => {
         const againControl = onePart(againRoot, "control");
 
         assert.deepStrictEqual(againControl.children, [text("<b>x</b>")]);
-        assert.include(toHtml(againControl), "&lt;b&gt;x&lt;/b&gt;</textarea>");
+        assert.include(Result.getOrThrow(toHtml(againControl)), "&lt;b&gt;x&lt;/b&gt;</textarea>");
         assert.isTrue(roundTrips(page([againRoot], again)));
       }),
   );
@@ -779,7 +779,7 @@ describe("validateExtendedText", () => {
         const control = onePart(root, "control");
 
         assert.deepStrictEqual(control.children, [text("<b>x</b>")]);
-        assert.include(toHtml(control), "&lt;b&gt;x&lt;/b&gt;</textarea>");
+        assert.include(Result.getOrThrow(toHtml(control)), "&lt;b&gt;x&lt;/b&gt;</textarea>");
         assert.strictEqual(control.attrs["data-format"], "xhtml");
         assert.strictEqual(control.attrs["aria-invalid"], "true");
         assert.strictEqual(
@@ -1520,36 +1520,38 @@ describe("an Extended Text the renderer does not support", () => {
     '[Q-5] [keyboard] builds an Extended Text whose pattern-mask="[0-9" the translator refuses beside a Choice as a notice in its place, and a walk still posts the Choice',
     () =>
       Effect.gen(function* refusedPatternNotice() {
-        const item = yield* buildItem(
-          doc(
-            "items/mixed.xml",
-            el(
-              "qti-assessment-item",
-              [attr("identifier", "mixed"), attr("title", "Mixed")],
-              [
-                declaration("RESPONSE", "identifier"),
-                declaration(response, "string"),
-                el(
-                  "qti-item-body",
-                  [],
-                  [
-                    el(
-                      "qti-choice-interaction",
-                      [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
-                      [
-                        el("qti-prompt", [], [sourceText("Pick a colour.")]),
-                        simpleChoice("A", "Red"),
-                        simpleChoice("B", "Green"),
-                      ],
-                    ),
-                    el(
-                      "qti-extended-text-interaction",
-                      [attr("pattern-mask", "[0-9"), attr("response-identifier", response)],
-                      [el("qti-prompt", [], [sourceText("Describe your day.")])],
-                    ),
-                  ],
-                ),
-              ],
+        const item = yield* Effect.fromResult(
+          buildItem(
+            doc(
+              "items/mixed.xml",
+              el(
+                "qti-assessment-item",
+                [attr("identifier", "mixed"), attr("title", "Mixed")],
+                [
+                  declaration("RESPONSE", "identifier"),
+                  declaration(response, "string"),
+                  el(
+                    "qti-item-body",
+                    [],
+                    [
+                      el(
+                        "qti-choice-interaction",
+                        [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
+                        [
+                          el("qti-prompt", [], [sourceText("Pick a colour.")]),
+                          simpleChoice("A", "Red"),
+                          simpleChoice("B", "Green"),
+                        ],
+                      ),
+                      el(
+                        "qti-extended-text-interaction",
+                        [attr("pattern-mask", "[0-9"), attr("response-identifier", response)],
+                        [el("qti-prompt", [], [sourceText("Describe your day.")])],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -1743,7 +1745,10 @@ describe("an Extended Text bound to a record response", () => {
           partsIn(root, "control").map((control) => [control.tag, control.attrs["name"]]),
           [["textarea", name]],
         );
-        assert.strictEqual(toHtml(root), toHtml(yield* render(payloadOf([counted]))));
+        assert.strictEqual(
+          Result.getOrThrow(toHtml(root)),
+          Result.getOrThrow(toHtml(yield* render(payloadOf([counted])))),
+        );
       }),
   );
 });

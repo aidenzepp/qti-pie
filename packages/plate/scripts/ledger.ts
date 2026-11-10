@@ -943,7 +943,7 @@ const program = Effect.gen(function* ledgerCommand() {
   const conf = yield* readConf;
   const sources = yield* readSources(packageDirectory);
   const vp = yield* findVp(packageDirectory);
-  const home = yield* Config.String("HOME");
+  const home = yield* Config.NonEmptyString("HOME");
   const nodeOptions = yield* Config.String("NODE_OPTIONS").pipe(Config.withDefault(""));
   const input = { environment: process.env, nodeOptions, output, packageDirectory, vp };
 

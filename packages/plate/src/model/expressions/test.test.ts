@@ -80,7 +80,7 @@ interface Read {
  *   model's refusal.
  */
 const readAll = (expressions: readonly SourceElement[]): Effect.Effect<Read, Refusal> =>
-  Effect.map(buildTest(testDocument(expressions)), (built) => ({
+  Effect.map(Effect.fromResult(buildTest(testDocument(expressions))), (built) => ({
     expressions:
       built.outcomeProcessing.kind === "runs"
         ? built.outcomeProcessing.rules.flatMap((rule) =>
