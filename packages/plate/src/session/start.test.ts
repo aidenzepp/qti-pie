@@ -3282,9 +3282,11 @@ describe("a package whose test reads a dotted name through its own prefix and a 
         const configuration = yield* configure({});
         for (const [name, sectionRef] of ownPrefixCases) {
           const reading = refXml("c", "i3.xml", defaultXml("T", read(name)));
+          // The placed section's item is delivered after c and a (issue m3f-03), so a third next
+          // closes the linear part.
           for (const [navigation, body, intents] of [
             ["nonlinear", refXml("a", "i1.xml") + reading + moreRefXml, ["end-part"]],
-            ["linear", reading + refXml("a", "i1.xml") + moreRefXml, ["next", "next"]],
+            ["linear", reading + refXml("a", "i1.xml") + moreRefXml, ["next", "next", "next"]],
           ] as const) {
             const label = `${name} in a ${navigation} part`;
             const verdict = yield* numberedVerdict({
@@ -3495,9 +3497,11 @@ describe("a package whose test reads a name whose one counting reading is a sect
         const configuration = yield* configure({});
         for (const { declarations, name, own, placed } of countingCases) {
           const reading = refXml("c", "i3.xml", defaultXml("T", read(name)));
+          // The placed section's item is delivered after c and the own item ref (issue m3f-03),
+          // so a third next closes the linear part.
           for (const [navigation, body, intents] of [
             ["nonlinear", own + reading + moreRefXml, ["end-part"]],
-            ["linear", reading + own + moreRefXml, ["next", "next"]],
+            ["linear", reading + own + moreRefXml, ["next", "next", "next"]],
           ] as const) {
             const label = `${name} in a ${navigation} part`;
             const verdict = yield* numberedVerdict({
