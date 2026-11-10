@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"
+  xmlns:lom="http://ltsc.ieee.org/xsd/LOM"
+  xmlns:qtim="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0"
+  identifier="m3f-metadata">
+  <metadata>
+    <schema>QTI Package</schema>
+    <schemaversion>3.0.1</schemaversion>
+  </metadata>
+  <organizations/>
+  <resources>
+    <resource identifier="full" type="imsqti_item_xmlv3p0" href="items/full.xml">
+      <metadata>
+        <lom:lom>
+          <lom:general>
+            <lom:identifier>
+              <lom:entry>full</lom:entry>
+            </lom:identifier>
+            <lom:title>
+              <lom:string language="en">Fully described item</lom:string>
+            </lom:title>
+            <lom:language>en</lom:language>
+          </lom:general>
+        </lom:lom>
+        <qtim:qtiMetadata>
+          <qtim:itemTemplate>false</qtim:itemTemplate>
+          <qtim:timeDependent>0</qtim:timeDependent>
+          <qtim:composite> true </qtim:composite>
+          <qtim:interactionType>choiceInteraction</qtim:interactionType>
+          <qtim:interactionType>textEntryInteraction</qtim:interactionType>
+          <qtim:feedbackType>nonadaptive</qtim:feedbackType>
+          <qtim:solutionAvailable>true</qtim:solutionAvailable>
+          <qtim:scoringMode>responseprocessing</qtim:scoringMode>
+          <qtim:toolName>  Plate Authoring  </qtim:toolName>
+          <qtim:toolVersion> 3.2.1 </qtim:toolVersion>
+          <qtim:toolVendor>  Plate Tools  </qtim:toolVendor>
+        </qtim:qtiMetadata>
+      </metadata>
+      <file href="items/full.xml"/>
+    </resource>
+    <resource identifier="bare" type="imsqti_item_xmlv3p0" href="items/bare.xml">
+      <file href="items/bare.xml"/>
+    </resource>
+  </resources>
+</manifest>
