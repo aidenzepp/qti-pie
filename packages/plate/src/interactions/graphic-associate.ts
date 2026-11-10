@@ -29,9 +29,12 @@
  * absent. A hotspot's `match-group`, when written, names the hotspots it may pair with, and a
  * pair is outside the group when either side names a group the other is not in.
  *
- * An outline needs the image's size to place a coordinate written in percentages; plate reads it
- * from the `width` and `height` attributes of the image (`img`, the `img` of a `picture`, or
- * `object`), and draws a percentage with no outline when the image gives neither.
+ * An outline needs the image's size to place a coordinate written in percentages: an x coordinate
+ * is a percentage of the width, a y coordinate of the height, and a `circle`'s radius of the
+ * smaller of the two (a proposed reading of the information model's Coords type, GitHub issue
+ * #376). plate reads the size from the `width` and `height` attributes of the image (`img`, the
+ * `img` of a `picture`, or `object`), and draws a percentage with no outline when the image gives
+ * neither.
  *
  * Strings the renderer writes here live in this module, in English ({@link words}).
  *
@@ -595,21 +598,24 @@ const hotspotOf = (
 const imageTags = ["img", "object", "picture"] as const;
 
 /**
- * An axis a coordinate is measured along.
+ * An axis a coordinate is measured along, which names the side of the image a percentage on it is
+ * of: `x` the width, `y` the height, and `shorter` the smaller of the two ({@link sideOf}).
  */
-type Axis = "x" | "y";
+type Axis = "shorter" | "x" | "y";
 
 /**
  * The axis of each coordinate a geometry reads, none when the coordinates are too few for it:
- * `rect` its four corners, `circle` its centre and radius (a percentage radius is of the image's
- * width), `ellipse` its centre and two radii, `poly` each complete pair, three at least.
+ * `rect` its four corners, `circle` its centre and radius (a percentage radius is of the smaller of
+ * the image's width and height, as the information model's Coords type reads it; a proposed
+ * reading, GitHub issue #376), `ellipse` its centre and two radii, `poly` each complete pair, three
+ * at least.
  *
  * @see https://html.spec.whatwg.org/multipage/image-maps.html#image-map-processing-model
  */
 const axesOf: Readonly<
   Record<Exclude<AssociableArea, "default">, (count: number) => Option.Option<readonly Axis[]>>
 > = {
-  circle: (count) => (count >= 3 ? Option.some(["x", "y", "x"]) : Option.none()),
+  circle: (count) => (count >= 3 ? Option.some(["x", "y", "shorter"]) : Option.none()),
   ellipse: (count) => (count >= 4 ? Option.some(["x", "y", "x", "y"]) : Option.none()),
   poly: (count) => {
     const pairs = Math.floor(count / 2);
@@ -704,9 +710,34 @@ const rounded = (value: number): number => Math.round(value * 10_000) / 10_000;
 const digits = (value: number): string => String(rounded(value));
 
 /**
+ * Give the side of an image a percentage on an axis is of.
+ *
+ * @param frame The image's size.
+ * @param axis The axis the coordinate is measured along.
+ * @returns The width for `x`, the height for `y`, and the smaller of the two for `shorter`.
+ */
+const sideOf = (frame: Frame, axis: Axis): number => {
+  switch (axis) {
+    case "shorter": {
+      return Math.min(frame.height, frame.width);
+    }
+    case "x": {
+      return frame.width;
+    }
+    case "y": {
+      return frame.height;
+    }
+    default: {
+      return axis satisfies never;
+    }
+  }
+};
+
+/**
  * Resolve a hotspot's coordinates to numbers in one unit: image pixels when the image's size is
- * known (a percentage is scaled by it), the coordinates as written otherwise, when none is a
- * percentage.
+ * known (a percentage is scaled by the side its axis names, {@link sideOf}), the coordinates as
+ * written otherwise, when none is a percentage. A `circle`'s radius is of the smaller of the
+ * image's width and height (a proposed reading, GitHub issue #376).
  *
  * @param coords The coordinates as written.
  * @param axes The axis of each coordinate the geometry reads.
@@ -728,9 +759,7 @@ const resolvedOf = (
     if (!coordinate.percent) {
       numbers.push(coordinate.value);
     } else if (Option.isSome(frame)) {
-      numbers.push(
-        (coordinate.value * (axis === "x" ? frame.value.width : frame.value.height)) / 100,
-      );
+      numbers.push((coordinate.value * sideOf(frame.value, axis)) / 100);
     } else {
       return Option.none();
     }
