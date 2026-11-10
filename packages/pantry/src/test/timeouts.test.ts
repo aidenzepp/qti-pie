@@ -130,6 +130,10 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: FIX-REFCARD's 480-case exhaust ran 13.4 s at a load average of 7 in its run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
+    "pantry/src/levels/cdn-style.test.ts",
+    "measurement owed: its lawsOf case ran 65.3 s and 257.4 s, and its installation compile 43.7 s and 112.7 s, in pa1-17's runs of 2026-11-10, the first at a load average near 13 to 21 and the second at 33 to 84; the load average stood at 14 to 17 when the wait for 60 ended (decision 490); its 600_000 and 360_000 stay in place until they are remeasured at a load average of at least 60",
+  ],
+  [
     "pantry/src/import/overlays/id-names.oracle.test.ts",
     "measurement owed: its 97-case exhaust ran 31.5 s at a load average of 21 to 34 in FIX-IDNCNAME's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
