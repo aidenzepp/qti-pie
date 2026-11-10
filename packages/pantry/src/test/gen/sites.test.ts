@@ -1,9 +1,9 @@
 /**
  * The site generator's packages (`#pantry/test/gen/sites.ts`) against the law oracle (lane NIL, the
  * SitePath fix; spec readings 114 and 115): every way each of the package's three sites can write
- * its href, exhausted, each package's import rows judged by the site laws restated on the host,
- * and three verdicts held to one: the rows', the law oracle's, and the case table's
- * (`rulesOfBox`).
+ * its href, exhausted, each package imported once and its rows judged by the site laws restated on
+ * the host and by the schema's own statements, and the verdicts held to one:
+ * the rows', the statements', the law oracle's, and the case table's (`rulesOfBox`).
  *
  * A site's href is a row of its own, `SitePath`, written only where the href names a path of the
  * package, with whether an entry is there (`entry`), and its target another, `SiteTarget`. So no
@@ -294,8 +294,8 @@ const schemaRules = (inputs: PackageInputs): ReadonlyMap<string, ReadonlySet<str
 };
 
 /**
- * Judge one package of the box: its rows under the site laws, the law oracle's verdict and the case
- * table's rules, one set of rules from all three.
+ * Judge one package of the box: its rows under the site laws, the law oracle's verdict, the case
+ * table's rules and the schema's own statements over its rows, one set of rules from all four.
  *
  * @param box - The package.
  * @param c - The search's case.
@@ -345,17 +345,32 @@ const judged = (box: SiteBox, c: Case<Situation>) =>
         `${literal}: the law oracle refuses it under {${[...verdict.rules].join(", ")}}, outside the site laws`,
       );
     }
+
+    const broken = schemaRules(program.inputs);
+    for (const name of siteNames) {
+      const site = siteOf(program.inputs, name);
+      const expected = ruleOfCase(name, box[name]);
+      assert.deepStrictEqual(
+        [...(broken.get(site.node) ?? [])].toSorted(),
+        expected === undefined || expected === "required-attribute" ? [] : [expected],
+        `${literal}: ${name} by the schema's statements`,
+      );
+    }
   }).pipe(Effect.scoped);
 
 layer(NodeServices.layer, { excludeTestServices: true })("test/gen/sites.ts", (it) => {
   it.effect(
-    "writes each site's href and target as rows of their own, so each package breaks exactly the site laws its cases and the law oracle name, an absent file File exists alone",
+    "writes each site's href and target as rows of their own, so each package breaks exactly the site laws its cases, the law oracle and the schema's own statements name, an absent file File_exists alone and an external section ref Remote_section_ref alone",
     (ctx) =>
       // Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts`) over the same
-      // entries, and the specification as a checker, reading 115 and §7.5 per case
-      // (`ruleOfCase`), against the import's rows under the site laws restated on the host.
+      // entries; the schema's statements as grizzle keeps them, their selections included
+      // (`checkOf`, `containmentsOf`), evaluated over the import's rows; and the specification as
+      // a checker, reading 115 and §7.5 per case (`ruleOfCase`), against the import's rows under
+      // the site laws restated on the host. A section ref with no href breaks AL3 alone, which
+      // PostgreSQL judges as the node is inserted and none of the statements states.
       // Bound: the every-relation package's three sites, each listed, naming an absent file, an
-      // entry listed as no document or a file outside the package, or writing no href, 125.
+      // entry listed as no document or a file outside the package, or writing no href, 125, each
+      // imported once and held to every verdict.
       searched(
         ctx,
         exhaust(
@@ -386,58 +401,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/sites.ts", (i
             suite: "pantry/test/gen-sites-box",
           },
           judged,
-        ),
-      ),
-    { timeout: testTimeoutMs },
-  );
-
-  it.effect(
-    "breaks, by the schema's own statements over each package's rows, each site's one law: an absent file File_exists alone, never its site's document law beside it, and an external section ref Remote_section_ref alone",
-    (ctx) =>
-      // Oracle: the specification as a checker, reading 115 and §7.5 per case (`ruleOfCase`),
-      // against the schema's statements as grizzle keeps them, their selections included
-      // (`#pantry/test/key-copies.ts` `checkOf`, `#pantry/test/judged-laws.ts` `containmentsOf`),
-      // evaluated over the import's rows and named by refusal.ts's rules. A section ref with no
-      // href breaks AL3 alone, which PostgreSQL judges as the node is inserted and none of these
-      // statements states: it writes no href reference, so "Document entry" demands it no path
-      // (reading 115, one cause per fault).
-      // Bound: the box's 125 packages.
-      searched(
-        ctx,
-        exhaust(
-          {
-            box: "the every-relation package's include of fragment.xml, include of rules.xml and section ref of section.xml, each listed, naming an absent file, an entry listed as no document or an external file, or writing no href",
-            caseHang: Duration.seconds(120),
-            coverage: requiredInSpace<Situation>([
-              "fragment absent",
-              "rules absent",
-              "section absent",
-              "section external",
-              "section missing",
-            ]),
-            generator: siteBox,
-            limit: hrefCases.length ** siteNames.length,
-            literal: siteLiteral,
-            oracle: { kind: "specification", name: "reading 115 and §7.5 per case" },
-            suite: "pantry/test/gen-sites-schema",
-          },
-          (box: SiteBox, c: Case<Situation>) =>
-            Effect.gen(function* bySchema() {
-              const literal = siteLiteral(box);
-              const program = yield* readProgram(yield* scopedPackage(sitePackage(box)));
-              const broken = schemaRules(program.inputs);
-
-              c.noteAll(siteNames.map((name): Situation => `${name} ${box[name]}`));
-              for (const name of siteNames) {
-                const site = siteOf(program.inputs, name);
-                const expected = ruleOfCase(name, box[name]);
-                assert.deepStrictEqual(
-                  [...(broken.get(site.node) ?? [])].toSorted(),
-                  expected === undefined || expected === "required-attribute" ? [] : [expected],
-                  `${literal}: ${name}`,
-                );
-              }
-            }).pipe(Effect.scoped),
         ),
       ),
     { timeout: testTimeoutMs },
