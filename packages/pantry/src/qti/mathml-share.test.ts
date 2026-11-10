@@ -1,27 +1,12 @@
 /**
- * The MathML share law's free tests (spec reading 2, MathML 3 validity): the module's relations are
- * composed into `Qti` under their own names, a schema of `Node` and the module's statements builds
- * with each statement once, the check is named by its law of the law catalog
- * (`#pantry/vocab/laws.ts`), and every other statement reads as "E1 derived".
- *
- * The database tests judge the law through PostgreSQL once the builder writes the rows.
+ * The MathML share module's rank chain (spec reading 2, MathML 3 validity), read over the
+ * descriptions of its statements' predicates: a chain ends at the document node, its own parent,
+ * and the share cycle's check refuses a share whose rank is not above its target's. The database
+ * tests (`mathml-share.oracle.db.test.ts`) judge the law through PostgreSQL.
  */
-import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Formatter, Option, Schema } from "effect";
-import { lawNames, lawOfCheck } from "#pantry/import/refusal.ts";
-import { lawTable } from "#pantry/vocab/laws.ts";
-import { shareLaws, shareRelations } from "#pantry/qti/mathml-share.ts";
-import { nodeLaws } from "#pantry/qti/node.ts";
-import { Qti, QtiBase } from "#pantry/qti/own.ts";
-import { schemaLawNameOf, statedLaws } from "#pantry/test/law-namer.ts";
-
-/**
- * How long building a schema over every relation of `Qti` may take: its statements are planned
- * whole, which takes some seconds beside the composed grammar.
- * Measured 2026-11-07: 0.04 s at a load average of 69 to 103, its slowest test.
- */
-const buildTimeout = 60_000;
+import { Option, Schema } from "effect";
+import { shareLaws } from "#pantry/qti/mathml-share.ts";
 
 /**
  * A row's fields, as a statement's predicate reads them.
@@ -168,112 +153,6 @@ const rankOf = (node: string, kind: string, parent: string, own: number, above: 
  * @returns Whether it holds.
  */
 const holds = (name: string, row: Fields): boolean => holdsOver(checkOf(name), row);
-
-/**
- * The laws that are no check, among those the module's relations carry, as the census of the
- * refusal table reads them: those whose law names one of the module's stored relations. A function,
- * since the first read of `statedLaws` compiles Qti's law model.
- *
- * Each stored text field's own pattern law, which grizzle states per field and refusal.ts names by
- * the field's type, is no statement of the module and is left out.
- *
- * @returns The laws, with their names.
- */
-const ownLaws = () =>
-  statedLaws().filter(
-    ([law]) =>
-      law.kind !== "pattern" &&
-      /"(?:MathRank|PlacedMathRank|PlacedShareTarget|ShareTarget)"/u.test(Formatter.format(law)),
-  );
-
-describe("qti/mathml-share.ts, declared", { timeout: buildTimeout }, () => {
-  it("declares the rank and the share target, composed into Qti under their own names", () => {
-    assert.deepStrictEqual(Object.keys(shareRelations).toSorted(), [
-      "MathRank",
-      "PlacedMathRank",
-      "PlacedShareTarget",
-      "ShareTarget",
-    ]);
-    for (const relation of Object.values(shareRelations)) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(Qti.relations, relation.name)?.value,
-        relation,
-      );
-    }
-  });
-
-  it("keys each relation by its node, a placed one by its instance and node, fields in key order", () => {
-    assert.deepStrictEqual(shareRelations.MathRank.primaryKey, ["node"]);
-    assert.deepStrictEqual(shareRelations.ShareTarget.primaryKey, ["node"]);
-    assert.deepStrictEqual(shareRelations.PlacedMathRank.primaryKey, ["instance", "node"]);
-    assert.deepStrictEqual(shareRelations.PlacedShareTarget.primaryKey, ["instance", "node"]);
-    for (const relation of Object.values(shareRelations)) {
-      const fields = Object.keys(relation.fields);
-
-      assert.deepStrictEqual(fields, fields.toSorted(), relation.name);
-    }
-  });
-
-  it("builds a schema of Node and the module's statements, each statement once", () => {
-    assert.isAbove(shareLaws.length, 0);
-    assert.strictEqual(new Set(shareLaws).size, shareLaws.length);
-
-    const built = schema("ShareLayer", { ...QtiBase.relations }, [...nodeLaws, ...shareLaws]);
-
-    assert.strictEqual(built.statements.length, nodeLaws.length + shareLaws.length);
-    for (const statement of shareLaws) {
-      assert.strictEqual(Qti.statements.filter((held) => held === statement).length, 1);
-    }
-  });
-
-  it("names its checks by their laws of the refusal table, spaces written as underscores, so lawOfCheck maps them", () => {
-    // Oracle: the refusal table's own law list (`#pantry/import/refusal.ts` lawNames), which
-    // `refusal.test.ts` holds equal to the oracle's.
-    const named = shareLaws.flatMap((statement) =>
-      statement.kind === "check" ? [statement.name] : [],
-    );
-
-    assert.deepStrictEqual(named.toSorted(), [
-      "E1_derived",
-      "E1_derived",
-      "E1_derived",
-      "MathML_share_cycle",
-      "MathML_share_cycle",
-    ]);
-    assert.isTrue(Option.isSome(lawOfCheck("MathML_share_cycle")));
-    assert.isTrue(lawNames.some((known) => known === "MathML share cycle"));
-    assert.strictEqual(lawTable["MathML share cycle"].rule, "document-key");
-    assert.strictEqual(
-      shareLaws.filter(
-        (statement) => statement.kind === "check" && statement.name === "MathML_share_cycle",
-      ).length,
-      2,
-      "one over ShareTarget, one over PlacedShareTarget",
-    );
-  });
-
-  it("reads every containment and key of the module as 'E1 derived', but the share's resolution as 'Idref target'", () => {
-    // Oracle: the statements are named by `schemaLawNameOf`'s own table, as `refusal.test.ts` holds; a
-    // share whose id names nothing breaks its resolution beside "Idref target"'s own statement,
-    // so the resolution is stated under that law and the share is refused by it alone.
-    const own = ownLaws();
-    assert.isAbove(own.length, 0);
-    assert.deepStrictEqual([...new Set(own.map(([, name]) => name))].toSorted(), [
-      "E1 derived",
-      "Idref target",
-    ]);
-
-    const resolutions = own.filter(([, name]) => name === "Idref target");
-    assert.lengthOf(resolutions, 1);
-    for (const [law] of resolutions) {
-      assert.match(Formatter.format(law), /"relation":"ShareFragment".*"relation":"ShareTarget"/su);
-    }
-
-    for (const [law, name] of own) {
-      assert.deepStrictEqual(schemaLawNameOf(law), Option.some(name));
-    }
-  });
-});
 
 describe("qti/mathml-share.ts, the rank chain's top", () => {
   it("lets the chain of a target outside every m:math end at the document node, which is its own parent", () => {

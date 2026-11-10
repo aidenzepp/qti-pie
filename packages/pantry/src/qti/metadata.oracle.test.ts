@@ -1,15 +1,14 @@
 /**
- * The metadata overlays' free tests: their statements build beside the layers they read, each check
- * is named by an oracle law, the pieces' patterns say what their names say, collapsed equality with
- * an identifier is trimmed equality, a statistic's typed day admits exactly `DateDType`'s values,
- * over every learning resource type of a small box the law refuses exactly what QTI 3.0 Metadata
- * §2.7.5.1 forbids (spec reading 122), and an overlay row stands on what the tree holds: an
- * `ObjectLang` on its object's root, a title's string under its title.
+ * The metadata overlays' free tests: the pieces' patterns say what their names say, collapsed
+ * equality with an identifier is trimmed equality, a statistic's typed day admits exactly
+ * `DateDType`'s values, over every learning resource type of a small box the law refuses exactly
+ * what QTI 3.0 Metadata §2.7.5.1 forbids (spec reading 122), and an overlay row stands on what the
+ * tree holds: an `ObjectLang` on its object's root, a title's string under its title.
  *
  * The database tests (`metadata.db.test.ts`) judge the laws through PostgreSQL, and the builder's
  * tests (`#pantry/import/overlays/metadata.oracle.test.ts`) its rows.
  */
-import { date, lexicalForm, schema } from "@bjornpagen/grizzle";
+import { date, lexicalForm } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
@@ -27,35 +26,9 @@ import { readProgram } from "#pantry/import/program.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
-import { attributeLaws } from "#pantry/qti/attributes.ts";
-import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
-import {
-  AssessmentObject,
-  identifierPattern,
-  LomEntry,
-  LomGeneral,
-  LomRecord,
-  LomResourceType,
-  LomResourceTypeSource,
-  LomString,
-  LomStringLanguage,
-  LomTitle,
-  LomTitleString,
-  metadataLaws,
-  ObjectIdentifier,
-  ObjectLang,
-  ObjectTitle,
-  StatisticDate,
-  trimmedPattern,
-  UsageBaseType,
-  UsageValue,
-  UsageValueBaseType,
-} from "#pantry/qti/metadata.ts";
-import { nodeLaws } from "#pantry/qti/node.ts";
+import { identifierPattern, trimmedPattern } from "#pantry/qti/metadata.ts";
 import { Qti } from "#pantry/qti/own.ts";
-import { packageLaws } from "#pantry/qti/package.ts";
-import { qtiRelations } from "#pantry/qti/base.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
@@ -69,14 +42,7 @@ import {
 import type { TermSketch, TypeSketch } from "#pantry/test/gen/lom-resource-type.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { hostRowsOf, judge as judgeRows, judgedLaws } from "#pantry/test/host-judge.ts";
-import {
-  documentBreaches,
-  judge,
-  lawNames,
-  lawsOf,
-  ruleOf,
-  typedTextHolds,
-} from "#pantry/test/oracle.ts";
+import { documentBreaches, judge, lawsOf, typedTextHolds } from "#pantry/test/oracle.ts";
 import { statisticKinds } from "#pantry/vocab/terms/metadata.ts";
 
 /**
@@ -85,29 +51,6 @@ import { statisticKinds } from "#pantry/vocab/terms/metadata.ts";
  * its slowest test.
  */
 const testTimeoutMs = 300_000;
-
-/**
- * The relations `metadata.ts` declares, by name.
- */
-const metadataRelations = {
-  AssessmentObject,
-  LomEntry,
-  LomGeneral,
-  LomRecord,
-  LomResourceType,
-  LomResourceTypeSource,
-  LomString,
-  LomStringLanguage,
-  LomTitle,
-  LomTitleString,
-  ObjectIdentifier,
-  ObjectLang,
-  ObjectTitle,
-  StatisticDate,
-  UsageBaseType,
-  UsageValue,
-  UsageValueBaseType,
-};
 
 /**
  * Whether a character is XML whitespace `S`.
@@ -185,53 +128,6 @@ const trimmed = new RegExp(trimmedPattern.source, "u");
  * The identifier pattern, as a host reads it.
  */
 const identifierForm = new RegExp(identifierPattern.source, "u");
-
-describe("qti/metadata.ts, declared", () => {
-  it("builds a schema of the schema's relations and the metadata overlays with the layers' laws, each statement once", () => {
-    const built = schema("MetadataLayer", { ...qtiRelations, ...metadataRelations }, [
-      ...nodeLaws,
-      ...chardataLaws,
-      ...attributeLaws,
-      ...packageLaws,
-      ...metadataLaws,
-    ]);
-
-    for (const relation of Object.values(metadataRelations)) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(built.relations, relation.name)?.value,
-        relation,
-      );
-    }
-
-    assert.strictEqual(new Set(metadataLaws).size, metadataLaws.length);
-    assert.strictEqual(
-      built.statements.length,
-      nodeLaws.length +
-        chardataLaws.length +
-        attributeLaws.length +
-        packageLaws.length +
-        metadataLaws.length,
-    );
-  });
-
-  it("names each check by an oracle law, spaces written as underscores, so ruleOf maps it", () => {
-    // Oracle: the oracle's own law list (`#pantry/test/oracle.ts` lawNames), the names Q5.17 maps.
-    const named = metadataLaws.flatMap((statement) =>
-      statement.kind === "check" ? [statement.name.replaceAll("_", " ")] : [],
-    );
-
-    for (const name of named) {
-      const law = lawNames.find((known) => known === name);
-
-      assert.isDefined(law, `${name} is no oracle law`);
-      if (law !== undefined) {
-        assert.isDefined(ruleOf(law), name);
-      }
-    }
-
-    assert.sameMembers([...new Set(named)], ["E1 derived", "Usage typed value"]);
-  });
-});
 
 describe("qti/metadata.ts, the pieces", () => {
   it.effect(

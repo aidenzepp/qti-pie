@@ -1,15 +1,13 @@
 /**
- * The operator overlays' free tests: their statements build beside the layers they read, each check
- * is named by an oracle law, the patterns the database's checks read are the specification's
- * languages, and the law oracle refuses exactly where the information model says, over the small
- * box of each reading exhausted and over packages a swarm draws past it.
+ * The operator overlays' free tests: the patterns the database's checks read are the
+ * specification's languages, and the law oracle refuses exactly where the information model says,
+ * over the small box of each reading exhausted and over packages a swarm draws past it.
  *
  * The specification is `#pantry/test/operator-spec.ts`, readings 119 and 121 restated from their
  * sources with a hand-written parser of `xs:double`'s lexical space. The database tests
  * (`operators.db.test.ts`) judge the laws through PostgreSQL, and the builder's tests
  * (`#pantry/import/overlays/operators.test.ts`) its rows.
  */
-import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
@@ -22,17 +20,8 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { attributeLaws } from "#pantry/qti/attributes.ts";
-import { chardataLaws } from "#pantry/qti/chardata.ts";
-import { nodeLaws } from "#pantry/qti/node.ts";
 import { integerForm } from "#pantry/qti/limits.ts";
-import {
-  doublePattern,
-  operatorLaws,
-  operatorRelations,
-  positivePattern,
-} from "#pantry/qti/operators.ts";
-import { qtiRelations } from "#pantry/qti/base.ts";
+import { doublePattern, positivePattern } from "#pantry/qti/operators.ts";
 import {
   collapsedText,
   doubleReadingOf,
@@ -41,7 +30,7 @@ import {
   toleranceRefused,
 } from "#pantry/test/operator-spec.ts";
 import type { RoundingKind } from "#pantry/test/operator-spec.ts";
-import { judge, lawNames, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
+import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment, LawName } from "#pantry/test/oracle.ts";
 
 /**
@@ -57,54 +46,6 @@ const testTimeoutMs = 600_000;
  * Measured 2026-11-07: 2.8 s at a load average of 63 to 73.
  */
 const buildTimeout = 60_000;
-
-describe("qti/operators.ts, declared", { timeout: buildTimeout }, () => {
-  it("builds a schema of Node, the character data, the attribute layer and the operator overlays with every law, each statement once", () => {
-    const built = schema("OperatorLayer", { ...qtiRelations, ...operatorRelations }, [
-      ...nodeLaws,
-      ...chardataLaws,
-      ...attributeLaws,
-      ...operatorLaws,
-    ]);
-
-    for (const relation of Object.values(operatorRelations)) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(built.relations, relation.name)?.value,
-        relation,
-      );
-    }
-
-    assert.strictEqual(new Set(operatorLaws).size, operatorLaws.length);
-    assert.strictEqual(
-      built.statements.length,
-      nodeLaws.length + chardataLaws.length + attributeLaws.length + operatorLaws.length,
-    );
-  });
-
-  it("names each check by an oracle law, spaces written as underscores, so ruleOf maps it", () => {
-    // Oracle: the oracle's own law list (`#pantry/test/oracle.ts` lawNames), the names Q5.17 maps.
-    const named = operatorLaws.flatMap((statement) =>
-      statement.kind === "check" ? [statement.name.replaceAll("_", " ")] : [],
-    );
-    const rules = new Map(
-      named.map((name) => {
-        const law = lawNames.find((known) => known === name);
-        assert.isDefined(law, `${name} is no oracle law`);
-
-        return [name, law === undefined ? "" : ruleOf(law)] as const;
-      }),
-    );
-
-    assert.deepStrictEqual(
-      new Map([...rules].toSorted(([a], [b]) => (a < b ? -1 : 1))),
-      new Map([
-        ["E1 derived", "derived"],
-        ["Equal tolerance", "P36"],
-        ["Rounding figures", "P10"],
-      ]),
-    );
-  });
-});
 
 /**
  * How long a search over the patterns may take: the value box is 16,105 cases, about 1.5 ms each

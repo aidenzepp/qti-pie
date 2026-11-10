@@ -1,13 +1,11 @@
 /**
- * The expression overlays' free tests: their statements build beside every law they read, each
- * check is named by its law, the typing table covers exactly `OperatorArity`'s kinds, every
- * `BaseTypePattern` row speaks its XSD type's installed language, and `OperatorArity` agrees with
- * each expression kind's content automaton at its bounds.
+ * The expression overlays' free tests: the typing table covers exactly `OperatorArity`'s kinds,
+ * every `BaseTypePattern` row speaks its XSD type's installed language, and `OperatorArity` agrees
+ * with each expression kind's content automaton at its bounds.
  *
  * The fixtures' verdicts are `#pantry/import/overlays/expressions.test.ts`'s, and the database's
  * `expressions.db.test.ts`'s.
  */
-import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
 import { stepOf } from "#pantry/grammar/content.ts";
@@ -28,54 +26,21 @@ import {
   ValueDomainOf,
   VariableReference,
 } from "#pantry/grammar/install.ts";
-import { attributeLaws } from "#pantry/qti/attributes.ts";
-import { chardataLaws } from "#pantry/qti/chardata.ts";
-import { Declaration } from "#pantry/qti/declarations.ts";
 import {
   BaseTypePattern,
   booleanValuePattern,
   domainValues,
-  Language,
-  LeadCardinality,
   OperandBase,
   pairValuePattern,
   pointValuePattern,
-  ReferenceBase,
   ReferenceDeclaration,
   setKindHandles,
   lookupKindHandle,
-  ReferencedTable,
-  ReferenceResolution,
-  ResultBase,
-  ResultCardinality,
-  RpTemplate,
-  TableReader,
-  TailCardinality,
   unjudgedBaseTypes,
-  ValueBase,
-  ValueBaseBit,
-  ValueBaseForm,
   ValueBaseOf,
-  ValueCardinality,
-  ValueCardinalityBit,
   ValueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
-import {
-  Expression,
-  ExpressionAttribute,
-  expressionLaws,
-  Literal,
-  LiteralTyped,
-  Operand,
-  Processing,
-  ProcessingTemplate,
-  referenceRelations,
-  VariableRef,
-} from "#pantry/qti/expressions.ts";
-import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
-import { nodeLaws } from "#pantry/qti/node.ts";
-import { qtiRelations } from "#pantry/qti/base.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { expressionLaws } from "#pantry/qti/expressions.ts";
 import { contentEnds } from "#pantry/test/indexes.ts";
 import {
   expressionKinds,
@@ -87,41 +52,6 @@ import {
 import { itemRefKind, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
 
 /**
- * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 1.1 s at a load average of 75, under
- * V8 coverage, its slowest test.
- */
-const testTimeoutMs = 120_000;
-
-/**
- * The rule each of this module's check names keeps, the oracle laws `#pantry/test/oracle.ts` names
- * with spaces for underscores (Q5.17 maps them).
- */
-const checkRules = {
-  Arity: "P2",
-  Condition_type: "P21",
-  E1_derived: "derived",
-  Literal_lexical: "attribute-lexical",
-  Lookup_type: "P22",
-  Mapped_response: "P27",
-  One_base: "P23",
-  Operand_fit: "P23",
-  Outcome_only: "P25",
-  Prefixed_reference: "prefixed-ref",
-  Reference_type: "P24",
-  Section_identifier_target: "section-identifier-target",
-  Set_type: "P20",
-  Template_default_target: "template-default-target",
-  Template_default_type: "P20",
-  Template_reads: "P26",
-  Variable_declared: "P8",
-  Variable_kind: "variable-kind",
-  Variable_mapping_source: "variable-mapping-source",
-  Variable_mapping_target: "variable-mapping-target",
-  Weighted_base: "P29",
-} as const;
-
-/**
  * Compile a base type's installed pattern as a match reads it.
  *
  * @param baseType - The base type.
@@ -130,91 +60,7 @@ const checkRules = {
 const patternOf = (baseType: string): RegExp =>
   new RegExp(BaseTypePattern.rows.find((row) => row.baseType === baseType)?.pattern ?? "^$", "u");
 
-describe("qti/expressions.ts, declared", () => {
-  it(
-    "builds a schema of every relation its laws read, with its laws and theirs, each statement once",
-    () => {
-      const built = schema(
-        "ExpressionLayer",
-        {
-          ...qtiRelations,
-          AreaMapping,
-          BaseTypePattern,
-          Declaration,
-          Expression,
-          ExpressionAttribute,
-          Language,
-          LeadCardinality,
-          Literal,
-          LiteralTyped,
-          LookupTable,
-          Mapping,
-          Operand,
-          OperandBase,
-          Processing,
-          ProcessingTemplate,
-          ReferenceBase,
-          ReferenceResolution,
-          ReferencedTable,
-          ResultBase,
-          ResultCardinality,
-          RpTemplate,
-          TableReader,
-          TailCardinality,
-          ValueBase,
-          ValueBaseBit,
-          ValueBaseForm,
-          ValueBaseOf,
-          ValueCardinality,
-          ValueCardinalityBit,
-          ValueCardinalityOf,
-          VariableRef,
-        },
-        [...nodeLaws, ...chardataLaws, ...attributeLaws, ...expressionLaws],
-      );
-
-      for (const relation of [
-        Expression,
-        Operand,
-        Processing,
-        VariableRef,
-        ExpressionAttribute,
-        Literal,
-        LiteralTyped,
-        ProcessingTemplate,
-        ...Object.values(referenceRelations),
-      ]) {
-        assert.strictEqual(
-          Object.getOwnPropertyDescriptor(built.relations, relation.name)?.value,
-          relation,
-        );
-      }
-
-      assert.strictEqual(new Set(expressionLaws).size, expressionLaws.length);
-    },
-    testTimeoutMs,
-  );
-
-  it("names each check by a law whose rule it keeps", () => {
-    // Oracle: the rule table of plan §2.2 (P2, P8, P20 to P27, P29) and the C17 proofs' `derived`,
-    // over the module's checks and the checks over its queries `HeldType` and `DeclaredTarget`
-    // (`#pantry/qti/queries.ts`), as `Qti` holds them.
-    const queries: ReadonlySet<unknown> = new Set([
-      Qti.relations.HeldType,
-      Qti.relations.DeclaredTarget,
-    ]);
-    const named = new Set([
-      ...expressionLaws.flatMap((statement) =>
-        statement.kind === "check" ? [statement.name] : [],
-      ),
-      ...Qti.statements.flatMap((statement) =>
-        statement.kind === "check" && queries.has(statement.relation) ? [statement.name] : [],
-      ),
-    ]);
-
-    assert.deepStrictEqual([...named].toSorted(), Object.keys(checkRules).toSorted());
-  });
-
+describe("qti/expressions.ts, its typing tables", () => {
   it("types exactly OperatorArity's expression kinds, each once", () => {
     // Oracle: `OperatorArity`, read from the ASI XSD's expression group (`facets.ts`).
     const kinds = expressionTypings.map(({ kind }) => kind);

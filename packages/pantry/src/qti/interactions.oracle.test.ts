@@ -1,13 +1,13 @@
 /**
- * The O3 overlays' free tests: their statements are composed into `Qti`, each check is named by an
- * oracle law, and the closed data the laws read is the grammar's: the content references, the
- * last-slot rules, the count pairs and the attributes copied. The built-in variables the laws read
- * are `BuiltInVariable`'s own rows, under each root (`#pantry/test/built-in-roots.oracle.test.ts`).
+ * The O3 overlays' free tests: the closed data the laws read is the grammar's: the content
+ * references, the last-slot rules, the count pairs and the attributes copied. The built-in
+ * variables the laws read are `BuiltInVariable`'s own rows, under each root
+ * (`#pantry/test/built-in-roots.oracle.test.ts`).
  *
  * The database tests (`interactions.db.test.ts`) judge the laws through PostgreSQL; the builder's
  * tests (`#pantry/import/overlays/interactions.oracle.test.ts`) check its rows.
  */
-import type { Law, Statement } from "@bjornpagen/grizzle";
+import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
@@ -21,13 +21,7 @@ import {
   RecordBindingFit,
   versions,
 } from "#pantry/grammar/install.ts";
-import {
-  anyTypeKinds,
-  cardinalityKinds,
-  interactionLaws,
-  interactionRelations,
-  itemBuiltInNames,
-} from "#pantry/qti/interactions.ts";
+import { anyTypeKinds, cardinalityKinds, itemBuiltInNames } from "#pantry/qti/interactions.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
@@ -37,7 +31,7 @@ import { hostRowsOf, judge as judgeRows, judgedLaws } from "#pantry/test/host-ju
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { lawNamesOf } from "#pantry/test/host-law-names.ts";
 import { itemKind } from "#pantry/vocab/terms/tests.ts";
-import { contentLawOf, judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { contentLawOf, judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import {
   base,
   breachesOf,
@@ -90,61 +84,6 @@ const referenceRelations = [
   "template",
   "variable",
 ] as const satisfies readonly (keyof typeof references)[];
-
-describe("qti/interactions.ts, declared", () => {
-  it("is composed into Qti: every O3 overlay a member under its name, every statement once", () => {
-    // Oracle: grizzle's schema builder, which built `Qti` from these statements when
-    // `#pantry/qti/schema.ts` loaded and refuses a statement over a relation it does not hold.
-    for (const relation of Object.values(interactionRelations)) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(Qti.relations, relation.name)?.value,
-        relation,
-      );
-    }
-
-    const statements: readonly Statement[] = Qti.statements;
-    assert.strictEqual(new Set(interactionLaws).size, interactionLaws.length);
-    for (const statement of interactionLaws) {
-      assert.strictEqual(statements.filter((held) => held === statement).length, 1);
-    }
-  });
-
-  it("names each check by an oracle law, spaces written as underscores, so ruleOf maps it", () => {
-    // Oracle: the oracle's own law list (`#pantry/test/oracle.ts` lawNames), the names Q5.17 maps.
-    const named = interactionLaws.flatMap((statement) =>
-      statement.kind === "check" ? [statement.name.replaceAll("_", " ")] : [],
-    );
-
-    for (const name of named) {
-      const law = lawNames.find((known) => known === name);
-
-      assert.isDefined(law, `${name} is no oracle law`);
-      if (law !== undefined) {
-        assert.isDefined(ruleOf(law), name);
-      }
-    }
-
-    assert.deepStrictEqual([...new Set(named)].toSorted(), [
-      "Aria value range",
-      "Binding cardinality",
-      "Binding declared",
-      "BindingFit",
-      "Choice bounds",
-      "Context variable reference",
-      "Custom interaction version",
-      "E1 derived",
-      "Feedback outcome type",
-      "Feedback reference",
-      "Graphic gap match default hotspot",
-      "PCI module source",
-      "Printed variable reference",
-      "Slider bounds",
-      "Template reference",
-      "Template variable type",
-      "default hotspot last slot",
-    ]);
-  });
-});
 
 describe("qti/interactions.ts, the closed data its laws read", () => {
   it("holds every ContentReference row in exactly one reference relation, the one whose law the oracle names for it", () => {

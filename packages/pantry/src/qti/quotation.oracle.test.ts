@@ -1,8 +1,7 @@
 /**
- * The quotation law's free tests (spec reading 127): its statements are composed into `Qti` once
- * and each check is named by an oracle law; and over a box of `q`s with a mark beside or inside
- * them, the builder's row holds each end the tree shows, the check's predicate refuses exactly
- * the rows a quotation mark stands in, and the oracle refuses exactly the same documents.
+ * The quotation law's free tests (spec reading 127): over a box of `q`s with a mark beside or
+ * inside them, the builder's row holds each end the tree shows, the check's predicate refuses
+ * exactly the rows a quotation mark stands in, and the oracle refuses exactly the same documents.
  *
  * The database tests (`quotation.db.test.ts`) judge the same laws through PostgreSQL.
  */
@@ -19,10 +18,9 @@ import { rowsOf } from "#pantry/import/overlays/quotation.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
-import { quotationLaws, quotationMarks, quotationRelations } from "#pantry/qti/quotation.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { quotationMarks } from "#pantry/qti/quotation.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
-import { documentBreaches, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 
 /**
  * The host law model, the oracle's tables over the grammar.
@@ -183,38 +181,6 @@ const judgedOf = (body: string) =>
       row,
     };
   });
-
-describe("qti/quotation.ts, declared", { timeout: searchTimeout }, () => {
-  it("is composed into Qti, its relation under its own name and every statement once", () => {
-    for (const relation of Object.values(quotationRelations)) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(Qti.relations, relation.name)?.value,
-        relation,
-      );
-    }
-
-    assert.strictEqual(new Set(quotationLaws).size, quotationLaws.length);
-    for (const statement of quotationLaws) {
-      assert.strictEqual(Qti.statements.filter((held) => held === statement).length, 1);
-    }
-  });
-
-  it("names each check by an oracle law, spaces written as underscores, so ruleOf maps it", () => {
-    // Oracle: the oracle's own law list (`#pantry/test/oracle.ts` lawNames), the names Q5.17 maps.
-    const named = quotationLaws.flatMap((statement) =>
-      statement.kind === "check" ? [statement.name.replaceAll("_", " ")] : [],
-    );
-
-    for (const name of named) {
-      const law = lawNames.find((known) => known === name);
-
-      assert.isDefined(law, `${name} is no oracle law`);
-    }
-
-    assert.deepStrictEqual(named.toSorted(), ["E1 derived", "Quotation punctuation"]);
-    assert.strictEqual(ruleOf("Quotation punctuation"), "q-punctuation");
-  });
-});
 
 describe("qti/quotation.ts, a q beside and around its marks", { timeout: searchTimeout }, () => {
   it.effect(

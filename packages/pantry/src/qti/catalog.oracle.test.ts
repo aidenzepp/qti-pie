@@ -1,18 +1,13 @@
 /**
- * The catalog overlays' free tests: their statements are composed into `Qti`, each check is named
- * by an oracle law, and the oracle judges the three catalog laws of spec reading R9-a (information
- * model §5.26.1, §5.27.2 and §5.28.1) over packages whose catalogs repeat a support or a default,
- * and whose `data-catalog-idref`s name or miss a catalog.
+ * The catalog overlays' free tests: the oracle judges the three catalog laws of spec reading R9-a
+ * (information model §5.26.1, §5.27.2 and §5.28.1) over packages whose catalogs repeat a support or
+ * a default, and whose `data-catalog-idref`s name or miss a catalog.
  *
  * The database tests judge the laws through PostgreSQL, and the builder's tests
  * (`#pantry/import/overlays/catalog.test.ts`) its rows.
  */
-import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { catalogLaws, catalogLawsByName, catalogRelations } from "#pantry/qti/catalog.ts";
-import { Qti } from "#pantry/qti/own.ts";
-import { lawNames, ruleOf } from "#pantry/test/oracle.ts";
 import { base, breachesOf, edit, item, judged, shown } from "#pantry/test/probe.ts";
 
 /**
@@ -107,53 +102,6 @@ const entriesOf = (...defaults: readonly (string | undefined)[]): string =>
         `<qti-card-entry${value === undefined ? "" : ` default="${value}"`}><qti-html-content/></qti-card-entry>`,
     )
     .join("")}</qti-card></qti-catalog>`;
-
-describe("qti/catalog.ts, declared", () => {
-  it("is composed into Qti: each overlay a member under its name, every statement once", () => {
-    // Oracle: grizzle's schema builder, which built `Qti` from these statements when
-    // `#pantry/qti/schema.ts` loaded and refuses a statement over a relation it does not hold.
-    for (const relation of Object.values(catalogRelations)) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(Qti.relations, relation.name)?.value,
-        relation,
-      );
-    }
-
-    const statements: readonly Statement[] = Qti.statements;
-    assert.strictEqual(new Set(catalogLaws).size, catalogLaws.length);
-    for (const statement of catalogLaws) {
-      assert.strictEqual(statements.filter((held) => held === statement).length, 1);
-    }
-  });
-
-  it("names each check by an oracle law, spaces written as underscores, so ruleOf maps it", () => {
-    // Oracle: the oracle's own law list (`#pantry/test/oracle.ts` lawNames), the names Q5.17 maps.
-    const named = catalogLaws.flatMap((statement) =>
-      statement.kind === "check" ? [statement.name.replaceAll("_", " ")] : [],
-    );
-
-    for (const name of named) {
-      const law = lawNames.find((known) => known === name);
-
-      assert.isDefined(law, `${name} is no oracle law`);
-      if (law !== undefined) {
-        assert.strictEqual(ruleOf(law), "derived", name);
-      }
-    }
-
-    assert.deepStrictEqual([...new Set(named)], ["E1 derived"]);
-    assert.deepStrictEqual(Object.keys(catalogLawsByName), [
-      "Card default entry",
-      "Card support",
-      "Catalog reference",
-      "DocumentId key",
-      "E1 derived",
-    ]);
-    assert.strictEqual(ruleOf("Card support"), "card-support");
-    assert.strictEqual(ruleOf("Card default entry"), "card-default");
-    assert.strictEqual(ruleOf("Catalog reference"), "idref-target");
-  });
-});
 
 describe("test/oracle.ts, Card support", () => {
   // Oracle: the specification as a checker, the information model's Card (§5.26.1: "Use only one

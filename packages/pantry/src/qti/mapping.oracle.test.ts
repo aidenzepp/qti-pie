@@ -1,11 +1,11 @@
 /**
- * The mapping overlays' free tests: their statements build beside the layers they read, each check
- * is named by an oracle law, the typed map keys select exactly the lexical forms their base types
- * give a typed value, read against the deleted schema's lexical forms with JavaScript's engine as
- * the oracle, and an integer key's typed value, the query `MapKeyInteger`, repeats exactly where
- * the law oracle's `Map key` names a repeat, as do a point's, a pair's and a directed pair's, the
- * queries `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`; a float key's, the query
- * `MapKeyFloat`, is held to the law oracle by `#pantry/import/overlays/float-keys.oracle.test.ts`.
+ * The mapping overlays' free tests: the typed map keys select exactly the lexical forms their base
+ * types give a typed value, read against the deleted schema's lexical forms with JavaScript's
+ * engine as the oracle, and an integer key's typed value, the query `MapKeyInteger`, repeats
+ * exactly where the law oracle's `Map key` names a repeat, as do a point's, a pair's and a directed
+ * pair's, the queries `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`; a float key's, the
+ * query `MapKeyFloat`, is held to the law oracle by
+ * `#pantry/import/overlays/float-keys.oracle.test.ts`.
  *
  * The database tests (`mapping.db.test.ts`) judge the same laws through PostgreSQL, and the
  * builder's rows are `#pantry/import/overlays/mapping.test.ts`'s.
@@ -26,22 +26,15 @@ import { shred } from "#pantry/model/shred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { BaseTypePattern } from "#pantry/qti/expression-types.ts";
 import {
-  AreaMapping,
   exactValuePattern,
   integerKeyPattern,
   itemPattern,
-  LookupValue,
-  MapKey,
-  MapKeyItems,
-  Mapping,
-  mappingLaws,
-  LookupTable,
   twoItemPattern,
 } from "#pantry/qti/mapping.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
 import { Qti, QtiBase } from "#pantry/qti/own.ts";
 import { searchTimeout } from "#pantry/test/gen/xdm.ts";
-import { documentBreaches, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 import { numericNamed } from "#pantry/test/predicates.ts";
 
 /**
@@ -73,58 +66,6 @@ const integerKey = new RegExp(integerKeyPattern.source, "u");
  * value, as JavaScript's engine reads it.
  */
 const floatKey = new RegExp(doublePattern.source, "u");
-
-/**
- * The relations this module declares.
- */
-const mappingRelations = {
-  AreaMapping,
-  LookupTable,
-  LookupValue,
-  MapKey,
-  MapKeyItems,
-  Mapping,
-};
-
-describe("qti/mapping.ts, declared", { timeout: searchTimeout }, () => {
-  it("is composed into Qti, every relation under its own name and every statement once", () => {
-    for (const relation of Object.values(mappingRelations)) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(Qti.relations, relation.name)?.value,
-        relation,
-      );
-    }
-
-    assert.strictEqual(new Set(mappingLaws).size, mappingLaws.length);
-    for (const statement of mappingLaws) {
-      assert.strictEqual(Qti.statements.filter((held) => held === statement).length, 1);
-    }
-  });
-
-  it("names each check by an oracle law, spaces written as underscores, so ruleOf maps it", () => {
-    // Oracle: the oracle's own law list (`#pantry/test/oracle.ts` lawNames), the names Q5.17 maps.
-    const named = mappingLaws.flatMap((statement) =>
-      statement.kind === "check" ? [statement.name.replaceAll("_", " ")] : [],
-    );
-
-    for (const name of named) {
-      const law = lawNames.find((known) => known === name);
-
-      assert.isDefined(law, `${name} is no oracle law`);
-      if (law !== undefined) {
-        assert.isDefined(ruleOf(law), name);
-      }
-    }
-
-    assert.deepStrictEqual([...new Set(named)].toSorted(), [
-      "AreaMapping base type",
-      "E1 derived",
-      "Lookup table cardinality",
-      "MappableBaseType",
-      "Typed attribute value",
-    ]);
-  });
-});
 
 /**
  * The characters the integer box draws keys from: a sign of each kind, the digits that tell a

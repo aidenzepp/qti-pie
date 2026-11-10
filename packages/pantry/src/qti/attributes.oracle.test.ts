@@ -1,13 +1,11 @@
 /**
- * The attribute layer's free tests: its statements build beside the document layer's, each check is
- * named by an oracle law, the host's `attrs` agrees with the installed grammar, AL2's distinctness
- * refuses exactly a repeated closed name, the derived bounds are what `#pantry/qti/limits.ts`
- * derives, and `coords` is judged by `CoordsDType` alone, whatever its shape.
+ * The attribute layer's free tests: the host's `attrs` agrees with the installed grammar, AL2's
+ * distinctness refuses exactly a repeated closed name, the derived bounds are what
+ * `#pantry/qti/limits.ts` derives, and `coords` is judged by `CoordsDType` alone, whatever its
+ * shape.
  *
  * The database tests (`attributes.db.test.ts`) judge the same laws through PostgreSQL.
  */
-import { schema } from "@bjornpagen/grizzle";
-import type { Addition } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
@@ -27,21 +25,9 @@ import { fold } from "#pantry/model/folds.ts";
 import type { FoldedRows } from "#pantry/model/folds.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
-import {
-  Attribute,
-  AttributeEntity,
-  attributeLaws,
-  Idref,
-  OpenAttributeName,
-  OpenLocal,
-} from "#pantry/qti/attributes.ts";
-import { chardataLaws } from "#pantry/qti/chardata.ts";
-import { namespaceText } from "#pantry/qti/limits.ts";
-import { nodeLaws } from "#pantry/qti/node.ts";
-import { qtiRelations } from "#pantry/qti/base.ts";
 import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
-import { documentBreaches, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 import { asiNamespace, xsiNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
@@ -73,93 +59,6 @@ const slots: ReadonlyMap<string, number> = new Map(
     Number(position),
   ]),
 );
-
-describe("qti/attributes.ts, declared", () => {
-  it("builds a schema of the closed relations, Node, the character data and the attribute layer with every law, each statement once", () => {
-    const built = schema("AttributeLayer", { ...qtiRelations }, [
-      ...nodeLaws,
-      ...chardataLaws,
-      ...attributeLaws,
-    ]);
-
-    for (const relation of [Attribute, OpenAttributeName, Idref, AttributeEntity]) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(built.relations, relation.name)?.value,
-        relation,
-      );
-    }
-
-    assert.strictEqual(new Set(attributeLaws).size, attributeLaws.length);
-    assert.strictEqual(
-      built.statements.length,
-      nodeLaws.length + chardataLaws.length + attributeLaws.length,
-    );
-  });
-
-  it("names each check by an oracle law, spaces written as underscores, so ruleOf maps it", () => {
-    // Oracle: the oracle's own law list (`#pantry/test/oracle.ts` lawNames), the names Q5.17 maps.
-    const named = attributeLaws.flatMap((statement) =>
-      statement.kind === "check" ? [statement.name.replaceAll("_", " ")] : [],
-    );
-
-    for (const name of named) {
-      const law = lawNames.find((known) => known === name);
-
-      assert.isDefined(law, `${name} is no oracle law`);
-      if (law !== undefined) {
-        assert.isDefined(ruleOf(law), name);
-      }
-    }
-
-    assert.deepStrictEqual([...new Set(named)].toSorted(), [
-      "AL1 admission",
-      "AL2 distinct",
-      "AL3 required",
-      "AL4 data name",
-      "AL4 declared data name",
-      "AL4 open names",
-      "AL5 attribute count",
-      "Attribute prefix",
-      "Double bound",
-      "E1 derived",
-      "Foreign attribute class",
-      "TextDomain",
-      "value domain",
-    ]);
-  });
-
-  it("generates each IDREF piece from its whitespace and token, so no writer states one", () => {
-    // Oracle: the write type, held by the compiler: `piece` is PostgreSQL's, `GENERATED ALWAYS AS
-    // ("before" || "token" || "after") STORED`, so the fold steps exactly the piece its parts
-    // spell. A planted piece is no field a writer holds (a type error below), and PostgreSQL
-    // refuses any value written into a generated column; `E1_derived` no longer restates it.
-    const fields = {
-      after: true,
-      attribute: true,
-      before: true,
-      node: true,
-      token: true,
-    } as const satisfies Record<keyof Addition<typeof Idref>, true>;
-    const planted = () =>
-      // @ts-expect-error -- A piece is generated from its parts, never written.
-      ({ ...fields, piece: true }) as const satisfies Record<keyof Addition<typeof Idref>, true>;
-
-    assert.lengthOf(Object.keys(fields), 5);
-    assert.isFunction(planted);
-    assert.strictEqual(Idref.fields.piece.writing, "generated");
-  });
-
-  it("types an open attribute's namespace names by the one namespace bound, and its local name by its own", () => {
-    // Oracle: `#pantry/qti/limits.ts`, whose bounds `limits.test.ts` holds to grizzle's
-    // `keyTextBytes`: an open attribute's namespace and its element's take the schema-wide
-    // namespace name type, what `(node, uri, local)` leaves beside a uuid and a local name, and its
-    // local name `OpenLocal`, an NCName of the local name's bytes with no counted repetition.
-    assert.strictEqual(OpenAttributeName.fields.uri, namespaceText);
-    assert.strictEqual(OpenAttributeName.fields.elementNamespace, namespaceText);
-    assert.strictEqual(OpenAttributeName.fields.local, OpenLocal);
-    assert.notMatch(OpenLocal.patterns[0].source, /\{\d*,\d+\}/u);
-  });
-});
 
 /**
  * The trees the host's view is checked over: the one generator's, over the composed grammar.

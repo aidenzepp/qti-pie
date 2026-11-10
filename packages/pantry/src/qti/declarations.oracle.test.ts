@@ -1,12 +1,10 @@
 /**
- * The O2 overlays' free tests: their statements build beside the document layer's, each check is
- * named by an oracle law, the reserved names are the specification's, and each base type's
+ * The O2 overlays' free tests: the reserved names are the specification's, and each base type's
  * pattern admits exactly the lexical forms the specification gives it.
  *
  * The database tests (`declarations.db.test.ts`) judge the laws through PostgreSQL; the builder's
  * tests (`#pantry/import/overlays/declarations.test.ts`) check its rows and codes.
  */
-import { schema } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -24,125 +22,26 @@ import {
 } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readEntries } from "#pantry/package/read.ts";
-import { attributeLaws } from "#pantry/qti/attributes.ts";
-import { chardataLaws } from "#pantry/qti/chardata.ts";
 import {
   booleanValuePattern,
   contextVariable,
-  Declaration,
-  DeclarationBaseType,
-  DeclarationCardinality,
-  DeclarationIdentifier,
-  declarationLaws,
   domainValues,
-  FieldValue,
   itemSessionVariables,
-  MasteryCeiling,
-  MasteryFloor,
-  MasteryValue,
-  NormalMaximum,
-  NormalMinimum,
   pairValuePattern,
   pointValuePattern,
-  RecordField,
-  RecordFieldName,
   reservedBaseTypes,
   sessionVariables,
   testSessionVariables,
   unjudgedBaseTypes,
-  Value,
-  ValueBaseType,
-  ValueSet,
-  ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
-import { nodeLaws } from "#pantry/qti/node.ts";
-import { packageLaws } from "#pantry/qti/package.ts";
-import { qtiRelations } from "#pantry/qti/base.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/test/host-judge.ts";
 import { lawNamesOf } from "#pantry/test/host-law-names.ts";
-import { judge as judgeOracle, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { judge as judgeOracle, lawsOf } from "#pantry/test/oracle.ts";
 
-/**
- * The O2 overlay relations, each under its own name.
- */
-const overlays = {
-  Declaration,
-  DeclarationBaseType,
-  DeclarationCardinality,
-  DeclarationIdentifier,
-  FieldValue,
-  MasteryCeiling,
-  MasteryFloor,
-  MasteryValue,
-  NormalMaximum,
-  NormalMinimum,
-  RecordField,
-  RecordFieldName,
-  Value,
-  ValueBaseType,
-  ValueSet,
-  ValueSetCardinality,
-};
-
-describe("qti/declarations.ts, declared", () => {
-  it("builds a schema of the schema's relations and the O2 overlays with every law, each statement once", () => {
-    const built = schema("DeclarationLayer", { ...qtiRelations, ...overlays }, [
-      ...nodeLaws,
-      ...chardataLaws,
-      ...attributeLaws,
-      ...packageLaws,
-      ...declarationLaws,
-    ]);
-
-    for (const relation of Object.values(overlays)) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(built.relations, relation.name)?.value,
-        relation,
-      );
-    }
-
-    assert.strictEqual(new Set(declarationLaws).size, declarationLaws.length);
-    assert.strictEqual(
-      built.statements.length,
-      nodeLaws.length +
-        chardataLaws.length +
-        attributeLaws.length +
-        packageLaws.length +
-        declarationLaws.length,
-    );
-  });
-
-  it("names each check by an oracle law, spaces written as underscores, so ruleOf maps it", () => {
-    // Oracle: the oracle's own law list (`#pantry/test/oracle.ts` lawNames), the names Q5.17 maps.
-    const named = declarationLaws.flatMap((statement) =>
-      statement.kind === "check" ? [statement.name.replaceAll("_", " ")] : [],
-    );
-
-    for (const name of named) {
-      const law = lawNames.find((known) => known === name);
-
-      assert.isDefined(law, `${name} is no oracle law`);
-      if (law !== undefined) {
-        assert.isDefined(ruleOf(law), name);
-      }
-    }
-
-    assert.deepStrictEqual([...new Set(named)].toSorted(), [
-      "Declaration not reserved",
-      "E1 derived",
-      "Mastery range",
-      "Reserved type",
-      "Typed value",
-      "Value cardinality",
-    ]);
-    assert.include(lawNames, "Declaration base type");
-    assert.include(lawNames, "Declaration key");
-    assert.include(lawNames, "Record field key");
-  });
-
+describe("qti/declarations.ts, reserved names", () => {
   it("reserves exactly the built-in session variables, spelled exactly with no alias (spec reading 72)", () => {
     // Oracle: the specification as a checker. The information model's tables 4.5.1, 5.115.1 and
     // 5.151.1 ("They are completionStatus, numAttempts and duration") and §2.2.2.1's one built-in

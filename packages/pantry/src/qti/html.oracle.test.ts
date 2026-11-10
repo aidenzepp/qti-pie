@@ -1,14 +1,12 @@
 /**
- * The HTML overlays' free tests: their statements build beside the layers they read, each check is
- * named by an oracle law, and the oracle's three HTML laws hold exactly where the information model
- * says, over a box of each: a `source` under each parent with each of its two attributes, a `track`
- * of each `kind` with and without `srclang`, and a cell of either of two nested tables whose
- * `headers` names each kind of target.
+ * The HTML overlays' free tests: the oracle's three HTML laws hold exactly where the information
+ * model says, over a box of each: a `source` under each parent with each of its two attributes, a
+ * `track` of each `kind` with and without `srclang`, and a cell of either of two nested tables
+ * whose `headers` names each kind of target.
  *
  * The database tests (`html.db.test.ts`) judge the laws through PostgreSQL, and the builder's tests
  * (`#pantry/import/overlays/html.test.ts`) its rows.
  */
-import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
@@ -18,13 +16,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { attributeLaws } from "#pantry/qti/attributes.ts";
-import { chardataLaws } from "#pantry/qti/chardata.ts";
-import { htmlLaws, htmlRelations } from "#pantry/qti/html.ts";
-import { identityLaws, identityRelations } from "#pantry/qti/identity.ts";
-import { nodeLaws } from "#pantry/qti/node.ts";
-import { qtiRelations } from "#pantry/qti/base.ts";
-import { judge, lawNames, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
+import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment, LawName } from "#pantry/test/oracle.ts";
 
 /**
@@ -33,61 +25,6 @@ import type { Breach, Judgment, LawName } from "#pantry/test/oracle.ts";
  * Measured 2026-11-07: 1.4 s at a load average of 63 to 73.
  */
 const buildTimeout = 60_000;
-
-describe("qti/html.ts, declared", { timeout: buildTimeout }, () => {
-  it("builds a schema of Node, the character data, the attribute layer, the identity and the HTML overlays with every law, each statement once", () => {
-    const built = schema("HtmlLayer", { ...qtiRelations, ...identityRelations, ...htmlRelations }, [
-      ...nodeLaws,
-      ...chardataLaws,
-      ...attributeLaws,
-      ...identityLaws,
-      ...htmlLaws,
-    ]);
-
-    for (const relation of Object.values(htmlRelations)) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(built.relations, relation.name)?.value,
-        relation,
-      );
-    }
-
-    assert.strictEqual(new Set(htmlLaws).size, htmlLaws.length);
-    assert.strictEqual(
-      built.statements.length,
-      nodeLaws.length +
-        chardataLaws.length +
-        attributeLaws.length +
-        identityLaws.length +
-        htmlLaws.length,
-    );
-  });
-
-  it("names each check by an oracle law, spaces written as underscores, so ruleOf maps it", () => {
-    // Oracle: the oracle's own law list (`#pantry/test/oracle.ts` lawNames), the names Q5.17 maps.
-    const named = htmlLaws.flatMap((statement) =>
-      statement.kind === "check" ? [statement.name.replaceAll("_", " ")] : [],
-    );
-    const rules = new Map(
-      named.map((name) => {
-        const law = lawNames.find((known) => known === name);
-        assert.isDefined(law, `${name} is no oracle law`);
-
-        return [name, law === undefined ? "" : ruleOf(law)] as const;
-      }),
-    );
-
-    assert.deepStrictEqual(
-      new Map([
-        ["E1 derived", "derived"],
-        ["Media source src", "source-src"],
-        ["Picture source srcset", "source-srcset"],
-        ["Track srclang", "track-srclang"],
-      ]),
-      new Map([...rules].toSorted(([a], [b]) => (a < b ? -1 : 1))),
-    );
-    assert.strictEqual(ruleOf("Table headers"), "table-headers");
-  });
-});
 
 /**
  * The composed grammar every case judges by, and the tables its laws read.

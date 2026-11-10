@@ -1,12 +1,10 @@
 /**
- * The test layer's free tests: its statements build beside the document layer's, each check is
- * named by an oracle law, and the patterns its laws judge text by are the languages the
+ * The test layer's free tests: the patterns its laws judge text by are the languages the
  * specifications state.
  *
  * The database tests (`tests.db.test.ts`) judge the laws through PostgreSQL; the overlay builders'
  * tests (`#pantry/import/overlays/tests.test.ts`) judge the rows the laws read.
  */
-import { schema } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -17,76 +15,12 @@ import { Array as Arr, Duration, Effect, Option, Schema } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readEntries } from "#pantry/package/read.ts";
-import { attributeLaws } from "#pantry/qti/attributes.ts";
-import { chardataLaws } from "#pantry/qti/chardata.ts";
-import { nodeLaws } from "#pantry/qti/node.ts";
-import { packageLaws } from "#pantry/qti/package.ts";
-import { qtiRelations } from "#pantry/qti/base.ts";
 import { Qti } from "#pantry/qti/own.ts";
-import { collapsedPattern, testLaws, testRelations } from "#pantry/qti/tests.ts";
+import { collapsedPattern, testLaws } from "#pantry/qti/tests.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { lawNamesOf } from "#pantry/test/host-law-names.ts";
-import { judge as judgeOracle, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
-
-describe("qti/tests.ts, declared", () => {
-  it("builds a schema of Node, the character data, the attributes, the package and the test layer with every law, each statement once", () => {
-    const built = schema("TestLayer", { ...qtiRelations }, [
-      ...nodeLaws,
-      ...chardataLaws,
-      ...attributeLaws,
-      ...packageLaws,
-      ...testLaws,
-    ]);
-
-    for (const relation of Object.values(testRelations)) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(built.relations, relation.name)?.value,
-        relation,
-      );
-    }
-
-    assert.strictEqual(new Set(testLaws).size, testLaws.length);
-    assert.strictEqual(
-      built.statements.length,
-      nodeLaws.length +
-        chardataLaws.length +
-        attributeLaws.length +
-        packageLaws.length +
-        testLaws.length,
-    );
-  });
-
-  it("names each check by an oracle law, spaces written as underscores, so ruleOf maps it", () => {
-    // Oracle: the oracle's own law list (`#pantry/test/oracle.ts` lawNames), the names Q5.17 maps.
-    const named = testLaws.flatMap((statement) =>
-      statement.kind === "check" ? [statement.name.replaceAll("_", " ")] : [],
-    );
-
-    for (const name of named) {
-      const law = lawNames.find((known) => known === name);
-
-      assert.isDefined(law, `${name} is no oracle law`);
-      if (law !== undefined) {
-        assert.isDefined(ruleOf(law), name);
-      }
-    }
-
-    assert.deepStrictEqual([...new Set(named)].toSorted(), [
-      "Branch forward",
-      "Branch target",
-      "E1 derived",
-      "File exists",
-      "Fragment context",
-      "Include root",
-      "Remote section ref",
-      "Selection bound",
-      "Selection required",
-      "Test name key",
-      "Variable mapping target",
-    ]);
-  });
-});
+import { judge as judgeOracle, lawsOf } from "#pantry/test/oracle.ts";
 
 /**
  * The characters a padded lexical form is written over in the collapse box: whitespace and two

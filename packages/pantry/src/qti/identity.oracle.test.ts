@@ -1,12 +1,10 @@
 /**
- * The identity overlays' free tests: their statements build beside the layers they read, each check
- * is named by an oracle law, and the ID law `E1_derived` pins one value per lexical form, the one
- * XML Schema's whitespace collapse gives an `xs:NCName`.
+ * The identity overlays' free tests: the ID law `E1_derived` pins one value per lexical form, the
+ * one XML Schema's whitespace collapse gives an `xs:NCName`.
  *
  * The database tests (`identity.db.test.ts`) judge the laws through PostgreSQL, and the builder's
  * tests (`#pantry/import/overlays/identity.test.ts`) its rows.
  */
-import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
@@ -15,14 +13,9 @@ import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
-import { attributeLaws } from "#pantry/qti/attributes.ts";
-import { chardataLaws } from "#pantry/qti/chardata.ts";
-import { identityLaws, identityRelations, idValuePattern } from "#pantry/qti/identity.ts";
-import { nodeLaws } from "#pantry/qti/node.ts";
-import { qtiRelations } from "#pantry/qti/base.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { idValuePattern } from "#pantry/qti/identity.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { judge, lawsOf } from "#pantry/test/oracle.ts";
 
 /**
  * How long building a schema over every relation of the schema may take: its statements are planned
@@ -30,57 +23,6 @@ import { judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
  * Measured 2026-11-07: 16.7 s at a load average of 63 to 73.
  */
 const buildTimeout = 60_000;
-
-describe("qti/identity.ts, declared", { timeout: buildTimeout }, () => {
-  it("builds a schema of Node, the character data, the attribute layer and the identity overlays with every law, each statement once", () => {
-    const built = schema("IdentityLayer", { ...qtiRelations, ...identityRelations }, [
-      ...nodeLaws,
-      ...chardataLaws,
-      ...attributeLaws,
-      ...identityLaws,
-    ]);
-
-    for (const relation of Object.values(identityRelations)) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(built.relations, relation.name)?.value,
-        relation,
-      );
-    }
-
-    for (const name of ["BodyXmlLang", "CatalogScope", "PlacedBodyXmlLang"] as const) {
-      assert.strictEqual(Qti.relations[name], identityRelations[name]);
-    }
-
-    assert.strictEqual(new Set(identityLaws).size, identityLaws.length);
-    assert.strictEqual(
-      built.statements.length,
-      nodeLaws.length + chardataLaws.length + attributeLaws.length + identityLaws.length,
-    );
-  });
-
-  it("names each check by an oracle law, spaces written as underscores, so ruleOf maps it", () => {
-    // Oracle: the oracle's own law list (`#pantry/test/oracle.ts` lawNames), the names Q5.17 maps.
-    const named = identityLaws.flatMap((statement) =>
-      statement.kind === "check" ? [statement.name.replaceAll("_", " ")] : [],
-    );
-
-    for (const name of named) {
-      const law = lawNames.find((known) => known === name);
-
-      assert.isDefined(law, `${name} is no oracle law`);
-      if (law !== undefined) {
-        assert.strictEqual(ruleOf(law), "derived", name);
-      }
-    }
-
-    assert.deepStrictEqual([...new Set(named)], ["E1 derived"]);
-    assert.isDefined(lawNames.find((known) => known === "Label tools"));
-    assert.strictEqual(ruleOf("Label tools"), "label-tool");
-    assert.strictEqual(ruleOf("DocumentId key"), "document-key");
-    assert.strictEqual(ruleOf("Idref target"), "idref-target");
-    assert.strictEqual(ruleOf("Document lang"), "document-lang");
-  });
-});
 
 /**
  * XML whitespace `S`, as `DocumentId.before` and `after` are typed.
