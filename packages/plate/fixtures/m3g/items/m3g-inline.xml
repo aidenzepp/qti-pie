@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m3g-inline" title="Seedling care" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="PICK" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>Y</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-response-declaration identifier="NOTE" cardinality="single" base-type="string"/>
+  <qti-item-body>
+    <p>Seedlings on a sunny windowsill are best watered <qti-inline-choice-interaction response-identifier="PICK" shuffle="false">
+        <qti-inline-choice identifier="X">at midday</qti-inline-choice>
+        <qti-inline-choice identifier="Y">early in the morning</qti-inline-choice>
+        <qti-inline-choice identifier="Z">only when they wilt</qti-inline-choice>
+      </qti-inline-choice-interaction> so the soil can drink before the heat arrives.</p>
+    <qti-extended-text-interaction response-identifier="NOTE" expected-lines="3">
+      <qti-prompt>Describe one sign that a seedling has been watered too much.</qti-prompt>
+    </qti-extended-text-interaction>
+  </qti-item-body>
+</qti-assessment-item>
