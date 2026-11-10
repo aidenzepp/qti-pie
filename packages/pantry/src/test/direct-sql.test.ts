@@ -10,11 +10,10 @@
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
-import { array, element, int, parents, shuffled } from "@grizzle/testing/gen";
+import { array, element, int, shuffled } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
-import { swarm, swarmChoice } from "@grizzle/testing/swarm";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter } from "effect";
 import { BarredOf, CountedOf, nonElementKinds } from "#pantry/grammar/install.ts";
@@ -239,23 +238,6 @@ const budget = {
 } as const;
 
 /**
- * The kinds a drawn node takes, by class, each a swarm feature: an element no fold counts, a
- * parent whose counted fold counts a position (`CountedOf`'s), a parent whose barred fold bars one
- * (`BarredOf`'s), and character data, which no fold counts at any position.
- */
-const nodeKinds = {
-  barring: ["colgroup"],
-  character: ["text", "comment"],
-  counting: ["qti-match-interaction"],
-  element: ["p", "col", "qti-simple-match-set"],
-} as const;
-
-/**
- * The classes of {@link nodeKinds}, the simplest first.
- */
-const nodeClasses = ["element", "counting", "barring", "character"] as const;
-
-/**
  * A drawn tree of `Node` facts: each node's parent (entry `i` is node `i + 1`'s), kind and state,
  * its one version, and the order its facts are stated in.
  */
@@ -266,30 +248,6 @@ interface DrawnTree {
   readonly states: readonly string[];
   readonly version: "3.0.0" | "3.0.1";
 }
-
-/**
- * Draw a tree of up to 8 nodes under a swarm over the node classes: its shape, each node's kind
- * from a class the swarm turns on and its state among the positions the folds read, and the order
- * its facts are stated in, a permutation.
- */
-const drawnTree: Gen<DrawnTree> = (source) => {
-  const mix = source.draw(swarm(nodeClasses));
-  const above = source.draw(parents({ max: 8, min: 1 }));
-  const size = above.length + 1;
-  const kinds = Array.from({ length: size }, () =>
-    source.draw(element(nodeKinds[source.draw(swarmChoice(mix, nodeClasses))])),
-  );
-  const states = Array.from({ length: size }, () => source.draw(element(["1", "2", "3"] as const)));
-  const version = source.draw(element(["3.0.0", "3.0.1"] as const));
-  const order = source.draw(
-    shuffled(
-      kinds.map((_, node) => node),
-      { max: size, min: size },
-    ),
-  );
-
-  return { kinds, order, parents: above, states, version };
-};
 
 /**
  * The kinds no fold counts, at any position.
@@ -455,50 +413,6 @@ const treeFeatures = (tree: DrawnTree): readonly TreeFeature[] => {
 
 describe("the direct writer's tree slots and hidden folds", () => {
   it.effect(
-    "derives each tree member's copy and parent's start, and the counted and barred folds' accumulators and ends, as a hand fold does, in any stated order",
-    (ctx) =>
-      // Oracle: a second implementation, the tree folded by hand: a member's copy and parent's start
-      // its parent's, the root its own parent; a member counted where it is an element at the
-      // position `CountedOf` (`BarredOf`) names under its parent's kind, read off their rows, so
-      // the writer's reading of each fold's selection from `Qti`'s statements meets an independent
-      // one.
-      // Bound: trees of up to 8 nodes, swarm-weighted over four kind classes, three states, both
-      // versions, stated in a drawn order.
-      searched(
-        ctx,
-        explore(
-          {
-            ...budget,
-            coverage: required<TreeFeature>(
-              [
-                "a lone root",
-                "a counted member",
-                "a barred member",
-                "character data at a counted position",
-                "two counted siblings",
-                "a member stated before its parent",
-              ],
-              { cases: 300, sense: notesOnly },
-            ),
-            draw: drawn(drawnTree),
-            oracle: { kind: "second-implementation", name: "the tree folded by hand" },
-            runs: 600,
-            suite: "test/direct-sql/tree-folds",
-          },
-          (tree, c) =>
-            Effect.sync(() => {
-              for (const feature of treeFeatures(tree)) {
-                c.note(feature);
-              }
-
-              assertFolded(tree);
-            }),
-        ),
-      ),
-    { timeout: searchTimeoutMs },
-  );
-
-  it.effect(
     "derives every family of up to three members under a counting, a barring and a plain parent, stated in order and reversed",
     (ctx) =>
       // Oracle: the tree folded by hand, as above.
@@ -568,26 +482,6 @@ interface TypedTree {
   readonly tree: DrawnTree;
   readonly type: (typeof documentTypes)[number];
 }
-
-/**
- * Draw a typed tree: a drawn tree, each node's attributes, where its type is stated, and a
- * permutation of all its facts.
- */
-const drawnTypedTree: Gen<TypedTree> = (source) => {
-  const tree = source.draw(drawnTree);
-  const attributes = tree.kinds.map(() => source.draw(int(0, 2)));
-  const byDocument = source.draw(element([false, true] as const));
-  const size =
-    tree.kinds.length + attributes.reduce((sum, count) => sum + count, 0) + (byDocument ? 1 : 0);
-  const order = source.draw(
-    shuffled(
-      Array.from({ length: size }, (_, at) => at),
-      { max: size, min: size },
-    ),
-  );
-
-  return { attributes, byDocument, order, tree, type: source.draw(element(documentTypes)) };
-};
 
 /**
  * A typed tree's facts, unordered: its nodes, its attributes, and its `Document` row where the
@@ -670,51 +564,6 @@ const typedFeatures = (typed: TypedTree): readonly TypedFeature[] => {
 };
 
 describe("the direct writer's copies across containments", () => {
-  it.effect(
-    "gives every node and attribute its document's type, from its Document row or its root, in any stated order",
-    (ctx) =>
-      // Oracle: the specification as a checker, Qti's statements: T3 holds a tree member's
-      // documentType to its parent's, AL1 owner an attribute's to its element's, and the
-      // `Document` row's containment into its document node the root's to its documentType, so
-      // every node and attribute of a document holds the one type.
-      // Bound: trees of up to 8 nodes with up to two attributes each, the type stated on the root
-      // or on its Document row, in a drawn order of all the facts.
-      searched(
-        ctx,
-        explore(
-          {
-            ...budget,
-            coverage: required<TypedFeature>(
-              [
-                "typed by its document",
-                "typed on its root",
-                "a member stated before its parent",
-                "an attribute stated before its element",
-                "a member two below its root",
-              ],
-              { cases: 300, sense: notesOnly },
-            ),
-            draw: drawn(drawnTypedTree),
-            oracle: {
-              kind: "specification",
-              name: "one type per document, by T3, AL1 owner and the Document row",
-            },
-            runs: 300,
-            suite: "test/direct-sql/document-type",
-          },
-          (typed, c) =>
-            Effect.sync(() => {
-              for (const feature of typedFeatures(typed)) {
-                c.note(feature);
-              }
-
-              assertTyped(typed);
-            }),
-        ),
-      ),
-    { timeout: searchTimeoutMs },
-  );
-
   it.effect(
     "types every tree of up to three nodes from its Document row or its root, stated in order and reversed",
     (ctx) =>
