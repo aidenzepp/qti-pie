@@ -1206,11 +1206,11 @@
 }
 
 /*
- * The svg that frames a Gap's placed choices lies over the Outline, in the same coordinate
- * space, and lets a label wider than its area show past the area's edge, so a placed choice is
- * never clipped.
+ * The Placed part, the svg that frames a Gap's placed choices, lies over the Outline, in the same
+ * coordinate space, and lets a label wider than its area show past the area's edge, so a placed
+ * choice is never clipped.
  */
-:where([data-slot="graphic-gap-match-interaction-gap"] > svg:not([data-slot])) {
+:where([data-slot="graphic-gap-match-interaction-placed"]) {
   position: absolute;
   inset: 0;
   width: 100%;

@@ -507,6 +507,21 @@ describe("Graphic Gap Match", () => {
           ["A", "A", "B"],
         );
         assert.deepStrictEqual(
+          partsOf(html, "gap").map((gap) =>
+            partsIn(gap.children, "placed").map((frame) => [
+              frame.tag,
+              attributeOf(frame, "role"),
+              attributeOf(frame, "viewBox"),
+              partsIn(frame.children, "gap-choice").length,
+            ]),
+          ),
+          [
+            [["svg", "presentation", "0 0 400 300", 2]],
+            [["svg", "presentation", "0 0 400 300", 1]],
+            [],
+          ],
+        );
+        assert.deepStrictEqual(
           partsOf(html, "hidden").map((input) => [
             attributeOf(input, "name"),
             attributeOf(input, "type"),

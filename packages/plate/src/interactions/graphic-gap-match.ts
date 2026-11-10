@@ -29,25 +29,25 @@
  * `base-type="…"` or `cardinality="…"`, as a binding no shipped kind renders is.
  *
  * {@link graphicGapMatchModule}'s render emits this structure: a `div` Root that is `role="group"`,
- * named by its Prompt through `aria-labelledby` (or by the author's names when there is no
- * Prompt), carrying `data-entry-name`, the name its hidden inputs post under, and
- * `data-max-associations`, which the runtime reads; the Prompt; the Image part, a box holding the
- * author's image (its `img`, `picture` or `object`, emitted as body content) and after it the Gaps
- * part, one Gap per hotspot in document order, each a `div` group laid over the whole image, named
- * by its `hotspot-label` (or by its position, "Area 2 of 3") through `aria-label`, holding its
- * Outline (an inline `svg` over the image, `aria-hidden`, whose one shape is the area, drawn in the
- * image's coordinate space) and, for each restored pair that names it, a GapChoice, an SVG `text`
- * with the choice's text, placed inside the area's bounding box in a second `svg` over the image
- * that carries no semantics of its own; then a `ul` of Choices, one `li` per gap choice in
- * presented order; and, only while the candidate may answer, one hidden input per pair under the
- * host's entry name (the wire of decision D2, which `runtime/wire.dom.ts` writes again from the
- * page). The stylesheet positions nothing by coordinates: the playground's pages carry a
- * `style-src 'self'` policy (rule `723e580c`), so no part carries an inline `style`, and the
- * geometry travels only as SVG attributes; the serialiser writes lower-case element names only, so
- * a `foreignObject` cannot carry HTML text to a coordinate, and the SVG `text` element is what
- * places a choice. A gap whose area draws no Outline holds its GapChoices directly, unplaced. The
- * page holds no other control: the select-then-place input is the runtime's (issue m3d-06), so
- * the script-free render shows the response and posts it (D3).
+ * named by its Prompt through `aria-labelledby` (or by the author's names when there is no Prompt),
+ * carrying `data-entry-name`, the name its hidden inputs post under, and `data-max-associations`,
+ * which the runtime reads; the Prompt; the Image part, a box holding the author's image (its `img`,
+ * `picture` or `object`, emitted as body content) and after it the Gaps part, one Gap per hotspot
+ * in document order, each a `div` group laid over the whole image, named by its `hotspot-label` (or
+ * by its position, "Area 2 of 3") through `aria-label`, holding its Outline (an inline `svg` over
+ * the image, `aria-hidden`, whose one shape is the area, drawn in the image's coordinate space)
+ * and, for each restored pair that names it, a GapChoice, an SVG `text` with the choice's text,
+ * placed inside the area's bounding box in the Placed part, a second `svg` over the image that
+ * carries no semantics of its own; then a `ul` of Choices, one `li` per gap choice in presented
+ * order; and, only while the candidate may answer, one hidden input per pair under the host's entry
+ * name (the wire of decision D2, which `runtime/wire.dom.ts` writes again from the page). The
+ * stylesheet positions nothing by coordinates: the playground's pages carry a `style-src 'self'`
+ * policy (rule `723e580c`), so no part carries an inline `style`, and the geometry travels only as
+ * SVG attributes; the serialiser writes lower-case element names only, so a `foreignObject` cannot
+ * carry HTML text to a coordinate, and the SVG `text` element is what places a choice. A gap whose
+ * area draws no Outline holds its GapChoices directly, unplaced. The page holds no other control:
+ * the select-then-place input is the runtime's (issue m3d-06), so the script-free render shows the
+ * response and posts it (D3).
  *
  * The ASI XSD declares no `shuffle` on this interaction and no `fixed` on a gap choice, so `open`
  * refuses either written (`unknown-attribute`) and a document gives both false; the redacted form
@@ -152,6 +152,7 @@ type GraphicGapMatchPart =
   | "hidden"
   | "image"
   | "outline"
+  | "placed"
   | "prompt"
   | "root";
 
@@ -159,8 +160,9 @@ type GraphicGapMatchPart =
  * The rows of the Graphic Gap Match parts, each part once: the Root, the Prompt, the Image (the box
  * the gaps are positioned in) and the Gaps (the group of gaps, after the image) are flow
  * containers; the Choices a list of Choices; a Gap a flow container laid over the image; the
- * Outline an `svg`; a GapChoice an SVG `text` inside its Gap, which a replacement may make any
- * element; the hidden input a native input whose `type` stays `hidden`. `merged` lists every
+ * Outline and the Placed (the `svg` that frames a Gap's GapChoices in the image's coordinate
+ * space) each an `svg`; a GapChoice an SVG `text` inside the Placed, which a replacement may make
+ * any element; the hidden input a native input whose `type` stays `hidden`. `merged` lists every
  * attribute the connect function computes beyond the `data-slot` marker and the Root state
  * (`data-mode`, `data-disabled`), which a replacement may not override.
  */
@@ -221,6 +223,13 @@ const parts = {
     merged: ["aria-hidden", "viewBox"],
     tagClass: "any",
   },
+  placed: {
+    defaults: {},
+    element: "svg",
+    listOwner: false,
+    merged: ["role", "viewBox"],
+    tagClass: "any",
+  },
   prompt: {
     defaults: {},
     element: "div",
@@ -262,6 +271,7 @@ const rows = {
   hidden: partRow(table, "hidden"),
   image: partRow(table, "image"),
   outline: partRow(table, "outline"),
+  placed: partRow(table, "placed"),
   prompt: partRow(table, "prompt"),
   root: partRow(table, "root"),
 } satisfies { readonly [Q in GraphicGapMatchPart]: PartRow };
@@ -521,13 +531,15 @@ interface Frame {
 
 /**
  * What the connect function computes for one gap: the Gap's attributes, its Outline when it draws
- * one (the shape and the Outline's attributes) and, for each restored pair that names the hotspot,
- * a GapChoice with its text, in the pairs' order, placed in the area's frame when there is one.
+ * one (the shape and the Outline's attributes), the Placed's attributes, and, for each restored
+ * pair that names the hotspot, a GapChoice with its text, in the pairs' order, placed in the area's
+ * frame when there is one.
  */
 interface GapItem {
   readonly gap: Attributes;
   readonly outline: Option.Option<{ readonly figure: Element; readonly props: Attributes }>;
-  readonly placed: readonly TextProps[];
+  readonly placed: Attributes;
+  readonly placedChoices: readonly TextProps[];
 }
 
 /**
@@ -543,11 +555,6 @@ interface Connected {
   readonly items: readonly GapItem[];
   readonly prompt: Attributes;
   readonly root: Attributes;
-  /**
-   * The image's `viewBox` attribute, which every `svg` over the image carries, none when its size
-   * is unknown.
-   */
-  readonly viewBox: Attributes;
 }
 
 /**
@@ -959,8 +966,9 @@ const placedIn = (
  * - Gap, one for each hotspot in document order: `role="group"` named by `aria-label`, the
  *   `hotspot-label` or the positional name; its identifier as `data-gap`; its `match-max` and, when
  *   the hotspot names its choices, its `match-group`. Its Outline, when it draws one: the marker,
- *   `aria-hidden`, and the image's `viewBox` when its size is known. Its GapChoices, one for each
- *   restored pair that names it ({@link placedIn}).
+ *   `aria-hidden`, and the image's `viewBox` when its size is known. Its Placed: the marker,
+ *   `role="presentation"` and the same `viewBox`. Its GapChoices, one for each restored pair that
+ *   names it ({@link placedIn}).
  * - Hidden, one for each pair to restore, only while the candidate may answer: `type="hidden"`, the
  *   name and the pair as posted. None in `review` and `solution`, nor when the author finished the
  *   item: the form posts nothing for it.
@@ -1026,7 +1034,8 @@ const connect = (
             props: { "aria-hidden": "true", "data-slot": rows.outline.slot, ...viewBox },
           })),
         ),
-        placed: placedIn(
+        placed: { "data-slot": rows.placed.slot, role: "presentation", ...viewBox },
+        placedChoices: placedIn(
           interaction,
           hotspot.identifier,
           outline.pipe(Option.map(({ frame }) => frame)),
@@ -1048,21 +1057,8 @@ const connect = (
       "data-mode": payload.mode,
       "data-slot": rows.root.slot,
     },
-    viewBox,
   };
 };
-
-/**
- * Frame the choices placed in a gap: an `svg` over the image in the Outline's coordinate space
- * (the same `viewBox`), `role="presentation"` so it adds no semantics of its own, holding the
- * GapChoices, each an SVG `text` at the baseline {@link placedIn} gave it.
- *
- * @param viewBox The Outline's `viewBox` attribute, none when the image's size is unknown.
- * @param placed The GapChoice elements.
- * @returns The framing element.
- */
-const framed = (viewBox: Attributes, placed: readonly Element[]): Element =>
-  h("svg", { role: "presentation", ...viewBox }, placed);
 
 /**
  * Render a Graphic Gap Match: a `div` Root holding the Prompt, when there is one, the Image part
@@ -1104,14 +1100,23 @@ const render = (
         ),
       );
       const placed = yield* pipe(
-        item.placed.map((chosen) =>
+        item.placedChoices.map((chosen) =>
           applyPart(rows.gapChoice, chosen.props, [text(chosen.text)], replacement("gapChoice")),
         ),
         Result.all,
       );
-      const shown: readonly Node[] = Option.match(item.outline, {
-        onNone: () => placed,
-        onSome: () => (placed.length === 0 ? [] : [framed(props.viewBox, placed)]),
+      const framed = yield* Result.transposeOption(
+        Option.some(placed)
+          .pipe(Option.filter((inside) => Option.isSome(item.outline) && inside.length > 0))
+          .pipe(
+            Option.map((inside) =>
+              applyPart(rows.placed, item.placed, inside, replacement("placed")),
+            ),
+          ),
+      );
+      const shown: readonly Node[] = Option.match(framed, {
+        onNone: () => (Option.isNone(item.outline) ? placed : []),
+        onSome: (frame) => [frame],
       });
 
       return yield* applyPart(
@@ -1551,7 +1556,8 @@ export const graphicGapMatchModule: InteractionModule<
   /**
    * Graphic Gap Match's connect function, {@link connect}, as the record of parts the contract
    * names: the Root, the Prompt, the Image, the Gaps, the Choices, each Choice in presented order,
-   * and each hotspot's Gap, Outline and GapChoices in document order.
+   * and each hotspot's Gap, Outline, Placed (only for a gap that draws an Outline and holds a
+   * choice) and GapChoices in document order.
    */
   connect: (interaction, payload, locale) => {
     const props = connect(interaction, payload, locale);
@@ -1560,12 +1566,15 @@ export const graphicGapMatchModule: InteractionModule<
       choice: props.choice,
       choices: props.choices,
       gap: props.items.map((item) => item.gap),
-      gapChoice: props.items.flatMap((item) => item.placed),
+      gapChoice: props.items.flatMap((item) => item.placedChoices),
       gaps: props.gaps,
       hidden: props.hidden,
       image: props.image,
       outline: props.items.flatMap((item) =>
         Option.match(item.outline, { onNone: () => [], onSome: (figure) => [figure.props] }),
+      ),
+      placed: props.items.flatMap((item) =>
+        Option.isSome(item.outline) && item.placedChoices.length > 0 ? [item.placed] : [],
       ),
       prompt: props.prompt,
       root: props.root,
