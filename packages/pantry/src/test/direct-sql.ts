@@ -41,7 +41,7 @@ export const authorViews = schemaNameOf(Author);
  * The PostgreSQL schema of `Qti`'s tables, its stored level's (`#pantry/qti/base.ts`): grizzle
  * installs each level in a schema of its own, and every table is the stored level's.
  */
-export const qtiSchema = schemaNameOf(QtiBase);
+export const qtiSchemaName = schemaNameOf(QtiBase);
 
 /**
  * The password a connection authenticates with, read once.
@@ -133,7 +133,7 @@ export const writtenColumnsOf = (client: Client, table: string) =>
       WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
         AND a.attgenerated = ''
       ORDER BY a.attnum`,
-    [`${qtiSchema}.${table}`],
+    [`${qtiSchemaName}.${table}`],
   );
 
 /**
@@ -151,7 +151,7 @@ export const constraintsDescribed = (client: Client, table: string, pattern: str
     `SELECT c.conname FROM pg_catalog.pg_constraint c
       WHERE c.conrelid = pg_catalog.to_regclass($1)
         AND pg_catalog.obj_description(c.oid, 'pg_constraint') LIKE $2`,
-    [`${qtiSchema}.${table}`, pattern],
+    [`${qtiSchemaName}.${table}`, pattern],
   ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
 
 /**
@@ -189,7 +189,7 @@ export const foreignKeysBetween = (client: Client, from: string, to: string) =>
        JOIN pg_class dst ON dst.oid = con.confrelid
        JOIN pg_namespace n ON n.oid = src.relnamespace
       WHERE con.contype = 'f' AND n.nspname = $1 AND src.relname = $2 AND dst.relname = $3`,
-    [qtiSchema, from, to],
+    [qtiSchemaName, from, to],
   ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
 
 /**
@@ -207,7 +207,7 @@ const checksOf = (client: Client, table: string) =>
             pg_catalog.obj_description(c.oid, 'pg_constraint') AS comment
        FROM pg_catalog.pg_constraint c
       WHERE c.conrelid = pg_catalog.to_regclass($1) AND c.contype = 'c'`,
-    [`${qtiSchema}.${table}`],
+    [`${qtiSchemaName}.${table}`],
   );
 
 /**
@@ -302,7 +302,7 @@ const statementOf = (client: Client, run: Arr.NonEmptyReadonlyArray<Insert>) =>
     );
 
     return {
-      text: `INSERT INTO ${qtiSchema}.${table} (${columns.map(({ name }) => `"${name}"`).join(", ")}) VALUES ${run
+      text: `INSERT INTO ${qtiSchemaName}.${table} (${columns.map(({ name }) => `"${name}"`).join(", ")}) VALUES ${run
         .map(
           (_, row) =>
             `(${columns.map((_column, at) => `$${String(row * columns.length + at + 1)}`).join(", ")})`,
@@ -379,7 +379,7 @@ export const judgedCase = (
         const columns = Object.keys(key);
         yield* rowsOf(
           client,
-          `DELETE FROM ${qtiSchema}.${table} WHERE ${columns.map((name, at) => `"${name}" = $${String(at + 1)}`).join(" AND ")}`,
+          `DELETE FROM ${qtiSchemaName}.${table} WHERE ${columns.map((name, at) => `"${name}" = $${String(at + 1)}`).join(" AND ")}`,
           Object.values(key),
         );
       }
@@ -389,7 +389,7 @@ export const judgedCase = (
       }
 
       for (const name of immediate) {
-        yield* rowsOf(client, `SET CONSTRAINTS ${qtiSchema}."${name}" IMMEDIATE`);
+        yield* rowsOf(client, `SET CONSTRAINTS ${qtiSchemaName}."${name}" IMMEDIATE`);
       }
 
       return yield* Effect.all(reads.map(({ text, values }) => rowsOf(client, text, values)));

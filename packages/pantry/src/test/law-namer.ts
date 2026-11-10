@@ -48,7 +48,7 @@ import { HrefParams, packageLawsByName } from "#pantry/qti/package.ts";
 import { quotationLawsByName, quotationRelations } from "#pantry/qti/quotation.ts";
 import { SelectForm, testLawsByName } from "#pantry/qti/tests.ts";
 import type { testRelations } from "#pantry/qti/tests.ts";
-import { builtLawsByName, Qti } from "#pantry/qti/own.ts";
+import { builtLawsByName, Qti } from "#pantry/test/qti.ts";
 import {
   bucketOf,
   contractNames,
@@ -398,8 +398,8 @@ type LawsByName = { readonly [Name in LawName]?: readonly Statement[] };
 
 /**
  * The modules that name their laws where they state them, each a {@link LawsByName}: the stored
- * level's, then the groups built with `Qti` (`#pantry/qti/own.ts` `builtLawsByName`), its policy's
- * and each domain's rules over the queries (`#pantry/qti/queries.ts`).
+ * level's, then the groups built with `Qti` (`#pantry/test/qti.ts` `builtLawsByName`), each
+ * domain's rules over the queries (`#pantry/qti/queries.ts`).
  */
 export const namedLaws: readonly LawsByName[] = [
   nodeLawsByName,

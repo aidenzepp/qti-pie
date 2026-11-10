@@ -1,20 +1,13 @@
 import { defineConfig } from "@bjornpagen/grizzle";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { connectionServices, migrationConnection } from "#pantry/db/connection.ts";
-import { authorAppOf } from "#pantry/qti/logins.ts";
-import { qtiSchema } from "#pantry/qti/schema.ts";
+import { authorLogin } from "#pantry/qti/logins.ts";
+import { qti } from "#pantry/qti/schema.ts";
 
 /**
- * This package's own `Qti`, with no single-CDN policy: the schema the committed migrations install,
- * whatever install `GR8DES_QTI_INSTALL` names for the runtime, since an install's migrations are
- * its own config's to generate.
- */
-const ownQti = qtiSchema(Option.none());
-
-/**
- * The grizzle configuration every `grizzle` command of this package names: this package's own
- * `Qti` schema, its one login, the committed migrations, and the migration identity's connection
- * to the local cluster.
+ * The grizzle configuration every `grizzle` command of this package names: the `Qti` schema, its
+ * one login, the committed migrations, and the migration identity's connection to the local
+ * cluster.
  *
  * Loading it reads the cluster's settings and CA (`#pantry/db/connection.ts`), since grizzle's
  * transport takes the CA as text, so every command, `generate` and `check` among them, needs the
@@ -32,7 +25,7 @@ const connection = await Effect.runPromise(
 
 export default defineConfig({
   connection: () => connection,
-  logins: [authorAppOf(ownQti)],
+  logins: [authorLogin(qti())],
   migrations: "migrations",
-  schemas: [ownQti],
+  schemas: [qti()],
 });

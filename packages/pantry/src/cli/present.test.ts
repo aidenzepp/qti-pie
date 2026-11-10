@@ -296,7 +296,7 @@ const refusing = Command.make(
       () => import("#pantry/import/refusal.ts"),
     );
     const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
-    const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
+    const { Qti } = yield* Effect.promise(() => import("#pantry/test/qti.ts"));
     const [first, second] = refusedLaws(checkNameOf("AL1 admission"));
 
     return yield* refusalOf(
@@ -375,7 +375,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
       // committed schema of the error object.
       Effect.gen(function* json() {
         const { checkNameOf } = yield* Effect.promise(() => import("#pantry/import/refusal.ts"));
-        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
+        const { Qti } = yield* Effect.promise(() => import("#pantry/test/qti.ts"));
         const [first] = refusedLaws(checkNameOf("AL1 admission"));
         const { stderr, stdout } = yield* captureCli(["--json"], { command: refusing });
         const error = errorLine(stderr);
@@ -532,7 +532,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
         );
         const { ImportRefused } = yield* Effect.promise(() => import("#pantry/import/rules.ts"));
         const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
-        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
+        const { Qti } = yield* Effect.promise(() => import("#pantry/test/qti.ts"));
         const { rule, source } = lawTable["AL1 admission"];
         const law = {
           kind: "check",

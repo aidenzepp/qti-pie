@@ -40,7 +40,7 @@ import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
@@ -334,7 +334,7 @@ describe.skipIf(!hasLease)(
         // Oracle: PostgreSQL, every law over `simple`, and the package read back by its id.
         Effect.gen(function* acceptsSimple() {
           const id = yield* importPackage(fixtures.simple);
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
 
           assert.match(id, uuidPattern);
           assert.isTrue(Option.isSome(yield* db.workload.packageOf.get({ id })), id);
@@ -431,7 +431,7 @@ describe.skipIf(!hasLease)(
               Effect.andThen(apply, Effect.fail(new CommitUnknown())),
             ),
           );
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
 
           assert.isTrue(Option.isSome(yield* db.workload.packageOf.get({ id })), id);
         }),

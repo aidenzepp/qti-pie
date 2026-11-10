@@ -25,7 +25,7 @@ import type { FileSystem, PlatformError } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { refusalOf } from "#pantry/import/refusal.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { packageFactsOf } from "#pantry/import/write.ts";
 import type { AuthorRole } from "#pantry/qti/roles.ts";
 import type { ImportRefused } from "#pantry/import/rules.ts";
@@ -207,11 +207,11 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
 ): Effect.fn.Return<
   Uuid,
   ImportRefused | PlatformError.PlatformError | ApplyError | OpenError | CommitUnresolved,
-  AuthorLogin | FileSystem.FileSystem | DbLayer<AuthorRole>
+  ServedAuthorLogin | FileSystem.FileSystem | DbLayer<AuthorRole>
 > {
   const schedule = yield* RetrySchedule;
   const wrap = yield* WrapApply;
-  const login = yield* AuthorLogin;
+  const login = yield* ServedAuthorLogin;
   const program = yield* readProgram(dir);
   const { packageId } = program;
   const facts = packageFactsOf(program.inputs);

@@ -38,10 +38,10 @@ import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
 
-import { authorRole, loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
+import { authorRole, loginSession, qtiSchemaName, rowsOf } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hasLease } from "#pantry/test/settings.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 
 /**
  * The bytes of each bulk entry: 64 MiB, one `bytes` value within grizzle's `bytesMaxLength`, so the
@@ -87,7 +87,7 @@ const recordTransactions = (client: Client, id: string) =>
       `SELECT count(*)::text AS entries,
               count(DISTINCT e.xmin::text)::text AS transactions,
               count(*) FILTER (WHERE e.xmin::text = p.xmin::text)::text AS ours
-         FROM ${qtiSchema}.entry e JOIN ${qtiSchema}.package p ON p.id = e.package
+         FROM ${qtiSchemaName}.entry e JOIN ${qtiSchemaName}.package p ON p.id = e.package
         WHERE p.id = $1`,
       [id],
     ),
@@ -135,7 +135,7 @@ describe.skipIf(!hasLease)(
 
             const source = yield* scopedPackage(entries);
             const [importElapsed, id] = yield* Effect.timed(importPackage(source));
-            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+            const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
             const client = yield* authorSession;
             const record = yield* recordTransactions(client, id);
 

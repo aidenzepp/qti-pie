@@ -38,7 +38,7 @@ import {
   NodeKind,
 } from "#pantry/grammar/install.ts";
 import { Attribute, Idref, OpenAttributeName } from "#pantry/qti/attributes.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   assertVerdict,

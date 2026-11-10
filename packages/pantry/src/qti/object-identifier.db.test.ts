@@ -27,27 +27,27 @@ import { probeLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/t
 import { testKind } from "#pantry/vocab/terms/tests.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
-import { Qti } from "#pantry/qti/own.ts";
-import { authorRoleOf } from "#pantry/qti/roles.ts";
-import { authorWorkloadsOf } from "#pantry/qti/logins.ts";
+import { Qti } from "#pantry/test/qti.ts";
+import { authorRole } from "#pantry/qti/roles.ts";
+import { authorWorkloads } from "#pantry/qti/logins.ts";
 import { servedProbe } from "#pantry/test/served-members.ts";
 
 /**
- * The author role of this file's probe login: grizzle puts a role in one login only, so the probe
- * holds a role of its own, named as the installed one.
+ * The author role of this file's probe login, the one author role over `Qti`: grizzle puts a role
+ * in one login only, so this file never builds the author login nor loads `#pantry/test/author.ts`.
  */
-const probeAuthor = authorRoleOf(Qti);
+const probeAuthor = authorRole(Qti);
 
 /**
  * The author login with this file's read of a test by its package and identifier beside its own
- * members, over an author role of its own (`#pantry/test/served-members.ts` `servedProbe`):
- * `ProbeLogin` opens the role that reads it, and `probeLayer` serves every test of the file,
- * `AuthorLogin` included.
+ * members, over the author role (`#pantry/test/served-members.ts` `servedProbe`): `ProbeLogin`
+ * opens the role that reads it, and `probeLayer` serves every test of the file,
+ * `ServedAuthorLogin` included.
  */
 const { layer: probeLayer, ProbeLogin } = servedProbe(
   login(Qti, "author_app", [probeAuthor], {
     workload: [
-      ...authorWorkloadsOf(Qti, probeAuthor),
+      ...authorWorkloads(Qti),
       workload(probeAuthor, {
         testByIdentifier: query(probeAuthor).rule((r) => {
           const { node: document } = v(TestDocument, "test");

@@ -26,7 +26,7 @@ const startupForbidden = [
  * build when the module is evaluated (`#pantry/qti/own-login.ts`): the dry run never needs it, and
  * the database layer loads it only once its settings resolve, so neither may reach it statically.
  */
-const loginForbidden = ["#pantry/qti/own-login.ts"];
+const loginForbidden = ["#pantry/test/author.ts"];
 
 /**
  * `@effect/platform-node`'s barrel, which loads every module of the package, the Redis client's 648

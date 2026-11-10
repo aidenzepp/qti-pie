@@ -1058,7 +1058,7 @@ export const packageFactsOf = (inputs: PackageInputs) => ({
  * about 2 s and 271 MB (measured 2026-11-06 at load average 27), and a caller that only builds
  * rows, such as the dry run, never needs it.
  *
- * @param author - The author role (`#pantry/qti/roles.ts` `authorRoleOf`), its login's.
+ * @param author - The author role (`#pantry/qti/roles.ts` `authorRole`), its login's.
  * @param inputs - The package's inputs.
  * @returns The ChangeSet, compiled by `db.apply` for the one call that applies it.
  */

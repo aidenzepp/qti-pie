@@ -36,14 +36,14 @@ import { compareWithRecord, exportEntries, exportPackage } from "#pantry/export/
 
 import { importPackage } from "#pantry/import/package.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
+import { loginSession, qtiSchemaName, rowsOf } from "#pantry/test/direct-sql.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import {
   exportPageSizesTestTimeoutMs,
   hasLease,
   leaseTestTimeoutMs,
 } from "#pantry/test/settings.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { explainMember } from "@bjornpagen/grizzle/compile";
 
 /**
@@ -273,12 +273,12 @@ describe.skipIf(!hasLease)(
             // key's order; `db.explain`'s plans carry each node's type, not its index.
             // Bound: every document of the accepted packages.
             Effect.gen(function* planAudit() {
-              const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+              const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
               const client = yield* loginSession;
               const key = yield* rowsOf<{ readonly name: string }>(
                 client,
                 `SELECT c.conname AS name FROM pg_catalog.pg_constraint c
-                  WHERE c.conrelid = '${qtiSchema}.node'::regclass AND c.contype = 'u'
+                  WHERE c.conrelid = '${qtiSchemaName}.node'::regclass AND c.contype = 'u'
                     AND pg_catalog.obj_description(c.oid, 'pg_constraint') = 'key Node(document, start)'`,
               );
               const byDocument = yield* rowsOf<{
@@ -294,7 +294,7 @@ describe.skipIf(!hasLease)(
                                ORDER BY k.o) AS columns
                    FROM pg_catalog.pg_index x
                    JOIN pg_catalog.pg_class i ON i.oid = x.indexrelid
-                  WHERE x.indrelid = '${qtiSchema}.node'::regclass`,
+                  WHERE x.indrelid = '${qtiSchemaName}.node'::regclass`,
               ).pipe(Effect.map((rows) => rows.filter(({ columns }) => columns[0] === "document")));
 
               assert.lengthOf(key, 1, "the key Node(document, start)");
@@ -314,7 +314,7 @@ describe.skipIf(!hasLease)(
                 assert.isAbove(documents.length, 0, name);
                 for (const { node, path: entry } of documents) {
                   const plans = yield* explainMember(
-                    (yield* AuthorLogin).roles.author,
+                    (yield* ServedAuthorLogin).roles.author,
                     "documentScan",
                     { kind: "params", params: { document: node } },
                     {},

@@ -73,7 +73,7 @@ import type { Stated } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { hasLease } from "#pantry/test/settings.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { importFacts } from "#pantry/test/import-facts.ts";
 
 /**
@@ -557,7 +557,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         // Bound: a choice interaction bound to a single string, and to a record; a text entry's
         // string binding to an integer, and to a record.
         Effect.gen(function* bindingFit() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const typedCases = [
             {
               label: "a choice bound to a single string",
@@ -689,7 +689,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         // response variable.
         // Bound: a declaration row of an outcome declaration.
         Effect.gen(function* bindingDeclared() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const outcome = yield* db.workload.importWrite.apply(
             importFacts({
               BindingDeclaration: [
@@ -712,7 +712,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         // "second response variable" (§5.162.3), the old `string-identifier-distinct`.
         // Bound: two interactions naming one variable; one text entry naming it twice.
         Effect.gen(function* bindingUnique() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           for (const rows of [
             [boundRow(0), boundRow(1)],
             [
@@ -1015,7 +1015,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         // Bound: a hotspot interaction's default hotspot at element 1 of 2; a graphic gap match's
         // associable hotspot of shape default.
         Effect.gen(function* defaultHotspot() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const cases = [
             { name: "default_hotspot_last_slot", row: hotspotOf({ elements: 1n }) },
             {
@@ -1069,7 +1069,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         // (256 integer and 255 fraction digits): 2 above 1 at 257 integer digits, and two values
         // one unit apart in their 300th fraction digit.
         Effect.gen(function* ranges() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           for (const row of [
             { lower: "5", node: strayNode(0), upper: "3" },
             { lower: "1e1", node: strayNode(0), upper: "9.5" },
@@ -1146,7 +1146,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         // `SectionFeedbackName`, since its placement's counts are its document's and its
         // reference is its document's, both keys PostgreSQL judges at the INSERT.
         Effect.gen(function* references() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const typed = yield* db.workload.importWrite.apply(
             importFacts({
               FeedbackRef: [feedbackOf()],
@@ -1210,7 +1210,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         // qti-template-variable, accepted by this check; the placed section reference of a
         // record template, refused.
         Effect.gen(function* templateType() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const wrong = yield* db.workload.importWrite.apply(
             importFacts({
               TemplateRef: [templateOf()],
@@ -1319,7 +1319,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         // interaction, which these per-class keys let be (the rows are stray, so the deferred
         // foreign keys refuse them at commit, and the keys are not among the laws).
         Effect.gen(function* choiceKeys() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           for (const second of [
             choiceOf(1, "A"),
             { ...choiceOf(1, "A"), nearest: strayNode(98) },
@@ -1374,7 +1374,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         // Bound: a simple choice and an outcome declaration named A with no cardinality; a hottext
         // and that declaration; a simple choice named numAttempts in an item.
         Effect.gen(function* choiceNotVariable() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const declared = {
             declarationKind: "qti-outcome-declaration",
             document: stray,
@@ -1601,7 +1601,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         // exactly when its nearest kind is `document`; a value is its lexical form collapsed.
         // Bound: a hottext of a hottext interaction whose nearest is its document; a value " R".
         Effect.gen(function* derived() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const hottext = yield* db.workload.importWrite.apply(
             importFacts({
               ChoiceVariableName: [nameOf("H")],

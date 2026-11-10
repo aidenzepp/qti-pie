@@ -13,7 +13,7 @@ import type { CursorError, Uuid } from "@bjornpagen/grizzle";
 import type { DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
 import { Array as Arr, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import type { PlatformError } from "effect";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { compareRecord } from "#pantry/export/compare.ts";
 import type { Report } from "#pantry/export/compare.ts";
 import { addRow, emptyScan, scannedRows } from "#pantry/export/pages.ts";
@@ -88,10 +88,10 @@ type EntriesError =
 export const exportEntries = Effect.fn("export.exportEntries")(function* exportEntries(
   packageId: Uuid,
   size: number = pageSize,
-): Effect.fn.Return<readonly ZipEntry[], EntriesError, AuthorLogin | DbLayer<AuthorRole>> {
+): Effect.fn.Return<readonly ZipEntry[], EntriesError, ServedAuthorLogin | DbLayer<AuthorRole>> {
   yield* Effect.annotateCurrentSpan({ packageId, pageSize: size });
 
-  const login = yield* AuthorLogin;
+  const login = yield* ServedAuthorLogin;
   const db = yield* Db.open(login.roles.author, {});
   if (Option.isNone(yield* db.workload.packageOf.get({ id: packageId }))) {
     return yield* new PackageNotFound({ packageId });
@@ -146,8 +146,8 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
 export const compareExported = Effect.fn("export.compareExported")(function* compareExported(
   packageId: Uuid,
   exported: readonly ZipEntry[],
-): Effect.fn.Return<Report, OpenError | ReadError, AuthorLogin | DbLayer<AuthorRole>> {
-  const login = yield* AuthorLogin;
+): Effect.fn.Return<Report, OpenError | ReadError, ServedAuthorLogin | DbLayer<AuthorRole>> {
+  const login = yield* ServedAuthorLogin;
   const db = yield* Db.open(login.roles.author, {});
   const record = yield* (yield* db.workload.entriesOf.execute({ package: packageId })).collect;
 
@@ -167,7 +167,7 @@ export const compareExported = Effect.fn("export.compareExported")(function* com
  */
 export const compareWithRecord = Effect.fn("export.compareWithRecord")(function* compareWithRecord(
   packageId: Uuid,
-): Effect.fn.Return<Report, EntriesError, AuthorLogin | DbLayer<AuthorRole>> {
+): Effect.fn.Return<Report, EntriesError, ServedAuthorLogin | DbLayer<AuthorRole>> {
   return yield* compareExported(packageId, yield* exportEntries(packageId));
 });
 
@@ -190,7 +190,7 @@ export const exportPackage = Effect.fn("export.exportPackage")(function* exportP
 ): Effect.fn.Return<
   readonly ZipEntry[],
   EntriesError | PlatformError.PlatformError,
-  AuthorLogin | DbLayer<AuthorRole> | FileSystem.FileSystem | Path.Path
+  ServedAuthorLogin | DbLayer<AuthorRole> | FileSystem.FileSystem | Path.Path
 > {
   yield* Effect.annotateCurrentSpan({ packageId, target });
 

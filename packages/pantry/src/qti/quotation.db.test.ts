@@ -29,7 +29,7 @@ import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
 import type { TextEdit } from "#pantry/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { importFacts } from "#pantry/test/import-facts.ts";
 
 /**
@@ -155,7 +155,7 @@ describe.skipIf(!hasLease)(
           // Bound: every quotation mark at every end, one row each, and the right single quote
           // and the apostrophe at every end.
           Effect.gen(function* marks() {
-            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+            const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
             for (const [end, at] of ends) {
               for (const mark of quotationMarks) {
                 const outcome = yield* db.workload.importWrite.apply(
@@ -191,7 +191,7 @@ describe.skipIf(!hasLease)(
           // firstAt = 0, and the end of a neighbour that does not exist is empty.
           // Bound: each derived field once, wrong.
           Effect.gen(function* derived() {
-            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+            const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
             for (const fields of [
               { nextAt: 3n },
               { firstAt: 1n },
