@@ -313,6 +313,12 @@ type Noted =
   | `reader ${(typeof readers)[number]["reader"]}`
   | `target ${(typeof targets)[number]["target"]}`;
 
+/**
+ * The timeout, in milliseconds, of the one test here: a hang guard, never a budget. Measured
+ * 2026-11-10: 120.0 s at a load average of 84 to 103, its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
 layer(NodeServices.layer, { excludeTestServices: true })(
   "a reference that names no declaration, and one that claims no table",
   (it) => {
@@ -384,7 +390,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             );
           }).pipe(Effect.scoped),
         ),
-      600_000,
+      testTimeoutMs,
     );
   },
 );

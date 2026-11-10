@@ -884,6 +884,37 @@ describe("a refusal from the internal subset", () => {
     }),
   );
 
+  it.effect("is placed at a default's reference whose expansion passes the budget", () =>
+    Effect.gen(function* placesBudgetDefault() {
+      const subset = `<!ENTITY e0 "${"x".repeat(1000)}"><!ENTITY e1 "${"&e0;".repeat(10)}"><!ENTITY e2 "${"&e1;".repeat(10)}"><!ENTITY e3 "${"&e2;".repeat(10)}">`;
+      const error = yield* refusalOf(
+        `<!DOCTYPE a [\n${subset}\n<!ATTLIST a d CDATA "&e3;">\n]><a/>`,
+      );
+
+      assertRefusal(error, "entity-expansion", Option.some({ column: 22, line: 3 }));
+      assert.instanceOf(error, ReaderRefusal);
+      assert.include(error.detail, "brings the replacement text");
+      assert.notInclude(error.detail, "levels deep");
+    }),
+  );
+
+  it.effect(
+    "is placed at the percent sign of a parameter entity whose expansion passes the budget",
+    () =>
+      Effect.gen(function* placesBudgetParameter() {
+        let subset = `<!ENTITY % p0 "<!--${"c".repeat(1996)}-->">`;
+        for (let n = 1; n <= 3; n += 1) {
+          subset += `<!ENTITY % p${n} "${`&#37;p${n - 1};`.repeat(10)}">`;
+        }
+        const error = yield* refusalOf(`<!DOCTYPE a [\n${subset}\n\n  %p3;\n]><a/>`);
+
+        assertRefusal(error, "entity-expansion", Option.some({ column: 3, line: 4 }));
+        assert.instanceOf(error, ReaderRefusal);
+        assert.include(error.detail, "brings the replacement text");
+        assert.notInclude(error.detail, "levels deep");
+      }),
+  );
+
   it.effect("finds no line or column while the subset is admitted, only for a refusal", () =>
     Effect.gen(function* findsNoPositionUntilRefused() {
       const scans = yield* lineScans(

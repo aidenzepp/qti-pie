@@ -923,29 +923,42 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
 });
 
 /**
- * A package of one item resource whose href names the item, unless `named` is false, and whose
- * record's one general category lists `lomLang`, and the item whose root writes `xmlLang`.
+ * A package of one item resource whose `href` names `item.xml`, so the importer reads the item
+ * whose root writes `xmlLang`, and one LOM record whose one general category lists `lomLang`.
  *
- * @param xmlLang - The item root's `xml:lang`, as written.
+ * The record names the item only when it is the resource's own, a `lom:lom` of the resource's
+ * `cp:metadata` (`namingRecords`, `#pantry/qti/queries.ts`; spec reading 62). The record of the
+ * resource's `item.xml` file describes that file and names no document, so no category describes
+ * the item and its languages meet no `document-lang` law (readings 62 and 134).
+ *
+ * @param xmlLang - The `xml:lang` the item states, as written: its root's, except the empty form,
+ *   which an item root's `xml:lang` never takes (spec reading 129, refused under
+ *   `attribute-lexical`) and so is written on the item body, where it is lawful and states no
+ *   language (XML 1.0 §2.12).
  * @param lomLang - The category's `lom:language`, as written.
- * @param named - Whether the resource's href names the item.
+ * @param named - Whether the record is the resource's own, which names the item; when false the
+ *   same record is the one `item.xml`'s `cp:file` carries, and no record names the item.
  * @returns The package's entries.
  */
 const r26PackageOf = (xmlLang: string, lomLang: string, named: boolean) => {
   const text = new TextEncoder();
-  const href = named ? ' href="item.xml"' : "";
+  const lom = `<metadata><imsmd:lom><imsmd:general><imsmd:language>${lomLang}</imsmd:language></imsmd:general></imsmd:lom></metadata>`;
+  const resourceLom = named ? lom : "";
+  const fileLom = named ? "" : lom;
+  const rootLang = xmlLang === "" ? "" : ` xml:lang="${xmlLang}"`;
+  const bodyLang = xmlLang === "" ? ' xml:lang=""' : "";
 
   return new Map([
     [
       "imsmanifest.xml",
       text.encode(
-        `<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="R" type="imsqti_item_xmlv3p0"${href}><metadata><imsmd:lom><imsmd:general><imsmd:language>${lomLang}</imsmd:language></imsmd:general></imsmd:lom></metadata><file href="item.xml"/></resource></resources></manifest>\n`,
+        `<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml">${resourceLom}<file href="item.xml">${fileLom}</file></resource></resources></manifest>\n`,
       ),
     ],
     [
       "item.xml",
       text.encode(
-        `<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="item" title="Item" time-dependent="false" xml:lang="${xmlLang}"><qti-item-body><p>Hi</p></qti-item-body></qti-assessment-item>\n`,
+        `<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="item" title="Item" time-dependent="false"${rootLang}><qti-item-body${bodyLang}><p>Hi</p></qti-item-body></qti-assessment-item>\n`,
       ),
     ],
   ]);
@@ -991,16 +1004,22 @@ describe.skipIf(!hasLease)(
               yield* writePackage(r26PackageOf(xmlLang, lomLang, named), dir);
 
               const outcome = yield* Effect.result(importPackage(dir));
+              const said = outcome._tag === "Failure" ? outcome.failure.message : "accepted";
               const rules =
                 outcome._tag === "Failure" && outcome.failure instanceof ImportRefused
                   ? outcome.failure.rules
                   : [];
 
-              assert.strictEqual(
-                rules.includes("document-lang"),
-                refused,
-                `${label}: ${outcome._tag === "Failure" ? outcome.failure.message : "accepted"}`,
-              );
+              if (refused) {
+                assert.isTrue(
+                  outcome._tag === "Failure" && outcome.failure instanceof ImportRefused,
+                  `${label}: expected an ImportRefused, got ${said}`,
+                );
+              } else {
+                assert.strictEqual(outcome._tag, "Success", `${label}: ${said}`);
+              }
+
+              assert.strictEqual(rules.includes("document-lang"), refused, `${label}: ${said}`);
             }
           }).pipe(Effect.scoped),
         leaseTestTimeoutMs,
