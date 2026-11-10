@@ -1124,19 +1124,13 @@
 }
 
 /*
- * The image part, the box the hotspots are positioned in: it takes the image's own size and no
- * more than its line, and its image scales down with it.
+ * The image part, the box the hotspots are positioned in: a grid, so the author's image is a block
+ * in it and leaves no line gap under it, and the box is exactly the image's. It takes the image's
+ * own size; an image wider than its line scrolls with the item, with the hotspots over it.
  */
 :where([data-slot="graphic-order-interaction-image"]) {
   position: relative;
-  display: inline-block;
-  max-inline-size: 100%;
-}
-
-:where([data-slot="graphic-order-interaction-image"]) :where(img) {
-  display: block;
-  max-inline-size: 100%;
-  block-size: auto;
+  display: inline-grid;
 }
 
 /* The hotspots lie over the image, and take no pointer: without script they are not controls. */
@@ -1176,14 +1170,13 @@
 
 /*
  * A drawn area: the theme's dark stroke over a light veil, so the stroke keeps 3:1 against the
- * veiled image inside it (1.4.11) however dark the image is. The stroke keeps its width as the
- * image scales.
+ * veiled image inside it (1.4.11) however dark the image is. The outline sets them on itself and
+ * the shape it holds inherits them.
  */
-:where([data-slot="graphic-order-interaction-outline"]) :where(circle, ellipse, polygon, rect) {
+:where([data-slot="graphic-order-interaction-outline"]) {
   fill: color-mix(in oklab, var(--card, oklch(1 0 0)) 25%, transparent);
   stroke: var(--primary, oklch(0.205 0 0));
   stroke-width: 2px;
-  vector-effect: non-scaling-stroke;
 }
 
 /*
@@ -1191,8 +1184,7 @@
  * they recolour a stroke and keep its width, so the order never shows by colour alone.
  */
 :where([data-slot="graphic-order-interaction-hotspot"][data-position])
-  :where([data-slot="graphic-order-interaction-outline"])
-  :where(circle, ellipse, polygon, rect) {
+  :where([data-slot="graphic-order-interaction-outline"]) {
   fill: color-mix(in oklab, var(--card, oklch(1 0 0)) 40%, transparent);
   stroke-width: 4px;
 }
