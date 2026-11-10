@@ -21,12 +21,13 @@ import type { ContentRenderKit } from "#plate/content/contract.ts";
 import {
   attachedBy,
   contentNodes,
+  dockedBy,
   renderContent,
   renderItemContent,
 } from "#plate/content/modules.ts";
 import type { ContentPayload } from "#plate/content/modules.ts";
 import { emitBody, emitNodes, writesMalformedHeading } from "#plate/emit/body.ts";
-import type { ReferencingElement, RenderInteraction } from "#plate/emit/body.ts";
+import type { DockStimulus, ReferencingElement, RenderInteraction } from "#plate/emit/body.ts";
 import type { Node } from "#plate/emit/node.ts";
 import { emitItem, emitStatus, itemPart } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
@@ -60,7 +61,7 @@ import { drawInstance } from "#plate/seed.ts";
 import { noSupports } from "#plate/supports.ts";
 import type { Supports } from "#plate/supports.ts";
 import type { OutcomeView } from "#plate/vocabulary.ts";
-import type { Accepted } from "#plate/validate/verdict.ts";
+import type { Accepted, AcceptedStimulus } from "#plate/validate/verdict.ts";
 
 /**
  * The author's inputs to one {@link render}, each optional.
@@ -103,16 +104,28 @@ export interface Options {
 }
 
 /**
- * The author's further inputs to one {@link redact}, each optional: `supports`, the accessibility
- * supports the host enabled for the candidate, `noSupports` when absent, which decide what catalog
- * content the redacted item holds, and `view`, the view the item is shown to, the candidate's when
- * absent, which decides which rubric blocks it holds: each content module's `redact` decides by
- * both, so content a view or a support does not show never reaches the page. And `feedback`,
- * whether the host lets feedback show, true when absent, which each feedback module's `redact`
- * decides by beside whether the record counts an attempt processed. A host in a test session passes
- * `feedbackShown(view)` (`#plate/session/feedback.ts`) and never derives it by hand.
+ * The author's further inputs to one {@link redact}, each optional: `documents`, the stimulus
+ * documents the host opened, which the module that reads a stimulus reference (`m3e-02`'s) looks a
+ * reference's `href` up in; `feedback`, whether the host lets feedback show; `supports`, the
+ * accessibility supports the host enabled for the candidate, `noSupports` when absent, which decide
+ * what catalog content the redacted item holds; and `view`, the view the item is shown to, the
+ * candidate's when absent, which decides which rubric blocks it holds: each content module's
+ * `redact` decides by both, so content a view or a support does not show never reaches the page.
  */
 export interface RedactOptions {
+  /**
+   * The stimulus documents the host handed, keyed by the document's location as the host named it
+   * (`AcceptedStimulus.document`, which `openPackage` keys `PackageContents.stimuli` by); none
+   * when absent. A resource names a document only through its `href`, and a resource with no
+   * `href` names none, so the module resolves each reference's `href` against the item's location
+   * and looks the document up here; a stimulus the host did not hand is the module's to mark.
+   */
+  readonly documents?: ReadonlyMap<string, AcceptedStimulus>;
+  /**
+   * Whether the host lets feedback show, true when absent, which each feedback module's `redact`
+   * decides by beside whether the record counts an attempt processed. A host in a test session
+   * passes `feedbackShown(view)` (`#plate/session/feedback.ts`) and never derives it by hand.
+   */
   readonly feedback?: boolean;
   readonly supports?: Supports;
   readonly view?: OutcomeView;
@@ -281,6 +294,11 @@ const checkedInstance = (
   });
 
 /**
+ * No stimulus document: what {@link redact} runs with when the host handed none.
+ */
+const noDocuments: ReadonlyMap<string, AcceptedStimulus> = new Map();
+
+/**
  * Copy an accepted document's item into the form the page may know: its body, title and language,
  * shown as the record's template values and outcome values say, without its correct responses,
  * mappings, defaults, processing or template rules.
@@ -357,6 +375,7 @@ export const redact = (
     options.supports ?? noSupports,
     options.view ?? defaultView,
     options.feedback ?? true,
+    options.documents ?? noDocuments,
   );
 
 /**
@@ -479,21 +498,60 @@ const contentKitOf = (
 });
 
 /**
+ * Answer `RenderInteraction.dock` over the payload's content: the first node of a module whose
+ * `dock.key` gives the element's idref (`dockedBy`), rendered through the module's `render` with
+ * the content kit and recorded as docked, so `renderItemContent` emits it nowhere else; none when
+ * no module's node answers, which is every element's answer while no module declares `dock`, so
+ * the element renders as any other.
+ *
+ * @param reference The element that names a stimulus: its idref and its id.
+ * @param built The render's payload.
+ * @param state The render's emit state.
+ * @param renderer The render function the docked node's content is emitted through.
+ * @param docked The nodes docked so far, which this adds to.
+ * @returns The docked node's element, none when no module's node answers, or the refusal of a part
+ *   swap.
+ */
+const dockOver = (
+  reference: ReferencingElement,
+  built: Payload,
+  state: EmitState,
+  renderer: RenderInteraction,
+  docked: Set<unknown>,
+): ReturnType<DockStimulus> =>
+  Option.match(dockedBy(built.content, reference.idref), {
+    onNone: () => Result.succeed(Option.none()),
+    onSome: (found) => {
+      docked.add(found.node);
+
+      return Result.map(found.render(state, contentKitOf(built, state, renderer)), (element) =>
+        Option.some([element]),
+      );
+    },
+  });
+
+/**
  * Construct the render function each interaction of a body is handed to, dispatching on its kind,
  * with its `modules`, which hands an interaction a module parses to its module's render, its
  * `moduleContent`, which gives that interaction's content through its module, its `content`,
  * which hands a body-placed content element's node to its module's render with the content kit,
  * its `contentNodes`, which gives that node's content, its `containers`, which hands a module's
  * container and its children's output to the module's container render, so the emitter reads all
- * five without importing a module, and its `attach`, which answers an element's catalog reference
+ * five without importing a module, its `attach`, which answers an element's catalog reference
  * with what the item-placed modules the payload holds nodes of attach, folded (`attachedBy`), with
- * the content kit: the empty answer, which leaves the HTML unchanged, while none attaches.
+ * the content kit: the empty answer, which leaves the HTML unchanged, while none attaches, and its
+ * `dock`, which docks the node of the module that names an element's stimulus ({@link dockOver}).
  *
  * @param built The render's payload.
  * @param state The render's emit state.
+ * @param docked The nodes body elements dock as the body is emitted, which the render then skips.
  * @returns The function that renders one interaction, container or content node through its module.
  */
-const interactionRenderer = (built: Payload, state: EmitState): RenderInteraction => {
+const interactionRenderer = (
+  built: Payload,
+  state: EmitState,
+  docked: Set<unknown>,
+): RenderInteraction => {
   const renderer: RenderInteraction = Object.assign(shippedRenderer(built, state), {
     attach: (reference: ReferencingElement) =>
       attachedBy(built.content, reference, state, contentKitOf(built, state, renderer)),
@@ -502,6 +560,7 @@ const interactionRenderer = (built: Payload, state: EmitState): RenderInteractio
     content: (node: ContentPayload) =>
       renderContent(node, state, contentKitOf(built, state, renderer)),
     contentNodes,
+    dock: (reference: ReferencingElement) => dockOver(reference, built, state, renderer, docked),
     moduleContent,
     modules: (interaction: ModulePayload) => renderModule(interaction, built, state),
   });
@@ -599,15 +658,14 @@ export const render = (
       : checkedInstance(options.instance, "options.instance");
     const state = stateOf(configuration, parts, options.assetBase, options.supports, options.view);
     const built = payload(item, viewOf(instance, configuration, options));
-    const renderer = interactionRenderer(built, state);
+    const docked = new Set<unknown>();
+    const renderer = interactionRenderer(built, state, docked);
     const body = yield* emitBody(built, state, renderer);
-    const content = yield* renderItemContent(
-      built.content,
-      state,
-      contentKitOf(built, state, renderer),
-    );
+    const kit = contentKitOf(built, state, renderer);
+    const before = yield* renderItemContent(built.content, state, kit, docked, "before-body");
+    const after = yield* renderItemContent(built.content, state, kit, docked, "after-body");
     const live = yield* itemPart(state.parts, "live", liveRegion, []);
-    const root = yield* emitItem(built, state, [...body, ...content, live]);
+    const root = yield* emitItem(built, state, [...before, ...body, ...after, live]);
 
     if (writesMalformedHeading(built.body, configuration.headingLevel, renderer)) {
       return yield* Result.fail(new InvalidHeadingLevel({ level: configuration.headingLevel }));
