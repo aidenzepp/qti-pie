@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { parseLexical } from "#plate/model/values.ts";
+import { format, parseLexical } from "#plate/model/values.ts";
 import type { RecordValue, Single, Value } from "#plate/model/values.ts";
 import { resultFields, resultValue, resultValues } from "#plate/results/values.ts";
 
@@ -109,10 +109,7 @@ describe("resultValue", () => {
         const lexical = resultValue({ baseType: "float", value: double });
         const again = yield* Effect.fromResult(parseLexical("float", lexical));
         assert.strictEqual(again.baseType, "float");
-        assert.isTrue(
-          Object.is(again.value, double),
-          `${lexical} reads back as ${String(again.value)}`,
-        );
+        assert.isTrue(Object.is(again.value, double), `${lexical} reads back as ${format(again)}`);
 
         const digits = significantDigits(lexical);
         if (Number.isFinite(double) && double !== 0 && digits > 1) {

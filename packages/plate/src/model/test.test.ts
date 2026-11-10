@@ -543,7 +543,7 @@ describe("buildTest", () => {
   );
 
   it.effect(
-    "[T-1] holds a test outcome of base type duration, its default read as seconds, and marks one of base type file",
+    "[T-1] [W0-AY] holds a test outcome of base type duration, its default read as seconds, and one of base type file, unmarked",
     () =>
       Effect.gen(function* holdsDurationOutcome() {
         const built = yield* Effect.fromResult(
@@ -556,7 +556,8 @@ describe("buildTest", () => {
           ),
         );
 
-        assert.deepStrictEqual([...built.outcomes.keys()], ["TIME"]);
+        // The file outcome was the mark `base-type="file"` before `[W0-AY]`; a file is held now.
+        assert.deepStrictEqual([...built.outcomes.keys()], ["TIME", "UPLOAD"]);
         assert.deepStrictEqual(built.outcomes.get("TIME")?.baseType, "duration");
         assert.deepStrictEqual(
           built.outcomes.get("TIME")?.defaultValue,
@@ -566,9 +567,9 @@ describe("buildTest", () => {
             values: [{ baseType: "duration", value: 90.5 }],
           }),
         );
-        assert.deepStrictEqual(built.unsupported, [
-          mark('base-type="file"', `${root}/qti-outcome-declaration[2]`),
-        ]);
+        assert.deepStrictEqual(built.outcomes.get("UPLOAD")?.baseType, "file");
+        assert.deepStrictEqual(built.outcomes.get("UPLOAD")?.defaultValue, Option.none());
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 
