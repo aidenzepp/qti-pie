@@ -67,20 +67,66 @@ export interface PnpSelector {
 }
 
 /**
+ * The reasons a PNP document cannot be read, which {@link InvalidPnp} names.
+ */
+const invalidReasons = ["unreadable", "not-a-pnp", "ambiguous-record", "unknown-record"] as const;
+
+/**
+ * The ids of one record of a bulk file, as {@link InvalidPnp.records} lists them: the person's
+ * `sourcedId` and every `appointment-id` of the record, the guide's `assignment-id` included.
+ */
+const RecordIds = Schema.Struct({
+  appointmentIds: Schema.Array(Schema.String),
+  personSourcedId: Schema.String,
+});
+
+/**
+ * What a caller changes to get each reason past: one sentence per reason, so only a reason a
+ * selector can settle mentions one.
+ */
+const remedies: Readonly<Record<(typeof invalidReasons)[number], string>> = {
+  "ambiguous-record":
+    "Pass a selector with personSourcedId, appointmentId or both that names exactly one of the records listed.",
+  "not-a-pnp":
+    "Pass the bytes of an AfA PNP 3.0 document, whose root is access-for-all-pnp or access-for-all-pnp-records in the PNP namespace or in none.",
+  "unknown-record":
+    "Pass a selector whose personSourcedId and appointmentId name one of the records listed.",
+  unreadable:
+    "Repair what the rule names, or pass the bytes of a well-formed XML document in an encoding the reader supports.",
+};
+
+/**
+ * What a caller changes when a bulk file holds no record, which no selector can settle.
+ */
+const emptyBulkRemedy =
+  "Pass a bulk file that holds at least one access-for-all-pnp-record, or the bytes of one access-for-all-pnp profile.";
+
+/**
  * A PNP document `readPnp` cannot read into supports: its bytes are not readable XML
  * (`unreadable`), it is not a PNP document (`not-a-pnp`), the selector matches more than one
- * record (`ambiguous-record`), or it matches none (`unknown-record`). `detail` says what was found.
+ * record (`ambiguous-record`), or it matches none (`unknown-record`).
+ *
+ * `detail` says what was found: for `unreadable`, the reader's own rule and what it found, for
+ * the two record reasons the ids the file holds. `records` carries those ids as data, the
+ * records of a bulk file in order, and is empty for a reason that names no record and for a bulk
+ * file that holds none.
  */
 // oxlint-disable-next-line unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown.
 export class InvalidPnp extends Schema.TaggedError<InvalidPnp>()("InvalidPnp", {
   detail: Schema.String,
-  reason: Schema.Literals(["unreadable", "not-a-pnp", "ambiguous-record", "unknown-record"]),
+  reason: Schema.Literals(invalidReasons),
+  records: Schema.Array(RecordIds).pipe(Schema.withConstructorDefault(Effect.succeed([]))),
 }) {
   /**
-   * The reason, what was found, and what to change.
+   * The reason, what was found, and what to change, which depends on the reason.
    */
   override get message(): string {
-    return `The PNP document cannot be read into supports (${this.reason}): ${this.detail}. Pass the bytes of one AfA PNP 3.0 document, with a selector that names exactly one of its records.`;
+    const remedy =
+      this.reason === "unknown-record" && this.records.length === 0
+        ? emptyBulkRemedy
+        : remedies[this.reason];
+
+    return `The PNP document cannot be read into supports (${this.reason}): ${this.detail}. ${remedy}`;
   }
 }
 
@@ -106,12 +152,16 @@ const elementSpellings: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * The guide's spellings of values, each with the schema's value it reads as: the chemistry
- * restriction (row 6) and the braille type (row 12).
+ * The guide's spellings of values, by the element whose text each is a spelling of, each with the
+ * schema's value it reads as: `restriction-type`'s chemistry restriction (row 6) and
+ * `braille-type`'s braille type (row 12).
+ *
+ * A spelling is the guide's for that element's vocabulary alone, so the same text anywhere else
+ * (a `person-sourced-id` or a `font-name` of `ubae`) is read as written.
  */
-const valueSpellings: ReadonlyMap<string, string> = new Map([
-  ["skip-chemical-equations", "skip-chemistry-equations"],
-  ["ubae", "ebae"],
+const valueSpellings: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map([
+  ["braille-type", new Map([["ubae", "ebae"]])],
+  ["restriction-type", new Map([["skip-chemical-equations", "skip-chemistry-equations"]])],
 ]);
 
 /**
@@ -164,18 +214,6 @@ const fullName = (element: SourceElement): string => `{${element.namespace}}${el
  */
 const schemaName = (element: SourceElement): string =>
   elementSpellings.get(element.local) ?? element.local;
-
-/**
- * Read a value in the schema's spelling, trimmed, the guide's spellings mapped.
- *
- * @param value The value as written.
- * @returns The schema's value.
- */
-const schemaValue = (value: string): string => {
-  const trimmed = value.trim();
-
-  return valueSpellings.get(trimmed) ?? trimmed;
-};
 
 /**
  * Decide whether a schema name names a PNP feature.
@@ -262,13 +300,20 @@ const childNamed = (element: SourceElement, name: string): Option.Option<SourceE
   Option.fromNullishOr(childrenNamed(element, name)[0]);
 
 /**
- * Read an element's text: its text children joined, in the schema's spelling.
+ * Read an element's text: its text children joined and trimmed, in the schema's spelling where
+ * {@link valueSpellings} gives the guide's spelling for this element.
  *
  * @param element The element.
  * @returns The text, trimmed.
  */
-const textOf = (element: SourceElement): string =>
-  schemaValue(element.children.map((child) => (child.kind === "text" ? child.text : "")).join(""));
+const textOf = (element: SourceElement): string => {
+  const text = element.children
+    .map((child) => (child.kind === "text" ? child.text : ""))
+    .join("")
+    .trim();
+
+  return valueSpellings.get(schemaName(element))?.get(text) ?? text;
+};
 
 /**
  * Read the text of an element's first child of one schema name.
@@ -323,17 +368,28 @@ const langOf = (element: SourceElement): Option.Option<string> =>
   attributeOf(element, "lang", xmlNamespace);
 
 /**
- * Read a number as XML Schema writes a float or an integer; anything else, `NaN` and the
- * infinities included, is no number.
+ * The lexical forms of XML Schema's `decimal`, `integer` and `double` that have a finite value: an
+ * optional sign, digits with an optional fraction, and an optional exponent, between XML
+ * whitespace.
+ *
+ * `Number` alone reads more than that, `0x1E` as 30 and `0b11` as 3 among it, so the text is
+ * checked against this form before `Number` converts it.
+ *
+ * @see https://www.w3.org/TR/xmlschema-2/#double
+ */
+const numberForm = /^[\t\n\r ]*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?[\t\n\r ]*$/u;
+
+/**
+ * Read a number as XML Schema writes a float or an integer; anything else is no number: a
+ * hexadecimal, binary or octal literal, `INF`, `NaN`, and a value beyond the double range.
  *
  * @param value The text.
  * @returns The finite number, none for any other text.
  */
 const numberOf = (value: string): Option.Option<number> => {
-  const trimmed = value.trim();
-  const parsed = Number(trimmed);
+  const parsed = Number(value);
 
-  return trimmed !== "" && Number.isFinite(parsed) ? Option.some(parsed) : Option.none();
+  return numberForm.test(value) && Number.isFinite(parsed) ? Option.some(parsed) : Option.none();
 };
 
 /**
@@ -419,7 +475,13 @@ const scan = (pnp: SourceElement): Scan => {
         sets[set].add(member);
       }
     } else if (isFeature(name)) {
-      assigned.set(name, [...(assigned.get(name) ?? []), child]);
+      const elements = assigned.get(name);
+
+      if (elements === undefined) {
+        assigned.set(name, [child]);
+      } else {
+        elements.push(child);
+      }
     } else {
       ignored.push(fullName(child));
     }
@@ -551,15 +613,43 @@ const magnificationOf = (element: SourceElement): Option.Option<number> =>
   );
 
 /**
- * Build the {@link PnpSupports} of a scanned profile: a feature in `prohibit-set` sets nothing.
+ * Stand in for the element of a feature that a set makes active and the profile does not assign:
+ * an element with no attributes and no children, which reads as the feature with every setting at
+ * the Schema's default.
  *
- * @param found What the scan found.
+ * @param name The feature's schema name.
+ * @returns The empty element.
+ */
+const unsetElement = (name: PnpFeature): SourceElement => ({
+  attributes: [],
+  children: [],
+  kind: "element",
+  local: name,
+  namespace: "",
+});
+
+/**
+ * Build the {@link PnpSupports} of a scanned profile, by ruling D17 on the three sets.
+ *
+ * A feature is active when `activate-at-initialization-set` names it, or when the profile assigns
+ * it and `activate-as-option-set` does not name it; a feature in the option set alone is
+ * available to the candidate and off at start, so only {@link PnpSupports.optional} holds it.
+ * `prohibit-set` wins over both sets and over an assignment: a prohibited feature is in
+ * {@link PnpSupports.prohibited} and in no other field. Every other field is the settings of the
+ * active features, a feature the profile does not assign reading with the Schema's defaults.
+ *
+ * @param scanned What the scan found.
  * @returns The supports.
  */
-const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
-  const features = new Set([...assigned.keys()].filter((name) => !sets.prohibited.has(name)));
+const supportsOf = (scanned: Scan): PnpSupports => {
+  const { assigned, ignored, sets } = scanned;
+  const atStart = sets.atStart.difference(sets.prohibited);
+  const optional = sets.optional.difference(sets.prohibited);
+  const features = atStart.union(
+    new Set(assigned.keys()).difference(sets.optional).difference(sets.prohibited),
+  );
   const elementsOf = (name: PnpFeature): readonly SourceElement[] =>
-    features.has(name) ? (assigned.get(name) ?? []) : [];
+    features.has(name) ? (assigned.get(name) ?? [unsetElement(name)]) : [];
   const firstOf = (name: PnpFeature): Option.Option<SourceElement> =>
     Option.fromNullishOr(elementsOf(name)[0]);
   const textAppearance = firstOf("text-appearance");
@@ -587,7 +677,7 @@ const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
       additionalTestingTimeOf,
     ),
     answerMasking: features.has("answer-masking"),
-    atStart: sets.atStart,
+    atStart,
     braille: Option.map(firstOf("braille"), brailleOf),
     breaks: Option.getOrElse(
       Option.flatMap(firstOf("environment"), (environment) =>
@@ -625,7 +715,7 @@ const supportsOf = ({ assigned, ignored, sets }: Scan): PnpSupports => {
       ).pipe(Option.map((hidden) => !hidden)),
       () => false,
     ),
-    optional: sets.optional,
+    optional,
     prohibited: sets.prohibited,
     readAloud: Option.map(firstOf("spoken"), (element) => spokenOf(element).readingType),
     signLanguage: Option.flatMap(firstOf("sign-language"), langOf),
@@ -675,42 +765,69 @@ const recordsOf = (records: SourceElement): readonly PnpRecord[] =>
   }));
 
 /**
- * Spell a record's ids for a refusal's detail.
+ * Take the ids of a record, as {@link InvalidPnp.records} lists them.
  *
  * @param record The record.
+ * @returns Its person and appointment ids.
+ */
+const idsOf = (record: PnpRecord): InvalidPnp["records"][number] => ({
+  appointmentIds: record.appointmentIds,
+  personSourcedId: record.personSourcedId,
+});
+
+/**
+ * Spell a record's ids for a refusal's detail.
+ *
+ * @param record The record's ids.
  * @returns Its person and appointments.
  */
-const describeRecord = (record: PnpRecord): string =>
+const describeRecord = (record: InvalidPnp["records"][number]): string =>
   record.appointmentIds.length === 0
     ? `person ${record.personSourcedId}`
     : `person ${record.personSourcedId} (appointments ${record.appointmentIds.join(", ")})`;
 
 /**
- * Spell a selector for a refusal's detail.
+ * Spell what a selector matched for a refusal's detail: the ids it names and how many records
+ * carry them, or that no selector was given and so every record matched.
  *
  * @param selector The selector.
- * @returns What it names, or that it names nothing.
+ * @param count How many records it matched.
+ * @returns The sentence clause.
  */
-const describeSelector = (selector: PnpSelector): string => {
-  const parts = [
+const describeMatches = (selector: PnpSelector, count: number): string => {
+  const named = [
     ...(selector.personSourcedId === undefined ? [] : [`person ${selector.personSourcedId}`]),
     ...(selector.appointmentId === undefined ? [] : [`appointment ${selector.appointmentId}`]),
   ];
 
-  return parts.length === 0 ? "no selector" : parts.join(" and ");
+  return named.length === 0
+    ? `no selector was given, so all ${count} records match`
+    : `${named.join(" and ")} matches ${count === 0 ? "no record" : `${count} records`}`;
 };
 
 /**
  * Choose the one record a selector names: with neither id, the file's one record.
  *
+ * A file that holds no record fails as `unknown-record` whatever the selector, since no selector
+ * could name one.
+ *
  * @param records The file's records.
  * @param selector Which to read.
- * @returns The record, or `ambiguous-record` or `unknown-record` naming the ids the file holds.
+ * @returns The record, or `ambiguous-record` or `unknown-record` naming the ids the file holds,
+ *   which {@link InvalidPnp.records} also carries.
  */
 const selectRecord = (
   records: readonly PnpRecord[],
   selector: PnpSelector,
 ): Effect.Effect<PnpRecord, InvalidPnp> => {
+  const held = records.map(idsOf);
+
+  if (records.length === 0) {
+    return Effect.fail(
+      new InvalidPnp({ detail: "the document holds no record", reason: "unknown-record" }),
+    );
+  }
+
   const matching = records.filter(
     (record) =>
       (selector.personSourcedId === undefined ||
@@ -719,45 +836,37 @@ const selectRecord = (
         record.appointmentIds.includes(selector.appointmentId)),
   );
   const [first] = matching;
-  const held =
-    records.length === 0
-      ? "the document holds no record"
-      : `the document holds ${records.map(describeRecord).join("; ")}`;
+  const detail = `${describeMatches(selector, matching.length)}; the document holds ${held.map(describeRecord).join("; ")}`;
 
   if (first === undefined) {
-    return Effect.fail(
-      new InvalidPnp({
-        detail: `${describeSelector(selector)} matches no record; ${held}`,
-        reason: "unknown-record",
-      }),
-    );
+    return Effect.fail(new InvalidPnp({ detail, reason: "unknown-record", records: held }));
   }
 
   return matching.length === 1
     ? Effect.succeed(first)
-    : Effect.fail(
-        new InvalidPnp({
-          detail: `${describeSelector(selector)} matches ${matching.length} records; ${held}`,
-          reason: "ambiguous-record",
-        }),
-      );
+    : Effect.fail(new InvalidPnp({ detail, reason: "ambiguous-record", records: held }));
 };
 
 /**
- * Turn the reader's refusal into `unreadable`, with the reader's reason.
+ * Turn the reader's refusal into `unreadable`, naming the shared reader's own rule.
+ *
+ * The rule is `readerRule` when the reader refused the input (`unsupported-encoding`, `nul`,
+ * `element-depth` and the rest of crust's `ReaderRefusal` rules), and `not-well-formed` when the
+ * parser did, with its line and column.
  *
  * @param refusal The adapter's refusal.
  * @returns The `InvalidPnp`.
  */
 const unreadable = (refusal: Refusal): InvalidPnp => {
   const facts = Object.values(refusal.detail).join("; ");
+  const rule = Option.getOrElse(refusal.readerRule, () => refusal.rule);
   const where =
     refusal.location.kind === "position"
       ? ` at line ${refusal.location.line}, column ${refusal.location.column}`
       : "";
 
   return new InvalidPnp({
-    detail: `the bytes are not readable XML (${refusal.rule}${where}): ${facts}`,
+    detail: `the bytes are not readable XML (${rule}${where}): ${facts}`,
     reason: "unreadable",
   });
 };
@@ -807,15 +916,27 @@ const profileOf = (
  * file, in the schema's namespace, either of the guide's, or none (row 3). It is read tolerantly,
  * the guide's spellings beside the schema's: `color-theme` is read (row 1); an `ext:` value is
  * any `ext:` followed by non-space characters (row 2); all four hazards and both extra input
- * requirements read (rows 4, 5); `skip-chemical-equations`, `activate-at-initiation-set`,
- * `spell-checker`, `homophone-checker`, `assignment-id` and `ubae` read as their schema
- * counterparts (rows 6 to 9, 12); a `font-size` under 4 is a factor, otherwise points (row 10);
- * `letter-spacing` is pixels (row 11). A feature assigned and in no set is active; `prohibit-set`
- * wins over an assignment. An element in another namespace is ignored and counted. Nothing is
- * validated against the XSD, but a value outside its vocabulary (neither one of the contract's
- * values nor an `ext:` extension where the vocabulary takes one), and a set member that names no
- * feature, reads as absent, so the result keeps the contract's types. A field the PNP does not set
- * takes `noPnpSupports`' value, and the result satisfies `PnpSupportsSchema`.
+ * requirements read (rows 4, 5); `activate-at-initiation-set`, `spell-checker`,
+ * `homophone-checker` and `assignment-id` read as their schema counterparts (rows 7 to 9), and
+ * `skip-chemical-equations` and `ubae` do in `restriction-type` and `braille-type`, the elements
+ * their rows name (rows 6, 12), and nowhere else, so a `person-sourced-id` or a `font-name` of
+ * `ubae` is read as written; a `font-size` under 4 is a factor, otherwise points (row 10);
+ * `letter-spacing` is pixels (row 11). A number is XML Schema's lexical form of a float or an
+ * integer, so `0x1E` is no number. An element in another namespace is ignored and counted.
+ * Nothing is validated against the XSD, but a value outside its vocabulary (neither one of the
+ * contract's values nor an `ext:` extension where the vocabulary takes one), and a set member
+ * that names no feature, reads as absent, so the result keeps the contract's types. A field the
+ * PNP does not set takes `noPnpSupports`' value, and the result satisfies `PnpSupportsSchema`.
+ *
+ * The three sets follow ruling D17, per AfA PNP 3.0. A feature named in
+ * `activate-at-initialization-set` is active at start, with or without an element of its own, and
+ * a feature without one reads with the Schema's defaults. A feature named in
+ * `activate-as-option-set` and not in the at-start set is available to the candidate but off at
+ * start: it is in `optional`, and no other field reads it, its element's settings included. A
+ * feature the profile assigns and names in no set is active. `prohibit-set` wins over both sets
+ * and over an assignment: a prohibited feature is in `prohibited` and in no other field. So
+ * `features` holds the active features, and `atStart` and `optional` hold the names of their
+ * sets that are not prohibited, a feature in both sets being active and in both.
  *
  * In a bulk file, the record is chosen by `personSourcedId` and `appointmentId` (either or both);
  * with neither, a file of one record reads that record, and one of several fails.
@@ -823,9 +944,10 @@ const profileOf = (
  * @param bytes The document's bytes.
  * @param selector Which of its records to read, when it holds more than one.
  * @returns The supports; {@link InvalidPnp} when the bytes are not readable XML (`unreadable`,
- *   with the reader's reason), the root is not a PNP root (`not-a-pnp`, naming it), or the
- *   selector names several records (`ambiguous-record`) or none (`unknown-record`), each naming
- *   the ids the file holds.
+ *   naming the reader's own rule), the root is not a PNP root (`not-a-pnp`, naming it), the
+ *   selector names several records (`ambiguous-record`), or it names none or the file holds none
+ *   (`unknown-record`); the two record reasons name the ids the file holds, in `detail` and in
+ *   `records`, and each reason names its own remedy.
  */
 export const readPnp = Effect.fn("plate.readPnp")(function* readPnp(
   bytes: Uint8Array,
@@ -833,19 +955,22 @@ export const readPnp = Effect.fn("plate.readPnp")(function* readPnp(
 ): Effect.fn.Return<PnpSupports, InvalidPnp> {
   const source = yield* readSource(location, bytes).pipe(Effect.mapError(unreadable));
   const profile = yield* profileOf(source.root, selector);
-  const found = Option.match(profile, {
-    onNone: (): Scan => ({
-      assigned: new Map(),
-      ignored: [],
-      sets: { atStart: new Set(), optional: new Set(), prohibited: new Set() },
+  const supports = supportsOf(
+    Option.match(profile, {
+      onNone: (): Scan => ({
+        assigned: new Map(),
+        ignored: [],
+        sets: { atStart: new Set(), optional: new Set(), prohibited: new Set() },
+      }),
+      onSome: scan,
     }),
-    onSome: scan,
-  });
+  );
 
   yield* Effect.annotateCurrentSpan({
-    "pnp.features": found.assigned.size,
-    "pnp.ignored": found.ignored.length,
+    "pnp.features": supports.features.size,
+    "pnp.ignored": supports.ignored.length,
+    "pnp.optional": supports.optional.size,
   });
 
-  return supportsOf(found);
+  return supports;
 });
