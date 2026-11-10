@@ -159,6 +159,8 @@ const copyKit: ContentCopyKit = { nodes: () => [] };
  * The kit a stub's `render` is handed here: it never reads it, as it throws first.
  */
 const renderKit: ContentRenderKit = {
+  files: () => Option.none(),
+  instance: "q1",
   nodes: () => Result.succeed([]),
   supports: noSupports,
   view: defaultView,
