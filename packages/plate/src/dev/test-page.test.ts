@@ -1,16 +1,22 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { ConfigProvider, Effect, Option, Result } from "effect";
 import { decodeSession } from "#plate/codec/session.ts";
 import { configure } from "#plate/configuration.ts";
 import { pageHeaders, pageHtml } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
 import { openDirectory, packageCache, testField } from "#plate/dev/packages.ts";
-import type { PackageCache, PackageOpener, PackageSource } from "#plate/dev/packages.ts";
+import type {
+  FileOptions,
+  PackageCache,
+  PackageOpener,
+  PackageSource,
+} from "#plate/dev/packages.ts";
+import { commentName } from "#plate/dev/post.ts";
 import { sessionStore } from "#plate/dev/store.ts";
 import { routeSessions, sessionPath } from "#plate/dev/test-page.ts";
-import type { SessionPlayground } from "#plate/dev/test-page.ts";
+import type { CommentedStep, SessionPlayground } from "#plate/dev/test-page.ts";
 import { emptyTheme } from "#plate/dev/theme.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
@@ -22,6 +28,9 @@ import type { Value } from "#plate/model/values.ts";
 import { navigationState, renderNavigation } from "#plate/navigation.ts";
 import { openPackage } from "#plate/package/open.ts";
 import { resultValues } from "#plate/results/values.ts";
+import type * as RenderModule from "#plate/render.ts";
+import type { Options } from "#plate/render.ts";
+import type * as AdvanceModule from "#plate/session/advance.ts";
 import type { Intent } from "#plate/session/session.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 
@@ -291,6 +300,10 @@ interface Bench {
    * Run an effect that reads the packages with the corpus root this bench names.
    */
   readonly provide: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>;
+  /**
+   * The session routes the bench sends to.
+   */
+  readonly route: typeof routeSessions;
   readonly sitting: Sitting;
 }
 
@@ -301,9 +314,15 @@ interface Bench {
  * @param packages The packages.
  * @param sitting The sitting it starts.
  * @param root The corpus root its reads name, the environment's when absent.
+ * @param route The session routes it sends to, those of `#plate/dev/test-page.ts` when absent.
  * @returns The bench.
  */
-const benchOf = (packages: PackageCache, sitting: Sitting, root?: string) =>
+const benchOf = (
+  packages: PackageCache,
+  sitting: Sitting,
+  root?: string,
+  route: typeof routeSessions = routeSessions,
+) =>
   Effect.map(configure({ seed: "7" }), (configuration): Bench => ({
     playground: { configuration, packages, seed: Option.none(), sessions: sessionStore() },
     provide: (effect) =>
@@ -314,6 +333,7 @@ const benchOf = (packages: PackageCache, sitting: Sitting, root?: string) =>
               ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: root })),
             ),
           ),
+    route,
     sitting,
   }));
 
@@ -333,7 +353,7 @@ type Fields = readonly (readonly [string, string])[];
  */
 const send = (bench: Bench, target: string, fields?: Fields, method?: string) =>
   bench.provide(
-    routeSessions(
+    bench.route(
       bench.playground,
       new Request(
         `${origin}${target}`,
@@ -959,7 +979,7 @@ describe("routeSessions", () => {
 
         const again = yield* open(bench, id);
         assert.strictEqual(controlsNamed(again, typed)[0]?.attrs["value"], "eight");
-        assert.strictEqual(pageHeaders["cache-control"], "no-store");
+        assert.strictEqual(pageHeaders()["cache-control"], "no-store");
       }),
   );
 
@@ -1411,5 +1431,124 @@ describe("routeSessions", () => {
         assert.strictEqual(session.status, "closed");
       }),
     { tags: ["corpus"], timeout: corpusTimeoutMs },
+  );
+});
+
+/**
+ * What a session route that records the options of each `render` call and the step of each
+ * `advance` call received, and does what the real ones do.
+ */
+interface Recorded {
+  /**
+   * The options each `render` call received, in call order.
+   */
+  readonly renders: (FileOptions & Options)[];
+  /**
+   * The session routes, from a module graph the recording replaced `render` and `advance` in.
+   */
+  readonly route: typeof routeSessions;
+  /**
+   * The step each `advance` call received, in call order.
+   */
+  readonly steps: CommentedStep[];
+}
+
+/**
+ * Run an effect over the session routes of a module graph of its own, where `render` of
+ * `#plate/render.ts` and `advance` of `#plate/session/advance.ts` record what they receive and
+ * then do their work, and restore the graph when it ends.
+ *
+ * @param use The effect, given what the routes record.
+ * @returns The effect under those replacements.
+ */
+const recordingSession = <A, E>(use: (recorded: Recorded) => Effect.Effect<A, E>) => {
+  const renders: (FileOptions & Options)[] = [];
+  const steps: CommentedStep[] = [];
+
+  return Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock("#plate/render.ts", async (importOriginal) => {
+      const actual = await importOriginal<typeof RenderModule>();
+
+      return {
+        ...actual,
+        render: (...given: Parameters<typeof actual.render>) => {
+          renders.push(given[2] ?? {});
+
+          return actual.render(...given);
+        },
+      };
+    });
+    vi.doMock("#plate/session/advance.ts", async (importOriginal) => {
+      const actual = await importOriginal<typeof AdvanceModule>();
+
+      return {
+        ...actual,
+        advance: (...given: Parameters<typeof actual.advance>) => {
+          steps.push(given[3]);
+
+          return actual.advance(...given);
+        },
+      };
+    });
+  }).pipe(
+    Effect.andThen(Effect.promise(() => import("#plate/dev/test-page.ts"))),
+    Effect.flatMap(({ routeSessions: route }) => use({ renders, route, steps })),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock("#plate/render.ts");
+        vi.doUnmock("#plate/session/advance.ts");
+        vi.resetModules();
+      }),
+    ),
+  );
+};
+
+describe("dev/test-page.ts: the package reader and the comment", () => {
+  it.effect(
+    "[W0-DEVHOST.2] the session page hands files to render and the comment to the step",
+    () =>
+      recordingSession(({ renders, route, steps }) =>
+        Effect.gen(function* commenting() {
+          const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot, route);
+          const id = yield* start(bench);
+          const choice = entryName(`${id}.1`, "RESPONSE");
+          const typed = entryName(`${id}.2`, "RESPONSE");
+          const held = Option.getOrThrow(
+            yield* bench.provide(bench.playground.packages.packageOf(fixture.id)),
+          );
+
+          const first = yield* open(bench, id);
+          assert.lengthOf(renders, 1);
+          assert.isFunction(renders[0]?.files);
+          assert.strictEqual(renders[0]?.files, held.files);
+
+          redirected(
+            yield* press(bench, id, buttonFor(first, { kind: "next" }), [
+              [choice, "B"],
+              [commentName(`${id}.1`), "hello"],
+            ]),
+          );
+          assert.lengthOf(steps, 1);
+          assert.strictEqual(steps[0]?.comment, "hello");
+          assert.deepStrictEqual(steps[0]?.intent, { kind: "next" });
+          assert.deepStrictEqual(Object.keys(steps[0]?.responses ?? {}), ["RESPONSE"]);
+
+          const second = yield* open(bench, id);
+          assert.lengthOf(renders, 2);
+          assert.isFunction(renders[1]?.files);
+          assert.strictEqual(renders[1]?.files, held.files);
+
+          redirected(
+            yield* press(bench, id, buttonFor(second, { kind: "previous" }), [
+              [typed, "eight"],
+              [commentName(`${id}.1`), "another item's"],
+            ]),
+          );
+          assert.lengthOf(steps, 2);
+          assert.notProperty(steps[1] ?? {}, "comment");
+          assert.deepStrictEqual(steps[1]?.intent, { kind: "previous" });
+        }),
+      ),
   );
 });
