@@ -770,11 +770,11 @@ const constraintNameLookupOf = Fn.memoize(constraintNamesOf);
  * relation's triggers by a digest (grizzle `b34dfbf9`).
  *
  * Grizzle's lookup throws for a law that is no check of the schema, and a refusal may name one: a
- * CDN install's stored level states checks the default `Qti` does not (`#pantry/qti/cdn.ts`), so a
- * refusal read against another schema than the one the database installed names a check this one
- * lacks. Such a check has no installed name here, so the refusal still prints, with its text and
- * the name and rule the table gives it. Only a check the schema states is asked for, so a refusal
- * that names none compiles nothing.
+ * package-media install's stored level states checks the default `Qti` does not
+ * (`#pantry/qti/media.ts`), so a refusal read against another schema than the one the database
+ * installed names a check this one lacks. Such a check has no installed name here, so the refusal
+ * still prints, with its text and the name and rule the table gives it. Only a check the schema
+ * states is asked for, so a refusal that names none compiles nothing.
  *
  * @param schema - The schema the import ran against, `Qti`.
  * @param law - A check law a refusal names.

@@ -171,9 +171,9 @@ import { dataName, typeAvailable } from "#pantry/vocab/open.ts";
  * - `selection-bounds`: a section selects more parts than it holds (O7), a law of the test
  *   vocabulary, which today's model does not read.
  *
- * It holds the rules of a single-CDN install's policy too (`#pantry/qti/cdn.ts`), which a refusal
- * of such an install names, and which the oracle, judging a package as this package's own install
- * does, never raises.
+ * It holds the rules of a package-media install's policy too (`#pantry/qti/media.ts`), which a
+ * refusal of such an install names, and which the oracle, judging a package as this package's own
+ * install does, never raises.
  */
 export const oracleRules = [
   "adaptive-feedback",
@@ -187,10 +187,6 @@ export const oracleRules = [
   "binding-fit",
   "binding-unique",
   "body-empty",
-  "cdn-data",
-  "cdn-foreign",
-  "cdn-origin",
-  "cdn-style",
   "branch-forward",
   "branch-target",
   "card-default",
@@ -233,6 +229,11 @@ export const oracleRules = [
   "mastery-range",
   "math-arity",
   "max-strings-required",
+  "media-data",
+  "media-foreign",
+  "media-path",
+  "media-style",
+  "media-type",
   "namespace-name",
   "not-qti3",
   "ordering",

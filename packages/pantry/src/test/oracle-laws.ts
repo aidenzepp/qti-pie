@@ -153,20 +153,22 @@ export const statedInParts = {
 } as const satisfies Readonly<Record<string, readonly string[]>>;
 
 /**
- * The laws a single-CDN install's policy states (`#pantry/qti/cdn.ts`), each with why the oracle
- * declares none: the oracle judges a package as this package's own install does, which states none
- * of them, so a package the oracle accepts may break one. Each law's checks are held to their
- * readings in `src/qti/cdn.test.ts`, and the database of such an install is their judge.
+ * The laws a package-media install's policy states (`#pantry/qti/media.ts`), each with why the
+ * oracle declares none: the oracle judges a package as this package's own install does, which
+ * states none of them, so a package the oracle accepts may break one. Each law's checks are held to
+ * their readings in `src/qti/media.test.ts`, and the database of such an install is their judge.
  */
 export const policyLaws = {
-  "CDN data":
-    "the policy refuses a data: address, which this package's own install admits as any URI; cdn.test.ts holds its patterns to the URL Standard's reading of a scheme",
-  "CDN foreign":
-    "the policy refuses foreign markup and every open attribute class but data-*, which this package's own install keeps; cdn.test.ts holds the check to the classes it names",
-  "CDN origin":
-    "the policy holds every fetched address to its origin, which this package's own install leaves free; cdn.test.ts holds its patterns to the URL Standard and to HTML's srcset parser",
-  "CDN style":
-    "the policy refuses a style that fetches, which this package's own install admits; cdn.test.ts holds its pattern to the texts it names and the backslash",
+  "Media data":
+    "the policy refuses a data: address, which this package's own install admits as any URI; media.test.ts holds its patterns to the URL Standard's reading of a scheme",
+  "Media foreign":
+    "the policy refuses foreign markup and every open attribute class but data-*, which this package's own install keeps; media.test.ts holds the check to the classes it names",
+  "Media path":
+    "the policy holds every fetched address to a file of the package, which this package's own install leaves free to name any URL; media.test.ts holds its checks to the URL Standard, the reference census and each reference's resolution",
+  "Media style":
+    "the policy refuses a style that fetches, which this package's own install admits; media.test.ts holds its pattern to the texts it names and the backslash",
+  "Media type":
+    "the policy holds every fetched entry to an extension it lists, which this package's own install leaves free; media.test.ts holds its checks to Node's path.extname and to the policy's record",
 } as const satisfies Readonly<Record<string, string>>;
 
 /**

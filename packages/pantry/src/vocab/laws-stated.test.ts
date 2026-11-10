@@ -1,8 +1,8 @@
 /**
  * Every law of the catalog (`lawTable` of `#pantry/vocab/laws.ts`) is stated somewhere: by a module
- * that names its statements (`namedLaws`), by a single-CDN install's policy (`cdnLawsByName` of
- * `#pantry/qti/cdn.ts`, which states nothing for this package's own install, so a probe policy's
- * laws stand for every install's), by a law the importer writes out (`statedLaws`: primary
+ * that names its statements (`namedLaws`), by a package-media install's policy (`mediaLawsByName`
+ * of `#pantry/qti/media.ts`, which states nothing for this package's own install, so a probe
+ * policy's laws stand for every install's), by a law the importer writes out (`statedLaws`: primary
  * keys, patterns and generated fields, among them the stated limits' bounds), by a part of a
  * statement the oracle states in parts (`statedInParts`), or by a statement grizzle gives its own
  * structure, listed below with why. A law the catalog names that none of these states is a rule the
@@ -11,19 +11,20 @@
  */
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
-import type { CdnPolicy } from "#pantry/db/install.ts";
+import type { MediaPolicy } from "#pantry/db/install.ts";
 import { lawNames } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
-import { cdnLawsByName } from "#pantry/qti/cdn.ts";
+import { mediaLawsByName } from "#pantry/qti/media.ts";
 import { statedInParts } from "#pantry/test/oracle-laws.ts";
 import { namedLaws, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
- * A single-CDN install's policy, whose schema states the CDN laws: `CDN data`, `CDN foreign`,
- * `CDN origin` and `CDN style`, each over its origin. This package's own install has no policy and
- * states none of them, so they are counted as stated where a policy states them.
+ * A package-media install's policy, whose schema states the media laws: `Media data`, `Media
+ * foreign`, `Media path`, `Media style` and `Media type`, the last over its extensions. This
+ * package's own install has no policy and states none of them, so they are counted as stated where
+ * a policy states them.
  */
-const probePolicy: CdnPolicy = { cdn: "https://cdn.example.test/" };
+const probePolicy: MediaPolicy = { media: { svg: "image/svg+xml" } };
 
 /**
  * The laws no module names a statement of, each stated by grizzle's own structure: the statement
@@ -65,7 +66,7 @@ const unstated = (stated: ReadonlySet<string>): readonly LawName[] =>
  */
 const statedByModules = (): ReadonlySet<string> =>
   new Set([
-    ...[...namedLaws, cdnLawsByName(Option.some(probePolicy))].flatMap((byName) =>
+    ...[...namedLaws, mediaLawsByName(Option.some(probePolicy))].flatMap((byName) =>
       Object.entries(byName).flatMap(([name, statements]) => (statements.length > 0 ? [name] : [])),
     ),
     ...statedLaws().map(([, name]) => name),

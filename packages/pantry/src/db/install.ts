@@ -1,9 +1,9 @@
 /**
  * The install this process opens: this package's own, whose schema is the default `Qti` and whose
- * snapshot is the committed one, or a single-CDN install, the folder `GR8DES_QTI_INSTALL` names.
+ * snapshot is the committed one, or a package-media install, the folder `GR8DES_QTI_INSTALL` names.
  *
- * A single-CDN install's folder holds `policy.json`, its policy, and `migrations/`, the migrations
- * a grizzle config outside this package generated for it, the author login's served file
+ * A package-media install's folder holds `policy.json`, its policy, and `migrations/`, the
+ * migrations a grizzle config outside this package generated for it, the author login's served file
  * `migrations/qti/served/author_app.json` among them. The setting tells this package's runtime and
  * command line two things and nothing else: the policy the `Qti` schema is built with
  * (`#pantry/qti/own.ts`), and the served file `AuthorAppLayer` opens (`#pantry/db/layer.ts`). Its
@@ -12,57 +12,86 @@
  */
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
-import { Config, Effect, FileSystem, Layer, Option, Path, Schema } from "effect";
+import { Array as Arr, Config, Effect, FileSystem, Layer, Option, Path, Schema } from "effect";
 
 /**
- * The origin every address a player fetches starts with: an `https://` URL of one host, its port
- * where it names one, and the root path, `/`, as the URL Standard serializes it, so the text an
- * author writes before the path is exactly this one. A host is lowercase letters, digits and inner
- * hyphens and dots, so the origin holds no character a pattern reads as an operator but the dot.
- *
- * @see {@link https://url.spec.whatwg.org/#concept-url-serializer | URL Standard, URL serializing}
+ * A file extension a media policy lists: lowercase ASCII letters and digits, without its dot, as an
+ * entry's path writes it after its last `.` (`photo.jpg` is `jpg`). An extension matches as
+ * written, so a policy lists one spelling of each and a path in another case is refused.
  */
-export const CdnOrigin = Schema.String.check(
-  Schema.isPattern(/^https:\/\/[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]{1,5})?\/$/u, {
+export const MediaExtension = Schema.String.check(
+  Schema.isPattern(/^[a-z0-9]+$/u, {
     message:
-      "Use an https:// origin and the root path, such as https://cdn.example.com/: a lowercase host, an optional port, and one slash after it",
+      "Write an extension in lowercase ASCII letters and digits, without its dot, such as svg or jpg",
   }),
-  Schema.makeFilter(
-    (origin: string) => URL.canParse(origin) && `${new URL(origin).origin}/` === origin,
-    {
-      message:
-        "Write the origin as the URL Standard serializes it: a port is a number from 1 to 65535, and the default port 443 is left out",
-    },
-  ),
 );
 
 /**
- * An install's policy, `policy.json`: exactly `{ "cdn": "<origin>" }`, every address the player
- * fetches on that one origin.
+ * The media type a policy serves an extension's files with, as an HTTP `Content-Type` names it: a
+ * type and a subtype, each a restricted name (RFC 6838, §4.2), in lower case, the form the
+ * registry writes, with no parameter.
+ *
+ * @see {@link https://www.rfc-editor.org/rfc/rfc6838#section-4.2 | RFC 6838, §4.2 Naming Requirements}
  */
-export const CdnPolicySchema = Schema.Struct({ cdn: CdnOrigin });
+export const MediaType = Schema.String.check(
+  Schema.isPattern(/^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/u, {
+    message:
+      "Write a media type in lower case as a type and a subtype with no parameter, such as image/svg+xml (RFC 6838, §4.2)",
+  }),
+);
 
 /**
- * A single-CDN install's policy.
+ * Find the media types a roster lists under more than one extension, each with those extensions.
+ *
+ * @param media - The roster.
+ * @returns One message per such type; none where each type has one extension.
  */
-export type CdnPolicy = typeof CdnPolicySchema.Type;
+const typesSpelledTwice = (media: Readonly<Record<string, string>>): readonly string[] =>
+  Object.entries(Arr.groupBy(Object.keys(media), (extension) => media[extension] ?? "")).flatMap(
+    ([type, extensions]) =>
+      extensions.length > 1
+        ? [
+            `${type} is listed under ${extensions.join(", ")}: list each media type under one extension, the one spelling its files use`,
+          ]
+        : [],
+  );
 
 /**
- * `policy.json`'s text as its policy: JSON whose one key is `cdn`.
+ * An install's policy, `policy.json`: exactly `{ "media": { "<extension>": "<type>/<subtype>", ...
+ * } }`, the one closed record of the extensions a player may fetch, each with the media type the
+ * install serves its files with. It lists at least one extension, and each media type under one
+ * extension, its one spelling: a policy that lists `jpg` for `image/jpeg` lists no `jpeg`.
  */
-const PolicyText = Schema.fromJsonString(CdnPolicySchema);
+export const MediaPolicySchema = Schema.Struct({
+  media: Schema.Record(MediaExtension, MediaType).check(
+    Schema.isMinProperties(1, {
+      message: 'List at least one extension, such as { "svg": "image/svg+xml" }',
+    }),
+    Schema.makeFilter(typesSpelledTwice),
+  ),
+});
 
 /**
- * A single-CDN install: its folder, absolute, and its policy.
+ * A package-media install's policy.
+ */
+export type MediaPolicy = typeof MediaPolicySchema.Type;
+
+/**
+ * `policy.json`'s text as its policy: JSON whose one key is `media`.
+ */
+const PolicyText = Schema.fromJsonString(MediaPolicySchema);
+
+/**
+ * A package-media install: its folder, absolute, and its policy.
  */
 export interface QtiInstall {
   readonly folder: string;
-  readonly policy: CdnPolicy;
+  readonly policy: MediaPolicy;
 }
 
 /**
- * The install folder's `policy.json` could not be read, or is not exactly `{ "cdn": "<origin>" }`
- * with an origin {@link CdnOrigin} admits.
+ * The install folder's `policy.json` could not be read, or is not exactly `{ "media": { ... } }`
+ * with a roster {@link MediaPolicySchema} admits.
  */
 export class InstallPolicyError extends Schema.TaggedError<InstallPolicyError>()(
   "InstallPolicyError",
@@ -72,7 +101,7 @@ export class InstallPolicyError extends Schema.TaggedError<InstallPolicyError>()
    * The file, why it was refused, and the setting that named its folder.
    */
   override get message(): string {
-    return `Cannot read the install's policy at ${this.path}, in the folder GR8DES_QTI_INSTALL names: ${String(this.reason)}. Write it as exactly { "cdn": "https://<host>/" }, or unset GR8DES_QTI_INSTALL to open this package's own install.`;
+    return `Cannot read the install's policy at ${this.path}, in the folder GR8DES_QTI_INSTALL names: ${String(this.reason)}. Write it as exactly { "media": { "svg": "image/svg+xml", ... } }, each extension in lower case with one media type, or unset GR8DES_QTI_INSTALL to open this package's own install.`;
   }
 }
 
@@ -90,7 +119,7 @@ const installFolder = Config.option(Config.String("GR8DES_QTI_INSTALL")).pipe(
  *
  * It fails with Effect's `ConfigError` for a setting that cannot be read, and with an
  * {@link InstallPolicyError} for a policy file that is missing, is no JSON, holds another key, or
- * names an origin {@link CdnOrigin} refuses.
+ * holds a roster {@link MediaPolicySchema} refuses.
  */
 export const readInstall = Effect.gen(function* readInstall() {
   const fs = yield* FileSystem.FileSystem;
@@ -125,7 +154,7 @@ export const installed: Option.Option<QtiInstall> = await Effect.runPromise(
 /**
  * The policy `Qti` is built with in this process: the install's, none for this package's own.
  */
-export const installedPolicy: Option.Option<CdnPolicy> = installed.pipe(
+export const installedPolicy: Option.Option<MediaPolicy> = installed.pipe(
   Option.map(({ policy }) => policy),
 );
 

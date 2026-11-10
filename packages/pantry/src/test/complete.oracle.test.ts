@@ -16,7 +16,7 @@
  *   folded rows of one document instead, and judged by `documentBreaches`.
  * - **Every stated law is declared.** Each law of `lawTable` is the oracle's, or the oracle states it
  *   in parts (`statedInParts`), or no host predicate can judge it, with the reason
- *   (`hostlessLaws`), or only a single-CDN install's policy states it, with the reason
+ *   (`hostlessLaws`), or only a package-media install's policy states it, with the reason
  *   (`policyLaws`).
  *
  * A law no mutation can break alone is a row of {@link owed} with why, a list that only shrinks: a
@@ -451,7 +451,7 @@ describe("a declaration that writes no cardinality", () => {
 });
 
 describe("every law the schema states", () => {
-  it("is the oracle's, stated by it in parts, judged by no host predicate, stated by a single-CDN policy alone, or owed, each with why", () => {
+  it("is the oracle's, stated by it in parts, judged by no host predicate, stated by a media policy alone, or owed, each with why", () => {
     const declared = new Set<string>(lawNames);
     for (const law of statedLawNames) {
       const ways = [

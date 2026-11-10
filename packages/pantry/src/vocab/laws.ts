@@ -20,9 +20,10 @@
  * 3. XML Schema's assessment of an element's governing type, its attributes and its text;
  * 4. The content model: the ancestry bans, the nearest interaction, then the automaton's order, the
  *    counts it relaxes, the family's end and admission;
- * 5. A single-CDN install's policy (`#pantry/qti/cdn.ts`), which only such an install states: a
- *    `data:` address, an address off the origin, a style that fetches, then markup pantry cannot
- *    read, so content that is not valid QTI is named by the rule that says so first;
+ * 5. A package-media install's policy (`#pantry/qti/media.ts`), which only such an install states: a
+ *    `data:` address, an address that names no file of the package, a file of a type the policy
+ *    does not list, a style that fetches, then markup pantry cannot read, so content that is not
+ *    valid QTI is named by the rule that says so first;
  * 6. The document layer: the stated bound on a key's text, foreign names, derived fields and the tree.
  *
  * A specific law says what in the content to change, and a general one only that the representation
@@ -134,11 +135,12 @@ export const precedence = [
   "child-set",
   "union-count",
   "admission",
-  // A single-CDN install's policy.
-  "cdn-data",
-  "cdn-origin",
-  "cdn-style",
-  "cdn-foreign",
+  // A package-media install's policy.
+  "media-data",
+  "media-path",
+  "media-type",
+  "media-style",
+  "media-foreign",
   // The document layer: its stated limit, then its laws.
   "key-text-bound",
   "href-form",
@@ -282,26 +284,6 @@ export const lawTable = {
     rule: "branch-target",
     source:
       "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'In the case of an item or section, the target must refer to an item or section in the same test-part … For test-parts, the target must refer to another test-part'; §5.23.1, the reserved EXIT_SECTION, EXIT_TESTPART and EXIT_TEST), §7.5 ('branching rules should treat referred sections as leaf nodes') and §5.98 ('It is therefore an error to make such an item the target of a branch-rule', of an item a selection with replacement can repeat): a target is an exit, or a part of its source's kind in its source's test part, in an instance that holds its source's, never a replaceable item ref (tests.ts Branch_target)",
-  },
-  "CDN data": {
-    rule: "cdn-data",
-    source:
-      "a single-CDN install's policy (#pantry/db/install.ts, policy.json): no address carries a base64 payload, so no address uses the data: scheme, read as https://url.spec.whatwg.org/#concept-basic-url-parser reads a scheme (the leading C0 controls and spaces stripped, 'Remove all ASCII tab or newline from input', the scheme ASCII-lowercased): every attribute and element text whose domain is an xs:anyURI, and each token of xsi:schemaLocation's list (https://www.w3.org/TR/xmlschema-1/#xsi_schemaLocation) (cdn.ts CDN_data)",
-  },
-  "CDN foreign": {
-    rule: "cdn-foreign",
-    source:
-      "a single-CDN install's policy (#pantry/db/install.ts, policy.json): markup pantry keeps but cannot interpret could carry an address no other law of the policy reads, so a single-CDN install refuses every foreign element, whichever its namespace class, and every attribute of an open class but data-* (fin.md D2's foreign, no-namespace and own-namespace), keeping https://html.spec.whatwg.org/multipage/dom.html#embedding-custom-non-visible-data-with-the-data-*-attributes (cdn.ts CDN_foreign)",
-  },
-  "CDN origin": {
-    rule: "cdn-origin",
-    source:
-      "a single-CDN install's policy (#pantry/db/install.ts, policy.json): every address a player fetches (#pantry/vocab/fetched.ts) starts with the policy's origin once the leading C0 controls and spaces https://url.spec.whatwg.org/#concept-basic-url-parser strips are stripped, and every image candidate's URL of a srcset does, as https://html.spec.whatwg.org/multipage/images.html#parsing-a-srcset-attribute parses one (cdn.ts CDN_origin)",
-  },
-  "CDN style": {
-    rule: "cdn-style",
-    source:
-      "a single-CDN install's policy (#pantry/db/install.ts, policy.json): no style attribute makes the player fetch, so none holds url(, @import, image-set( or src(, in any case, or a backslash, which begins an escape that could spell any of them (https://www.w3.org/TR/css-syntax-3/#consume-ident-like-token, https://www.w3.org/TR/css-syntax-3/#consume-escaped-code-point, https://www.w3.org/TR/css-cascade-4/#at-import, https://www.w3.org/TR/css-images-4/#image-set-notation, https://www.w3.org/TR/css-values-4/#urls) (cdn.ts CDN_style)",
   },
   "Card default entry": {
     rule: "card-default",
@@ -622,10 +604,35 @@ export const lawTable = {
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ExtendedTextInteraction.Attr_max-strings (§5.48.6: 'The max-strings characteristic is required when the interaction is bound to a response variable that is a container'): an extended text interaction bound to a multiple or ordered response writes max-strings, select(BindingCardinality, response-identifier, extended text, multiple or ordered)(node, kind) contained in select(CountBound, maxWritten)(node, kind) (interactions.ts, Q5.09)",
   },
+  "Media data": {
+    rule: "media-data",
+    source:
+      "a package-media install's policy (#pantry/db/install.ts, policy.json): no address carries a base64 payload, so no address uses the data: scheme, read as https://url.spec.whatwg.org/#concept-basic-url-parser reads a scheme (the leading C0 controls and spaces stripped, 'Remove all ASCII tab or newline from input', the scheme ASCII-lowercased): every attribute and element text whose domain is an xs:anyURI, and each token of xsi:schemaLocation's list (https://www.w3.org/TR/xmlschema-1/#xsi_schemaLocation) (media.ts Media_data)",
+  },
+  "Media foreign": {
+    rule: "media-foreign",
+    source:
+      "a package-media install's policy (#pantry/db/install.ts, policy.json): markup pantry keeps but cannot interpret could carry an address no other law of the policy reads, so a package-media install refuses every foreign element, whichever its namespace class, and every attribute of an open class but data-* (fin.md D2's foreign, no-namespace and own-namespace), keeping https://html.spec.whatwg.org/multipage/dom.html#embedding-custom-non-visible-data-with-the-data-*-attributes (media.ts Media_foreign)",
+  },
+  "Media path": {
+    rule: "media-path",
+    source:
+      "a package-media install's policy (#pantry/db/install.ts, policy.json): every address a player fetches (#pantry/vocab/fetched.ts) names a file of the package, which file-exists holds to an entry: it is an attribute or a text the reference census resolves (ReferenceAttribute, textReferenceKinds), resolved in the package (HrefScope entry), and holds no scheme and starts with no / or \\ once the leading C0 controls and spaces are stripped and tabs and newlines removed, as https://url.spec.whatwg.org/#concept-basic-url-parser reads one; so a qti-interaction-module's primary-path and fallback-path, a qti-file-href's text but a card's, and an attribute fetched under another kind's xsi:type governor, which no census resolves, are refused (media.ts Media_path)",
+  },
   "Media source src": {
     rule: "source-src",
     source:
       "reading 124: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Source.Attr_src (§5.135.1: 'The value must be a valid non-empty URL potentially surrounded by spaces. This characteristic must be present'), read in a media element as the HTML Standard it restates splits it (https://html.spec.whatwg.org/multipage/embedded-content.html#the-source-element: where 'The source element's parent is a media element', 'This attribute must be present'; where it is a picture element, 'The src attribute must not be present'): a source whose parent is an audio or a video carries src (html.ts Media_source_src)",
+  },
+  "Media style": {
+    rule: "media-style",
+    source:
+      "a package-media install's policy (#pantry/db/install.ts, policy.json): no style attribute makes the player fetch, so none holds url(, @import, image-set( or src(, in any case, or a backslash, which begins an escape that could spell any of them (https://www.w3.org/TR/css-syntax-3/#consume-ident-like-token, https://www.w3.org/TR/css-syntax-3/#consume-escaped-code-point, https://www.w3.org/TR/css-cascade-4/#at-import, https://www.w3.org/TR/css-images-4/#image-set-notation, https://www.w3.org/TR/css-values-4/#urls) (media.ts Media_style)",
+  },
+  "Media type": {
+    rule: "media-type",
+    source:
+      "a package-media install's policy (#pantry/db/install.ts, policy.json): every entry a fetched reference resolves to has an extension the policy's media record lists, matched case-sensitively, the text after the last . of its last segment where that . does not start the segment (https://nodejs.org/api/path.html#pathextnamepath), so the install knows the media type it serves the entry with (media.ts Media_type)",
   },
   "N1 one document node": {
     rule: "reachability",

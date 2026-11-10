@@ -15,18 +15,18 @@
  */
 import { schema } from "@bjornpagen/grizzle";
 import type { Option } from "effect";
-import type { CdnPolicy } from "#pantry/db/install.ts";
+import type { MediaPolicy } from "#pantry/db/install.ts";
 import { qtiBaseOf } from "#pantry/qti/base.ts";
-import { cdnLawsByName } from "#pantry/qti/cdn.ts";
+import { mediaLawsByName } from "#pantry/qti/media.ts";
 import { queriesOf } from "#pantry/qti/queries.ts";
 
 /**
  * Build the QTI 3.0 schema's levels for an install's policy, or none for this package's own
- * install: the stored level, every module's relations and laws and the policy's single-CDN laws
- * (`#pantry/qti/cdn.ts`); over it the level `QtiQueries`, every query and every rule over one, each
- * defined over that stored level; and the groups of the statements this call built, the policy's
- * and the queries', by the law each states, which the schema's own naming of its laws reads
- * (`#pantry/test/law-namer.ts` `namedLaws`, the source of the committed law-name dictionary),
+ * install: the stored level, every module's relations and laws and the policy's package-media laws
+ * (`#pantry/qti/media.ts`); over it the level `QtiQueries`, every query and every rule over one,
+ * each defined over that stored level; and the groups of the statements this call built, the
+ * policy's and the queries', by the law each states, which the schema's own naming of its laws
+ * reads (`#pantry/test/law-namer.ts` `namedLaws`, the source of the committed law-name dictionary),
  * since it knows a statement by its identity.
  *
  * Each call builds its own schema, statements and queries: one install builds once and holds the
@@ -36,14 +36,14 @@ import { queriesOf } from "#pantry/qti/queries.ts";
  * @returns The stored level (`base`), the schema (`qti`) and the groups of the statements built
  *   with it (`lawsByName`).
  */
-export const qtiLevelsOf = (policy: Option.Option<CdnPolicy>) => {
-  const cdn = cdnLawsByName(policy);
-  const base = qtiBaseOf(Object.values(cdn).flat());
+export const qtiLevelsOf = (policy: Option.Option<MediaPolicy>) => {
+  const media = mediaLawsByName(policy);
+  const base = qtiBaseOf(Object.values(media).flat());
   const queries = queriesOf(base);
 
   return {
     base,
-    lawsByName: [cdn, ...queries.lawsByName] as const,
+    lawsByName: [media, ...queries.lawsByName] as const,
     qti: schema.extend(base, "QtiQueries", queries.relations, queries.laws),
   };
 };
@@ -55,7 +55,7 @@ export const qtiLevelsOf = (policy: Option.Option<CdnPolicy>) => {
  * @param policy - The install's policy, none for this package's own install.
  * @returns The schema.
  */
-export const qtiSchema = (policy: Option.Option<CdnPolicy>) => qtiLevelsOf(policy).qti;
+export const qtiSchema = (policy: Option.Option<MediaPolicy>) => qtiLevelsOf(policy).qti;
 
 /**
  * The QTI 3.0 schema, whatever policy built it: what the author role, its login and the export's

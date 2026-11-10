@@ -402,7 +402,7 @@ const slotOf = (a: NamedRow) => AttributeGrammar.at("slot", attributeModelOf(a),
  * State that an attribute's name is one its element's governor admits: the singleton of the name
  * inside `AttributeGrammar`'s row of names for the governor's model. It reads no NULL where the
  * name is unadmitted, so it is the admission law itself, not a closed read's absence. Exported for
- * `#pantry/qti/cdn.ts`, whose laws read an admitted attribute's domain.
+ * `#pantry/qti/media.ts`, whose laws read an admitted attribute's domain.
  *
  * @param a - The row.
  * @returns The predicate.
@@ -412,7 +412,7 @@ export const admitted = (a: AttributeRow) =>
 
 /**
  * Read an admitted attribute's value domain under its element's governor. Exported for
- * `#pantry/qti/cdn.ts`, whose laws read it.
+ * `#pantry/qti/media.ts`, whose laws read it.
  *
  * @param a - The row.
  * @returns The closed read, absent for an unadmitted name.

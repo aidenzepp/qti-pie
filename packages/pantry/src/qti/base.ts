@@ -1,9 +1,9 @@
 /**
  * The `Qti` schema's stored level, `QtiBase`, composed by name: every roster and closed relation
  * `install.ts` declares, every stored relation of the `src/qti/` modules, and every module's laws
- * over them, each array once (plan §1.1, the W5 amendment's §C), and an install's single-CDN laws
- * where its policy states them (`#pantry/qti/cdn.ts`). `Qti` (`#pantry/qti/schema.ts`) is the level
- * over it that names the queries its rules read (`#pantry/qti/queries.ts`).
+ * over them, each array once (plan §1.1, the W5 amendment's §C), and an install's package-media
+ * laws where its policy states them (`#pantry/qti/media.ts`). `Qti` (`#pantry/qti/schema.ts`) is
+ * the level over it that names the queries its rules read (`#pantry/qti/queries.ts`).
  *
  * Loading this module builds no schema: {@link qtiBaseOf} builds one where it is called, each call
  * its own, and the caller holds it (`#pantry/qti/own.ts` for this package's own install).
@@ -150,7 +150,7 @@ import {
   ValueSet,
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
-import type { cdnLawsByName } from "#pantry/qti/cdn.ts";
+import type { mediaLawsByName } from "#pantry/qti/media.ts";
 import { catalogLaws, catalogRelations } from "#pantry/qti/catalog.ts";
 import { dataSsmlLaws, dataSsmlRelations } from "#pantry/qti/data-ssml.ts";
 import { htmlLaws, htmlRelations } from "#pantry/qti/html.ts";
@@ -519,12 +519,12 @@ type QtiStatement =
   | (typeof mathmlLaws)[number]
   | (typeof catalogLaws)[number]
   | (typeof dataSsmlLaws)[number]
-  | NonNullable<CdnStatements[keyof CdnStatements]>[number];
+  | NonNullable<MediaStatements[keyof MediaStatements]>[number];
 
 /**
- * The single-CDN laws a policy states, by name (`#pantry/qti/cdn.ts`).
+ * The package-media laws a policy states, by name (`#pantry/qti/media.ts`).
  */
-type CdnStatements = ReturnType<typeof cdnLawsByName>;
+type MediaStatements = ReturnType<typeof mediaLawsByName>;
 
 /**
  * Every module's statements, in module order, each module's list one element: a list of lists
@@ -578,15 +578,15 @@ export const qtiRelations = {
 };
 
 /**
- * Build the stored level of the QTI 3.0 schema for a single-CDN install's laws: the relations and
- * every module's laws, then the policy's. Its name, `Qti`, names the installation: its PostgreSQL
- * schema, which holds every table, and its migrations folder, `migrations/qti/`.
+ * Build the stored level of the QTI 3.0 schema for a package-media install's laws: the relations
+ * and every module's laws, then the policy's. Its name, `Qti`, names the installation: its
+ * PostgreSQL schema, which holds every table, and its migrations folder, `migrations/qti/`.
  *
- * @param cdnLaws - The policy's laws, none for no policy.
+ * @param mediaLaws - The policy's laws, none for no policy.
  * @returns The stored level.
  */
-export const qtiBaseOf = (cdnLaws: readonly QtiStatement[]) =>
-  schema("Qti", qtiRelations, [...moduleLaws, cdnLaws].flat());
+export const qtiBaseOf = (mediaLaws: readonly QtiStatement[]) =>
+  schema("Qti", qtiRelations, [...moduleLaws, mediaLaws].flat());
 
 /**
  * The stored level of the QTI 3.0 schema, whatever policy built it: every policy's holds the same

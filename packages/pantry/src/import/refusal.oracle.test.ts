@@ -459,7 +459,7 @@ const tiers: readonly (readonly Rule[])[] = [
     "attribute-admission",
   ],
   ["ancestry-ban", "owner-copy", "ordering", "child-set", "union-count", "admission"],
-  ["cdn-data", "cdn-origin", "cdn-style", "cdn-foreign"],
+  ["media-data", "media-path", "media-type", "media-style", "media-foreign"],
   [
     "key-text-bound",
     "href-form",
@@ -764,11 +764,11 @@ describe("the merged axes and the laws no row states", () => {
     // vendored commit): a table's constraint and a domain's CHECK carry the name PostgreSQL holds
     // them under, and a write statement and a generated column's NOT NULL carry none, so the
     // refusal reads the name off the refusing object and nothing off the schema. Bound: a check Qti
-    // states (AL1's admission), a check it does not (a CDN install's origin), a primary key, a
-    // contract and a generated field's law, each refused by each kind of object; exhausted.
+    // states (AL1's admission), a check it does not (a media install's media path), a primary key,
+    // a contract and a generated field's law, each refused by each kind of object; exhausted.
     const laws: readonly Law[] = [
       { kind: "check", name: checkNameOf("AL1 admission"), relation: "Attribute" },
-      { kind: "check", name: checkNameOf("CDN origin"), relation: "Attribute" },
+      { kind: "check", name: checkNameOf("Media path"), relation: "Attribute" },
       { fields: ["id"], kind: "primaryKey", relation: "Package" },
       { contract: "natural", kind: "contract" },
       { field: "value", kind: "generated", relation: "DocumentLang" },
@@ -1154,28 +1154,33 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   ],
   [
     "admission",
-    "cdn-data",
-    "the tiers: the content model before a single-CDN install's policy, so content that is not valid QTI is named by the rule that says so",
+    "media-data",
+    "the tiers: the content model before a package-media install's policy, so content that is not valid QTI is named by the rule that says so",
   ],
   [
-    "cdn-data",
-    "cdn-origin",
-    "the install's policy: a data: address is the cause its address off the origin follows from (cdn.ts)",
+    "media-data",
+    "media-path",
+    "the install's policy: a data: address is the cause its address outside the package follows from (media.ts)",
   ],
   [
-    "cdn-origin",
-    "cdn-style",
-    "the install's policy: an address the player fetches before a style that fetches, which no fetched field is (cdn.ts)",
+    "media-path",
+    "media-type",
+    "the install's policy: an address that names no file of the package before the type of the file it names, which only a path in the package has (media.ts)",
   ],
   [
-    "cdn-style",
-    "cdn-foreign",
-    "the install's policy: markup it reads before markup pantry cannot read (cdn.ts)",
+    "media-type",
+    "media-style",
+    "the install's policy: a file the player fetches before a style that fetches, which no fetched field is (media.ts)",
   ],
   [
-    "cdn-foreign",
+    "media-style",
+    "media-foreign",
+    "the install's policy: markup it reads before markup pantry cannot read (media.ts)",
+  ],
+  [
+    "media-foreign",
     "key-text-bound",
-    "the tiers: a single-CDN install's policy before the document layer",
+    "the tiers: a package-media install's policy before the document layer",
   ],
   [
     "key-text-bound",

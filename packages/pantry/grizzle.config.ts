@@ -6,7 +6,7 @@ import { authorAppOf } from "#pantry/qti/logins.ts";
 import { qtiSchema } from "#pantry/qti/schema.ts";
 
 /**
- * This package's own `Qti`, with no single-CDN policy: the schema the committed migrations install,
+ * This package's own `Qti`, with no media policy: the schema the committed migrations install,
  * whatever install `GR8DES_QTI_INSTALL` names for the runtime, since an install's migrations are
  * its own config's to generate.
  */
