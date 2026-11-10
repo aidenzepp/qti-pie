@@ -1596,29 +1596,6 @@ export const fixed: readonly Known[] = [
   {
     files: [
       [
-        "choice.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"/>',
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/><resource type="resourcemetadata/xml" href="meta/choice.xml"/></resources></manifest>',
-      ],
-      [
-        "meta/choice.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"><metadata><imsmd:lom><imsmd:general><imsmd:title/></imsmd:general></imsmd:lom></metadata></resource></resources></manifest>',
-      ],
-    ],
-    fix: "no longer shown on the host since the merge of #96 (9cf1cc67) onto 660a9d64's model: LomObjectTitle is stated only over queries (ListedTitle in MatchedTitle, #pantry/qti/queries.ts), which the host never judges, so neither copy's import summary names it and the renamed twin moves no host verdict; the database judges the record a record file names (#pantry/import/record-naming.db.test.ts), and RootOfType refuses both copies on both sides; it must not show again unless the host judges that law",
-    noised: { noise: "path-rename", salt: 490 },
-    owner: "decision 463",
-    signature: { kind: "noise-moved", noise: "path-rename", side: "import" },
-  },
-  {
-    files: [
-      [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
@@ -3855,25 +3832,6 @@ export const fixed: readonly Known[] = [
     fix: "fix (3): a package's records are read from its manifest and its record files alone (recordDocumentTypes), and the Manifest overlay selections read the manifest's cp:* attributes alone, each by its node's and attribute's documentType (170356bd's reading)",
     owner: "GEN-A",
     signature: { kind: "oracle-only-law", law: "Key text bound" },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
-      ],
-      [
-        "items/item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-template-declaration identifier="N" cardinality="0"/><qti-template-processing><qti-set-template-value identifier="N"><qti-random-integer/></qti-set-template-value></qti-template-processing></qti-assessment-item>`,
-      ],
-    ],
-    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
-    owner: "NIL",
-    signature: { kind: "oracle-only-law", law: "Set type" },
   },
   {
     files: [

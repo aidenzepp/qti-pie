@@ -17,8 +17,9 @@
  *   keyed by the stated limit it falls under (`#pantry/test/gen/genetic/judge.ts` `limitOf`), so
  *   the fixed entry keeps guarding the cause it closed;
  * - Each known and fixed entry's signature is a class some package can show: a law the host judges
- *   (grizzle's `sameLaw` holds it one of them, its selections included), or a uuid field it holds
- *   to the mint, since a law no statement states, or a field a later commit removed, can never
+ *   (grizzle's `sameLaw` holds it one of them, its selections included, and an oracle-only law is
+ *   one some judged law bears the name of), or a uuid field it holds to the mint, since a law no
+ *   statement states, a law the host never judges, or a field a later commit removed, can never
  *   show, and a fixed entry keyed by it guards nothing;
  * - Each planted value-domain case (`#pantry/test/gen/genetic/planted.ts`) lies inside its domain's
  *   lexical space and outside its facets, which the oracle refuses and today's database does not,
@@ -74,6 +75,7 @@ import {
   shownResidual,
 } from "#pantry/test/gen/genetic/search.ts";
 import type { Isolating } from "#pantry/test/gen/genetic/search.ts";
+import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { settings } from "#pantry/test/settings.ts";
@@ -265,10 +267,21 @@ const filledCases = [
 const keyTextBound: Signature = { kind: "oracle-only-law", law: "Key text bound" };
 
 /**
+ * The names of the laws the host judges ({@link judgedLaws}), each as `Qti` names its law.
+ */
+const judgedNames: ReadonlySet<string> = new Set(
+  judgedLaws.flatMap((law) => Option.toArray(schemaLawNameOf(law))),
+);
+
+/**
  * Whether some package can show a signature's class: for a law the rows break, a law the host
  * judges, which grizzle's `sameLaw` holds one of {@link judgedLaws}, its selections included; for
- * a dangling uuid, a uuid field the host holds to the mint. Any other class names a law by its
- * name, which the type keeps to the law table, or a rule or a noise, which nothing removes.
+ * a law the oracle alone raises, a law some judged law bears the name of, since the disagreement
+ * needs the host to hold every statement of the law, and the host never holds a law it does not
+ * judge (a law stated only over queries, or a check over one, is never judged); for a dangling
+ * uuid, a uuid field the host holds to the mint. A class that names a law by its name carries a
+ * name the type keeps to the law table; a rule, or a noise and the side it moved, is no law of the
+ * host's to judge, so nothing bounds it, and a package a noise moves shows it.
  *
  * @param signature - The signature.
  * @returns Whether it can show.
@@ -279,6 +292,9 @@ const canShow = (signature: Signature): boolean => {
       return judgedLaws.some(
         (law) => law.kind === signature.law.kind && sameLaw(law, signature.law),
       );
+    }
+    case "oracle-only-law": {
+      return judgedNames.has(signature.law);
     }
     case "dangling-uuid": {
       return Option.exists(Option.fromUndefinedOr(uuidFields.get(signature.relation)), (fields) =>
@@ -291,8 +307,7 @@ const canShow = (signature: Signature): boolean => {
     case "import-died":
     case "lone-refusal":
     case "noise-moved":
-    case "oracle-died":
-    case "oracle-only-law": {
+    case "oracle-died": {
       return true;
     }
     default: {
@@ -306,7 +321,9 @@ const canShow = (signature: Signature): boolean => {
  * kept, each naming a relation or a field `Qti` no longer has, and the containment of a
  * declaration's cardinality in its attribute with its selections dropped, which the text keys this
  * file once held wrote for two laws `Qti` states, its `base-type` and its `cardinality`
- * attribute's, and no law of `Qti` is: the guard below must refuse each.
+ * attribute's, and no law of `Qti` is; and two laws the oracle raises that the host never judges,
+ * `LomObjectTitle`, stated only over queries, and `Set type`, a check over one, which a fixed entry
+ * once guarded: the guard below must refuse each.
  */
 const unshowable: readonly Signature[] = [
   { field: "declaration", kind: "dangling-uuid", relation: "VariableRef" },
@@ -361,6 +378,8 @@ const unshowable: readonly Signature[] = [
       },
     },
   },
+  { kind: "oracle-only-law", law: "LomObjectTitle" },
+  { kind: "oracle-only-law", law: "Set type" },
 ];
 
 /**
