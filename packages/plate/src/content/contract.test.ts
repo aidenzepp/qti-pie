@@ -487,6 +487,7 @@ describe("the item root's walk", () => {
             item.unsupported.map(({ feature, path, shown }) => [feature, path, shown]),
             [[module.element, `qti-assessment-item/${module.element}`, "mark"]],
           );
+          assert.isUndefined(item.content);
         }).pipe(
           Effect.ensuring(
             Effect.sync(() => {
@@ -496,5 +497,71 @@ describe("the item root's walk", () => {
           ),
         ),
     );
+  }
+});
+
+/**
+ * What a fake item-placed module that lands its element reads it into: the element's name and
+ * path, so the test sees which element each node came from, in which order.
+ */
+interface LandedNode {
+  readonly element: string;
+  readonly path: string;
+}
+
+describe("the item model", () => {
+  for (const { attributes, exported, module, specifier } of itemStubs) {
+    for (const count of [1, 2]) {
+      it.effect(
+        `holds the node a landed module reads from each of ${String(count)} ${module.element}, in document order, by its element`,
+        () =>
+          Effect.gen(function* holdNodes() {
+            const landing = {
+              ...module,
+              parse: (
+                source: SourceElement,
+                context: ItemParseContext,
+              ): Result.Result<Option.Option<LandedNode>> =>
+                Result.succeed(Option.some({ element: source.local, path: context.path })),
+            };
+            vi.resetModules();
+            vi.doMock(specifier, () => ({ [exported]: landing }));
+
+            const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+            const parts = Array.from({ length: count }, () => el(module.element, attributes));
+            const item = yield* Effect.fromResult(
+              model.buildItem(
+                doc(
+                  "item.xml",
+                  el(
+                    "qti-assessment-item",
+                    [attr("identifier", "item"), attr("title", "Item")],
+                    [...parts, el("qti-item-body", [], [])],
+                  ),
+                ),
+              ),
+            );
+            const paths =
+              count === 1
+                ? [`qti-assessment-item/${module.element}`]
+                : [
+                    `qti-assessment-item/${module.element}[1]`,
+                    `qti-assessment-item/${module.element}[2]`,
+                  ];
+
+            assert.deepStrictEqual<unknown>(item.content, {
+              [module.element]: paths.map((path) => ({ element: module.element, path })),
+            });
+            assert.deepStrictEqual(item.unsupported, []);
+          }).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                vi.doUnmock(specifier);
+                vi.resetModules();
+              }),
+            ),
+          ),
+      );
+    }
   }
 });
