@@ -2757,6 +2757,13 @@ the cause is unchanged on trunk `76c27633` (2026-11-08).
   at `fa6c5e27`), and no longer by `lawsOf`. So qti-pie's level build tests also compile the installation (decisions
   484 and 485), and `limits.test.ts`'s one-byte-past case will fail, loudly, at a re-pin past `b9f100ac` until it is
   re-pointed at that compile.
+- **Re-run, 2026-11-10, at the pin `b927d99` (pa1-r11).** Still reproduces, at the installation's compile only: the
+  reproduction above prints "compiles" for all three fields, since `lawsOf` no longer checks a rule's violation query,
+  and the same level under `grizzle check` from an empty snapshot refuses `str.regex(chars)` and
+  `str.bytes(268435455, …)` with `UnsupportedOperation at check NoData` and compiles `str.bytes(268435454, …)` to an
+  ungenerated change (`regexReadable`, `lower.ts:2465-2474`, reached through `lawChecks`,
+  `deploy/snapshot/violation.ts:79`, and `theoryViolations`' `ruleViolation`, `laws/model/violations.ts:99`); so
+  `limits.test.ts` now pins `regexTextBytes` through that compile.
 - **Classification.** A documented limit. README "Text" (`README.md:2271`: "A query matches, translates or collapses
   only a bounded text"), "Limits" (`:3191`), and "Rules over queries" (`:1946`: the rule's violation query is "compiled
   by grizzle's own query compiler"). grizzle behaves as its source and README state, so it is no defect. Its reason, "a
