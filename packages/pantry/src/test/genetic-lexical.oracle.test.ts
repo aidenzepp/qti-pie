@@ -9,10 +9,10 @@
  * defect of one side; the run reduces each one it found (`reduce`, largest cut first), prints it
  * shrunk, and fails.
  *
- * Budget: the free suite breeds a bounded run in a few generations, one `xmllint` process per
- * version a generation; `GR8DES_GENETIC=1` breeds the long one. Each run draws its seed from the
- * run's own (`TEST_SEED` replays it), and its swarm over the edits from that seed, so different
- * runs explore different corners and a failing run replays exactly.
+ * Budget: the free suite judges every seed in one `xmllint` round, one process per version;
+ * `GR8DES_GENETIC=1` breeds the long run at merge time. Each run draws its seed from the run's own
+ * (`TEST_SEED` replays it), and its swarm over the edits from that seed, so different runs explore
+ * different corners and a failing run replays exactly.
  *
  * Stopping: each feature family's Good–Turing residual, the families' features seen once over the
  * candidates judged, is printed for every run: the chance the next candidate shows a feature of the
@@ -51,12 +51,13 @@ import { XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
 import { writeXsdOracle, xsdCached } from "#pantry/test/xsd-catalog.ts";
 
 /**
- * The bounded budget, the free suite's: every seed and two generations, each generation one
- * `xmllint` process per version. A round's time is the validator's compile of the XSDs, 29 to 49 s
- * at load averages of 75 to 83 whether it holds 1,500 probes or 8,000, so a generation is as large
- * as a batch stays small.
+ * The bounded budget, the free suite's: every seed, judged in one `xmllint` round of one process
+ * per version, and no bred generation. A round's time is the validator's compile of the
+ * XSDs, 29 to 49 s at load averages of 75 to 83 whether it holds 1,500 probes or 8,000, so the
+ * free suite pays for one round and spends the breeding, where the generations' novelty pays,
+ * under `GR8DES_GENETIC=1` at merge time.
  */
-const bounded: Budget = { candidates: 4800, edits: 3, generation: 2400, initial: 2000 };
+const bounded: Budget = { candidates: 0, edits: 3, generation: 2400, initial: 2000 };
 
 /**
  * The long budget, `GR8DES_GENETIC=1`'s: every seed and twelve generations.
