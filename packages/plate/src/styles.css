@@ -1161,11 +1161,22 @@
  * once the runtime makes it a control.
  */
 :where([data-slot="associate-interaction-choice"]) {
+  min-block-size: 1.5rem;
   padding: 0.25rem 0.75rem;
   border: 1px solid var(--muted-foreground, oklch(0.556 0 0));
   border-radius: calc(var(--radius, 0.625rem) * 0.8);
   background-color: var(--card, oklch(1 0 0));
   color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/*
+ * A held Choice: the primary surface of the select-then-place block's own rule, restated here
+ * because the chip's surface above is as specific and comes later, so it would cover that rule.
+ */
+:where([data-slot="associate-interaction-choice"][aria-pressed="true"]) {
+  border-color: var(--primary, oklch(0.205 0 0));
+  background-color: var(--primary, oklch(0.205 0 0));
+  color: var(--primary-foreground, oklch(0.985 0 0));
 }
 
 /* The Pairs: the associations made, one to a row. An empty list takes no room. */
@@ -1182,11 +1193,20 @@
  * association never rests on position or colour.
  */
 :where([data-slot="associate-interaction-pair"]) {
+  min-block-size: 1.5rem;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border, oklch(0.922 0 0));
   border-radius: var(--radius, 0.625rem);
   background-color: var(--card, oklch(1 0 0));
   color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/* Focus on a Pair, which the runtime makes reachable: the same ring as the select-then-place block gives a Choice. */
+:where([data-slot="associate-interaction-pair"]:focus-visible) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
 }
 
 /* end associate-interaction */
