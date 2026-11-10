@@ -120,12 +120,7 @@ const choiceTree = (redacted: Redacted, configuration: Configuration): Element =
   };
   const body = Result.getOrThrow(emitBody(built, state, renderInteraction));
   const live = Result.getOrThrow(
-    itemPart(
-      state.parts,
-      "live",
-      { "aria-atomic": "true", "aria-live": "polite", role: "status" },
-      [],
-    ),
+    itemPart(state.parts, "live", { "aria-atomic": "true", "aria-live": "polite" }, []),
   );
 
   return Result.getOrThrow(emitItem(built, state, [...body, live]));
