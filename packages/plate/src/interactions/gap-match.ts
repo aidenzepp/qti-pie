@@ -10,6 +10,18 @@
  * it, so `parse` reads the declared cardinality, `single` or `multiple`, and any other is the
  * notice `cardinality="…"`, as a binding no shipped kind renders is.
  *
+ * Proposed reading, for the operator: an unwritten `max-associations` reads as the default the
+ * schema gives the attribute on this interaction, 1. The ASI XSD declares, in
+ * `GapMatchInteractionDType`, `<xs:attribute name="max-associations" use="optional" default="1"
+ * type="xs:nonNegativeInteger" />` (`imsqti_asiv3p0p1_v1p0.xsd:27805`), and `min-associations`
+ * with no default (`:27804`), so an unwritten `min-associations` is no minimum. Reading 92 reads
+ * an unwritten count as its XSD default, and reading 53 gives `0` the meaning of no restriction:
+ * "`max-associations` (section 5.8.2) and `match-max` (section 5.7.8) say the same". So a response
+ * of more pairs than the item writes, or than 1 when it writes none, is refused in tier (a), and
+ * the correct response of an item that writes three pairs and no `max-associations`, such as the
+ * 1EdTech examples `jumble-gapMatch.xml` and `multi-input.xml`, is refused as any response over a
+ * limit is.
+ *
  * {@link gapMatchModule}'s render emits this structure: a `div` Root that is `role="group"`, named
  * by its Prompt through `aria-labelledby` (or by the author's names when there is no Prompt); the
  * Prompt; a `ul` of Choices, one `li` for each gap text in presented order; the Content, the
@@ -244,7 +256,8 @@ export interface GapMatchInteraction extends ModuleInteraction<"gap-match"> {
    */
   readonly gapped: readonly BodyNode[];
   /**
-   * `max-associations`, 1 when absent: the most pairs a response may hold; 0 is no limit.
+   * `max-associations`, 1 when absent (the default the ASI XSD gives it on this interaction): the
+   * most pairs a response may hold; 0 is no limit.
    */
   readonly maxAssociations: bigint;
   /**

@@ -558,6 +558,21 @@ describe("Gap Match", () => {
           ),
         );
 
+        const unwritten = yield* accept(
+          "gap-match-default.xml",
+          edited(base, ' max-associations="2"', ""),
+        );
+        const unlimited = yield* accept(
+          "gap-match-unlimited.xml",
+          edited(base, 'max-associations="2"', 'max-associations="0"'),
+        );
+
+        assert.deepStrictEqual(textsOf(yield* checked(unwritten, correct)), [
+          message("en", "atMost", { n: "1" }),
+        ]);
+        assert.deepStrictEqual(yield* checked(unwritten, pairValue(["A", "G1"])), []);
+        assert.deepStrictEqual(yield* checked(unlimited, correct), []);
+
         assert.deepStrictEqual(textsOf(yield* checked(worded, undefined, true)), [
           "Fill a gap first.",
         ]);
