@@ -12,6 +12,7 @@ import type { Controller } from "#plate/runtime/contract.dom.ts";
  * m3d-06 fills it.
  */
 export const controller: Controller<"graphic-gap-match"> = {
+  implemented: false,
   kind: "graphic-gap-match",
   upgrade: (root) => {
     root.dataset["runtime"] = "stub";

@@ -12,6 +12,7 @@ import type { Controller } from "#plate/runtime/contract.dom.ts";
  * ei-09 fills it.
  */
 export const controller: Controller<"graphic-associate"> = {
+  implemented: false,
   kind: "graphic-associate",
   upgrade: (root) => {
     root.dataset["runtime"] = "stub";

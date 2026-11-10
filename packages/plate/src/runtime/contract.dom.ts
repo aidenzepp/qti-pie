@@ -61,6 +61,14 @@ export interface Controller<K extends RuntimeKind = RuntimeKind> {
   readonly kind: K;
 
   /**
+   * Whether the controller gives the kind its behaviour. A stub declares `false` and marks its root
+   * `data-runtime="stub"`; the issue that fills a kind flips this to `true` and drops the mark, and
+   * the registry tests then expect only what every controller promises: a teardown that removes
+   * what the upgrade added, no focus moved, nothing announced.
+   */
+  readonly implemented: boolean;
+
+  /**
    * Attach the kind's behaviour to one rendered interaction, without moving focus.
    *
    * @param root The interaction's root, `data-slot="<kind>-interaction"`.

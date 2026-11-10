@@ -240,6 +240,7 @@ describe(server.browser, () => {
       const calls: HTMLElement[] = [];
       let teardowns = 0;
       const controller: Controller<"gap-match"> = {
+        implemented: true,
         kind: "gap-match",
         upgrade: (root: HTMLElement, region: LiveRegion) => {
           calls.push(root);
@@ -315,15 +316,17 @@ describe(server.browser, () => {
         }),
     );
 
-    it("[runtime] teardown removes every stub mark and a second upgrade re-attaches", () => {
+    it("[runtime] teardown removes every mark and a second upgrade re-attaches", () => {
       const container = mount(everyKindItem);
       const first = upgrade(container);
 
       assert.strictEqual(first.controllers.length, runtimeKinds.length);
-      assert.strictEqual(
-        container.querySelectorAll('[data-runtime="stub"]').length,
-        runtimeKinds.length,
-      );
+
+      const upgradedRoots = new Set<Element>(first.controllers.map(({ root }) => root));
+
+      for (const mark of container.querySelectorAll("[data-runtime]")) {
+        assert.isTrue(upgradedRoots.has(mark), "a mark sits on an upgraded root");
+      }
 
       first.teardown();
       assert.strictEqual(container.querySelectorAll("[data-runtime]").length, 0);

@@ -12,6 +12,7 @@ import type { Controller } from "#plate/runtime/contract.dom.ts";
  * fills it.
  */
 export const controller: Controller<"select-point"> = {
+  implemented: false,
   kind: "select-point",
   upgrade: (root) => {
     root.dataset["runtime"] = "stub";

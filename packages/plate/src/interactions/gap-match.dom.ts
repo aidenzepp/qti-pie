@@ -12,6 +12,7 @@ import type { Controller } from "#plate/runtime/contract.dom.ts";
  * fills it.
  */
 export const controller: Controller<"gap-match"> = {
+  implemented: false,
   kind: "gap-match",
   upgrade: (root) => {
     root.dataset["runtime"] = "stub";
