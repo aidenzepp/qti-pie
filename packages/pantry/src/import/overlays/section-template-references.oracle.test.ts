@@ -198,6 +198,12 @@ const packageOf = (input: TemplateCase): PackageEntries => {
  */
 type Situation = `${Place}, ${Naming}`;
 
+/**
+ * The timeout, in milliseconds, of the one test here: a hang guard, never a budget. Measured
+ * 2026-11-10: 19.6 s at a load average of 87 to 102, its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
 layer(NodeServices.layer, { excludeTestServices: true })(
   "a section document's or a fragment's template-identifier",
   (it) => {
@@ -255,7 +261,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             );
           }).pipe(Effect.scoped),
         ),
-      600_000,
+      testTimeoutMs,
     );
   },
 );
