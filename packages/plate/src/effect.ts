@@ -142,6 +142,7 @@ export {
   entryName,
   EscapableRawTextElementChild,
   EventHandlerAttribute,
+  feedbackShown,
   h,
   intentName,
   IntentRefused,
