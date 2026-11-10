@@ -2,7 +2,9 @@
 
 How this repository reads QTI 3.0 and the languages it embeds where a specification is silent, ambiguous or split
 between its schema and its prose. Every package follows these readings: the qti package when it accepts or refuses a
-document, and the renderer when it renders one, so the two never disagree about the same file. Each reading is an
+document, and the renderer when it renders one, so the two never disagree about the same file. A grizzle level's policy
+over pantry's schema is not a reading: it may refuse more than these readings allow and never accepts what they refuse.
+Each reading is an
 operator ruling. A new reading lands here by pull request, and a package that needs one asks the operator first.
 
 ## Validity

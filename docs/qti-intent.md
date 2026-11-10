@@ -6,8 +6,11 @@ design. Every design decision is still open unless this page says otherwise.
 ## Why this exists
 
 The goal is to put [grizzle](../vendor/README.md) through a large, real data model and find where it holds up and where
-it breaks. The QTI implementation is the vehicle, not the product. A grizzle limit or defect the work runs into is a
-result: record it in [grizzle-findings.md](grizzle-findings.md) with the smallest reproduction, so it can go back to
+it breaks. pantry began as a test of grizzle and is now three things at once (operator, 2026-11-09): it puts grizzle
+through a large, real data model; it is a library of grizzle building blocks that apps such as EduLLM install into their
+own grizzle databases and use through its exports, never by growing inside it; and it finds grizzle's bugs and
+improvements. Where the public API and pantry's internals conflict, the API wins; how strictly QTI is modeled does not
+change. A grizzle limit or defect the work runs into is a result: record it in [grizzle-findings.md](grizzle-findings.md) with the smallest reproduction, so it can go back to
 grizzle's author.
 
 So the awkward parts are in scope on purpose. Mapping QTI content (item bodies, response processing) into relations is
@@ -18,6 +21,9 @@ part of the test, not a cost to avoid.
 1. **Import.** Real QTI 3.0 content packages, starting with 1EdTech's published examples, load into grizzle relations.
    That includes item bodies and response processing, not only metadata.
 2. **Export.** What was imported is written back as QTI 3.0 XML and compared with the original package.
+3. **Public API.** An app builds pantry's schema, stacks its own grizzle level on it, imports a package and gets a
+   verdict, reads a document, exports a package and lists what is stored, through pantry's exports alone, and references
+   pantry's published relations natively from its level.
 
 **Out of scope: delivery and scoring** (operator ruling, 2026-10-30). No candidate sessions, attempts or responses, no
 attempt-time variable state, no execution of response or template processing, and no results reports. Response
@@ -38,10 +44,18 @@ every item and test; they are stored and round-tripped, never run.
   hold HTML, MathML and SSML, `data-*` attributes, portable custom interactions and vendor extensions. Each of those is
   modeled as tightly as the QTI elements themselves, as relations and rules, rather than refused or stored as opaque
   text. Content that is not valid QTI 3.0 is still refused.
-- **Local only.** Node on the local grizzle cluster. No Cloudflare, no deploy.
+- **Local development.** pantry is developed and tested on the local grizzle cluster; this repository has no deploy
+  target. An app installs, configures and connects through grizzle, on its own server. The database is always
+  grizzle's.
 - **Toolchain.** pnpm, Effect `4.1.2`, Vite+, and the lint, format and TypeScript rules carried over from the
   Cloudflare monorepo template. See [AGENTS.md](../AGENTS.md).
 - **Location.** `packages/pantry` in this workspace, as `@qti-pie/pantry`.
+- **Spec purity.** A rule set beyond QTI is a grizzle level over pantry's schema: it may refuse more than QTI and never
+  accepts what QTI bans. Its rules live outside `docs/spec-readings.md` and pantry's law table, and a refusal names the
+  level that refused.
+- **Published relations, no backwards compatibility.** A short list of pantry's relations is published; each changes
+  only on purpose and is named in pantry's changelog. Everything else is internal. No grace periods, shims or
+  deprecated aliases. Versions are 0.x git tags, for information only.
 
 ## Open
 

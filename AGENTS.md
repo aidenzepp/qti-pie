@@ -3,10 +3,12 @@
 qti-pie (the first local checkout is still the folder `gr8des`) is a pnpm workspace of three packages. `packages/crust`
 (`@qti-pie/crust`) is the shared XML reader and writer, bytes to an XML tree and back; its dependencies stay `effect`
 and `saxes`, so grizzle stays out of anything that depends on it. `packages/pantry` (`@qti-pie/pantry`) implements IMS
-QTI 3.0 on [grizzle](vendor/README.md), and exists first to put grizzle through a large, real data model. Read
+QTI 3.0 on [grizzle](vendor/README.md): a library of grizzle building blocks (a schema, author role and login builders,
+typed programs, published relations) that apps such as EduLLM install into their own grizzle databases, and the project
+that puts grizzle through a large, real data model and finds its bugs. Read
 [docs/qti-intent.md](docs/qti-intent.md) before planning or changing the QTI model. `packages/plate` (`@qti-pie/plate`)
 is planned: it renders QTI 3.0, depends on crust and never on pantry, and its intent and rules arrive with its own goal;
-pantry's intent (a grizzle test vehicle, delivery out of scope) does not bind it. The packages read the specifications the same way: [docs/spec-readings.md](docs/spec-readings.md). Everything runs locally; there is no deploy target. The shared repository
+pantry's intent (a QTI library and grizzle test vehicle, delivery out of scope) does not bind it. The packages read the specifications the same way: [docs/spec-readings.md](docs/spec-readings.md). Everything here runs locally; there is no deploy target. Apps run pantry on their own grizzle servers. The shared repository
 is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (public, MIT-licensed; main is protected), the remote `origin`.
 
 ## Toolchain
@@ -122,7 +124,7 @@ named (`func-names`).
 Import shape, for every package: it exposes its public parts through an `"exports"` map in `package.json` pointing at
 TypeScript source (no build step), consumers depend with `"workspace:*"`, and it imports its own files through its own
 `#<package>/*` alias from `package.json` `imports` (`#pantry/*` in pantry, `#crust/*` in crust, and `#migrations/*`
-for committed snapshots), never relative paths. pantry's `"exports"` is `{}`: it exports nothing, so nothing depends on it. Nothing outside a package reaches a file its `"exports"` map does not
+for committed snapshots), never relative paths. pantry's `"exports"` lists its public files; apps use pantry only through them. Nothing outside a package reaches a file its `"exports"` map does not
 list. The checks that enforce it:
 
 - The resolver (`tsc` in `pnpm check`, and Node at run time) refuses a subpath an `"exports"` map does not list, and
@@ -130,6 +132,7 @@ list. The checks that enforce it:
 - pnpm refuses an undeclared workspace dependency.
 - Lint refuses relative, absolute and `file:` specifiers, and crust importing itself by name.
 - crust's `src/package.test.ts` pins its dependencies.
+- pantry's surface test pins its exports map, its exported names and its published relations.
 
 Read environment-backed settings with Effect `Config`, with constraints and defaults in Config or Schema. Test with
 `ConfigProvider.fromUnknown` rather than mutating the host environment.
@@ -145,6 +148,12 @@ regenerate it, run the corpus witness under a lease (`GR8DES_CORPUS=1 GR8DES_PG_
 --fail-if-no-match --filter @qti-pie/pantry run test src/cli.corpus.db.test.ts`), then run the `cp` its failure message
 prints to adopt `packages/pantry/work/verdicts/<name>.tsv`. A stale file fails that corpus run; a renamed rule or a
 corpus zip without a row fails `src/test/verdicts.committed.test.ts`, which needs no lease.
+
+### Versioning
+
+pantry's versions are git tags `pantry-v<version>`, for information only. Each release adds an entry to
+`packages/pantry/CHANGELOG.md` listing every breaking change: programs, published relations, rule names, verdicts and
+needed migrations. No backwards compatibility.
 
 ## Planning and building with shipyard
 
@@ -195,7 +204,7 @@ This is the workflow `factory` records in its ledger; it meets shipyard's five r
   it with `gh pr merge --merge` (a merge commit, never squash or rebase), and fast-forward local `main`. A failed check
   leaves no pull request. If `origin/main` moves after the checks ran, fetch, merge again and re-run the checks before
   merging the pull request. Slices still merge into their feature branch locally and are never pushed.
-- **Remote.** Push only `main`, `qti/<feature>/main`, `renderer/<feature>/main` and `gate/<name>`. Never force-push, and never rewrite a pushed
+- **Remote.** Push only the branches `main`, `qti/<feature>/main`, `renderer/<feature>/main` and `gate/<name>`, and `pantry-v<version>` tags. Never force-push, and never rewrite a pushed
   branch: fixes go forward and are pushed again. Issues that track this project's work may be opened on `origin`.
 - **Audits** take a frozen range on the feature branch. Never rewrite accepted history, never force anything, fix
   forward. The one exception was the operator-authorized move of `snapshot.json` into Git LFS on 2026-11-03, which
