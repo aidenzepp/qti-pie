@@ -7,7 +7,9 @@
  * {@link parseLexical}'s, with the allowances a posted form needs: a number is trimmed, and a
  * string's line breaks are a textarea's. A record posts the text it was typed as, and its other
  * fields are read from that text. A point posts its two coordinates as two entries, `<name>.x` and
- * `<name>.y` ({@link pointEntryNames}), and is read back from the pair at each position.
+ * `<name>.y` ({@link pointEntryNames}), and is read back from the pair at each position. A file
+ * posts as a `File` entry, read as its name, size and type and never its bytes, and encodes to no
+ * entry.
  *
  * @module
  */
@@ -57,10 +59,19 @@ const pointBaseType = "point";
 const booleanBaseType = "boolean";
 
 /**
+ * The base type whose value is a file, which Upload (`ei-01`) and Drawing (`ei-17`) post as one
+ * `File` entry per value under the binding's name, from a `multipart/form-data` post. Plate reads
+ * the entry's name, size and type into a `FileValue` and never its bytes: the host keeps those
+ * under the same entry name ({@link entryName}). A file cannot be re-posted from text, so
+ * {@link encode} gives a file value no entry; a module shows a restored file by its name.
+ */
+const fileBaseType = "file";
+
+/**
  * The base types an interaction posts: Choice's `identifier`, Text Entry's and Extended Text's
  * `string`, `integer` and `float`, the {@link PairBaseType}s of the interactions that put
- * identifiers into targets, the `point` of the interactions that place a point on an image, and
- * End Attempt's `boolean`.
+ * identifiers into targets, the `point` of the interactions that place a point on an image, End
+ * Attempt's `boolean`, and the `file` of Upload and Drawing.
  */
 const postedBaseTypes = [
   "identifier",
@@ -70,6 +81,7 @@ const postedBaseTypes = [
   ...pairBaseTypes,
   pointBaseType,
   booleanBaseType,
+  fileBaseType,
 ] as const;
 
 /**
@@ -103,6 +115,15 @@ const isPair = (baseType: PostedBaseType): baseType is PairBaseType =>
  */
 const isPoint = (baseType: PostedBaseType): baseType is typeof pointBaseType =>
   baseType === pointBaseType;
+
+/**
+ * Report whether a posted base type is a file, whose value posts as a `File` entry.
+ *
+ * @param baseType A posted base type.
+ * @returns Whether `baseType` is `file`.
+ */
+const isFile = (baseType: PostedBaseType): baseType is typeof fileBaseType =>
+  baseType === fileBaseType;
 
 /**
  * How a response of a base type travels through the form: the entry name it posts under, from
@@ -184,6 +205,7 @@ type MalformedReason =
   | "boolean"
   | "character"
   | "file"
+  | "file-text"
   | "identifier"
   | "number"
   | "point"
@@ -197,6 +219,8 @@ const remedies = {
   character:
     "holds a character XML cannot carry: a control character other than tab, line feed and carriage return, U+FFFE, U+FFFF or a lone surrogate; post the text without it",
   file: "is a file, but this response takes text; post text, not a file",
+  "file-text":
+    "is text, but this response takes a file; post the file itself, as a multipart/form-data form with an input of type file gives it, not its name",
   identifier:
     "is not an identifier, or for a pair response not two identifiers separated by a space; post an NCName such as choiceA, or a pair such as choiceA gapB, as the form gives it",
   number:
@@ -323,10 +347,15 @@ export const recordText = (record: RecordValue): readonly Single[] =>
  * @param single The value.
  * @param binding The response's binding, which names the entries.
  * @returns For a point, its two coordinates under the binding's {@link pointEntryNames}, x then y,
- *   each written as an integer is; for any other single, one entry under the binding's name in
- *   {@link format}'s lexical form.
+ *   each written as an integer is; for a file, no entry, since a form posts a file as its bytes and
+ *   plate holds none; for any other single, one entry under the binding's name in {@link format}'s
+ *   lexical form.
  */
 const entriesOf = (single: Single, binding: Binding): readonly Entry[] => {
+  if (single.baseType === "file") {
+    return [];
+  }
+
   if (single.baseType === "point") {
     const [x, y] = pointEntryNames(binding.name);
 
@@ -345,14 +374,16 @@ const entriesOf = (single: Single, binding: Binding): readonly Entry[] => {
  * A record posts its `stringValue` field ({@link recordText}), the text {@link decode} reads every
  * other field from, so a record decoded from a post encodes back to that post. A point posts two
  * entries per value, `<name>.x` and `<name>.y` ({@link pointEntryNames}), as the form's two number
- * inputs do.
+ * inputs do. A file value encodes to no entry: a form posts a file as its bytes, which plate never
+ * holds, so a file cannot be re-posted from its name, size and type; a module that restores one
+ * shows its name instead.
  *
  * @param value The response's value.
  * @param binding The response's binding, which names the entries.
- * @returns No entries for NULL, one for a `single`, one for each value of a `multiple` or
- *   `ordered`, in order, and for a record one for its `stringValue` field, none when it has none,
- *   all under the binding's name and in {@link format}'s lexical form; a point value is two entries
- *   in that place, its x then its y.
+ * @returns No entries for NULL or for a file value, one for a `single`, one for each value of a
+ *   `multiple` or `ordered`, in order, and for a record one for its `stringValue` field, none when
+ *   it has none, all under the binding's name and in {@link format}'s lexical form; a point value
+ *   is two entries in that place, its x then its y.
  */
 export const encode = (value: ResponseValue, binding: Binding): readonly Entry[] => {
   const singles = isRecordValue(value) ? recordText(value) : value.values;
@@ -694,6 +725,58 @@ const postedTexts = (
 };
 
 /**
+ * Read one posted file as a file value: its `name` when the entry is a `File`, else the empty
+ * string, and its `size` and `type` as the `Blob` reports them. Not a byte of it is read.
+ *
+ * A nameless empty file is no value: a `multipart/form-data` form posts one for an input of type
+ * file the candidate left empty, as it posts an empty string for an empty text input, so it is
+ * NULL as that is. A named empty file, or a nameless `Blob` with bytes, is a value.
+ *
+ * @param posted The posted entry's `Blob`.
+ * @returns The file, or none for a nameless empty file.
+ */
+const readFile = (posted: Blob): Option.Option<Single> => {
+  const name = posted instanceof File ? posted.name : "";
+
+  return name === "" && posted.size === 0
+    ? Option.none()
+    : Option.some({ baseType: "file", value: { name, size: posted.size, type: posted.type } });
+};
+
+/**
+ * Read a file value from the entries posted under its binding's name.
+ *
+ * Each entry is a `File`, as a `multipart/form-data` form posts an input of type file; a text
+ * entry under the name is `file-text`, as a file under a text binding is `file`. A `single` takes
+ * one entry, so two are `single-many`; a `multiple` or `ordered` holds one value per entry in
+ * posted order, less the nameless empty files ({@link readFile}), and NULL when none remains.
+ *
+ * @param entries The posted entries.
+ * @param binding The file response's binding.
+ * @returns The value, or the first reason the entries are refused.
+ */
+const readFiles = (
+  entries: readonly Entry[],
+  binding: ValueBinding,
+): Result.Result<Value, MalformedReason> => {
+  const posted = entries.filter(([entry]) => entry === binding.name).map(([, value]) => value);
+  const files = posted.filter((value): value is Blob => typeof value !== "string");
+  if (files.length < posted.length) {
+    return Result.fail("file-text");
+  }
+
+  if (binding.cardinality === "single" && files.length > 1) {
+    return Result.fail("single-many");
+  }
+
+  return Result.succeed({
+    baseType: binding.baseType,
+    cardinality: binding.cardinality,
+    values: Array.getSomes(files.map(readFile)),
+  });
+};
+
+/**
  * Read a point value from the `.x` and `.y` entries posted for its binding.
  *
  * The two names are read as two bindings of the point's cardinality are, so a file under either is
@@ -738,8 +821,8 @@ const readPoints = (
  * @param binding The response's binding.
  * @param base The number base of an integer.
  * @returns A record for a record binding, a point from its two entry names for a point binding, a
- *   value of the binding's base type from its one name for any other, or the reason the entries
- *   are refused.
+ *   file from the `File` entries under its name for a file binding, a value of the binding's base
+ *   type from its one name for any other, or the reason the entries are refused.
  */
 const readBinding = (
   entries: readonly Entry[],
@@ -752,6 +835,10 @@ const readBinding = (
 
   if (isPoint(binding.baseType)) {
     return readPoints(entries, binding);
+  }
+
+  if (isFile(binding.baseType)) {
+    return readFiles(entries, binding);
   }
 
   return Result.flatMap(postedTexts(entries, binding.name, binding.cardinality), (texts) =>
@@ -857,6 +944,13 @@ interface Decode {
  * empty is no value, so NULL when every position is. One filled and one empty, more `.x` entries
  * than `.y` or the reverse, and a coordinate that is not a whole number are refused as `point`.
  *
+ * A file binding reads `File` entries under its name, one per value, as a `multipart/form-data`
+ * form posts an input of type file: each gives the file's `name` (the empty string for a bare
+ * `Blob`), its `size` in bytes and its MIME `type`, and not a byte of it; the host keeps the bytes
+ * under the same entry name. A nameless empty file, which a form posts for an input of type file
+ * left empty, is no value, so NULL when every entry is one. A text entry under a file binding is
+ * refused as `file-text`.
+ *
  * A record binding reads one text, kept as the record's `stringValue` field with its line breaks
  * made LF, and, when the text trimmed of XML whitespace is a decimal number with an optional
  * exponent, the fields `floatValue`, `integerValue` (only for a whole number with no exponent),
@@ -874,9 +968,10 @@ interface Decode {
  * @param options The number base of an integer, and the value no entry takes, which a record
  *   binding ignores.
  * @returns A value of the binding's base type for a {@link ValueBinding}, a record for a
- *   {@link RecordBinding}, or {@link Malformed}: `file` for a file, `single-many` for two entries
- *   of a `single` or a record, `character` for text holding a character XML cannot carry, and
- *   `number`, `identifier`, `boolean` or `point` for text outside the base type's lexical space.
+ *   {@link RecordBinding}, or {@link Malformed}: `file` for a file under a text binding,
+ *   `file-text` for text under a file binding, `single-many` for two entries of a `single` or a
+ *   record, `character` for text holding a character XML cannot carry, and `number`, `identifier`,
+ *   `boolean` or `point` for text outside the base type's lexical space.
  */
 export const decode =
   // SAFETY: decodeResponse gives a record exactly when the binding's cardinality is `record`, which only a RecordBinding has, and a Value of the binding's base type otherwise, which is what each overload states.

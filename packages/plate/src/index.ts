@@ -121,7 +121,7 @@ export {
 
 export { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
 
-export type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
+export type { FileValue, RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 
 export type {
   NavigationItem,

@@ -2877,7 +2877,10 @@ describe("choiceOrder", () => {
  * @param baseType Its base type.
  * @returns The declaration.
  */
-const declared = (identifier: string, baseType: "boolean" | "point"): ResponseDeclaration => ({
+const declared = (
+  identifier: string,
+  baseType: "boolean" | "file" | "point",
+): ResponseDeclaration => ({
   areaMapping: Option.none(),
   baseType,
   cardinality: "single",
@@ -3154,6 +3157,41 @@ describe("postings", () => {
     assert.deepStrictEqual(
       Result.getSuccess(decode([[doneBinding.name, "true"]], doneBinding, doneOptions)),
       Option.some(truth),
+    );
+  });
+
+  it("[W0-AY] gives a file response an interaction binds its posting, a value binding of file, which decodes a posted file by its name, size and type", () => {
+    const bound: Item = {
+      ...item,
+      body: [textEntry("UPLOADED")],
+      responses: new Map([...item.responses, ["UPLOADED", declared("UPLOADED", "file")]]),
+    };
+    const [uploaded, ...others] = postings(redactItem(bound), instance);
+
+    assert.deepStrictEqual(uploaded, postingOf("UPLOADED", "file", 10));
+    assert.lengthOf(others, 0);
+
+    const { binding, options } = uploaded ?? assert.fail("UPLOADED has no posting.");
+    const posted = new File([new Uint8Array([1, 2, 3])], "photo.png", { type: "image/png" });
+    const photo: Value = {
+      baseType: "file",
+      cardinality: "single",
+      values: [{ baseType: "file", value: { name: "photo.png", size: 3, type: "image/png" } }],
+    };
+
+    assert.deepStrictEqual(
+      Result.getSuccess(decode([[binding.name, posted]], binding, options)),
+      Option.some(photo),
+    );
+    assert.deepStrictEqual(
+      Result.getSuccess(decode([], binding, options)),
+      Option.some(nullOf("file", "single")),
+    );
+    assert.deepStrictEqual(
+      Result.getFailure(decode([[binding.name, "photo.png"]], binding, options)).pipe(
+        Option.map((malformed) => malformed.reason),
+      ),
+      Option.some("file-text"),
     );
   });
 
