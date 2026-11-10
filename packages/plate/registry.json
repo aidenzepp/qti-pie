@@ -1,0 +1,27 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "qti-pie",
+  "homepage": "https://github.com/aidenzepp/qti-pie",
+  "items": [
+    {
+      "name": "qti-pie",
+      "type": "registry:block",
+      "title": "qti-pie",
+      "description": "plate's React layer styled for shadcn: Item, Status, Navigation, Choice, Text Entry, Extended Text and Inline Choice wrapped with Tailwind classes on shadcn's theme tokens, and plate's stylesheet.",
+      "dependencies": ["@qti-pie/plate"],
+      "files": [
+        {
+          "path": "src/registry/qti-pie.tsx",
+          "type": "registry:component",
+          "target": "@components/qti-pie.tsx"
+        },
+        {
+          "path": "src/registry/qti-pie.css",
+          "type": "registry:file",
+          "target": "~/styles/qti-pie.css"
+        }
+      ],
+      "docs": "Import styles/qti-pie.css once, from your app's global stylesheet or entry file; it brings in @qti-pie/plate/styles.css and sets no theme token, so your shadcn theme styles plate's parts. Then use QtiItem, QtiStatus, QtiNavigation, QtiChoice, QtiTextEntry, QtiExtendedText and QtiInlineChoice from the installed qti-pie component in place of the components of the same name in @qti-pie/plate/react. @qti-pie/plate is not published to npm yet, so this item installs into an app that already has it, as a workspace package or a tarball."
+    }
+  ]
+}

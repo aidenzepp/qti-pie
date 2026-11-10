@@ -1,0 +1,6 @@
+/*
+ * The `qti-pie` registry item's sheet: it brings in plate's sheet and sets no token. The tokens
+ * (--background, --foreground, --card, --primary, --border and the rest) are the host's shadcn
+ * theme's, which plate's sheet reads with fallbacks, so this file never declares one.
+ */
+@import "@qti-pie/plate/styles.css";
