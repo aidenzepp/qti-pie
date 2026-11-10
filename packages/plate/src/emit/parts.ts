@@ -129,6 +129,13 @@ export type Position = "flow" | "phrasing";
  * - `inline-label`: a `label`, or a phrasing container, so a Label stays phrasing content inside the
  *   author's sentence. `label` is no phrasing container, and a `div` or `p` there would close the
  *   author's `p` in the HTML parser.
+ * - `svg-content`: a part inside an `svg`, which may become one of {@link svgElements}, in its own
+ *   case, and no HTML or custom element: the HTML parser moves an HTML tag such as `strong` or
+ *   `div` out of an `svg` to its next sibling, and keeps any other name as an SVG element that
+ *   renders nothing.
+ * - `svg`: the `svg` element only, the root of a picture placed under an HTML parent: the parser
+ *   opens the picture's foreign content at an `svg` start tag, and under any other element its
+ *   shapes are unknown HTML elements that draw nothing.
  * - `any`: any element.
  */
 export type TagClass =
@@ -148,6 +155,8 @@ export type TagClass =
   | "phrasing-container"
   | "prompt"
   | "select"
+  | "svg"
+  | "svg-content"
   | "text-input"
   | "textarea";
 
@@ -255,6 +264,80 @@ export const links: ReadonlySet<string> = new Set(["a", "area"]);
  * The list elements, whose children are `li` elements.
  */
 export const lists: ReadonlySet<string> = new Set(["menu", "ol", "ul"]);
+
+/**
+ * The SVG elements a part inside an `svg` may become, each in its own case: the SVG 2 element index
+ * less `a`, `script` and `style`.
+ *
+ * `a` is a link, which no tag class admits; plate emits neither `script` nor `style` anywhere, and
+ * its pages carry a content security policy with no `unsafe-inline`. The names keep their case
+ * because the emitter writes a tag as given and a DOM host creates the element by that name, so
+ * `foreignObject` is in the set and `foreignobject` is not. A nested `svg` is SVG content.
+ *
+ * @see https://www.w3.org/TR/SVG2/eltindex.html
+ */
+export const svgElements: ReadonlySet<string> = new Set([
+  "animate",
+  "animateMotion",
+  "animateTransform",
+  "circle",
+  "clipPath",
+  "defs",
+  "desc",
+  "ellipse",
+  "feBlend",
+  "feColorMatrix",
+  "feComponentTransfer",
+  "feComposite",
+  "feConvolveMatrix",
+  "feDiffuseLighting",
+  "feDisplacementMap",
+  "feDistantLight",
+  "feDropShadow",
+  "feFlood",
+  "feFuncA",
+  "feFuncB",
+  "feFuncG",
+  "feFuncR",
+  "feGaussianBlur",
+  "feImage",
+  "feMerge",
+  "feMergeNode",
+  "feMorphology",
+  "feOffset",
+  "fePointLight",
+  "feSpecularLighting",
+  "feSpotLight",
+  "feTile",
+  "feTurbulence",
+  "filter",
+  "foreignObject",
+  "g",
+  "image",
+  "line",
+  "linearGradient",
+  "marker",
+  "mask",
+  "metadata",
+  "mpath",
+  "path",
+  "pattern",
+  "polygon",
+  "polyline",
+  "radialGradient",
+  "rect",
+  "set",
+  "stop",
+  "svg",
+  "switch",
+  "symbol",
+  "text",
+  "textPath",
+  "title",
+  "tspan",
+  "use",
+  "view",
+]);
 
 /**
  * The heading elements.
@@ -494,6 +577,8 @@ const admits = {
   "phrasing-container": ({ tag }) => isPhrasingContainer(tag),
   prompt: ({ tag }) => tag === "p" || isFlowContainer(tag),
   select: ({ attrs, tag }) => tag === "select" && isDropDown(attrs),
+  svg: ({ tag }) => tag === "svg",
+  "svg-content": ({ tag }) => svgElements.has(tag),
   "text-input": ({ attrs, tag }) => tag === "input" && isTextType(attributeOf(attrs, "type")),
   textarea: ({ tag }) => tag === "textarea",
 } satisfies { readonly [C in TagClass]: (element: Element) => boolean };
