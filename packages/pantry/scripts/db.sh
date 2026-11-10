@@ -28,16 +28,16 @@ cd "$(dirname "$0")/.."
 
 # The GR8DES_PG_* and GRIZZLE_PG_STATE defaults below are read again, with the same values, by `localCluster` in
 # src/db/connection.ts; change one, change both. They are exported, so the grizzle config connects where this script
-# does.
+# does. The CA is not: unset or empty, GR8DES_PG_CA stays so, and the config finds the same file in GRIZZLE_PG_STATE,
+# so a missing one is reported as the local cluster's.
 : "${GRIZZLE_PG_STATE:=$HOME/.local/var/grizzle/pg19rc1}"
 : "${GRIZZLE_PG_BIN:=$HOME/.local/opt/postgresql/19rc1/bin}"
 : "${GR8DES_PG_HOST:=localhost}"
 : "${GR8DES_PG_PORT:=5433}"
 : "${GR8DES_PG_DATABASE:=gr8des_qti}"
 : "${GR8DES_PG_SECRETS:=$HOME/.local/var/gr8des/$GR8DES_PG_DATABASE}"
-: "${GR8DES_PG_CA:=$GRIZZLE_PG_STATE/tls/ca.crt}"
 : "${GR8DES_PG_MIGRATION_ROLE:=grizzle_dev}"
-export GRIZZLE_PG_STATE GR8DES_PG_HOST GR8DES_PG_PORT GR8DES_PG_DATABASE GR8DES_PG_SECRETS GR8DES_PG_CA GR8DES_PG_MIGRATION_ROLE
+export GRIZZLE_PG_STATE GR8DES_PG_HOST GR8DES_PG_PORT GR8DES_PG_DATABASE GR8DES_PG_SECRETS GR8DES_PG_MIGRATION_ROLE
 config="${GR8DES_GRIZZLE_CONFIG:-grizzle.config.ts}"
 
 if ! [[ $GR8DES_PG_DATABASE =~ ^[a-z_][a-z0-9_]{0,62}$ ]]; then
@@ -46,7 +46,7 @@ if ! [[ $GR8DES_PG_DATABASE =~ ^[a-z_][a-z0-9_]{0,62}$ ]]; then
 fi
 
 owner="$GR8DES_PG_MIGRATION_ROLE"
-ca="$GR8DES_PG_CA"
+ca="${GR8DES_PG_CA:-$GRIZZLE_PG_STATE/tls/ca.crt}"
 
 # Prints the migration identity's password for one connection: GR8DES_PG_PASSWORD_COMMAND's output for it, trimmed,
 # where the command is set, else the password file in the cluster's state folder. Fails, printing nothing, where the

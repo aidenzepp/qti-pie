@@ -217,5 +217,55 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           }
         }),
     );
+
+    it.effect(
+      "names the local cluster's CA as GRIZZLE_PG_STATE's where GR8DES_PG_CA is unset or empty, and as GR8DES_PG_CA's where it is set: grizzle migrate's report and psql's CA",
+      () =>
+        Effect.gen(function* missingCa() {
+          const scratch = yield* scriptScratch;
+          const command = yield* scratch.command("password.sh", "echo the-password");
+          const local = `${scratch.state}/tls/ca.crt`;
+          const named = `${scratch.state}/named.crt`;
+
+          for (const ca of [undefined, ""]) {
+            const run = yield* runScript("migrate", {
+              ...scratch.environment,
+              GR8DES_PG_CA: ca,
+              GR8DES_PG_PASSWORD_COMMAND: command,
+            });
+
+            assert.notStrictEqual(run.code, 0);
+            assert.include(
+              run.stderr,
+              `Cannot read the local database's CA certificate at ${local}.`,
+            );
+            assert.include(run.stderr, "pnpm pg:init");
+            assert.notInclude(run.stderr, "the file GR8DES_PG_CA names");
+
+            yield* runScript("create", {
+              ...scratch.environment,
+              GR8DES_PG_CA: ca,
+              GR8DES_PG_PASSWORD_COMMAND: command,
+            });
+          }
+
+          const runs = yield* scratch.psqlRuns;
+
+          assert.lengthOf(runs, 4);
+
+          for (const line of runs) {
+            assert.include(line, `sslrootcert=${local}`);
+          }
+
+          const run = yield* runScript("migrate", {
+            ...scratch.environment,
+            GR8DES_PG_CA: named,
+            GR8DES_PG_PASSWORD_COMMAND: command,
+          });
+
+          assert.notStrictEqual(run.code, 0);
+          assert.include(run.stderr, `${named}, the file GR8DES_PG_CA names`);
+        }),
+    );
   },
 );
