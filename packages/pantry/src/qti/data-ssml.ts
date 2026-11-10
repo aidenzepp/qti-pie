@@ -20,9 +20,9 @@
  *   its row, and each property's member is one of its element's.
  *
  * The importer writes every member and property it reads, and the database judges them. Which
- * rows a value has is the JSON's grammar, which grizzle cannot state as one pattern
- * (`docs/grizzle-findings.md`, the Data-SSML row), so the importer reads it once, before the
- * database, as it reads a document's XML. Every text a law compares is `keyText`, so a property
+ * rows a value has is the JSON's grammar, and no grizzle term derives rows from a text (no JSON
+ * type, no `Compute` term that splits a text), so the importer reads it once, before the database,
+ * as it reads a document's XML. Every text a law compares is `keyText`, so a property
  * past the key-text bound is refused under that stated limit (reading 1).
  *
  * @see {@link https://www.imsglobal.org/sites/default/files/spec/qti/v3/data-ssml_infobind/imsqtiv3p0_datassml_v1p0_InfoBind.html#JSOND | IMS Data-SSML 1.0, 3.4 Description of the JSON Schema}

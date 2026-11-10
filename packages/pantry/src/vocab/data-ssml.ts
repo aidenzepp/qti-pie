@@ -4,11 +4,12 @@
  * property's name and decoded value in the order written. The database holds those rows to
  * Data-SSML 1.0's JSON Schema (`#pantry/qti/data-ssml.ts`, law "Data SSML"): which members and
  * properties it lists, the enumerated and the normalized values, and the required properties.
- * This module judges none of that. It reads the JSON, which grizzle cannot state as a pattern (one
- * pattern for the language needs about 4,400 positions where grizzle admits 4,096,
- * `docs/grizzle-findings.md`), and a value that is not one JSON object of objects of strings has
- * no rows, so the database refuses its attribute under "Data SSML", which requires every closed
- * `data-ssml` to have them.
+ * This module judges none of that. It reads the JSON into rows, which no grizzle term derives from
+ * a text: grizzle has no JSON type and no `Compute` term that splits a text (grizzle's README,
+ * "Tables and types", and TODO, "A Compute term that splits a text"), so the rows the laws read
+ * are the importer's to write, as a document's XML is. A value that is not one JSON object of
+ * objects of strings has no rows, so the database refuses its attribute under "Data SSML", which
+ * requires every closed `data-ssml` to have them.
  *
  * The value is read as written, as RFC 8259 reads it, one grammar for the text. A name written
  * twice in one object is kept twice (RFC 8259 §4: names "SHOULD be unique"), each value its own

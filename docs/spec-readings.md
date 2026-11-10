@@ -2839,14 +2839,13 @@ Where the check lives: pantry's importer parses the value as JSON and judges it 
 `attribute-lexical`, the rule of a value its domain refuses. The law oracle judges the same value with a reader of
 its own (`src/test/oracle-laws/data-ssml.ts`), written from the schema apart from the importer's, which the purity guard
 keeps it from reading, so the two judges are independent. The attribute's value domain in the database stays
-`xs:string`. Writing the language as the domain's pattern was tried and does not fit: one pattern for it needs about
-4,400 positions where grizzle admits 4,096 (`regexMaxPositions`), and splitting it into chained pattern steps makes a
-product of about 35,791, past pantry's `productPositions` of 4,096 (`docs/grizzle-findings.md`, the row for the pattern
-size). Dropping any JSON spelling of a name or value to make it fit would refuse valid content, which decision 321
-forbids. So a ChangeSet written without the importer could store a `data-ssml` the schema refuses: that is this
-reading's stated limit, the same shape as the `xsi:type` and SSML `role` values the codec checks and no law over the
-stored rows holds. This binds pantry and plate alike as to what is valid; where it is checked is pantry's. (Decision
-351; 2026-11-06. Amended 2026-11-07 by the Mind on audit b61b8f14's C2: the oracle's own reader.)
+`xs:string`. Writing the language as the domain's pattern was tried and did not fit grizzle's pattern bound of that
+time (`docs/grizzle-findings.md`, the row for the pattern size), and dropping any JSON spelling of a name or value to
+make it fit would refuse valid content, which decision 321 forbids. So a ChangeSet written without the importer could
+store a `data-ssml` the schema refuses: that is this reading's stated limit, the same shape as the `xsi:type` and SSML
+`role` values the codec checks and no law over the stored rows holds. This binds pantry and plate alike as to what is
+valid; where it is checked is pantry's. (Decision 351; 2026-11-06. Amended 2026-11-07 by the Mind on audit b61b8f14's
+C2: the oracle's own reader.)
 
 138. **An entry path that holds a backslash or begins with a drive prefix is refused under `href-path`, in a zip and in
      a directory alike.** The ZIP format's file name field says "The path stored MUST NOT contain a drive or device
@@ -3720,9 +3719,9 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      the importer judges nothing of it.** Reading R7-a states what a `data-ssml` value must be (one JSON object that
      Data-SSML 1.0's normative JSON Schema admits, section 3.4) and has the importer check it, with the database holding
      the text unchecked. This keeps R7-a's content and moves its check into the database, as Bjorn's ruling that the
-     database checks everything requires (no host judge of what a law can state). The JSON grammar is not a law grizzle
-     can state (one pattern needs about 4,400 positions where grizzle admits 4,096, `docs/grizzle-findings.md`), so the
-     importer reads the value once, before any row exists, as it reads a document's XML: one JSON object of objects of
+     database checks everything requires (no host judge of what a law can state). The rows a value holds are not a law
+     grizzle can state, since grizzle has no JSON type and no term that splits a text into rows, so the importer reads
+     the value once, before any row exists, as it reads a document's XML: one JSON object of objects of
      strings, each member and each property in the order written and each name and value decoded, a name written twice
      kept twice (`dataSsmlOf`, `src/vocab/data-ssml.ts`). It decides nothing else. The schema is the database's, law
      "Data SSML" under `attribute-lexical` (`src/qti/data-ssml.ts`): every closed `data-ssml` has its `DataSsml` row,
