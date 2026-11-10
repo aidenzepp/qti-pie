@@ -62,10 +62,11 @@ export const textsPattern = (texts: Iterable<string>): string => {
 
 /**
  * Spell an element's expanded name as one text, `namespace}local`: the subject a law matches
- * `KindByNameUnder`'s pattern against, as `Compute.concat(Compute.concat(namespace, "}"), local)`,
- * since grizzle's `concat` takes a literal only second. A local name is an NCName, which holds no
- * `}`, so the text's last `}` ends the namespace and one text spells one name: James Clark's
- * `{namespace}local` without its opening brace.
+ * `KindByNameUnder`'s pattern against, as `Compute.concat(Compute.concat(namespace, "}"), local)`.
+ * The separator follows the namespace, so it stands second, a plain string; a leading literal would
+ * be a typed constant, `Compute.literal` (grizzle's README, "Text"). A local name is an NCName,
+ * which holds no `}`, so the text's last `}` ends the namespace and one text spells one name: James
+ * Clark's `{namespace}local` without its opening brace.
  *
  * @param name - The element's namespace name, empty for none, and its local name.
  * @param name.local - The local name.
