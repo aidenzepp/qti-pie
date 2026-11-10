@@ -104,7 +104,7 @@ interface Mounted {
   /**
    * Find the badge an ordered hotspot shows, or none.
    */
-  readonly badge: (identifier: string) => HTMLElement | null;
+  readonly badge: (identifier: string) => SVGElement | null;
   readonly container: HTMLElement;
   readonly form: HTMLFormElement;
 
@@ -208,7 +208,7 @@ const mount = (html: string): Mounted => {
 
   return {
     badge: (identifier) =>
-      hotspot(identifier).querySelector<HTMLElement>(`[data-slot="${badgeSlot}"]`),
+      hotspot(identifier).querySelector<SVGElement>(`[data-slot="${badgeSlot}"]`),
     begin: () => {
       const upgraded = upgrade(container);
 
@@ -765,7 +765,9 @@ describe(server.browser, () => {
             placeByKeys(item.hotspot("H2"), 3);
             assert.deepStrictEqual(readHidden(item.root, name), ["H4", "H3", "H2"]);
             assert.deepStrictEqual(shown(item), ["Anywhere else", "Area 3 of 4", "Sun"]);
-            assert.strictEqual(item.badge("H4")?.getAttribute("style"), "left:50%;top:50%");
+            assert.strictEqual(item.badge("H4")?.getAttribute("x"), "50%");
+            assert.strictEqual(item.badge("H4")?.getAttribute("y"), "50%");
+            assert.isFalse(item.badge("H4")?.hasAttribute("style"));
           }),
         );
       }),

@@ -4,9 +4,9 @@
  * badge each ordered hotspot shows and the text each position shows (issue ei-11).
  *
  * The controller builds no interaction structure of its own. A hotspot's badge is drawn as the SSR
- * draws a restored one, a `graphic-order-interaction-badge` inside its hotspot placed at the centre
- * of its area, and {@link GraphicOrderView.restore} gives the hotspots' and positions' content and
- * attributes back as the SSR wrote them.
+ * draws a restored one, a `graphic-order-interaction-badge` SVG `text` inside its hotspot's
+ * outline, after the shape, at the centre of its area, and {@link GraphicOrderView.restore} gives
+ * the hotspots' and positions' content and attributes back as the SSR wrote them.
  *
  * Its texts are English and local to this module (D7).
  *
@@ -146,8 +146,8 @@ export interface GraphicOrderView {
   readonly show: (placements: readonly OrderPlacement[]) => void;
 
   /**
-   * Give the interaction's markup back as the SSR wrote it: each hotspot's children and
-   * `data-position`, each badge's number, each position's content and `data-empty`, and the
+   * Give the interaction's markup back as the SSR wrote it: each hotspot's `data-position`, each
+   * outline's content, each badge's number, each position's content and `data-empty`, and the
    * attributes the view claimed.
    */
   readonly restore: () => void;
@@ -213,65 +213,55 @@ const centreOf = (figure: Element): readonly [x: number, y: number] | undefined 
 };
 
 /**
- * Read the size of the image an outline is drawn over from its `viewBox`.
- *
- * @param outline The outline SVG.
- * @returns The width and the height, `undefined` when the outline names no positive size.
+ * The namespace of SVG elements, which a badge inside an outline is in.
  */
-const frameOf = (outline: Element): { height: number; width: number } | undefined => {
-  const parts = (outline.getAttribute("viewBox") ?? "").split(/[\s,]+/u).map(Number);
-  const width = parts[2] ?? 0;
-  const height = parts[3] ?? 0;
-
-  return width > 0 && height > 0 ? { height, width } : undefined;
-};
+const svgNamespace = "http://www.w3.org/2000/svg";
 
 /**
- * Write the `style` that places a hotspot's badge at the centre of its area, as the SSR writes it:
- * percentages of the image when the outline knows the image's size, pixels otherwise, and the
- * middle of the image for a `default` area.
+ * Find the outline SVG of a hotspot, which holds its shape and its badge.
  *
  * @param hotspot The hotspot.
- * @returns The `style` attribute's value, `undefined` for a hotspot with no drawn area, whose
- *   badge sits at the image's corner.
+ * @returns The outline, `null` for a hotspot whose area holds no drawing.
  */
-const placementStyle = (hotspot: HTMLElement): string | undefined => {
-  if (hotspot.dataset["area"] === "default") {
-    return "left:50%;top:50%";
-  }
-
-  const outline = hotspot.querySelector(`[data-slot="${outlineSlot}"]`);
-  const figure = outline?.firstElementChild;
-  const centre = figure === null || figure === undefined ? undefined : centreOf(figure);
-
-  if (outline === null || centre === undefined) {
-    return undefined;
-  }
-
-  const [x, y] = centre;
-  const frame = frameOf(outline);
-
-  return frame === undefined
-    ? `left:${digits(x)}px;top:${digits(y)}px`
-    : `left:${digits((x / frame.width) * 100)}%;top:${digits((y / frame.height) * 100)}%`;
-};
+const outlineOf = (hotspot: HTMLElement): Element | null =>
+  hotspot.querySelector(`[data-slot="${outlineSlot}"]`);
 
 /**
- * Draw a hotspot's badge as the SSR draws one.
+ * Find the badge an outline holds.
+ *
+ * @param outline The outline SVG, or none.
+ * @returns The badge, `null` when the hotspot is not ordered or has no outline.
+ */
+const badgeIn = (outline: Element | null): SVGElement | null =>
+  outline === null
+    ? null
+    : outline.querySelector<SVGElement>(`:scope > [data-slot="${badgeSlot}"]`);
+
+/**
+ * Draw a hotspot's badge as the SSR draws one: an SVG `text` after the shape, whose `x` and `y` are
+ * the centre of the area in the outline's own units (`50%` of each for a `default` area), and never
+ * an inline `style`, which plate's Content Security Policy refuses.
  *
  * @param hotspot The hotspot.
+ * @param outline The hotspot's outline SVG.
  * @param number The position it shows.
- * @returns The badge, not yet in the page.
+ * @returns The badge, not yet in the page. It carries no `x` and `y` when the shape's centre cannot
+ *   be read.
  */
-const badgeFor = (hotspot: HTMLElement, number: string): HTMLElement => {
-  const badge = document.createElement("span");
-  const style = placementStyle(hotspot);
+const badgeFor = (hotspot: HTMLElement, outline: Element, number: string): SVGElement => {
+  const badge = document.createElementNS(svgNamespace, "text");
+  const figure = outline.firstElementChild;
+  const centre = figure === null ? undefined : centreOf(figure);
 
   badge.dataset["position"] = number;
   badge.dataset["slot"] = badgeSlot;
 
-  if (style !== undefined) {
-    badge.setAttribute("style", style);
+  if (hotspot.dataset["area"] === "default") {
+    badge.setAttribute("x", "50%");
+    badge.setAttribute("y", "50%");
+  } else if (centre !== undefined) {
+    badge.setAttribute("x", digits(centre[0]));
+    badge.setAttribute("y", digits(centre[1]));
   }
 
   badge.textContent = number;
@@ -286,7 +276,7 @@ const badgeFor = (hotspot: HTMLElement, number: string): HTMLElement => {
  * @param children The nodes it should hold.
  * @returns True when it holds those nodes and no others.
  */
-const holds = (element: HTMLElement, children: readonly ChildNode[]): boolean =>
+const holds = (element: Element, children: readonly ChildNode[]): boolean =>
   element.childNodes.length === children.length &&
   children.every((child, index) => element.childNodes[index] === child);
 
@@ -329,14 +319,16 @@ const claim = (
 };
 
 /**
- * Show a hotspot's place in the order: its `data-position` and a badge of that number, or neither
- * for a hotspot that is not ordered. A badge already showing the number is left as it is.
+ * Show a hotspot's place in the order: its `data-position` and a badge of that number in its
+ * outline, or neither for a hotspot that is not ordered. A badge already showing the number is left
+ * as it is, and a hotspot whose area holds no drawing shows no badge, as the SSR writes none.
  *
  * @param hotspot The hotspot.
  * @param place The index of the position it is placed in, -1 for none.
  */
 const showHotspot = (hotspot: HTMLElement, place: number): void => {
-  const badge = hotspot.querySelector<HTMLElement>(`:scope > [data-slot="${badgeSlot}"]`);
+  const outline = outlineOf(hotspot);
+  const badge = badgeIn(outline);
 
   if (place === -1) {
     badge?.remove();
@@ -351,8 +343,12 @@ const showHotspot = (hotspot: HTMLElement, place: number): void => {
     hotspot.dataset["position"] = number;
   }
 
+  if (outline === null) {
+    return;
+  }
+
   if (badge === null) {
-    hotspot.append(badgeFor(hotspot, number));
+    outline.append(badgeFor(hotspot, outline, number));
   } else {
     putBack(badge, "data-position", number);
 
@@ -405,7 +401,8 @@ export const viewOf = (root: HTMLElement): GraphicOrderView => {
   const most = Number(root.dataset["maxChoices"]);
   const positions = Number.isInteger(most) && most > 0 ? written.slice(0, most) : written;
   const originals = hotspots.map((hotspot) => {
-    const badge = hotspot.querySelector<HTMLElement>(`:scope > [data-slot="${badgeSlot}"]`);
+    const outline = outlineOf(hotspot);
+    const badge = badgeIn(outline);
 
     return {
       badge:
@@ -416,8 +413,9 @@ export const viewOf = (root: HTMLElement): GraphicOrderView => {
               number: badge.dataset["position"] ?? null,
               text: badge.textContent,
             },
-      children: [...hotspot.childNodes],
+      children: outline === null ? [] : [...outline.childNodes],
       element: hotspot,
+      outline,
       position: hotspot.dataset["position"] ?? null,
     };
   });
@@ -434,9 +432,9 @@ export const viewOf = (root: HTMLElement): GraphicOrderView => {
   );
   const areas = claim(
     hotspots.flatMap((hotspot) =>
-      [...hotspot.querySelectorAll(`[data-slot="${outlineSlot}"]`)].flatMap((outline) => [
-        ...outline.children,
-      ]),
+      [...(outlineOf(hotspot)?.children ?? [])].filter(
+        (area) => !area.matches(`[data-slot="${badgeSlot}"]`),
+      ),
     ),
     "pointer-events",
     "all",
@@ -480,9 +478,9 @@ export const viewOf = (root: HTMLElement): GraphicOrderView => {
     },
     positions,
     restore: () => {
-      for (const { badge, children, element, position } of originals) {
-        if (!holds(element, children)) {
-          element.replaceChildren(...children);
+      for (const { badge, children, element, outline, position } of originals) {
+        if (outline !== null && !holds(outline, children)) {
+          outline.replaceChildren(...children);
         }
 
         putBack(element, "data-position", position);
