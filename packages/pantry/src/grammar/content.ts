@@ -1,21 +1,22 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
- * The content grammar: each (version, parent)'s content model as its Glushkov automaton (the
- * operator's ruling of 2026-11-05, Glushkov for all 638 models).
+ * The content grammar: each (version, parent)'s content model as its Glushkov automaton (Bjorn's
+ * ruling of 2026-11-05, Glushkov for all 638 models).
  *
  * A model's positions are its element and wildcard particles, numbered from 1 in tree order (U4's
  * particle numbering); 0 is the start. A child's `Admission` row carries its position: the one
  * position its kind names, or 0 where its kind names none (character data, which carries its
- * predecessor's state) or several (a shared kind, whose position the state decides through
- * `Symbol`). The law reads one bit, `Follow(model, was, position)`, with `model` the family's
+ * predecessor's state) or several (a shared kind, whose position the state decides among its
+ * symbol set's). The law reads one bit, whether `position` is in the follow set of `was`:
+ * `FollowMember(FollowSetOf(model, was), position)`, with `model` the family's
  * `ContentModelOf(version, parent)` and `was` the predecessor's position (0 for the first child),
  * and the last child reads `Last(model, state)`: the relations are keyed by automaton, each
- * distinct automaton stated once, however many families share it. Under Unique Particle Attribution
- * the automaton enforces order, required particles, at-most-once and exclusive choice; a bound of
- * 2…n, which a position automaton relaxes, is a count law, `Counted(version, parent, position) →
- * (min, max)`. So is a reading's cap, a particle of at most one that an enclosing group repeats,
- * which the automaton reads per repeat and the reading reads as the family's total: `Counted` holds
- * it as `(0, 1)` (spec reading 130, the loose LOM binding's Schematron).
+ * distinct automaton stated once, however many families share it, and each state's follow set by
+ * its set, each distinct set stated once, however many states share it. Under Unique Particle
+ * Attribution the automaton enforces order, required particles, at-most-once and exclusive choice;
+ * a bound of 2…n, which a position automaton relaxes, is a count law, `Counted(version, parent,
+ * position) → (min, max)`. So is a reading's cap, a particle of at most one that an enclosing group
+ * repeats, which the automaton reads per repeat and the reading reads as the family's total:
+ * `Counted` holds it as `(0, 1)` (spec reading 130, the loose LOM binding's Schematron).
  *
  * A group's bound of 2…n the automaton relaxes too, to `1..n` (`automatonOf` links a repeatable
  * group's last positions to its first, whatever its bounds), and no position carries it, so
@@ -36,12 +37,14 @@
  * Q3's `automatonOf` builds every automaton from the content-model IR; this module installs them.
  */
 import { Array as Arr, Option, pipe, Result, Schema } from "effect";
-import type { Admission, AdmittedChild } from "#pantry/grammar/admission.ts";
+import type { Admission, AdmissionKey, AdmittedChild } from "#pantry/grammar/admission.ts";
 import {
   closed,
   dependentField,
   fin,
   idField,
+  indexed,
+  indexedSourced,
   prefixHandle,
   roster,
   rowsAt,
@@ -51,9 +54,10 @@ import {
 } from "#pantry/grammar/closed.ts";
 import type {
   Closed,
-  ClosedRelationError,
   DependentField,
   IdField,
+  Indexed,
+  IndexedSourced,
   Roster,
   Sourced,
   ValueField,
@@ -74,8 +78,8 @@ import {
   namespaceClassesUnder,
 } from "#pantry/vocab/namespaces.ts";
 import type { NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
-import { automatonOf } from "#pantry/vocab/sequencing.ts";
-import type { Automaton, Position } from "#pantry/vocab/sequencing.ts";
+import { positionsOf, outlineOf, structureOf } from "#pantry/vocab/sequencing.ts";
+import type { Automaton, Position, Structure } from "#pantry/vocab/sequencing.ts";
 
 /**
  * A spec reading that edits a content model where it says more than the XSD: a kind admitted beside
@@ -160,20 +164,43 @@ type FamilyKey = readonly [IdField<"version", SchemaVersion>, IdField<"parent", 
 /**
  * The content grammar's relations, and the host's view of each automaton.
  *
- * `Follow`, `Last` and `Symbol` are keyed by the automaton, not by the (version, parent) family:
- * two families whose automata have the same positions, `Follow` and `Last` are one content model
+ * `FollowSetOf` and `Last` are keyed by the automaton, not by the (version, parent) family: two
+ * families whose automata have the same positions, follow sets and `Last` are one content model
  * (rule 0: identical facts are one fact), and a family reads its model through `ContentModelOf`;
- * `Symbol` is keyed likewise by its shared model, through `SharedModelOf`. Where a family's row
- * comes from is the family's, not the model's, so {@link ContentGrammar.sourceOf} answers it by
- * family and position.
+ * `SymbolSetOf` is keyed likewise by its shared model, through `SharedModelOf`. A state's follow
+ * set is keyed by the set, through `FollowSetOf`, by the same rule: a repeated choice of n
+ * particles has n + 1 states that follow to the same n positions, so its automaton's transitions,
+ * n² + n of them, are one set of n; and so is a shared kind's set of positions, through
+ * `SymbolSetOf`, which 3,282 (model, kind) pairs share as 333 sets. Where a family's row comes from
+ * is the family's, not the model's, so {@link ContentGrammar.sourceOf} answers it by family and
+ * position.
  */
 export interface ContentGrammar {
   /**
-   * `ContentModelOf`: (version, parent) → model, total, the automaton the family's children
-   * follow; a family no content model holds reads the model of one position that nothing follows
-   * and nothing ends at.
+   * `AdmissionIn`: (map, child) → position, each admission map's children at their positions in
+   * their parent's content model, 0 for character data, for a kind several positions name and for
+   * a triple a vocabulary states beside its models. A family that admits no child holds the empty
+   * map, which holds no row.
    */
-  readonly contentModelOf: Closed<FamilyKey, readonly [IdField<"model", string>]>;
+  readonly admissionIn: Indexed<
+    readonly [IdField<"map", string>, IdField<"child", string>],
+    readonly [IdField<"position", string>]
+  >;
+  /**
+   * The `AdmissionMap` roster: every distinct admission map of a family, the children it admits
+   * at their positions, numbered from 0 in the order of the first family, in (version, parent)
+   * code order, that holds it (rule 0: identical facts are one fact): 1,288 families hold 190.
+   */
+  readonly admissionMaps: Roster<string>;
+  /**
+   * `ContentModelOf`: (version, parent) → (model, admission), total: the automaton the family's
+   * children follow, and the family's admission map. A family no content model holds reads the
+   * model of one position that nothing follows and nothing ends at.
+   */
+  readonly contentModelOf: Indexed<
+    FamilyKey,
+    readonly [IdField<"model", string>, IdField<"admission", string>]
+  >;
   /**
    * `Counted`: the positions whose count is a law beside the automaton, with their bounds, each
    * sourced to the particle whose bound it is, or to the reading that caps it at one.
@@ -183,12 +210,26 @@ export interface ContentGrammar {
     readonly [ValueField<"min", number>, ValueField<"max", number>]
   >;
   /**
-   * `Follow`: (model, from, to) where a child at position `to` may follow one at `from`, `from` 0
-   * the start, in the content model's automaton.
+   * `FollowMember`: (set, to) for each position `to` a follow set holds.
    */
-  readonly follow: Closed<
-    readonly [IdField<"model", string>, DependentField<"from">, DependentField<"to">],
+  readonly followMember: Indexed<
+    readonly [IdField<"set", string>, IdField<"to", string>],
     readonly []
+  >;
+  /**
+   * The `FollowSet` roster: every distinct follow set of a content model's state, numbered from 0
+   * in the order of the first (model, state) that holds it, models in `ContentModel` code order
+   * and each model's states ascending.
+   */
+  readonly followSets: Roster<string>;
+  /**
+   * `FollowSetOf`: (model, from) → set, total over each content model's states, `from` 0 the
+   * start: the positions a child may take after one at `from`, in the model's automaton. A state
+   * nothing follows holds the empty set, which `FollowMember` holds no row of.
+   */
+  readonly followSetOf: Indexed<
+    readonly [IdField<"model", string>, DependentField<"from">],
+    readonly [IdField<"set", string>]
   >;
   /**
    * `Last`: (model, at) where a family of the model may end at position `at`, 0 when it may be
@@ -200,7 +241,7 @@ export interface ContentGrammar {
   >;
   /**
    * `ModelPositions`: model → positions, each content model's position count, its start 0
-   * included, `Follow`'s and `Last`'s dependent sizes.
+   * included, `FollowSetOf`'s and `Last`'s dependent sizes.
    */
   readonly modelPositions: Closed<
     readonly [IdField<"model", string>],
@@ -220,23 +261,16 @@ export interface ContentGrammar {
    * `SharedModelOf`: (version, parent) → shared model, for each family a kind names at several
    * positions; a family whose kinds each name one position has no row.
    */
-  readonly sharedModelOf: Closed<FamilyKey, readonly [IdField<"model", string>]>;
-  /**
-   * `SharedPositions`: shared model → positions, each shared model's position count, its start 0
-   * included, `Symbol`'s dependent size.
-   */
-  readonly sharedModelPositions: Closed<
-    readonly [IdField<"model", string>],
-    readonly [ValueField<"positions", number>]
-  >;
+  readonly sharedModelOf: Indexed<FamilyKey, readonly [IdField<"model", string>]>;
   /**
    * The `SharedModel` roster: every distinct shared model in the code order of its first family,
    * each named as {@link ContentGrammar.models} names a model.
    */
   readonly sharedModels: Roster<string>;
   /**
-   * Read `Symbol`'s row of a kind: the positions a family's model names it at, where several
-   * positions name it and the state decides; none for a kind one position names, or none does.
+   * Read a kind's symbol set in a family: the positions its shared model names it at
+   * (`SymbolMember` of its `SymbolSetOf` set), where several positions name it and the state
+   * decides; none for a kind one position names, or none does.
    *
    * @param key - The family and the kind.
    * @returns The positions, ascending.
@@ -249,7 +283,7 @@ export interface ContentGrammar {
   /**
    * Find where a family's position comes from: its particle in the XSD of its version, or the
    * reading or specification that states it; position 0 is the family's model as a whole. A content
-   * refusal reads it, for the positions `Follow` allows next and the model they belong to.
+   * refusal reads it, for the positions a follow set allows next and the model they belong to.
    *
    * @param key - The family and the position.
    * @returns The source, or none for a position the family's model has not.
@@ -260,21 +294,13 @@ export interface ContentGrammar {
     readonly version: SchemaVersion;
   }) => Option.Option<Source>;
   /**
-   * `Symbol`: (shared model, kind, position) for the kinds several positions of a model name, whose
-   * position the state decides.
-   */
-  readonly symbol: Closed<
-    readonly [IdField<"model", string>, IdField<"kind", string>, DependentField<"position">],
-    readonly []
-  >;
-  /**
    * `StrictlyHeld`: (version, parent, child) for each foreign kind only `strict` wildcards of the
    * parent's model admit, each sourced to the wildcard. Such a child has no declaration its
    * document's schema set gives it, so it stands only where its `xsi:type` names a type that set
    * holds or a built-in, against which XML Schema assesses it (Part 1, §3.3.4 clause 1.2; spec
    * reading 81); without one it is invalid (§3.10.4 clause 2, §3.3.5 [validity] clause 1.1.3).
    */
-  readonly strictlyHeld: Sourced<
+  readonly strictlyHeld: IndexedSourced<
     readonly [
       IdField<"version", SchemaVersion>,
       IdField<"parent", string>,
@@ -282,56 +308,27 @@ export interface ContentGrammar {
     ],
     readonly []
   >;
-}
-
-/**
- * A content model's automaton whose Unique Particle Attribution fails, so no automaton state
- * decides a child's particle.
- */
-export class AmbiguousModel extends Schema.TaggedError<AmbiguousModel>()("AmbiguousModel", {
-  kind: Schema.String,
-  versions: Schema.String,
-}) {
   /**
-   * The kind, its versions, and the repair.
+   * `SymbolMember`: (set, position) for each position a symbol set holds.
    */
-  override get message(): string {
-    return `The content model of ${this.kind} in ${this.versions} breaches Unique Particle Attribution, so a child's particle is not decided by the children before it. Correct the model, or state a spec reading that removes the ambiguity.`;
-  }
-}
-
-/**
- * A spec reading names a kind or a parent the models do not hold.
- */
-export class UnreadEdit extends Schema.TaggedError<UnreadEdit>()("UnreadEdit", {
-  kind: Schema.String,
-  parent: Schema.String,
-  source: Schema.String,
-}) {
+  readonly symbolMember: Closed<
+    readonly [IdField<"set", string>, IdField<"position", string>],
+    readonly []
+  >;
   /**
-   * The reading, the kind and parent, and the repair.
+   * `SymbolSetOf`: (shared model, kind) → set, for each kind several positions of the model name,
+   * whose position the state decides: the set of those positions.
    */
-  override get message(): string {
-    return `The spec reading ${this.source} edits ${this.kind} under ${this.parent}, which no particle of ${this.parent}'s model names. Correct the reading's kind or parent.`;
-  }
-}
-
-/**
- * A spec reading's ending names some kinds of one of its model's positions and not the others, so
- * no position state tells a family that ends there with a listed kind from one that ends with
- * another.
- */
-export class MixedEnding extends Schema.TaggedError<MixedEnding>()("MixedEnding", {
-  kinds: Schema.String,
-  parent: Schema.String,
-  source: Schema.String,
-}) {
+  readonly symbolSetOf: Indexed<
+    readonly [IdField<"model", string>, IdField<"kind", string>],
+    readonly [IdField<"set", string>]
+  >;
   /**
-   * The reading, the position's kinds, and the repair.
+   * The `SymbolSet` roster: every distinct set of positions a shared model names a kind at,
+   * numbered from 0 in the order of the first (shared model, kind) that holds it, models in
+   * `SharedModel` code order (rule 0: identical facts are one fact).
    */
-  override get message(): string {
-    return `The spec reading ${this.source} ends ${this.parent}'s families with some of the kinds ${this.kinds}, which one position of its model names together, so the ending is not decided by the last child's position. Restate the model so that position is split, or list all its kinds or none.`;
-  }
+  readonly symbolSets: Roster<string>;
 }
 
 /**
@@ -354,12 +351,7 @@ export class UncountedCap extends Schema.TaggedError<UncountedCap>()("UncountedC
 /**
  * The ways the content models have no content grammar.
  */
-export type ContentError =
-  | AmbiguousModel
-  | ClosedRelationError
-  | MixedEnding
-  | UncountedCap
-  | UnreadEdit;
+export type ContentError = UncountedCap;
 
 /**
  * The kinds of character data, comments, instructions and entity references: the XDM's nodes
@@ -405,14 +397,6 @@ const dataOf = (
     : characterData[content._tag];
 
 /**
- * A particle tree after an edit, and whether the edit found what it names.
- */
-interface Edited {
-  readonly found: boolean;
-  readonly particle: Particle;
-}
-
-/**
  * Collect the element and wildcard particles within a particle, in document order.
  *
  * @param particle - The particle.
@@ -437,14 +421,14 @@ const leavesOf = (particle: Particle): readonly Exclude<Particle, { readonly _ta
  * @param particle - The model's particle.
  * @param leading - The kinds that come first.
  * @param source - The reading, which the restated groups and the text position cite.
- * @returns The restated model, and whether the model names every leading kind; the model as it
- *   is where it names one not, which leaves the reading unread ({@link UnreadEdit}).
+ * @returns The restated model; the model as it is where it names a leading kind not, which leaves
+ *   the reading unread ({@link finds}).
  */
-const leadingFirst = (particle: Particle, leading: readonly string[], source: string): Edited => {
+const leadingFirst = (particle: Particle, leading: readonly string[], source: string): Particle => {
   const leaves = leavesOf(particle).filter(({ occurs }) => !Option.contains(occurs.max, 0));
   const named = leaves.flatMap((leaf) => (leaf._tag === "element" ? leaf.kinds : []));
   if (!leading.every((kind) => named.includes(kind))) {
-    return { found: false, particle };
+    return particle;
   }
 
   const others = [...new Set(named)].filter((kind) => !leading.includes(kind));
@@ -485,49 +469,46 @@ const leadingFirst = (particle: Particle, leading: readonly string[], source: st
     );
 
   return {
-    found: true,
-    particle: {
-      _tag: "group",
-      compositor: "sequence",
-      occurs: once,
-      particles: [
-        {
-          _tag: "group",
-          compositor: "choice",
-          occurs: many,
-          particles: [
-            ...leading.map(restated),
-            ...wildcards.map((wildcard) => ({ ...wildcard, occurs: once })),
-          ],
-          sources,
-        },
-        {
-          _tag: "group",
-          compositor: "choice",
-          occurs: many,
-          particles: [
-            {
-              _tag: "group",
-              compositor: "sequence",
-              occurs: once,
-              particles: [
-                {
-                  _tag: "group",
-                  compositor: "choice",
-                  occurs: once,
-                  particles: [element("text", sources), ...others.map(restated)],
-                  sources,
-                },
-                ...wildcards.map((wildcard) => ({ ...wildcard, occurs: many })),
-              ],
-              sources,
-            },
-          ],
-          sources,
-        },
-      ],
-      sources,
-    },
+    _tag: "group",
+    compositor: "sequence",
+    occurs: once,
+    particles: [
+      {
+        _tag: "group",
+        compositor: "choice",
+        occurs: many,
+        particles: [
+          ...leading.map(restated),
+          ...wildcards.map((wildcard) => ({ ...wildcard, occurs: once })),
+        ],
+        sources,
+      },
+      {
+        _tag: "group",
+        compositor: "choice",
+        occurs: many,
+        particles: [
+          {
+            _tag: "group",
+            compositor: "sequence",
+            occurs: once,
+            particles: [
+              {
+                _tag: "group",
+                compositor: "choice",
+                occurs: once,
+                particles: [element("text", sources), ...others.map(restated)],
+                sources,
+              },
+              ...wildcards.map((wildcard) => ({ ...wildcard, occurs: many })),
+            ],
+            sources,
+          },
+        ],
+        sources,
+      },
+    ],
+    sources,
   };
 };
 
@@ -536,9 +517,9 @@ const leadingFirst = (particle: Particle, leading: readonly string[], source: st
  *
  * @param particle - The model's particle.
  * @param edit - The edit.
- * @returns The edited particle, and whether the edit found what it names.
+ * @returns The edited particle.
  */
-const edited = (particle: Particle, edit: ModelEdit): Edited => {
+const edited = (particle: Particle, edit: ModelEdit): Particle => {
   if (edit._tag === "first") {
     return leadingFirst(particle, edit.kinds, edit.source);
   }
@@ -547,27 +528,19 @@ const edited = (particle: Particle, edit: ModelEdit): Edited => {
     // A restatement is the reading's whole model: it replaces the XSD's particle, narrowing or
     // widening its language, and the reading's own recognizer (`#pantry/test/gen/relaxng.ts`,
     // `relaxNgModels`) is what it is checked against.
-    return { found: true, particle: edit.particle };
+    return edit.particle;
   }
 
   if (edit._tag === "ends" || edit._tag === "cap") {
     // An ending narrows the automaton and a cap counts beside it, neither the particle
-    // (`contentOf`); each is found when the model names one of its kinds.
-    const named = new Set(
-      leavesOf(particle).flatMap((leaf) => (leaf._tag === "element" ? leaf.kinds : [])),
-    );
-    const kinds = edit._tag === "cap" ? [edit.kind] : edit.kinds;
-
-    return { found: kinds.some((kind) => named.has(kind)), particle };
+    // (`contentOf`).
+    return particle;
   }
 
-  let found = false;
   const walk = (node: Particle): Particle => {
     switch (node._tag) {
       case "element": {
         if (node.kinds.includes(edit.with)) {
-          found = true;
-
           return {
             ...node,
             kinds: [...node.kinds, edit.kind],
@@ -591,36 +564,79 @@ const edited = (particle: Particle, edit: ModelEdit): Edited => {
       }
     }
   };
-  const result = walk(particle);
 
-  return { found, particle: result };
+  return walk(particle);
 };
 
 /**
- * Apply every spec reading's edit of a kind's model, in order, and record each edit that found what
- * it names.
+ * The kinds a model's leaves name: each element leaf's kinds, and none of a wildcard's.
+ *
+ * @param leaves - The model's leaves.
+ * @returns The kinds, each once.
+ */
+const kindsNamed = (leaves: readonly Exclude<Particle, { readonly _tag: "group" }>[]) =>
+  new Set(leaves.flatMap((leaf) => (leaf._tag === "element" ? leaf.kinds : [])));
+
+/**
+ * Whether a spec reading's edit finds what it names in its parent's model, as the particle stands
+ * when the edit is applied: every leading kind among the particles that may occur (`first`), its
+ * model (`restate`), one of its kinds (`ends`, `cap`), or the kind it is admitted beside
+ * (`beside`). The readings are fixed data, so this is the tests' reading of them
+ * (`content.test.ts`, every edit of a composition), never a load's: an edit that finds nothing
+ * leaves its model as it is.
+ *
+ * @param particle - The model's particle, the edits before this one applied.
+ * @param edit - The edit.
+ * @returns Whether it finds what it names.
+ */
+export const finds = (particle: Particle, edit: ModelEdit): boolean => {
+  switch (edit._tag) {
+    case "first": {
+      const occurring = kindsNamed(
+        leavesOf(particle).filter(({ occurs }) => !Option.contains(occurs.max, 0)),
+      );
+
+      return edit.kinds.every((kind) => occurring.has(kind));
+    }
+    case "restate": {
+      return true;
+    }
+    case "ends": {
+      const held = kindsNamed(leavesOf(particle));
+
+      return edit.kinds.some((kind) => held.has(kind));
+    }
+    case "cap": {
+      return kindsNamed(leavesOf(particle)).has(edit.kind);
+    }
+    case "beside": {
+      return kindsNamed(leavesOf(particle)).has(edit.with);
+    }
+    default: {
+      return edit satisfies never;
+    }
+  }
+};
+
+/**
+ * Apply every spec reading's edit of a kind's model, in order: the particle {@link contentOf}
+ * builds the model's automaton from, which the tests read too (`content.test.ts`, Unique Particle
+ * Attribution over every model of a composition, and {@link finds} over every edit).
  *
  * @param particle - The model's particle.
  * @param edits - Every reading's edits.
  * @param kind - The model's kind.
- * @param used - The edits that found what they name, added to.
  * @returns The edited particle.
  */
-const editedBy = (
+export const editedBy = (
   particle: Particle,
   edits: readonly ModelEdit[],
   kind: string,
-  used: Set<ModelEdit>,
 ): Particle => {
   let tree = particle;
   for (const edit of edits) {
     if (edit.parent === kind) {
-      const result = edited(tree, edit);
-      if (result.found) {
-        used.add(edit);
-      }
-
-      tree = result.particle;
+      tree = edited(tree, edit);
     }
   }
 
@@ -628,11 +644,25 @@ const editedBy = (
 };
 
 /**
+ * The endings a kind's readings state.
+ *
+ * @param edits - Every reading's edits.
+ * @param kind - The model's kind.
+ * @returns Its endings, in the readings' order.
+ */
+const endingsOf = (
+  edits: readonly ModelEdit[],
+  kind: string,
+): readonly Extract<ModelEdit, { readonly _tag: "ends" }>[] =>
+  edits.flatMap((edit) => (edit._tag === "ends" && edit.parent === kind ? [edit] : []));
+
+/**
  * Narrow an automaton by the readings' endings of its kind: a family may end only at a position
- * whose kinds an ending lists, every ending's, and never empty. `Follow` is untouched, so the
- * family's other children keep the model's order. A family's last state is its last child's
+ * whose kinds an ending lists, every ending's, and never empty. The follow sets are untouched, so
+ * the family's other children keep the model's order. A family's last state is its last child's
  * position, so an ending is exact only where each position names kinds all of which or none of
- * which it lists; a position it lists in part is refused as {@link MixedEnding}.
+ * which it lists: the readings are fixed, so the tests check that every ending is
+ * ({@link mixedEndingsOf}), and no load does.
  *
  * An ending states a language no deterministic expression does: MathML's `lambda` is
  * `bvar*, DomainQ, ContExp` with `interval` in both `DomainQ` and `ContExp` (spec reading 2), whose
@@ -644,39 +674,13 @@ const editedBy = (
  * @param automaton - The model's automaton.
  * @param edits - Every reading's edits.
  * @param kind - The model's kind.
- * @returns The automaton, its `Last` narrowed by the kind's endings, or the first ending a position
- *   is listed in only in part by.
+ * @returns The automaton, its `Last` narrowed by the kind's endings.
  * @see {@link https://doi.org/10.1006/inco.1997.2695 | Brüggemann-Klein and Wood, One-Unambiguous Regular Languages (Information and Computation 142(2), 1998)}
  */
-const endedBy = (
-  automaton: Automaton,
-  edits: readonly ModelEdit[],
-  kind: string,
-): Result.Result<Automaton, MixedEnding> => {
-  const endings = edits.flatMap((edit) =>
-    edit._tag === "ends" && edit.parent === kind ? [edit] : [],
-  );
-  for (const ending of endings) {
-    const listed = new Set<string>(ending.kinds);
-    for (const { symbol } of automaton.positions) {
-      if (
-        symbol._tag === "kinds" &&
-        symbol.kinds.some((held) => listed.has(held)) &&
-        !symbol.kinds.every((held) => listed.has(held))
-      ) {
-        return Result.fail(
-          new MixedEnding({
-            kinds: symbol.kinds.join(", "),
-            parent: kind,
-            source: ending.source,
-          }),
-        );
-      }
-    }
-  }
-
+const endedBy = (automaton: Automaton, edits: readonly ModelEdit[], kind: string): Automaton => {
+  const endings = endingsOf(edits, kind);
   if (endings.length === 0) {
-    return Result.succeed(automaton);
+    return automaton;
   }
 
   // A state is the position its family's last child stands at; state 0, the empty family, has no
@@ -689,8 +693,41 @@ const endedBy = (
         endings.every(({ kinds }) => symbol.kinds.every((held) => kinds.includes(held))),
     );
 
-  return Result.succeed({ ...automaton, ends: new Set([...automaton.ends].filter(listed)) });
+  return { ...automaton, ends: new Set([...automaton.ends].filter(listed)) };
 };
+
+/**
+ * Find the endings of a kind's readings that list some of one position's kinds and not the others,
+ * so that no position state tells a family that ends there with a listed kind from one that ends
+ * with another. The readings are fixed data, so this is the tests' reading of them
+ * (`content.test.ts`, every ending of a composition), never a load's.
+ *
+ * @param automaton - The kind's model's automaton.
+ * @param edits - Every reading's edits.
+ * @param kind - The model's kind.
+ * @returns Each such ending, with the kinds of the first position it lists in part.
+ */
+export const mixedEndingsOf = (
+  automaton: Automaton,
+  edits: readonly ModelEdit[],
+  kind: string,
+): readonly { readonly ending: ModelEdit; readonly kinds: readonly string[] }[] =>
+  endingsOf(edits, kind).flatMap((ending) => {
+    const listed = new Set<string>(ending.kinds);
+
+    return Arr.findFirst(
+      automaton.positions,
+      ({ symbol }) =>
+        symbol._tag === "kinds" &&
+        symbol.kinds.some((held) => listed.has(held)) &&
+        !symbol.kinds.every((held) => listed.has(held)),
+    ).pipe(
+      Option.flatMap(({ symbol }) =>
+        symbol._tag === "kinds" ? Option.some({ ending, kinds: symbol.kinds }) : Option.none(),
+      ),
+      Option.toArray,
+    );
+  });
 
 /**
  * One position a reading caps: at most one child of a family stands there.
@@ -705,7 +742,7 @@ interface Cap {
  * that names its kind and no other kind, so the count of the family's children there is the count
  * of the kind. A kind a model names at several positions, or beside another kind at one, has no
  * such position, and its cap is refused as {@link UncountedCap}. A kind no particle of the model
- * names leaves the cap unread, which {@link contentOf} refuses as {@link UnreadEdit}, and one whose
+ * names leaves the cap unread, which the tests find ({@link finds}), and one whose
  * particles never occur has no child to count.
  *
  * @param automaton - The model's automaton.
@@ -744,7 +781,6 @@ const cappedBy = (
  * ends at the start.
  */
 const noAutomaton: Automaton = {
-  ambiguous: [],
   ends: new Set([0]),
   next: [new Set()],
   positions: [],
@@ -755,7 +791,6 @@ const noAutomaton: Automaton = {
  * ends at, so the family admits no word, not even the empty one.
  */
 const emptyLanguage: Automaton = {
-  ambiguous: [],
   ends: new Set(),
   next: [new Set()],
   positions: [],
@@ -769,29 +804,6 @@ interface Placed {
   readonly position: Position;
   readonly source: Source;
 }
-
-/**
- * Find a state from which one kind leads to two positions, so that no state decides the child's
- * position: a breach of determinism over the kind alphabet. An XSD's Unique Particle Attribution
- * rules it out wherever a kind carries what the XSD tells particles apart by, as a foreign kind
- * carries its namespace class; this refuses, when the grammar composes, a kind that does not.
- *
- * @param automaton - The automaton.
- * @param symbols - The positions each kind names.
- * @returns A kind with such a state, or none.
- */
-const undecidedKindOf = (
-  automaton: Automaton,
-  symbols: ReadonlyMap<string, readonly Placed[]>,
-): Option.Option<string> =>
-  Arr.findFirst([...symbols], ([, placed]) =>
-    automaton.next.some(
-      (next) =>
-        [...new Set(placed.map(({ position }) => position.number))].filter((number) =>
-          next.has(number),
-        ).length > 1,
-    ),
-  ).pipe(Option.map(([kind]) => kind));
 
 /**
  * One installed automaton: its version, parent, model and the kinds it admits by each position.
@@ -809,6 +821,11 @@ interface Installed {
    */
   readonly positions: readonly Placed[];
   /**
+   * Each state's follow set, ascending ({@link followsOf}), which the signature and the model's
+   * `FollowSetOf` read.
+   */
+  readonly follows: Follows;
+  /**
    * The automaton's signature ({@link signatureOf}), one per model, which its versions share.
    */
   readonly signature: string;
@@ -821,7 +838,7 @@ interface Installed {
    */
   readonly strictly: ReadonlySet<string>;
   /**
-   * The positions each kind the model admits is named at, in position order.
+   * The positions each kind the model admits is named at, in position order, each once.
    */
   readonly symbols: ReadonlyMap<string, readonly Placed[]>;
   readonly version: SchemaVersion;
@@ -861,27 +878,47 @@ const familiesOf = (rosters: {
   );
 
 /**
- * Write what makes two automata one content model: the position count, start included, the pairs
- * `Follow` holds and the positions `Last` holds, each list sorted, so two automata of one language
- * built apart write the same text exactly when they state the same rows.
+ * Each state's follow set, the start's first: the positions a child may take after one at the
+ * state, ascending.
+ */
+type Follows = readonly (readonly number[])[];
+
+/**
+ * Read an automaton's follow sets, each ascending, so two automata of one language built apart
+ * hold equal lists exactly when they hold equal sets.
  *
  * @param automaton - The automaton.
+ * @returns Each state's follow set, the start's first.
+ */
+const followsOf = (automaton: Structure): Follows =>
+  automaton.next.map((next) => [...next].toSorted((left, right) => left - right));
+
+/**
+ * Write what makes two automata one content model: the state count, start included, each state's
+ * follow set and the positions `Last` holds, each in order, so two automata of one language built
+ * apart write the same text exactly when they state the same rows.
+ *
+ * @param follows - The automaton's follow sets ({@link followsOf}).
+ * @param ends - The states `Last` holds.
  * @returns Its signature.
  */
-const signatureOf = (automaton: Automaton): string =>
+const signatureOf = (follows: Follows, ends: ReadonlySet<number>): string =>
   [
-    String(automaton.next.length),
-    automaton.next
-      .flatMap((next, from) => [...next].map((to) => `${String(from)}>${String(to)}`))
-      .toSorted()
-      .join(" "),
-    [...automaton.ends].map(String).toSorted().join(" "),
+    String(follows.length),
+    follows.map((held) => held.join(" ")).join(","),
+    [...ends].toSorted((left, right) => left - right).join(" "),
   ].join("|");
 
 /**
- * The signature of {@link emptyLanguage}, the model of every family no content model holds.
+ * The follow sets of {@link emptyLanguage}, the model of every family no content model holds: its
+ * start's, which nothing follows.
  */
-const emptySignature = signatureOf(emptyLanguage);
+const emptyFollows: Follows = followsOf(emptyLanguage);
+
+/**
+ * The signature of {@link emptyLanguage}.
+ */
+const emptySignature = signatureOf(emptyFollows, emptyLanguage.ends);
 
 /**
  * A family's model as {@link modelsOf} reads it: the signature that makes two families one model,
@@ -963,8 +1000,8 @@ export const maxOccursOf = (occurs: Occurs): number =>
   Option.match(occurs.max, { onNone: () => Number.POSITIVE_INFINITY, onSome: (most) => most });
 
 /**
- * Install the automata of content models, and project their admitted triples with each child's
- * position (plan R12, U4).
+ * Install the automata of content models, and state their admitted triples with each child's
+ * position as each family's admission map (plan R12, U4).
  *
  * An element particle admits its kinds. A wildcard admits, by its processing, the globally
  * declared kinds in its namespaces that no element particle of the model names and that the
@@ -978,8 +1015,10 @@ export const maxOccursOf = (occurs: Occurs): number =>
  * @param input.globalKinds - The kinds a `lax` or `strict` wildcard of a parent reads as their
  *   global declarations in a version: those a schema set of the parent's documents declares.
  * @param input.namespaceOf - The namespace of each kind's elements.
- * @returns The content grammar and the admitted triples with their positions, or the first model or
- *   reading that has none.
+ * @param input.stated - The triples the vocabularies state beside their models, each admitted at
+ *   position 0 in its family's admission map.
+ * @returns The content grammar and `Admission` read through its admission maps, or the first model
+ *   or reading that has none.
  */
 export const contentOf = (input: {
   readonly facets: readonly ContentFacet[];
@@ -988,10 +1027,11 @@ export const contentOf = (input: {
   readonly kinds: Roster<string>;
   readonly models: readonly ContentModel[];
   readonly namespaceOf: (kind: string) => NamespaceOfKind;
+  readonly stated: readonly (AdmittedChild & { readonly source: Source })[];
   readonly versions: Roster<SchemaVersion>;
 }): Result.Result<
   {
-    readonly admitted: readonly AdmittedRow[];
+    readonly admission: Admission;
     readonly content: ContentGrammar;
   },
   ContentError
@@ -1014,52 +1054,81 @@ export const contentOf = (input: {
       );
     };
     const installed: Installed[] = [];
-    const used = new Set<ModelEdit>();
+    // Each distinct outline's follow sets, endings and sorted follows, built once: the models of
+    // many kinds share an outline, and differ only in what their positions name.
+    const outlined = new Map<string, Structure & { readonly follows: Follows }>();
     for (const model of [...input.models, ...input.facets.flatMap((facet) => facet.models)]) {
       const { content } = model;
       const own = input.namespaceOf(model.kind);
       const data = dataOf(content, own);
       const particle: Option.Option<Particle> =
         content._tag === "element-only" || content._tag === "mixed"
-          ? Option.some(editedBy(content.particle, edits, model.kind, used))
+          ? Option.some(editedBy(content.particle, edits, model.kind))
           : Option.none();
-      const automaton = yield* endedBy(
-        Option.match(particle, {
-          onNone: () => noAutomaton,
-          onSome: (held) => automatonOf(held, input.namespaceOf, own),
-        }),
-        edits,
-        model.kind,
-      );
-      if (automaton.ambiguous.length > 0) {
-        return yield* Result.fail(
-          new AmbiguousModel({ kind: model.kind, versions: model.versions.join(" and ") }),
-        );
-      }
+      const built = Option.match(particle, {
+        // A model with no element content follows as the empty language does: its start, which
+        // nothing follows.
+        onNone: () => ({ automaton: noAutomaton, follows: emptyFollows }),
+        onSome: (tree) => {
+          const outline = outlineOf(tree);
+          const {
+            ends,
+            follows: sorted,
+            next,
+          } = outlined.getOrInsertComputed(outline.key, () => {
+            const structure = structureOf(tree);
 
+            return { ...structure, follows: followsOf(structure) };
+          });
+
+          return { automaton: { ends, next, positions: positionsOf(outline) }, follows: sorted };
+        },
+      });
+      const automaton = endedBy(built.automaton, edits, model.kind);
       const caps = yield* cappedBy(automaton, edits, model.kind);
-      const signature = signatureOf(automaton);
+      const { follows } = built;
+      const signature = signatureOf(follows, automaton.ends);
+      const named = new Set(
+        automaton.positions.flatMap(({ symbol }) => (symbol._tag === "kinds" ? symbol.kinds : [])),
+      );
+      // Whether a wildcard of the model reads global declarations, so its versions' global kinds
+      // are read at all.
+      const readsGlobals = automaton.positions.some(
+        ({ symbol }) => symbol._tag === "wildcard" && symbol.processing !== "skip",
+      );
 
       for (const [at, version] of model.versions.entries()) {
-        const named = new Set(
-          automaton.positions.flatMap(({ symbol }) =>
-            symbol._tag === "kinds" ? symbol.kinds : [],
-          ),
-        );
         // `sources` are aligned with the model's versions, so this version's is at its index.
         const positions = automaton.positions.map((position): Placed => ({
           position,
           source: sourceIn(
             position.sources,
             at,
-            `Position ${String(position.number)} of the content model of ${model.kind}`,
+            () => `Position ${String(position.number)} of the content model of ${model.kind}`,
           ),
         }));
+        // The global kinds a wildcard of the model may admit in the version, read once for all
+        // its wildcards, each by what the kind alone decides: no element particle of the model
+        // names it, reading 6 keeps no foreign root of it, and a namespace a facet states the
+        // roots of admits only those.
+        const globals = readsGlobals
+          ? input
+              .globalKinds(version, model.kind)
+              .filter(
+                (kind) => !named.has(kind) && !input.foreignRoots.has(kind) && rootAdmits(kind),
+              )
+          : [];
         const symbols = new Map<string, Placed[]>();
         // The processing of each wildcard position that admits a foreign kind.
         const processings = new Map<string, string[]>();
+        // The positions are walked in order and all of one position's kinds are admitted before
+        // the next's, so a kind's positions are held ascending, and a kind one position names
+        // twice is held there once.
         const admit = (kind: string, placed: Placed) => {
-          symbols.getOrInsertComputed(kind, () => []).push(placed);
+          const held = symbols.getOrInsertComputed(kind, () => []);
+          if (held.at(-1) !== placed) {
+            held.push(placed);
+          }
         };
         // `automatonOf` gives no position to a particle that never occurs, or sits in a group that
         // never does, so every position is one some family reaches.
@@ -1071,13 +1140,8 @@ export const contentOf = (input: {
             }
           } else {
             if (symbol.processing !== "skip") {
-              for (const kind of input.globalKinds(version, model.kind)) {
-                if (
-                  !named.has(kind) &&
-                  !input.foreignRoots.has(kind) &&
-                  rootAdmits(kind) &&
-                  admitsNamespace(symbol.namespace, own, input.namespaceOf(kind))
-                ) {
+              for (const kind of globals) {
+                if (admitsNamespace(symbol.namespace, own, input.namespaceOf(kind))) {
                   admit(kind, placed);
                 }
               }
@@ -1096,24 +1160,15 @@ export const contentOf = (input: {
           }
         }
 
-        const undecided = undecidedKindOf(automaton, symbols);
-        if (Option.isSome(undecided)) {
-          return yield* Result.fail(
-            new AmbiguousModel({
-              kind: `${model.kind} (for ${undecided.value})`,
-              versions: version,
-            }),
-          );
-        }
-
         installed.push({
           automaton,
           caps,
           data,
+          follows,
           parent: model.kind,
           positions,
           signature,
-          source: sourceIn(model.sources, at, `The content model of ${model.kind}`),
+          source: sourceIn(model.sources, at, () => `The content model of ${model.kind}`),
           strictly: new Set(
             [...processings].flatMap(([kind, held]) =>
               held.every((processing) => processing === "strict") ? [kind] : [],
@@ -1123,40 +1178,6 @@ export const contentOf = (input: {
           version,
         });
       }
-    }
-
-    const unused = edits.find((edit) => !used.has(edit));
-    if (unused !== undefined) {
-      return yield* Result.fail(
-        new UnreadEdit({
-          kind: ((): string => {
-            switch (unused._tag) {
-              case "ends":
-              case "first": {
-                return unused.kinds.join(", ");
-              }
-              case "restate": {
-                return [
-                  ...new Set(
-                    leavesOf(unused.particle).flatMap((leaf) =>
-                      leaf._tag === "element" ? leaf.kinds : [],
-                    ),
-                  ),
-                ].join(", ");
-              }
-              case "beside":
-              case "cap": {
-                return unused.kind;
-              }
-              default: {
-                return unused satisfies never;
-              }
-            }
-          })(),
-          parent: unused.parent,
-          source: unused.source,
-        }),
-      );
     }
 
     const widest = Math.max(0, ...installed.map(({ automaton }) => automaton.positions.length));
@@ -1185,9 +1206,7 @@ export const contentOf = (input: {
     // character data the model gives no position, which carries its predecessor's state.
     const admittedOf = (entry: Installed): readonly AdmittedRow[] => [
       ...[...entry.symbols].map(([child, placed]) => {
-        const [only, ...rest] = new Map(
-          placed.map((held) => [held.position.number, held]),
-        ).values();
+        const [only, ...rest] = placed;
 
         return only !== undefined && rest.length === 0
           ? {
@@ -1215,27 +1234,34 @@ export const contentOf = (input: {
           version: entry.version,
         })),
     ];
-    // Each family's kinds that several positions of its model name, with those positions.
+    // Each family's kinds that several positions of its model name, with those positions,
+    // ascending as `symbols` holds them.
     const sharedOf = (entry: Installed) =>
-      [...entry.symbols].flatMap(([kind, placed]) => {
-        const distinct = [...new Set(placed.map(({ position }) => position.number))].toSorted(
-          (left, right) => left - right,
-        );
-
-        return distinct.length > 1 ? [{ kind, numbers: distinct }] : [];
-      });
+      [...entry.symbols].flatMap(([kind, placed]) =>
+        placed.length > 1 ? [{ kind, numbers: placed.map(({ position }) => position.number) }] : [],
+      );
+    // Every (version, parent) family, which both models' readings walk.
+    const families = familiesOf(input);
     // The models, read once per family in (version, parent) code order: a family's automaton is its
-    // model's whenever an earlier family's has the same positions, `Follow` and `Last`.
+    // model's whenever an earlier family's has the same positions, follow sets and `Last`.
     const contentModels = modelsOf(
-      familiesOf(input).map((family) =>
+      families.map((family) =>
         Option.match(installedAt(family), {
-          onNone: () => ({ family, signature: emptySignature, value: emptyLanguage }),
-          onSome: (entry) => ({ family, signature: entry.signature, value: entry.automaton }),
+          onNone: () => ({
+            family,
+            signature: emptySignature,
+            value: { automaton: emptyLanguage, follows: emptyFollows },
+          }),
+          onSome: (entry) => ({
+            family,
+            signature: entry.signature,
+            value: { automaton: entry.automaton, follows: entry.follows },
+          }),
         }),
       ),
     );
     const sharedModels = modelsOf(
-      familiesOf(input).flatMap((family) =>
+      families.flatMap((family) =>
         Option.toArray(installedAt(family)).flatMap((entry) => {
           const shared = sharedOf(entry);
 
@@ -1251,20 +1277,56 @@ export const contentOf = (input: {
                       .flatMap(({ kind, numbers }) => numbers.map((number) => `${kind}:${number}`))
                       .toSorted(),
                   ].join(" "),
-                  value: { positions: entry.automaton.next.length, shared },
+                  value: shared,
                 },
               ];
         }),
       ),
     );
-    const model = idField("model", yield* roster("ContentModel", contentModels.handles));
-    const sharedModel = idField("model", yield* roster("SharedModel", sharedModels.handles));
+    const model = idField("model", roster("ContentModel", contentModels.handles));
+    const sharedModel = idField("model", roster("SharedModel", sharedModels.handles));
     const modelSizes = new Map(
-      contentModels.models.map(({ handle, value }) => [handle, value.next.length]),
+      contentModels.models.map(({ handle, value }) => [handle, value.follows.length]),
     );
-    const sharedSizes = new Map(
-      sharedModels.models.map(({ handle, value }) => [handle, value.positions]),
+    // Each model's states' follow sets, each distinct set once (rule 0), numbered in the order of
+    // the first (model, state) that holds it, and the positions each holds.
+    const setOf = new Map<string, string>();
+    const members: { readonly set: string; readonly to: string }[] = [];
+    const statedSets = contentModels.models.flatMap(({ handle, value }) =>
+      value.follows.map((held, from) => ({
+        from: String(from),
+        model: handle,
+        set: setOf.getOrInsertComputed(held.join(" "), () => {
+          const fresh = String(setOf.size);
+          members.push(...held.map((to) => ({ set: fresh, to: String(to) })));
+
+          return fresh;
+        }),
+      })),
     );
+    const followSet = idField("set", roster("FollowSet", [...setOf.values()]));
+    // Each shared model's kinds' positions, each distinct set of positions once (rule 0), numbered
+    // in the order of the first (model, kind) that holds it, with the positions each holds,
+    // ascending as `sharedOf` reads them.
+    const symbolSetByText = new Map<string, string>();
+    const symbolMembers: { readonly position: string; readonly set: string }[] = [];
+    const symbolNumbers = new Map<string, readonly number[]>();
+    const symbolRows = sharedModels.models.flatMap(({ handle, value }) =>
+      value.map(({ kind, numbers }) => ({
+        kind,
+        model: handle,
+        set: symbolSetByText.getOrInsertComputed(numbers.join(" "), () => {
+          const fresh = String(symbolSetByText.size);
+          symbolMembers.push(
+            ...numbers.map((number) => ({ position: String(number), set: fresh })),
+          );
+          symbolNumbers.set(fresh, numbers);
+
+          return fresh;
+        }),
+      })),
+    );
+    const symbolSet = idField("set", roster("SymbolSet", [...symbolSetByText.values()]));
     // A family's positions are 0, its start, then its model's own: the dependent sum Σ (P + 1).
     const position = dependentField(
       "position",
@@ -1279,7 +1341,49 @@ export const contentOf = (input: {
       dependentField(name, positions, (prefix) =>
         countOf(modelSizes, prefixHandle(prefix, "model"), "ModelPositions"),
       );
-    const admitted = installed.flatMap(admittedOf);
+    // Each installed family with the children its model admits, read once: its admission map's,
+    // and `StrictlyHeld`'s among them.
+    const admittedBy = installed.map((entry) => ({ entry, rows: admittedOf(entry) }));
+    // Each family's admitted children at their positions, the models' and then the triples the
+    // vocabularies state beside them, at 0; then each family's children, by kind, as its
+    // admission map, each distinct map numbered once in the order of the first family, in
+    // (version, parent) code order, that holds it (rule 0).
+    const admittedAt = new Map<string, { readonly child: string; readonly position: string }[]>();
+    for (const { entry, rows } of admittedBy) {
+      admittedAt
+        .getOrInsertComputed(`${entry.version} ${entry.parent}`, () => [])
+        .push(...rows.map(({ child, position: at }) => ({ child, position: String(at) })));
+    }
+
+    for (const { child, parent: held, version: in_ } of input.stated) {
+      admittedAt.getOrInsertComputed(`${in_} ${held}`, () => []).push({ child, position: "0" });
+    }
+
+    const mapOf = new Map<string, string>();
+    const mapMembers: {
+      readonly child: string;
+      readonly map: string;
+      readonly position: string;
+    }[] = [];
+    const familyModels = contentModels.families.map((family) => {
+      const children = rowsAt(admittedAt, `${family.version} ${family.parent}`).toSorted(
+        (left, right) => (left.child < right.child ? -1 : 1),
+      );
+      const admission = mapOf.getOrInsertComputed(
+        children.map(({ child, position: at }) => `${child}:${at}`).join(" "),
+        () => {
+          const fresh = String(mapOf.size);
+          mapMembers.push(
+            ...children.map(({ child, position: at }) => ({ child, map: fresh, position: at })),
+          );
+
+          return fresh;
+        },
+      );
+
+      return { ...family, admission };
+    });
+    const admissionMap = idField("admission", roster("AdmissionMap", [...mapOf.values()]));
     // A bound of 2…n the automaton relaxes is the particle's; a cap is its reading's, at most one
     // child where the model's enclosing group repeats the particle.
     const countedRows = installed.flatMap(
@@ -1311,7 +1415,7 @@ export const contentOf = (input: {
     const sourceOf = (key: {
       readonly parent: string;
       readonly position: string;
-      readonly version: SchemaVersion;
+      readonly version: string;
     }): Option.Option<Source> =>
       Option.flatMap(installedAt(key), (entry) => {
         const number = Number(key.position);
@@ -1322,41 +1426,70 @@ export const contentOf = (input: {
               Option.map(({ source }) => source),
             );
       });
-    const symbol = yield* closed({
-      key: [
-        sharedModel,
-        idField("kind", input.kinds),
-        dependentField("position", positions, (prefix) =>
-          countOf(sharedSizes, prefixHandle(prefix, "model"), "SharedPositions"),
-        ),
-      ],
-      name: "Symbol",
-      payload: [],
-      rows: sharedModels.models.flatMap(({ handle, value }) =>
-        value.shared.flatMap(({ kind, numbers }) =>
-          numbers.map((number) => ({ kind, model: handle, position: String(number) })),
-        ),
-      ),
-    });
-    const sharedModelOf = yield* closed({
-      key: [version, parent],
-      name: "SharedModelOf",
-      payload: [sharedModel],
-      rows: sharedModels.families,
-    });
-    // `Symbol`'s positions by shared model and kind, for the host's step.
-    const sharedAt = Map.groupBy(symbol.rows, (row) => `${row.model} ${row.kind}`);
+    const symbolSetOf = indexed(
+      closed({
+        key: [sharedModel, idField("kind", input.kinds)],
+        name: "SymbolSetOf",
+        payload: [symbolSet],
+        rows: symbolRows,
+      }),
+    );
+    const sharedModelOf = indexed(
+      closed({
+        key: [version, parent],
+        name: "SharedModelOf",
+        payload: [sharedModel],
+        rows: sharedModels.families,
+      }),
+    );
+
+    const admissionIn = indexed(
+      closed({
+        key: [idField("map", admissionMap.roster), idField("child", input.kinds)],
+        name: "AdmissionIn",
+        payload: [idField("position", positions)],
+        rows: mapMembers,
+      }),
+    );
+    const contentModelOf = indexed(
+      closed({
+        key: [version, parent],
+        name: "ContentModelOf",
+        payload: [model, admissionMap],
+        rows: familyModels,
+      }),
+    );
+    // The sources the vocabularies state their triples with, by `version parent child`: production
+    // states none.
+    const statedSources = new Map(
+      input.stated.map(({ child, parent: held, source, version: in_ }) => [
+        `${in_} ${held} ${child}`,
+        source,
+      ]),
+    );
+    const lookup = (key: AdmissionKey) =>
+      Option.flatMap(contentModelOf.lookup(key), ({ admission }) =>
+        admissionIn.lookup({ child: key.child, map: admission }),
+      );
 
     return {
-      admitted,
+      admission: {
+        lookup,
+        sourceOf: (key) =>
+          Option.flatMap(lookup(key), ({ position: at }) =>
+            Option.orElse(
+              Option.fromUndefinedOr(
+                statedSources.get(`${key.version} ${key.parent} ${key.child}`),
+              ),
+              () => sourceOf({ parent: key.parent, position: at, version: key.version }),
+            ),
+          ),
+      },
       content: {
-        contentModelOf: yield* closed({
-          key: [version, parent],
-          name: "ContentModelOf",
-          payload: [model],
-          rows: contentModels.families,
-        }),
-        counted: yield* sourced({
+        admissionIn,
+        admissionMaps: admissionMap.roster,
+        contentModelOf,
+        counted: sourced({
           key: [version, parent, position],
           name: "Counted",
           payload: [
@@ -1371,25 +1504,32 @@ export const contentOf = (input: {
           ],
           rows: countedRows,
         }),
-        follow: yield* closed({
-          key: [model, modelPosition("from"), modelPosition("to")],
-          name: "Follow",
-          payload: [],
-          rows: contentModels.models.flatMap(({ handle, value }) =>
-            value.next.flatMap((next, from) =>
-              [...next].map((to) => ({ from: String(from), model: handle, to: String(to) })),
-            ),
-          ),
-        }),
-        last: yield* closed({
+        followMember: indexed(
+          closed({
+            key: [followSet, idField("to", positions)],
+            name: "FollowMember",
+            payload: [],
+            rows: members,
+          }),
+        ),
+        followSetOf: indexed(
+          closed({
+            key: [model, modelPosition("from")],
+            name: "FollowSetOf",
+            payload: [followSet],
+            rows: statedSets,
+          }),
+        ),
+        followSets: followSet.roster,
+        last: closed({
           key: [model, modelPosition("position")],
           name: "Last",
           payload: [],
           rows: contentModels.models.flatMap(({ handle, value }) =>
-            [...value.ends].map((state) => ({ model: handle, position: String(state) })),
+            [...value.automaton.ends].map((state) => ({ model: handle, position: String(state) })),
           ),
         }),
-        modelPositions: yield* closed({
+        modelPositions: closed({
           key: [model],
           name: "ModelPositions",
           payload: [valueField("positions", modelSizes.values())],
@@ -1398,33 +1538,38 @@ export const contentOf = (input: {
         models: model.roster,
         positions,
         sharedModelOf,
-        sharedModelPositions: yield* closed({
-          key: [sharedModel],
-          name: "SharedPositions",
-          payload: [valueField("positions", sharedSizes.values())],
-          rows: [...sharedSizes].map(([handle, size]) => ({ model: handle, positions: size })),
-        }),
         sharedModels: sharedModel.roster,
         sharedPositions: ({ kind, parent: held, version: in_ }) =>
-          Option.match(sharedModelOf.lookup({ parent: held, version: in_ }), {
-            onNone: () => [],
-            onSome: ({ model: shared }) =>
-              rowsAt(sharedAt, `${shared} ${kind}`).map((row) => Number(row.position)),
-          }),
-        sourceOf,
-        strictlyHeld: yield* sourced({
-          key: [version, parent, idField("child", input.kinds)],
-          name: "StrictlyHeld",
-          payload: [],
-          rows: installed.flatMap((entry) =>
-            admittedOf(entry).flatMap(({ child, parent: held, source, version: in_ }) =>
-              entry.strictly.has(child)
-                ? [{ row: { child, parent: held, version: in_ }, source }]
-                : [],
+          Option.match(
+            Option.flatMap(
+              sharedModelOf.lookup({ parent: held, version: in_ }),
+              ({ model: shared }) => symbolSetOf.lookup({ kind, model: shared }),
             ),
+            { onNone: () => [], onSome: ({ set }) => symbolNumbers.get(set) ?? [] },
           ),
+        sourceOf,
+        strictlyHeld: indexedSourced(
+          sourced({
+            key: [version, parent, idField("child", input.kinds)],
+            name: "StrictlyHeld",
+            payload: [],
+            rows: admittedBy.flatMap(({ entry, rows }) =>
+              rows.flatMap(({ child, parent: held, source, version: in_ }) =>
+                entry.strictly.has(child)
+                  ? [{ row: { child, parent: held, version: in_ }, source }]
+                  : [],
+              ),
+            ),
+          }),
+        ),
+        symbolMember: closed({
+          key: [symbolSet, idField("position", positions)],
+          name: "SymbolMember",
+          payload: [],
+          rows: symbolMembers,
         }),
-        symbol,
+        symbolSetOf,
+        symbolSets: symbolSet.roster,
       },
     };
   });
@@ -1444,8 +1589,64 @@ export const contentModelOf = (
 ): Option.Option<string> => Option.map(content.contentModelOf.lookup(key), ({ model }) => model);
 
 /**
- * Whether a child at one position may follow one at another in a family: `Follow`'s cell under the
- * family's model.
+ * Spell a content grammar's follow sets out as the transitions they state, (model, from, to): each
+ * state's set's positions, the empty set's none. An explanation lists the positions a state allows
+ * by them (`#pantry/import/refusal.ts`), and the tests read the automata by them; no load does.
+ *
+ * @param content - `FollowSetOf` and `FollowMember`, the content grammar's or `install.ts`'s.
+ * @param content.followSetOf - `FollowSetOf`.
+ * @param content.followMember - `FollowMember`.
+ * @returns The transitions, by model and state as `FollowSetOf` orders them, each set's positions
+ *   as `FollowMember` does.
+ */
+export const followPairsOf = (content: {
+  readonly followMember: {
+    readonly rows: readonly { readonly set: string; readonly to: string }[];
+  };
+  readonly followSetOf: {
+    readonly rows: readonly {
+      readonly from: string;
+      readonly model: string;
+      readonly set: string;
+    }[];
+  };
+}): readonly { readonly from: string; readonly model: string; readonly to: string }[] => {
+  const members = Map.groupBy(content.followMember.rows, ({ set }) => set);
+
+  return content.followSetOf.rows.flatMap(({ from, model, set }) =>
+    rowsAt(members, set).map(({ to }) => ({ from, model, to })),
+  );
+};
+
+/**
+ * Read a model's follow set at a state: `FollowSetOf`'s cell.
+ *
+ * @param content - The content grammar.
+ * @param model - The model.
+ * @param from - The state, 0 for the start.
+ * @returns The set's handle, or none for a state the model has not.
+ */
+const followSetAt = (content: ContentGrammar, model: string, from: string): Option.Option<string> =>
+  Option.map(content.followSetOf.lookup({ from, model }), ({ set }) => set);
+
+/**
+ * Whether a model's follow set at a state holds a position, as N5 reads it:
+ * `FollowMember(FollowSetOf(model, from), to)`.
+ *
+ * @param content - The content grammar.
+ * @param model - The model.
+ * @param from - The state, 0 for the start.
+ * @param to - The position.
+ * @returns Whether a child at `to` may follow one at `from`.
+ */
+const followHolds = (content: ContentGrammar, model: string, from: string, to: string): boolean =>
+  Option.exists(followSetAt(content, model, from), (set) =>
+    Option.isSome(content.followMember.lookup({ set, to })),
+  );
+
+/**
+ * Whether a child at one position may follow one at another in a family: whether the follow set
+ * of the predecessor's position, under the family's model, holds the child's.
  *
  * @param content - The content grammar.
  * @param key - The family and the two positions.
@@ -1453,7 +1654,7 @@ export const contentModelOf = (
  * @param key.parent - The parent's kind.
  * @param key.from - The predecessor's position, 0 for the start.
  * @param key.to - The child's position.
- * @returns Whether `Follow` holds the pair.
+ * @returns Whether `FollowMember` holds the pair, under `FollowSetOf`.
  */
 export const contentFollows = (
   content: ContentGrammar,
@@ -1465,12 +1666,12 @@ export const contentFollows = (
   },
 ): boolean =>
   Option.exists(contentModelOf(content, key), (model) =>
-    Option.isSome(content.follow.lookup({ from: key.from, model, to: key.to })),
+    followHolds(content, model, key.from, key.to),
   );
 
 /**
  * Where a child stands in its family's content model, read once from its `Admission` position and
- * the family's `Symbol` rows. `Admission` installs one position per (version, parent, child), 0 for
+ * the family's symbol sets. `Admission` installs one position per (version, parent, child), 0 for
  * a kind that names no position or several; the host tells the two apart here, once.
  *
  * - `at`: the one position the child's kind names.
@@ -1494,7 +1695,7 @@ interface StepKey {
 /**
  * Read a child's placement from its `Admission` position.
  *
- * @param content - The content grammar, whose `Symbol` rows hold a shared kind's positions.
+ * @param content - The content grammar, whose symbol sets hold a shared kind's positions.
  * @param key - The family and the child.
  * @param position - The child's `Admission` position.
  * @returns The placement.
@@ -1534,9 +1735,9 @@ export const placementOf = (
 
 /**
  * Step a family's automaton by one placed child, as `Node`'s position derives (the host's
- * evaluation of the law the database proves): an `at` child moves to its position where `Follow`
- * allows, a `shared` one to the one of its positions `Follow` allows, and a `carries` one keeps its
- * predecessor's state.
+ * evaluation of the law the database proves): an `at` child moves to its position where its
+ * predecessor's follow set holds it, a `shared` one to the one of its positions the set holds, and
+ * a `carries` one keeps its predecessor's state.
  *
  * @param content - The content grammar.
  * @param key - The family and the child.
@@ -1552,9 +1753,7 @@ export const placedStep = (
 ): Option.Option<number> => {
   const model = contentModelOf(content, key);
   const follows = (to: number) =>
-    Option.exists(model, (held) =>
-      Option.isSome(content.follow.lookup({ from: String(was), model: held, to: String(to) })),
-    );
+    Option.exists(model, (held) => followHolds(content, held, String(was), String(to)));
 
   switch (placement._tag) {
     case "at": {
@@ -1593,53 +1792,3 @@ export const stepOf = (
   Option.flatMap(placementOf(grammar, key), (placement) =>
     placedStep(grammar.content, key, placement, was),
   );
-
-/**
- * Whether a family may end in a state: `Last`'s cell under the family's model.
- *
- * @param content - The content grammar.
- * @param version - The version.
- * @param parent - The parent's kind.
- * @param state - The last child's state, 0 for an empty family.
- * @returns Whether the family may end there.
- */
-export const contentEnds = (
-  content: ContentGrammar,
-  version: SchemaVersion,
-  parent: string,
-  state: number,
-): boolean =>
-  Option.exists(contentModelOf(content, { parent, version }), (model) =>
-    Option.isSome(content.last.lookup({ model, position: String(state) })),
-  );
-
-/**
- * Judge a family of child kinds by the installed automaton, as the database does: each child steps
- * from its predecessor's state (0 for the first), and the last state must be one `Last` holds.
- *
- * @param grammar - The composed grammar's `Admission` and content grammar.
- * @param grammar.admission - `Admission`.
- * @param grammar.content - The content grammar.
- * @param version - The version.
- * @param parent - The parent's kind.
- * @param children - The children's kinds, in order.
- * @returns Whether the family's content is the model's.
- */
-export const accepts = (
-  grammar: { readonly admission: Admission; readonly content: ContentGrammar },
-  version: SchemaVersion,
-  parent: string,
-  children: readonly string[],
-): boolean => {
-  let state = 0;
-  for (const child of children) {
-    const next = stepOf(grammar, { child, parent, version }, state);
-    if (Option.isNone(next)) {
-      return false;
-    }
-
-    state = next.value;
-  }
-
-  return contentEnds(grammar.content, version, parent, state);
-};

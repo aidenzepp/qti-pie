@@ -51,20 +51,21 @@ export const itemPart = (
 };
 
 /**
- * Emit the item Root around an emitted body.
+ * Emit the item Root around an emitted body and the item's modal feedback.
  *
  * The Root (`qti-assessment-item`) carries `lang`, its scoped `id`, `data-mode` naming the
  * payload's mode, and `data-disabled` when the author disabled every control. It holds the body's
- * nodes by identity, in order, and nothing else: no form, no submit control, no attempt state.
+ * nodes, then the ModalFeedback parts the payload shows, by identity, in order, and nothing else:
+ * no form, no submit control, no attempt state.
  *
  * @example
- *   Result.map(emitItem(payload, state, body), toHtml);
+ *   Result.map(emitItem(payload, state, [...body, ...feedback]), toHtml);
  *   // a qti-assessment-item element, its id `<instance>-item`, holding the body's HTML
  *
  * @param payload The render's payload, which gives the language, the instance, the mode and
  *   `finished`.
  * @param state The emit state, which holds the part overrides.
- * @param body The emitted body, which the Root holds.
+ * @param body The emitted body, then the emitted modal feedback, which the Root holds.
  * @returns The item Root, or the refusal of a replacement that breaks the swap invariant.
  */
 export const emitItem = (

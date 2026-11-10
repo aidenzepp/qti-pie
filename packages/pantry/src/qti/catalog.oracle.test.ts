@@ -11,7 +11,7 @@ import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { catalogLaws, catalogLawsByName, catalogRelations } from "#pantry/qti/catalog.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { lawNames, ruleOf } from "#pantry/test/oracle.ts";
 import { base, breachesOf, edit, item, judged, shown } from "#pantry/test/probe.ts";
 

@@ -4,7 +4,7 @@
  *
  * - **The list is the schema's.** `#pantry/test/key-copies.ts` reads its copies from the schema's
  *   statements. This file holds them, statement by statement and field by field, to the laws the
- *   law table states (`src/import/refusal.ts` `statedLaws`), to every `keyText` field of the
+ *   law table states (`src/test/law-namer.ts` `statedLaws`), to every `keyText` field of the
  *   document relations, and to the copies whose source is no document row.
  * - **The verdict is the schema's.** Generated packages carry key texts of generated lengths in 1-,
  *   2-, 3- and 4-byte scripts around the bound the schema's type admits. The oracle refuses one
@@ -27,22 +27,17 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Predicate, Schema } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
-import { ruleOfLaws, statedLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { keyText, keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import {
-  generatedFields,
-  identityOf,
-  judgedSideOf,
-  keyCopies,
-  keyTextFields,
-  SideSchema,
-} from "#pantry/test/key-copies.ts";
-import type { Datum } from "#pantry/test/key-copies.ts";
+import { SideSchema } from "#pantry/test/predicates.ts";
+import type { Datum } from "#pantry/test/predicates.ts";
+import { generatedFields, judgedSideOf } from "#pantry/test/host-judge.ts";
+import { identityOf, keyCopies, keyTextFields } from "#pantry/test/key-copies.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { schemaRuleOfLaw, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -252,10 +247,15 @@ describe("the oracle's key-text list", () => {
 
   it("leaves out only the copies whose source is no document row, each bounded where it is written", () => {
     // Oracle: the law table's copies into a keyText field from a relation the oracle has no rows
-    // of, each bounded by its own type where its row is written: a document's path and an entry's
-    // are `EntryPath`, which the oracle bounds as `Document.path`, and a float map key's typed
-    // value mirrors `MapKeyType.key`, the key beside its mapping's base type where it has one
-    // (reading 153), which copies `MapKey.key`, which copies the attribute.
+    // of, each bounded by its own type where its row is written: an entry's path is `EntryPath`,
+    // which the oracle bounds as `Document.path`. A float map key's typed value is the query
+    // `MapKeyFloat` over `MapKeyType`, and a resource's document's path meets a typed href in a
+    // rule over the query `TypedHref`, so neither copies a text. Three sources are queries, whose
+    // text is no row's the import writes, each held where grizzle types it: R26's
+    // `DescribedLang.value` and `DescribedAssembledLang.value` are `DocumentLang`'s and
+    // `AssembledLang`'s generated `value`, which grizzle casts into `keyText` where it computes
+    // it (`Compute.cast`, identity.ts), and `RequiredSsmlProperty.name` is a constant of its query,
+    // one of `ph`, `interpret-as` and `alias`, the values grizzle's heading types it by.
     // Bound: every law the schema states that is no check.
     assert.deepStrictEqual(
       [
@@ -266,9 +266,10 @@ describe("the oracle's key-text list", () => {
         ),
       ].toSorted(),
       [
-        "Document.path → NamedHref.path",
+        "DescribedAssembledLang.value → ResourceLomLanguageSet.lang",
+        "DescribedLang.value → ResourceLomLanguageSet.lang",
         "Entry.path → FileHref.path",
-        "MapKeyFloat.key → MapKeyType.key",
+        "RequiredSsmlProperty.name → DataSsmlProperty.name",
       ],
     );
   });
@@ -375,7 +376,7 @@ interface Drawn {
 type Sketch = Readonly<Partial<Record<Site, Drawn>>>;
 
 /**
- * `keyText`'s pattern, read as grizzle installs it.
+ * `keyText`'s pattern, read as grizzle installs it: its one `str.regex` pattern.
  */
 const keyTextPattern = new RegExp(keyText.patterns[0].source, keyText.patterns[0].flags);
 
@@ -696,7 +697,7 @@ const concatEnds: ReadonlyMap<
 
 /**
  * The parent copies a tree's member reads, as grizzle fills them along the owner axis from the row
- * it nests in: its parent's kind and governing type, and its grandparent's kind, the parent's own
+ * it nests in: its parent's kind and governor, and its grandparent's kind, the parent's own
  * `parentKind`; and its `start`, past the root's 0.
  *
  * @param owner - The member's parent, as the import writes it.
@@ -714,7 +715,7 @@ const treeCopies = (owner: Written, copies: Readonly<Record<string, Datum>>) => 
   }
 
   return {
-    parentGoverns: writtenText(owner, "governs"),
+    parentGovernor: writtenText(owner, "governor"),
     parentKind: writtenText(owner, "kind"),
     parentParentKind: grandparent,
     start: 1n,
@@ -834,7 +835,7 @@ const databaseRules = (refused: ReadonlySet<string>): ReadonlySet<string> =>
 
       return statedLaws().flatMap(([law]) =>
         law.kind === "contained" && law.to.relation === relation
-          ? Option.toArray(ruleOfLaws([law]))
+          ? Option.toArray(schemaRuleOfLaw(law))
           : [],
       );
     }),

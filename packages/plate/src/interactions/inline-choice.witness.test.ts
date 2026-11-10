@@ -8,7 +8,6 @@ import {
   entryName,
   h,
   Malformed,
-  open,
   partition,
   postings,
   redact,
@@ -36,6 +35,7 @@ import { attribute, checkTree } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { open } from "#plate/validate/open.ts";
 import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 
 /**

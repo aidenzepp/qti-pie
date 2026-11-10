@@ -29,10 +29,12 @@ import type {
   InlineChoiceInteraction,
   Interaction,
   Item,
+  OutcomeDeclaration,
   ResponseDeclaration,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { redactItem } from "#plate/payload.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
 import type { RenderMode } from "#plate/payload.ts";
 import { render, renderStatus } from "#plate/render.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
@@ -49,6 +51,7 @@ const specRows = [
   ["item", "messages", "item-messages", "ul"],
   ["item", "message", "item-message", "li"],
   ["item", "notice", "item-notice", "span"],
+  ["item", "modalFeedback", "item-modal-feedback", "section"],
   ["choice-interaction", "root", "choice-interaction", "fieldset"],
   ["choice-interaction", "prompt", "choice-interaction-prompt", "qti-prompt"],
   ["choice-interaction", "choices", "choice-interaction-choices", "ul"],
@@ -159,6 +162,7 @@ describe("partTable", () => {
       "messages",
       "message",
       "notice",
+      "modalFeedback",
     ]);
   });
 
@@ -904,6 +908,71 @@ const itemOf = (interaction: Interaction): Item => ({
 });
 
 /**
+ * A single float outcome declaration with no default and no reporting attribute.
+ *
+ * @param identifier The outcome's identifier.
+ * @returns The declaration.
+ */
+const floatOutcome = (identifier: string): OutcomeDeclaration => ({
+  baseType: "float",
+  cardinality: "single",
+  defaultValue: Option.none(),
+  identifier,
+  interpretation: Option.none(),
+  longInterpretation: Option.none(),
+  lookupTable: Option.none(),
+  masteryValue: Option.none(),
+  normalMaximum: Option.none(),
+  normalMinimum: Option.none(),
+  view: Option.none(),
+});
+
+/**
+ * The Text Entry's item with one modal feedback, titled so its ModalFeedback part carries
+ * `aria-label`, shown once response processing has set `FEEDBACK` to `correct` ({@link answered}),
+ * and a `SCORE` and `MAXSCORE`, so the part carries `data-credit` too.
+ */
+const modalItem = (): Item => ({
+  ...itemOf(textEntry),
+  modalFeedback: [
+    {
+      content: [words("Well done.")],
+      feedbackVisibility: { outcomeIdentifier: "FEEDBACK", showHide: "show" },
+      identifier: "correct",
+      path: "qti-assessment-item/qti-modal-feedback",
+      title: Option.some("Feedback"),
+    },
+  ],
+  outcomes: new Map([
+    ["MAXSCORE", floatOutcome("MAXSCORE")],
+    ["SCORE", floatOutcome("SCORE")],
+  ]),
+});
+
+/**
+ * The record of an attempt response processing has run, `FEEDBACK` at `correct`, which shows
+ * {@link modalItem}'s modal feedback, and `SCORE` at its `MAXSCORE`, full credit.
+ */
+const answered: RedactRecord = {
+  attempt: "submitted",
+  defaults: {},
+  outcomes: {
+    FEEDBACK: {
+      baseType: "identifier",
+      cardinality: "single",
+      values: [{ baseType: "identifier", value: "correct" }],
+    },
+    MAXSCORE: {
+      baseType: "float",
+      cardinality: "single",
+      values: [{ baseType: "float", value: 1 }],
+    },
+    SCORE: { baseType: "float", cardinality: "single", values: [{ baseType: "float", value: 1 }] },
+  },
+  templates: {},
+};
+
+/**
  * List an element and every element below it, in document order.
  *
  * @param nodes The nodes to walk.
@@ -976,6 +1045,9 @@ describe("the merged column", () => {
                 posted: { [interaction.response]: posted },
               }),
             ),
+          ),
+          ...modes.map((mode) =>
+            render(redactItem(modalItem(), answered), configuration, { instance, mode }),
           ),
           renderStatus(
             {

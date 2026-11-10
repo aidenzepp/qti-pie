@@ -1,5 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-
 /**
  * How the program's failures are told apart: the closed roster of kinds a failure may have, the
  * exit code each kind ends the process with, and {@link describeFailure}, which names the kind of
@@ -13,7 +11,6 @@ import type { DatabaseRefusal } from "#pantry/cli/refused.ts";
 import type { exportPackage } from "#pantry/export/package.ts";
 import type { OverlayConflict } from "#pantry/import/overlays/index.ts";
 import type { importPackage } from "#pantry/import/package.ts";
-import type { UnownedLaws } from "#pantry/import/refusal.ts";
 
 /**
  * Every kind a failure of this program has.
@@ -139,13 +136,12 @@ export type ExportDefectTag = Exclude<
 
 /**
  * Every other way the import ends (`#pantry/import/package.ts`): the codec refusing a value the
- * builders wrote (grizzle's `EncodingFailure`), and the two defects it dies with, laws no rule owns
- * and two builders that disagree on a row. Each is a defect of qti, never of the package.
+ * builders wrote (grizzle's `EncodingFailure`), and the defect it dies with, two builders that
+ * disagree on a row. Each is a defect of qti, never of the package.
  */
 export type ImportDefectTag =
   | Exclude<Effect.Error<ReturnType<typeof importPackage>>["_tag"], KindedTag>
-  | OverlayConflict["_tag"]
-  | UnownedLaws["_tag"];
+  | OverlayConflict["_tag"];
 
 /**
  * What to do next after an export that cannot rebuild a package the database holds.
@@ -192,7 +188,6 @@ const namedHelp = {
   RootMissing: exportDefectHelp,
   RowMissing: exportDefectHelp,
   RowsOutsideImage: exportDefectHelp,
-  UnownedLaws: importDefectHelp,
   XmlVersionUnread: exportDefectHelp,
 } as const satisfies Readonly<Record<NamedTag, string>>;
 
@@ -318,23 +313,25 @@ export const namedFailureOf = (failure: unknown): Option.Option<NamedTag> =>
 
 /**
  * The tags of the failures that mean the local set-up is missing or unreadable: the layer's two
- * (`db/connection.ts` and `db/layer.ts`) and Effect's `ConfigError`, which a missing or malformed
+ * (`db/connection.ts` and `db/served.ts`) and Effect's `ConfigError`, which a missing or malformed
  * setting raises. They are matched by tag so this module imports neither the layer nor the engine.
  */
 const configTags: ReadonlySet<string> = new Set([
   "ClusterConfigError",
   "ConfigError",
-  "SnapshotLoadError",
+  "ServedLoadError",
 ]);
 
 /**
  * Whether `failure` is grizzle's report of a password file that could not be read. grizzle never
- * raises a bare `CredentialError`: `Db.open` contacts no database, so a call's failed acquisition
- * is a `TransportFailure` that carries it as its `reason`.
+ * raises a bare `CredentialError`: the first call that connects asks for the password, and its
+ * failed acquisition is a `ReadFailure` (a read) or a `TransportFailure` (a write) at stage
+ * `acquire` that carries it as its `reason` (grizzle `1ab38472`). `Db.open` contacts nothing of
+ * the database (grizzle `d994809c`), so no `OpenError` carries one.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
 const isCredentialFailure = (failure: unknown): boolean =>
-  tagOf(failure) === "TransportFailure" &&
+  (tagOf(failure) === "ReadFailure" || tagOf(failure) === "TransportFailure") &&
   Predicate.hasProperty(failure, "reason") &&
   tagOf(failure.reason) === "CredentialError";
 

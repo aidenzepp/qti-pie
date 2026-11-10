@@ -30,12 +30,8 @@ import type { OperatorRows, ToleranceRow } from "#pantry/import/overlays/operato
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import {
-  doublePattern,
-  equalRoundedMode,
-  integerForm,
-  positivePattern,
-} from "#pantry/qti/operators.ts";
+import { integerForm } from "#pantry/qti/limits.ts";
+import { doublePattern, positivePattern } from "#pantry/qti/operators.ts";
 import {
   collapsedText,
   figuresIntegerOf,
@@ -45,6 +41,7 @@ import {
 } from "#pantry/test/operator-spec.ts";
 import type { RoundingKind } from "#pantry/test/operator-spec.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
+import { equalRoundedMode } from "#pantry/vocab/terms/operators.ts";
 
 /**
  * The QTI 3.0 assessment namespace.

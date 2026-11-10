@@ -80,10 +80,12 @@ const farTimeoutMs = 60_000;
  */
 const payloadOf = (body: readonly PayloadNode[]): Payload => ({
   body,
+  credit: Option.none(),
   finished: false,
   instance,
   lang: "en",
   messages: [],
+  modalFeedback: [],
   mode: "answering",
   notices: [],
   title: "Item",
@@ -849,20 +851,30 @@ describe("writesMalformedHeading", () => {
     ];
 
     for (const body of bodies) {
-      assert.isTrue(writesMalformedHeading(body, 5.5));
+      assert.isTrue(writesMalformedHeading(payloadOf(body), 5.5));
     }
   });
 
+  it("[heading level refused] is true at 5.5 for an item whose one heading is in a modal feedback, which shifts with the body's", () => {
+    const feedback = {
+      ...payloadOf([el("p", {}, [txt("Text")])]),
+      modalFeedback: [{ content: [el("h2", {}, [txt("Well done")])], title: Option.none() }],
+    };
+
+    assert.isTrue(writesMalformedHeading(feedback, 5.5));
+    assert.isFalse(writesMalformedHeading(feedback, 6));
+  });
+
   it("[heading level refused] is false at 5.5 for a body with no heading and for one whose only heading is below a dropped element", () => {
-    assert.isFalse(writesMalformedHeading([el("p", {}, [txt("Text")])], 5.5));
+    assert.isFalse(writesMalformedHeading(payloadOf([el("p", {}, [txt("Text")])]), 5.5));
     assert.isFalse(
-      writesMalformedHeading([el("script", {}, [el("h1", {}, [txt("Dropped")])])], 5.5),
+      writesMalformedHeading(payloadOf([el("script", {}, [el("h1", {}, [txt("Dropped")])])]), 5.5),
     );
   });
 
   it("[heading level refused] is false at 0, 1, 7, 9, 6.5 and Infinity for a heading below a kept element", () => {
     for (const level of [0, 1, 7, 9, 6.5, Number.POSITIVE_INFINITY]) {
-      assert.isFalse(writesMalformedHeading(kept, level), String(level));
+      assert.isFalse(writesMalformedHeading(payloadOf(kept), level), String(level));
     }
   });
 
@@ -877,7 +889,11 @@ describe("writesMalformedHeading", () => {
             (failure) => failure.reason._tag === "MalformedTagName",
           );
 
-          assert.strictEqual(writesMalformedHeading(kept, level), malformed, String(level));
+          assert.strictEqual(
+            writesMalformedHeading(payloadOf(kept), level),
+            malformed,
+            String(level),
+          );
         }
       }),
   );

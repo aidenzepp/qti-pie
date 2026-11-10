@@ -25,7 +25,7 @@ import { rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
 import { message, numeral } from "#plate/messages.ts";
 import { format, isRecordValue } from "#plate/model/values.ts";
-import { itemRefs } from "#plate/package/open.ts";
+import { itemRefs } from "#plate/session/item-refs.ts";
 import { sessionControl } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import { solution } from "#plate/solution.ts";

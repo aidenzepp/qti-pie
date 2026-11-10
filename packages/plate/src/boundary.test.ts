@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import * as plateEffect from "#plate/effect.ts";
 import * as plate from "#plate/index.ts";
 import { PartlessTestDefect } from "#plate/navigation.ts";
+import * as packageEntry from "#plate/package/index.ts";
 import { acceptPackageForTest } from "#plate/package/open.ts";
 import { brandRedacted, isRedacted } from "#plate/payload.ts";
 import {
@@ -14,6 +15,7 @@ import {
   unreadable,
   valueClosure,
 } from "#plate/test/imports.ts";
+import * as openEntry from "#plate/validate/open.ts";
 import {
   acceptForTest,
   acceptMarkedTest,
@@ -51,13 +53,13 @@ interface Crossing {
 
 /**
  * The specifiers the core may not load (rules `b454bdf7` and `6f47762b`, and the composition ruling
- * `a9d04969` points 1 and 5, so the one `"."` entry stays callable anywhere): the dev playground,
- * the example hosts, the conformance ledger, test support, the Node-only corpus reader, every Node
- * built-in, the HTML parser the tests use, the browser drivers, the test runner by package
- * (`vitest`, every `@vitest/` package, `@effect/vitest` and `vite-plus`, so a re-export under
- * another name, such as vite-plus's in-page context re-exporting `vitest/browser`, cannot route
- * around the list), the QTI database package and grizzle. One that ends in `/` or `:` forbids every
- * specifier it begins; any other forbids itself and its subpaths.
+ * `a9d04969` points 1 and 5, so the `"."`, `"./open"` and `"./package"` entries stay callable
+ * anywhere): the dev playground, the example hosts, the conformance ledger, test support, the
+ * Node-only corpus reader, every Node built-in, the HTML parser the tests use, the browser
+ * drivers, the test runner by package (`vitest`, every `@vitest/` package, `@effect/vitest` and
+ * `vite-plus`, so a re-export under another name, such as vite-plus's in-page context re-exporting
+ * `vitest/browser`, cannot route around the list), the QTI database package and grizzle. One that
+ * ends in `/` or `:` forbids every specifier it begins; any other forbids itself and its subpaths.
  */
 const forbiddenSpecifiers: readonly string[] = [
   "#plate/dev/",
@@ -333,6 +335,59 @@ const plateExports: ReadonlyMap<string, unknown> = new Map(Object.entries(plate)
 const plateEffectExports: ReadonlyMap<string, unknown> = new Map(Object.entries(plateEffect));
 
 /**
+ * The published script entries' exports, each by its entry: `src/index.ts` as `.`,
+ * `src/effect.ts` as `./effect`, `src/validate/open.ts` as `./open` and `src/package/index.ts` as
+ * `./package`.
+ */
+const publishedEntries: ReadonlyMap<string, ReadonlyMap<string, unknown>> = new Map([
+  [".", plateExports],
+  ["./effect", plateEffectExports],
+  ["./open", new Map(Object.entries(openEntry))],
+  ["./package", new Map(Object.entries(packageEntry))],
+]);
+
+/**
+ * List the exports of every published entry ({@link publishedEntries}) that are one of some named
+ * values, by its own name or under any other.
+ *
+ * @param named The values, by the name each is declared with.
+ * @returns `<entry> <name>` for each name an entry exports one of them under, empty when none
+ *   exports one.
+ */
+const publishedAmong = (named: ReadonlyMap<string, unknown>): readonly string[] =>
+  [...publishedEntries].flatMap(([entry, exports]) =>
+    exportedAmong(exports, named).map((name) => `${entry} ${name}`),
+  );
+
+/**
+ * The committed JSON modules the serving entries, `.` and `./effect`, may load, each with what
+ * reads it while a host serves items. Any other JSON their closure reaches is a table serving never
+ * reads, loaded and parsed on every cold start for nothing: the full XSD tables and the package
+ * tables among them, which only the checking entries read.
+ */
+const servedTables = {
+  "src/model/blocks.generated.json":
+    "the block names of XML Schema Part 2, which model/regex.ts reads to check a pattern facet",
+  "src/validate/securing-tables.generated.json":
+    "the securing tables, which openAdmitted secures an admitted item by",
+} satisfies Readonly<Record<string, string>>;
+
+/**
+ * List the committed JSON modules the roots reach that {@link servedTables} does not name.
+ *
+ * @param sources The modules' sources, by path under the package (`src/<x>`).
+ * @param roots The paths to start from.
+ * @returns Each such JSON module, in the order the walk first reached it.
+ */
+const unservedTables = (
+  sources: ReadonlyMap<string, string>,
+  roots: readonly string[],
+): readonly string[] =>
+  valueClosure(sources, roots).filter(
+    (module) => module.endsWith(".json") && !Object.hasOwn(servedTables, module),
+  );
+
+/**
  * The parts of `package.json` this witness reads.
  */
 const Manifest = Schema.Struct({
@@ -357,34 +412,107 @@ describe("the core, from src/index.ts", () => {
     assert.deepStrictEqual(crossings(modules, ["src/index.ts"]), []);
   });
 
-  it("reaches more than ten modules, render, score and open among them", () => {
+  it("reaches more than ten modules, render, score and openAdmitted among them", () => {
     assert.isAbove(closure.length, 10);
     assert.includeMembers(
       [...closure],
-      ["src/render.ts", "src/score.ts", "src/validate/open.ts", "src/document/read.ts"],
+      ["src/render.ts", "src/score.ts", "src/validate/admitted.ts", "src/document/read.ts"],
     );
   });
 
-  it("exports no test seam, brand constructor or defect, under any name (ledger security note)", () => {
-    assert.includeMembers([...plateExports.keys()], ["open", "redact"]);
-    assert.deepStrictEqual(exportedAmong(plateExports, seams), []);
+  it("exports from no published entry a test seam, brand constructor, mark predicate or defect, under any name (ledger security note)", () => {
+    assert.includeMembers([...plateExports.keys()], ["openAdmitted", "redact"]);
+    assert.includeMembers(Object.keys(openEntry), ["open"]);
+    assert.includeMembers(Object.keys(packageEntry), ["openPackage"]);
+    assert.deepStrictEqual(publishedAmong(seams), []);
   });
 
   it("exports no marked-test seam, openPackage's constructor of an accepted test it marked, under any name (ledger D9-15)", () => {
     // `acceptMarkedTest` brands an `AcceptedTest` without `check`, so only `openPackage` calls it.
-    assert.deepStrictEqual(
-      exportedAmong(plateExports, new Map([["acceptMarkedTest", acceptMarkedTest]])),
-      [],
-    );
+    assert.deepStrictEqual(publishedAmong(new Map([["acceptMarkedTest", acceptMarkedTest]])), []);
   });
 
-  it("[effect entry boundary] publishes src/index.ts as . and src/effect.ts as ./effect, the exports map's only script modules", () => {
+  it("[effect entry boundary] publishes src/index.ts as ., src/effect.ts as ./effect, src/validate/open.ts as ./open and src/package/index.ts as ./package, the exports map's only script modules", () => {
     assert.deepStrictEqual(
       Object.entries(readManifest().exports).filter(([, target]) => /\.[cm]?[jt]s$/u.test(target)),
       [
         [".", "./src/index.ts"],
         ["./effect", "./src/effect.ts"],
+        ["./open", "./src/validate/open.ts"],
+        ["./package", "./src/package/index.ts"],
       ],
+    );
+  });
+
+  it.effect(
+    "resolves @qti-pie/plate/open through the exports map to the open entry, which exports open alone",
+    () =>
+      Effect.gen(function* openSelfImport() {
+        const surface = yield* Effect.promise(() => import("@qti-pie/plate/open"));
+
+        assert.deepStrictEqual(Object.keys(surface), ["open"]);
+        assert.strictEqual(surface.open, openEntry.open);
+      }),
+  );
+
+  it("loads from src/validate/open.ts, the open entry, none of what the core may not load", () => {
+    assert.deepStrictEqual(crossings(modules, ["src/validate/open.ts"]), []);
+  });
+
+  it.effect(
+    "resolves @qti-pie/plate/package through the exports map to the package entry, which exports openPackage alone",
+    () =>
+      Effect.gen(function* packageSelfImport() {
+        const surface = yield* Effect.promise(() => import("@qti-pie/plate/package"));
+
+        assert.deepStrictEqual(Object.keys(surface), ["openPackage"]);
+        assert.strictEqual(surface.openPackage, packageEntry.openPackage);
+      }),
+  );
+
+  it("loads from src/package/index.ts, the package entry, none of what the core may not load", () => {
+    assert.deepStrictEqual(crossings(modules, ["src/package/index.ts"]), []);
+  });
+
+  it('loads from the serving entry, the exports map\'s ".", no committed JSON but the securing tables and the block table', () => {
+    const entry = readManifest().exports["."]?.replace(/^\.\//u, "") ?? "";
+
+    assert.strictEqual(entry, "src/index.ts");
+    assert.deepStrictEqual(unservedTables(modules, [entry]), []);
+    // The full XSD tables are the checking entries' alone, and the package tables the package
+    // entry's.
+    assert.includeMembers(
+      [...valueClosure(modules, ["src/validate/open.ts"])],
+      ["src/validate/tables.generated.json"],
+    );
+    assert.includeMembers(
+      [...valueClosure(modules, ["src/package/index.ts"])],
+      ["src/package/tables.generated.json", "src/validate/tables.generated.json"],
+    );
+  });
+
+  it("refuses the full XSD tables on the serving entry once it re-exports open (the plant)", () => {
+    const planted = new Map(modules);
+    planted.set(
+      "src/index.ts",
+      `${modules.get("src/index.ts") ?? ""}\nexport { open } from "#plate/validate/open.ts";\n`,
+    );
+
+    assert.deepStrictEqual(unservedTables(planted, ["src/index.ts"]), [
+      "src/validate/tables.generated.json",
+    ]);
+  });
+
+  it("refuses the package tables and the full XSD tables on the serving entry once it re-exports openPackage (the plant)", () => {
+    const planted = new Map(modules);
+    planted.set(
+      "src/index.ts",
+      `${modules.get("src/index.ts") ?? ""}\nexport { openPackage } from "#plate/package/open.ts";\n`,
+    );
+
+    assert.sameMembers(
+      [...unservedTables(planted, ["src/index.ts"])],
+      ["src/package/tables.generated.json", "src/validate/tables.generated.json"],
     );
   });
 
@@ -405,8 +533,27 @@ describe("the ./effect entry, from src/effect.ts", () => {
     assert.deepStrictEqual(crossings(modules, ["src/effect.ts"]), []);
   });
 
+  it("[effect entry boundary] loads no committed JSON but the securing tables and the block table, as the serving entry does", () => {
+    assert.deepStrictEqual(unservedTables(modules, ["src/effect.ts"]), []);
+  });
+
+  it("refuses the full XSD tables on the ./effect entry once it re-exports open (the plant)", () => {
+    const planted = new Map(modules);
+    planted.set(
+      "src/effect.ts",
+      `${modules.get("src/effect.ts") ?? ""}\nexport { open } from "#plate/validate/open.ts";\n`,
+    );
+
+    assert.deepStrictEqual(unservedTables(planted, ["src/effect.ts"]), [
+      "src/validate/tables.generated.json",
+    ]);
+  });
+
   it("[effect entry boundary] exports no test seam, brand constructor, mark predicate, marked-test seam or defect, under any name", () => {
-    assert.includeMembers([...plateEffectExports.keys()], ["open", "redact", "Configuration"]);
+    assert.includeMembers(
+      [...plateEffectExports.keys()],
+      ["openAdmitted", "redact", "Configuration"],
+    );
     assert.deepStrictEqual(
       exportedAmong(
         plateEffectExports,

@@ -13,10 +13,11 @@ is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (public, MIT-licens
 
 - Node 26 or later runs TypeScript source directly. There is no build step.
 - pnpm workspace. Effect is pinned to `4.1.2`, and the workspace must keep exactly one copy (`pnpm why effect -r`).
-- grizzle trunk at commit `89e94c0` (`89e94c040262c587065e84df42829a2f12d9f0c3`) is vendored as tarballs; see
+- grizzle trunk at commit `b927d99` (`b927d9995ecf254230da725c65357a420b392b91`) is vendored as tarballs; see
   `vendor/README.md`.
-- Git LFS holds every `packages/*/migrations/**/snapshot.json` and `manifest.json` (`.gitattributes`). Install
-  `git-lfs` before cloning; without it the snapshot checks out as pointer files and grizzle refuses it.
+- Git LFS holds every `packages/*/migrations/**/snapshot.json` and `manifest.json` (`.gitattributes`), the two files
+  of a grizzle snapshot. Install `git-lfs` before cloning; without it the snapshot checks out as pointer files and
+  grizzle refuses it.
 - Vite+ (`vp`) formats, lints and runs tests. TypeScript `7.0.2` typechecks under the strict settings in `tsconfig.json`.
 
 Run before completing implementation:
@@ -122,8 +123,10 @@ named (`func-names`).
 Import shape, for every package: it exposes its public parts through an `"exports"` map in `package.json` pointing at
 TypeScript source (no build step), consumers depend with `"workspace:*"`, and it imports its own files through its own
 `#<package>/*` alias from `package.json` `imports` (`#pantry/*` in pantry, `#crust/*` in crust, and `#migrations/*`
-for committed snapshots), never relative paths. pantry's `"exports"` is `{}`: it exports nothing, so nothing depends on it. Nothing outside a package reaches a file its `"exports"` map does not
-list. The checks that enforce it:
+for committed snapshots), never relative paths. pantry's `"exports"` lists only what an install outside this workspace
+composes: the `Qti` schema built for a policy, the author role and login built over it, the connections, and the export's
+document scan and the rows-to-XML step it ends with; no package of this workspace depends on it. Nothing outside a
+package reaches a file its `"exports"` map does not list. The checks that enforce it:
 
 - The resolver (`tsc` in `pnpm check`, and Node at run time) refuses a subpath an `"exports"` map does not list, and
   another package's alias.

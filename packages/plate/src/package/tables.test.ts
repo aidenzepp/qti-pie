@@ -1,7 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
-import { ConfigProvider, Effect } from "effect";
+import { ConfigProvider, Effect, Result, Schema } from "effect";
 import { xmlNamespace } from "#plate/document/source.ts";
-import { packageOccurrences, packageTables } from "#plate/package/tables.ts";
+import committed from "#plate/package/tables.generated.json" with { type: "json" };
+import { packageOccurrences, packageTables, PackageTablesFile } from "#plate/package/tables.ts";
 import { cachedXsds, isXsdPath, linkedHome, xsdPaths } from "#plate/test/xsd-layout.ts";
 import type { XsdPath } from "#plate/test/xsd-layout.ts";
 import type { ChildOccurrence, Tables } from "#plate/validate/xsd.ts";
@@ -158,7 +159,66 @@ const resourceTypesOf = (version: string): readonly string[] => {
   return type?.kind === "enumeration" ? type.values : [];
 };
 
+/**
+ * List the namespaces whose tables or occurrences in {@link packageTables} and
+ * {@link packageOccurrences} are not a file's own objects.
+ *
+ * @param file A package tables file: the JSON module's, or a decode of it.
+ * @returns `<version> <namespace>` for each such namespace of the file, empty when the maps hold
+ *   the file's objects throughout.
+ */
+const notHeldFrom = (
+  file: Readonly<
+    Record<
+      string,
+      Readonly<Record<string, { readonly occurrences: unknown; readonly tables: unknown }>>
+    >
+  >,
+): readonly string[] =>
+  Object.entries(file).flatMap(([version, namespaces]) =>
+    Object.entries(namespaces).flatMap(([namespace, { occurrences, tables }]) =>
+      packageTables.get(version)?.get(namespace) === tables &&
+      packageOccurrences.get(version)?.get(namespace) === occurrences
+        ? []
+        : [`${version} ${namespace}`],
+    ),
+  );
+
+/**
+ * Decode a package tables file as {@link PackageTablesFile}, refusing a key that Schema does not
+ * name, so a stray field fails as a wrong value does.
+ */
+const decodeExactly = Schema.decodeUnknownResult(PackageTablesFile, { onExcessProperty: "error" });
+
 describe("package/tables.ts", () => {
+  it("the committed file decodes as PackageTablesFile, with no key that Schema does not name, to itself", () => {
+    // The maps assert this type without a decode at load, so this case is the file's one check
+    // that needs no cache.
+    assert.deepStrictEqual<unknown>(Result.getOrUndefined(decodeExactly(committed)), committed);
+
+    // The plant: a field the Schema does not name, beside each namespace's tables, fails it.
+    const stray = Object.fromEntries(
+      Object.entries(committed).map(([version, namespaces]) => [
+        version,
+        Object.fromEntries(
+          Object.entries(namespaces).map(([namespace, entry]) => [
+            namespace,
+            { ...entry, stray: true },
+          ]),
+        ),
+      ]),
+    );
+    assert.isTrue(Result.isFailure(decodeExactly(stray)));
+  });
+
+  it("holds the JSON module's own tables and occurrences, so loading them decodes and copies nothing", () => {
+    assert.deepStrictEqual(notHeldFrom(committed), []);
+    assert.deepStrictEqual([...packageTables.keys()], Object.keys(committed));
+
+    // The plant: maps built from a decode at load hold the decode's copies, which the case refuses.
+    assert.isNotEmpty(notHeldFrom(Schema.decodeUnknownSync(PackageTablesFile)(committed)));
+  });
+
   it.effect(
     "the committed tables are what the generator builds from the cached profiles",
     () =>

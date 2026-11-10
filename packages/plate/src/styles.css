@@ -10,6 +10,10 @@
  * https://github.com/shadcn-ui/ui/blob/4aaea19d9cff3e0908e12a8c1d504b8c5ec34610/apps/v4/content/docs/(root)/theming.mdx
  * (lines 204-223). It declares no token: the host's theme sets them, at :root and .dark.
  *
+ * Colours that are not tokens: the credit marks' green, oklch(0.6 0.16 150), for full credit, and
+ * amber, oklch(0.62 0.16 60), for partial credit, since shadcn has no success or warning token.
+ * Each holds the 3:1 a graphical object needs (WCAG 1.4.11) on the card in light and in .dark.
+ *
  * Every rule sits inside :where(), so it weighs nothing and any host rule wins by order; only the
  * authored qti-* classes count. Every combinator is the descendant one, so a part swapped for the
  * host's own markup, with wrappers between, still matches.
@@ -171,6 +175,72 @@
 }
 
 /*
+ * A row of fewer choices than tracks: as many tracks as choices, so no empty track leaves its gap
+ * at the row's end and the row spans the Root as the blocks below it do. Each count below the
+ * class's track count has its rule, after the class's own, so a later stacking class still
+ * outranks it and a Root takes the fewer of its stacking's tracks and its choices.
+ */
+.qti-orientation-horizontal:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(1):last-child
+    )
+  ),
+:where(
+  [data-slot="choice-interaction"][data-orientation="horizontal"]
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(1):last-child
+    )
+) {
+  grid-template-columns: auto;
+}
+
+.qti-orientation-horizontal:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(2):last-child
+    )
+  ),
+:where(
+  [data-slot="choice-interaction"][data-orientation="horizontal"]
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(2):last-child
+    )
+) {
+  grid-template-columns: auto auto;
+}
+
+.qti-orientation-horizontal:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(3):last-child
+    )
+  ),
+:where(
+  [data-slot="choice-interaction"][data-orientation="horizontal"]
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(3):last-child
+    )
+) {
+  grid-template-columns: auto auto auto;
+}
+
+.qti-orientation-horizontal:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(4):last-child
+    )
+  ),
+:where(
+  [data-slot="choice-interaction"][data-orientation="horizontal"]
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(4):last-child
+    )
+) {
+  grid-template-columns: auto auto auto auto;
+}
+
+/*
  * Choice stacking (vocab.txt:4550-4738): qti-choices-stacking-N shows N columns. With horizontal
  * orientation or none, the choices run row by row ("Z"), as grid tracks.
  */
@@ -186,10 +256,37 @@
   grid-template-columns: auto auto;
 }
 
+.qti-choices-stacking-2:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(1):last-child
+    )
+  ) {
+  grid-template-columns: auto;
+}
+
 .qti-choices-stacking-3:where([data-slot="choice-interaction"])
   :where([data-slot="choice-interaction-choices"]) {
   display: grid;
   grid-template-columns: auto auto auto;
+}
+
+.qti-choices-stacking-3:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(1):last-child
+    )
+  ) {
+  grid-template-columns: auto;
+}
+
+.qti-choices-stacking-3:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(2):last-child
+    )
+  ) {
+  grid-template-columns: auto auto;
 }
 
 .qti-choices-stacking-4:where([data-slot="choice-interaction"])
@@ -198,10 +295,73 @@
   grid-template-columns: auto auto auto auto;
 }
 
+.qti-choices-stacking-4:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(1):last-child
+    )
+  ) {
+  grid-template-columns: auto;
+}
+
+.qti-choices-stacking-4:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(2):last-child
+    )
+  ) {
+  grid-template-columns: auto auto;
+}
+
+.qti-choices-stacking-4:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(3):last-child
+    )
+  ) {
+  grid-template-columns: auto auto auto;
+}
+
 .qti-choices-stacking-5:where([data-slot="choice-interaction"])
   :where([data-slot="choice-interaction-choices"]) {
   display: grid;
   grid-template-columns: auto auto auto auto auto;
+}
+
+.qti-choices-stacking-5:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(1):last-child
+    )
+  ) {
+  grid-template-columns: auto;
+}
+
+.qti-choices-stacking-5:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(2):last-child
+    )
+  ) {
+  grid-template-columns: auto auto;
+}
+
+.qti-choices-stacking-5:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(3):last-child
+    )
+  ) {
+  grid-template-columns: auto auto auto;
+}
+
+.qti-choices-stacking-5:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(4):last-child
+    )
+  ) {
+  grid-template-columns: auto auto auto auto;
 }
 
 /*
@@ -536,19 +696,30 @@
  * class. Author content is laid out and painted inside the Root, fixed and absolute content
  * included, so an authored host utility class such as "fixed inset-0 z-50" cannot cover the host
  * page; content wider than the Root scrolls inside it; and the padding, the focus ring's 3px width
- * plus its 0 offset, keeps every focus ring inside it unclipped.
+ * plus its 0 offset, keeps every focus ring inside it unclipped. The margin of the padding's width,
+ * negative, puts the Root's content back on the host's column, so the item lines up with the page
+ * around it while the rings still paint inside the Root. A host whose own container clips its edge
+ * clips a ring at the Root's edge.
  */
 :where([data-slot="item"]) {
   contain: layout paint;
   overflow: auto;
+  margin: -3px;
   padding: 3px;
 }
 
 /* == theme: plate's default theme, on the part markers == */
 
-/* The item Root: a block. The page's surface, text colour and font are the host's. */
+/*
+ * The item Root: one column of its blocks, the body's and each modal feedback's, 1rem apart, so
+ * the item keeps one rhythm whatever margins the host's reset leaves its blocks. Flex margins do
+ * not collapse, so a host whose p keeps its margin adds it to the gap. The page's surface, text
+ * colour and font are the host's.
+ */
 :where([data-slot="item"]) {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 /* The Choice Root, a native fieldset: no border, margin or padding, and no minimum width. */
@@ -635,6 +806,21 @@
   opacity: 1;
 }
 
+/*
+ * A Choice row in review or solution: the muted surface a readonly text Control takes there, so
+ * every interaction shows one locked look, and the default cursor, since its Control takes no
+ * click. The selected row keeps its --primary border and its filled Indicator, so the answer shown
+ * still reads at full contrast.
+ */
+:where(
+  [data-slot="choice-interaction"][data-mode="review"] [data-slot="choice-interaction-choice"],
+  [data-slot="choice-interaction"][data-mode="solution"] [data-slot="choice-interaction-choice"]
+) {
+  background-color: var(--muted, oklch(0.97 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+  cursor: default;
+}
+
 /* Focus on a Choice row, by its Control: shadcn's 3px ring at half strength. */
 :where(
   [data-slot="choice-interaction-choice"]:has(
@@ -665,7 +851,12 @@
   display: block;
 }
 
-/* The Indicator, the visible mark: a box for a checkbox Control. */
+/*
+ * The Indicator, the visible mark: a box for a checkbox Control. Its ring is --muted-foreground,
+ * 4.73:1 on the row at the fallbacks and 3.79:1 on the .dark card, past the 3:1 an unselected
+ * control's boundary needs (WCAG 1.4.11); --input, 1.26:1, left an unselected row with no visible
+ * mark. A selected one takes --primary.
+ */
 :where([data-slot="choice-interaction-indicator"]) {
   display: inline-block;
   box-sizing: border-box;
@@ -673,7 +864,7 @@
   height: 1em;
   margin-inline-end: 0.5em;
   padding: 3px;
-  border: 1px solid var(--input, oklch(0.922 0 0));
+  border: 1px solid var(--muted-foreground, oklch(0.556 0 0));
   border-radius: calc(var(--radius, 0.625rem) * 0.6);
   vertical-align: middle;
 }
@@ -887,6 +1078,73 @@
   border-radius: var(--radius, 0.625rem);
   background-color: var(--card, oklch(1 0 0));
   color: var(--muted-foreground, oklch(0.556 0 0));
+}
+
+/*
+ * A modal feedback, after the item body inside the Root: a card, as the Status region is, set off
+ * from the body above it by the Root's gap. A host that shows modal feedback as a dialog swaps the
+ * part.
+ */
+:where([data-slot="item-modal-feedback"]) {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border, oklch(0.922 0 0));
+  border-radius: var(--radius, 0.625rem);
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/*
+ * A modal feedback that carries the credit its attempt earned (data-credit): a 4px edge at its
+ * inline start in the credit's colour, the other sides keeping the card's 1px border, and a mark
+ * level with its first line, in the space the wider start padding leaves. The mark's alternative
+ * text is empty: the feedback's own words say how the answer did, and the mark and colour repeat it
+ * for the eye; its shape carries the result where colour does not (WCAG 1.4.1), forced colours
+ * included. Each colour holds 3:1 on the card in light and in .dark, as a graphical object needs.
+ * The plain content written first is the fallback of a browser without the alternative-text form,
+ * which then announces the glyph. The mark sits level with the first line when the content's first
+ * block has no top margin, as under a reset that zeroes a p's margins.
+ */
+:where([data-slot="item-modal-feedback"][data-credit]) {
+  position: relative;
+  padding-inline-start: 2.5rem;
+  border-inline-start-width: 4px;
+}
+
+:where([data-slot="item-modal-feedback"][data-credit])::before {
+  position: absolute;
+  inset-block-start: 0.75rem;
+  inset-inline-start: 0.875rem;
+  font-weight: 600;
+}
+
+:where([data-slot="item-modal-feedback"][data-credit="full"]) {
+  border-inline-start-color: oklch(0.6 0.16 150);
+}
+
+:where([data-slot="item-modal-feedback"][data-credit="full"])::before {
+  content: "\2713";
+  content: "\2713" / "";
+  color: oklch(0.6 0.16 150);
+}
+
+:where([data-slot="item-modal-feedback"][data-credit="partial"]) {
+  border-inline-start-color: oklch(0.62 0.16 60);
+}
+
+:where([data-slot="item-modal-feedback"][data-credit="partial"])::before {
+  content: "\25D0";
+  content: "\25D0" / "";
+  color: oklch(0.62 0.16 60);
+}
+
+:where([data-slot="item-modal-feedback"][data-credit="none"]) {
+  border-inline-start-color: var(--destructive, oklch(0.577 0.245 27.325));
+}
+
+:where([data-slot="item-modal-feedback"][data-credit="none"])::before {
+  content: "\2717";
+  content: "\2717" / "";
+  color: var(--destructive, oklch(0.577 0.245 27.325));
 }
 
 /*

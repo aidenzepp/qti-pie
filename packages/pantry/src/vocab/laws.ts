@@ -7,9 +7,10 @@
  */
 
 /**
- * Every rule a law keeps or will keep, most specific first: the order `ruleOfLaws`
- * (`#pantry/import/refusal.ts`) picks a refusal's rule by when one PostgreSQL object discharges
- * several laws.
+ * Every rule a law keeps or will keep, most specific first: the order a refusal lists the rules
+ * of its laws in (`ruleOrder` of `#pantry/import/refusal.ts`), when one PostgreSQL object
+ * discharges several laws. It orders the rules for display and decides none: a refusal carries
+ * every rule its laws carry.
  *
  * The tiers run from QTI's own rules to the representation's:
  *
@@ -19,12 +20,15 @@
  * 3. XML Schema's assessment of an element's governing type, its attributes and its text;
  * 4. The content model: the ancestry bans, the nearest interaction, then the automaton's order, the
  *    counts it relaxes, the family's end and admission;
- * 5. The document layer: the stated bound on a key's text, foreign names, derived fields and the tree.
+ * 5. A single-CDN install's policy (`#pantry/qti/cdn.ts`), which only such an install states: a
+ *    `data:` address, an address off the origin, a style that fetches, then markup pantry cannot
+ *    read, so content that is not valid QTI is named by the rule that says so first;
+ * 6. The document layer: the stated bound on a key's text, foreign names, derived fields and the tree.
  *
  * A specific law says what in the content to change, and a general one only that the representation
- * broke, so a QTI rule wins over a tree law and a content-order law over a family law. The rules
- * `owedRules` (`#pantry/import/refusal.ts`) lists stand at their tier already, so the order holds
- * when their laws land.
+ * broke, so a QTI rule is listed before a tree law and a content-order law before a family law. The
+ * rules `owedRules` (`#pantry/import/refusal.ts`) lists stand at their tier already, so the order
+ * holds when their laws land.
  */
 export const precedence = [
   // O1, identity.
@@ -130,6 +134,11 @@ export const precedence = [
   "child-set",
   "union-count",
   "admission",
+  // A single-CDN install's policy.
+  "cdn-data",
+  "cdn-origin",
+  "cdn-style",
+  "cdn-foreign",
   // The document layer: its stated limit, then its laws.
   "key-text-bound",
   "href-form",
@@ -228,7 +237,7 @@ export const lawTable = {
   "Aria value range": {
     rule: "aria-value-range",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ARIABase.Attr_aria-valuemax (§5.2.31, and §7.1.31 of ARIABaseEmpty: 'Authors MUST ensure the value of 'aria-valuemax' is greater than or equal to the value of 'aria-valuemin''), both read as xs:decimal, as the XSD types them (interactions.ts AriaRange); reading 91 makes the MUST a law",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ARIABase.Attr_aria-valuemax (§5.2.31, and §7.1.31 of ARIABaseEmpty: 'Authors MUST ensure the value of 'aria-valuemax' is greater than or equal to the value of 'aria-valuemin''), both read as xs:decimal, as the XSD types them, each collapsed value in xs:decimal's lexical space read as the decimal XML Schema 1.1's decimalLexicalMap maps it to (Part 2 §3.3.3.1; grizzle's Compute.parseDecimal), exactly and of any digits, a pair with a value outside it not judged, since its value domain alone refuses it (interactions.ts AriaRange); reading 91 makes the MUST a law",
   },
   Arity: {
     rule: "P2",
@@ -262,7 +271,7 @@ export const lawTable = {
   BindingFit: {
     rule: "binding-fit",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4 (§2.4, each interaction's 'must be bound to a response variable with a base-type of … and … cardinality', as §2.4.1.1 https://www.imsglobal.org/spec/qti/v3p0/info#ChoiceInt), but the order interaction's, whose class description states none (spec reading 172), so it has no row (expression.ts BindingFit)",
+      "each interaction class's binding sentence, its typed rows every pairing of the base types and cardinalities it names: https://www.imsglobal.org/spec/qti/v3p0/info#Data_ChoiceInteraction (§5.30: 'The ChoiceInteraction must be bound to a response variable with a base-type of identifier and single or multiple cardinality'), and https://www.imsglobal.org/spec/qti/v3p0/info#Data_HotTextInteraction (§5.66) and https://www.imsglobal.org/spec/qti/v3p0/info#Data_HotspotInteraction (§5.68) alike; https://www.imsglobal.org/spec/qti/v3p0/info#Data_InlineChoiceInteraction (§5.74: 'with a base-type of identifier and single cardinality only'); https://www.imsglobal.org/spec/qti/v3p0/info#Data_GraphicOrderInteraction (§5.61: 'with a base-type of identifier and ordered cardinality'); https://www.imsglobal.org/spec/qti/v3p0/info#Data_AssociateInteraction (§5.8) and https://www.imsglobal.org/spec/qti/v3p0/info#Data_GraphicAssociateInteraction (§5.59: 'with base-type pair and either single or multiple cardinality'); https://www.imsglobal.org/spec/qti/v3p0/info#Data_MatchInteraction (§5.89) and https://www.imsglobal.org/spec/qti/v3p0/info#Data_GapMatchInteraction (§5.57: 'with base-type directedPair and either single or multiple cardinality'); https://www.imsglobal.org/spec/qti/v3p0/info#Data_GraphicGapMatchInteraction (§5.60: 'with base-type directedPair and multiple cardinality'); https://www.imsglobal.org/spec/qti/v3p0/info#Data_SelectPointInteraction (§5.128) and https://www.imsglobal.org/spec/qti/v3p0/info#Data_PositionObjectInteraction (§5.107: 'with a base-type of point and single or multiple cardinality'); https://www.imsglobal.org/spec/qti/v3p0/info#Data_SliderInteraction (§5.134: 'with single cardinality with a base-type of either integer or float'); https://www.imsglobal.org/spec/qti/v3p0/info#Data_MediaInteraction (§5.92: the response variable 'must be of base-type integer and single cardinality'); https://www.imsglobal.org/spec/qti/v3p0/info#Data_DrawingInteraction (§5.44) and https://www.imsglobal.org/spec/qti/v3p0/info#Data_UploadInteraction (§5.165: 'with base-type file and single cardinality'); https://www.imsglobal.org/spec/qti/v3p0/info#Data_EndAttemptInteraction (§5.45: 'with base-type boolean and single cardinality'); https://www.imsglobal.org/spec/qti/v3p0/info#Data_TextEntryInteraction (§5.162: 'If the response variable has single cardinality the base-type must be one of string, integer or float') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_ExtendedTextInteraction (§5.48: 'must be bound to a response variable of single, multiple, ordered or record cardinality', and otherwise of 'a base-type of string, integer or float'), whose record is RecordBindingFit's. The order interaction's class description (https://www.imsglobal.org/spec/qti/v3p0/info#Data_OrderInteraction, §5.97) states no binding, so it has no row and binds any type, as the custom interactions do (reading 172) (facets.ts typedFits, expression.ts BindingFit)",
   },
   "Branch forward": {
     rule: "branch-forward",
@@ -273,6 +282,26 @@ export const lawTable = {
     rule: "branch-target",
     source:
       "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'In the case of an item or section, the target must refer to an item or section in the same test-part … For test-parts, the target must refer to another test-part'; §5.23.1, the reserved EXIT_SECTION, EXIT_TESTPART and EXIT_TEST), §7.5 ('branching rules should treat referred sections as leaf nodes') and §5.98 ('It is therefore an error to make such an item the target of a branch-rule', of an item a selection with replacement can repeat): a target is an exit, or a part of its source's kind in its source's test part, in an instance that holds its source's, never a replaceable item ref (tests.ts Branch_target)",
+  },
+  "CDN data": {
+    rule: "cdn-data",
+    source:
+      "a single-CDN install's policy (#pantry/db/install.ts, policy.json): no address carries a base64 payload, so no address uses the data: scheme, read as https://url.spec.whatwg.org/#concept-basic-url-parser reads a scheme (the leading C0 controls and spaces stripped, 'Remove all ASCII tab or newline from input', the scheme ASCII-lowercased): every attribute and element text whose domain is an xs:anyURI, and each token of xsi:schemaLocation's list (https://www.w3.org/TR/xmlschema-1/#xsi_schemaLocation) (cdn.ts CDN_data)",
+  },
+  "CDN foreign": {
+    rule: "cdn-foreign",
+    source:
+      "a single-CDN install's policy (#pantry/db/install.ts, policy.json): markup pantry keeps but cannot interpret could carry an address no other law of the policy reads, so a single-CDN install refuses every foreign element, whichever its namespace class, and every attribute of an open class but data-* (fin.md D2's foreign, no-namespace and own-namespace), keeping https://html.spec.whatwg.org/multipage/dom.html#embedding-custom-non-visible-data-with-the-data-*-attributes (cdn.ts CDN_foreign)",
+  },
+  "CDN origin": {
+    rule: "cdn-origin",
+    source:
+      "a single-CDN install's policy (#pantry/db/install.ts, policy.json): every address a player fetches (#pantry/vocab/fetched.ts) starts with the policy's origin once the leading C0 controls and spaces https://url.spec.whatwg.org/#concept-basic-url-parser strips are stripped, and every image candidate's URL of a srcset does, as https://html.spec.whatwg.org/multipage/images.html#parsing-a-srcset-attribute parses one (cdn.ts CDN_origin)",
+  },
+  "CDN style": {
+    rule: "cdn-style",
+    source:
+      "a single-CDN install's policy (#pantry/db/install.ts, policy.json): no style attribute makes the player fetch, so none holds url(, @import, image-set( or src(, in any case, or a backslash, which begins an escape that could spell any of them (https://www.w3.org/TR/css-syntax-3/#consume-ident-like-token, https://www.w3.org/TR/css-syntax-3/#consume-escaped-code-point, https://www.w3.org/TR/css-cascade-4/#at-import, https://www.w3.org/TR/css-images-4/#image-set-notation, https://www.w3.org/TR/css-values-4/#urls) (cdn.ts CDN_style)",
   },
   "Card default entry": {
     rule: "card-default",
@@ -319,6 +348,11 @@ export const lawTable = {
     source:
       "R10-b: https://www.imsglobal.org/spec/qti/v3p0/info#Data_PortableCustomInteraction (§5.106, 3.0.0: 'PCIs MUST be used instead of custom interactions (the latter have been deprecated)', a sentence the 3.0.1 text drops): a 3.0.0 document holds no qti-custom-interaction, and a 3.0.1 document may (interactions.ts Custom_interaction_version)",
   },
+  "Data SSML": {
+    rule: "attribute-lexical",
+    source:
+      "reading 177, over R7-a: https://www.imsglobal.org/sites/default/files/spec/qti/v3/data-ssml_infobind/imsqtiv3p0_datassml_v1p0_InfoBind.html#JSOND (Data-SSML 1.0 §3.4, Description of the JSON Schema, NORMATIVE): a closed data-ssml holds one JSON object whose members are among break, phoneme, prosody, say-as and sub, each an object of the string properties the schema lists for it (break: strength, time; phoneme: ph, alphabet, type; prosody: rate; say-as: interpret-as; sub: alias), with ph, interpret-as and alias required, strength, alphabet, type and interpret-as enumerated, and time and rate normalized strings; a name written twice is admitted and each value judged (RFC 8259 §4). The importer reads the JSON into rows and the database judges them (data-ssml.ts DataSsml, DataSsmlMember, DataSsmlProperty, Data_SSML; queries.ts RequiredSsmlProperty)",
+  },
   "Declaration base type": {
     rule: "declaration-type",
     source:
@@ -357,7 +391,7 @@ export const lawTable = {
   "Document lang": {
     rule: "document-lang",
     source:
-      "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (identity.ts documentLang, through metadata.ts LomObject); xml:lang compared by its collapsed xs:language value and the LOM language as written, both as tags without regard to case (RFC 5646 §2.1.1); reading R9-c: a catalog is outside the content body (information model §5.28: 'outside the content body node'), so the xml:lang of a catalog's cards, entries and HTML content is not counted (identity.ts CatalogScope)",
+      "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (queries.ts DescribedLang and DescribedAssembledLang, over namingGenerals); xml:lang compared by its collapsed xs:language value and the LOM language as written, both as tags without regard to case (RFC 5646 §2.1.1); reading R9-c: a catalog is outside the content body (information model §5.28: 'outside the content body node'), so the xml:lang of a catalog's cards, entries and HTML content is not counted (identity.ts CatalogScope)",
   },
   "DocumentId key": {
     rule: "document-key",
@@ -368,11 +402,6 @@ export const lawTable = {
     rule: "attribute-lexical",
     source:
       "XML Schema Part 2's minInclusive and minExclusive on a double's value (XML Schema 1.1 Part 2 §3.3.5.2, doubleLexicalMap: a literal rounds to its IEEE value, a magnitude below 2^-1075 to a zero of its sign, and -0 equals 0): NonNegativeDoubleDType's minInclusive 0.0 (imsqti_asiv3p0_v1p0.xsd:24034-24038, imsqti_asiv3p0p1_v1p0.xsd:24120-24124) and reading 16's minExclusive 0 for normal-maximum; reading 144",
-  },
-  "Double value": {
-    rule: "attribute-lexical",
-    source:
-      "reading 144: a bounded double's value is a row of its own, DoubleValue, where its lexical form is in xs:double's lexical space (XML Schema 1.0 Part 2 §3.2.5.1, reading 71's edition), read once by the import (write.ts doubleOf)",
   },
   "E1 derived": {
     rule: "derived",
@@ -526,7 +555,7 @@ export const lawTable = {
   "Map key": {
     rule: "map-key-unique",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88.4 and §7.21: 'The map is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float'), so a mapping is a function of its source value: no two of its entries share a key, compared as values of its base type where the schema holds one (an integer's canonical form, a float of grizzle's double form as its double, mapping.ts MapKeyInteger and MapKeyFloat) and as written otherwise (readings 7, 34 and 45), a string key written twice repeating whatever its entries' case-sensitive says (reading 160), and keys written apart two keys whatever their matching (§7.21.3: case-sensitive 'Used to control whether or not a qti-map-entry string is matched case sensitively'; readings 98 and 165: `York` and `york` are two keys, the first listed matching entry giving the value, as AreaMapping's areas are 'those listed first taking priority')",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88.4 and §7.21: 'The map is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float'), so a mapping is a function of its source value: no two of its entries share a key, compared as values of its base type where the schema holds one (an integer as the integer its text names and a float as its double, queries.ts MapKeyInteger and MapKeyFloat) and as written otherwise (readings 7, 34 and 45), a string key written twice repeating whatever its entries' case-sensitive says (reading 160), and keys written apart two keys whatever their matching (§7.21.3: case-sensitive 'Used to control whether or not a qti-map-entry string is matched case sensitively'; readings 98 and 165: `York` and `york` are two keys, the first listed matching entry giving the value, as AreaMapping's areas are 'those listed first taking priority')",
   },
   MappableBaseType: {
     rule: "mapping-base-type",
@@ -541,12 +570,12 @@ export const lawTable = {
   "Mapping overlay": {
     rule: "reachability",
     source:
-      "plan §1.7 O5 and the W5 amendment's C18: each O5 overlay (Mapping, MapKey, MapKeyInteger, MapKeyFloat, AreaMapping, LookupTable) is its element's row, keyed by its node: it copies its node's nodeRef tuple and its declaration's declarationRef tuple, names a node of its kind, takes its key from its element's map-key attribute, and a typed key is the row of exactly the map keys of its form (Q5.11); a mapping, a map key and a lookup value each has its row beside its declaration's base type (MappingBaseType, MapKeyType, LookupValueType) exactly where the declaration has one, a record's having none (lane NIL's audit, B12), and a mapping, an area mapping and a lookup table each beside its declaration's cardinality (MappingCardinality, AreaMappingCardinality, LookupTableCardinality) exactly where the declaration has one (spec reading 158)",
+      "plan §1.7 O5 and the W5 amendment's C18: each O5 overlay (Mapping, MapKey, AreaMapping, LookupTable) is its element's row, keyed by its node: it copies its node's nodeRef tuple and its declaration's declarationRef tuple, names a node of its kind, takes its key from its element's map-key attribute, and a typed key is the row of exactly the map keys of its form (Q5.11); a mapping, a map key and a lookup value each has its row beside its declaration's base type (MappingBaseType, MapKeyType, LookupValueType) exactly where the declaration has one, a record's having none (lane NIL's audit, B12), and a mapping, an area mapping and a lookup table each beside its declaration's cardinality (MappingCardinality, AreaMappingCardinality, LookupTableCardinality) exactly where the declaration has one (spec reading 158)",
   },
   "Mastery range": {
     rule: "mastery-range",
     source:
-      "reading 9: the Schematron's RULE SPECIFIC CLASS OUTCOMEDEC 1 (ASI 3.0.1 XSD, on qti-outcome-declaration: 'not(@mastery-value < @normal-minimum)', 'The mastery-value attribute value must not be less than the normal-minimum value'; 'not(@mastery-value > @normal-maximum)', 'The mastery-value attribute value must not be greater than the normal-maximum value'), read by its intent: each pair judged where both have a value, a normal-minimum a 3.0.1 outcome declaration does not write being its XSD default 0.0 and a 3.0.0 one's none (reading 149), as xs:double values (INF and -INF infinite), NaN ordered against nothing; a value outside grizzle's double lexical form (outer whitespace, over 15 significant digits, an exponent beyond 293) is not judged, a recorded limit",
+      "reading 9: the Schematron's RULE SPECIFIC CLASS OUTCOMEDEC 1 (ASI 3.0.1 XSD, on qti-outcome-declaration: 'not(@mastery-value < @normal-minimum)', 'The mastery-value attribute value must not be less than the normal-minimum value'; 'not(@mastery-value > @normal-maximum)', 'The mastery-value attribute value must not be greater than the normal-maximum value'), read by its intent: each pair judged where both have a value, a normal-minimum a 3.0.1 outcome declaration does not write being its XSD default 0.0 and a 3.0.0 one's none (reading 149), as xs:double values, each form collapsed as xs:double's whiteSpace collapses it (XML Schema Part 2 §4.3.6; reading 7) and, where it is in xs:double's lexical space (XML Schema 1.0's, reading 71's edition, operators.ts doublePattern), read as the double XML Schema 1.1's doubleLexicalMap maps it to (Part 2 §3.3.5.2, reading 144; grizzle's Compute.parseDouble), of any digits and any exponent, NaN ordered against nothing (declarations.ts doublesInOrder)",
   },
   "MathML align first": {
     rule: "ordering",
@@ -627,7 +656,7 @@ export const lawTable = {
   "N5 Follow": {
     rule: "ordering",
     source:
-      "XML Schema Part 1 §3.8, each content model as its Glushkov automaton (content.ts Follow; the operator's ruling of 2026-11-05)",
+      "XML Schema Part 1 §3.8, each content model as its Glushkov automaton (content.ts Follow; Bjorn's ruling of 2026-11-05)",
   },
   "N5 admitted": {
     rule: "admission",
@@ -817,7 +846,7 @@ export const lawTable = {
   "Slider bounds": {
     rule: "slider-bounds",
     source:
-      "reading 9, the Schematron's rule 14Ba (RULE_SET_INTERACTION_14B, ASI 3.0.1 XSD, on qti-slider-interaction: 'not(@upper-bound < @lower-bound)', 'The upper-bound attribute value must not be less than the lower-bound value'), its values read as xs:double; the information model (§5.134.1-2) states no order",
+      "reading 9, the Schematron's rule 14Ba (RULE_SET_INTERACTION_14B, ASI 3.0.1 XSD, on qti-slider-interaction: 'not(@upper-bound < @lower-bound)', 'The upper-bound attribute value must not be less than the lower-bound value'), its values collapsed and read as xs:double, each in xs:double's lexical space (XML Schema 1.0's, reading 71's edition, operators.ts doublePattern) as the double XML Schema 1.1's doubleLexicalMap maps it to (Part 2 §3.3.5.2, reading 144; grizzle's Compute.parseDouble), of any digits and any exponent, NaN ordered against nothing; the information model (§5.134.1-2) states no order",
   },
   "Stimulus ref key": {
     rule: "stimulus-ref-key",
@@ -832,7 +861,7 @@ export const lawTable = {
   "Strictly held": {
     rule: "unmodeled-vocabulary",
     source:
-      "reading 81: https://www.w3.org/TR/xmlschema-1/#cvc-wildcard (XML Schema 1.0 Part 1 §3.10.4, Item Valid (Wildcard), clause 2: a strict wildcard's element has the context-determined declaration mustFind), with §3.3.4 clause 1.2 and §3.3.5 [validity] clause 1.1.3: an element only the strict wildcards of its parent's model hold (install.ts StrictlyHeld) stands only under an xsi:type naming a type of its document's schema set or a built-in, so its governing type is not none (C44; shred: strict-undeclared), but for reading 6's root whose declaration the wildcard finds (§3.10.4 clause 2, §3.3.4 clause 1.1.1.3.2), kept foreign and unrefused (install.ts HeldRootsUnder, C13)",
+      "reading 81: https://www.w3.org/TR/xmlschema-1/#cvc-wildcard (XML Schema 1.0 Part 1 §3.10.4, Item Valid (Wildcard), clause 2: a strict wildcard's element has the context-determined declaration mustFind), with §3.3.4 clause 1.2 and §3.3.5 [validity] clause 1.1.3: an element only the strict wildcards of its parent's model hold (install.ts StrictlyHeld) stands only under an xsi:type naming a type of its document's schema set or a built-in, so it has a governing type, its OpenElementType row (C44; shred: strict-undeclared), but for reading 6's root whose declaration the wildcard finds (§3.10.4 clause 2, §3.3.4 clause 1.1.1.3.2), kept foreign and unrefused (install.ts HeldRootsUnder, C13)",
   },
   "Structure identifier": {
     rule: "structure-identifier",
@@ -966,12 +995,12 @@ export const lawTable = {
   "XsiType available": {
     rule: "xsi-type",
     source:
-      "readings 60 and 81: https://www.w3.org/TR/xmlschema-1/#cvc-assess-elt (XML Schema 1.0 Part 1 §3.3.4, Schema-Validity Assessment (Element), clause 1.2: an element no declaration assesses is assessed against the type its xsi:type resolves to in the schema its document is assessed against), so a foreign element's governing type is none, one of XML Schema's own, or a type of a schema set its parent's namespace stands in (open.ts typeAvailable; install.ts TypeAvailable, C15 and C36); a parent in no vocabulary's namespace stands in documents of every set, and the document's own set is reading 81's recorded limit",
+      "readings 60 and 81: https://www.w3.org/TR/xmlschema-1/#cvc-assess-elt (XML Schema 1.0 Part 1 §3.3.4, Schema-Validity Assessment (Element), clause 1.2: an element no declaration assesses is assessed against the type its xsi:type resolves to in the schema its document is assessed against), so a foreign element's governing type, where it has one (its OpenElementType row), is one of XML Schema's own or a type of a schema set its parent's namespace stands in (open.ts typeAvailable; install.ts TypeAvailable, C15 and C36); a parent in no vocabulary's namespace stands in documents of every set, and the document's own set is reading 81's recorded limit",
   },
   "XsiType derived": {
     rule: "xsi-type",
     source:
-      "reading 47: https://www.w3.org/TR/xmlschema-1/#cvc-elt (XML Schema 1.0 Part 1 §3.3.4, Element Locally Valid (Element), clause 4.3: the local type definition 'must be validly derived from the {type definition}', §3.4.6 and §3.14.6), over the type that governs each element of a vocabulary kind (Node.governs: its xsi:type's, else its declared type; xsi.ts XsiType). Clauses 4.1 and 4.2, a value that is no QName in scope or names no type, are the codec's (shred: type-unresolved, type-unknown)",
+      "reading 47: https://www.w3.org/TR/xmlschema-1/#cvc-elt (XML Schema 1.0 Part 1 §3.3.4, Element Locally Valid (Element), clause 4.3: the local type definition 'must be validly derived from the {type definition}', §3.4.6 and §3.14.6), over the named type that governs each element of a vocabulary kind (its ElementType row: its xsi:type's, else its declared type; xsi.ts XsiType), which every element of a kind whose declared type is named has, and an element of an anonymous declared type has not (AnonymousType). Clauses 4.1 and 4.2, a value that is no QName in scope or names no type, are the codec's (shred: type-unresolved, type-unknown)",
   },
   "comment arm": {
     rule: "text-copy",

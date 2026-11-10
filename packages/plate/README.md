@@ -11,7 +11,8 @@ plate is a library of parts and pure functions. Only a value you leave out is ra
 document, `render` writes an item as HTML with native form controls, and `score` scores the
 responses that come back. `openPackage` checks a content package, and a test session takes a
 candidate through a test's items. plate renders choice, inline choice, text entry and extended
-text interactions, and each verdict names the features that plate does not render. plate has no
+text interactions, and an item's modal, block and inline feedback, and each verdict names the
+features that plate does not render. plate has no
 form, submit control, submission flow or store. The host page owns those. plate reads XML through
 [crust](../crust/README.md), never depends on pantry, and is pre-release.
 
@@ -24,13 +25,22 @@ plate is a private workspace package of [qti-pie](../../README.md). In a sibling
 "dependencies": { "@qti-pie/plate": "workspace:*", "effect": "4.1.2" }
 ```
 
-Then run `pnpm install` from the repository root. The package has three entry points:
+Then run `pnpm install` from the repository root. The package has five entry points:
 
 | Entry point | Gives | Stability |
 | --- | --- | --- |
 | `@qti-pie/plate` | Every function, type and error in [`src/index.ts`](src/index.ts) | Unstable until M3 |
 | `@qti-pie/plate/effect` | The same names as Effects, for a server that runs Effect, in [`src/effect.ts`](src/effect.ts) ([Effect](#effect)) | Unstable until M3 |
+| `@qti-pie/plate/open` | `open`, in [`src/validate/open.ts`](src/validate/open.ts) | Unstable until M3 |
+| `@qti-pie/plate/package` | `openPackage` and its verdict's types, in [`src/package/index.ts`](src/package/index.ts) | Unstable until M3 |
 | `@qti-pie/plate/styles.css` | The default theme, [`src/styles.css`](src/styles.css) | Unstable until M3 |
+
+`open` and `openPackage` have entries of their own because they check content against tables that
+load with them: the QTI XSD's, 5 MB of JSON, and for a package the content packaging profiles'
+too. A host whose content store checks each document with `open` when it admits it imports
+`@qti-pie/plate` alone where it serves, and opens each document there with `openAdmitted`, which
+loads only the securing tables, a projection of the XSD's under 3% of their size.
+`@qti-pie/plate/effect` serves as `@qti-pie/plate` does and loads the same tables.
 
 Until M3, plate's next milestone, any name or signature can change in any commit. The
 [changelog](CHANGELOG.md) records each change a host can see.
@@ -42,7 +52,8 @@ On the server, open an item and render it:
 ```ts
 import { readFile } from "node:fs/promises";
 import { Effect, Option, Result } from "effect";
-import { acceptedItem, configure, open, redact, render } from "@qti-pie/plate";
+import { acceptedItem, configure, redact, render } from "@qti-pie/plate";
+import { open } from "@qti-pie/plate/open";
 
 const verdict = await Effect.runPromise(open("item.xml", await readFile("item.xml")));
 const accepted = acceptedItem(verdict);
@@ -57,6 +68,12 @@ Put that HTML inside your own form. When the form posts back, `partition` picks 
 entries, and `decode` reads each response that `postings` lists, in the base its interaction
 declares. `score` scores the responses. The [playground](#playground) does the whole round trip.
 
+Where a content store checks each document with `open` when it admits it, serve it after with
+`openAdmitted` in place of `open`, imported from `@qti-pie/plate`. It judges the bytes with none of
+`open`'s checks, and secures the item by the securing tables, so the serving process never loads
+the XSD's 5 MB. On a document `open` accepts it gives the same verdict, so the item renders and
+scores the same. Give it only bytes the store admitted, never a document from anywhere else.
+
 An item whose template processing runs shows its template parts only from the record `begin`
 starts. With no record, `redact` shows a notice in their place, and `score` refuses the post with
 `RecordRequired`. [Template processing](#template-processing) shows that round trip.
@@ -67,15 +84,8 @@ first item:
 
 ```ts
 import { Effect, Result } from "effect";
-import {
-  configure,
-  encodeSession,
-  itemView,
-  openPackage,
-  redact,
-  render,
-  startTest,
-} from "@qti-pie/plate";
+import { configure, encodeSession, itemView, redact, render, startTest } from "@qti-pie/plate";
+import { openPackage } from "@qti-pie/plate/package";
 
 const verdict = await Effect.runPromise(openPackage("package", files));
 if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") {
@@ -85,7 +95,7 @@ if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsuppo
       const instance = `s-${crypto.randomUUID()}`;
       const session = yield* startTest(test, items, configuration, { instance, now: new Date() });
       const shown = yield* itemView(test, session, configuration, 1);
-      const redacted = redact(items.get(shown.ref)!, shown.record, shown.configuration);
+      const redacted = redact(items.get(shown.ref)!, shown.page, shown.configuration);
       const item = yield* render(redacted, shown.configuration, {
         instance: shown.instance,
         values: shown.values,
@@ -105,7 +115,8 @@ request. [Navigation](#navigation) moves the session on.
 
 | Function | Does |
 | --- | --- |
-| `open` | Reads and checks a document's bytes, and returns a verdict |
+| `open` | Reads and checks a document's bytes, and returns a verdict. It comes from `@qti-pie/plate/open` |
+| `openAdmitted` | Reads the bytes of a document the host's content store has admitted, and returns the verdict `open` gives on it, without `open`'s checks or the XSD tables |
 | `acceptedItem` | Reads the accepted item out of a verdict |
 | `configure` | Decodes the host's settings into a `Configuration` |
 | `begin` | Starts an item's stored record, running its template processing |
@@ -117,7 +128,7 @@ request. [Navigation](#navigation) moves the session on.
 | `score` | Scores a map of responses, each a `ResponseValue`, and returns the record the host stores |
 | `restore` | Gives an item's record and values back from its stored record |
 | `solution` | Gives an item's correct responses, from its record where template processing set them |
-| `openPackage` | Reads and checks a content package's files, and returns a verdict on the package |
+| `openPackage` | Reads and checks a content package's files, and returns a verdict on the package. It comes from `@qti-pie/plate/package` |
 | `itemRefs` | Lists a test's item refs in document order |
 | `startTest` | Starts a test session, and fails with `EngineFailure` when a template default of its first part does not fit its variable |
 | `current`, `itemView` | Give what a session shows now, and what any of its items renders with |
@@ -128,7 +139,7 @@ request. [Navigation](#navigation) moves the session on.
 | `encodeSession`, `decodeSession` | Write a session as the record the host stores, and check one handed back |
 | `results` | Writes a Results Reporting document for an item or a test session |
 
-`open`, `openPackage` and `configure` return Effects. Every other function is plain and returns
+`open`, `openAdmitted`, `openPackage` and `configure` return Effects. Every other function is plain and returns
 its value, or a `Result` when it can fail. `redact`, `checkResponses` and `solution` take the
 item's record as an optional last argument, and `redact` takes the output budget after it.
 `render`'s `parts` option swaps a part for the host's
@@ -155,22 +166,18 @@ made in `render`'s `solution` or `review` mode.
 server-side: a host that does not import it loads none of it, and no browser module imports it.
 It exports every name of `@qti-pie/plate`. Each function there that returns a `Result` or takes a
 configuration, and `acceptedItem`, is an Effect here. It calls the plain function, and succeeds
-and fails as that function does. The rest are the plain functions themselves: `open`,
-`openPackage` and `configure`, which already return Effects, and the functions that never fail,
-such as `partition`, `postings` and `solution`.
+and fails as that function does. The rest are the plain functions themselves: `openAdmitted` and
+`configure`, which already return Effects, and the functions that never fail, such as
+`partition`, `postings` and `solution`. `open` and `openPackage` already return Effects too, and
+stay on `@qti-pie/plate/open` and `@qti-pie/plate/package`, so this entry loads no table they
+check by.
 
 ```ts
 import { readFile } from "node:fs/promises";
 import { Effect } from "effect";
-import {
-  acceptedItem,
-  ConfigurationFromEnv,
-  open,
-  redact,
-  render,
-  score,
-} from "@qti-pie/plate/effect";
+import { acceptedItem, ConfigurationFromEnv, redact, render, score } from "@qti-pie/plate/effect";
 import type { Responses } from "@qti-pie/plate/effect";
+import { open } from "@qti-pie/plate/open";
 
 const bytes = await readFile("item.xml");
 const item = Effect.flatMap(open("item.xml", bytes), acceptedItem);
@@ -259,9 +266,9 @@ test, and `decodeRedacted` gives the `Redacted` that `render` takes.
 
 plate's work runs in spans:
 
-- `plate.open` and `plate.openPackage` hold a `plate.readSource` for each document they read, and
-  a `plate.check` for each document they judge, which carries `document.location`,
-  `document.kind` and `document.verdict`.
+- `plate.open`, `plate.openAdmitted` and `plate.openPackage` hold a `plate.readSource` for each
+  document they read, and a `plate.check` for each document they judge, which carries
+  `document.location`, `document.kind` and `document.verdict`.
 - `plate.configure` runs `configure` and `ConfigurationFromEnv`.
 - The tooling reads the corpus under `plate.readCorpusFile` and `plate.corpusDocuments`, and
   builds its tables under `plate.generateTables` and `plate.generateOccurrences`.
@@ -435,7 +442,7 @@ export const step = (
     const responses: Record<string, ResponseValue> = {};
     if (shown.kind === "item") {
       const { own } = partition(entries, shown.instance);
-      const item = redact(items.get(shown.ref)!, shown.record, shown.configuration);
+      const item = redact(items.get(shown.ref)!, shown.page, shown.configuration);
       for (const { binding, identifier, options } of postings(item, shown.instance)) {
         responses[identifier] = yield* decode(own, binding, options);
       }
@@ -488,7 +495,9 @@ Both records are server data. An item's record holds the seed that keys every va
 processing draws, and its template values and correct responses can give the answers away. Keep
 both where only your server reads them, never in a hidden field, a cookie or the browser's
 storage. `ItemView`, the item that `current` gives, and `restore`'s `Restored` each carry the
-record, so they are server data too.
+record, so they are server data too. Pass `ItemView`'s `page` to `redact` and `checkResponses`: it
+is the item's `record`, except for a closed item whose `show-feedback` is false, where it reads as
+an attempt no response processing has run in, so the item shows no feedback.
 
 `restore(document, record)` gives an item's decoded record and its values back from its
 `StoredRecord`. In a test, `itemView` gives them. plate exports no `ItemRecord` type: the record's
@@ -624,6 +633,7 @@ build the container from that variable.
 | An operand of a type its expression does not take | `expression-type` | P23 |
 | A reference attribute, such as `qti-index`'s `n`, that names a variable other than a single template or outcome variable of the attribute's base type | `expression-type` | P24 |
 | A reference attribute that names no declared variable | `undeclared-variable` | P8 |
+| A `qti-feedback-block`, `qti-feedback-inline` or `qti-modal-feedback` whose `outcome-identifier` names no outcome variable of base type `identifier`, single or multiple (the built-in `completionStatus` counts) | `undeclared-variable` or `expression-type` | Feedback reference, Feedback outcome type |
 | A `qti-variable` with a `weight-identifier`, which only a test's outcome processing may hold | `expression-placement` | none: pantry once refused it as P12, and no law of pantry's names it now |
 | A literal `figures` below 1, or below 0 in `decimalPlaces` mode | `attribute-type` | P10 |
 | A literal `n` of `qti-index` below 1 | `attribute-type` | `attribute-lexical` |
@@ -695,6 +705,72 @@ item's `StoredRecord` holds it among the outcomes.
 The verdict marks an adaptive item `adaptive="true"`, and its processing runs as a non-adaptive
 item's. Each attempt starts from the declared defaults, so outcomes do not add up across attempts
 until M5.
+
+## Feedback
+
+plate shows an item's feedback by the outcome values of the attempt the page shows, so a host
+shows a candidate's feedback by rendering the item again from the record `score` returned. No
+function or option is feedback's own. In review, after a submit:
+
+```ts
+import { Result } from "effect";
+import { redact, render, restore, score } from "@qti-pie/plate";
+
+const page = Result.gen(function* review() {
+  const stored = yield* score(accepted, responses, record);
+  const { record: scored, values } = yield* restore(accepted, stored);
+  const shown = redact(accepted, scored, configuration);
+  return (yield* render(shown, configuration, { instance, mode: "review", values })).html;
+});
+```
+
+Store `stored` as you store any record. `mode: "review"` shows the candidate's answers, which
+`values` holds, in controls they cannot edit. The feedback follows the record whatever the mode,
+so a host that lets the candidate try again renders in `answering` with the same record.
+
+A `qti-feedback-block`, a `qti-feedback-inline` and a `qti-modal-feedback` each name an outcome in
+`outcome-identifier`, an `identifier` and `show-hide`. The outcome matches the element when its
+value is the identifier, for a single outcome, or holds it, for a multiple one. NULL matches
+nothing. `show-hide="show"`, a block's and an inline's default, shows the element only when the
+outcome matches, and `show-hide="hide"` shows it unless the outcome matches. `open` refuses an
+`outcome-identifier` that names no outcome of base type `identifier`, single or multiple.
+
+Which values decide it:
+
+- Once `score` has processed an attempt, the record's `attempt` is `submitted`, and feedback reads
+  the outcomes that processing set.
+- Before, under `begin`'s record or with no record, the page is the body as an attempt starts, so
+  feedback reads each outcome's default, the one template processing set where it set one.
+- With no record, an item whose template processing runs shows a notice in place of each feedback
+  block and inline, as it does for its template content. So does a record that holds no value of
+  the outcome a feedback element names.
+- In a test, `ItemView`'s `page` decides it, as [Records](#records) says.
+
+What the page gets:
+
+- A shown block or inline leaves its content in its place, with no wrapper element and without its
+  `id`, `class` or `lang`. A hidden one leaves nothing. Its content is in neither the HTML nor the
+  redacted item, so hidden feedback never reaches the page.
+- Modal feedback shows only after `score` has processed an attempt, never under `begin`'s record or
+  with no record, even with `show-hide="hide"`. Each one shown is a `section` with
+  `data-slot="item-modal-feedback"`, after the body inside the item Root, in document order, with
+  its `title` as its `aria-label`. A record that holds no value of its outcome shows the section
+  with only a notice in it. Swap the part through `parts: { item: { modalFeedback } }` for your own
+  flow container, such as an `aside`, or a custom element that opens it as a dialog.
+- Each modal feedback section carries `data-credit`, the credit the attempt earned by its own
+  `SCORE` (s) against its own `MAXSCORE` (m): `full` when s >= m, `none` when s <= 0, and `partial`
+  between. It carries none, and the card stays neutral, when the item declares no `MAXSCORE`, when
+  either outcome is not a single float or holds NULL or a value that is not finite, when m <= 0,
+  when `SCORE` carries `external-scored`, and when either outcome's `view` leaves out `candidate`.
+  A swapped part keeps it, as it keeps `aria-label`. The default theme draws it as a 4px edge and a
+  mark, a green ✓, an amber ◐ or a red ✗, with no words; the feedback's own text says how the answer
+  did.
+- An interaction inside hidden feedback, which only an adaptive item may hold, is hidden too, as
+  inside hidden template content: `postings` lists none for its response, `checkResponses` ignores
+  it, and `score` keeps the record's value whatever is posted. A notice inside hidden feedback is
+  not among the redacted item's `notices`.
+- An `option` shows only text, so an Inline Choice whose choice holds a feedback inline shows a
+  notice in its place. A Choice's choice shows its feedback inline.
 
 ## Template processing
 
@@ -1151,7 +1227,7 @@ The server keeps what `open` accepted, correct responses included. The browser g
 that `render` makes from `redact`'s copy, and the server scores the post. plate does not enforce
 this split. A host that sends the accepted item to the browser sends what `redact` removes.
 
-- `open` and `openPackage` run on Node, not in a browser.
+- `open`, `openAdmitted` and `openPackage` run on Node, not in a browser.
 - An accepted item is not JSON, so a stateless server opens the bytes again for each request. To
   send the redacted item itself, write it with `encodeRedacted` and read it with `decodeRedacted`.
 - A page that holds a `TestSession` holds every item's outcomes and the test's own, scores included,
@@ -1205,7 +1281,7 @@ default.
 serves one item inside its own `<form method="post" autocomplete="off">` and submit button, on a
 page that links plate's sheet and sends `Cache-Control: no-store`. It scores a post with
 `partition`, `postings`, `decode`, `checkResponses` and `score`, and uses only what
-`@qti-pie/plate` exports. It keeps no record, so it cannot score an item whose template processing
+`@qti-pie/plate` and `@qti-pie/plate/open` export. It keeps no record, so it cannot score an item whose template processing
 runs: `score` refuses that item with `RecordRequired`.
 
 In Astro, render on an on-demand page, import plate's stylesheet so that Astro links it, and put
@@ -1216,7 +1292,8 @@ the HTML in with `set:html`:
 import "@qti-pie/plate/styles.css";
 import { readFile } from "node:fs/promises";
 import { Effect, Option, Result } from "effect";
-import { acceptedItem, configure, open, redact, render } from "@qti-pie/plate";
+import { acceptedItem, configure, redact, render } from "@qti-pie/plate";
+import { open } from "@qti-pie/plate/open";
 
 export const prerender = false;
 
@@ -1247,6 +1324,16 @@ through the `exports` map, serve the file, and link it from the page. It reads s
 names, so a shadcn theme carries over, and its opening comment lists them. The host's theme sets
 the tokens at `:root` and `.dark`. The page's surface and font are the host's. A host that skips
 the sheet copies its `[data-slot="item"]` rule, which keeps authored content inside the item.
+
+The item Root pads its content by 3px, the width of a focus ring, so no ring is clipped, and takes
+the same width back as a negative margin, so the item lines up with the host's column. A host
+whose own container clips its edge clips a ring at the Root's edge. The Root lays its blocks out in
+one column, 1rem apart; a `p` that keeps the browser's margin adds it to that gap.
+
+Every rule of the sheet sits inside `:where()`, so any unlayered host rule wins by order. A rule in
+a cascade layer loses to every unlayered rule whatever its specificity, so a host whose own rules
+sit in a layer, as Tailwind v4's utilities do, imports the sheet into a layer of its own below
+them, such as `@import "@qti-pie/plate/styles.css" layer(base);`.
 
 ## Playground
 

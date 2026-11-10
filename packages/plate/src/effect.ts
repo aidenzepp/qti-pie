@@ -8,9 +8,9 @@
  * `checkResponses` read the {@link Configuration} service in place of a configuration argument;
  * `begin`, `startTest`, `advance` and `results` take time from `Clock` and draw an absent seed
  * through {@link Randomness}; the rest lift the plain call's `Result` unchanged. Each mirror calls
- * its plain function, so a given input succeeds and fails as it does from `.`. `open`,
- * `openPackage` and `configure` already return Effects, and the functions that cannot fail are the
- * plain ones, so all of these are the same values `.` exports. Beside them are the service and its
+ * its plain function, so a given input succeeds and fails as it does from `.`. `openAdmitted` and
+ * `configure` already return Effects, and the functions that cannot fail are the plain ones, so all
+ * of these are the same values `.` exports. Beside them are the service and its
  * layers ({@link ConfigurationFromEnv}, {@link configurationLayer}), {@link Randomness} and its
  * draws, the stored forms' Schemas and their JSON Schema documents, {@link Refused} and
  * {@link PlateError}.
@@ -18,6 +18,10 @@
  * One name of `.` means something else here: `Configuration` is the service, not the plain settings
  * type. A host names that type as the service's shape, `(typeof Configuration)["Service"]`, equally
  * as `typeof ConfigurationSchema.Type`, or imports it from `.`.
+ *
+ * Like `.`, it is a serving entry: `open` and `openPackage`, which already return Effects, stay on
+ * `@qti-pie/plate/open` and `@qti-pie/plate/package`, so this entry loads the securing tables and
+ * never the full XSD tables or the package tables.
  *
  * Nothing under `src/` imports this module, and no browser module reaches it: a host that does not
  * import `./effect` loads none of it.
@@ -73,7 +77,6 @@ export { advance, begin, results, startTest } from "#plate/effect/session.ts";
 
 export type {
   Accepted,
-  AcceptedPackage,
   AcceptedSection,
   AcceptedStimulus,
   AcceptedTest,
@@ -97,9 +100,6 @@ export type {
   NavigationState,
   Node,
   Options,
-  PackageResource,
-  PackageTest,
-  PackageVerdict,
   PartFunction,
   PartOverrides,
   Partition,
@@ -163,8 +163,7 @@ export {
   MalformedTagName,
   MarkupRefused,
   NotRedacted,
-  open,
-  openPackage,
+  openAdmitted,
   OutcomeMismatchError,
   OutputTooLarge,
   partition,

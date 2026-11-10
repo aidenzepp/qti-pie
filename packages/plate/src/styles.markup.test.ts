@@ -7,14 +7,16 @@ import { rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
 import { isPosted } from "#plate/form/encoding.ts";
 import {
+  acceptedItem,
   checkResponses,
   configure,
   decode,
   entryName,
-  open,
   redact,
   render,
   renderStatus,
+  restore,
+  score,
 } from "#plate/index.ts";
 import type {
   Accepted,
@@ -30,6 +32,7 @@ import type { NavigationOptions, NavigationState } from "#plate/navigation.ts";
 import { compounds, scanSheet } from "#plate/test/css.ts";
 import type { AttributeTest, Compound, Sheet } from "#plate/test/css.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { open } from "#plate/validate/open.ts";
 import { styledClasses } from "#plate/vocabulary.ts";
 import type { ClassOwner } from "#plate/vocabulary.ts";
 
@@ -614,8 +617,107 @@ const readSheet = Effect.tryPromise(() =>
 ).pipe(Effect.flatMap(scanSheet));
 
 /**
- * Render every markup the sheet styles: each authored item in every state, both Status headings,
- * and the navigation.
+ * An item whose modal feedback shows once it is scored: a Choice whose processing sets `FEEDBACK`
+ * to `correct` for `true`, and `SCORE` against a `MAXSCORE` of 1 to 1 for `true`, 0.5 for `partly`
+ * and 0 for `false`; a titled modal feedback that `correct` shows, in the shape of 1EdTech's BPIG
+ * `Example01-modalFeedback.xml`; and one that every scored attempt shows, so each credit's card is
+ * drawn.
+ */
+const modalBytes = new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+ identifier="witness-modal" title="witness-modal" adaptive="false" time-dependent="false" xml:lang="en-US">
+ <qti-response-declaration base-type="identifier" cardinality="single" identifier="RESPONSE"/>
+ <qti-outcome-declaration base-type="identifier" cardinality="single" identifier="FEEDBACK"/>
+ <qti-outcome-declaration base-type="float" cardinality="single" identifier="SCORE"/>
+ <qti-outcome-declaration base-type="float" cardinality="single" identifier="MAXSCORE">
+  <qti-default-value><qti-value>1</qti-value></qti-default-value>
+ </qti-outcome-declaration>
+ <qti-item-body>
+  <qti-choice-interaction max-choices="1" response-identifier="RESPONSE">
+   <qti-prompt>Spiders have eight legs.</qti-prompt>
+   <qti-simple-choice identifier="true">True</qti-simple-choice>
+   <qti-simple-choice identifier="partly">Partly</qti-simple-choice>
+   <qti-simple-choice identifier="false">False</qti-simple-choice>
+  </qti-choice-interaction>
+ </qti-item-body>
+ <qti-response-processing>
+  <qti-response-condition>
+   <qti-response-if>
+    <qti-match>
+     <qti-variable identifier="RESPONSE"/>
+     <qti-base-value base-type="identifier">true</qti-base-value>
+    </qti-match>
+    <qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>
+   </qti-response-if>
+   <qti-response-else-if>
+    <qti-match>
+     <qti-variable identifier="RESPONSE"/>
+     <qti-base-value base-type="identifier">partly</qti-base-value>
+    </qti-match>
+    <qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">0.5</qti-base-value></qti-set-outcome-value>
+   </qti-response-else-if>
+  </qti-response-condition>
+  <qti-response-condition>
+   <qti-response-if>
+    <qti-match>
+     <qti-variable identifier="RESPONSE"/>
+     <qti-base-value base-type="identifier">true</qti-base-value>
+    </qti-match>
+    <qti-set-outcome-value identifier="FEEDBACK">
+     <qti-base-value base-type="identifier">correct</qti-base-value>
+    </qti-set-outcome-value>
+   </qti-response-if>
+  </qti-response-condition>
+ </qti-response-processing>
+ <qti-modal-feedback outcome-identifier="FEEDBACK" show-hide="show" identifier="correct" title="Well done">
+  <qti-content-body><p>Spiders are arachnids.</p></qti-content-body>
+ </qti-modal-feedback>
+ <qti-modal-feedback outcome-identifier="FEEDBACK" show-hide="hide" identifier="unset">
+  <qti-content-body><p>Spiders have eight legs.</p></qti-content-body>
+ </qti-modal-feedback>
+</qti-assessment-item>`);
+
+/**
+ * Render {@link modalBytes} in review after scoring each answer, `true`, `partly` and `false`, as an
+ * app shows a candidate the feedback of a submitted attempt: `score`, `restore`, then `redact` by
+ * the restored record.
+ *
+ * @param configuration The configuration.
+ * @returns The renders' trees, which hold the ModalFeedback part with each credit.
+ */
+const scoredTrees = Effect.fnUntraced(function* scoredTrees(configuration: Configuration) {
+  const verdict = yield* open("witness/modal.xml", modalBytes);
+  const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`witness/modal.xml is ${verdict.verdict}, not an accepted item`),
+  );
+  const trees: Node[] = [];
+  for (const answer of ["true", "partly", "false"]) {
+    const stored = yield* Effect.fromResult(
+      score(accepted, {
+        RESPONSE: {
+          baseType: "identifier",
+          cardinality: "single",
+          values: [{ baseType: "identifier", value: answer }],
+        },
+      }),
+    );
+    const { record, values } = yield* Effect.fromResult(restore(accepted, stored));
+    const rendered = yield* Effect.fromResult(
+      render(redact(accepted, record, configuration), configuration, {
+        instance,
+        mode: "review",
+        values,
+      }),
+    );
+    trees.push(...parseHtml(rendered.html));
+  }
+
+  return trees;
+});
+
+/**
+ * Render every markup the sheet styles: each authored item in every state, a scored item showing
+ * its modal feedback, both Status headings, and the navigation.
  *
  * @param configuration The configuration.
  * @returns The trees, and the refused answers' messages.
@@ -634,6 +736,7 @@ const markupOf = Effect.fnUntraced(function* markupOf(configuration: Configurati
     messages,
     trees: [
       ...renders.flatMap((entry) => entry.trees),
+      ...(yield* scoredTrees(configuration)),
       ...status.flatMap((entry) => parseHtml(entry.html)),
       ...(yield* navigationTrees(configuration)),
     ],

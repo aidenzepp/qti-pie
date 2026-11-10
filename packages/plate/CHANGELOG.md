@@ -7,7 +7,122 @@ changes. [`docs/spec-readings.md`](../../docs/spec-readings.md) numbers the read
 ## Unreleased
 
 These entries list the surface of M1 and M2, what M3 adds to it, and each change to how plate
-reads the specification. plate is not published, and its entry points are unstable until M3.
+reads the specification. plate is not published, and each of its entry points is unstable until
+M3.
+
+### Serving admitted content without the XSD tables (2026-11-09)
+
+- `openAdmitted(location, bytes)`, in `@qti-pie/plate`, opens a document the host's content store
+  has already admitted, through a check of its own, and returns the verdict `open` gives on it. It
+  runs none of `open`'s checks (the structural walk, the item and the test prose rules), and it
+  secures an item by the securing tables, a 148 KB projection of the XSD tables, in place of the
+  full 5 MB. E3 and the URL checks still run on the same values, so an `Accepted` it gives renders
+  and scores as `open`'s does. Give it only bytes the store admitted: it accepts what `open`'s
+  checks would refuse.
+- `open` moves from `@qti-pie/plate` to a new entry, `@qti-pie/plate/open`. Import it from there.
+  A host that imports only `@qti-pie/plate` no longer loads the XSD tables.
+- Only `check`, or `checkAdmitted` for content admission already checked, makes an `Accepted`.
+
+### Content packages on their own entry (2026-11-09)
+
+- `openPackage` and the types of its verdict, `AcceptedPackage`, `PackageResource`, `PackageTest`
+  and `PackageVerdict`, move from `@qti-pie/plate` to a new entry, `@qti-pie/plate/package`.
+  Import `openPackage` from there. `@qti-pie/plate` no longer exports them.
+- `itemRefs` and `ItemRefEntry` stay in `@qti-pie/plate`: they read an `AcceptedTest`, which
+  `open` gives without a package.
+- A host that imports only `@qti-pie/plate` no longer loads the content packaging profiles' tables
+  (423 KB of JSON), which only `openPackage` reads.
+
+### Feedback (M3)
+
+- `render(redact(accepted, record, configuration), configuration, options)` shows an item's
+  `qti-modal-feedback`, `qti-feedback-block` and `qti-feedback-inline` by the outcomes of the
+  attempt the record holds. No function or option is new: after `score`, pass the record `restore`
+  gives to `redact`, and render in `review` with its `values`. The README's
+  [Feedback](README.md#feedback) section has the example and the rule.
+- A block or inline shows when its outcome's value is its `identifier`, or a multiple value holds
+  it, under `show-hide="show"`, and unless it does under `show-hide="hide"`. Once `score` has
+  processed an attempt (`attempt` `submitted`) the record's outcomes decide it. Before, under
+  `begin`'s record or with no record, each outcome's default decides it, the one template
+  processing set where it set one. With no record, an item whose template processing runs shows a
+  notice in place of each block and inline, and so does a record that holds no value of the
+  outcome.
+- Modal feedback shows only once `score` has processed an attempt, after the body inside the item
+  Root, each one a `section` with `data-slot="item-modal-feedback"` and its `title` as
+  `aria-label`. The part is `item.modalFeedback` in `parts`, so a host can swap it. One whose
+  outcome the record holds no value of shows only a notice.
+- Hidden feedback never reaches the page, the HTML or the redacted item. An interaction inside it
+  is hidden as inside hidden template content: `postings` lists none for its response,
+  `checkResponses` ignores it, and `score` keeps the record's value. `Redacted`'s `responses` and
+  `notices` leave out what only hidden feedback holds.
+- Each modal feedback section carries `data-credit`, `full`, `partial` or `none`, from the
+  attempt's own `SCORE` against its own `MAXSCORE`, or none where those cannot say, as the README's
+  [Feedback](README.md#feedback) section lists. `Redacted`, and its JSON form, gains `credit`, an
+  optional key absent when no modal feedback shows. The model reads an outcome declaration's
+  `external-scored`.
+- `Redacted`, and its JSON form, gains `modalFeedback`, each modal feedback shown with its content
+  and its `title`. `decodeRedacted` refuses JSON whose body holds a feedback block or inline, or
+  whose modal feedback holds an interaction.
+- The record `redact` and `checkResponses` read gains `attempt` and `defaults`: pass
+  `Restored["record"]` as before. A record built by hand needs both, such as
+  `{ attempt: "submitted", defaults: {}, outcomes, templates: {} }`. `checkResponses` now takes the
+  same record type as `redact`.
+- `ItemView` gains `page`, the record to pass to `redact` and `checkResponses` in a test: the
+  item's `record`, except for a closed item whose `show-feedback` is false, which shows no feedback
+  (ItemSessionControl, section 7.19.2). Pass `shown.page` where you passed `shown.record`.
+- An Inline Choice whose choice holds a `qti-feedback-inline` shows its notice, as one holding a
+  `qti-template-inline` does, since an `option` shows only text. A Choice's choice shows it.
+- The default theme gives a Choice row in `review` and `solution` the muted surface a readonly
+  text Control takes there, and the default cursor, so every interaction shows one locked look.
+  The selected row keeps its border and its filled Indicator.
+- The default theme draws the Indicator's ring in `--muted-foreground` in place of `--input`, so
+  an unselected choice shows its boundary at 3:1; gives a horizontal or stacked Choice as many
+  tracks as it has choices, up to its own, so its row spans the Root; lays the item Root's blocks
+  out in one column 1rem apart, in place of a modal feedback's own top margin; and gives the Root a
+  -3px margin beside its 3px padding, so the item lines up with the host's column. The README's
+  Styling section says how to import the sheet beside a host's layered rules.
+
+### How plate reads feedback (2026-11-09)
+
+- A feedback element's outcome matches its `identifier` when its value holds a single
+  `identifier` equal to it, the value itself or a member, and `show-hide` shows or hides it by
+  that match (the information model's FeedbackBlock, section 5.49.3, FeedbackInline 5.52.3 and
+  ModalFeedback 5.93.2). Before response processing the body is "the version of the qti-item-body
+  displayed to the candidate at the start of each attempt", "with the visibility of any integrated
+  feedback determined by the default values of the outcome variables" (7.19.3). Modal feedback
+  "is shown to the candidate directly following response processing" (5.93).
+- `open` refuses a feedback element whose `outcome-identifier` names no outcome of base type
+  `identifier`, single or multiple, the built-in `completionStatus` included, as pantry does
+  (reading 77, the laws `Feedback reference` and `Feedback outcome type`), by align-54's E3a rule
+  below: `undeclared-variable` for a name no outcome answers, and `expression-type`, check
+  `feedback-outcome`, for an outcome of another type. No corpus document is newly refused.
+- The verdict no longer marks `qti-modal-feedback` nor shows `qti-feedback-block` or
+  `qti-feedback-inline` as a notice. These 36 corpus items are now `accepted`, each also as its
+  copy inside its folder's zip (`BPIG_22April.zip`, `basicFeedbackTest.zip`, `BBQsTest.zip`,
+  `ccPackage.zip`, `feedbackTest.zip`, `interactionMixSaxonyV3.zip` or `items.zip`). They were
+  `accepted-with-unsupported` for those features alone.
+  - `QTI3_BPIG_Examples/items/Example01-modalFeedback.xml` and `Example02-feedbackInline.xml`
+  - `qtiv3-examples/packaging/items/Example01-modalFeedback.xml` and `Example02-feedbackInline.xml`
+  - `qtiv3-examples/packaging/basicFeedbackTest/` and `qtiv3-examples/packaging/feedbackTest/`:
+    each one's `Example01-modalFeedback.xml` and `Example02-feedbackInline.xml`
+  - `qtiv3-examples/packaging/BBQsTest/`: `SineRule-002-maths.xml`, `jumble-inlineChoice.xml`,
+    `MultipleAnswer-choice-materials.xml`, `Likert-choice-questionSet.xml`,
+    `QuizBowl-multi-geometry.xml`, `TF-choice.xml`, `text_entry-calculus.xml`,
+    `text_entry-Lycidas.xml` and `TheAnswer-001.xml`
+  - `qtiv3-examples/packaging/ccPackage/testitems/`: `QUE_102010.xml`, `QUE_102011.xml`,
+    `QUE_102012.xml`, `QUE_102013.xml`, `QUE_102015.xml`, `QUE_102016.xml`, `QUE_104045.xml`,
+    `QUE_104047.xml`, `QUE_104048.xml`, `QUE_104049.xml` and `QUE_104051.xml`
+  - `qtiv3-examples/packaging/interactionMixSaxonyV3/`: `Choicemultiple_2014410822.xml`,
+    `Choicemultiple_871212949.xml`, `Choicesingle_853928446.xml`,
+    `Choicetruefalse_176040516.xml`, `TextEntry_883368511.xml`, `TextEntrynumeric_2040297025.xml`,
+    `TextEntrynumeric_770468849.xml` and `TextEntrysubset_806481421.xml`
+- 21 other corpus items, each also with its zip copy, lose those marks and notices and stay
+  `accepted-with-unsupported` for features plate does not render, such as `adaptive="true"`, End
+  Attempt, Match, Order, Gap Match, Hotspot, Hottext and Select Point. Among them are
+  `Example05-feedbackBlock-adaptive.xml`, `adaptiveTemplate.xml`, `adaptive.xml` and `hint.xml`.
+  Every copy of `Example03-feedbackBlock-solution.xml` and `Example04-feedbackBlock-templateBlock.xml`
+  stays `unchecked` for its MathML. No package's verdict moves: `feedbackTest.zip` stays refused with
+  `item-ref-unresolved` and `package-file-missing`, for refs its test names that its zip lacks.
 
 ### The full-Effect phase (FE)
 
@@ -32,13 +147,15 @@ reads the specification. plate is not published, and its entry points are unstab
 - The library's spans are named under `plate.`: `open`, `openPackage`, `readSource`,
   `readCorpusFile`, `corpusDocuments`, `generateTables` and `generateOccurrences` become
   `plate.open`, `plate.openPackage`, `plate.readSource`, `plate.readCorpusFile`,
-  `plate.corpusDocuments`, `plate.generateTables` and `plate.generateOccurrences`. `plate.check` is
-  new: `open` and `openPackage` judge each document under it, with the attributes
-  `document.location`, `document.kind` and `document.verdict`. `plate.configure` keeps its name.
-- A third entry point, `@qti-pie/plate/effect`, is opt-in and for servers. Neither
+  `plate.corpusDocuments`, `plate.generateTables` and `plate.generateOccurrences`, and
+  `openAdmitted`'s becomes `plate.openAdmitted`. `plate.check` is new: `open`, `openAdmitted` and
+  `openPackage` judge each document under it, with the attributes `document.location`,
+  `document.kind` and `document.verdict`. `plate.configure` keeps its name.
+- Another entry point, `@qti-pie/plate/effect`, is opt-in and for servers. Neither
   `@qti-pie/plate` nor any browser module imports it, so a host that does not import it loads none
-  of it.
-  - It exports every name of `@qti-pie/plate`. `acceptedItem`, `advance`, `allowedIntents`,
+  of it. It serves as `@qti-pie/plate` does and loads the same tables: `open` and `openPackage`
+  stay on `@qti-pie/plate/open` and `@qti-pie/plate/package`.
+  - It exports every name of `@qti-pie/plate`, `openAdmitted` among them. `acceptedItem`, `advance`, `allowedIntents`,
     `begin`, `checkResponses`, `current`, `decode`, `decodeRedacted`, `decodeSession`,
     `encodeRedacted`, `encodeSession`, `itemView`, `navigationState`, `permits`, `redact`,
     `render`, `renderNavigation`, `renderStatus`, `restore`, `results`, `score` and `startTest`

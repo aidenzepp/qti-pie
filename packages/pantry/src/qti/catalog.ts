@@ -61,27 +61,20 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
-import { booleanTrue, namingPattern } from "#pantry/grammar/domains.ts";
+import { booleanTrue } from "#pantry/grammar/domains.ts";
 import {
   AttributeGrammar,
   AttributeModelOf,
-  AttributeSlotOf,
-  GoverningOf,
   NodeKind,
   SchemaVersion,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { Attribute } from "#pantry/qti/attributes.ts";
+import { Attribute, namingPattern } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { AssembledId, DocumentId, PlacedIdref } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { nodeRef } from "#pantry/qti/node.ts";
 import { TestDocument } from "#pantry/qti/tests.ts";
-
-/**
- * {@link namingPattern} as a `Compute.matches` pattern.
- */
-const naming = Compute.pattern(namingPattern);
 
 /**
  * A `qti-card`'s `support`, keyed by the card's node: its {@link nodeRef} tuple, with `catalog` its
@@ -251,16 +244,9 @@ type AttributeRow = RowScalars<typeof Attribute>;
  * @returns The closed read.
  */
 const identityOf = (a: AttributeRow) => {
-  const model = AttributeModelOf.at(
-    "model",
-    a.version,
-    GoverningOf.at("governor", a.version, a.kind, a.governs),
-  );
+  const model = AttributeModelOf.at("model", a.version, a.governor);
 
-  return ValueIdentity.at(
-    "identity",
-    AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, a.name)),
-  );
+  return ValueIdentity.at("identity", AttributeGrammar.at("domain", model, a.name));
 };
 
 /**
@@ -283,7 +269,7 @@ const referenceAttributes = select(Attribute, (a) =>
  * as it has no {@link DocumentId}, and its value domain refuses it alone (spec reading 156).
  */
 const catalogIdAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "qti-catalog"), a.eq(a.name, "id"), Compute.matches(a.lexical, naming)),
+  a.and(a.eq(a.kind, "qti-catalog"), a.eq(a.name, "id"), Compute.matches(a.lexical, namingPattern)),
 );
 
 /**

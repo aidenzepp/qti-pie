@@ -732,6 +732,8 @@ const referencingNode = (node: BodyNode, ids: string): BodyNode => {
         ),
       };
     }
+    case "feedback-block":
+    case "feedback-inline":
     case "inline-choice":
     case "printed-variable":
     case "template-block":
@@ -812,9 +814,11 @@ describe("redactItem", () => {
     assert.notInclude(json(copied), extra);
     assert.deepStrictEqual(Object.keys(copied).toSorted(), [
       "body",
+      "credit",
       "document",
       "identifier",
       "lang",
+      "modalFeedback",
       "notices",
       "responses",
       "title",
@@ -1024,7 +1028,12 @@ describe("redactItem on printed variables", () => {
       Option.none(),
     );
     const accepted = Option.getOrThrow(acceptedItem(verdict));
-    const withheld = redact(accepted, { outcomes: {}, templates: {} });
+    const withheld = redact(accepted, {
+      attempt: "none",
+      defaults: {},
+      outcomes: {},
+      templates: {},
+    });
     const link = `${bodyPath}/p/a`;
 
     assert.deepStrictEqual(accepted.unsupported, [
@@ -1498,6 +1507,8 @@ const choicesShown = (redaction: Redacted): readonly string[] => {
  * @returns The record's part `redact` reads.
  */
 const holding = (templates: Readonly<Record<string, Value>>): RedactRecord => ({
+  attempt: "none",
+  defaults: {},
   outcomes: {},
   templates,
 });
@@ -2221,10 +2232,12 @@ describe("payload", () => {
 
     assert.deepStrictEqual(Object.keys(built).toSorted(), [
       "body",
+      "credit",
       "finished",
       "instance",
       "lang",
       "messages",
+      "modalFeedback",
       "mode",
       "notices",
       "title",

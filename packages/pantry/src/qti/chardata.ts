@@ -47,15 +47,17 @@ import {
 } from "@bjornpagen/grizzle";
 import { uriReference } from "@qti-pie/crust/uri.ts";
 import {
+  DocumentType,
   Flag,
+  Governor,
   HeldRootsUnder,
   interactionKinds,
   KindByNameUnder,
+  KindGovernor,
   KindNamespace,
   NodeKind,
   nonElementKinds,
   openElementClasses,
-  ResourceType,
   SchemaVersion,
   StrictlyHeld,
   TypeAvailable,
@@ -63,11 +65,12 @@ import {
   vocabularyNamespacePattern,
 } from "#pantry/grammar/install.ts";
 import { keyTextBytes, namespaceBytes, prefixBytes } from "#pantry/qti/limits.ts";
-import { Node, nodeRef } from "#pantry/qti/node.ts";
+import { Chars, Node, nodeRef, typeGovernorOf } from "#pantry/qti/node.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
- * {@link vocabularyNamespacePattern} as a `Compute.matches` pattern.
+ * The namespaces the vocabularies name (`vocabularyNamespacePattern` of
+ * `#pantry/grammar/install.ts`), as the pattern `Compute.matches` reads, made once.
  */
 const vocabularyNamespaces = Compute.pattern(vocabularyNamespacePattern);
 
@@ -317,7 +320,7 @@ export const NamespaceUri = str.regex(`^${uriReference}$`);
  *
  * Exported for `src/import/refusal.ts`, which names its pattern law.
  */
-export const ForeignNamespace = str.bytes(namespaceBytes, str.regex(`^[${xmlChar}]*$`));
+export const ForeignNamespace = str.bytes(namespaceBytes, Chars);
 
 /**
  * An NCName: a foreign element's local name.
@@ -344,18 +347,20 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
 /**
  * The document row, one per document node, keyed by the node (plan §1.4): the entry it was read
  * from, the charset it was decoded under and the one it is written back in, its root element's
- * kind, and the type of the resource that lists it. Its XML declaration is no field of it: the
- * declaration is optional, and so are its encoding and standalone parts (XML 1.0 §2.8), so each is
- * a row of its own, {@link XmlDecl}, {@link EncodingDecl} and {@link SdDecl}, written only where
+ * kind, and its type: the manifest, or the type of the resource that lists it, which is a row of
+ * its own (`ResourceDocument` of `#pantry/qti/package.ts`). Its XML declaration is no field of it:
+ * the declaration is optional, and so are its encoding and standalone parts (XML 1.0 §2.8), so each
+ * is a row of its own, {@link XmlDecl}, {@link EncodingDecl} and {@link SdDecl}, written only where
  * the document writes it.
  *
  * - `package` and `path` are its `Entry`'s, which Q5.06's P3 states, with the key over them.
  * - `rootKind` is a `NodeKind` handle, the root element's kind, which a containment from the root
  *   element proves. `RootOfType`'s payload is over `NodeKind` too, so P2 compares them directly.
- * - `resourceType` is the type of the resource that lists the document, `none` for the manifest,
- *   which no resource lists (ResourceType's code 0); Q5.06's P1 and P2 judge it. Its document node
- *   holds it as its `documentType`, and every node and attribute of the document holds it alike, so
- *   a law can tell the manifest's elements from another document's.
+ * - `documentType` is the document's type in its package (spec reading 176): `manifest` for the
+ *   package's manifest, which no resource lists, else the type of the resource that lists it, whose
+ *   `ResourceDocument` row Q5.06's P1 and P2 judge. Its document node holds it, and every node and
+ *   attribute of the document holds it alike, so a law can tell the manifest's elements, and a
+ *   record file's, from another document's.
  * - **its context** (spec readings 85 and 117): the ancestry and nearest interaction its document
  *   node holds, which every node below it inherits along the tree's owner axis, so an included
  *   fragment's content is judged where it is included. `context` is the union of the ancestries of
@@ -373,10 +378,12 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  *   and `Hottext` rows), `ids` (Q5.07's `DocumentId` rows), `idrefTargets` (Q5.07's `IdrefTarget`
  *   rows), `langs` (Q5.07's `XmlLang` rows) and `variables` (Q5.10's `VariableRef` rows).
  * - **its document node's copies:** `nodeChildren` and `version`, the document node's own, so the row
- *   states the node's context through `Node`'s key, `id`, and no other index on `Node` holds it.
- *   What every document node holds alike is no field: the containment's target selects the nodes
- *   that are their own `document`, govern `none`, are of kind `document` under a parent of kind
- *   `document`, and start at 0.
+ *   states the node's context. What every document node holds alike is no field: the containment's
+ *   target is the document nodes, selected as their own `document`, governed by and of kind
+ *   `document` under a `document` parent, at start 0, fields grizzle fixes beyond the target's
+ *   terms (its fixed target, at `3cc8fbd`), held by `Node`'s key `id`. grizzle references a UNIQUE
+ *   over the terms and then the fixed fields in field order, which no other containment into `Node`
+ *   shares (docs/grizzle-findings.md, "A fixed target's UNIQUE").
  */
 export const Document = relation(
   "Document",
@@ -388,6 +395,7 @@ export const Document = relation(
     context: accumulated(bits(Flag), Bits.of(Flag, [])),
     contextNearest: uuid,
     contextNearestKind: closedId(NodeKind),
+    documentType: closedId(DocumentType),
     exportCharset: EncName,
     hottexts: drawn(natural),
     idrefTargets: drawn(natural),
@@ -397,7 +405,6 @@ export const Document = relation(
     nodeChildren: natural,
     package: uuid,
     path: EntryPath,
-    resourceType: closedId(ResourceType),
     rootKind: closedId(NodeKind),
     spliced: accumulated(natural, 0n),
     targetedBy: drawn(natural),
@@ -460,8 +467,6 @@ export const namespaceFamily = ordered(on(Namespace, "node", "at"), fin(Node, "n
  *
  * - `document`, `kind`, `start`, `nearest`, `version` and `parent` are its node's {@link nodeRef}
  *   tuple (C18);
- * - `governs` is its node's governing type, through the `(id, kind, version, document, governs)`
- *   tuple the attribute and identity overlays copy too, so one UNIQUE on `Node` serves them all;
  * - `parentKind` is its parent's kind, through `UNIQUE (id, kind)` on `Node`;
  * - `parentNamespace` is its parent's namespace name: `KindNamespace`'s for a parent of a kind, the
  *   parent's own row's for a foreign parent.
@@ -470,7 +475,6 @@ export const OpenElementName = relation(
   "OpenElementName",
   {
     document: uuid,
-    governs: closedId(TypeName),
     kind: closedId(NodeKind),
     local: NcName,
     namespace: ForeignNamespace,
@@ -480,6 +484,32 @@ export const OpenElementName = relation(
     parentKind: closedId(NodeKind),
     parentNamespace: ForeignNamespace,
     start: natural,
+    version: closedId(SchemaVersion),
+  },
+  ["node"],
+);
+
+/**
+ * A foreign element's governing type, keyed by its node, where its `xsi:type` gives it one: the
+ * type its `xsi:type` names, where that resolves to a type its document's schema set holds or a
+ * built-in (XML Schema 1.0 Part 1, §3.3.4, Schema-Validity Assessment (Element), clause 1.2; spec
+ * readings 60 and 81). A foreign element with no `xsi:type`, or one naming no such type, is
+ * assessed laxly and has none.
+ *
+ * - **the host's:** `type`, the shred's reading of the `xsi:type`; its node's `document`, `governor`,
+ *   `kind` and `version`, through the `(id, kind, version, document, governor)` tuple the attribute
+ *   and identity overlays copy too; and its {@link OpenElementName}'s `parentNamespace`, which
+ *   `TypeAvailable` reads the type against.
+ */
+export const OpenElementType = relation(
+  "OpenElementType",
+  {
+    document: uuid,
+    governor: closedId(Governor),
+    kind: closedId(NodeKind),
+    node: uuid,
+    parentNamespace: ForeignNamespace,
+    type: closedId(TypeName),
     version: closedId(SchemaVersion),
   },
   ["node"],
@@ -506,15 +536,19 @@ const rootElements = select(Node, (n) =>
  *   XML declaration, where it writes one, is a document's; and an `encoding` or a `standalone` is a
  *   declaration's, since neither is written outside one (XML 1.0 §2.8, `XMLDecl`).
  * - **its context** (spec reading 117): its document node's ancestry and nearest interaction are its
- *   `context`, `contextNearest` and `contextNearestKind`, through its document node's context; and
- *   (`E1_derived`) the nearest is the document node itself, unless sites name the document from
- *   inside one interaction.
+ *   `context`, `contextNearest` and `contextNearestKind`, through a containment into the document
+ *   node its target fixes; and (`E1_derived`) the nearest is the document node itself, unless sites
+ *   name the document from inside one interaction.
  * - **"Namespace family":** each element's declarations in order, and one per prefix on an element
  *   (Namespaces in XML 1.0, §3: a prefix is declared once on an element, since an element's
  *   attributes are distinct by name).
  * - **"OpenElementName":** one row per foreign element, both ways: every node of a foreign kind has
- *   its row, and each row carries its node's tuple, its governing type and its parent's kind, its
- *   own kind one of the three classes, which `Foreign_element_class`'s first conjunct holds.
+ *   its row, and each row carries its node's tuple and its parent's kind, its own kind one of the
+ *   three classes, which `Foreign_element_class`'s first conjunct holds.
+ * - **its type** (`E1_derived`): an {@link OpenElementType} copies its node's tuple and its
+ *   `OpenElementName`'s parent namespace, and holds its node's governor to the one its type gives
+ *   (`typeGovernorOf`); a foreign element no type governs is governed by its kind, so one whose
+ *   governor is another has its type.
  * - **"Foreign element class"** (rule `unmodeled-vocabulary`): its stored namespace agrees with its
  *   class against its parent's, as XML Schema 1.0 Part 1 §3.10.4 classes a wildcard's names:
  *   `no-namespace-element` in none, `own-namespace-element` in its parent's, `foreign-element` in
@@ -528,17 +562,19 @@ const rootElements = select(Node, (n) =>
  *   §3.3.4 clauses 1.1.1.2 and 1.1.1.3.2, with §3.10.4 clause 2; shred reads it so).
  *   `KindByNameUnder` holds each (version, parent)'s names as one pattern over `namespace}local`,
  *   the subject built by `Compute.concat`, since a closed relation's key is closed ids only.
- * - **"XsiType available"** (C15, C36; spec readings 60 and 81): a foreign element's governing type
- *   is one its document's schema set holds, or XML Schema's own, or `none`, read from its parent's
- *   namespace through `TypeAvailable`; under a parent of no vocabulary's namespace, which stands in
- *   documents of every set, any type stands. Which set a document is assessed against is not on
- *   `Node`, so the parent's namespace stands for it: reading 81's recorded limit.
+ * - **"XsiType available"** (C15, C36; spec readings 60 and 81): a foreign element's governing type,
+ *   its {@link OpenElementType} where it has one, is one its document's schema set holds or XML
+ *   Schema's own, read from its parent's namespace through `TypeAvailable`; under a parent of no
+ *   vocabulary's namespace, which stands in documents of every set, any type stands. Which set a
+ *   document is assessed against is not on `Node`, so the parent's namespace stands for it: reading
+ *   81's recorded limit.
  * - **"Strictly held"** (C44, C13; spec readings 6 and 81): a foreign element its parent's model
- *   holds only by `strict` wildcards (`StrictlyHeld`) has a governing type, since without one XML
- *   Schema cannot assess it (§3.10.4 clause 2, §3.3.5 [validity] clause 1.1.3), unless its expanded
- *   name is one of reading 6's roots its documents' schema set declares there (`HeldRootsUnder`),
- *   which the wildcard assesses against that declaration (`cp:manifest` under
- *   `drd:accessForAllResource`). shred refuses the rest as `strict-undeclared`.
+ *   holds only by `strict` wildcards (`StrictlyHeld`) has a governing type, its
+ *   {@link OpenElementType}, since without one XML Schema cannot assess it (§3.10.4 clause 2,
+ *   §3.3.5 [validity] clause 1.1.3), unless its expanded name is one of reading 6's roots its
+ *   documents' schema set declares there (`HeldRootsUnder`), which the wildcard assesses against
+ *   that declaration (`cp:manifest` under `drd:accessForAllResource`). shred refuses the rest as
+ *   `strict-undeclared`.
  * - **"MathML foreign element"** (reading 2): no foreign element is in MathML's namespace.
  */
 export const chardataLawsByName = {
@@ -562,7 +598,7 @@ export const chardataLawsByName = {
         "node",
         "nodeChildren",
         "context",
-        "resourceType",
+        "documentType",
         "contextNearest",
         "contextNearestKind",
         "version",
@@ -571,7 +607,7 @@ export const chardataLawsByName = {
         select(Node, (n) =>
           n.and(
             n.eq(n.document, n.id),
-            n.eq(n.governs, "none"),
+            n.eq(n.governor, "document"),
             n.eq(n.kind, "document"),
             n.eq(n.parentKind, "document"),
             n.eq(n.start, 0n),
@@ -593,8 +629,27 @@ export const chardataLawsByName = {
       ),
     ),
     contained(
-      on(OpenElementName, "node", "kind", "version", "document", "governs"),
-      on(Node, "id", "kind", "version", "document", "governs"),
+      on(OpenElementType, "node", "kind", "version", "document", "governor"),
+      on(Node, "id", "kind", "version", "document", "governor"),
+    ),
+    contained(
+      on(OpenElementType, "node", "parentNamespace"),
+      on(OpenElementName, "node", "parentNamespace"),
+    ),
+    check("E1_derived", OpenElementType, (t) =>
+      t.eq(t.governor, typeGovernorOf(t.version, t.kind, t.type)),
+    ),
+    contained(
+      on(
+        select(Node, (n) =>
+          n.and(
+            n.in(n.kind, openElementClasses),
+            n.ne(n.governor, KindGovernor.at("governor", n.kind)),
+          ),
+        ),
+        "id",
+      ),
+      on(OpenElementType, "node"),
     ),
   ],
   "Foreign element class": [
@@ -660,34 +715,42 @@ export const chardataLawsByName = {
     ),
   ],
   "Strictly held": [
-    check("Strictly_held", OpenElementName, (o) =>
-      o.or(
-        o.not(o.in(o.kind, openElementClasses)),
-        ...openElementClasses.map((kind) =>
+    contained(
+      on(
+        select(OpenElementName, (o) =>
           o.and(
-            o.eq(o.kind, kind),
-            o.eq(
-              Compute.disjoint(
-                StrictlyHeld.row(o.version, o.parentKind),
-                Bits.of(NodeKind, [kind]),
+            o.or(
+              ...openElementClasses.map((kind) =>
+                o.and(
+                  o.eq(o.kind, kind),
+                  o.eq(
+                    Compute.disjoint(
+                      StrictlyHeld.row(o.version, o.parentKind),
+                      Bits.of(NodeKind, [kind]),
+                    ),
+                    false,
+                  ),
+                ),
               ),
-              true,
+            ),
+            o.not(
+              Compute.matches(
+                Compute.concat(Compute.concat(o.namespace, "}"), o.local),
+                HeldRootsUnder.at("names", o.version, o.parentKind),
+              ),
             ),
           ),
         ),
-        o.ne(o.governs, "none"),
-        Compute.matches(
-          Compute.concat(Compute.concat(o.namespace, "}"), o.local),
-          HeldRootsUnder.at("names", o.version, o.parentKind),
-        ),
+        "node",
       ),
+      on(OpenElementType, "node"),
     ),
   ],
   "XsiType available": [
-    check("XsiType_available", OpenElementName, (o) =>
-      o.or(
-        Compute.matches(o.parentNamespace, TypeAvailable.at("namespaces", o.governs)),
-        o.not(Compute.matches(o.parentNamespace, vocabularyNamespaces)),
+    check("XsiType_available", OpenElementType, (t) =>
+      t.or(
+        Compute.matches(t.parentNamespace, TypeAvailable.at("namespaces", t.type)),
+        t.not(Compute.matches(t.parentNamespace, vocabularyNamespaces)),
       ),
     ),
   ],

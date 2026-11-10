@@ -29,29 +29,12 @@ import {
   completionValue,
   fresh,
   holdsCompletionStatus,
-  outcomeDefaults,
+  outcomeStart,
   unrunTemplateProcessing,
 } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf, nullRecord } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
-
-/**
- * Give each declared outcome of an item the value it holds before any processing sets it: the
- * default template processing set for it, else its starting value, and the built-in
- * `completionStatus` at `not_attempted` where the item holds it, as {@link outcomeDefaults} gives
- * them. A default set for a response is not an outcome's, so it never joins the outcomes.
- *
- * @param item The item.
- * @param defaults The defaults template processing set, by identifier.
- * @returns The outcomes, keyed by identifier.
- */
-const outcomeStart = (item: Item, defaults: ItemRecord["defaults"]): ItemRecord["outcomes"] => ({
-  ...outcomeDefaults(item),
-  ...Object.fromEntries(
-    Object.entries(defaults).filter(([identifier]) => item.outcomes.has(identifier)),
-  ),
-});
 
 /**
  * Give each response of an item its default (D4-11): the default template processing set for it,

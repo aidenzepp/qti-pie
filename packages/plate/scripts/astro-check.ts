@@ -24,13 +24,14 @@ import { Console, Effect, Option, Result, Schema } from "effect";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
-import { acceptedItem, configure, open, postings, redact, render } from "#plate/index.ts";
+import { acceptedItem, configure, postings, redact, render } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
 import { textOf } from "#plate/test/accessibility.ts";
 import { scanSheet } from "#plate/test/css.ts";
 import type { Sheet } from "#plate/test/css.ts";
 import { dial } from "#plate/test/dial.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { open } from "#plate/validate/open.ts";
 import { astroPort, astroServer } from "#scripts/astro-server.ts";
 
 /**

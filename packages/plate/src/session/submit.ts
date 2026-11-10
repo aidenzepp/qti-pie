@@ -333,7 +333,7 @@ export const deliveredItem = (
  */
 const skipped = (
   item: Item,
-  record: Pick<ItemRecord, "defaults" | "outcomes" | "templates">,
+  record: Pick<ItemRecord, "attempt" | "defaults" | "outcomes" | "templates">,
   instance: string,
   values: Responses,
 ): boolean => {
