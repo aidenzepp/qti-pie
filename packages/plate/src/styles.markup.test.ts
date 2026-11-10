@@ -7,21 +7,28 @@ import { partForSlot, rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
 import { isPosted } from "#plate/form/encoding.ts";
 import {
+  acceptedItem,
   checkResponses,
   configure,
   decode,
   entryName,
+  navigationState,
+  noSupports,
   open,
   redact,
   render,
   renderStatus,
+  startTest,
 } from "#plate/index.ts";
 import type {
   Accepted,
+  AcceptedTest,
   Configuration,
   Entry,
   Options,
   Redacted,
+  Supports,
+  TimeState,
   ValidationMessage,
   Verdict,
 } from "#plate/index.ts";
@@ -686,6 +693,149 @@ const navigationTrees = (configuration: Configuration, options: NavigationOption
   );
 
 /**
+ * Open an authored item and require an accepted item, as a host hands one to `startTest`.
+ *
+ * @param item The hand-written item.
+ * @returns The accepted item.
+ */
+const acceptedOf = Effect.fnUntraced(function* acceptedOf(item: Authored) {
+  const verdict: Verdict = yield* open(item.location, item.bytes);
+
+  return Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`${item.location} is ${verdict.verdict}, not an accepted item`),
+  );
+});
+
+/**
+ * The authored Choice the test-level and support-driven witnesses deliver: the single-cardinality
+ * Choice, whose row stands first in {@link authored}.
+ */
+const choiceItem: Authored = authored[0] ?? assert.fail("no authored Choice item");
+
+/**
+ * The identifier of {@link choiceItem}'s ref in {@link timedTestBytes}, which keys the items
+ * `startTest` takes.
+ */
+const timedRef = "timed-choice";
+
+/**
+ * The seconds the timed test's part allows, its `max-time`.
+ */
+const maxTime = 600;
+
+/**
+ * A QTI 3.0 test of one linear, individual part that allows {@link maxTime} seconds and holds one
+ * item ref to {@link choiceItem}: the smallest test on which a time limit is in force, so the
+ * navigation emits its `time` part (the time-limits module's styles block, issue m3f-01).
+ */
+const timedTestBytes: Uint8Array = new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+ identifier="witness-timed" title="witness-timed">
+ <qti-test-part identifier="P1" navigation-mode="linear" submission-mode="individual">
+  <qti-time-limits max-time="${maxTime}"/>
+  <qti-assessment-section identifier="S1" title="Timed" visible="true">
+   <qti-assessment-item-ref identifier="${timedRef}" href="choice-single.xml"/>
+  </qti-assessment-section>
+ </qti-test-part>
+</qti-assessment-test>`);
+
+/**
+ * When the timed test's session starts.
+ */
+const startedAt = new Date("2026-11-10T09:00:00.000Z");
+
+/**
+ * The time in force on the timed test at its start, as the time-limits module reads it once issue
+ * m3f-01 lands: the part's whole `max-time` left, no `min-time`, and late submission not allowed.
+ *
+ * The module's stub reads no time, so a session of the timed test carries none until then; this
+ * value stands in for it, so the `time` part is emitted and its styles block has markup to match
+ * ({@link timedNavigationTrees}). Once the module reads the session's own time, that wins.
+ */
+const witnessTime: TimeState = {
+  allowLateSubmission: false,
+  minTimeLeft: Option.none(),
+  timeLeft: Option.some(maxTime),
+};
+
+/**
+ * Open the timed test and require an accepted test: `accepted-with-unsupported` while the
+ * time-limits module is a stub, which `parse` shows as a notice, `accepted` once it lands.
+ *
+ * @returns The accepted test.
+ */
+const timedTest = Effect.gen(function* timedTest() {
+  const location = "witness/timed.xml";
+  const verdict: Verdict = yield* open(location, timedTestBytes);
+
+  return (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") &&
+    verdict.kind === "test"
+    ? verdict.accepted
+    : assert.fail(`${location} is ${verdict.verdict} on a ${verdict.kind}, not an accepted test`);
+});
+
+/**
+ * Render the navigation of a just-started session of the timed test, so the Root holds the `time`
+ * part: the test-level witness of the time-limits module's styles block.
+ *
+ * The session is started and read through the session functions a host uses, `startTest` and
+ * `navigationState`; only the time in force is supplied ({@link witnessTime}) while the session
+ * carries none.
+ *
+ * @param configuration The configuration, which the session and the render take.
+ * @returns The navigation Root's trees, the `time` part among them.
+ */
+const timedNavigationTrees = Effect.fnUntraced(function* timedNavigationTrees(
+  configuration: Configuration,
+) {
+  const test: AcceptedTest = yield* timedTest;
+  const items = new Map([[timedRef, yield* acceptedOf(choiceItem)]]);
+  const session = yield* Effect.fromResult(
+    startTest(test, items, configuration, { instance, now: startedAt }),
+  );
+  const state = yield* Effect.fromResult(navigationState(test, session));
+  const timed = { ...state, time: state.time ?? witnessTime };
+  const trees = yield* Effect.fromResult(renderNavigation(timed, configuration)).pipe(
+    Effect.map(parseHtml),
+  );
+
+  assert.isTrue(
+    elementsOf(trees).some((element) =>
+      Option.contains(attribute(element, "data-slot"), rowFor("test-navigation", "time").slot),
+    ),
+    "the timed navigation emits the time part",
+  );
+
+  return trees;
+});
+
+/**
+ * The supports of a candidate with answer masking on (A-8), every other support off.
+ */
+const masking: Supports = { ...noSupports, answerMasking: true };
+
+/**
+ * Open and render {@link choiceItem} with answer masking on, as a host does for a candidate who
+ * has it: the support-driven witness of the answer-masking styles block (issue m4-05), whose
+ * mask parts the Choice emits under `supports.answerMasking` once that issue lands; until then its
+ * markup is the unmasked Choice's. The redaction takes the same supports as the render, as the
+ * render contract asks.
+ *
+ * @param configuration The configuration.
+ * @returns The render's trees.
+ */
+const maskedTrees = Effect.fnUntraced(function* maskedTrees(configuration: Configuration) {
+  const redacted = redact(yield* acceptedOf(choiceItem), undefined, configuration, {
+    supports: masking,
+  });
+  const rendered = yield* Effect.fromResult(
+    render(redacted, configuration, { instance, supports: masking }),
+  );
+
+  return parseHtml(rendered.html);
+});
+
+/**
  * Read and scan the stylesheet through the package's own import alias.
  */
 const readSheet = Effect.tryPromise(() =>
@@ -694,7 +844,7 @@ const readSheet = Effect.tryPromise(() =>
 
 /**
  * Render every markup the sheet styles: each authored item in every state, both Status headings,
- * and the navigation.
+ * the navigation, the navigation of a timed test and a Choice with answer masking on.
  *
  * @param configuration The configuration.
  * @returns The trees, and the refused answers' messages.
@@ -715,6 +865,8 @@ const markupOf = Effect.fnUntraced(function* markupOf(configuration: Configurati
       ...renders.flatMap((entry) => entry.trees),
       ...status.flatMap((entry) => parseHtml(entry.html)),
       ...(yield* navigationTrees(configuration)),
+      ...(yield* timedNavigationTrees(configuration)),
+      ...(yield* maskedTrees(configuration)),
     ],
   };
 });
