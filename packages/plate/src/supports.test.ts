@@ -291,7 +291,7 @@ describe("PnpSupportsSchema", () => {
 
 describe("the supports option", () => {
   it.effect(
-    "is accepted by redact and render, and changes nothing while every content module is a stub",
+    "is accepted by redact and render, and changes only what a landed module reads of them",
     () =>
       Effect.gen(function* sameHtml() {
         const configuration = yield* configure({});
@@ -333,7 +333,14 @@ describe("the supports option", () => {
           render(plain, configuration, { instance: "q1", supports: noSupports }),
         );
 
-        assert.strictEqual(withSupports.html, without.html);
+        // The three data attributes are the Root hook's (issue m3e-09b); nothing else differs.
+        assert.strictEqual(
+          withSupports.html.replaceAll(
+            / data-(?:magnification|font-color|background-color)="[^"]*"/gu,
+            "",
+          ),
+          without.html,
+        );
         assert.strictEqual(withNone.html, without.html);
       }),
   );
