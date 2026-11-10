@@ -1,7 +1,9 @@
 /**
  * This package's own install's schema: the QTI 3.0 schema this process opens, built once, here.
- * Only this package's own modules import it, its importer and command line and its tests, and its
- * author login (`#pantry/qti/own-login.ts`); the builders an install outside it calls
+ * It is test support. The importer, the exporter and the command line serve the author login's
+ * committed workload (`#pantry/db/served.ts`) and import no schema, so no production module loads
+ * this one; only this package's tests and `src/test/` import it, and its test-support login
+ * (`#pantry/qti/own-login.ts`). The builders an install outside it calls
  * (`#pantry/qti/schema.ts`, `#pantry/qti/logins.ts`, `#pantry/export/scan.ts`) never do, so loading
  * them builds no schema, and such an install builds and holds its own.
  *
