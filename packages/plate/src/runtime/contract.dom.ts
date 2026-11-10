@@ -71,6 +71,11 @@ export interface Controller<K extends RuntimeKind = RuntimeKind> {
   /**
    * Attach the kind's behaviour to one rendered interaction, without moving focus.
    *
+   * A root may lack the parts the SSR would write (no choices, no gaps, no entry name, no image),
+   * and the upgrade tolerates it: it attaches nothing to a missing part, moves no focus, announces
+   * nothing, and still returns a teardown that undoes what it did. The shared runtime tests run the
+   * page's registry over such bare roots.
+   *
    * @param root The interaction's root, `data-slot="<kind>-interaction"`.
    * @param live The live region of the item the root sits in, the only place it announces.
    * @returns The teardown that undoes the upgrade.

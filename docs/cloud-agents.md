@@ -137,3 +137,110 @@ A check-first issue may end with no change. Then list each file as `INSPECTED-CL
 3. End with `BLOCKED: <one question>`.
 
 Never guess the spec or a contract. The supervisor answers by a follow-up run on the same issue.
+
+## Issue ids
+
+The work is cut into issues, each with an id such as `m3d-01`. A GitHub issue carries its id in its title, before a colon, so a source comment that names an issue by its id resolves through this table or through a search of the repository's issues.
+
+| id         | title                                                                                                                                                             |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `m3d-01`   | runtime core: the controller registry wired to one stub per runtime kind, with in-page tests over every fixture                                                   |
+| `m3d-02`   | select-then-place core: pick up, move, place, cancel, announcements, key map, pointer drag over the same model                                                    |
+| `m3d-03`   | Gap Match core: model, redact, parts, SSR, validation, bindings, fixture                                                                                          |
+| `m3d-04`   | Gap Match runtime controller and in-page tests (keyboard-only, 2.5.7, 2.5.8)                                                                                      |
+| `m3d-05`   | Graphic Gap Match core: shapes, coords (reading 59), area semantics                                                                                               |
+| `m3d-06`   | Graphic Gap Match runtime controller and in-page tests                                                                                                            |
+| `m3d-07`   | Hotspot core: positioned native checkable controls over the image; reading 80's default hotspot                                                                   |
+| `m3d-08`   | Hotspot runtime polish (pointer areas, announcements) and in-page tests                                                                                           |
+| `m3d-09`   | Hot Text core: inline native checkable controls; reading 38                                                                                                       |
+| `m3d-10`   | Hot Text runtime polish and in-page tests                                                                                                                         |
+| `m3d-11`   | Match core: the matrix, max-associations, directed pairs                                                                                                          |
+| `m3d-12`   | Match runtime controller and in-page tests                                                                                                                        |
+| `m3d-13`   | the playground serves the runtime bundle (opt-in) so the browser walk can upgrade                                                                                 |
+| `m3d-14`   | pointer-drag enhancement over select-then-place (optional drag, never the only path)                                                                              |
+| `m3e-01`   | rubric blocks (reading 65): item rubric by view; section and test rubric shown with each item                                                                     |
+| `m3e-02`   | shared stimulus: the referenced stimulus body rendered with its items; stimulus resources                                                                         |
+| `m3e-03`   | composite items: check-first; tagged tests over a multi-interaction item's render, post and score                                                                 |
+| `m3e-04`   | catalogs: listing, and the resolution function (document, supports) -> content \| dormant behind render's supports option                                         |
+| `m3e-05`   | MathML (readings 2, 71): normalisation (mfenced, menclose), validity per the MathML 3 Recommendation, cn hex doubles                                              |
+| `m3e-06`   | the full shared vocabulary and CSS classes: vocabulary.ts and the class table are this issue's alone                                                              |
+| `m3e-07`   | captions: track on media, catalog captions                                                                                                                        |
+| `m3e-08`   | glossary on screen: catalog glossary as a native details/popover, keyboard reachable                                                                              |
+| `m3e-09`   | magnification and text/background colour: supports-driven CSS variables                                                                                           |
+| `m3f-01`   | time limits: enforcement in advance, allow-late-submission, the time navigation part that warns before expiry                                                     |
+| `m3f-02`   | selection and ordering: check-first; tagged tests over the session's selection and shuffle; fixes                                                                 |
+| `m3f-03`   | section references (reading 170): a local section document assembled at openPackage                                                                               |
+| `m3f-04`   | package and resource metadata: qti-metadata and LOM on PackageResource                                                                                            |
+| `m3f-05`   | item session control and structure claims: check-first tagged tests; fixes                                                                                        |
+| `m3f-06`   | includes: XInclude at item and section level, or the stated limit with its row                                                                                    |
+| `m3f-07`   | context declarations and the remaining packaging rows: claims, limited where member-only                                                                          |
+| `m3g-01`   | React core: Item, useParts, the parts override map, state props, useUpgrade                                                                                       |
+| `m3g-02`   | React components for the shipped interactions and chrome: Choice, Text Entry, Extended Text, Inline Choice, Status, Navigation                                    |
+| `m3g-03`   | React wrappers for the M3.d interactions                                                                                                                          |
+| `m3g-04`   | React wrappers for the elective interactions and PortableCustom over the frame host                                                                               |
+| `m3g-05`   | the shadcn registry item: registry.json, the item installing the components and the sheet                                                                         |
+| `m3g-06`   | TestProvider: the transport, the hooks, and createTestServer over plate's session functions                                                                       |
+| `m3g-07`   | the React 19 host fixture (criterion 10): one item rendered and scored with a shadcn theme                                                                        |
+| `m3g-08`   | the reference app: React, shadcn, React Hook Form, a sample test end to end in Chromium and WebKit; README examples compile and run                               |
+| `m4-01`    | PNP reader (AfA PNP 3.0, read tolerantly across the 12 contradictions) -> Supports                                                                                |
+| `m4-02`    | SSML and PLS model (readings 3, 39 to 44): both carriers to one speech plan; validity per speak fragment; data-qti-suppress-tts                                   |
+| `m4-03`    | additional testing time: multiplier, fixed minutes, unlimited, on the displayed and the enforced timer                                                            |
+| `m4-04`    | read-aloud engine: candidate-started, pause, stop, Web Speech, off for screen-reader, pronunciations never in aria-label                                          |
+| `m4-05`    | answer masking: visually and programmatically unavailable, a toggle per choice                                                                                    |
+| `m4-06`    | audio description, PNP-driven                                                                                                                                     |
+| `m4-07`    | braille, PNP-driven                                                                                                                                               |
+| `m4-08`    | breaks, PNP-driven                                                                                                                                                |
+| `m4-09`    | long description, PNP-driven                                                                                                                                      |
+| `m4-10`    | sign language, PNP-driven                                                                                                                                         |
+| `m4-11`    | tactile, PNP-driven                                                                                                                                               |
+| `m4-12`    | transcript and the ARIA subset claim, PNP-driven                                                                                                                  |
+| `pci-01`   | PCI module resolution (readings 11, 20; PCI-2, PCI-3, PCI-5): every corpus route, .js never doubled, type-identifier notice                                       |
+| `pci-02`   | the Appendix C JSON binding, both ways, for every base type and cardinality                                                                                       |
+| `pci-03`   | PCI SSR: the model, the inert template, verdict rows, a fresh fixture package; the corpus packages' verdicts (PCI-1)                                              |
+| `pci-04`   | the frame host: one sandboxed iframe per PCI, AMD loader and bridge inside, event.source plus nonce, ResizeObserver height, oncompleted before teardown           |
+| `pci-05`   | PCI responses and solution: Appendix C JSON in the hidden input, scored on the server; boundTo only in the solution state; 3.0.1 deltas; Q-16 limited             |
+| `ei-01`    | Upload: input type=file, the file value, the host's multipart/form-data duty                                                                                      |
+| `ei-02`    | End Attempt: a native submit button naming its response; count-attempt at the stated default pending G-928                                                        |
+| `ei-03`    | Media (reading I-8.11 controls): native video/audio, play count by runtime, min-plays/max-plays                                                                   |
+| `ei-04`    | Associate core                                                                                                                                                    |
+| `ei-05`    | Associate runtime over select-then-place                                                                                                                          |
+| `ei-06`    | Order core (readings 18, 172)                                                                                                                                     |
+| `ei-07`    | Order runtime over select-then-place; a non-drag reorder path                                                                                                     |
+| `ei-08`    | Graphic Associate core                                                                                                                                            |
+| `ei-09`    | Graphic Associate runtime                                                                                                                                         |
+| `ei-10`    | Graphic Order core (reading 18)                                                                                                                                   |
+| `ei-11`    | Graphic Order runtime                                                                                                                                             |
+| `ei-12`    | Position Object core                                                                                                                                              |
+| `ei-13`    | Position Object runtime                                                                                                                                           |
+| `ei-14`    | Select Point core: number inputs as the script-free path; the point value                                                                                         |
+| `ei-15`    | Select Point runtime: click and arrow-key crosshair over the image                                                                                                |
+| `ei-16`    | Slider core: native input type=range, step, lower-bound, upper-bound, reverse, step-label                                                                         |
+| `ei-17`    | Drawing core: the model, the file response, the notice without script                                                                                             |
+| `ei-18`    | Drawing runtime: canvas, pen, erase, undo, PNG into the file value, keyboard path                                                                                 |
+| `ei-19`    | elective interactions' accessibility pages: one fixture page per interaction for the local screen-reader pass                                                     |
+| `m5-01`    | modal feedback: a native dialog that returns focus; dialog[open] without script                                                                                   |
+| `m5-02`    | inline and block feedback (qti-feedback-inline, qti-feedback-block; reading 77)                                                                                   |
+| `m5-03`    | adaptive items: adaptive, attempts until completionStatus, the metadata rows                                                                                      |
+| `m5-04`    | test feedback: during and atEnd, in the test part and the test                                                                                                    |
+| `m5-05`    | branch rules and pre-conditions (reading 4, C6, T-O10) in advance                                                                                                 |
+| `m5-06`    | stylesheets: @scope wrap or selector prefix, the package file served                                                                                              |
+| `m5-07`    | companion materials (reading 12)                                                                                                                                  |
+| `m5-08`    | elementary and content MathML, hand-written fixtures                                                                                                              |
+| `m5-09`    | elective result content: candidate comment, test feedback outcomes                                                                                                |
+| `m5-10`    | PNP tool preferences exposed in Supports for the host; limited rows where plate renders no tool                                                                   |
+| `m5-11`    | PNP catalog content supports                                                                                                                                      |
+| `m5-12`    | display preferences                                                                                                                                               |
+| `m5-13`    | spoken preferences                                                                                                                                                |
+| `m5-14`    | ARIA full and the remaining A-family rows' tests                                                                                                                  |
+| `m5-15`    | the ledger's goal-close completeness: every unsupported-with-notice row named with its owner                                                                      |
+| `m5-16`    | data-* and foreign content in the new interactions (readings 13, 49)                                                                                              |
+| `m3h-01`   | the browser and accessibility sweep: axe-core class WCAG 2.2 AA over every rendered corpus item in Chromium and WebKit; the contrast sweep; one command at freeze |
+| `m3h-02`   | runtime size per module, published with the ledger (information, criterion 11)                                                                                    |
+| `docs-m3d` | README and CHANGELOG for area m3d, replacing the (pending) lines from the modules' TSDoc                                                                          |
+| `docs-m3e` | README and CHANGELOG for area m3e                                                                                                                                 |
+| `docs-m3f` | README and CHANGELOG for area m3f                                                                                                                                 |
+| `docs-m3g` | README and CHANGELOG for area m3g                                                                                                                                 |
+| `docs-m4`  | README and CHANGELOG for area m4                                                                                                                                  |
+| `docs-pci` | README and CHANGELOG for area pci                                                                                                                                 |
+| `docs-ei`  | README and CHANGELOG for area ei                                                                                                                                  |
+| `docs-m5`  | README and CHANGELOG for area m5                                                                                                                                  |

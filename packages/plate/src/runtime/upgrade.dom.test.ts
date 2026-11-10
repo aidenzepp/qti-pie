@@ -3,12 +3,14 @@
  * attaches nothing and moves no focus over every M2 fixture item as plate renders it, the walk
  * attaches a registered controller once per root with its item's live region, the live region
  * re-announces by clearing first, and the hidden-input wire keeps one input per value. Through the
- * page's registry, `upgrade` attaches exactly the roots whose kind has a runtime, tears them down
- * to the SSR's markup, and never moves focus or speaks on its own.
+ * page's registry, `upgrade` attaches, in every fixture item of every area, exactly the roots whose
+ * kind has a runtime, tears them down to the SSR's markup, and never moves focus or speaks on its
+ * own.
  *
  * Every case sits under a `describe` named by the engine (`server.browser`), as in
  * `src/test/page.dom.test.ts`.
  */
+/// <reference types="vite-plus/client" />
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { commands, server } from "vite-plus/test/browser/context";
@@ -34,20 +36,31 @@ import { acceptedItem } from "#plate/validate/verdict.ts";
 const fixtureFolder = "fixtures/m2";
 
 /**
- * The fixture packages whose items the runtime walk is counted over: M2's, and the runtime area
- * M3d's, whose items arrive with the interactions that fill its controllers.
+ * Every fixture item of every area, `fixtures/<area>/items/*.xml` for M2's folder and each fan-out
+ * area's, as paths relative to the package's root. Vite expands the glob when it serves this file,
+ * so an item added to any area's `items` folder is walked without a listing to update, and an area
+ * with no `items` folder adds none.
  */
-const runtimeFixtureFolders = [fixtureFolder, "fixtures/m3d"] as const;
+const everyFixtureItem = Object.keys(import.meta.glob("/fixtures/*/items/*.xml")).map((key) =>
+  key.slice("/".length),
+);
 
 /**
- * Read one of a fixture package's files as text, through the test server.
+ * The `data-slot` marker of each runtime kind's root, written out from {@link runtimeKinds} rather
+ * than read through `runtimeKindOf`, the function the walk itself uses.
+ */
+const runtimeSlots: ReadonlySet<string> = new Set(
+  runtimeKinds.map((kind) => `${kind}-interaction`),
+);
+
+/**
+ * Read a file of the package as text, through the test server. A file that cannot be read fails
+ * the test.
  *
- * @param file The file's path relative to the package's root.
- * @param folder The package's folder, M2's unless given.
+ * @param path The file's path relative to the package's root.
  * @returns The file's text.
  */
-const fixtureText = (file: string, folder: string = fixtureFolder) =>
-  Effect.promise(() => commands.readFile(`${folder}/${file}`));
+const fixtureText = (path: string) => Effect.promise(() => commands.readFile(path));
 
 /**
  * Read the items a fixture test lists, in test order, from its `qti-assessment-item-ref` elements.
@@ -68,32 +81,20 @@ const itemRefs = (xml: string): readonly string[] =>
  *
  * @returns Each item's path relative to the package's root.
  */
-const fixtureItems = fixtureText("test.xml").pipe(Effect.map(itemRefs));
-
-/**
- * Read the items of a fixture package that may hold no test yet: a folder without a `test.xml`
- * (an area whose items have not landed) has no items.
- *
- * @param folder The package's folder.
- * @returns Each item's path relative to the package's root, or none.
- */
-const fixtureItemsIfAny = (folder: string) =>
-  Effect.tryPromise(() => commands.readFile(`${folder}/test.xml`)).pipe(
-    Effect.option,
-    Effect.map(Option.match({ onNone: (): readonly string[] => [], onSome: itemRefs })),
-  );
+const fixtureItems = fixtureText(`${fixtureFolder}/test.xml`).pipe(
+  Effect.map((xml) => itemRefs(xml).map((ref) => `${fixtureFolder}/${ref}`)),
+);
 
 /**
  * Render one fixture item as plate's SSR writes it, with the default configuration.
  *
- * @param file The item's path relative to the package's root.
- * @param folder The package's folder, M2's unless given.
+ * @param path The item's path relative to the package's root.
  * @returns The item's HTML.
  */
-const renderedFixture = (file: string, folder: string = fixtureFolder) =>
+const renderedFixture = (path: string) =>
   Effect.gen(function* renderFixture() {
-    const bytes = new TextEncoder().encode(yield* fixtureText(file, folder));
-    const accepted = Option.getOrThrow(acceptedItem(yield* open(file, bytes)));
+    const bytes = new TextEncoder().encode(yield* fixtureText(path));
+    const accepted = Option.getOrThrow(acceptedItem(yield* open(path, bytes)));
     const configuration = yield* configure({});
 
     return Result.getOrThrow(render(redact(accepted), configuration, { instance: "w0d" })).html;
@@ -136,8 +137,8 @@ const frames = (): Promise<number> =>
 const handBuiltItem = `<div data-slot="item"><div data-slot="item-live" aria-live="polite" aria-atomic="true"></div><fieldset data-slot="gap-match-interaction"></fieldset><fieldset data-slot="choice-interaction"></fieldset></div>`;
 
 /**
- * An item by hand holding the roots no fixture renders yet: a Gap Match root, whose kind has a
- * runtime, and an Inline Choice root, whose kind has none.
+ * An item by hand holding roots no fixture may render yet: a Gap Match root with none of its parts,
+ * whose kind has a runtime, and an Inline Choice root, whose kind has none.
  */
 const unrenderedRootsItem = `<div data-slot="item"><div data-slot="item-live" aria-live="polite" aria-atomic="true"></div><fieldset data-slot="gap-match-interaction"></fieldset><span data-slot="inline-choice-interaction"></span></div>`;
 
@@ -277,42 +278,58 @@ describe(server.browser, () => {
     });
 
     it.effect(
-      "[runtime] upgrade over the rendered HTML of every fixture item attaches exactly the roots whose kind has a runtime",
+      "[runtime] upgrade over each fixture item of every area attaches exactly the roots whose kind has a runtime",
       () =>
         Effect.gen(function* fixturesAttachByKind() {
-          const rendered: string[] = [];
+          assert.includeMembers(everyFixtureItem, yield* fixtureItems);
 
-          for (const folder of runtimeFixtureFolders) {
-            for (const file of yield* fixtureItemsIfAny(folder)) {
-              rendered.push(yield* renderedFixture(file, folder));
-            }
+          const items: (readonly [string, string])[] = [];
+
+          for (const path of everyFixtureItem) {
+            items.push([path, yield* renderedFixture(path)]);
           }
 
-          assert.isAtLeast(rendered.length, 5);
+          items.push(["the hand-built item", unrenderedRootsItem]);
+          assert.strictEqual(items.length, everyFixtureItem.length + 1);
 
-          const container = mount([...rendered, unrenderedRootsItem].join(""));
-          const roots = [...container.querySelectorAll<HTMLElement>(interactionRootSelector)];
-          const upgraded = upgrade(container);
-          const counts = countBySlot(container, upgraded);
+          const totals = new Map<string, { attached: number; roots: number }>();
 
-          assert.deepStrictEqual(
-            upgraded.controllers,
-            roots.flatMap((root) => {
-              const kind = runtimeKindOf(root.dataset["slot"]);
+          for (const [label, html] of items) {
+            const container = mount(html);
+            const roots = [...container.querySelectorAll<HTMLElement>(interactionRootSelector)];
+            const upgraded = upgrade(container);
 
-              return kind === undefined ? [] : [{ kind, root }];
-            }),
-          );
+            assert.deepStrictEqual(
+              upgraded.controllers.map(({ root }) => root),
+              roots.filter((root) => runtimeSlots.has(root.dataset["slot"] ?? "")),
+              label,
+            );
+
+            for (const { kind, root } of upgraded.controllers) {
+              assert.strictEqual(root.dataset["slot"], `${kind}-interaction`, label);
+            }
+
+            for (const [slot, count] of countBySlot(container, upgraded)) {
+              const total = totals.get(slot) ?? { attached: 0, roots: 0 };
+
+              total.attached += count.attached;
+              total.roots += count.roots;
+              totals.set(slot, total);
+            }
+
+            upgraded.teardown();
+            container.remove();
+          }
 
           for (const slot of nativeSlots) {
-            assert.isAbove(counts.get(slot)?.roots ?? 0, 0, slot);
-            assert.strictEqual(counts.get(slot)?.attached, 0, slot);
+            assert.isAbove(totals.get(slot)?.roots ?? 0, 0, slot);
+            assert.strictEqual(totals.get(slot)?.attached, 0, slot);
           }
 
-          assert.deepStrictEqual(counts.get("gap-match-interaction"), { attached: 1, roots: 1 });
+          const gapMatch = totals.get("gap-match-interaction");
 
-          upgraded.teardown();
-          container.remove();
+          assert.isAtLeast(gapMatch?.roots ?? 0, 1);
+          assert.strictEqual(gapMatch?.attached, gapMatch?.roots);
         }),
     );
 
