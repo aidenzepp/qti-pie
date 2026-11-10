@@ -21,8 +21,7 @@ import type { Addition } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
-import { required, requiredInSpace } from "@grizzle/testing/features";
-import { notesOnly } from "@grizzle/testing/sense";
+import { noCoverage, requiredInSpace } from "@grizzle/testing/features";
 import { completeShrink } from "@grizzle/testing/shrink";
 import type { Case } from "@grizzle/testing/explore";
 import { searched } from "@grizzle/testing/vitest";
@@ -419,22 +418,20 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts",
     (ctx) =>
       // Oracle: as the box's. Bound: up to 4 documents in chains of placements, sections nested 3
       // deep, 3 children each, 2 parts and 3 rules, each case under its own swarm of 7 features;
-      // 300 runs.
+      // 4 runs, each a fresh corner of the swarm. The box requires every situation these reach, so
+      // this search requires none: it only carries the shapes past the box's bounds.
       searched(
         ctx,
         explore(
           {
             caseHang: Duration.seconds(30),
             concurrency: 1,
-            coverage: required<Situation>(
-              ["a chain of three instances", "accepted", "refused", "an instance with no rule"],
-              { cases: 80, sense: notesOnly },
-            ),
+            coverage: noCoverage,
             draw: drawn(swarmedAssembly(sampledBounds)),
             kept: [],
             literal: ({ assembly }) => assemblyLiteral(assembly),
             oracle: { kind: "specification", name: "reading 87's bullets over the assembled test" },
-            runs: 300,
+            runs: 4,
             shrink: completeShrink,
             steerEvery: 16,
             suite: "pantry/test/gen-assembly-swarm",
