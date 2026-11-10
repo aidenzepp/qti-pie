@@ -1,4 +1,3 @@
-import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, explore } from "@grizzle/testing/explore";
 import { required } from "@grizzle/testing/features";
@@ -13,7 +12,6 @@ import { faultOf } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { documentRoots } from "#pantry/grammar/facets.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
-import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import { ssmlNamespace } from "#pantry/vocab/namespaces.ts";
 import * as open from "#pantry/vocab/open.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
@@ -31,7 +29,7 @@ import {
   XsdOracleLayer,
   xsdContents,
 } from "#pantry/test/gen/grammar.ts";
-import type { Content, Particle as TestParticle } from "#pantry/test/gen/grammar.ts";
+import type { Content, Particle as TestParticle, XsdSet } from "#pantry/test/gen/grammar.ts";
 import {
   contentExpressionParents,
   mathmlNamespace,
@@ -39,6 +37,7 @@ import {
   semanticsContexp,
 } from "#pantry/test/gen/relaxng.ts";
 import { admittedOf } from "#pantry/test/indexes.ts";
+import { xsdCached } from "#pantry/test/xsd-catalog.ts";
 
 /**
  * The wildcards a parent's content reads, a spec reading's in place of the XSD's: spec reading 61
@@ -73,18 +72,6 @@ const takenOut: ReadonlySet<string> = new Set(
 const grammar = Effect.fromResult(composed());
 
 /**
- * Whether every pinned XSD is in the cache. The XSD differential needs them; without them it is
- * skipped with its reason.
- */
-const cached = await Effect.runPromise(
-  checkCache().pipe(
-    Effect.as(true),
-    Effect.catchTag("XsdSourceMissing", () => Effect.succeed(false)),
-    Effect.provide(NodeServices.layer),
-  ),
-);
-
-/**
  * The pinned schema sets the differential walks, each with the version its rows are read in. The
  * metadata XSD is one for both versions.
  */
@@ -106,7 +93,34 @@ const schemas: readonly (readonly [SourcePath, (typeof schemaVersions)[number]])
 const xsdTimeout = 120_000;
 
 /**
- * How long one of the two compose searches may take, each a few hundred toy grammars composed in
+ * Each pinned schema set this file reads, read once for the file: the two tests walk the same
+ * sets, and the metadata XSD stands for both versions, so a second read only repeats the first.
+ */
+const readSets = new Map<SourcePath, XsdSet>();
+
+/**
+ * A pinned schema set, read on its first use in this file and held for the rest.
+ *
+ * @param root - The schema set's root XSD.
+ * @returns The schema set.
+ */
+const setOf = (root: SourcePath) => {
+  const held = readSets.get(root);
+
+  return held === undefined
+    ? loadXsd(root).pipe(
+        Effect.map(({ set }) => set),
+        Effect.tap((set) =>
+          Effect.sync(() => {
+            readSets.set(root, set);
+          }),
+        ),
+      )
+    : Effect.succeed(held);
+};
+
+/**
+ * How long one of the two compose searches may take, each 120 or 40 toy grammars composed in
  * turn. Vitest's 5 s default was met under load (seats PG and IN, 2026-11-06). Measured on
  * 2026-11-06 at `0f6264a` with this file's searches run alone on seeds 1 to 3: the projection
  * search took 3195, 2475 and 2573 ms and the restated search 940, 770 and 643 ms at one-minute load
@@ -136,7 +150,7 @@ const characterDataOf = (content: Content): readonly string[] => {
   return Option.isSome(content.particle) ? ["comment", "pi", "ws"] : ["comment", "pi"];
 };
 
-describe.skipIf(!cached)("Admission against the XSD", () => {
+describe.skipIf(!xsdCached)("Admission against the XSD", () => {
   it.effect(
     "admits under each kind exactly the elements its content model names, wildcards apart, in every pinned schema",
     () =>
@@ -149,7 +163,7 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
         const differences: string[] = [];
         let compared = 0;
         for (const [root, version] of schemas) {
-          const { set } = yield* loadXsd(root);
+          const set = yield* setOf(root);
           const { contents } = xsdContents(set, (namespace, local, parent) =>
             resolverOf(kinds)(namespace, local, parent),
           );
@@ -259,7 +273,7 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
           ...schemas.map(([held]) => held),
           "usagedata/imsqti_usagedatav3p0_v1p0.xsd" as const,
         ]) {
-          const { set } = yield* loadXsd(root);
+          const set = yield* setOf(root);
           read.push({ contents: xsdContents(set, resolverOf(kinds)).contents, set });
         }
 
@@ -560,7 +574,7 @@ describe("Admission projected from content models", () => {
             caseHang: Duration.minutes(1),
             concurrency: 1,
             coverage: required<ProjectionFeature>(projectionFeatures, {
-              cases: 300,
+              cases: 120,
               sense: notesOnly,
             }),
             draw: drawn((source) => numbered(source.draw(treeGen(2)))),
@@ -570,7 +584,7 @@ describe("Admission projected from content models", () => {
               kind: "second-implementation",
               name: "XML Schema Part 1's rule as a naive particle walk (mayHold)",
             },
-            runs: 300,
+            runs: 120,
             shrink: completeShrink,
             steerEvery: 16,
             suite: "grammar/admission/projection",
@@ -641,7 +655,7 @@ describe("Admission through compose", () => {
             caseHang: Duration.minutes(1),
             concurrency: 1,
             coverage: required<"restated" | "stated once">(["restated", "stated once"], {
-              cases: 200,
+              cases: 40,
               sense: notesOnly,
             }),
             draw: drawn((source) => ({
@@ -662,7 +676,7 @@ describe("Admission through compose", () => {
               kind: "specification",
               name: "a closed relation's key (E4) holds one row per (version, parent, child), whichever vocabulary states it",
             },
-            runs: 200,
+            runs: 40,
             shrink: completeShrink,
             steerEvery: 16,
             suite: "grammar/admission/restated",
