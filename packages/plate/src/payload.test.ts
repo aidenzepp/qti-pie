@@ -470,7 +470,7 @@ const json = (value: Item | Payload | Redacted): string =>
  */
 const interactionsIn = (nodes: readonly PayloadNode[]): readonly InteractionPayload[] =>
   nodes.flatMap((node) => {
-    if (node.kind === "element") {
+    if (node.kind === "element" || node.kind === "container") {
       return interactionsIn(node.children);
     }
 
@@ -743,6 +743,7 @@ const referencingNode = (node: BodyNode, ids: string): BodyNode => {
         ),
       };
     }
+    case "container":
     case "content":
     case "inline-choice":
     case "printed-variable":
@@ -4349,5 +4350,49 @@ describe("payload, catalog references", () => {
       tag: "p",
     });
     assert.isFalse(Object.hasOwn(built.body[1] ?? {}, "catalog"));
+  });
+});
+
+describe("redactItem and payload on a module's container", () => {
+  /**
+   * The hand-built item with its whole body inside one container a module owns, as a stage holds
+   * its interactions.
+   */
+  const stagePath = "qti-assessment-item/qti-item-body/qti-slider-stage";
+  const wrapped: Item = {
+    ...item,
+    body: [{ children: item.body, kind: "container", module: "slider", path: stagePath }],
+  };
+
+  it("keeps the container and redacts its children as it redacts the body", () => {
+    const redaction = redactItem(wrapped);
+    const [node, ...rest] = redaction.body;
+
+    assert.lengthOf(rest, 0);
+    assert.deepStrictEqual(node, {
+      children: redacted.body,
+      kind: "container",
+      module: "slider",
+      path: stagePath,
+    });
+    assert.deepStrictEqual(redaction.responses, redacted.responses);
+    assert.deepStrictEqual(redaction.notices, redacted.notices);
+  });
+
+  it("copies the container into its payload node, its children copied as the body is", () => {
+    const [node, ...rest] = payload(redactItem(wrapped), answering).body;
+
+    assert.lengthOf(rest, 0);
+    assert.deepStrictEqual(node, {
+      children: payload(redacted, answering).body,
+      kind: "container",
+      module: "slider",
+    });
+    assert.deepStrictEqual(
+      interactionsIn(payload(redactItem(wrapped), answering).body).map(
+        (interaction) => interaction.response,
+      ),
+      interactionsIn(payload(redacted, answering).body).map((interaction) => interaction.response),
+    );
   });
 });

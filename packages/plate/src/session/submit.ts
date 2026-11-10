@@ -373,7 +373,8 @@ const skipped = (
  * takes and decoded back, and clear its saved responses.
  *
  * The attempt that processes the item's first attempt writes its outcomes to `firstOutcomes`,
- * which no later attempt changes (F1).
+ * which no later attempt changes (F1). `expireScope` (`#plate/session/expire.ts`) is its second
+ * caller, processing each presented item of an expired scope as a submission does.
  *
  * @param accepted The item the session item delivers.
  * @param item The session item.
@@ -381,7 +382,7 @@ const skipped = (
  * @param datestamp The time of the transition, in ISO 8601.
  * @returns The session item after the attempt, or what `score` or the record's codec failed with.
  */
-const processed = (
+export const processed = (
   accepted: Accepted,
   item: SessionItem,
   values: Responses,
@@ -437,7 +438,9 @@ const processedInPart = (
  * `drawStream(session.seed, outcomeLabel(session.instance, n))`, the processing seed under its own
  * label, never the default key. The session then holds the outcomes it left and `outcomeRuns` `n`.
  * A test whose outcome processing is `absent`, or `marked` because the engine cannot run it, runs
- * nothing: its outcomes stay at their defaults and no run is counted.
+ * nothing: its outcomes stay at their defaults and no run is counted. `expireScope`
+ * (`#plate/session/expire.ts`) is its second caller, running it once over the items an expiry
+ * processed.
  *
  * @param test The test.
  * @param items The accepted items, keyed by item ref identifier.
@@ -446,7 +449,7 @@ const processedInPart = (
  * @returns The session after the run, or the {@link EngineFailure} the run failed with: a stored
  *   item record that lacks a value the processing reads.
  */
-const outcomesProcessed = (
+export const outcomesProcessed = (
   test: Test,
   items: ReadonlyMap<string, Accepted>,
   session: TestSession,
@@ -475,6 +478,8 @@ const outcomesProcessed = (
  * first item is presented (`partStarted`), over the test's outcomes as the session holds them:
  * after a simultaneous part's submission, those its outcome run left. When the test closes, its
  * outcome processing runs once more, at the same `now` as any run before it in the transition.
+ * `expireScope` (`#plate/session/expire.ts`) is its second caller, ending the part an expiry
+ * leaves.
  *
  * @param test The test.
  * @param items The accepted items, keyed by item ref identifier.
@@ -485,7 +490,7 @@ const outcomesProcessed = (
  *   for the next part's first item ref; a failure of `partStarted` or of `present`; or the
  *   `EngineFailure` of the closing outcome run.
  */
-const partEnded = (
+export const partEnded = (
   test: Test,
   items: ReadonlyMap<string, Accepted>,
   session: TestSession,
