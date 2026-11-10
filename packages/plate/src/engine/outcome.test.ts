@@ -579,6 +579,7 @@ const sessionItem = (
   datestamp: "2026-11-07T00:00:00.000Z",
   duration: 0,
   firstOutcomes: Option.none(),
+  locked: false,
   presented,
   record: itemRecord,
   ref: itemRecord.item,
