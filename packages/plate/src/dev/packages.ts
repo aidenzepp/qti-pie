@@ -24,7 +24,7 @@
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown. */
 import { readdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
-import { Effect, Option, Result, Schema } from "effect";
+import { Context, Effect, Layer, Option, Result, Schema } from "effect";
 import type { Config } from "effect";
 import { assetHeaders, assetTypes, page, servedFilePath } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
@@ -417,8 +417,8 @@ const packageSources: Effect.Effect<readonly PackageSource[], PackagesFailure> =
  *
  * The packages are found the first time a verdict is asked for, and each is opened through the
  * opener the first time its verdict is asked for. The opener is called only then, once per package
- * while its opens succeed, so a test can count the opens through it. The playground builds one
- * cache per handler, which `scripts/serve.ts` builds once per process.
+ * while its opens succeed, so a test can count the opens through it. The playground reads its
+ * cache as the {@link Packages} service, which its handler's runtime builds once.
  *
  * @param opener How a package is opened; {@link openDirectory} when absent.
  * @returns The cache.
@@ -456,6 +456,23 @@ export const packageCache = (opener: PackageOpener = openDirectory): Effect.Effe
       ),
     })),
   );
+
+/**
+ * The playground's package cache as a service: the handler's runtime builds it once, and every
+ * request the handler answers reads the same cache.
+ *
+ * A test shares one cache between handlers by providing it with `Layer.succeed(Packages, cache)`,
+ * and counts its opens through the opener it built the cache with.
+ */
+export class Packages extends Context.Service<Packages, PackageCache>()(
+  "@qti-pie/plate/dev/packages/Packages",
+) {
+  /**
+   * A new package cache over {@link openDirectory}. Building it reads nothing: the corpus root is
+   * read under the config provider of the first request that asks for a package.
+   */
+  static readonly layer: Layer.Layer<Packages> = Layer.effect(Packages, packageCache());
+}
 
 /**
  * Find the package at a location among the playground's packages, opening only the package whose

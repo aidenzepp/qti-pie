@@ -5,11 +5,12 @@
  * The cache holds one verdict per member of `corpusDocuments`, so what it keeps is bounded by the
  * corpus. A member is opened the first time something asks for its verdict and kept for the
  * cache's life; a failed open is not kept, so the next request opens that member again. The
- * playground builds one cache per handler, which `scripts/serve.ts` builds once per process.
+ * playground reads its cache as the {@link Verdicts} service, which its handler's runtime builds
+ * once, from {@link Verdicts.layer} unless the handler is given another Layer.
  *
  * @module
  */
-import { Duration, Effect, Exit } from "effect";
+import { Context, Duration, Effect, Exit, Layer } from "effect";
 import type { Config, Option } from "effect";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
@@ -123,6 +124,23 @@ export const verdictCache = (opener: Opener = openMember): Effect.Effect<Verdict
       ),
     })),
   );
+
+/**
+ * The playground's verdict cache as a service: the handler's runtime builds it once, and every
+ * request the handler answers reads the same cache.
+ *
+ * A test shares one cache between handlers by providing it with `Layer.succeed(Verdicts, cache)`,
+ * and counts its opens through the opener it built the cache with.
+ */
+export class Verdicts extends Context.Service<Verdicts, VerdictCache>()(
+  "@qti-pie/plate/dev/listing/Verdicts",
+) {
+  /**
+   * A new verdict cache over {@link openMember}. Building it reads nothing: the corpus root is read
+   * under the config provider of the first request that asks for a verdict.
+   */
+  static readonly layer: Layer.Layer<Verdicts> = Layer.effect(Verdicts, verdictCache());
+}
 
 /**
  * The members of one top folder of the corpus root, in the document set's order.
