@@ -1,14 +1,15 @@
 /**
  * The manifest is one document, read once: the package's one `imsmanifest.xml`, the description of
  * the package and no resource's document (spec reading 146). A path is one document, of one type
- * (reading 93), and the manifest's is fixed, `none`, since it is read before any resource names a
- * path. So a document-typed resource whose href names `imsmanifest.xml` names no document of its
- * type, and "Document entry" (`entry-kind`) refuses it, on the import's rows as in the law oracle;
- * a `cp:file` naming it only locates it (IMS Content Packaging 1.2, §6.11.3); and a site whose href
- * names it names no document, whatever names it. The import's reader and the oracle shredded the
- * manifest a second time, as the document of each resource whose href named it, so the package
- * held two documents at one path, the copy writing the manifest overlays again, and a site could
- * target the copy (FIX-HOLES).
+ * (reading 93), and the manifest's is fixed, `manifest` (reading 176), since it is read before any
+ * resource names a path. So a document-typed resource whose href names `imsmanifest.xml` names no
+ * document of its type, and "Document entry" (`entry-kind`) refuses it, in the law oracle and, over
+ * the query `TypedHref`, in the database (`#pantry/qti/package.db.test.ts`); a `cp:file` naming it
+ * only locates it (IMS Content Packaging 1.2, §6.11.3); and a site whose href names it names no
+ * document, whatever names it. The import's reader and the oracle shredded the manifest a second
+ * time, as the document of each resource whose href named it, so the package held two documents at
+ * one path, the copy writing the manifest overlays again, and a site could target the copy
+ * (FIX-HOLES).
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`), and
