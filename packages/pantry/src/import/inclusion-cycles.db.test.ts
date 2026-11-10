@@ -51,11 +51,19 @@ describe.skipIf(!hasLease)(
                 if (cycle === "none") {
                   assert.strictEqual(outcome._tag, "Success", "the acyclic package");
                 } else {
-                  assert.isTrue(
-                    outcome._tag === "Failure" &&
-                      outcome.failure instanceof ImportRefused &&
-                      outcome.failure.rules.includes("inclusion-cycle"),
-                    outcome._tag === "Failure" ? outcome.failure.message : "accepted",
+                  if (outcome._tag !== "Failure") {
+                    assert.fail("the cyclic package was accepted");
+                  }
+
+                  const refused = outcome.failure;
+                  if (!(refused instanceof ImportRefused)) {
+                    assert.fail(`the cyclic package failed with ${refused.message}`);
+                  }
+
+                  assert.deepStrictEqual(
+                    [...new Set(refused.rules)],
+                    ["inclusion-cycle"],
+                    refused.message,
                   );
                 }
               }),
