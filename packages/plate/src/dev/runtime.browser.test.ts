@@ -240,7 +240,7 @@ eachEngine((it) => {
             const opened = yield* open(page);
 
             assert.strictEqual(opened.status, 200);
-            assert.strictEqual(opened.policy, pageHeaders["content-security-policy"]);
+            assert.strictEqual(opened.policy, pageHeaders()["content-security-policy"]);
             assert.include(opened.policy, "script-src 'none'");
             assert.strictEqual(yield* evaluated(page, "document.scripts.length"), 0);
             assert.isNull(yield* rootAttribute(page, "data-runtime-upgraded"));

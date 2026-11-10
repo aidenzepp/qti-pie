@@ -51,7 +51,7 @@ import {
   servedFilePath,
   slot,
 } from "#plate/dev/frame.ts";
-import type { Appearance, Page } from "#plate/dev/frame.ts";
+import type { Appearance, Chrome, Page } from "#plate/dev/frame.ts";
 import { groupVerdicts, keptOnSuccess, Verdicts } from "#plate/dev/listing.ts";
 import type { OpenFailure, VerdictCache, VerdictGroup } from "#plate/dev/listing.ts";
 import {
@@ -1404,7 +1404,7 @@ const serveRuntime = (
           return source === undefined
             ? notFound()
             : new Response(source, {
-                headers: { ...pageHeaders, "content-type": runtimeScriptType },
+                headers: { ...pageHeaders(), "content-type": runtimeScriptType },
               });
         }),
       )
@@ -1719,13 +1719,19 @@ const answer = (
 ): Effect.Effect<Response> =>
   outcome instanceof Response
     ? Effect.succeed(outcome)
-    : Effect.map(Ref.get(playground.appearance), (appearance) =>
-        pageResponse(outcome, {
+    : Effect.map(Ref.get(playground.appearance), (appearance) => {
+        const chrome: Chrome = {
           appearance,
           back: Option.getOrElse(outcome.back, () => ownTarget(request)),
-          ...(Option.isSome(playground.runtime) ? { runtime: runtimeUrl(bootModule) } : {}),
-        }),
-      );
+        };
+
+        return pageResponse(
+          outcome,
+          Option.isSome(playground.runtime)
+            ? { ...chrome, runtime: runtimeUrl(bootModule) }
+            : chrome,
+        );
+      });
 
 /**
  * Construct a playground's Fetch handler, with its own store of open items' sittings and their

@@ -348,7 +348,7 @@ describe("dev/page.ts: the opt-in runtime", () => {
         assert.strictEqual(page.status, 404);
         assert.deepStrictEqual(
           Object.fromEntries(page.headers),
-          Object.fromEntries(Object.entries(pageHeaders)),
+          Object.fromEntries(Object.entries(pageHeaders())),
         );
         assert.strictEqual(
           page.headers.get("content-security-policy"),
@@ -385,7 +385,7 @@ describe("dev/page.ts: the opt-in runtime", () => {
         assert.deepStrictEqual(
           Object.fromEntries(page.headers),
           Object.fromEntries(
-            Object.entries({ ...pageHeaders, "content-security-policy": policyWithRuntime }),
+            Object.entries({ ...pageHeaders(), "content-security-policy": policyWithRuntime }),
           ),
         );
 
@@ -399,7 +399,7 @@ describe("dev/page.ts: the opt-in runtime", () => {
         assert.strictEqual(sheet.status, 200);
         assert.strictEqual(
           sheet.headers.get("content-security-policy"),
-          pageHeaders["content-security-policy"],
+          pageHeaders()["content-security-policy"],
         );
       }),
   );

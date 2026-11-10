@@ -86,8 +86,8 @@ const scriptRefused = "script-src 'none'";
 
 /**
  * The headers of every HTML page while the playground's runtime is on (issue m3d-13): the
- * {@link pageHeaders} with `script-src 'self'` in place of `script-src 'none'`, and every other
- * directive as it is.
+ * {@link pageHeaders} of the same style sources with `script-src 'self'` in place of
+ * `script-src 'none'`, and every other directive as it is.
  *
  * `'self'` admits the page's own origin's scripts and nothing more: no `'unsafe-inline'`, no
  * `'unsafe-eval'`, no host, no hash. The playground serves the runtime from its own origin, so the
@@ -96,15 +96,21 @@ const scriptRefused = "script-src 'none'";
  * stylesheets, redirects and package documents keep `script-src 'none'`, since none of them is a
  * page that loads the runtime.
  *
+ * @param styleSources The hash source of each style element the response carries, none by default.
+ * @returns The headers.
  * @see https://w3c.github.io/webappsec-csp/#grammardef-scheme-source (`'self'`, a source expression)
  */
-export const runtimePageHeaders = {
-  ...pageHeaders,
-  "content-security-policy": pageHeaders["content-security-policy"].replace(
-    scriptRefused,
-    "script-src 'self'",
-  ),
-} as const satisfies Readonly<Record<string, string>>;
+export const runtimePageHeaders = (styleSources: readonly StyleSource[] = []) => {
+  const headers = pageHeaders(styleSources);
+
+  return {
+    ...headers,
+    "content-security-policy": headers["content-security-policy"].replace(
+      scriptRefused,
+      "script-src 'self'",
+    ),
+  } as const satisfies Readonly<Record<string, string>>;
+};
 
 /**
  * The headers of every served asset besides its type: a package document is a live document, so
@@ -414,20 +420,22 @@ const styleSources = (html: string): readonly StyleSource[] =>
 
 /**
  * Answer a page as the playground does: its HTML with the status and headers it carries over
- * {@link pageHeaders}, whose `style-src` admits each style element the written page holds by the
- * hash of its text, so a response admits its own item's style elements and no other.
+ * {@link pageHeaders}, or {@link runtimePageHeaders} when the chrome names a runtime module, whose
+ * `style-src` admits each style element the written page holds by the hash of its text, so a
+ * response admits its own item's style elements and no other.
  *
  * @param shown The page.
- * @param chrome The stored appearance and the theme box's return path.
+ * @param chrome The stored appearance, the theme box's return path and the runtime module, if on.
  * @returns The response.
  * @throws {VoidElementChildren} When the page's nodes break one of the serialiser's rules, a
  *   defect in the playground's code (see {@link written}).
  */
 export const pageResponse = (shown: Page, chrome: Chrome): Response => {
   const html = pageHtml(shown, chrome);
+  const headers = chrome.runtime === undefined ? pageHeaders : runtimePageHeaders;
 
   return new Response(html, {
-    headers: { ...pageHeaders(styleSources(html)), ...shown.headers },
+    headers: { ...headers(styleSources(html)), ...shown.headers },
     status: shown.status,
   });
 };
