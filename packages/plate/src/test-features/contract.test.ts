@@ -2,18 +2,24 @@ import { readdirSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
+import { defaultView } from "#plate/content/contract.ts";
 import { attr, doc, el, qtiNamespace, xincludeNamespace } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
+import { h } from "#plate/emit/node.ts";
+import { scopedId } from "#plate/emit/parts.ts";
 import { pathsOf } from "#plate/model/item.ts";
 import { readersOf } from "#plate/model/reader.ts";
 import { buildTest } from "#plate/model/test.ts";
 import type { Test } from "#plate/model/test.ts";
+import type { EmitState } from "#plate/payload.ts";
 import { moveTargets } from "#plate/session/navigate.ts";
 import { startTest } from "#plate/session/start.ts";
 import type { TestSession } from "#plate/session/session.ts";
+import { noSupports } from "#plate/supports.ts";
 import { TestFeatureNotImplemented, stub, testFeatureKeys } from "#plate/test-features/contract.ts";
 import type {
   SequencePlace,
+  TestContentRenderKit,
   TestFeatureId,
   TestFeatureKey,
   TestFeatureModule,
@@ -260,8 +266,53 @@ const landedTimeLimits: TestFeatureModule<"qti-time-limits", TimeLimitsNode> = {
 
       return Option.some({ maxTime: maxTime.value, path: context.path });
     }),
+  render: (_node, _state, kit) =>
+    Result.succeed(
+      Option.match(kit.files("style/test.css"), {
+        onNone: () => h("span", { "data-stylesheet": "none" }),
+        onSome: (css) => h("style", { "data-rule": `#${scopedId(kit.instance, "item")} ${css}` }),
+      }),
+    ),
   sequence: (context) => context.places.toReversed(),
 };
+
+/**
+ * The emit state a landed module's `render` is handed here, which the fake never reads.
+ */
+const emitState: EmitState = {
+  assetBase: "",
+  headingLevel: 2,
+  locale: "en",
+  parts: { replacementFor: () => Option.none() },
+};
+
+/**
+ * The host's reader of package files here: it holds the one file the landed module asks for.
+ *
+ * @param path A package-relative path.
+ * @returns The file's text, none for any other path.
+ */
+const holdsStyle = (path: string): Option.Option<string> =>
+  path === "style/test.css" ? Option.some("p { color: red }") : Option.none();
+
+/**
+ * Construct the kit a landed module's `render` is handed: the host's reader and the item's
+ * instance, and a `nodes` the fake never calls.
+ *
+ * @param instance The item's instance.
+ * @param files The host's reader of package-relative paths.
+ * @returns The kit.
+ */
+const renderKit = (
+  instance: string,
+  files: (path: string) => Option.Option<string>,
+): TestContentRenderKit => ({
+  files,
+  instance,
+  nodes: () => Result.succeed([]),
+  supports: noSupports,
+  view: defaultView,
+});
 
 /**
  * The table of stubs with the landed module in the time-limits stub's place.
@@ -470,6 +521,28 @@ describe("a test-feature module not implemented", () => {
       }),
   );
 
+  it("[W0-BH] throws TestFeatureNotImplemented from its render, naming its key and the issue that fills it", () => {
+    for (const module of stubbed) {
+      const ran = Result.try({
+        catch: (thrown) => thrown,
+        try: () =>
+          module.render(
+            undefined,
+            emitState,
+            renderKit("sitting.1", () => Option.none()),
+          ),
+      });
+
+      assert.isTrue(
+        Result.isFailure(ran) &&
+          ran.failure instanceof TestFeatureNotImplemented &&
+          ran.failure.feature === module.key &&
+          ran.failure.issue === module.issue,
+        module.key,
+      );
+    }
+  });
+
   it("names its key and the issue that fills it in TestFeatureNotImplemented", () => {
     const thrown = new TestFeatureNotImplemented({ feature: "qti-time-limits", issue: "m3f-01" });
 
@@ -540,5 +613,26 @@ describe("a test-feature module that has landed", () => {
       deliveredBy(landed, { documents: new Map(), source: testOf([]), test }).title,
       "T (timed)",
     );
+  });
+
+  it("[W0-BH] a test-feature module's render reads files and the item's instance", () => {
+    const node = { maxTime: 60, path: "x" };
+    const first = landedTimeLimits.render(node, emitState, renderKit("sitting.1", holdsStyle));
+    const second = landedTimeLimits.render(node, emitState, renderKit("sitting.2", holdsStyle));
+    const absent = landedTimeLimits.render(
+      node,
+      emitState,
+      renderKit("sitting.1", () => Option.none()),
+    );
+
+    assert.deepStrictEqual(
+      first,
+      Result.succeed(h("style", { "data-rule": "#sitting.1-item p { color: red }" })),
+    );
+    assert.deepStrictEqual(
+      second,
+      Result.succeed(h("style", { "data-rule": "#sitting.2-item p { color: red }" })),
+    );
+    assert.deepStrictEqual(absent, Result.succeed(h("span", { "data-stylesheet": "none" })));
   });
 });

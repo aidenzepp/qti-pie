@@ -75,11 +75,16 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * the candidate, `noSupports` when absent, and `view` the view the item is shown to, one of QTI's
  * six, the candidate's when absent: each content module's render decides by both what it shows of
  * what {@link redact} kept under the same two, so a render passes the supports and the view its
- * redaction took.
+ * redaction took. `files` is the host's reader of package-relative paths, none when the host holds
+ * no such file: plate reads no file itself (`openPackage` gives the host the package's paths, and
+ * the host holds the texts), so a content module's render reads one through the kit's `files`, as
+ * the two stylesheet modules of issue `m5-06` will, together with the kit's `instance` that scopes
+ * the Root's id. With no `files`, every path reads as none.
  */
 export interface Options {
   readonly assetBase?: string;
   readonly disabled?: boolean;
+  readonly files?: (path: string) => Option.Option<string>;
   readonly instance?: string;
   readonly messages?: readonly ValidationMessage[];
   readonly mode?: RenderMode;
@@ -442,23 +447,35 @@ const shippedRenderer =
 
 /**
  * Give the kit each content module's render reads: the emission of its content through the render
- * function, with the body's id scoping, heading shift, URLs and Notice part, and the supports and
- * the view the emit state holds.
+ * function, with the body's id scoping, heading shift, URLs and Notice part, the supports and the
+ * view the emit state holds, the host's reader of package files, and the render's instance.
  *
- * @param built The render's payload.
+ * @param built The render's payload, which gives the instance.
  * @param state The render's emit state.
  * @param renderInteraction The render function an interaction among the content is handed to.
+ * @param files The host's reader of package-relative paths, or {@link noFiles}.
  * @returns The kit.
  */
 const contentKitOf = (
   built: Payload,
   state: EmitState,
   renderInteraction: RenderInteraction,
+  files: ContentRenderKit["files"],
 ): ContentRenderKit => ({
+  files,
+  instance: built.instance,
   nodes: (nodes) => emitNodes(nodes, built, state, renderInteraction),
   supports: state.supports ?? noSupports,
   view: state.view ?? defaultView,
 });
+
+/**
+ * The reader of package files a render uses when the host passed none: it holds no file, so every
+ * path reads as none.
+ *
+ * @returns None.
+ */
+const noFiles: ContentRenderKit["files"] = () => Option.none();
 
 /**
  * The default answer to `RenderInteraction.attach`: no catalog presenter attaches anything, so an
@@ -482,15 +499,20 @@ const attachNothing: AttachCatalog = () => Result.succeed([]);
  *
  * @param built The render's payload.
  * @param state The render's emit state.
+ * @param files The host's reader of package-relative paths, which a content module's kit carries.
  * @returns The function that renders one interaction, container or content node through its module.
  */
-const interactionRenderer = (built: Payload, state: EmitState): RenderInteraction => {
+const interactionRenderer = (
+  built: Payload,
+  state: EmitState,
+  files: ContentRenderKit["files"],
+): RenderInteraction => {
   const renderer: RenderInteraction = Object.assign(shippedRenderer(built, state), {
     attach: attachNothing,
     containers: (node: ContainerPayload, children: readonly Node[]) =>
       renderContainer(node, children, built, state),
     content: (node: ContentPayload) =>
-      renderContent(node, state, contentKitOf(built, state, renderer)),
+      renderContent(node, state, contentKitOf(built, state, renderer, files)),
     contentNodes,
     moduleContent,
     modules: (interaction: ModulePayload) => renderModule(interaction, built, state),
@@ -589,12 +611,13 @@ export const render = (
       : checkedInstance(options.instance, "options.instance");
     const state = stateOf(configuration, parts, options.assetBase, options.supports, options.view);
     const built = payload(item, viewOf(instance, configuration, options));
-    const renderer = interactionRenderer(built, state);
+    const files = options.files ?? noFiles;
+    const renderer = interactionRenderer(built, state, files);
     const body = yield* emitBody(built, state, renderer);
     const content = yield* renderItemContent(
       built.content,
       state,
-      contentKitOf(built, state, renderer),
+      contentKitOf(built, state, renderer, files),
     );
     const live = yield* itemPart(state.parts, "live", liveRegion, []);
     const root = yield* emitItem(built, state, [...body, ...content, live]);

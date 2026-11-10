@@ -12,8 +12,10 @@
  * a section or stimulus root, `lti-link`) name no element and have no module.
  *
  * Each module beside this file is a stub, built by {@link stub}: `implemented` is false, its
- * `parse` records the mark the test model records for its element and reads no node, and its three
- * hooks have no effect, so the verdicts, the sequence and the HTML stay what they were. The hubs
+ * `parse` records the mark the test model records for its element and reads no node, its three
+ * hooks have no effect, and its `render` throws {@link TestFeatureNotImplemented}, which no hub
+ * reaches since no hub holds a node of a stub, so the verdicts, the sequence and the HTML stay what
+ * they were. The hubs
  * consult the modules through the table `testFeatures` (`#plate/test-features/table.ts`) and the
  * delegations of `#plate/test-features/dispatch.ts`, each at one site:
  *
@@ -34,10 +36,16 @@
 import { Data, Option } from "effect";
 import type { Result } from "effect";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
+import type { Element, Node } from "#plate/emit/node.ts";
+import type { PartSwapRefused } from "#plate/emit/swap.ts";
+import type { BodyNode } from "#plate/model/item.ts";
 import type { AttributeReaders } from "#plate/model/reader.ts";
 import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
+import type { EmitState } from "#plate/payload.ts";
 import type { Intent, TestSession } from "#plate/session/session.ts";
+import type { Supports } from "#plate/supports.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
+import type { OutcomeView } from "#plate/vocabulary.ts";
 
 /**
  * The keys of the test features that have a module, each once: the one place that names them, in
@@ -216,6 +224,61 @@ export interface DeliveryContext {
 }
 
 /**
+ * What a test-feature module's `render` is handed, beside the emit state: the emission of body
+ * nodes and the supports and the view the content is shown under, and the two facts of this render
+ * that only the host and the render know, the host's reader of package files and the instance of
+ * the item the content is shown with.
+ *
+ * Issue `m5-06` fills the test-level stylesheet module from `files` and `instance`: plate reads no
+ * file itself (`openPackage` hands the host paths only, and the host holds the texts), and the host
+ * passes the item's instance to the item's render and to this one, so a `<style>` the module
+ * renders is confined to that item's Root, `#<scopedId(instance, "item")>`.
+ */
+export interface TestContentRenderKit {
+  /**
+   * Read the text of one package file from the host: `renderTestContent`'s `options.files`, or
+   * `() => Option.none()` when the host passed none. The kit resolves nothing: a module resolves
+   * the path it asks for against the test document. A module that finds no file renders nothing
+   * for it and says so through the Notice part, since the host decides at render time what it
+   * holds.
+   *
+   * @param path A package-relative path, as the module resolved it.
+   * @returns The file's text, none when the host holds no such file.
+   */
+  readonly files: (path: string) => Option.Option<string>;
+  /**
+   * The instance of the item the content is shown with: the item Root's id is
+   * `scopedId(instance, "item")`, so a module that confines a rule to that Root writes the
+   * selector `#<id>`. Two renderings of one item differ by it, so the selector does too.
+   */
+  readonly instance: string;
+  /**
+   * Prints the body nodes by the session's outcomes and emits them; refuses any interaction.
+   *
+   * @param nodes The body nodes.
+   * @returns The emitted nodes, or the first refusal of a part swap.
+   */
+  readonly nodes: (nodes: readonly BodyNode[]) => Result.Result<readonly Node[], PartSwapRefused>;
+  /**
+   * The supports the host enabled, `noSupports` when it named none.
+   */
+  readonly supports: Supports;
+  /**
+   * The view the content is shown to, the candidate's when the host named none.
+   */
+  readonly view: OutcomeView;
+}
+
+/**
+ * One module's node as a hub holds it, erased as {@link TestFeatureNodes} erases it: the key of the
+ * module that presents it, and the node, which only that module's `render` reads.
+ */
+export interface TestContent {
+  readonly key: TestFeatureKey;
+  readonly node: unknown;
+}
+
+/**
  * The members every test-feature module has.
  *
  * @template K The feature's key.
@@ -260,6 +323,21 @@ export interface TestFeatureModule<K extends TestFeatureKey, N> {
     element: SourceElement,
     context: TestParseContext,
   ) => Result.Result<Option.Option<N>, Refusal>;
+  /**
+   * Render the module's node as one element, given the emit state and the kit, whose `files` and
+   * `instance` a stylesheet module reads. Issue `m5-06` fills the test-level stylesheet module's.
+   *
+   * @param node The module's node.
+   * @param state The emit state.
+   * @param kit The render kit.
+   * @returns The element, or the first refusal of a part swap.
+   */
+  // oxlint-disable-next-line typescript/method-signature-style -- A method signature is bivariant in `node`, so a stub, `TestFeatureModule<K, never>`, stays assignable to the `TestFeatureModule<TestFeatureKey, unknown>` every hub's table holds; a property signature is contravariant and refuses it.
+  render(
+    node: N,
+    state: EmitState,
+    kit: TestContentRenderKit,
+  ): Result.Result<Element, PartSwapRefused>;
   /**
    * Give the places a session walks, from those the sequence holds so far: unchanged for a feature
    * that neither selects nor orders.
@@ -327,8 +405,10 @@ export type StubDeclaration<K extends TestFeatureKey> = Pick<
 
 /**
  * Build a stub module from its declaration: `implemented` false, a `parse` that records the
- * declaration's key as the element's mark and reads no node, and the three hooks with no effect,
- * so a test that holds the feature is marked and delivered as it was before the module existed.
+ * declaration's key as the element's mark and reads no node, the three hooks with no effect, and a
+ * `render` that throws {@link TestFeatureNotImplemented}, which is unreachable since the module
+ * reads no node to render. A test that holds the feature is marked and delivered as it was before
+ * the module existed.
  *
  * @template K The feature's key.
  * @param declared The feature's facts.
@@ -342,5 +422,8 @@ export const stub = <K extends TestFeatureKey>(
   gate: () => Option.none(),
   implemented: false,
   parse: (_element, context) => context.mark(declared.key),
+  render: () => {
+    throw new TestFeatureNotImplemented({ feature: declared.key, issue: declared.issue });
+  },
   sequence: (context) => context.places,
 });
