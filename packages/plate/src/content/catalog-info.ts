@@ -27,8 +27,11 @@
  *    is picked, since no reading says which.
  * 8. Presentation: the sources stop at each support's own row, and plate's default is the listing
  *    {@link catalogInfoModule}'s `render` writes after the body; a support whose presenter has
- *    landed ({@link Presenters}) is handed its card instead, and each support's presentation beside
- *    its referencing element is that presenter's issue.
+ *    landed ({@link Presenters}) is handed its card instead, by `attach`, for each body element
+ *    that references the catalog, and its nodes stand beside that element; the listing keeps the
+ *    cards no presenter claims, and the cards of a catalog no element got a presentation of (the
+ *    emitter hands `attach` no element inside an interaction's own content). Each support's
+ *    presentation is that presenter's issue.
  * 9. Dormant otherwise: a card of a support the host did not enable, an entry not chosen and a catalog
  *    no reference names are in neither the HTML nor the redacted copy, withheld through the
  *    redaction kit.
@@ -38,6 +41,8 @@
 import { Option, Result } from "effect";
 import type { RedactedJson } from "#plate/codec/redacted.ts";
 import type {
+  AttachAnswer,
+  CatalogPresentation,
   CatalogPresenter,
   CatalogReference,
   ContentRedactKit,
@@ -50,6 +55,7 @@ import { qtiNamespace } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
+import type { ReferencingElement } from "#plate/emit/body.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import type { ReaderKit } from "#plate/interactions/contract.ts";
 import type { BodyAttribute, BodyNode } from "#plate/model/item.ts";
@@ -620,9 +626,70 @@ const fileLink = (file: CatalogFile, state: EmitState): Element => {
 };
 
 /**
+ * Read what a presenter gave as a {@link CatalogPresentation}: the bare nodes of a presenter that
+ * only places them stand for a presentation of nodes alone.
+ *
+ * @param given What the presenter gave.
+ * @returns The presentation.
+ */
+const presentationOf = (given: readonly Node[] | CatalogPresentation): CatalogPresentation =>
+  "nodes" in given ? given : { nodes: given };
+
+/**
+ * The catalogs, by collapsed `id`, that `attach` presented a card of for at least one referencing
+ * element, by the emit state of the render. The emitter hands `attach` the elements of the item
+ * body and of the content a module emits through the render kit, and not an element inside an
+ * interaction's own content (a Prompt, a choice), so a catalog whose references all sit there is
+ * never presented beside a term; the listing writes its claimed cards, so a definition the host
+ * enabled is never dropped from the page. The body is emitted before the listing, so the set is
+ * complete when the listing reads it.
+ */
+const presented = new WeakMap<EmitState, Set<string>>();
+
+/**
+ * Tell whether `attach` presented a catalog's cards beside at least one element ({@link
+ * presented}).
+ *
+ * @param state The emit state of the render.
+ * @param catalog The catalog.
+ * @returns Whether a referencing element got a presentation of the catalog.
+ */
+const wasPresented = (state: EmitState, catalog: CatalogPayload): boolean =>
+  presented.get(state)?.has(collapse(catalog.id)) ?? false;
+
+/**
+ * Record that `attach` presented a catalog's cards beside an element ({@link presented}).
+ *
+ * @param state The emit state of the render.
+ * @param idref The catalog's id as the element wrote it, collapsed.
+ */
+const recordPresented = (state: EmitState, idref: string): void => {
+  const known = presented.get(state);
+
+  if (known === undefined) {
+    presented.set(state, new Set([idref]));
+  } else {
+    known.add(idref);
+  }
+};
+
+/**
+ * Tell whether the listing writes a card: a card of a support with no landed presenter always, and
+ * a card a landed presenter claims only when `attach` presented none of its catalog's cards beside
+ * a term ({@link presented}).
+ *
+ * @param card The active card.
+ * @param catalog The catalog that holds it.
+ * @param state The emit state of the render.
+ * @returns Whether the listing writes the card.
+ */
+const isListed = (card: CatalogCard, catalog: CatalogPayload, state: EmitState): boolean =>
+  Option.isNone(presenterOf(collapse(card.support))) || !wasPresented(state, catalog);
+
+/**
  * Write one active card as a list item: `data-support` the card's `support` as written, `lang` the
- * language of what it shows when it names one, and either what the support's landed presenter
- * gives or the card's content followed by one link per file.
+ * language of what it shows when it names one, and either what the support's landed presenter gives
+ * when it is handed no element or the card's content followed by one link per file.
  *
  * @param card The active card.
  * @param state The emit state.
@@ -641,7 +708,8 @@ const cardItem = (
           ...content,
           ...card.files.map((file) => fileLink(file, state)),
         ]),
-      onSome: (presenter) => presenter.present(card, state, kit),
+      onSome: (presenter) =>
+        Result.map(presenter.present(card, state, kit), (given) => presentationOf(given).nodes),
     }),
     (children) =>
       h(
@@ -656,26 +724,189 @@ const cardItem = (
 
 /**
  * Write one kept catalog as a list: `data-catalog` its `id`, `data-references` how many elements
- * of the body named it, and one item per active card in document order.
+ * of the body named it, and one item per active card in document order that the listing writes
+ * ({@link isListed}).
  *
  * @param catalog The catalog.
  * @param state The emit state.
  * @param kit The render kit.
- * @returns The list, or the refusal of a part swap.
+ * @returns The list, none when the listing writes no card of the catalog, or the refusal of a part
+ *   swap.
  */
 const catalogList = (
   catalog: CatalogPayload,
   state: EmitState,
   kit: ContentRenderKit,
-): Result.Result<Element, PartSwapRefused> =>
-  Result.map(Result.all(catalog.cards.map((card) => cardItem(card, state, kit))), (items) =>
-    h("ul", { "data-catalog": catalog.id, "data-references": String(catalog.references) }, items),
+): Result.Result<Option.Option<Element>, PartSwapRefused> => {
+  const cards = catalog.cards.filter((card) => isListed(card, catalog, state));
+
+  return Result.map(Result.all(cards.map((card) => cardItem(card, state, kit))), (items) =>
+    items.length === 0
+      ? Option.none()
+      : Option.some(
+          h(
+            "ul",
+            { "data-catalog": catalog.id, "data-references": String(catalog.references) },
+            items,
+          ),
+        ),
   );
+};
+
+/**
+ * The emit states a catalog presentation is being written for. A card's content is emitted through
+ * the render kit, whose walk hands every element of it that carries a `data-catalog-idref` to
+ * `attach` again; a definition that names its own term, or two that name each other, would present
+ * without end. A reference inside a card's content is no reference of the body (the module's
+ * `parse` counts none), so `attach` answers it with nothing while its state is in this set.
+ */
+const presenting = new WeakSet<EmitState>();
+
+/**
+ * Run a presentation with the state marked as presenting ({@link presenting}), so the references
+ * inside the card content it emits attach nothing.
+ *
+ * @template A What the presentation gives.
+ * @param state The emit state the presentation emits under.
+ * @param present The presentation.
+ * @returns What the presentation gave.
+ */
+const whilePresenting = <A>(state: EmitState, present: () => A): A => {
+  presenting.add(state);
+
+  const given = present();
+
+  presenting.delete(state);
+
+  return given;
+};
+
+/**
+ * The attributes whose value is a list of ids, which two presenters marking one element each add
+ * to rather than replace: the HTML attributes that hold an IDREFS.
+ */
+const idReferenceLists: ReadonlySet<string> = new Set([
+  "aria-controls",
+  "aria-describedby",
+  "aria-details",
+  "aria-flowto",
+  "aria-labelledby",
+  "aria-owns",
+]);
+
+/**
+ * Read an attribute value as the tokens it lists, none for a bare attribute.
+ *
+ * @param value The attribute's value.
+ * @returns Its whitespace-separated tokens.
+ */
+const tokensOf = (value: string | true | undefined): readonly string[] =>
+  value === undefined || value === true
+    ? []
+    : value.split(/[\t\n\f\r ]+/u).filter((token) => token !== "");
+
+/**
+ * Add one presenter's attributes to the attributes before it: its value over theirs, except for an
+ * attribute that lists ids ({@link idReferenceLists}), whose tokens follow theirs, each once.
+ *
+ * @param folded The attributes so far.
+ * @param given The next presenter's attributes.
+ * @returns The merged attributes.
+ */
+const mergedAttributes = (folded: Attributes, given: Attributes): Attributes => ({
+  ...folded,
+  ...Object.fromEntries(
+    Object.entries(given).map(([name, value]): [string, string | true] => [
+      name,
+      idReferenceLists.has(name)
+        ? [...new Set([...tokensOf(folded[name]), ...tokensOf(value)])].join(" ")
+        : value,
+    ]),
+  ),
+});
+
+/**
+ * Fold the presentations of the cards of one reference into the answer the emitter takes: the
+ * nodes in card order, the attributes merged ({@link mergedAttributes}), and `after-block` when any
+ * presentation says so.
+ *
+ * @param presentations The presentations, in card order.
+ * @returns The answer.
+ */
+const answerOf = (presentations: readonly CatalogPresentation[]): AttachAnswer => {
+  let attributes: Attributes = {};
+  let place: AttachAnswer["place"] = "after-element";
+  const nodes: Node[] = [];
+
+  for (const presentation of presentations) {
+    attributes = mergedAttributes(attributes, presentation.attributes ?? {});
+    nodes.push(...presentation.nodes);
+
+    if (presentation.place === "after-block") {
+      place = "after-block";
+    }
+  }
+
+  return { attributes, nodes, place };
+};
+
+/**
+ * Present the cards of the catalog a body element references through their landed presenters
+ * (step 8): each active card whose support has a landed presenter is handed to it with the
+ * referencing element, in card order, and the answers are folded. A reference to a catalog with no
+ * such card, or one made inside a card's own content ({@link presenting}), answers nothing, which
+ * leaves the element as emitted.
+ *
+ * @param reference The referencing element: the catalog's idref and the element's id.
+ * @param state The emit state.
+ * @param kit The render kit.
+ * @param nodes The payload nodes the item holds of this module's element.
+ * @returns The answer, or the refusal of a part swap.
+ */
+const attach = (
+  reference: ReferencingElement,
+  state: EmitState,
+  kit: ContentRenderKit,
+  nodes: readonly CatalogInfoPayload[],
+): Result.Result<AttachAnswer, PartSwapRefused> => {
+  const idref = collapse(reference.idref);
+  const claimed = presenting.has(state)
+    ? []
+    : nodes
+        .flatMap((node) => node.catalogs)
+        .filter((catalog) => collapse(catalog.id) === idref)
+        .flatMap((catalog) => catalog.cards)
+        .flatMap((card) =>
+          Option.toArray(
+            Option.map(presenterOf(collapse(card.support)), (presenter) => ({ card, presenter })),
+          ),
+        );
+
+  return Result.map(
+    whilePresenting(state, () =>
+      Result.all(
+        claimed.map(({ card, presenter }) =>
+          Result.map(presenter.present(card, state, kit, reference), presentationOf),
+        ),
+      ),
+    ),
+    (presentations) => {
+      const answer = answerOf(presentations);
+
+      if (answer.nodes.length > 0) {
+        recordPresented(state, idref);
+      }
+
+      return answer;
+    },
+  );
+};
 
 /**
  * The Catalog Resources module (I-14), landed by issue m3e-04: it reads the item's catalogs, keeps
- * the active cards under the enabled supports, and lists them after the body, each support's card
- * through its presenter once that has landed. The resolution steps and plate's defaults where the
+ * the active cards under the enabled supports, and lists them after the body, except the cards of a
+ * support whose presenter has landed, which `attach` (issue m3e-08) hands to that presenter beside
+ * each element that references their catalog. The resolution steps and plate's defaults where the
  * sources stop are stated at the module's head.
  */
 export const catalogInfoModule: ItemContentModule<
@@ -690,6 +921,11 @@ export const catalogInfoModule: ItemContentModule<
    */
   readonly presenters: Presenters;
 } = {
+  /**
+   * Hand the active cards of the catalog a body element references to the landed presenters of
+   * their supports, with the element, and answer with what they give ({@link attach}).
+   */
+  attach,
   /**
    * The content the listing writes: every active card's content, in order, so the heading shift
    * counts a heading inside a card.
@@ -794,12 +1030,19 @@ export const catalogInfoModule: ItemContentModule<
     return catalogs.length === 0 ? Option.none() : Option.some({ ...node, catalogs });
   },
   /**
-   * Write the listing: one element holding one list per kept catalog, since the contract gives one
-   * element per node ({@link catalogList}).
+   * Write the listing: one element holding one list per kept catalog that keeps a card no landed
+   * presenter claims, since the contract gives one element per node ({@link catalogList}).
    */
   render: (payload, state, kit) =>
     Result.map(
-      Result.all(payload.catalogs.map((catalog) => catalogList(catalog, state, kit))),
-      (lists) => h("div", {}, lists),
+      whilePresenting(state, () =>
+        Result.all(payload.catalogs.map((catalog) => catalogList(catalog, state, kit))),
+      ),
+      (lists) =>
+        h(
+          "div",
+          {},
+          lists.flatMap((list) => Option.toArray(list)),
+        ),
     ),
 };
