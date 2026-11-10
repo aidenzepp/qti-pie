@@ -6,6 +6,7 @@ import type { MessageKey } from "#plate/messages.ts";
  * A value for every placeholder any key's text has.
  */
 const sample = {
+  answer: "8",
   count: "2",
   feature: "pattern-mask",
   intent: "Submit part",
@@ -48,6 +49,10 @@ const english = {
   malformedFile: "Enter text, not a file.",
   malformedNumber: "Enter a number.",
   malformedSingleMany: "Enter one answer.",
+  markMissed: "Right answer",
+  markMissedAnswer: "Right answer: 8",
+  markRight: "Your answer, right",
+  markWrong: "Your answer, wrong",
   nextItem: "Next item",
   notAccepted: "Not accepted",
   notice: "Not supported here: pattern-mask",
@@ -238,6 +243,14 @@ describe("message", () => {
       [message("en", "confirmList"), message("en", "confirm"), message("en", "return")],
       ["Unanswered or unsubmitted items", "Confirm", "Return"],
     );
+  });
+
+  it("writes a review mark's words: the answer's, right or wrong, and the right answer, alone on a choice or naming it beside a control", () => {
+    assert.strictEqual(message("en", "markRight"), "Your answer, right");
+    assert.strictEqual(message("en", "markWrong"), "Your answer, wrong");
+    assert.strictEqual(message("en", "markMissed"), "Right answer");
+    assert.strictEqual(message("en", "markMissedAnswer", { answer: "moo" }), "Right answer: moo");
+    assert.notStrictEqual(message("en", "markRight"), message("en", "markWrong"));
   });
 
   it("writes the summary page's links and the words for a link it does not give", () => {

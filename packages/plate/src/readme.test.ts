@@ -52,7 +52,7 @@ const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
 
 /**
  * The README's sections: the eleven it had before M2, the four M2 adds, the one M3.b-2 adds, the
- * one M3.b-3 adds, Feedback and the two align-54 adds.
+ * one M3.b-3 adds, Feedback, Right and wrong answers and the two align-54 adds.
  */
 const headings = [
   "## Install",
@@ -64,6 +64,7 @@ const headings = [
   "## Interactions",
   "## Scoring",
   "## Feedback",
+  "## Right and wrong answers",
   "## Template processing",
   "## Outcome processing",
   "## Documents and packages",
@@ -601,6 +602,42 @@ describe("README.md", () => {
     );
     assert.include(script, 'mode: "review"');
     assert.include(flatSectionOf("## Feedback"), "Modal feedback shows only after `score`");
+  });
+
+  it("passes solution(accepted, view.record) as render's solution in review only where permits gives solution, in Right and wrong answers' example", () => {
+    const [script = "", ...others] = codeBlocks(sectionOf("## Right and wrong answers")).map(
+      scriptOf,
+    );
+    const calls = ["permits(", "redact(accepted, view.page", "render("];
+    const at = calls.map((call) => script.indexOf(call));
+
+    assert.lengthOf(others, 0, "Right and wrong answers holds one code block");
+    assert.notInclude(at, -1, `the example calls ${calls.join(", ")}`);
+    assert.deepStrictEqual(
+      at,
+      at.toSorted((left, right) => left - right),
+      "in that order",
+    );
+    assert.include(script, 'mode: "review"');
+    assert.include(
+      script,
+      "allowed.solution ? { ...options, solution: solution(accepted, view.record) }",
+    );
+
+    const section = flatSectionOf("## Right and wrong answers");
+    for (const phrase of [
+      "`show-solution`",
+      "A mode other than `review` reads none of it",
+      '`data-answer="right"`, "Your answer, right"',
+      '`wrong`, "Your answer, wrong"',
+      '`missed`, "Right answer"',
+      '"Right answer: 2"',
+      "`aria-describedby`",
+      "as `qti-match` compares them",
+      "colour is never the only signal",
+    ]) {
+      assert.include(section, phrase);
+    }
   });
 
   it("names the navigation API and says its parts are plain buttons with no submit semantics", () => {

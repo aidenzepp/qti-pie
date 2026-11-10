@@ -10,6 +10,27 @@ These entries list the surface of M1 and M2, what M3 adds to it, and each change
 reads the specification. plate is not published, and each of its entry points is unstable until
 M3.
 
+### Right and wrong answers in review (2026-11-09)
+
+- `render`'s options gain `solution`, the item's correct responses as `solution(accepted, record)`
+  gives them. A `review` render with no `messages` marks each answer against them; any other mode
+  reads none of it. Pass it only where the candidate may see the correct responses, in a test
+  where `permits` gives `solution`. With no `solution`, review is unchanged.
+- Three parts are new, each a `span` that carries `data-answer`, `right`, `wrong` or `missed`, and
+  holds the mark's words: `choice-interaction-mark`, last in a picked or right choice's Label, and
+  `text-entry-interaction-mark` and `inline-choice-interaction-mark`, after the Control, the
+  answer's own and, when it is not right, the right answer's, "Right answer: {answer}". The Text
+  Entry's Control names its Marks in `aria-describedby`. `parts` swaps each as `mark`.
+- An answer is right when it matches the correct response as `qti-match` compares them. A
+  response whose correct response is NULL, a `record` response and an Extended Text are never
+  marked.
+- The catalog gains `markRight`, `markWrong`, `markMissed` and `markMissedAnswer`.
+- The default theme draws the marks in `data-credit`'s green and `--destructive`, with a ✓ or ✗, a
+  2px border on a marked Choice row or Control, and a dashed one on a right choice not picked. A
+  Choice's Mark sits in its row's top corner, which every row of a marked Choice keeps clear. The
+  README's [Right and wrong answers](README.md#right-and-wrong-answers) section has the example
+  and the look.
+
 ### Serving admitted content without the XSD tables (2026-11-09)
 
 - `openAdmitted(location, bytes)`, in `@qti-pie/plate`, opens a document the host's content store

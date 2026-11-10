@@ -3,7 +3,8 @@
  * validation, the module shape Text Entry and Extended Text copy.
  *
  * {@link renderChoice} emits this structure: a native `fieldset` Root, the Prompt, and a
- * `ul` of Choices, each `li > [Control, Label > [Indicator, …choice content]]`. The connect
+ * `ul` of Choices, each `li > [Control, Label > [Indicator, …choice content, Mark?]]`, the Mark
+ * only in a review against the solution. The connect
  * function computes every attribute of every part once, and `applyPart` places each one, through
  * the embedder's replacement when there is one (ruling `fb4fe744` S1, S2). The Controls are native
  * radios or checkboxes, so the browser's own keyboard map applies: the radios form one
@@ -18,13 +19,14 @@
 import { Option, Result, pipe } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import { emitNodes, nestedInteraction } from "#plate/emit/body.ts";
-import { h, when } from "#plate/emit/node.ts";
+import { h, text, when } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { promptMarkupFor, rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOf, PartRow, PromptMarkup, RowContext } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
+import { markOf } from "#plate/interactions/marks.ts";
 import { authorsName, choiceControlName } from "#plate/interactions/name.ts";
 import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
@@ -55,8 +57,16 @@ type ChoicePart = PartOf<typeof owner>;
 type Rows = { readonly [P in ChoicePart]: PartRow };
 
 /**
+ * A choice's Mark as the connect function computes it: its attributes and the words it holds.
+ */
+interface MarkProps {
+  readonly props: Attributes;
+  readonly words: string;
+}
+
+/**
  * The attributes the connect function computes for one choice's parts, beside the content its
- * Label holds.
+ * Label holds and its Mark, none when the render marks the choice nothing.
  */
 interface ChoiceItem {
   readonly choice: Attributes;
@@ -64,6 +74,7 @@ interface ChoiceItem {
   readonly control: Attributes;
   readonly indicator: Attributes;
   readonly label: Attributes;
+  readonly mark: Option.Option<MarkProps>;
 }
 
 /**
@@ -97,6 +108,7 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
     control: rowFor(owner, "control"),
     indicator: rowFor(owner, "indicator"),
     label: rowFor(owner, "label"),
+    mark: rowFor(owner, "mark"),
     prompt: rowFor(owner, "prompt", context),
     root: rowFor(owner, "root", context),
   };
@@ -124,6 +136,11 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  *   its position as emitted; `aria-invalid` and `aria-describedby` → the message ids when the
  *   response is invalid; and `autofocus` on the first Control when the payload says.
  * - Indicator: `aria-hidden="true"`. Label: its id, and `for` → its Control.
+ * - Mark, for a choice the payload marks: `data-answer`, the mark, and its words ({@link markOf}). It
+ *   sits last in the Label after a space, so a Control its Label names has the words in its name
+ *   apart from the content's last word, and a screen reader reads them with the choice; the ✓ or ✗
+ *   is the stylesheet's. The space is a text node of its own: an accessible name joins inline
+ *   content with no separator, so a picture's `alt` would otherwise run into the words.
  *
  * Every id is `scopedId(instance, response, part, index)`.
  *
@@ -179,6 +196,11 @@ const connect = (
         },
         indicator: { "aria-hidden": "true", "data-slot": rows.indicator.slot },
         label: { "data-slot": rows.label.slot, for: controlId, id: labelId },
+        mark: Option.map(Option.fromUndefinedOr(choice.mark), (answer): MarkProps => {
+          const { words } = markOf(answer, locale);
+
+          return { props: { "data-answer": answer, "data-slot": rows.mark.slot }, words };
+        }),
       };
     }),
     prompt: { "data-slot": rows.prompt.slot, ...when(labelledby, { id: promptId }) },
@@ -234,7 +256,8 @@ export const labelAsSpan = (node: Node): Node => {
 
 /**
  * Render a Choice: a `fieldset` Root holding the Prompt, when there is
- * one, then a `ul` of Choices, each `li > [Control, Label > [Indicator, …choice content]]`.
+ * one, then a `ul` of Choices, each `li > [Control, Label > [Indicator, …choice content, Mark?]]`,
+ * a choice the payload marks holding its Mark last in its Label.
  *
  * The Prompt's markup is picked from its emitted content (rule `efed9867`): a Prompt of phrasing
  * content is the Root's first child, a `legend`; any other is a `qti-prompt` the Root names through
@@ -282,10 +305,17 @@ export const renderChoice = (
             [],
             replacement("indicator"),
           );
+          const mark = yield* Result.transposeOption(
+            item.mark.pipe(
+              Option.map(({ props: markProps, words }) =>
+                applyPart(rows.mark, markProps, [text(words)], replacement("mark")),
+              ),
+            ),
+          );
           const label = yield* applyPart(
             rows.label,
             item.label,
-            [indicator, ...nodes],
+            [indicator, ...nodes, ...Option.toArray(mark).flatMap((held) => [text(" "), held])],
             replacement("label"),
           );
           const control = yield* applyPart(rows.control, item.control, [], replacement("control"));

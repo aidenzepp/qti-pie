@@ -12,7 +12,10 @@
  *
  * Colours that are not tokens: the credit marks' green, oklch(0.6 0.16 150), for full credit, and
  * amber, oklch(0.62 0.16 60), for partial credit, since shadcn has no success or warning token.
- * Each holds the 3:1 a graphical object needs (WCAG 1.4.11) on the card in light and in .dark.
+ * Each holds the 3:1 a graphical object needs (WCAG 1.4.11) on the card in light and in .dark. A
+ * review's answer marks reuse the credit colours: the green for a right answer, --destructive for
+ * a wrong one. The green holds 3:1 on the muted surface too (3.38:1 light, 4.11:1 .dark), and
+ * never colours text, which needs 4.5:1.
  *
  * Every rule sits inside :where(), so it weighs nothing and any host rule wins by order; only the
  * authored qti-* classes count. Every combinator is the descendant one, so a part swapped for the
@@ -898,6 +901,80 @@
   background-clip: content-box;
 }
 
+/*
+ * A Choice row a review marks against the solution, by its Mark's data-answer: a 2px border, the
+ * padding giving back the extra pixel, so the mark shows by width as well as by colour. A right
+ * choice, picked or not, takes the green, and a wrong pick --destructive (4.37:1 on the muted
+ * surface in light, 5.23:1 in .dark). A right choice the candidate did not pick has a dashed
+ * border and an empty Indicator, so it reads apart from a right pick by shape, not by colour alone
+ * (WCAG 1.4.1). The Mark in the row's Label carries the glyph and the words.
+ *
+ * Every row of a marked Choice keeps its inline end clear for a Mark, so the rows stay as wide as
+ * one another and no content runs under a Mark.
+ */
+:where(
+  [data-slot="choice-interaction"]:has([data-slot="choice-interaction-mark"])
+    [data-slot="choice-interaction-choice"]
+) {
+  padding-inline-end: 2.25rem;
+}
+
+:where(
+  [data-slot="choice-interaction-choice"]:has([data-slot="choice-interaction-mark"][data-answer])
+) {
+  padding-block: calc(0.5rem - 1px);
+  padding-inline: calc(0.75rem - 1px) calc(2.25rem - 1px);
+  border-width: 2px;
+}
+
+:where(
+  [data-slot="choice-interaction-choice"]:has(
+    [data-slot="choice-interaction-mark"][data-answer="right"]
+  ),
+  [data-slot="choice-interaction-choice"]:has(
+    [data-slot="choice-interaction-mark"][data-answer="missed"]
+  )
+) {
+  border-color: oklch(0.6 0.16 150);
+}
+
+:where(
+  [data-slot="choice-interaction-choice"]:has(
+    [data-slot="choice-interaction-mark"][data-answer="missed"]
+  )
+) {
+  border-style: dashed;
+}
+
+:where(
+  [data-slot="choice-interaction-choice"]:has(
+    [data-slot="choice-interaction-mark"][data-answer="wrong"]
+  )
+) {
+  border-color: var(--destructive, oklch(0.577 0.245 27.325));
+}
+
+/* The Indicator of a marked pick: filled in its mark's colour, in place of --primary. */
+:where(
+  [data-slot="choice-interaction-choice"]:has(
+      [data-slot="choice-interaction-mark"][data-answer="right"]
+    )
+    [data-slot="choice-interaction-indicator"]
+) {
+  border-color: oklch(0.6 0.16 150);
+  background-color: oklch(0.6 0.16 150);
+}
+
+:where(
+  [data-slot="choice-interaction-choice"]:has(
+      [data-slot="choice-interaction-mark"][data-answer="wrong"]
+    )
+    [data-slot="choice-interaction-indicator"]
+) {
+  border-color: var(--destructive, oklch(0.577 0.245 27.325));
+  background-color: var(--destructive, oklch(0.577 0.245 27.325));
+}
+
 /* The Text Entry Root: inline, in the run of the item's text. */
 :where([data-slot="text-entry-interaction"]) {
   display: inline-block;
@@ -1010,6 +1087,153 @@
 ) {
   background-color: var(--muted, oklch(0.97 0 0));
   color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/*
+ * A Text Entry's or an Inline Choice's Control whose answer a review marks against the solution:
+ * a 2px border, the padding giving back the extra pixel, in the green when the answer is right and
+ * --destructive when it is wrong, beside the Mark that says so.
+ */
+:where(
+  [data-slot="text-entry-interaction"]:has([data-slot="text-entry-interaction-mark"][data-answer])
+    [data-slot="text-entry-interaction-control"],
+  [data-slot="inline-choice-interaction"]:has(
+      [data-slot="inline-choice-interaction-mark"][data-answer]
+    )
+    [data-slot="inline-choice-interaction-control"]
+) {
+  padding: calc(0.25rem - 1px) calc(0.75rem - 1px);
+  border-width: 2px;
+}
+
+:where(
+  [data-slot="text-entry-interaction"]:has(
+      [data-slot="text-entry-interaction-mark"][data-answer="right"]
+    )
+    [data-slot="text-entry-interaction-control"],
+  [data-slot="inline-choice-interaction"]:has(
+      [data-slot="inline-choice-interaction-mark"][data-answer="right"]
+    )
+    [data-slot="inline-choice-interaction-control"]
+) {
+  border-color: oklch(0.6 0.16 150);
+}
+
+:where(
+  [data-slot="text-entry-interaction"]:has(
+      [data-slot="text-entry-interaction-mark"][data-answer="wrong"]
+    )
+    [data-slot="text-entry-interaction-control"],
+  [data-slot="inline-choice-interaction"]:has(
+      [data-slot="inline-choice-interaction-mark"][data-answer="wrong"]
+    )
+    [data-slot="inline-choice-interaction-control"]
+) {
+  border-color: var(--destructive, oklch(0.577 0.245 27.325));
+}
+
+/*
+ * A Mark, a review's mark against the solution, in a Choice row's Label or beside a Text Entry's
+ * or an Inline Choice's Control: a ✓ or ✗ in its mark's colour, then its words. The glyph's
+ * alternative text is empty, since the words say the same to a screen reader; its shape carries
+ * the mark where colour does not (WCAG 1.4.1), forced colours included. The plain content written
+ * first is the fallback of a browser without the alternative-text form, which then announces the
+ * glyph before the words.
+ */
+:where(
+  [data-slot="choice-interaction-mark"],
+  [data-slot="inline-choice-interaction-mark"],
+  [data-slot="text-entry-interaction-mark"]
+) {
+  display: inline-flex;
+  margin-inline-start: 0.375em;
+  font-weight: 600;
+}
+
+:where(
+  [data-slot="choice-interaction-mark"],
+  [data-slot="inline-choice-interaction-mark"],
+  [data-slot="text-entry-interaction-mark"]
+)::before {
+  flex-shrink: 0;
+  inline-size: 1em;
+  text-align: center;
+}
+
+:where(
+  [data-slot="choice-interaction-mark"][data-answer="right"],
+  [data-slot="choice-interaction-mark"][data-answer="missed"],
+  [data-slot="inline-choice-interaction-mark"][data-answer="right"],
+  [data-slot="inline-choice-interaction-mark"][data-answer="missed"],
+  [data-slot="text-entry-interaction-mark"][data-answer="right"],
+  [data-slot="text-entry-interaction-mark"][data-answer="missed"]
+)::before {
+  content: "\2713";
+  content: "\2713" / "";
+  color: oklch(0.6 0.16 150);
+}
+
+:where(
+  [data-slot="choice-interaction-mark"][data-answer="wrong"],
+  [data-slot="inline-choice-interaction-mark"][data-answer="wrong"],
+  [data-slot="text-entry-interaction-mark"][data-answer="wrong"]
+)::before {
+  content: "\2717";
+  content: "\2717" / "";
+  color: var(--destructive, oklch(0.577 0.245 27.325));
+}
+
+/*
+ * A Choice's Mark: in its row's top inline-end corner, on the line of the Indicator, in the space
+ * every row of a marked Choice keeps clear, so a picture choice keeps its size and its row its
+ * height.
+ */
+:where([data-slot="choice-interaction-mark"]) {
+  position: absolute;
+  inset-block-start: calc(0.5rem - 1px);
+  inset-inline-end: calc(0.75rem - 1px);
+  margin-inline-start: 0;
+}
+
+/*
+ * A Choice's Mark, and the Mark of a Text Entry's or an Inline Choice's own answer: its glyph alone
+ * shows, since the row's border and Indicator, or the Control beside it, already show the answer.
+ * Its words stay in the box, clipped past the glyph, so a screen reader still reads them;
+ * display: none or visibility: hidden would take them from it too. overflow: clip, unlike hidden,
+ * makes no scroll container, so the Mark keeps its glyph's baseline and sits on the line of the
+ * text around it.
+ */
+:where(
+  [data-slot="choice-interaction-mark"],
+  [data-slot="inline-choice-interaction-mark"][data-answer="right"],
+  [data-slot="inline-choice-interaction-mark"][data-answer="wrong"],
+  [data-slot="text-entry-interaction-mark"][data-answer="right"],
+  [data-slot="text-entry-interaction-mark"][data-answer="wrong"]
+) {
+  inline-size: 1em;
+  overflow: clip;
+  white-space: nowrap;
+}
+
+/*
+ * The right answer beside a Text Entry or an Inline Choice, its words showing: framed in a 1px
+ * border of the green, its words and the answer in the text's own colour, since the green holds
+ * only the 3:1 of a graphical object, not the 4.5:1 text needs (WCAG 1.4.3).
+ */
+:where(
+  [data-slot="inline-choice-interaction-mark"][data-answer="missed"],
+  [data-slot="text-entry-interaction-mark"][data-answer="missed"]
+) {
+  padding: 0 0.375em;
+  border: 1px solid oklch(0.6 0.16 150);
+  border-radius: calc(var(--radius, 0.625rem) * 0.8);
+}
+
+:where(
+  [data-slot="inline-choice-interaction-mark"][data-answer="missed"],
+  [data-slot="text-entry-interaction-mark"][data-answer="missed"]
+)::before {
+  margin-inline-end: 0.25em;
 }
 
 /* Focus on a text Control or the Inline Choice Control: the same ring as a Choice row's. */

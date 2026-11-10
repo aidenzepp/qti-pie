@@ -35,6 +35,7 @@ import type {
 } from "#plate/model/item.ts";
 import { redactItem } from "#plate/payload.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
+import type { Value } from "#plate/model/values.ts";
 import type { RenderMode } from "#plate/payload.ts";
 import { render, renderStatus } from "#plate/render.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
@@ -59,8 +60,10 @@ const specRows = [
   ["choice-interaction", "control", "choice-interaction-control", "input"],
   ["choice-interaction", "indicator", "choice-interaction-indicator", "span"],
   ["choice-interaction", "label", "choice-interaction-label", "label"],
+  ["choice-interaction", "mark", "choice-interaction-mark", "span"],
   ["text-entry-interaction", "root", "text-entry-interaction", "qti-text-entry-interaction"],
   ["text-entry-interaction", "control", "text-entry-interaction-control", "input"],
+  ["text-entry-interaction", "mark", "text-entry-interaction-mark", "span"],
   [
     "inline-choice-interaction",
     "root",
@@ -71,6 +74,7 @@ const specRows = [
   ["inline-choice-interaction", "control", "inline-choice-interaction-control", "select"],
   ["inline-choice-interaction", "placeholder", "inline-choice-interaction-placeholder", "option"],
   ["inline-choice-interaction", "option", "inline-choice-interaction-option", "option"],
+  ["inline-choice-interaction", "mark", "inline-choice-interaction-mark", "span"],
   [
     "extended-text-interaction",
     "root",
@@ -500,6 +504,27 @@ describe("allows", () => {
     for (const tag of ["div", "p"]) {
       assert.isFalse(allows(row, h(tag, {})), tag);
     }
+  });
+
+  it("keeps each review Mark phrasing content, a span or a custom element and never a div or a p, and merges its data-answer", () => {
+    const marks = [
+      rowFor("choice-interaction", "mark"),
+      rowFor("inline-choice-interaction", "mark"),
+      rowFor("text-entry-interaction", "mark"),
+    ];
+    for (const row of marks) {
+      for (const tag of ["span", "strong", "my-mark"]) {
+        assert.isTrue(allows(row, h(tag, {})), `${row.slot} ${tag}`);
+      }
+
+      for (const tag of ["div", "p", "label"]) {
+        assert.isFalse(allows(row, h(tag, {})), `${row.slot} ${tag}`);
+      }
+
+      assert.include(row.merged, "data-answer", row.slot);
+    }
+
+    assert.deepStrictEqual(rowFor("text-entry-interaction", "mark").merged, ["id", "data-answer"]);
   });
 
   it("keeps a legend Prompt a legend, and lets a labelledby Prompt become a p or a div", () => {
@@ -984,6 +1009,45 @@ const answered: RedactRecord = {
 };
 
 /**
+ * Construct a single value of one base type, as a response's answer or its correct response.
+ *
+ * @param single The value's base type and value.
+ * @returns The value.
+ */
+const one = (single: Value["values"][number]): Value => ({
+  baseType: single.baseType,
+  cardinality: "single",
+  values: [single],
+});
+
+/**
+ * The interactions a review marks against the solution, each with a correct response and an answer
+ * that misses it, so its Marks are drawn: a Choice's wrong pick and its missed choice, and the
+ * Text Entry's and the Inline Choice's wrong answer and the right one beside it.
+ */
+const marked: readonly {
+  readonly correct: Value;
+  readonly given: Value;
+  readonly interaction: Interaction;
+}[] = [
+  {
+    correct: one({ baseType: "identifier", value: "B" }),
+    given: one({ baseType: "identifier", value: "A" }),
+    interaction: legendChoice,
+  },
+  {
+    correct: one({ baseType: "integer", value: 1066n }),
+    given: one({ baseType: "integer", value: 1067n }),
+    interaction: textEntry,
+  },
+  {
+    correct: one({ baseType: "identifier", value: "R" }),
+    given: one({ baseType: "identifier", value: "B" }),
+    interaction: labelledInlineChoice,
+  },
+];
+
+/**
  * List an element and every element below it, in document order.
  *
  * @param nodes The nodes to walk.
@@ -1028,7 +1092,7 @@ const rowKey = (row: PartRow): string =>
 
 describe("the merged column", () => {
   it.effect(
-    "records, for every row render emits in answering, review and solution, the attributes its connect function computes beyond the marker and the Root state, and the states it owns only by their absence",
+    "records, for every row render emits in answering, review (marked against the solution too) and solution, the attributes its connect function computes beyond the marker and the Root state, and the states it owns only by their absence",
     () =>
       Effect.gen(function* mergedColumn() {
         const configuration = yield* configure({});
@@ -1059,6 +1123,14 @@ describe("the merged column", () => {
           ),
           ...modes.map((mode) =>
             render(redactItem(modalItem(), answered), configuration, { instance, mode }),
+          ),
+          ...marked.map(({ correct, given, interaction }) =>
+            render(redactItem(itemOf(interaction)), configuration, {
+              instance,
+              mode: "review",
+              solution: { [interaction.response]: correct },
+              values: { [interaction.response]: given },
+            }),
           ),
           renderStatus(
             {

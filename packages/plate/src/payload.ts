@@ -14,7 +14,8 @@
  * is settled as shown, hidden or withheld before the page sees it. Neither holds a
  * seed: the view's seed only orders a shuffled Choice's or Inline Choice's choices. What the page
  * cannot be given, it cannot leak. A `solution` render shows correct responses only when the author
- * passes them as the view's values; nothing here reads them from the item.
+ * passes them as the view's values, and a `review` render marks each answer against them only when
+ * the author passes them as the view's `solution`; nothing here reads them from the item.
  *
  * @module
  * @see {@link Item} for the model it reads.
@@ -56,7 +57,7 @@ import type {
 } from "#plate/model/item.ts";
 import { outcomeDefaults, outcomeStart, unrunTemplateProcessing } from "#plate/model/record.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
-import { format, isRecordValue, nullOf } from "#plate/model/values.ts";
+import { format, isNull, isRecordValue, match, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, ResponseValue, Single, Value } from "#plate/model/values.ts";
 import { clampOutputBudget, defaultOutputBudget } from "#plate/output-budget.ts";
 
@@ -116,6 +117,13 @@ export interface View {
    * Choice's order with the instance and the response; keyed as the empty string when absent.
    */
   readonly seed?: string;
+  /**
+   * The item's correct responses, as `solution` gives them, which a `review` render with no
+   * messages marks each answer against ({@link AnswerMark}); absent when the author passes none.
+   * Any other mode, and a render with messages, reads none of it, so an answering page never shows
+   * a mark.
+   */
+  readonly solution?: ReadonlyMap<string, ResponseValue>;
   /**
    * The value each response's controls show, such as its `defaultValue` or a value the author's
    * flow recorded; NULL when absent. A record shows its `stringValue`, the text it was typed as,
@@ -211,6 +219,37 @@ export interface ModePayload {
 }
 
 /**
+ * A mark a `review` render writes on an answer against the item's correct response, which the
+ * author passes as the view's `solution`: `right` on an answer the candidate gave that the correct
+ * response holds, `wrong` on one it does not hold, and `missed` on a part of the correct response
+ * the candidate did not give.
+ *
+ * An answer is right when it matches the correct response as `qti-match` compares them, not when
+ * it scored: an item whose `qti-mapping` credits other answers than its correct response still
+ * marks those `wrong`.
+ */
+export type AnswerMark = "missed" | "right" | "wrong";
+
+/**
+ * The marks a `review` render writes beside a Text Entry's or an Inline Choice's Control against
+ * its correct response.
+ */
+export interface ControlMarks {
+  /**
+   * The mark of the answer the Control shows: `right` when it matches the correct response, else
+   * `wrong`; none when the Control shows no answer.
+   */
+  readonly given: Option.Option<Exclude<AnswerMark, "missed">>;
+  /**
+   * The correct response as the Control shows one, which the page writes beside the Control when
+   * the answer it shows is not right: a Text Entry's text, an integer in its `base`, or the
+   * identifier of an Inline Choice's choice, whose option text the page writes; none when the
+   * answer is right, or the right choice is not presented.
+   */
+  readonly missed: Option.Option<string>;
+}
+
+/**
  * A Choice as the page may know it (Q-2): its binding, its constraints, its Prompt, its choices in
  * the order they are presented, and the identifiers to show as checked.
  */
@@ -229,11 +268,13 @@ export interface ChoicePayload extends ModePayload, ValidationPayload {
   /**
    * The choices in presented order: for a Choice with `shuffle` true, the order the view's seed,
    * the instance and the response key, each fixed choice at its document position; else document
-   * order.
+   * order. `mark` is the mark a `review` render against the correct response writes on the choice,
+   * absent when it writes none.
    */
   readonly choices: readonly {
     readonly content: readonly PayloadNode[];
     readonly identifier: string;
+    readonly mark?: AnswerMark;
   }[];
   /**
    * The author's `class` value, empty when absent.
@@ -282,6 +323,11 @@ export interface InlineChoicePayload extends ModePayload, ValidationPayload {
    * The content of the first `qti-label`, none when the interaction has none.
    */
   readonly label: Option.Option<readonly PayloadNode[]>;
+  /**
+   * The marks a `review` render against the correct response writes beside the Control; absent
+   * when it writes none.
+   */
+  readonly marks?: ControlMarks;
   /**
    * How the Control is named for assistive technology when no Label gives it a name, as a text
    * control's is.
@@ -366,6 +412,11 @@ export interface TextControlPayload extends ModePayload, ValidationPayload {
 export interface TextEntryPayload extends TextControlPayload {
   readonly expectedLength: Option.Option<bigint>;
   readonly kind: "text-entry";
+  /**
+   * The marks a `review` render against the correct response writes beside the Control; absent
+   * when it writes none, as for a `record` binding, which `qti-match` does not compare.
+   */
+  readonly marks?: ControlMarks;
   /**
    * The text the Control shows: the string posted when the view has messages, else the view's
    * value written in its lexical form, an integer in `base`; empty for NULL.
@@ -588,6 +639,11 @@ interface Build {
    * The view's seed, none when the view has none.
    */
   readonly seed: Option.Option<string>;
+  /**
+   * The correct responses each answer is marked against, set only in a `review` render with no
+   * messages whose view holds them.
+   */
+  readonly solution: Option.Option<ReadonlyMap<string, ResponseValue>>;
   /**
    * Each interaction the renderer names, with where its first Control stands among the Controls
    * the renderer names ({@link TextName}).
@@ -844,36 +900,89 @@ const presentedChoices = (
 };
 
 /**
+ * Give the correct response a `review` render marks a response's answer against.
+ *
+ * A record is left out, as `qti-match` compares no record, and so is NULL, which no answer
+ * matches, such as the correct response of a declaration that has none.
+ *
+ * @param build The build, which gives the solution.
+ * @param response The response identifier.
+ * @returns The correct response; none when the build marks nothing, or its solution holds no value
+ *   of the response, a record or NULL.
+ */
+const correctFor = (build: Pick<Build, "solution">, response: string): Option.Option<Value> =>
+  build.solution.pipe(
+    Option.flatMap((solution) => Option.fromUndefinedOr(solution.get(response))),
+    Option.flatMap((value) =>
+      isRecordValue(value) || isNull(value) ? Option.none() : Option.some(value),
+    ),
+  );
+
+/**
+ * Give the mark a `review` render writes on one choice of a Choice against its correct response.
+ *
+ * @param identifier The choice's identifier.
+ * @param picked The identifiers the Choice shows checked.
+ * @param right The identifiers the correct response holds.
+ * @returns `right` for a picked choice the correct response holds, `wrong` for a picked one it does
+ *   not hold, and `missed` for an unpicked one it holds; none for an unpicked one it does not hold.
+ */
+const choiceMark = (
+  identifier: string,
+  picked: ReadonlySet<string>,
+  right: ReadonlySet<string>,
+): Option.Option<AnswerMark> => {
+  if (picked.has(identifier)) {
+    return Option.some(right.has(identifier) ? "right" : "wrong");
+  }
+
+  return right.has(identifier) ? Option.some("missed") : Option.none();
+};
+
+/**
  * Copy a Choice into its payload.
  *
  * @param interaction The Choice.
  * @param build The build.
  * @returns Its payload; `restore` holds the posted identifiers when the view has messages, else
- *   the view's value.
+ *   the view's value; each choice carries its {@link choiceMark} when the build marks answers and
+ *   the response has a correct response ({@link correctFor}).
  */
-const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayload => ({
-  ...validationOf(interaction, build),
-  ariaLabel: interaction.ariaLabel,
-  ariaLabelledby: resolvedLabelledby(interaction, build.ids),
-  cardinality: interaction.cardinality,
-  choices: presentedChoices(interaction, build).map((choice) => ({
-    content: copyNodes(choice.content, build),
-    identifier: choice.identifier,
-  })),
-  class: interaction.class,
-  editable: build.editable,
-  formName: formNameOf(build, interaction.response),
-  kind: "choice",
-  maxChoices: interaction.maxChoices,
-  minChoices: interaction.minChoices,
-  orientation: interaction.orientation,
-  prompt: interaction.prompt.pipe(Option.map((prompt) => copyNodes(prompt, build))),
-  response: interaction.response,
-  restore: Option.match(build.posted, {
+const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayload => {
+  const restore = Option.match(build.posted, {
     onNone: () => shown(build, interaction.response).map(format),
     onSome: (posted) => posted.get(interaction.response) ?? [],
-  }),
-});
+  });
+  const picked = new Set(restore);
+  const right = correctFor(build, interaction.response).pipe(
+    Option.map((correct) => new Set(correct.values.map(format))),
+  );
+
+  return {
+    ...validationOf(interaction, build),
+    ariaLabel: interaction.ariaLabel,
+    ariaLabelledby: resolvedLabelledby(interaction, build.ids),
+    cardinality: interaction.cardinality,
+    choices: presentedChoices(interaction, build).map((choice) => ({
+      content: copyNodes(choice.content, build),
+      identifier: choice.identifier,
+      ...Option.match(
+        right.pipe(Option.flatMap((held) => choiceMark(choice.identifier, picked, held))),
+        { onNone: () => ({}), onSome: (mark) => ({ mark }) },
+      ),
+    })),
+    class: interaction.class,
+    editable: build.editable,
+    formName: formNameOf(build, interaction.response),
+    kind: "choice",
+    maxChoices: interaction.maxChoices,
+    minChoices: interaction.minChoices,
+    orientation: interaction.orientation,
+    prompt: interaction.prompt.pipe(Option.map((prompt) => copyNodes(prompt, build))),
+    response: interaction.response,
+    restore,
+  };
+};
 
 /**
  * Give how a text control or an Inline Choice is named: the author's `aria-label` as written, the
@@ -915,17 +1024,59 @@ const textControlPayload = (
 });
 
 /**
+ * Give the marks a `review` render writes beside a Text Entry's Control against its correct
+ * response.
+ *
+ * It reads the view's value, the answer the Control shows, since a render that marks has no
+ * messages and so restores no posted string. A record value is never marked, as `qti-match`
+ * compares no record.
+ *
+ * @param interaction The Text Entry, which gives the response and the `base`.
+ * @param build The build, which gives the view's values.
+ * @param correct The correct response.
+ * @returns `given` `right` when the answer matches the correct response ({@link match}), `wrong`
+ *   when it does not, none when the view holds NULL or no value; and `missed`, the correct response
+ *   written as the Control writes a value, when the answer is not right.
+ */
+const textEntryMarks = (
+  interaction: TextEntryInteraction,
+  build: Pick<Build, "values">,
+  correct: Value,
+): ControlMarks => {
+  const given = Option.fromUndefinedOr(build.values.get(interaction.response)).pipe(
+    Option.flatMap((value) =>
+      isRecordValue(value) || isNull(value) ? Option.none() : Option.some(value),
+    ),
+    Option.map((value): Exclude<AnswerMark, "missed"> =>
+      match(value, correct) ? "right" : "wrong",
+    ),
+  );
+
+  return {
+    given,
+    missed: Option.contains(given, "right")
+      ? Option.none()
+      : Option.map(Arr.head(correct.values), (single) => writeIn(single, interaction.base)),
+  };
+};
+
+/**
  * Copy a Text Entry into its payload.
  *
  * @param interaction The Text Entry.
  * @param build The build.
  * @returns Its payload; `restore` holds the posted string when the view has messages, else the
- *   view's value in its lexical form.
+ *   view's value in its lexical form; `marks` holds its {@link textEntryMarks} when the build
+ *   marks answers and the response has a correct response ({@link correctFor}).
  */
 const textEntryPayload = (interaction: TextEntryInteraction, build: Build): TextEntryPayload => ({
   ...textControlPayload(interaction, build),
   expectedLength: interaction.expectedLength,
   kind: "text-entry",
+  ...Option.match(correctFor(build, interaction.response), {
+    onNone: () => ({}),
+    onSome: (correct) => ({ marks: textEntryMarks(interaction, build, correct) }),
+  }),
   restore: Option.match(build.posted, {
     onNone: () =>
       Option.match(Arr.head(shown(build, interaction.response)), {
@@ -937,39 +1088,85 @@ const textEntryPayload = (interaction: TextEntryInteraction, build: Build): Text
 });
 
 /**
+ * Give the marks a `review` render writes beside an Inline Choice's Control against its correct
+ * response.
+ *
+ * @param presented The identifiers of the choices it presents.
+ * @param restore The identifier its Control shows chosen, empty for none.
+ * @param correct The correct response, a single identifier.
+ * @returns `given` `right` when the Control shows the correct choice, `wrong` when it shows another,
+ *   none when it shows its Placeholder; and `missed`, the correct choice's identifier, when the
+ *   Control does not show it and it is presented.
+ */
+const inlineChoiceMarks = (
+  presented: ReadonlySet<string>,
+  restore: string,
+  correct: Value,
+): ControlMarks => {
+  const right = Option.map(Arr.head(correct.values), format);
+  const given: Option.Option<Exclude<AnswerMark, "missed">> = presented.has(restore)
+    ? Option.some(Option.contains(right, restore) ? "right" : "wrong")
+    : Option.none();
+
+  return {
+    given,
+    missed: Option.contains(given, "right")
+      ? Option.none()
+      : right.pipe(Option.filter((identifier) => presented.has(identifier))),
+  };
+};
+
+/**
  * Copy an Inline Choice into its payload (Q-12).
  *
  * @param interaction The Inline Choice.
  * @param build The build.
- * @returns Its payload: its choices in presented order, its Label, and `restore`, the string posted
- *   when the view has messages, else the view's identifier, else empty.
+ * @returns Its payload: its choices in presented order, its Label, `restore`, the string posted
+ *   when the view has messages, else the view's identifier, else empty, and `marks`, its
+ *   {@link inlineChoiceMarks}, when the build marks answers and the response has a correct response
+ *   ({@link correctFor}).
  */
 const inlineChoicePayload = (
   interaction: InlineChoiceInteraction,
   build: Build,
-): InlineChoicePayload => ({
-  ...validationOf(interaction, build),
-  choices: presentedChoices(interaction, build).map((choice) => ({
+): InlineChoicePayload => {
+  const choices = presentedChoices(interaction, build).map((choice) => ({
     content: copyNodes(choice.content, build),
     identifier: choice.identifier,
-  })),
-  class: interaction.class,
-  editable: build.editable,
-  formName: formNameOf(build, interaction.response),
-  kind: "inline-choice",
-  label: interaction.label.pipe(Option.map((label) => copyNodes(label, build))),
-  name: textNameOf(interaction, build),
-  placeholder: interaction.placeholder,
-  response: interaction.response,
-  restore: Option.match(build.posted, {
+  }));
+  const restore = Option.match(build.posted, {
     onNone: () =>
       Option.match(Arr.head(shown(build, interaction.response)), {
         onNone: () => "",
         onSome: format,
       }),
     onSome: (posted) => posted.get(interaction.response)?.[0] ?? "",
-  }),
-});
+  });
+
+  return {
+    ...validationOf(interaction, build),
+    choices,
+    class: interaction.class,
+    editable: build.editable,
+    formName: formNameOf(build, interaction.response),
+    kind: "inline-choice",
+    label: interaction.label.pipe(Option.map((label) => copyNodes(label, build))),
+    ...Option.match(correctFor(build, interaction.response), {
+      onNone: () => ({}),
+      onSome: (correct) => ({
+        marks: inlineChoiceMarks(
+          new Set(choices.map((choice) => choice.identifier)),
+          restore,
+          correct,
+        ),
+      }),
+    }),
+    name: textNameOf(interaction, build),
+    placeholder: interaction.placeholder,
+    response: interaction.response,
+    restore,
+  };
+};
 
 /**
  * The number of Controls a container renders when `max-strings` does not fix it (Q9).
@@ -2555,11 +2752,13 @@ export const postings = (redacted: Redacted, instance: string): readonly Posting
  * item and the author's inputs.
  *
  * @param redacted The item, through {@link redactItem}.
- * @param view The author's inputs: the instance, the mode, the seed, values, names, messages and
- *   posted strings.
+ * @param view The author's inputs: the instance, the mode, the seed, values, names, messages,
+ *   posted strings and the solution a `review` render marks answers against.
  * @returns The payload. It holds no correct response, mapping, default, processing rule, seed,
  *   template value or feedback content the redaction hid, whatever the view; the seed only orders
- *   a shuffled Choice's or Inline Choice's choices, and a value it shows is one the view gave.
+ *   a shuffled Choice's or Inline Choice's choices, a value it shows is one the view gave, and a
+ *   mark, and the correct answer a mark writes, come only from the view's `solution`, in a
+ *   `review` render with no messages.
  */
 export const payload = (redacted: Redacted, view: View): Payload => {
   const messages = identifyMessages(view.instance, view.messages);
@@ -2579,6 +2778,10 @@ export const payload = (redacted: Redacted, view: View): Payload => {
     messages,
     names: view.names,
     seed: Option.fromUndefinedOr(view.seed),
+    solution:
+      view.mode === "review" && messages.length === 0
+        ? Option.fromUndefinedOr(view.solution)
+        : Option.none(),
     unnamed: unnamedPositions(interactions, restoring),
   };
 

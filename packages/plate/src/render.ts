@@ -60,7 +60,13 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * Control takes `autofocus`. `disabled` disables every control. `mode` is the state the item is
  * shown in, `answering` when absent, which the Root's `data-mode` names: `review` and `solution`
  * mark every interaction not editable, and `solution` shows the correct responses only when the
- * author passes them as `values`.
+ * author passes them as `values`. `solution` is the item's correct responses, keyed by response
+ * identifier as `solution(accepted, record)` gives them, which a `review` render with no `messages`
+ * marks each answer against: each choice of a Choice `right`, `wrong` or `missed`, and the answer
+ * of a Text Entry or an Inline Choice `right` or `wrong`, with the right answer written beside it
+ * when it is not right. Nothing marks a `record` response, a response whose correct response is
+ * NULL, or an Extended Text. Pass it only where the item's solution may be shown, in a test where
+ * `permits` gives `solution` for the item; any other mode reads none of it.
  */
 export interface Options {
   readonly assetBase?: string;
@@ -71,6 +77,7 @@ export interface Options {
   readonly names?: Readonly<Record<string, string>>;
   readonly parts?: PartOverrides;
   readonly posted?: Readonly<Record<string, readonly string[]>>;
+  readonly solution?: Readonly<Record<string, ResponseValue>>;
   readonly values?: Readonly<Record<string, ResponseValue>>;
 }
 
@@ -295,7 +302,7 @@ const mapOf = <A>(record: Readonly<Record<string, A>> = {}): ReadonlyMap<string,
  * @param configuration The configuration, which gives the locale and the seed.
  * @param options The author's options.
  * @returns The view `payload` reads, its mode `answering` when the author names none, holding the
- *   configuration's `seed` when it has one.
+ *   configuration's `seed` when it has one and the author's `solution` when they pass one.
  */
 const viewOf = (instance: string, configuration: Configuration, options: Options): View => {
   const view: View = {
@@ -308,8 +315,9 @@ const viewOf = (instance: string, configuration: Configuration, options: Options
     posted: Option.map(Option.fromUndefinedOr(options.posted), mapOf),
     values: mapOf(options.values),
   };
+  const seeded = configuration.seed === undefined ? view : { ...view, seed: configuration.seed };
 
-  return configuration.seed === undefined ? view : { ...view, seed: configuration.seed };
+  return options.solution === undefined ? seeded : { ...seeded, solution: mapOf(options.solution) };
 };
 
 /**

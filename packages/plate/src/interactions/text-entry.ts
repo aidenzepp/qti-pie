@@ -3,7 +3,9 @@
  * shape of Choice.
  *
  * {@link renderTextEntry} emits this structure: a `qti-text-entry-interaction` Root, a phrasing
- * container that stands inside the author's sentence, holding one native text `input`, the Control.
+ * container that stands inside the author's sentence, holding one native text `input`, the Control,
+ * and after it, in a review against the solution, up to two Marks: the answer's, right or wrong,
+ * and the right answer's, which writes the right answer when the answer shown is not it.
  * A Text Entry bound to a record response is this control as a string one: the text typed gives the
  * record's fields. The connect function computes every attribute of both parts once, and
  * `applyPart` places each one, through the embedder's replacement when there is one (ruling
@@ -21,15 +23,17 @@
  *
  * @module
  */
-import { Option, Result } from "effect";
+import { Option, Result, pipe } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { when } from "#plate/emit/node.ts";
+import { text, when } from "#plate/emit/node.ts";
 import type { Attributes, Element } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOf, PartRow } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
+import { controlMarks } from "#plate/interactions/marks.ts";
+import type { Mark } from "#plate/interactions/marks.ts";
 import { textControlName } from "#plate/interactions/name.ts";
 import { malformedMessage, patternMessage } from "#plate/interactions/pattern.ts";
 import type { Locale } from "#plate/messages.ts";
@@ -53,15 +57,21 @@ type TextEntryPart = PartOf<typeof owner>;
 type Rows = { readonly [P in TextEntryPart]: PartRow };
 
 /**
- * The attributes of every part of one Text Entry, computed once by {@link connect}.
+ * The attributes of every part of one Text Entry, computed once by {@link connect}: the Root's,
+ * the Control's, and each Mark's with the words it holds, in order.
  */
-type Connected = { readonly [P in TextEntryPart]: Attributes };
+interface Connected {
+  readonly control: Attributes;
+  readonly marks: readonly { readonly props: Attributes; readonly words: string }[];
+  readonly root: Attributes;
+}
 
 /**
  * The rows of the Text Entry parts, which no placement changes.
  */
 const rows: Rows = {
   control: rowFor(owner, "control"),
+  mark: rowFor(owner, "mark"),
   root: rowFor(owner, "root"),
 };
 
@@ -96,7 +106,7 @@ const inputModeOf = (interaction: TextEntryPayload): Attributes => {
 };
 
 /**
- * Compute every attribute of both parts of one Text Entry: the connect function.
+ * Compute every attribute of every part of one Text Entry: the connect function.
  *
  * - Root: the marker, the state (`data-mode`, and `data-disabled` when the author disabled every
  *   control), and the author's `class`.
@@ -104,51 +114,71 @@ const inputModeOf = (interaction: TextEntryPayload): Attributes => {
  *   when finished; `readonly` when the interaction is not `editable` (review and solution);
  *   `autocomplete="off"` in every mode, so the browser offers no remembered answer; `inputmode` by
  *   the base type; `expected-length` as `size` when above 0, which HTML requires;
- *   `placeholder-text` as `placeholder`; its name ({@link textControlName}); `aria-invalid` and
- *   `aria-describedby` → the message ids when the response is invalid; and `autofocus` when the
- *   payload says.
+ *   `placeholder-text` as `placeholder`; its name ({@link textControlName}); `aria-invalid` when
+ *   the response is invalid; `aria-describedby` → the message ids when it is invalid, then each
+ *   Mark's id; and `autofocus` when the payload says.
+ * - Mark, one per mark the payload holds ({@link controlMarks}): its id, `data-answer` and its words.
+ *   The Control, unlike a Choice's or an Inline Choice's, stays a tab stop in review, so it names
+ *   its Marks in `aria-describedby`, and a screen reader that reaches it by Tab reads them with its
+ *   value.
  *
- * @param interaction The Text Entry, which gives `editable`.
+ * @param interaction The Text Entry, which gives `editable` and its marks.
  * @param payload The payload, which gives the instance, the mode and `finished`.
  * @param locale The locale of the renderer's own text.
- * @returns The attributes of both parts.
+ * @returns The attributes of every part.
  * @see https://html.spec.whatwg.org/multipage/input.html#attr-input-readonly
  * @see https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#attr-fe-autocomplete
  */
-const connect = (interaction: TextEntryPayload, payload: Payload, locale: Locale): Connected => ({
-  control: {
-    ...textControlName(interaction.name, payload.instance, locale),
-    ...when(interaction.invalid, {
-      "aria-describedby": interaction.messageIds.join(" "),
-      "aria-invalid": "true",
-    }),
-    ...when(interaction.autofocus, { autofocus: true }),
-    autocomplete: "off",
-    "data-slot": rows.control.slot,
-    ...when(payload.finished, { disabled: true }),
-    id: scopedId(payload.instance, interaction.response, "control"),
-    ...inputModeOf(interaction),
-    name: interaction.formName,
-    ...when(!interaction.editable, { readonly: true }),
-    ...whenSome(interaction.placeholder, (placeholder) => ({ placeholder })),
-    ...whenSome(
-      interaction.expectedLength.pipe(Option.filter((expected) => expected > 0n)),
-      (expected) => ({ size: String(expected) }),
-    ),
-    type: "text",
-    value: interaction.restore,
-  },
-  root: {
-    ...when(interaction.class !== "", { class: interaction.class }),
-    ...when(payload.finished, { "data-disabled": true }),
-    "data-mode": payload.mode,
-    "data-slot": rows.root.slot,
-  },
-});
+const connect = (interaction: TextEntryPayload, payload: Payload, locale: Locale): Connected => {
+  const marks = Option.match(Option.fromUndefinedOr(interaction.marks), {
+    onNone: (): readonly Mark[] => [],
+    onSome: (held) => controlMarks(held, (missed) => missed, locale),
+  }).map((mark, index) => ({
+    ...mark,
+    id: scopedId(payload.instance, interaction.response, "mark", index),
+  }));
+  const describedby = [
+    ...(interaction.invalid ? interaction.messageIds : []),
+    ...marks.map((mark) => mark.id),
+  ];
+
+  return {
+    control: {
+      ...textControlName(interaction.name, payload.instance, locale),
+      ...when(describedby.length > 0, { "aria-describedby": describedby.join(" ") }),
+      ...when(interaction.invalid, { "aria-invalid": "true" }),
+      ...when(interaction.autofocus, { autofocus: true }),
+      autocomplete: "off",
+      "data-slot": rows.control.slot,
+      ...when(payload.finished, { disabled: true }),
+      id: scopedId(payload.instance, interaction.response, "control"),
+      ...inputModeOf(interaction),
+      name: interaction.formName,
+      ...when(!interaction.editable, { readonly: true }),
+      ...whenSome(interaction.placeholder, (placeholder) => ({ placeholder })),
+      ...whenSome(
+        interaction.expectedLength.pipe(Option.filter((expected) => expected > 0n)),
+        (expected) => ({ size: String(expected) }),
+      ),
+      type: "text",
+      value: interaction.restore,
+    },
+    marks: marks.map((mark) => ({
+      props: { "data-answer": mark.answer, "data-slot": rows.mark.slot, id: mark.id },
+      words: mark.words,
+    })),
+    root: {
+      ...when(interaction.class !== "", { class: interaction.class }),
+      ...when(payload.finished, { "data-disabled": true }),
+      "data-mode": payload.mode,
+      "data-slot": rows.root.slot,
+    },
+  };
+};
 
 /**
  * Render a Text Entry: a `qti-text-entry-interaction` Root holding one
- * text `input` Control.
+ * text `input` Control, then the Marks a review against the solution writes beside it.
  *
  * Each part goes through `applyPart` with its replacement from `state.parts`, so every swap holds
  * I1 to I4.
@@ -169,8 +199,14 @@ export const renderTextEntry = (
       Option.getOrUndefined(state.parts.replacementFor(owner, part));
     const props = connect(interaction, payload, state.locale);
     const control = yield* applyPart(rows.control, props.control, [], replacement("control"));
+    const marks = yield* pipe(
+      props.marks.map((mark) =>
+        applyPart(rows.mark, mark.props, [text(mark.words)], replacement("mark")),
+      ),
+      Result.all,
+    );
 
-    return yield* applyPart(rows.root, props.root, [control], replacement("root"));
+    return yield* applyPart(rows.root, props.root, [control, ...marks], replacement("root"));
   });
 
 /**
@@ -203,9 +239,9 @@ export const validateTextEntry = (
 ): readonly ValidationMessage[] => {
   if (!(input instanceof Malformed)) {
     return Option.toArray(
-      Option.map(patternMessage(interaction, input, configuration), (text) => ({
+      Option.map(patternMessage(interaction, input, configuration), (words) => ({
         response: interaction.response,
-        text,
+        text: words,
       })),
     );
   }

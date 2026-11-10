@@ -20,7 +20,11 @@ export type Locale = (typeof locales)[number];
  * `solution`, `finished`), so the closed test's summary is titled "Finished: {test}" through
  * `title` and `finished`. An item's state in words (`itemAnswered`, `itemNotAnswered`,
  * `itemSubmitted`, `itemClosed`) follows its name (`itemOf` on a navigation button, `item` on the
- * confirm page's list) through `itemState`, so the punctuation between them is the locale's. The
+ * confirm page's list) through `itemState`, so the punctuation between them is the locale's. A
+ * review against the solution writes a mark's words, which a screen reader reads where the eye
+ * reads its ✓ or ✗: `markRight` and `markWrong` on the candidate's answer, `markMissed` on a
+ * Choice's right choice the candidate did not pick, and `markMissedAnswer` beside a Text Entry or
+ * an Inline Choice, with the right answer as its `answer`. The
  * closed test's summary heads the test's outcomes with `testOutcomes`, writes a NULL outcome as
  * `nullValue`, and says with `outcomesNotRun` that outcome processing the engine cannot run did not
  * run. `atLeastStrings` and `atMostStrings` read in the plural, so at a count of 1 an Extended Text
@@ -56,6 +60,10 @@ const en = {
   malformedFile: "Enter text, not a file.",
   malformedNumber: "Enter a number.",
   malformedSingleMany: "Enter one answer.",
+  markMissed: "Right answer",
+  markMissedAnswer: "Right answer: {answer}",
+  markRight: "Your answer, right",
+  markWrong: "Your answer, wrong",
   nextItem: "Next item",
   notAccepted: "Not accepted",
   notice: "Not supported here: {feature}",
@@ -105,8 +113,9 @@ type Placeholders<Text extends string> = Text extends `${string}{${infer Name}}$
  *
  * Each value is text as the candidate reads it: a number arrives already formatted for the locale,
  * `notice`'s `feature` is the feature key in QTI's own spelling (an element name, `pattern-mask`,
- * `cardinality="record"`), a `test` is the test's title, and `confirmTitle`'s `intent` is the
- * navigation label of the intent it confirms (`submitPart`'s or `endPart`'s text).
+ * `cardinality="record"`), a `test` is the test's title, `confirmTitle`'s `intent` is the
+ * navigation label of the intent it confirms (`submitPart`'s or `endPart`'s text), and
+ * `markMissedAnswer`'s `answer` is the right answer as its control shows one.
  */
 export type MessageParams<Key extends MessageKey> = Readonly<
   Record<Placeholders<(typeof en)[Key]>, string>

@@ -10,7 +10,9 @@
  * once, and `applyPart` places each one, through the embedder's replacement when there is one. The
  * Control is a native select, so the browser's own keyboard map applies. In review and solution,
  * and when the author finished the item, the Control is `disabled`, since a `select` has no
- * `readonly`.
+ * `readonly`. A review against the solution writes up to two Marks after the Control: the
+ * answer's, right or wrong, and the right answer's, which writes the right choice's text when the
+ * Control does not show it.
  *
  * {@link validateInlineChoice} checks a value the caller decoded, in two tiers: tier (a) always,
  * tier (b) only under `validateResponses` (D5).
@@ -28,6 +30,7 @@ import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
 import { labelAsSpan } from "#plate/interactions/choice.ts";
+import { controlMarks } from "#plate/interactions/marks.ts";
 import { givesText, textControlName } from "#plate/interactions/name.ts";
 import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
@@ -58,23 +61,24 @@ type InlineChoicePart = PartOf<typeof owner>;
 type Rows = { readonly [P in InlineChoicePart]: PartRow };
 
 /**
- * One option of the Control as the connect function computes it: its attributes and the one text
- * node it holds.
+ * A part that holds one text node, an option of the Control or a Mark, as the connect function
+ * computes it: its attributes and its text.
  */
-interface OptionProps {
+interface TextProps {
   readonly props: Attributes;
   readonly text: string;
 }
 
 /**
- * The attributes of every part of one Inline Choice, and the text of each option, computed once
- * by {@link connect}.
+ * The attributes of every part of one Inline Choice, the text of each option, and each Mark's
+ * attributes with the words it holds, computed once by {@link connect}.
  */
 interface Connected {
   readonly control: Attributes;
   readonly label: Attributes;
-  readonly options: readonly OptionProps[];
-  readonly placeholder: OptionProps;
+  readonly marks: readonly TextProps[];
+  readonly options: readonly TextProps[];
+  readonly placeholder: TextProps;
   readonly root: Attributes;
 }
 
@@ -84,6 +88,7 @@ interface Connected {
 const rows: Rows = {
   control: rowFor(owner, "control"),
   label: rowFor(owner, "label"),
+  mark: rowFor(owner, "mark"),
   option: rowFor(owner, "option"),
   placeholder: rowFor(owner, "placeholder"),
   root: rowFor(owner, "root"),
@@ -193,6 +198,9 @@ const placeholderText = (placeholder: Option.Option<string>, locale: Locale): st
  *   ({@link placeholderText}).
  * - Option: its choice's identifier as `value`, `selected` when it is the one restored, and its text
  *   ({@link optionText}).
+ * - Mark, one per mark the payload holds ({@link controlMarks}): `data-answer` and its words, the
+ *   right answer's naming the right choice by its Option's text. The Control is disabled in review,
+ *   so no Tab reaches it, and a screen reader reads the Marks as the text after it.
  *
  * @param interaction The Inline Choice, which gives `editable`.
  * @param payload The payload, which gives the instance, the mode and `finished`.
@@ -204,6 +212,12 @@ const connect = (interaction: InlineChoicePayload, payload: Payload, locale: Loc
   const controlId = scopedId(payload.instance, interaction.response, "control");
   const labelId = scopedId(payload.instance, interaction.response, "label");
   const restored = interaction.choices.some((choice) => choice.identifier === interaction.restore);
+  const position = (index: number) => ({ count: interaction.choices.length, n: index + 1 });
+  const choiceText = (identifier: string): string => {
+    const index = interaction.choices.findIndex((choice) => choice.identifier === identifier);
+
+    return optionText(interaction.choices[index]?.content ?? [], position(index), locale);
+  };
 
   return {
     control: {
@@ -222,13 +236,21 @@ const connect = (interaction: InlineChoicePayload, payload: Payload, locale: Loc
       name: interaction.formName,
     },
     label: { "data-slot": rows.label.slot, for: controlId, id: labelId },
+    marks: Option.match(Option.fromUndefinedOr(interaction.marks), {
+      onNone: () => [],
+      onSome: (held) =>
+        controlMarks(held, choiceText, locale).map((mark) => ({
+          props: { "data-answer": mark.answer, "data-slot": rows.mark.slot },
+          text: mark.words,
+        })),
+    }),
     options: interaction.choices.map((choice, index) => ({
       props: {
         "data-slot": rows.option.slot,
         ...when(choice.identifier === interaction.restore, { selected: true }),
         value: choice.identifier,
       },
-      text: optionText(choice.content, { count: interaction.choices.length, n: index + 1 }, locale),
+      text: optionText(choice.content, position(index), locale),
     })),
     placeholder: {
       props: {
@@ -250,7 +272,7 @@ const connect = (interaction: InlineChoicePayload, payload: Payload, locale: Loc
 /**
  * Render an Inline Choice: a `qti-inline-choice-interaction` Root holding the Label, when the item
  * has a `qti-label`, then a `select` Control holding the Placeholder and one Option per choice, in
- * presented order.
+ * presented order, then the Marks a review against the solution writes beside it.
  *
  * Each part goes through `applyPart` with its replacement from `state.parts`, so every swap holds
  * I1 to I4. The Label's content goes through {@link emitNodes}, as the body's does, and then every
@@ -275,12 +297,12 @@ export const renderInlineChoice = (
     const replacement = (part: InlineChoicePart) =>
       Option.getOrUndefined(state.parts.replacementFor(owner, part));
     const props = connect(interaction, payload, state.locale);
-    const placeOption = (part: "option" | "placeholder", option: OptionProps) =>
-      applyPart(rows[part], option.props, [text(option.text)], replacement(part));
+    const placeText = (part: "mark" | "option" | "placeholder", held: TextProps) =>
+      applyPart(rows[part], held.props, [text(held.text)], replacement(part));
 
-    const placeholder = yield* placeOption("placeholder", props.placeholder);
+    const placeholder = yield* placeText("placeholder", props.placeholder);
     const options = yield* pipe(
-      props.options.map((option) => placeOption("option", option)),
+      props.options.map((option) => placeText("option", option)),
       Result.all,
     );
     const control = yield* applyPart(
@@ -298,11 +320,15 @@ export const renderInlineChoice = (
         ),
       ),
     );
+    const marks = yield* pipe(
+      props.marks.map((mark) => placeText("mark", mark)),
+      Result.all,
+    );
 
     return yield* applyPart(
       rows.root,
       props.root,
-      [...Option.toArray(label), control],
+      [...Option.toArray(label), control, ...marks],
       replacement("root"),
     );
   });

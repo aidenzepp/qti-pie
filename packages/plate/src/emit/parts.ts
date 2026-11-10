@@ -12,10 +12,11 @@ interface PartsOf {
     | "control"
     | "indicator"
     | "label"
+    | "mark"
     | "prompt"
     | "root";
   "extended-text-interaction": "control" | "prompt" | "root";
-  "inline-choice-interaction": "control" | "label" | "option" | "placeholder" | "root";
+  "inline-choice-interaction": "control" | "label" | "mark" | "option" | "placeholder" | "root";
   item: "message" | "messages" | "modalFeedback" | "notice" | "root" | "status" | "statusHeading";
   "test-navigation":
     | "end"
@@ -26,7 +27,7 @@ interface PartsOf {
     | "previous"
     | "root"
     | "submit";
-  "text-entry-interaction": "control" | "root";
+  "text-entry-interaction": "control" | "mark" | "root";
 }
 
 /**
@@ -456,6 +457,10 @@ const admits = {
  * on them, so plate owns their absence: a replacement cannot disable or hide a choice, or the way
  * back to no answer, on the option's own element; disabling the select through an ancestor, such
  * as a `fieldset disabled`, is the host's.
+ *
+ * The Marks of a review against the solution, a Choice's, an Inline Choice's and a Text Entry's,
+ * merge `data-answer`, so a replacement keeps the mark review computed; the Text Entry's merges
+ * its `id` too, which its Control's `aria-describedby` names.
  */
 const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
   {
@@ -597,6 +602,15 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
   },
   {
     defaults: {},
+    element: "span",
+    interaction: "choice-interaction",
+    listOwner: false,
+    merged: ["data-answer"],
+    part: "mark",
+    tagClass: "phrasing-container",
+  },
+  {
+    defaults: {},
     element: "qti-text-entry-interaction",
     interaction: "text-entry-interaction",
     listOwner: false,
@@ -628,6 +642,15 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     ],
     part: "control",
     tagClass: "text-input",
+  },
+  {
+    defaults: {},
+    element: "span",
+    interaction: "text-entry-interaction",
+    listOwner: false,
+    merged: ["id", "data-answer"],
+    part: "mark",
+    tagClass: "phrasing-container",
   },
   {
     defaults: {},
@@ -683,6 +706,15 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     merged: ["value", "selected", "disabled", "hidden"],
     part: "option",
     tagClass: "option",
+  },
+  {
+    defaults: {},
+    element: "span",
+    interaction: "inline-choice-interaction",
+    listOwner: false,
+    merged: ["data-answer"],
+    part: "mark",
+    tagClass: "phrasing-container",
   },
   {
     defaults: {},

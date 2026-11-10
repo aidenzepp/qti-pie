@@ -125,7 +125,7 @@ request. [Navigation](#navigation) moves the session on.
 | `checkResponses` | Validates responses without scoring them |
 | `score` | Scores a map of responses, each a `ResponseValue`, and returns the record the host stores |
 | `restore` | Gives an item's record and values back from its stored record |
-| `solution` | Gives an item's correct responses, from its record where template processing set them |
+| `solution` | Gives an item's correct responses, from its record where template processing set them, for a solution page or for `render`'s `solution` in review |
 | `openPackage` | Reads and checks a content package's files, and returns a verdict on the package. It comes from `@qti-pie/plate/package` |
 | `itemRefs` | Lists a test's item refs in document order |
 | `startTest` | Starts a test session, and fails with `EngineFailure` when a template default of its first part does not fit its variable |
@@ -141,7 +141,8 @@ request. [Navigation](#navigation) moves the session on.
 its value, or a `Result` when it can fail. `redact`, `checkResponses` and `solution` take the
 item's record as an optional last argument, and `redact` takes the output budget after it.
 `render`'s `parts` option swaps a part for the host's
-own markup, built with `h`, and its `mode` option shows an item in `review` or `solution`. A host
+own markup, built with `h`, its `mode` option shows an item in `review` or `solution`, and in
+`review` its `solution` option marks each answer right or wrong. A host
 that builds its own Status part reads the fields `StatusInput` documents.
 [`src/index.ts`](src/index.ts) lists every export, and the TSDoc on each name is its reference.
 
@@ -632,6 +633,64 @@ What the page gets:
   not among the redacted item's `notices`.
 - An `option` shows only text, so an Inline Choice whose choice holds a feedback inline shows a
   notice in its place. A Choice's choice shows its feedback inline.
+
+## Right and wrong answers
+
+A review page can mark each answer right or wrong against the item's correct responses. Pass
+`solution(accepted, record)` to `render` as `solution`, beside the candidate's `values`, in
+`review`. Pass it only where the candidate may see the correct responses: in a test, where
+`permits` gives `solution` for the item, which its item session control's `show-solution` decides
+(false by default).
+
+```ts
+import { Result } from "effect";
+import { itemView, permits, redact, render, solution } from "@qti-pie/plate";
+
+const page = Result.gen(function* review() {
+  const view = yield* itemView(test, session, configuration, n);
+  const allowed = yield* permits(test, session, n);
+  const options = { instance: view.instance, mode: "review", values: view.values } as const;
+  const shown = redact(accepted, view.page, view.configuration);
+  const rendered = yield* render(
+    shown,
+    view.configuration,
+    allowed.solution ? { ...options, solution: solution(accepted, view.record) } : options,
+  );
+  return rendered.html;
+});
+```
+
+With no `solution`, review looks as it does without one. A mode other than `review` reads none of
+it, so an answering page never shows a mark, and neither does a render with `messages`.
+
+What the page gets:
+
+- Each choice of a Choice that is picked or right holds a Mark, a `span` with
+  `data-slot="choice-interaction-mark"`, last in its Label. A picked choice the correct response
+  holds is `data-answer="right"`, "Your answer, right"; a picked one it does not hold is `wrong`,
+  "Your answer, wrong"; and one it holds that the candidate did not pick is `missed`, "Right
+  answer". The words sit in the Label, so they are part of the Control's name.
+- A Text Entry or an Inline Choice holds up to two Marks after its Control. The answer's Mark,
+  `right` or `wrong`, shows when the Control shows an answer. When the answer is not right, a
+  `missed` Mark names the right answer, "Right answer: 2": a Text Entry's as its Control writes a
+  value, an Inline Choice's as its option's text. A Text Entry's Control stays a tab stop in
+  review, so it names its Marks in `aria-describedby`.
+- An answer is right when it matches the correct response as `qti-match` compares them, not when
+  it scored, so an item whose `qti-mapping` credits other answers marks those wrong. A Choice marks
+  each choice by whether the correct response holds it.
+- Nothing is marked for a response whose correct response is NULL, such as one that declares none,
+  for a `record` response, or for an Extended Text.
+- A swapped Mark part keeps `data-answer`.
+
+The default theme draws each mark in `data-credit`'s colours, green for right and `--destructive`
+for wrong, with a ✓ or ✗. A right pick has a 2px green border and a green Indicator, a wrong pick a
+2px red border and a red Indicator, and a right choice not picked a 2px dashed green border and an
+empty Indicator. A Choice's Mark shows its glyph in its row's top corner, which every row of a
+marked Choice keeps clear, so the rows keep one width. A marked Text Entry's or Inline Choice's
+Control has a 2px green or red border, with its glyph after it, and the right answer beside it
+shows in a green frame, its words in the text's own colour, since the green is too light for text.
+Every Mark but the right answer beside a Control shows only its glyph, and its words stay for a
+screen reader, so colour is never the only signal.
 
 ## Template processing
 
