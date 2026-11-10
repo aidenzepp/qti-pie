@@ -9,9 +9,11 @@ const sourceRoot = path.resolve(import.meta.dirname, "..");
 
 /**
  * The prefixes and package that a module the command line starts with must never import, so that
- * `--help` does not pay for the database, the importer, the exporter or grizzle (spec D7).
+ * `--help` does not pay for the database, pantry's public programs, the importer, the exporter or
+ * grizzle (spec D7).
  */
 const startupForbidden = [
+  "#pantry/api/",
   "#pantry/db/",
   "#pantry/import/",
   "#pantry/export/",
