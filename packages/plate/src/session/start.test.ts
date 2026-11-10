@@ -997,7 +997,7 @@ describe("startTest", () => {
   );
 
   it.effect(
-    "[T-1] keeps the configuration's seed as the shuffle seed, none when it has none, and a session stored at version 5 keeps either",
+    "[T-1] keeps the configuration's seed as the shuffle seed, none when it has none, and a session stored at version 6 keeps either",
     () =>
       Effect.gen(function* keepsShuffleSeed() {
         const delivery = yield* builtDelivery("shuffled", [
@@ -1187,6 +1187,44 @@ describe("current", () => {
         });
       }),
     { tags: ["corpus"] },
+  );
+});
+
+describe("a locked item", () => {
+  it.effect("is closed: its view is disabled where an unlocked item's is not", () =>
+    Effect.gen(function* lockedIsClosed() {
+      const choices = ["A", "B"];
+      const delivery = yield* builtDelivery("locked", [
+        ["first", itemXml("first", { choices, defaultValue: false, shuffle: false })],
+        ["second", itemXml("second", { choices, defaultValue: false, shuffle: false })],
+      ]);
+      const configuration = yield* configure({});
+      const session = started(delivery, configuration);
+      const locked: TestSession = {
+        ...session,
+        items: session.items.map((item) =>
+          item.sequenceIndex === 1 ? { ...item, locked: true } : item,
+        ),
+      };
+
+      assert.deepStrictEqual(
+        [1, 2].map(
+          (sequenceIndex) => viewAt(delivery, session, configuration, sequenceIndex).disabled,
+        ),
+        [false, false],
+      );
+      assert.deepStrictEqual(
+        [1, 2].map(
+          (sequenceIndex) => viewAt(delivery, locked, configuration, sequenceIndex).disabled,
+        ),
+        [true, false],
+      );
+      assert.deepStrictEqual(
+        session.items.map((item) => item.locked),
+        [false, false],
+      );
+      assert.deepStrictEqual(session.expired, []);
+    }),
   );
 });
 

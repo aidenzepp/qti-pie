@@ -17,9 +17,14 @@ import type { ItemRecord } from "#plate/model/record.ts";
 /**
  * The version of every stored form this renderer writes, the session record's and the test
  * session's, and the only version it reads. The two forms share it, so a change to either form
- * moves both, and a form whose fields did not change still names the new version.
+ * moves both, and a form whose fields did not change still names the new version. Two changes
+ * each arrived at version 5 on separate branches: the gate's expire fields, `locked` on each item
+ * of the stored session and `expired` on the session, the facts an expired timed scope leaves
+ * (`expireScope` in `#plate/session/expire.ts`), and m3f-02b's stored shape, the delivered
+ * `sequence` of the session. The merged form, which holds both, is version 6; the record's fields
+ * did not change.
  */
-export const storedVersion = 5;
+export const storedVersion = 6;
 
 /**
  * The fields of one item's session, as {@link ItemRecord} has them.
@@ -60,7 +65,7 @@ export const ItemRecordSchema = Schema.Struct({
 );
 
 /**
- * One item's session in the form the host stores: JSON-safe data that names its version, `5`,
+ * One item's session in the form the host stores: JSON-safe data that names its version, `6`,
  * with every integer written as its decimal digits, so no integer is rounded on the way through
  * the host, and the floats JSON has no number for written by name: the infinities as `"INF"` and
  * `"-INF"`, NaN as `"NaN"` and negative zero as `"-0"`. A record response's value sits in

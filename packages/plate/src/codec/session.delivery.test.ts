@@ -402,7 +402,7 @@ describe("a session of a test that places one section document twice", () => {
             items: [...stored.items, third],
             sequence: [...stored.sequence, "a-item"],
           }),
-          ["InvalidSession", "decode", Option.some(5)],
+          ["InvalidSession", "decode", Option.some(6)],
         );
       }),
   );
@@ -421,7 +421,7 @@ describe("a session of a test that places one section document twice", () => {
             items: stored.items.slice(0, -1),
             sequence: stored.sequence.slice(0, -1),
           }),
-          ["InvalidSession", "decode", Option.some(5)],
+          ["InvalidSession", "decode", Option.some(6)],
         );
       }),
   );
@@ -446,7 +446,7 @@ describe("a session of a test that selects with replacement", () => {
 });
 
 describe("the stored version", () => {
-  it.effect("[T-14] both stored forms are written at version 5", () =>
+  it.effect("[T-14] both stored forms are written at version 6", () =>
     Effect.gen(function* writesVersion() {
       const configuration = yield* configure({});
       const given = yield* placedTwice();
@@ -456,9 +456,9 @@ describe("the stored version", () => {
         assert.fail(`begin refused: ${failure.message}`),
       );
 
-      assert.strictEqual(stored.version, 5);
-      assert.strictEqual(itemAt(stored, 0).record.version, 5);
-      assert.strictEqual(record.version, 5);
+      assert.strictEqual(stored.version, 6);
+      assert.strictEqual(itemAt(stored, 0).record.version, 6);
+      assert.strictEqual(record.version, 6);
     }),
   );
 
@@ -485,7 +485,7 @@ describe("the stored version", () => {
             ...stored,
             items: stored.items.map((item) => ({ ...item, record: olderRecord })),
           }),
-          ["InvalidSession", "decode", Option.some(5)],
+          ["InvalidSession", "decode", Option.some(6)],
         );
         assert.deepStrictEqual(
           [failure._tag, failure.stage, Option.some(failure.issue)],

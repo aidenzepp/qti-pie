@@ -40,6 +40,7 @@ const SessionItemSchema = Schema.Struct({
   datestamp: Schema.String,
   duration: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
   firstOutcomes: Schema.OptionFromOptionalKey(ValuesSchema),
+  locked: Schema.Boolean,
   presented: Schema.Boolean,
   record: ItemRecordSchema,
   ref: Schema.String,
@@ -60,12 +61,22 @@ const SessionItemSchema = Schema.Struct({
 const SequenceSchema = Schema.Array(Schema.String);
 
 /**
+ * A timed scope that expired, as `TimedScope` of `#plate/test-features/contract.ts` names one.
+ */
+const TimedScopeSchema = Schema.Struct({
+  identifier: Schema.String,
+  kind: Schema.Literals(["item-ref", "part", "section", "test"]),
+});
+
+/**
  * The fields of a test session, as {@link TestSession} has them. `seed` is a string, required: the
  * host's seed or the one `startTest` drew, which every stored session holds. `outcomeRuns` is a
  * whole number, and `shuffleSeed` is left out of the stored form when the session has none.
+ * `expired` is always present, empty until a timed scope expires.
  */
 const sessionFields = {
   document: Schema.String,
+  expired: Schema.Array(TimedScopeSchema),
   instance: Schema.String,
   items: Schema.Array(SessionItemSchema),
   kind: Schema.Literal("test"),
@@ -88,7 +99,7 @@ const sessionFields = {
 
 /**
  * The Schema of a test session as the host stores it: {@link sessionFields} with the
- * {@link SequenceSchema delivered sequence} and the version, `5`.
+ * {@link SequenceSchema delivered sequence} and the version, `6`.
  */
 const StoredSessionSchema = Schema.Struct({
   ...sessionFields,
@@ -119,7 +130,7 @@ export const TestSessionSchema = StoredSessionSchema.pipe(
 );
 
 /**
- * A test session in the form the host stores: JSON-safe data that names its version, `5`. Every
+ * A test session in the form the host stores: JSON-safe data that names its version, `6`. Every
  * value is written as the stored item record writes it, integers as their decimal digits, so no
  * integer is rounded on the way through the host, the test's `outcomes` among them; each item's
  * `record` is a stored item record, its seed, template values, correct responses and defaults with
@@ -234,7 +245,7 @@ export class InvalidSession extends Data.TaggedError("InvalidSession")<{
    */
   readonly stage: SessionStage;
   /**
-   * The value the stored session holds under `version`, which is `5` when something else is
+   * The value the stored session holds under `version`, which is `6` when something else is
    * wrong; none when it is not an object or names no version, and at stage `encode`, where no
    * stored session was read.
    */
