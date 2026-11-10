@@ -1095,6 +1095,56 @@
 /* end match-interaction */
 
 /* begin associate-interaction (issue ei-04) */
+
+/* The Associate Root: a block, holding the Prompt, the choices and the associations made. */
+:where([data-slot="associate-interaction"]) {
+  display: block;
+}
+
+/* The Choices: in a wrapping row, with no list marker. */
+:where([data-slot="associate-interaction-choices"]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 0.5rem 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * A Choice: a chip on the card's surface, so a dark host theme reads. Its edge is the muted
+ * foreground, a 3:1 boundary against the page (WCAG 1.4.11), so the chip still shows where it ends
+ * once the runtime makes it a control.
+ */
+:where([data-slot="associate-interaction-choice"]) {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--muted-foreground, oklch(0.556 0 0));
+  border-radius: calc(var(--radius, 0.625rem) * 0.8);
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/* The Pairs: the associations made, one to a row. An empty list takes no room. */
+:where([data-slot="associate-interaction-pairs"]) {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * A Pair: a bordered row on the card's surface, whose text names both of its choices, so the
+ * association never rests on position or colour.
+ */
+:where([data-slot="associate-interaction-pair"]) {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, oklch(0.922 0 0));
+  border-radius: var(--radius, 0.625rem);
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
 /* end associate-interaction */
 
 /* begin order-interaction (issue ei-06) */
