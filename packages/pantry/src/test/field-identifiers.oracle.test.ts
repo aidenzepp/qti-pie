@@ -27,15 +27,14 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawNameOf, ruleOfLaws } from "#pantry/import/refusal.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge as judgeHost } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/test/host-judge.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
+import { schemaLawNameOf, schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The oracle's tables over the installed grammar, which the importer reads.
@@ -237,7 +236,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a field-identifier", (
 
                 const { broken } = judgeHost(hostRowsOf(inputs), hostLaws);
                 const brokenNames = broken.map(({ law }) =>
-                  Option.getOrElse(lawNameOf(law), () => Formatter.format(law)),
+                  Option.getOrElse(schemaLawNameOf(law), () => Formatter.format(law)),
                 );
                 const shown = broken.map(({ law }) => Formatter.format(law)).join("; ") || "no law";
                 assert.sameMembers(
@@ -248,7 +247,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a field-identifier", (
 
                 const brokenLaws = broken.map(({ law }) => law);
                 const rule = Arr.isReadonlyArrayNonEmpty(brokenLaws)
-                  ? ruleOfLaws(brokenLaws)
+                  ? Arr.head(schemaRulesOf(brokenLaws))
                   : Option.none();
                 const rules = [...expected].map((law) => ruleOf(law));
                 assert.isTrue(
