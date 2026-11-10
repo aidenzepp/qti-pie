@@ -52,6 +52,7 @@ import {
   textTypes,
 } from "#pantry/vocab/inventory/attributes.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
+import { cacheDirectory, xmlSecondEdition } from "#pantry/test/spec-cache/pins.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import type { Domain, Facet } from "#pantry/vocab/inventory/types.ts";
 import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
@@ -1114,34 +1115,26 @@ describe("xs:date", () => {
 });
 
 /**
- * The cached XML 1.0 (Second Edition), `~/.cache/gr8des/xml-2e/REC-xml-20001006.html`, and its
- * SHA-256 as fetched on 2026-11-05 from `https://www.w3.org/TR/2000/REC-xml-20001006`.
+ * Where the cache holds XML 1.0 (Second Edition) ({@link xmlSecondEdition}), and whether it does.
  */
-const secondEdition = {
-  path: `${process.env["HOME"] ?? ""}/.cache/gr8des/xml-2e/REC-xml-20001006.html`,
-  sha256: "e5350fb462ada6babfc43d72263a955bddf78605180457c6e006886f60a89b67",
-} as const;
-
-/**
- * Whether the Second Edition is cached.
- */
-const specCached = await Effect.runPromise(
+const secondEdition = await Effect.runPromise(
   Effect.gen(function* findSpec() {
     const fs = yield* FileSystem.FileSystem;
+    const file = `${yield* cacheDirectory}/${xmlSecondEdition.path}`;
 
-    return yield* fs.exists(secondEdition.path);
+    return { cached: yield* fs.exists(file), file };
   }).pipe(Effect.provide(NodeServices.layer)),
 );
 
-describe.skipIf(!specCached)("The name tables", () => {
+describe.skipIf(!secondEdition.cached)("The name tables", () => {
   it.effect(
     "are XML 1.0 (Second Edition)'s BaseChar, Ideographic, CombiningChar, Digit and Extender, as Appendix B lists them",
     () =>
       Effect.gen(function* tablesAreTheSpecs() {
         const fs = yield* FileSystem.FileSystem;
-        const bytes = yield* fs.readFile(secondEdition.path);
+        const bytes = yield* fs.readFile(secondEdition.file);
         const digest = yield* Digest.Digest;
-        assert.strictEqual(yield* digest.digestHex(Digest.sha256, bytes), secondEdition.sha256);
+        assert.strictEqual(yield* digest.digestHex(Digest.sha256, bytes), xmlSecondEdition.sha256);
 
         const text = new TextDecoder().decode(bytes);
         const tableOf = (name: string): readonly CodeRange[] => {
