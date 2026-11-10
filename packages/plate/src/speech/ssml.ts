@@ -30,10 +30,12 @@ import { doc, ssmlNamespace, walk, xmlNamespace } from "#plate/document/source.t
  * - `token-voice`: a `token` or `w` holds a `voice` (reading 44).
  * - `mark`: `speak`'s `startmark` or `endmark` names no mark defined exactly once in the fragment,
  *   names compared collapsed (reading 3).
+ * - `lookup`: a `lookup`'s `ref` names no `lexicon` `xml:id` of the fragment (reading 3).
  */
 export type SpeakRule =
   | "attribute"
   | "languages"
+  | "lookup"
   | "mark"
   | "meta"
   | "order"
@@ -107,15 +109,22 @@ const isSsml = (element: SourceElement, local?: string): boolean =>
   element.namespace === ssmlNamespace && (local === undefined || element.local === local);
 
 /**
- * Read an attribute of an element in no namespace.
+ * Read an attribute of an element: in no namespace, or in the namespace given.
  *
  * @param element The element.
  * @param local The attribute's local name.
+ * @param namespace The attribute's namespace, none by default.
  * @returns The value as written, none without the attribute.
  */
-const attributeOf = (element: SourceElement, local: string): Option.Option<string> =>
+const attributeOf = (
+  element: SourceElement,
+  local: string,
+  namespace = "",
+): Option.Option<string> =>
   Option.fromNullishOr(
-    element.attributes.find((attribute) => attribute.local === local && attribute.namespace === ""),
+    element.attributes.find(
+      (attribute) => attribute.local === local && attribute.namespace === namespace,
+    ),
   ).pipe(Option.map((attribute) => attribute.value));
 
 /**
@@ -250,14 +259,19 @@ const outOfOrder = (speak: SourceElement): ReadonlySet<SourceElement> => {
 
 /**
  * Check one element of the fragment below its root: `meta` (reading 41), `voice/@languages`
- * (reading 42), the attributes of `voice` and `prosody` (reading 43), and a `voice` in a `token`
- * or `w` (reading 44).
+ * (reading 42), the attributes of `voice` and `prosody` (reading 43), a `voice` in a `token` or
+ * `w` (reading 44), and the `ref` of a `lookup` (reading 3).
  *
  * @param visit The visit.
  * @param late The leading elements that come after other content of `speak` (reading 40).
+ * @param lexicons The `xml:id` of every `lexicon` the fragment defines (reading 3).
  * @returns The element's problems, in rule order.
  */
-const checkElement = (visit: Visit, late: ReadonlySet<SourceElement>): readonly SpeakProblem[] => {
+const checkElement = (
+  visit: Visit,
+  late: ReadonlySet<SourceElement>,
+  lexicons: ReadonlySet<string>,
+): readonly SpeakProblem[] => {
   const { element, parent, path } = visit;
 
   if (!isSsml(element)) {
@@ -322,6 +336,23 @@ const checkElement = (visit: Visit, late: ReadonlySet<SourceElement>): readonly 
     });
   }
 
+  if (element.local === "lookup") {
+    const ref = attributeOf(element, "ref");
+
+    if (!Option.isSome(ref) || !lexicons.has(ref.value)) {
+      problems.push({
+        detail: Option.match(ref, {
+          onNone: () =>
+            "lookup has no ref; it needs a ref naming the xml:id of a lexicon of this speak fragment",
+          onSome: (found) =>
+            `lookup has ref "${found}", which is the xml:id of no lexicon of this speak fragment`,
+        }),
+        path,
+        rule: "lookup",
+      });
+    }
+  }
+
   return problems;
 };
 
@@ -341,10 +372,14 @@ export const checkSpeak = (speak: SourceElement): readonly SpeakProblem[] => {
   const visits = [...walk(doc("speak", speak))];
   const [root, ...rest] = visits;
   const marks = new Map<string, number>();
+  const lexicons = new Set<string>();
 
   for (const visit of visits) {
     const name = isSsml(visit.element, "mark")
       ? attributeOf(visit.element, "name")
+      : Option.none<string>();
+    const id = isSsml(visit.element, "lexicon")
+      ? attributeOf(visit.element, "id", xmlNamespace)
       : Option.none<string>();
 
     if (Option.isSome(name)) {
@@ -352,12 +387,16 @@ export const checkSpeak = (speak: SourceElement): readonly SpeakProblem[] => {
 
       marks.set(key, (marks.get(key) ?? 0) + 1);
     }
+
+    if (Option.isSome(id)) {
+      lexicons.add(id.value);
+    }
   }
 
   const late = outOfOrder(speak);
 
   return [
     ...(root === undefined ? [] : checkRoot(root, marks)),
-    ...rest.flatMap((visit) => checkElement(visit, late)),
+    ...rest.flatMap((visit) => checkElement(visit, late, lexicons)),
   ];
 };
