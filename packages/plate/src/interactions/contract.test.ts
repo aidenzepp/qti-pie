@@ -1822,6 +1822,7 @@ describe("a module that lands", () => {
           const recorded = yield* Effect.fromResult(
             plate.render(
               plate.redact(accepted, {
+                numAttempts: 0,
                 outcomes: {},
                 templates: { HELD: identifierValue("beacon") },
               }),

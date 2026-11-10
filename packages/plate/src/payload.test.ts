@@ -4831,6 +4831,7 @@ const holder: Item = {
  * is 7.
  */
 const holderRecord: RedactRecord = {
+  numAttempts: 0,
   outcomes: { SCORE: floatValue(7) },
   templates: { HELD: identifierValue("beacon"), OTHER: identifierValue("unbound") },
 };
@@ -4916,6 +4917,7 @@ describe("redactItem holds a module node's bound template values", () => {
           const plate = yield* Effect.promise(() => import("#plate/render.ts"));
           const configuration = yield* configure({});
           const redaction = payloads.redactItem(holder, {
+            numAttempts: 0,
             outcomes: { OTHER_HELD: floatValue(3), SCORE: floatValue(7) },
             templates: { HELD: identifierValue("beacon") },
           });
@@ -5016,7 +5018,11 @@ describe("redactItem holds a module node's bound template values", () => {
 
 describe("the printer of test content", () => {
   it("[W0-BF] printNodes prints a test outcome and leaves redactItem equal", () => {
-    const record: RedactRecord = { outcomes: { X: floatValue(2.675) }, templates: {} };
+    const record: RedactRecord = {
+      numAttempts: 0,
+      outcomes: { X: floatValue(2.675) },
+      templates: {},
+    };
     const path = `${bodyPath}/p`;
     const placed: BodyNode = {
       attributes: [],
@@ -5033,7 +5039,10 @@ describe("the printer of test content", () => {
     ]);
     assert.deepStrictEqual(printNodes([placed], Option.some(record)), onItem(record));
 
-    const withheld = printNodes([placed], Option.some({ outcomes: {}, templates: {} }));
+    const withheld = printNodes(
+      [placed],
+      Option.some({ numAttempts: 0, outcomes: {}, templates: {} }),
+    );
 
     assert.deepStrictEqual(withheld, [
       {
@@ -5047,7 +5056,7 @@ describe("the printer of test content", () => {
         tag: "p",
       },
     ]);
-    assert.deepStrictEqual(withheld, onItem({ outcomes: {}, templates: {} }));
+    assert.deepStrictEqual(withheld, onItem({ numAttempts: 0, outcomes: {}, templates: {} }));
 
     const limits = { outputBudget: 3 };
 
