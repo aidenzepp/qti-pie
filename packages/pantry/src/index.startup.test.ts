@@ -11,7 +11,6 @@ import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, FileSystem, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { fileScratchDirectory } from "#pantry/test/scratch.ts";
-import { cliProcessTestTimeoutMs } from "#pantry/test/settings.ts";
 import { valueImports } from "#pantry/test/module-imports.ts";
 
 /**
@@ -190,7 +189,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("the public entry's sta
         assert.strictEqual(code, ChildProcessSpawner.ExitCode(0), stderr);
         assert.strictEqual(stdout.trim(), "false");
       }),
-    cliProcessTestTimeoutMs,
+    // A hang guard, not a budget: the fresh process ran 1.3 to 2.7 s alone at a load average of 42
+    // to 54, 8.9 s in the free suite at 57 to 59, and past 10 s at 40 to 58 (decision 497). Its
+    // measurement at a load average of at least 60 is owed (`#pantry/test/timeouts.test.ts`).
+    30_000,
   );
 });
 

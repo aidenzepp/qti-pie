@@ -1,25 +1,30 @@
 /**
- * The census of the committed migration (plan-qti-pie Q6.02): the one `_init` folder the Qti
- * schema's migrations hold, beside the snapshot's two files and `served/`, which holds the one file
- * `grizzle generate` writes for the author login (`#pantry/db/served.ts`), taken by
- * `#pantry/test/census.ts`, meets fin.md §13's zero targets and holds the measured counts. It lands
- * with the migration it reads, so it is a file of its own: the census's parser and its targets are
- * `census.test.ts`'s, which need no migration.
+ * The census of the committed migration chain (plan-qti-pie Q6.02): the migration folders the Qti
+ * schema holds, the `_init` first and a later migration on top for each phase that has landed,
+ * beside the snapshot's two files and `served/`, which holds the one file `grizzle generate` writes
+ * for the author login (`#pantry/db/served.ts`), taken together by `#pantry/test/census.ts`, meet
+ * fin.md §13's zero targets and hold the measured counts. It lands with the migrations it reads, so
+ * it is a file of its own: the census's parser and its targets are `census.test.ts`'s, which need
+ * no migration.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
+import path from "node:path";
 import { Qti } from "#pantry/test/qti.ts";
 import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
 
 /**
- * The committed migration's measured counts (the `_init` drafted from zero on grizzle `450d098`,
+ * The committed chain's measured counts (the `_init` drafted from zero on grizzle `450d098`,
  * after the composition's restated include, symbol and admission sets and the author login's
  * package read, which move none of them, and after the merge of upstream's genetic repair round 4,
  * whose placed reference type is a query, `PlacedReferenceType`: its rule, "Condition type", reads
  * four tables, so four constraint triggers more, and its placed map responses' two containments
- * move no count), as a ratchet: a change that moves one fails here until the count is measured
- * again. A regeneration updates them here, and only here.
+ * move no count; then pantry-api-1 on top, which rebuilds the one constraint trigger that reads
+ * `attribute.lexical`, dropped in its structure step and created again in its own `-validate.sql`,
+ * so the chain's text counts 97 triggers and 2 validate files while the database holds 96), as a
+ * ratchet: a change that moves one fails here until the count is measured again. A regeneration
+ * updates them here, and only here.
  *
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
@@ -32,18 +37,19 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  *   selections;
  * - `constraintTriggers`: one deferred constraint trigger per table a rule over a query reads
  *   (`#pantry/qti/queries.ts`), which is how grizzle judges such a rule at COMMIT (README, "Rules
- *   over queries"), so fin.md §13's zero target for them no longer holds since the cutover;
- * - `validateFiles`: the one `-validate.sql` file those rules are validated in.
+ *   over queries"), so fin.md §13's zero target for them no longer holds since the cutover; a later
+ *   migration that rebuilds one counts it again;
+ * - `validateFiles`: one `-validate.sql` file per migration that validates such a rule.
  */
 const measured = {
   constants: 119,
-  constraintTriggers: 96,
+  constraintTriggers: 97,
   live: 7,
   names: 48,
   nodeAxes: 5,
   nodeKeys: 48,
   tables: 251,
-  validateFiles: 1,
+  validateFiles: 2,
 } as const;
 
 /**
@@ -55,28 +61,41 @@ const measured = {
 const membersOf = (kind: "closed" | "relation"): number =>
   Object.values(Qti.relations).filter((member) => member.kind === kind).length;
 
-describe("the committed migration", () => {
+describe("the committed migration chain", () => {
   it.effect(
-    "is one _init folder, its snapshot's two files and the author login's served file, meets every zero target, and holds the measured counts",
+    "is the _init, its later migrations, the snapshot and the author login's served file, meets every zero target, and holds the measured counts",
     () =>
       // Oracle: the specification as a checker, fin.md §13's zero targets (the ones
       // `census.test.ts` states as predicates) and plan-qti-pie Q6.02's counts, over the committed
-      // migration's census; the schema's own members for the counts that follow from them (a table
-      // per stored relation, a names constant per roster). The chain's later migrations (GEN-S3 to
-      // GEN-S8) fold into the one `_init` drafted from zero, so their data steps, which moved rows
-      // already stored, have none to move, and the zero target for inserts holds.
-      // Bound: the one committed migration.
+      // chain's census; the schema's own members for the counts that follow from them (a table per
+      // stored relation, a names constant per roster). A data step is a later migration's, and the
+      // chain's later migrations move no stored rows, so the zero target for inserts holds.
+      // Bound: the committed chain, the `_init` first.
       Effect.gen(function* committedCensus() {
         const fs = yield* FileSystem.FileSystem;
         const entries = (yield* fs.readDirectory(qtiMigrations)).toSorted();
         const served = (yield* fs.readDirectory(`${qtiMigrations}/served`)).toSorted();
         const held = yield* censusOf(qtiMigrations);
+        const folders = entries.filter((entry) => !entry.endsWith(".json") && entry !== "served");
+        const [init, ...later] = folders;
+        const validateFilesOf = (folder: string) =>
+          fs
+            .readDirectory(path.join(qtiMigrations, folder))
+            .pipe(Effect.map((files) => files.filter((file) => file.endsWith("-validate.sql"))));
+        const chainValidateFiles = (yield* Effect.all(folders.map(validateFilesOf))).flat();
 
-        assert.lengthOf(entries, 4, entries.join(", "));
-        assert.match(entries[0] ?? "", /^\d{14}_init$/u);
-        assert.strictEqual(entries[1], "manifest.json");
-        assert.strictEqual(entries[2], "served");
-        assert.strictEqual(entries[3], "snapshot.json");
+        assert.isAtLeast(folders.length, 1, entries.join(", "));
+        assert.deepStrictEqual(entries.slice(0, folders.length), folders, entries.join(", "));
+        assert.deepStrictEqual(entries.slice(folders.length), [
+          "manifest.json",
+          "served",
+          "snapshot.json",
+        ]);
+        assert.match(init ?? "", /^\d{14}_init$/u);
+        for (const migration of later) {
+          assert.match(migration, /^\d{14}_[a-z0-9-]+$/u);
+        }
+        assert.strictEqual(held.laws.validateFiles, chainValidateFiles.length);
         assert.deepStrictEqual(served, ["author_app.json"], "the author login's one served file");
         assert.deepStrictEqual(
           {
