@@ -12,7 +12,7 @@
  *
  * @module
  */
-import { Effect } from "effect";
+import { Result } from "effect";
 import { requiredValue } from "#plate/model/attributes.ts";
 import { everyOperand, integerOrRefOf, singleOf } from "#plate/model/expression.ts";
 import type { FamilyRules, KindRule } from "#plate/model/expression.ts";
@@ -68,7 +68,7 @@ export const logicRules: FamilyRules<"and" | "any-n" | "not" | "or"> = {
 const andReader: ReaderSpec<"and"> = {
   _tag: "generic",
   arity: "some",
-  attributes: () => Effect.succeed((operands) => ({ kind: "and", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "and", operands })),
 };
 
 /**
@@ -77,7 +77,7 @@ const andReader: ReaderSpec<"and"> = {
 const orReader: ReaderSpec<"or"> = {
   _tag: "generic",
   arity: "some",
-  attributes: () => Effect.succeed((operands) => ({ kind: "or", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "or", operands })),
 };
 
 /**
@@ -86,7 +86,7 @@ const orReader: ReaderSpec<"or"> = {
 const notReader: ReaderSpec<"not"> = {
   _tag: "generic",
   arity: "one",
-  attributes: () => Effect.succeed((operands) => ({ kind: "not", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "not", operands })),
 };
 
 /**
@@ -102,7 +102,7 @@ const anyNReader: ReaderSpec<"any-n"> = {
   _tag: "generic",
   arity: "some",
   attributes: (context, element) =>
-    Effect.gen(function* readAnyNBounds() {
+    Result.gen(function* readAnyNBounds() {
       const min = integerOrRefOf(yield* requiredValue(context.walk, element, "min"));
       const max = integerOrRefOf(yield* requiredValue(context.walk, element, "max"));
 

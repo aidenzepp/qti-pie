@@ -1006,13 +1006,15 @@ const recordRun = (
   record: RecordValue,
 ) =>
   Effect.gen(function* runOverRecord() {
-    const item = yield* buildItem(
-      processingItem(
-        [
-          recordResponse,
-          ...outcomes.map(([identifier, baseType]) => outcomeDeclaration(identifier, baseType)),
-        ],
-        outcomes.map(([identifier, , expression]) => setOutcomeElement(identifier, expression)),
+    const item = yield* Effect.fromResult(
+      buildItem(
+        processingItem(
+          [
+            recordResponse,
+            ...outcomes.map(([identifier, baseType]) => outcomeDeclaration(identifier, baseType)),
+          ],
+          outcomes.map(([identifier, , expression]) => setOutcomeElement(identifier, expression)),
+        ),
       ),
     );
     assert.deepStrictEqual([...(item.records?.keys() ?? [])], ["R"]);

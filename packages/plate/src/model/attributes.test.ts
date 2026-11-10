@@ -55,12 +55,14 @@ describe("attributes", () => {
     Effect.gen(function* readsXsInt() {
       const inRange = el("qti-text-entry-interaction", [attr("base", "2147483647")]);
       assert.deepStrictEqual(
-        yield* xsInt(walkOf(inRange), inRange, "base"),
+        yield* Effect.fromResult(xsInt(walkOf(inRange), inRange, "base")),
         Option.some(2_147_483_647),
       );
 
       const outside = el("qti-text-entry-interaction", [attr("base", "2147483648")]);
-      const refused = yield* Effect.flip(xsInt(walkOf(outside), outside, "base"));
+      const refused = yield* Effect.flip(
+        Effect.fromResult(xsInt(walkOf(outside), outside, "base")),
+      );
       assert.strictEqual(refused.rule, "value-type");
       assert.deepStrictEqual(refused.detail, { baseType: "xs:int", lexical: "2147483648" });
       assert.deepStrictEqual(refused.location, {
@@ -82,11 +84,11 @@ describe("attributes", () => {
         const refuse = refuseOn(build, declaration);
 
         assert.deepStrictEqual(
-          yield* doubleAttribute(build, declaration, "normal-maximum", refuse),
+          yield* Effect.fromResult(doubleAttribute(build, declaration, "normal-maximum", refuse)),
           Option.some(Number.MAX_VALUE),
         );
         assert.deepStrictEqual(
-          yield* doubleAttribute(build, declaration, "normal-minimum", refuse),
+          yield* Effect.fromResult(doubleAttribute(build, declaration, "normal-minimum", refuse)),
           Option.some(-Number.MAX_VALUE),
         );
       }),
@@ -95,21 +97,21 @@ describe("attributes", () => {
   it.effect("reads coords in written order, each with whether it is written with %", () =>
     Effect.gen(function* readsCoords() {
       const plain = el("qti-area-map-entry", [attr("coords", "10,20,30")]);
-      assert.deepStrictEqual(yield* coordsOf(walkOf(plain), plain), [
+      assert.deepStrictEqual(yield* Effect.fromResult(coordsOf(walkOf(plain), plain)), [
         [10, false],
         [20, false],
         [30, false],
       ]);
 
       const percent = el("qti-area-map-entry", [attr("coords", "10%,20,30")]);
-      assert.deepStrictEqual(yield* coordsOf(walkOf(percent), percent), [
+      assert.deepStrictEqual(yield* Effect.fromResult(coordsOf(walkOf(percent), percent)), [
         [10, true],
         [20, false],
         [30, false],
       ]);
 
       const decimal = el("qti-area-map-entry", [attr("coords", "10,2.5,30")]);
-      const refused = yield* Effect.flip(coordsOf(walkOf(decimal), decimal));
+      const refused = yield* Effect.flip(Effect.fromResult(coordsOf(walkOf(decimal), decimal)));
       assert.strictEqual(refused.rule, "attribute-type");
     }),
   );

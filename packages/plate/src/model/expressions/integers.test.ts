@@ -126,42 +126,44 @@ describe("the integers family's reader specs and kind rules", () => {
     "[I-9a] build an item whose inline processing holds qti-integer-divide, qti-integer-modulus, qti-integer-to-float, qti-gcd and qti-lcm, with processing some",
     () =>
       Effect.gen(function* buildsIntegers() {
-        const built = yield* buildItem(
-          processingItem(
-            [
-              outcomeDeclaration("QUOTIENT", "integer"),
-              outcomeDeclaration("REMAINDER", "integer"),
-              outcomeDeclaration("FLOATED", "float"),
-              outcomeDeclaration("GCD", "integer"),
-              outcomeDeclaration("LCM", "integer"),
-            ],
-            [
-              setOutcomeElement(
-                "QUOTIENT",
-                expressionElement(
-                  "integer-divide",
-                  [],
-                  [integerElement("-7"), integerElement("2")],
+        const built = yield* Effect.fromResult(
+          buildItem(
+            processingItem(
+              [
+                outcomeDeclaration("QUOTIENT", "integer"),
+                outcomeDeclaration("REMAINDER", "integer"),
+                outcomeDeclaration("FLOATED", "float"),
+                outcomeDeclaration("GCD", "integer"),
+                outcomeDeclaration("LCM", "integer"),
+              ],
+              [
+                setOutcomeElement(
+                  "QUOTIENT",
+                  expressionElement(
+                    "integer-divide",
+                    [],
+                    [integerElement("-7"), integerElement("2")],
+                  ),
                 ),
-              ),
-              setOutcomeElement(
-                "REMAINDER",
-                expressionElement(
-                  "integer-modulus",
-                  [],
-                  [integerElement("7"), integerElement("-2")],
+                setOutcomeElement(
+                  "REMAINDER",
+                  expressionElement(
+                    "integer-modulus",
+                    [],
+                    [integerElement("7"), integerElement("-2")],
+                  ),
                 ),
-              ),
-              setOutcomeElement(
-                "FLOATED",
-                expressionElement("integer-to-float", [], [integerElement("3")]),
-              ),
-              setOutcomeElement(
-                "GCD",
-                expressionElement("gcd", [], [integerElement("12"), integerElement("18")]),
-              ),
-              setOutcomeElement("LCM", expressionElement("lcm", [], [integerElement("4")])),
-            ],
+                setOutcomeElement(
+                  "FLOATED",
+                  expressionElement("integer-to-float", [], [integerElement("3")]),
+                ),
+                setOutcomeElement(
+                  "GCD",
+                  expressionElement("gcd", [], [integerElement("12"), integerElement("18")]),
+                ),
+                setOutcomeElement("LCM", expressionElement("lcm", [], [integerElement("4")])),
+              ],
+            ),
           ),
         );
 

@@ -149,31 +149,33 @@ describe("the rounding family's reader specs and kind rules", () => {
     "[I-9a] build an item whose inline processing holds qti-round, qti-truncate, qti-round-to and qti-equal-rounded, with processing some",
     () =>
       Effect.gen(function* buildsRounding() {
-        const built = yield* buildItem(
-          processingItem(
-            [
-              outcomeDeclaration("ROUNDED", "integer"),
-              outcomeDeclaration("CUT", "integer"),
-              outcomeDeclaration("TO", "float"),
-              outcomeDeclaration("SAME", "boolean"),
-              integerOutcome("FIGURES", "2"),
-            ],
-            [
-              setOutcomeElement("ROUNDED", expressionElement("round", [], [floatElement("6.5")])),
-              setOutcomeElement("CUT", expressionElement("truncate", [], [floatElement("-6.8")])),
-              setOutcomeElement(
-                "TO",
-                roundToElement("decimalPlaces", "FIGURES", floatElement("2.675")),
-              ),
-              setOutcomeElement(
-                "SAME",
-                equalRoundedElement(
-                  [attr("figures", " 3 ")],
-                  floatElement("3.175"),
-                  floatElement("3.183"),
+        const built = yield* Effect.fromResult(
+          buildItem(
+            processingItem(
+              [
+                outcomeDeclaration("ROUNDED", "integer"),
+                outcomeDeclaration("CUT", "integer"),
+                outcomeDeclaration("TO", "float"),
+                outcomeDeclaration("SAME", "boolean"),
+                integerOutcome("FIGURES", "2"),
+              ],
+              [
+                setOutcomeElement("ROUNDED", expressionElement("round", [], [floatElement("6.5")])),
+                setOutcomeElement("CUT", expressionElement("truncate", [], [floatElement("-6.8")])),
+                setOutcomeElement(
+                  "TO",
+                  roundToElement("decimalPlaces", "FIGURES", floatElement("2.675")),
                 ),
-              ),
-            ],
+                setOutcomeElement(
+                  "SAME",
+                  equalRoundedElement(
+                    [attr("figures", " 3 ")],
+                    floatElement("3.175"),
+                    floatElement("3.183"),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
 
@@ -400,7 +402,7 @@ describe("the rounding family's reader specs and kind rules", () => {
           ["count-range"],
         );
 
-        const built = yield* buildItem(outItem("float", greatest));
+        const built = yield* Effect.fromResult(buildItem(outItem("float", greatest)));
         const read = Option.getOrElse(built.processing, () => []).flatMap((rule) =>
           rule.kind === "set-outcome" && rule.expression.kind === "round-to"
             ? [rule.expression.figures]

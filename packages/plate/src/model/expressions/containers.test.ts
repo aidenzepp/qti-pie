@@ -220,40 +220,42 @@ describe("the containers family's reader specs and kind rules", () => {
     "[I-9a] build an item whose inline processing holds qti-repeat, qti-index and qti-random, their operands, references and literals read, with processing some",
     () =>
       Effect.gen(function* buildsContainers() {
-        const built = yield* buildItem(
-          processingItem(
-            [
-              outcomeDeclaration("REPEATED", "identifier", "ordered"),
-              outcomeDeclaration("PICKED", "identifier"),
-              outcomeDeclaration("CHOSEN", "identifier"),
-              integerOutcome("n", "2"),
-            ],
-            [
-              setOutcomeElement(
-                "REPEATED",
-                expressionElement(
-                  "repeat",
-                  [attr("number-repeats", "n")],
-                  [identifierElement("A"), expressionElement("ordered")],
+        const built = yield* Effect.fromResult(
+          buildItem(
+            processingItem(
+              [
+                outcomeDeclaration("REPEATED", "identifier", "ordered"),
+                outcomeDeclaration("PICKED", "identifier"),
+                outcomeDeclaration("CHOSEN", "identifier"),
+                integerOutcome("n", "2"),
+              ],
+              [
+                setOutcomeElement(
+                  "REPEATED",
+                  expressionElement(
+                    "repeat",
+                    [attr("number-repeats", "n")],
+                    [identifierElement("A"), expressionElement("ordered")],
+                  ),
                 ),
-              ),
-              setOutcomeElement(
-                "PICKED",
-                expressionElement(
-                  "index",
-                  [attr("n", " 2 ")],
-                  [expressionElement("multiple", [], [identifierElement("B")])],
+                setOutcomeElement(
+                  "PICKED",
+                  expressionElement(
+                    "index",
+                    [attr("n", " 2 ")],
+                    [expressionElement("multiple", [], [identifierElement("B")])],
+                  ),
                 ),
-              ),
-              setOutcomeElement(
-                "CHOSEN",
-                expressionElement(
-                  "random",
-                  [],
-                  [expressionElement("ordered", [], [identifierElement("C")])],
+                setOutcomeElement(
+                  "CHOSEN",
+                  expressionElement(
+                    "random",
+                    [],
+                    [expressionElement("ordered", [], [identifierElement("C")])],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
 
@@ -433,7 +435,7 @@ describe("the containers family's reader specs and kind rules", () => {
 
         for (const [label, unset, expression] of cases) {
           const document = outItem(unset.baseType, unset.cardinality, expression);
-          const built = yield* buildItem(document);
+          const built = yield* Effect.fromResult(buildItem(document));
           const ran = yield* Effect.result(processed(document, {}));
 
           assert.deepStrictEqual(refusalsOf(document), [], label);
@@ -699,21 +701,23 @@ describe("the containers family's reader specs and kind rules", () => {
     "[I-9a] reads a qti-field-value of a record response, its field-identifier with its outer whitespace gone, and keeps the processing with no mark",
     () =>
       Effect.gen(function* readsFieldValue() {
-        const built = yield* buildItem(
-          outItem(
-            "string",
-            "single",
-            expressionElement(
-              "field-value",
-              [attr("field-identifier", " stringValue ")],
-              [variableElement("ANSWER")],
+        const built = yield* Effect.fromResult(
+          buildItem(
+            outItem(
+              "string",
+              "single",
+              expressionElement(
+                "field-value",
+                [attr("field-identifier", " stringValue ")],
+                [variableElement("ANSWER")],
+              ),
+              [
+                el("qti-response-declaration", [
+                  attr("cardinality", "record"),
+                  attr("identifier", "ANSWER"),
+                ]),
+              ],
             ),
-            [
-              el("qti-response-declaration", [
-                attr("cardinality", "record"),
-                attr("identifier", "ANSWER"),
-              ]),
-            ],
           ),
         );
 

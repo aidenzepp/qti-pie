@@ -13,7 +13,7 @@
  *
  * @module
  */
-import { Effect } from "effect";
+import { Result } from "effect";
 import { everyOperand, singleOf } from "#plate/model/expression.ts";
 import type { FamilyRules, KindRule } from "#plate/model/expression.ts";
 import type { FamilyReaders, ReaderSpec } from "#plate/model/expressions/read.ts";
@@ -85,7 +85,7 @@ export const integersRules: FamilyRules<
 const integerDivideReader: ReaderSpec<"integer-divide"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "integer-divide", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "integer-divide", operands })),
 };
 
 /**
@@ -94,7 +94,7 @@ const integerDivideReader: ReaderSpec<"integer-divide"> = {
 const integerModulusReader: ReaderSpec<"integer-modulus"> = {
   _tag: "generic",
   arity: "two",
-  attributes: () => Effect.succeed((operands) => ({ kind: "integer-modulus", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "integer-modulus", operands })),
 };
 
 /**
@@ -103,7 +103,7 @@ const integerModulusReader: ReaderSpec<"integer-modulus"> = {
 const integerToFloatReader: ReaderSpec<"integer-to-float"> = {
   _tag: "generic",
   arity: "one",
-  attributes: () => Effect.succeed((operands) => ({ kind: "integer-to-float", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "integer-to-float", operands })),
 };
 
 /**
@@ -112,7 +112,7 @@ const integerToFloatReader: ReaderSpec<"integer-to-float"> = {
 const gcdReader: ReaderSpec<"gcd"> = {
   _tag: "generic",
   arity: "some",
-  attributes: () => Effect.succeed((operands) => ({ kind: "gcd", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "gcd", operands })),
 };
 
 /**
@@ -121,7 +121,7 @@ const gcdReader: ReaderSpec<"gcd"> = {
 const lcmReader: ReaderSpec<"lcm"> = {
   _tag: "generic",
   arity: "some",
-  attributes: () => Effect.succeed((operands) => ({ kind: "lcm", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "lcm", operands })),
 };
 
 /**

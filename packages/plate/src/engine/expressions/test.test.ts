@@ -1171,24 +1171,26 @@ describe("the test family's evaluators", () => {
     "[T-9] agree on each of the eight kinds over the test scope: the reader's variant, the model's type and the evaluator's value",
     () =>
       Effect.gen(function* agreeOnEachKind() {
-        const built = yield* buildTest(
-          testDocument([
-            el("qti-number-correct"),
-            el("qti-number-incorrect"),
-            el("qti-number-presented", [attr("section-identifier", "S1")]),
-            el("qti-number-responded", [attr("include-category", "easy")]),
-            el("qti-number-selected", [attr("exclude-category", "hard")]),
-            el("qti-outcome-maximum", [
-              attr("outcome-identifier", "SCORE"),
-              attr("weight-identifier", "W"),
+        const built = yield* Effect.fromResult(
+          buildTest(
+            testDocument([
+              el("qti-number-correct"),
+              el("qti-number-incorrect"),
+              el("qti-number-presented", [attr("section-identifier", "S1")]),
+              el("qti-number-responded", [attr("include-category", "easy")]),
+              el("qti-number-selected", [attr("exclude-category", "hard")]),
+              el("qti-outcome-maximum", [
+                attr("outcome-identifier", "SCORE"),
+                attr("weight-identifier", "W"),
+              ]),
+              el("qti-outcome-minimum", [attr("outcome-identifier", "SCORE")]),
+              el("qti-test-variables", [attr("variable-identifier", "SCORE")]),
+              el("qti-test-variables", [
+                attr("base-type", "integer"),
+                attr("variable-identifier", "SCORE"),
+              ]),
             ]),
-            el("qti-outcome-minimum", [attr("outcome-identifier", "SCORE")]),
-            el("qti-test-variables", [attr("variable-identifier", "SCORE")]),
-            el("qti-test-variables", [
-              attr("base-type", "integer"),
-              attr("variable-identifier", "SCORE"),
-            ]),
-          ]),
+          ),
         );
         assert.strictEqual(built.outcomeProcessing.kind, "runs");
 

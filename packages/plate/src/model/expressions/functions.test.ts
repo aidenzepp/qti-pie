@@ -159,7 +159,7 @@ describe("the functions family's reader specs and kind rules", () => {
     "[I-9a] build an item whose inline processing holds qti-power, qti-math-operator, qti-math-constant and qti-stats-operator, with processing some",
     () =>
       Effect.gen(function* buildsFunctions() {
-        const built = yield* buildItem(functionsItem());
+        const built = yield* Effect.fromResult(buildItem(functionsItem()));
 
         assert.deepStrictEqual(
           built.processing,
