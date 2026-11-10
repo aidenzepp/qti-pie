@@ -49,6 +49,10 @@ export const selectPointModule: InteractionModule<"select-point", SelectPointInt
    */
   connect: notImplemented,
   /**
+   * No content: a stub has no payload node, so no hub asks.
+   */
+  content: () => [],
+  /**
    * How many Controls Select Point renders: not implemented; issue ei-14 fills it.
    */
   controls: notImplemented,
@@ -83,9 +87,17 @@ export const selectPointModule: InteractionModule<"select-point", SelectPointInt
    */
   redact: notImplemented,
   /**
+   * No region: the model holds no node of this kind until the module lands.
+   */
+  regions: () => [],
+  /**
    * Select Point's render function: not implemented; issue ei-14 fills it.
    */
   render: notImplemented,
+  /**
+   * The node itself, as it has no region.
+   */
+  replaceRegions: (interaction) => interaction,
   /**
    * The value Select Point shows for a stored response: not implemented; issue ei-14 fills it.
    */

@@ -53,6 +53,10 @@ export const portableCustomModule: InteractionModule<
    */
   connect: notImplemented,
   /**
+   * No content: a stub has no payload node, so no hub asks.
+   */
+  content: () => [],
+  /**
    * How many Controls Portable Custom Interaction renders: not implemented; issue pci-03 fills it.
    */
   controls: notImplemented,
@@ -89,9 +93,17 @@ export const portableCustomModule: InteractionModule<
    */
   redact: notImplemented,
   /**
+   * No region: the model holds no node of this kind until the module lands.
+   */
+  regions: () => [],
+  /**
    * Portable Custom Interaction's render function: not implemented; issue pci-03 fills it.
    */
   render: notImplemented,
+  /**
+   * The node itself, as it has no region.
+   */
+  replaceRegions: (interaction) => interaction,
   /**
    * The value Portable Custom Interaction shows for a stored response: not implemented; issue
    * pci-03 fills it.

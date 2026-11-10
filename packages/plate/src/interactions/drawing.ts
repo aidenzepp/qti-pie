@@ -48,6 +48,10 @@ export const drawingModule: InteractionModule<"drawing", DrawingInteraction, nev
    */
   connect: notImplemented,
   /**
+   * No content: a stub has no payload node, so no hub asks.
+   */
+  content: () => [],
+  /**
    * How many Controls Drawing renders: not implemented; issue ei-17 fills it.
    */
   controls: notImplemented,
@@ -82,9 +86,17 @@ export const drawingModule: InteractionModule<"drawing", DrawingInteraction, nev
    */
   redact: notImplemented,
   /**
+   * No region: the model holds no node of this kind until the module lands.
+   */
+  regions: () => [],
+  /**
    * Drawing's render function: not implemented; issue ei-17 fills it.
    */
   render: notImplemented,
+  /**
+   * The node itself, as it has no region.
+   */
+  replaceRegions: (interaction) => interaction,
   /**
    * The value Drawing shows for a stored response: not implemented; issue ei-17 fills it.
    */

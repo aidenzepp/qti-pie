@@ -854,11 +854,13 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
 ];
 
 /**
- * The part table broke one of its own rules, a defect of this module that no caller can cause.
+ * The part table, or the rows an interaction module adds to its lookups, broke one of the table's
+ * rules, a defect of plate that no caller can cause.
  *
  * It cannot occur: the table is a constant, its rows are unique by construction and checked once
- * when the module loads, and {@link rowFor}'s types admit only the keys it holds. It is thrown,
- * never returned.
+ * when the module loads, a module's parts are checked once when they are adopted
+ * ({@link adoptModuleParts}), and {@link rowFor}'s types admit only the keys the table holds. It is
+ * thrown, never returned.
  */
 export class PartTableDefect extends Data.TaggedError("PartTableDefect")<{
   readonly detail: string;
@@ -867,7 +869,7 @@ export class PartTableDefect extends Data.TaggedError("PartTableDefect")<{
    * The rule the table broke, and where to correct it.
    */
   override get message(): string {
-    return `The part table is inconsistent: ${this.detail}. Correct its rows in emit/parts.ts.`;
+    return `The part table is inconsistent: ${this.detail}. Correct its rows in emit/parts.ts, or the parts of the interaction module that owns the row.`;
   }
 }
 
@@ -931,9 +933,10 @@ if (rowIndex.size !== partTable.length) {
 }
 
 /**
- * The part each `data-slot` marker names.
+ * The part each `data-slot` marker names: each row of the part table's, and each part of an
+ * interaction module's, which {@link adoptModuleParts} adds.
  */
-const slotIndex: ReadonlyMap<string, PartName> = new Map(
+const slotIndex = new Map<string, PartName>(
   partTable.map((row) => [row.slot, { interaction: row.interaction, part: row.part }]),
 );
 
@@ -943,7 +946,8 @@ if (slotIndex.size !== partTable.length) {
 
 /**
  * Find the part a `data-slot` marker names, so a reader of an emitted tree asks the part table
- * rather than comparing marker strings.
+ * rather than comparing marker strings: a part of the table's, or of an interaction module that
+ * {@link adoptModuleParts} adopted.
  *
  * @param slot A `data-slot` attribute's value.
  * @returns The interaction and the part, or none when no row carries the marker.
@@ -952,15 +956,58 @@ export const partForSlot = (slot: string): Option.Option<PartName> =>
   Option.fromUndefinedOr(slotIndex.get(slot));
 
 /**
- * The part keys of each interaction, in the table's order, for checking overrides and naming the
- * keys an unknown one should have been.
+ * The owners of the part table's rows: the four shipped kinds and the chrome.
  */
-const knownParts: ReadonlyMap<string, readonly string[]> = new Map(
-  [...new Set(partTable.map((row) => row.interaction))].map((interaction) => [
+const tableOwners: ReadonlySet<string> = new Set(partTable.map((row) => row.interaction));
+
+/**
+ * The part keys of each interaction, in the table's order, for checking overrides and naming the
+ * keys an unknown one should have been; an interaction module's, in its `parts` order, after the
+ * table's, which {@link adoptModuleParts} adds. An owner with no part has no entry, so a stub's
+ * owner is no interaction an override may key.
+ */
+const knownParts = new Map<string, readonly string[]>(
+  [...tableOwners].map((interaction) => [
     interaction,
     partTable.filter((row) => row.interaction === interaction).map((row) => row.part),
   ]),
 );
+
+/**
+ * Add the interaction modules' parts to the lookups the part table serves a host and a reader of
+ * an emitted tree by: {@link resolveOverrides}, so a host overrides a module's part as it does a
+ * shipped one, and {@link partForSlot}, so the marker {@link slotFor} derives for a module's part
+ * names it. {@link rowFor} stays the table's: a module places its parts through `partRow`.
+ *
+ * This module cannot import the modules, since each imports `slotFor` from it through
+ * `#plate/interactions/contract.ts`, so `#plate/model/interactions.ts`, which holds the modules
+ * table, hands their parts over once as it loads. Every renderer loads it, `render` and the package
+ * entry among them; a caller that imports this module alone reads the table's parts only.
+ *
+ * @param parts Every module's parts, each by its owner and its key.
+ * @throws {PartTableDefect} When a part's owner is one of the table's, or its marker is one another
+ *   part already derives, which the module types rule out.
+ */
+export const adoptModuleParts = (parts: readonly PartName[]): void => {
+  for (const { interaction, part } of parts) {
+    const slot = slotFor(interaction, part);
+
+    if (tableOwners.has(interaction)) {
+      throw new PartTableDefect({
+        detail: `an interaction module gives the part ${part} of ${interaction}, which the table owns`,
+      });
+    }
+
+    if (slotIndex.has(slot)) {
+      throw new PartTableDefect({
+        detail: `the part ${part} of ${interaction} derives the data-slot marker ${slot}, which another part already derives`,
+      });
+    }
+
+    slotIndex.set(slot, { interaction, part });
+    knownParts.set(interaction, [...(knownParts.get(interaction) ?? []), part]);
+  }
+};
 
 /**
  * Give the row of a part as placed: the table's row, with the Notice's element and class set by its
@@ -1152,7 +1199,8 @@ export class UnknownPart extends Data.TaggedError("UnknownPart")<{
 }
 
 /**
- * Check part overrides against the part table, failing on the first unknown interaction or part.
+ * Check part overrides against the part table and the interaction modules' adopted parts
+ * ({@link adoptModuleParts}), failing on the first unknown interaction or part.
  *
  * @param overrides The replacement part functions, none by default.
  * @returns The overrides, resolvable by interaction and part, or the first {@link UnknownPart}.

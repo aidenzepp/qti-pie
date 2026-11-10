@@ -53,6 +53,10 @@ export const graphicGapMatchModule: InteractionModule<
    */
   connect: notImplemented,
   /**
+   * No content: a stub has no payload node, so no hub asks.
+   */
+  content: () => [],
+  /**
    * How many Controls Graphic Gap Match renders: not implemented; issue m3d-05 fills it.
    */
   controls: notImplemented,
@@ -89,9 +93,17 @@ export const graphicGapMatchModule: InteractionModule<
    */
   redact: notImplemented,
   /**
+   * No region: the model holds no node of this kind until the module lands.
+   */
+  regions: () => [],
+  /**
    * Graphic Gap Match's render function: not implemented; issue m3d-05 fills it.
    */
   render: notImplemented,
+  /**
+   * The node itself, as it has no region.
+   */
+  replaceRegions: (interaction) => interaction,
   /**
    * The value Graphic Gap Match shows for a stored response: not implemented; issue m3d-05 fills
    * it.
