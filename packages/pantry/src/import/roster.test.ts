@@ -10,7 +10,7 @@ import { insertableNamesOf } from "@bjornpagen/grizzle";
 import { Effect, Schema } from "effect";
 import { overlayPartsOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { documentLayerNames, overlayNamesOf, writtenNamesOf } from "#pantry/import/roster.ts";
+import { documentLayerNames, overlayNames, writtenNames } from "#pantry/import/roster.ts";
 import { changeSetOf, documentRowsOf } from "#pantry/import/write.ts";
 import { Author } from "#pantry/test/author.ts";
 import { Qti } from "#pantry/test/qti.ts";
@@ -90,7 +90,7 @@ layer(NodeServices.layer)("the roster", (it) => {
         const { parts } = yield* everyRelation;
         const written = new Set(parts.flatMap((part) => Object.keys(part)));
 
-        assert.deepStrictEqual(sortedNames(written), [...overlayNamesOf()]);
+        assert.deepStrictEqual(sortedNames(written), [...overlayNames]);
       }).pipe(Effect.scoped),
     testTimeoutMs,
   );
@@ -117,8 +117,8 @@ layer(NodeServices.layer)("the roster", (it) => {
           members.map(({ relation }) => relation),
         );
 
-        assert.deepStrictEqual(sortedNames(Object.keys(program.inputs)), [...writtenNamesOf()]);
-        assert.deepStrictEqual(sortedNames(inserted), [...writtenNamesOf()]);
+        assert.deepStrictEqual(sortedNames(Object.keys(program.inputs)), [...writtenNames]);
+        assert.deepStrictEqual(sortedNames(inserted), [...writtenNames]);
         assert.strictEqual(new Set(inserted).size, inserted.length);
       }).pipe(Effect.scoped),
     testTimeoutMs,

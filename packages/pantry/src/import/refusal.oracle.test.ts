@@ -1228,8 +1228,13 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   ],
   [
     "key-text-bound",
+    "regex-text-bound",
+    "the document layer: its stated limits first, in limitRules' order, the key-text bound (reading 133) before the regex-text bound (reading 178)",
+  ],
+  [
+    "regex-text-bound",
     "href-form",
-    "the document layer: its stated limits first, in limitRules' order, the key-text bound (reading 133) before the href form (reading 102)",
+    "limitRules' order: the regex-text bound (reading 178), then the href form (reading 102)",
   ],
   [
     "href-form",
@@ -1731,6 +1736,26 @@ describe("the pattern laws, one per field", () => {
         [schemaLawNameOf(chars), schemaLawNameOf(namespace)],
         [Option.some("XML production"), Option.some("Key text bound")],
       );
+    },
+    testTimeoutMs,
+  );
+
+  it(
+    "names two fields of one pattern apart: Node.chars an XML production, Attribute.lexical the regex-text bound",
+    () => {
+      // Oracle: the classes of `textLaws` and reading 178: a node's characters and an attribute's
+      // lexical form are both `Char*`, which crust refuses a break of before any row exists, but
+      // only the lexical form is bounded, at the most PostgreSQL's regular expressions read, so a
+      // refusal of the one is crust's production and of the other the stated limit.
+      const chars = statedPatternLaw("Node", "chars");
+      const lexicalForm = statedPatternLaw("Attribute", "lexical");
+
+      assert.isFalse(sameLaw(chars, lexicalForm));
+      assert.deepStrictEqual(
+        [schemaLawNameOf(chars), schemaLawNameOf(lexicalForm)],
+        [Option.some("XML production"), Option.some("Regex text bound")],
+      );
+      assert.deepStrictEqual(schemaRuleOfLaw(lexicalForm), Option.some("regex-text-bound"));
     },
     testTimeoutMs,
   );

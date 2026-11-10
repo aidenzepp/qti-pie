@@ -128,8 +128,8 @@ import { namingText } from "#pantry/grammar/domains.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import { handlePrefixes } from "#pantry/model/xdm.ts";
 import { NamespacePrefix, OpenElementName } from "#pantry/qti/chardata.ts";
-import { keyText, localNameBytes, namespaceText } from "#pantry/qti/limits.ts";
-import { Chars, holdsCheckedText, Node, universalDomains } from "#pantry/qti/node.ts";
+import { keyText, localNameBytes, namespaceText, regexTextBytes } from "#pantry/qti/limits.ts";
+import { charsPattern, holdsCheckedText, Node, universalDomains } from "#pantry/qti/node.ts";
 import { dataName } from "#pantry/vocab/open.ts";
 
 /**
@@ -169,6 +169,23 @@ const ncStart =
  * @see {@link https://www.w3.org/TR/xml/#NT-NameChar | XML 1.0, NameChar}
  */
 const ncChar = `\\-.0-9\\u{B7}\\u{300}-\\u{36F}\\u{203F}-\\u{2040}${ncStart}`;
+
+/**
+ * An attribute's lexical form, the record (U1): the value as attribute-value normalization leaves
+ * it, each unexpanded entity reference kept as `&name;`, so any run of XML `Char`s, character
+ * references to tabs and line breaks included. Its domain's pattern, not its type, judges it (AL1).
+ * It is free text, in no key: a law that compares it across rows reads a bounded copy.
+ *
+ * It holds at most {@link regexTextBytes} UTF-8 bytes, the stated limit "Regex text bound"
+ * (reading 178): the ceiling the domain's `~` already held every write to, since PostgreSQL's
+ * regular expressions read no longer text, now refused by name. The bound is a refinement, no part
+ * of the text's type (`#pantry/qti/limits.ts`), so a bounded lexical form still meets its unbounded
+ * and key-text copies in a containment. A rule over a query that reads it with `Compute.matches`
+ * compiles only because of it. A node's characters (`Node.chars`, `#pantry/qti/node.ts` `Chars`)
+ * share its pattern and stay unbounded.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
+ */
+export const Lexical = str.bytes(regexTextBytes, str.regex(charsPattern));
 
 /**
  * XML whitespace `S`, possibly none: what a lexical form holds around its token or value, an
@@ -238,7 +255,7 @@ export const Attribute = relation(
     idrefText: accumulated(keyText, ""),
     idrefs: drawn(natural),
     kind: accumulated(closedId(NodeKind), "document"),
-    lexical: Chars,
+    lexical: Lexical,
     name: closedId(AttributeName),
     node: uuid,
     openName: drawn(natural),

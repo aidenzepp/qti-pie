@@ -31,13 +31,16 @@ const codecRules = [
 /**
  * The rules that name a stated limit of the representation, never a law of the specification:
  * `key-text-bound` is the bound on a text a key holds (`src/qti/limits.ts` `keyText`), which
- * grizzle's representability rule derives from PostgreSQL's `BTMaxItemSize`, and `href-form` an
- * href the importer reads no name from (reading 102, `overlays/package.ts` `Limit`), and
- * `fragment-context` the one context an included fragment's rows are judged in (reading 117,
- * `tests.ts` `Fragment_context`): a fragment two includes place in different interactions would
- * need two rows per node, and `remote-section` a section ref whose href resolves outside the
- * package (reading 170, `tests.ts` `Remote_section_ref`): the import is offline and never fetches
- * the section, which is the test's own content, so it cannot assemble the test.
+ * grizzle's representability rule derives from PostgreSQL's `BTMaxItemSize`, `regex-text-bound` the
+ * bound on an attribute's lexical form (`src/qti/limits.ts` `regexTextBytes`, reading 178), the
+ * longest text PostgreSQL's regular expressions read, which the field's domain CHECK runs on every
+ * write, and `href-form` an href the importer reads no name from (reading 102,
+ * `overlays/package.ts` `Limit`), and `fragment-context` the one context an included fragment's
+ * rows are judged in (reading 117, `tests.ts` `Fragment_context`): a fragment two includes place in
+ * different interactions would need two rows per node, and `remote-section` a section ref whose
+ * href resolves outside the package (reading 170, `tests.ts` `Remote_section_ref`): the import is
+ * offline and never fetches the section, which is the test's own content, so it cannot assemble the
+ * test.
  *
  * A value over the bound is valid QTI the model cannot key, so its verdict says so by its rule. The
  * import meets it as the bound's pattern law: grizzle's encoder and its family fill check a text's
@@ -48,6 +51,7 @@ const codecRules = [
  */
 export const limitRules = [
   "key-text-bound",
+  "regex-text-bound",
   "href-form",
   "fragment-context",
   "remote-section",
