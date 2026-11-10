@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Option, Result } from "effect";
 import { toHtml } from "#plate/emit/serialise.ts";
 import type { Element } from "#plate/emit/node.ts";
 import { h } from "#plate/emit/node.ts";
@@ -615,15 +615,15 @@ describe("ledger/view.ts", () => {
     assert.deepStrictEqual(byTag(list, "li").map(textOf), [...noteLines]);
     assert.include(text, `\n\nSession notes\n${noteLines.join("\n")}\n`);
     assert.isAbove(text.indexOf("Session notes"), text.indexOf("Records\n"));
-    assert.include(toHtml(tree), "&lt;b&gt;Step 2&lt;/b&gt; follows.");
+    assert.include(Result.getOrThrow(toHtml(tree)), "&lt;b&gt;Step 2&lt;/b&gt; follows.");
   });
 
   it("lists the recorded session notes when none are given, and says so when there are none", () => {
     const sentence = "No session note has been recorded yet.";
 
     assert.strictEqual(
-      toHtml(ledgerHtml(fixture)),
-      toHtml(ledgerHtml(fixture, browserSupport, sessionNotes)),
+      Result.getOrThrow(toHtml(ledgerHtml(fixture))),
+      Result.getOrThrow(toHtml(ledgerHtml(fixture, browserSupport, sessionNotes))),
     );
     assert.strictEqual(ledgerText(fixture), ledgerText(fixture, browserSupport, sessionNotes));
     assert.strictEqual(
@@ -639,7 +639,10 @@ describe("ledger/view.ts", () => {
 
     assert.include(byTag(ledgerHtml(fixture, []), "p").map(textOf), sentence);
     assert.include(ledgerText(fixture, []), `Browser support\n${sentence}`);
-    assert.strictEqual(toHtml(ledgerHtml(fixture)), toHtml(ledgerHtml(fixture, browserSupport)));
+    assert.strictEqual(
+      Result.getOrThrow(toHtml(ledgerHtml(fixture))),
+      Result.getOrThrow(toHtml(ledgerHtml(fixture, browserSupport))),
+    );
   });
 
   it("lists each browser-support row with its degrade", () => {
@@ -848,7 +851,7 @@ describe("ledger/view.ts", () => {
   });
 
   it("escapes a test title that holds markup", () => {
-    const html = toHtml(ledgerHtml(fixture));
+    const html = Result.getOrThrow(toHtml(ledgerHtml(fixture)));
 
     assert.include(html, "&lt;script&gt;alert(1)&lt;/script&gt;");
     assert.notInclude(html, "<script");
@@ -856,7 +859,7 @@ describe("ledger/view.ts", () => {
   });
 
   it("says these tests pass over these fixtures, never conformant or certified", () => {
-    const html = toHtml(ledgerHtml(fixture));
+    const html = Result.getOrThrow(toHtml(ledgerHtml(fixture)));
     const text = ledgerText(fixture);
 
     for (const view of [html, text]) {

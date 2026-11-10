@@ -706,7 +706,10 @@ describe("emitBody", () => {
         const nodes = yield* emit([el("p", { ONCLICK: "x()", class: "t", onclick: "alert(1)" })]);
 
         assert.deepStrictEqual(nodes, [h("p", { class: "t" })]);
-        assert.strictEqual(nodes.map(toHtml).join(""), '<p class="t"></p>');
+        assert.strictEqual(
+          nodes.map((node) => Result.getOrThrow(toHtml(node))).join(""),
+          '<p class="t"></p>',
+        );
       }),
   );
 

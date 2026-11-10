@@ -59,6 +59,19 @@ export type { PartOverrides } from "#plate/emit/parts.ts";
 
 export { UnknownPart } from "#plate/emit/parts.ts";
 
+export type { MarkupRefusal } from "#plate/emit/serialise.ts";
+
+export {
+  EscapableRawTextElementChild,
+  EventHandlerAttribute,
+  MalformedAttributeName,
+  MalformedTagName,
+  MarkupRefused,
+  PlaintextElement,
+  RawTextChildren,
+  VoidElementChildren,
+} from "#plate/emit/serialise.ts";
+
 export { PartSwapRefused } from "#plate/emit/swap.ts";
 
 export type { EngineFailure } from "#plate/engine/evaluate.ts";

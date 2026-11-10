@@ -643,7 +643,7 @@ describe("renderExtendedText", () => {
         const againControl = onePart(againRoot, "control");
 
         assert.deepStrictEqual(againControl.children, [text("<b>x</b>")]);
-        assert.include(toHtml(againControl), "&lt;b&gt;x&lt;/b&gt;</textarea>");
+        assert.include(Result.getOrThrow(toHtml(againControl)), "&lt;b&gt;x&lt;/b&gt;</textarea>");
         assert.isTrue(roundTrips(page([againRoot], again)));
       }),
   );
@@ -779,7 +779,7 @@ describe("validateExtendedText", () => {
         const control = onePart(root, "control");
 
         assert.deepStrictEqual(control.children, [text("<b>x</b>")]);
-        assert.include(toHtml(control), "&lt;b&gt;x&lt;/b&gt;</textarea>");
+        assert.include(Result.getOrThrow(toHtml(control)), "&lt;b&gt;x&lt;/b&gt;</textarea>");
         assert.strictEqual(control.attrs["data-format"], "xhtml");
         assert.strictEqual(control.attrs["aria-invalid"], "true");
         assert.strictEqual(
@@ -1743,7 +1743,10 @@ describe("an Extended Text bound to a record response", () => {
           partsIn(root, "control").map((control) => [control.tag, control.attrs["name"]]),
           [["textarea", name]],
         );
-        assert.strictEqual(toHtml(root), toHtml(yield* render(payloadOf([counted]))));
+        assert.strictEqual(
+          Result.getOrThrow(toHtml(root)),
+          Result.getOrThrow(toHtml(yield* render(payloadOf([counted])))),
+        );
       }),
   );
 });

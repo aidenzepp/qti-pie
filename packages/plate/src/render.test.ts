@@ -8,6 +8,7 @@ import type { StatusInput } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
+import { MarkupRefused } from "#plate/emit/serialise.ts";
 import { checkInstance, entryName, partition } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
 import type { Entry, InstanceRequirement } from "#plate/form/encoding.ts";
@@ -562,6 +563,20 @@ const instanceFailure = (
   );
 
 /**
+ * Give the reason of a {@link MarkupRefused} a render failed with.
+ *
+ * @param result The result of a render.
+ * @returns The reason's `_tag` when the failure is a `MarkupRefused`, the failure's tag when it is
+ *   another failure, and none on success.
+ */
+const markupRefusal = (
+  result: Result.Result<Rendered, { readonly _tag: string }>,
+): Option.Option<string> =>
+  Option.map(failureOf(result), (failure) =>
+    failure instanceof MarkupRefused ? `MarkupRefused: ${failure.reason._tag}` : failure._tag,
+  );
+
+/**
  * Hand `render` an accepted document and a hand-built item, which its type refuses: the type
  * tests are the `@ts-expect-error`s below, which `tsc` fails on if a call ever type-checks. No
  * test calls it.
@@ -666,6 +681,28 @@ describe("render", () => {
         }),
       );
     }),
+  );
+
+  it.effect(
+    "[markup refused] fails MarkupRefused for a replacement holding a plaintext element",
+    () =>
+      Effect.gen(function* plaintextRefused() {
+        const configuration = yield* defaults;
+        const result = render(redacted, configuration, {
+          instance,
+          parts: {
+            item: {
+              root: (props, children) =>
+                h(rowFor("item", "root").element, props, [h("plaintext", {}), ...children]),
+            },
+          },
+        });
+
+        assert.deepStrictEqual(
+          markupRefusal(result),
+          Option.some("MarkupRefused: PlaintextElement"),
+        );
+      }),
   );
 
   it("refuses, in its type, an Accepted and an Item; redact refuses a hand-built Item", () => {
@@ -1759,6 +1796,39 @@ describe("renderStatus", () => {
         }),
       );
     }),
+  );
+
+  it.effect(
+    "[markup refused] fails MarkupRefused for a replacement holding a br with text, or an onclick on its root",
+    () =>
+      Effect.gen(function* statusMarkup() {
+        const configuration = yield* defaults;
+        const voidChildren = renderStatus(scored, configuration, {
+          parts: {
+            item: {
+              status: (props, children) =>
+                h("div", props, [h("br", {}, [{ kind: "text", text: "x" }]), ...children]),
+            },
+          },
+        });
+        const handler = renderStatus(scored, configuration, {
+          parts: {
+            item: {
+              status: (props, children) =>
+                h(rowFor("item", "status").element, { ...props, onclick: "x" }, children),
+            },
+          },
+        });
+
+        assert.deepStrictEqual(
+          markupRefusal(voidChildren),
+          Option.some("MarkupRefused: VoidElementChildren"),
+        );
+        assert.deepStrictEqual(
+          markupRefusal(handler),
+          Option.some("MarkupRefused: EventHandlerAttribute"),
+        );
+      }),
   );
 
   it.effect("fails UnknownPart through the same overrides as render", () =>

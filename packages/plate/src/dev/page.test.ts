@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Option } from "effect";
+import { ConfigProvider, Effect, Option, Result } from "effect";
 import { defaultTreeAdapter, parse } from "parse5";
 import type { DefaultTreeAdapterTypes } from "parse5";
 import { groupVerdicts, openMember, verdictCache, verdictOrder } from "#plate/dev/listing.ts";
@@ -1711,7 +1711,7 @@ describe("dev/page.ts: the verdicts page and the ledger page", { tags: ["corpus"
         const tables = elementChildren(article).filter((child) => child.tag === "table");
 
         assert.strictEqual(response.status, 200);
-        assert.include(html, toHtml(ledgerHtml(fixtureLedger)));
+        assert.include(html, Result.getOrThrow(toHtml(ledgerHtml(fixtureLedger))));
         assert.deepStrictEqual(order[0], ["h1", "Feature ledger"]);
         assert.deepStrictEqual(
           order.slice(

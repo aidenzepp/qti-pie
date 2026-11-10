@@ -1909,6 +1909,8 @@ describe("the public surface", () => {
       const surface = yield* Effect.promise(() => import("#plate/index.ts"));
 
       assert.deepStrictEqual(Object.keys(surface).toSorted(), [
+        "EscapableRawTextElementChild",
+        "EventHandlerAttribute",
         "IntentRefused",
         "InvalidConfiguration",
         "InvalidInstance",
@@ -1921,9 +1923,14 @@ describe("the public surface", () => {
         "InvalidTime",
         "ItemNotInSession",
         "Malformed",
+        "MalformedAttributeName",
+        "MalformedTagName",
+        "MarkupRefused",
         "OutcomeMismatchError",
         "OutputTooLarge",
         "PartSwapRefused",
+        "PlaintextElement",
+        "RawTextChildren",
         "RecordMismatch",
         "RecordOperandError",
         "RecordRequired",
@@ -1936,6 +1943,7 @@ describe("the public surface", () => {
         "UnknownItemRef",
         "UnknownPart",
         "UnmappedResponseError",
+        "VoidElementChildren",
         "acceptedItem",
         "advance",
         "allowedIntents",

@@ -23,6 +23,7 @@ import type { StatusInput } from "#plate/emit/item.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
 import type { PartOverrides, Resolved, UnknownPart } from "#plate/emit/parts.ts";
 import { toHtml, toHtmlWithin } from "#plate/emit/serialise.ts";
+import type { MarkupRefused } from "#plate/emit/serialise.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
@@ -370,7 +371,8 @@ const interactionRenderer =
  * @param options The author's inputs, none by default.
  * @returns The Root's HTML and the instance token it used, or {@link UnknownPart} for an override
  *   the part table lacks, {@link InvalidInstance} for an instance token that breaks a requirement,
- *   {@link PartSwapRefused} for a replacement that breaks the swap invariant, or
+ *   {@link PartSwapRefused} for a replacement that breaks the swap invariant,
+ *   {@link MarkupRefused} for a replacement holding markup the serialiser cannot write, or
  *   {@link OutputTooLarge} for an item with a text past its bound, or HTML that would pass the
  *   configuration's `outputBudget`.
  */
@@ -378,7 +380,10 @@ export const render = (
   item: Redacted,
   configuration: Configuration,
   options: Options = {},
-): Result.Result<Rendered, InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart> =>
+): Result.Result<
+  Rendered,
+  InvalidInstance | MarkupRefused | OutputTooLarge | PartSwapRefused | UnknownPart
+> =>
   Result.gen(function* renderItem() {
     if (Option.isSome(item.unprinted)) {
       const { bound, identifier, limit } = item.unprinted.value;
@@ -401,7 +406,7 @@ export const render = (
     const body = yield* emitBody(built, state, interactionRenderer(built, state));
     const root = yield* emitItem(built, state, body);
     const html = yield* Result.fromOption(
-      toHtmlWithin(root, configuration.outputBudget),
+      yield* toHtmlWithin(root, configuration.outputBudget),
       () =>
         new OutputTooLarge({
           budget: configuration.outputBudget,
@@ -429,18 +434,19 @@ export const render = (
  * @param options The part overrides, none by default.
  * @returns The region's HTML and `input.instance`, or {@link InvalidInstance} for an
  *   `input.instance` that breaks a requirement, {@link UnknownPart} for an override the part table
- *   lacks, or {@link PartSwapRefused} for a replacement that breaks the swap invariant.
+ *   lacks, {@link PartSwapRefused} for a replacement that breaks the swap invariant, or
+ *   {@link MarkupRefused} for a replacement holding markup the serialiser cannot write.
  */
 export const renderStatus = (
   input: StatusInput,
   configuration: Configuration,
   options: Pick<Options, "parts"> = {},
-): Result.Result<Rendered, InvalidInstance | PartSwapRefused | UnknownPart> =>
+): Result.Result<Rendered, InvalidInstance | MarkupRefused | PartSwapRefused | UnknownPart> =>
   Result.gen(function* renderStatusRegion() {
     yield* checkedInstance(input.instance, "input.instance");
 
     const parts = yield* resolveOverrides(options.parts);
     const region = yield* emitStatus(input, stateOf(configuration, parts));
 
-    return { html: toHtml(region), instance: input.instance };
+    return { html: yield* toHtml(region), instance: input.instance };
   });
