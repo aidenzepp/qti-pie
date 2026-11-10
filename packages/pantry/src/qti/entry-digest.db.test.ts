@@ -27,7 +27,7 @@ import { authorRoleOf } from "#pantry/qti/roles.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { servedProbe } from "#pantry/test/served-members.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs, probeLayerHookTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The fields of an `Entry` that no write holds: each a fact's field that grizzle's addition of the
@@ -151,7 +151,7 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(probeLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
+      timeout: probeLayerHookTimeoutMs,
     })("an entry's digest", (it) => {
       it.effect(
         "is the SHA-256 of the entry's bytes, PostgreSQL's own, for every entry of the package",
