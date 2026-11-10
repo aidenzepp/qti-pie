@@ -41,6 +41,8 @@ import {
 } from "#pantry/test/gen/attribute-order.ts";
 import type { CaseEntry } from "#pantry/test/gen/attribute-order.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { Qti } from "#pantry/qti/schema.ts";
+import { judgedOf } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import type { OracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
@@ -104,51 +106,101 @@ const verdictOf = (imported: Imported) =>
     : { rule: imported.rule, verdict: imported.verdict };
 
 /**
- * The roots that write an `ObjectIdentifier` row from their `identifier`.
+ * The relations that copy an identifier attribute and check the copy with `E1_derived`, read from
+ * the schema's own statements rather than named by hand: the target of each containment from
+ * `Attribute` whose selection takes an `identifier` attribute and turns on the name (it takes no
+ * attribute of another name), and which copies the attribute's `lexical` into a field the target's
+ * `E1_derived` check reads. At grizzle 89e94c0 they are `DeclarationIdentifier`,
+ * `InteractionAttribute`, `ManifestId`, `ObjectIdentifier`, `ResourceId` and `TestToken`.
  */
-const objectRoots: ReadonlySet<string> = new Set(["qti-assessment-item", "qti-assessment-test"]);
+const identifierCopies: ReadonlySet<string> = (() => {
+  const laws = Qti.statements.flatMap(judgedOf);
+  const derivedReads = new Map(
+    laws.flatMap((law) =>
+      law.kind === "check" && law.law.kind === "check" && law.law.name === "E1_derived"
+        ? [[law.relation, law.reads] as const]
+        : [],
+    ),
+  );
+
+  return new Set(
+    laws.flatMap((law) => {
+      if (law.kind !== "contained" || law.from.relation !== "Attribute") {
+        return [];
+      }
+
+      const at = law.from.law.terms.findIndex(({ field }) => field === "lexical");
+      const copied = law.to.law.terms[at]?.field;
+
+      return at !== -1 &&
+        copied !== undefined &&
+        derivedReads.get(law.to.relation)?.includes(copied) === true &&
+        law.from.selection({ name: "identifier" }) !== false &&
+        law.from.selection({ name: "" }) === false
+        ? [law.to.relation]
+        : [];
+    }),
+  );
+})();
 
 /**
- * The law `ObjectIdentifier`'s identifier piece breaks, as a refusal's origin names it.
+ * Name the `E1_derived` check on a relation as a refusal's origin names it, grizzle's law written
+ * by `Formatter.format`.
+ *
+ * @param relation - The relation.
+ * @returns The law's identity.
  */
-const objectIdentifierCheck = '{"kind":"check","relation":"ObjectIdentifier","name":"E1_derived"}';
+const derivedCheckOf = (relation: string): string =>
+  `{"kind":"check","relation":"${relation}","name":"E1_derived"}`;
 
 /**
- * Decide whether a package has an item or test root whose `identifier` the `E1_derived` check on
- * `ObjectIdentifier` refuses: once the import strips its leading and trailing XML whitespace
- * (`lead` and `trail`), the piece left is empty or holds a character below `!`, so it fails
- * `identifierPattern` (`src/qti/metadata.ts`).
+ * The `E1_derived` checks of every identifier copy ({@link identifierCopies}), as a refusal's
+ * origin names them.
+ */
+const identifierCopyChecks: ReadonlySet<string> = new Set(
+  [...identifierCopies].map(derivedCheckOf),
+);
+
+/**
+ * Decide whether a package has an element whose `identifier` the identifier's value domain refuses:
+ * once the import strips its leading and trailing XML whitespace (`lead` and `trail`), the piece
+ * left is empty or holds a character below `!`, so it fails `identifierPattern`
+ * (`src/qti/metadata.ts`).
  *
  * @param entries - The package's entries as the case reads them.
- * @returns Whether one such root is written.
+ * @returns Whether one such element is written.
  */
-const breaksObjectIdentifier = (entries: readonly CaseEntry[]): boolean =>
+const breaksIdentifier = (entries: readonly CaseEntry[]): boolean =>
   entries.some(
     ({ tree }) =>
       Option.isSome(tree) &&
-      objectRoots.has(tree.value.root.local) &&
-      tree.value.root.attributes.some(
-        ({ local, namespace, value }) =>
-          namespace === "" &&
-          local === "identifier" &&
-          !/^[!-\uFFFD\u{10000}-\u{10FFFF}]+$/u.test(
-            value.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, ""),
-          ),
+      elementsOf(tree.value.root).some(({ attributes }) =>
+        attributes.some(
+          ({ local, namespace, value }) =>
+            namespace === "" &&
+            local === "identifier" &&
+            !/^[!-\uFFFD\u{10000}-\u{10FFFF}]+$/u.test(
+              value.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, ""),
+            ),
+        ),
       ),
   );
 
 /**
- * The one refusal this test admits under a rule the law oracle does not predict, issue #103.
- * The import writes the derived `ObjectIdentifier` row for an item identifier outside its value
- * domain, and PostgreSQL refuses that row's immediate `E1_derived` check before the attribute's own
- * `value_domain` check, so the import names `derived` where the oracle predicts
- * `attribute-lexical`. The verdict is the same. It holds at grizzle 6995af4 and at 89e94c0 alike;
- * this test first drew it in the run that moved the pin (`TEST_SEED=1234327904`, case 14). It is
- * keyed as narrowly as the case allows: the refusal names that one law and no other, a root's
- * `identifier` breaks that check ({@link breaksObjectIdentifier}), and the oracle refuses the
- * package under `attribute-lexical`, the value domain the same identifier breaks. Every other
- * refusal is still held to the oracle's rules, and `derived` is admitted nowhere else. Remove it
- * with issue #103.
+ * The one family of refusals this test admits under a rule the law oracle does not predict, issue
+ * #103 (decision 474). The import writes the derived row of an identifier copy for an identifier
+ * outside its value domain, and PostgreSQL refuses that row's immediate `E1_derived` check before
+ * the attribute's own `value_domain` check, so the import names `derived` where the oracle predicts
+ * `attribute-lexical` or `required-attribute`. The verdict is the same. This test first drew it on
+ * `ObjectIdentifier`, an item's identifier (`TEST_SEED=1234327904`, case 14), and then on
+ * `TestToken`, a section's item ref with an empty identifier (`TEST_SEED=1819136236`, case 6); it
+ * holds at grizzle 6995af4 and at 89e94c0 alike. It is keyed to the family, not to one relation, so
+ * the next copy it reaches does not reopen the test: the refusal names one law and no other, the
+ * `E1_derived` check of an identifier copy ({@link identifierCopyChecks}); an element's
+ * `identifier` breaks the value domain ({@link breaksIdentifier}); and the oracle refuses the
+ * package under `attribute-lexical` or `required-attribute`, the rules that identifier breaks.
+ * Every other refusal is still held to the oracle's rules, and `derived` is admitted nowhere else.
+ * Remove it with issue #103.
  *
  * @param imported - What the import did.
  * @param predicted - What the oracle predicts.
@@ -163,10 +215,10 @@ const knownException = (
   imported.verdict === "refused" &&
   imported.rule === "derived" &&
   imported.laws.length === 1 &&
-  imported.laws[0] === objectIdentifierCheck &&
+  identifierCopyChecks.has(imported.laws[0] ?? "") &&
   predicted.kind === "refused" &&
-  predicted.rules.has("attribute-lexical") &&
-  breaksObjectIdentifier(entries);
+  (predicted.rules.has("attribute-lexical") || predicted.rules.has("required-attribute")) &&
+  breaksIdentifier(entries);
 
 /**
  * The law on `Expression` an operand count outside its operator's breaks (rule `P2`), as a
@@ -340,7 +392,7 @@ describe.skipIf(!hasLease)(
                       assert.deepStrictEqual(verdictOf(after), verdictOf(before));
                     }
 
-                    // Issue #103: the one keyed exception to the oracle's rules (knownException).
+                    // Issue #103: the keyed family of exceptions to the oracle (knownException).
                     assert.isTrue(
                       (predicted.kind === "refused" && predicted.rules.has(after.rule)) ||
                         knownException(after, predicted, entries),
