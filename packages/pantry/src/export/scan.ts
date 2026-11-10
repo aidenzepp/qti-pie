@@ -2,8 +2,8 @@
  * The export's reads (fin.md §4.6, trees.md §3, plan N11; the W5 amendment's C20): one ordered
  * scan per document, and the documents and entries of a package, each built over the `Qti` schema
  * value it is handed. The author login's export workload (`#pantry/qti/logins.ts` `authorLogin`)
- * holds all three, so each is compiled once per pool and its indexes are planned by
- * `grizzle generate`.
+ * holds all three, with the listing queries (`#pantry/export/listing.ts`), so each is compiled once
+ * per pool and its indexes are planned by `grizzle generate`.
  *
  * Each query is written over the schema, never over a role: a role that holds every table of `Qti`
  * whole runs every query over `Qti`, so the author role runs them, and so does a role over an
@@ -22,6 +22,7 @@
  */
 import { paged, query, uuid, v } from "@bjornpagen/grizzle";
 import { Function as Fn } from "effect";
+import { listingQueriesOf } from "#pantry/export/listing.ts";
 import { Attribute, AttributeEntity, OpenAttributeName } from "#pantry/qti/attributes.ts";
 import {
   Comment,
@@ -284,19 +285,26 @@ const entriesQuery = (qti: QtiSchema) =>
     .orderBy(["at", "asc"]);
 
 /**
- * Build the author workload's export reads over a `Qti` schema: one document's ordered scan,
- * `documentScan`, which the export pages; the documents of a package, `documentsOf`; and a
- * package's record, `entriesOf`. A `Db` opened on the author login runs them as
- * `db.workload.documentScan`, `db.workload.documentsOf` and `db.workload.entriesOf`.
+ * Build the author workload's reads over a `Qti` schema: one document's ordered scan,
+ * `documentScan`, which the export pages; the documents of a package, `documentsOf`; a package's
+ * record, `entriesOf`; and the listing queries an app pages, `packages` and `documents`
+ * (`#pantry/export/listing.ts`). A `Db` opened on the author login runs them as
+ * `db.workload.<name>`, and pages the paged members with `db.workload.<name>.page`.
  *
  * Built once per schema value, so the login's workload holds the queries {@link documentScanOf}
- * gives.
+ * and `listingQueriesOf` give.
  *
  * @param qti - The `Qti` schema the queries read.
  * @returns The workload's record of named queries.
  */
-export const authorReadsOf = Fn.memoize((qti: QtiSchema) => ({
-  documentScan: paged(documentScanOf(qti)),
-  documentsOf: documentsQuery(qti),
-  entriesOf: entriesQuery(qti),
-}));
+export const authorReadsOf = Fn.memoize((qti: QtiSchema) => {
+  const listing = listingQueriesOf(qti);
+
+  return {
+    documentScan: paged(documentScanOf(qti)),
+    documents: paged(listing.documents),
+    documentsOf: documentsQuery(qti),
+    entriesOf: entriesQuery(qti),
+    packages: paged(listing.packages),
+  };
+});
