@@ -4,9 +4,10 @@
  *
  * A package-media install's folder holds `policy.json`, its policy, and `migrations/`, the
  * migrations a grizzle config outside this package generated for it, the author login's served file
- * `migrations/qti/served/author_app.json` among them. The setting tells this package's runtime and
- * command line two things and nothing else: the policy the `Qti` schema is built with
- * (`#pantry/qti/own.ts`), and the served file `AuthorAppLayer` opens (`#pantry/db/layer.ts`). Its
+ * `migrations/qti/served/author_app.json` among them. The setting tells this package two things and
+ * nothing else: the served file `AuthorAppLayer` opens (`#pantry/db/layer.ts`), which it reads from
+ * the folder alone ({@link installFolder}, {@link servedPathOf}), and the policy the `Qti` schema
+ * is built with (`#pantry/qti/own.ts`), which only a module that builds the schema reads. Its
  * migrations are never this package's to generate or apply: grizzle.config.ts installs the default
  * `Qti` whatever the setting says.
  */
@@ -47,13 +48,12 @@ export const MediaType = Schema.String.check(
  * @returns One message per such type; none where each type has one extension.
  */
 const typesSpelledTwice = (media: Readonly<Record<string, string>>): readonly string[] =>
-  Object.entries(Arr.groupBy(Object.keys(media), (extension) => media[extension] ?? "")).flatMap(
-    ([type, extensions]) =>
-      extensions.length > 1
-        ? [
-            `${type} is listed under ${extensions.join(", ")}: list each media type under one extension, the one spelling its files use`,
-          ]
-        : [],
+  Object.entries(Arr.groupBy(Object.entries(media), ([, type]) => type)).flatMap(([type, listed]) =>
+    listed.length > 1
+      ? [
+          `${type} is listed under ${listed.map(([extension]) => extension).join(", ")}: list each media type under one extension, the one spelling its files use`,
+        ]
+      : [],
   );
 
 /**
@@ -106,10 +106,10 @@ export class InstallPolicyError extends Schema.TaggedError<InstallPolicyError>()
 }
 
 /**
- * The install folder `GR8DES_QTI_INSTALL` names, none where it is unset or empty, as an unset
- * setting of scripts/db.sh is.
+ * The install folder `GR8DES_QTI_INSTALL` names, as written, none where it is unset or empty, as an
+ * unset setting of scripts/db.sh is.
  */
-const installFolder = Config.option(Config.String("GR8DES_QTI_INSTALL")).pipe(
+export const installFolder = Config.option(Config.String("GR8DES_QTI_INSTALL")).pipe(
   Config.map(Option.filter((folder) => folder !== "")),
 );
 
@@ -143,19 +143,17 @@ export const readInstall = Effect.gen(function* readInstall() {
 }).pipe(Effect.withSpan("db.readInstall"));
 
 /**
- * The install this process opens, read once, when this module loads, through the process's own
- * settings: `#pantry/qti/own.ts` builds `Qti` with its policy, and `AuthorAppLayer` opens its
- * served file, so the two never disagree. A policy file it refuses fails the load, naming the file.
+ * The policy `Qti` is built with in this process, none for this package's own install: the
+ * install's policy, read once, when this module loads, through the process's own settings, for
+ * `#pantry/qti/own.ts` to build the schema with. A policy file it refuses fails the load, naming
+ * the file. `AuthorAppLayer` reads none of it: it opens the served file by the folder alone,
+ * through the layer's own settings.
  */
-export const installed: Option.Option<QtiInstall> = await Effect.runPromise(
-  readInstall.pipe(Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
-);
-
-/**
- * The policy `Qti` is built with in this process: the install's, none for this package's own.
- */
-export const installedPolicy: Option.Option<MediaPolicy> = installed.pipe(
-  Option.map(({ policy }) => policy),
+export const installedPolicy: Option.Option<MediaPolicy> = Option.map(
+  await Effect.runPromise(
+    readInstall.pipe(Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+  ),
+  ({ policy }) => policy,
 );
 
 /**
@@ -163,8 +161,8 @@ export const installedPolicy: Option.Option<MediaPolicy> = installed.pipe(
  * `migrations/qti/served/author_app.json` in its folder, as that config writes it for the schema
  * `Qti`.
  *
- * @param install - The install.
+ * @param folder - The install's folder, as {@link installFolder} gives it.
  * @returns The served file's path.
  */
-export const servedPathOf = (install: QtiInstall): string =>
-  `${install.folder}/migrations/qti/served/author_app.json`;
+export const servedPathOf = (folder: string): string =>
+  `${folder}/migrations/qti/served/author_app.json`;
