@@ -15,9 +15,14 @@
  * announces the expiry and nothing more: the gate's contract can only refuse an intent or redirect
  * a move, so it can neither lock input nor submit at expiry.
  *
- * Two hooks wait for the issues after it, each with no effect until its issue fills it: issue m4-03
- * extends every `max-time` by the candidate's additional testing time ({@link extendedMaxTime}),
- * and issue m4-08 pauses and resumes the clock for a break ({@link pauseTime}, {@link resumeTime}).
+ * Issue m4-03 extends every `max-time` in force by the candidate's additional testing time (A-6,
+ * `Supports.additionalTestingTime`), which the gate reads from `GateContext.supports` and
+ * {@link timeStateOf} from its `supports`: {@link allowedMaxTime} gives each scope's time allowed, so
+ * the time left, the expiry and the warning of the `time` part, and the point where a `max-time`
+ * ends a `min-time`, all follow the extended limit; `min-time` is never extended. One hook waits
+ * for the issue after it, with no effect until its issue fills it: issue m4-08 pauses and resumes
+ * the clock for a break ({@link pauseTime}, {@link resumeTime}). {@link extendedMaxTime} stays the
+ * identity hook issue m3f-01 pinned.
  *
  * This is a browser module, reached from the session and the emitter: it value-imports from
  * `effect` only `Option` and `Result`.
@@ -32,7 +37,7 @@ import { refIdentifiersIn } from "#plate/model/item-refs.ts";
 import type { ItemRef, Section, SectionChild, Test, TestPart } from "#plate/model/test.ts";
 import { elapsedSeconds } from "#plate/session/elapsed.ts";
 import type { SessionItem, TestSession } from "#plate/session/session.ts";
-import type { AdditionalTestingTime } from "#plate/supports.ts";
+import type { AdditionalTestingTime, Supports } from "#plate/supports.ts";
 import { TestFeatureNotImplemented } from "#plate/test-features/contract.ts";
 import type { GateContext, GateVerdict, TestFeatureModule } from "#plate/test-features/contract.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
@@ -71,7 +76,8 @@ export interface TimeState {
   readonly minTimeLeft: Option.Option<number>;
   /**
    * The seconds left on the tightest `max-time` in force, zero once it has run out; none when no
-   * `max-time` is in force.
+   * `max-time` is in force, as when the candidate's additional testing time is unlimited (A-6).
+   * With additional testing time, every `max-time` is the time {@link allowedMaxTime} gives.
    */
   readonly timeLeft: Option.Option<number>;
 }
@@ -198,18 +204,85 @@ const placeOf = (
 };
 
 /**
- * Give the limits the test holds by the path of the element each sits on.
+ * Give the seconds a `max-time` allows a candidate with additional testing time (A-6, T-2, S-2,
+ * T-6, I-16; issue m4-03), which every `max-time` in force passes through, in the test, a test
+ * part, a section and an item ref alike:
+ *
+ * - A multiplier multiplies the `max-time` by its factor;
+ * - Fixed minutes add `minutes × 60` seconds to it;
+ * - Unlimited removes it, so the scope has no expiry, no countdown and no warning;
+ * - A candidate with no additional time keeps the `max-time` as written.
+ *
+ * `min-time` never passes through here, and the `time` part's warning, which counts down to the
+ * limit this gives, fires at the same distance from the extended limit as from a written one.
+ *
+ * @example
+ *   allowedMaxTime(600, Option.some({ factor: 1.5, kind: "multiplier" })); // Option.some(900)
+ *   allowedMaxTime(600, Option.some({ kind: "minutes", minutes: 10 })); // Option.some(1200)
+ *   allowedMaxTime(600, Option.some({ kind: "unlimited" })); // Option.none()
+ *
+ * @param maxTime The seconds a `max-time` in force writes.
+ * @param extension The candidate's additional testing time; none for a candidate allowed none.
+ * @returns The seconds allowed, or none for a limit the extension lifts.
+ */
+export const allowedMaxTime = (
+  maxTime: number,
+  extension: Option.Option<AdditionalTestingTime>,
+): Option.Option<number> => {
+  if (Option.isNone(extension)) {
+    return Option.some(maxTime);
+  }
+
+  const time = extension.value;
+  switch (time.kind) {
+    case "multiplier": {
+      return Option.some(maxTime * time.factor);
+    }
+    case "minutes": {
+      return Option.some(maxTime + time.minutes * 60);
+    }
+    case "unlimited": {
+      return Option.none();
+    }
+    default: {
+      return time satisfies never;
+    }
+  }
+};
+
+/**
+ * Read the additional testing time out of a candidate's supports.
+ *
+ * @param supports The candidate's supports; none when the host passed none.
+ * @returns The additional testing time (A-6), none for a candidate allowed none.
+ */
+const extensionOf = (supports: Supports | undefined): Option.Option<AdditionalTestingTime> =>
+  supports === undefined ? Option.none() : supports.additionalTestingTime;
+
+/**
+ * Give the limits the test holds by the path of the element each sits on, each with the `max-time`
+ * the candidate is allowed (A-6): the written one through {@link allowedMaxTime}, so every read of
+ * a scope's time left, its expiry and the tightest limit in force sees the extended time. The
+ * `min-time` and `allow-late-submission` stay as written.
  *
  * @param test The test.
- * @returns Each `qti-time-limits` by its scope's path.
+ * @param extension The candidate's additional testing time.
+ * @returns Each `qti-time-limits` by its scope's path, its `maxTime` the time allowed.
  */
-const limitsByScope = (test: Test): ReadonlyMap<string, TimeLimitsNode> =>
-  new Map(
-    (test.features?.["qti-time-limits"] ?? []).map((node) => [
-      node.path.slice(0, node.path.lastIndexOf("/")),
-      node,
-    ]),
-  );
+const limitsByScope = (
+  test: Test,
+  extension: Option.Option<AdditionalTestingTime>,
+): ReadonlyMap<string, TimeLimitsNode> => {
+  const limits = new Map<string, TimeLimitsNode>();
+  for (const node of test.features?.["qti-time-limits"] ?? []) {
+    limits.set(node.path.slice(0, node.path.lastIndexOf("/")), {
+      ...node,
+      maxTime: node.maxTime.pipe(Option.flatMap((maxTime) => allowedMaxTime(maxTime, extension))),
+    });
+  }
+
+  return limits;
+};
 
 /**
  * Read where an open session stands at a time: the scopes in force at its current item, each with
@@ -218,10 +291,17 @@ const limitsByScope = (test: Test): ReadonlyMap<string, TimeLimitsNode> =>
  * @param test The test.
  * @param session The session, open.
  * @param at The time asked about.
+ * @param extension The candidate's additional testing time, which extends every `max-time` in
+ *   force.
  * @returns Where it stands; none when the session's position or current item names nothing the
  *   test holds, which the hubs refuse on their own.
  */
-const standingOf = (test: Test, session: TestSession, at: Date): Option.Option<Standing> => {
+const standingOf = (
+  test: Test,
+  session: TestSession,
+  at: Date,
+  extension: Option.Option<AdditionalTestingTime>,
+): Option.Option<Standing> => {
   const item = session.items[session.position];
   if (item === undefined) {
     return Option.none();
@@ -230,7 +310,7 @@ const standingOf = (test: Test, session: TestSession, at: Date): Option.Option<S
   const root = "qti-assessment-test";
   const partSteps = stepsOf(test.parts.map(() => "qti-test-part"));
   const extra = elapsedSeconds(Date.parse(session.updated), at.getTime());
-  const limits = limitsByScope(test);
+  const limits = limitsByScope(test, extension);
   const usedBy = (refs: ReadonlySet<string>): number =>
     tenths(
       session.items
@@ -461,12 +541,14 @@ export const timeLimitsModule: TestFeatureModule<"qti-time-limits", TimeLimitsNo
   element: "qti-time-limits",
   enter: () => Option.none(),
   feature: ["T-2", "S-2", "T-6", "I-16"],
-  gate: ({ intent, now, session, test }) => {
+  gate: ({ intent, now, session, supports, test }) => {
     if (session.status === "closed" || !heldKinds.has(intent.kind) || !timed(test)) {
       return Option.none();
     }
 
-    return Option.flatMap(standingOf(test, session, timeAt(session, now)), (standing) => {
+    const at = timeAt(session, now);
+
+    return Option.flatMap(standingOf(test, session, at, extensionOf(supports)), (standing) => {
       if (expired(standing.scopes)) {
         return Option.none();
       }
@@ -506,17 +588,31 @@ export const timeLimitsModule: TestFeatureModule<"qti-time-limits", TimeLimitsNo
  * with the `allow-late-submission` of the scope that gives it (the innermost on a tie), and the
  * longest a `min-time` still holds the candidate, none once any `max-time` in force has run out.
  *
+ * With additional testing time (A-6), every `max-time` is the one {@link allowedMaxTime} gives, so
+ * the time left, and the expiry and warning the `time` part derives from it, are the extended
+ * limit's: a multiplier of 1.5 on a `max-time` of 600 leaves 800 seconds at 100 seconds, not 500;
+ * unlimited leaves none, no `max-time` being in force, though the state is still present while a
+ * scope in force writes a limit. `min-time` is as written.
+ *
  * @param test The test.
  * @param session The session.
+ * @param supports The candidate's supports, whose `additionalTestingTime` extends every `max-time`;
+ *   none for a candidate with none, as `noSupports`, which leaves the limits as written.
  * @returns The time in force; none for a closed session or when no scope in force at the current
  *   item writes a time limit.
  */
-export const timeStateOf = (test: Test, session: TestSession): Option.Option<TimeState> => {
+export const timeStateOf = (
+  test: Test,
+  session: TestSession,
+  supports?: Supports,
+): Option.Option<TimeState> => {
   if (session.status === "closed" || !timed(test)) {
     return Option.none();
   }
 
-  return Option.flatMap(standingOf(test, session, timeAt(session, Option.none())), (standing) => {
+  const at = timeAt(session, Option.none());
+
+  return Option.flatMap(standingOf(test, session, at, extensionOf(supports)), (standing) => {
     const { part, scopes } = standing;
     if (!scopes.some((scope) => Option.isSome(scope.limits))) {
       return Option.none();
@@ -552,14 +648,15 @@ export const timeStateOf = (test: Test, session: TestSession): Option.Option<Tim
 /**
  * Give the seconds a `max-time` (T-2, S-2, T-6, I-16; issue m3f-01) allows a candidate, given the
  * additional testing time they are allowed (A-6, `Supports.additionalTestingTime`): the hook issue
- * m4-03 fills, so that it changes
- * only how the time allowed is computed and no session function's signature. Until then it has no
- * effect: every extension leaves the `max-time` as written. `min-time` never passes through it.
+ * m3f-01 shipped for issue m4-03 and pinned in `time-limits.test.ts`, which gives every `max-time`
+ * as written whatever the extension. Issue m4-03 keeps that pinned behaviour and extends the time
+ * through {@link allowedMaxTime}, which the module's scopes call, so this hook has no caller and no
+ * effect. `min-time` never passes through either.
  *
  * @param maxTime The seconds a `max-time` in force writes.
  * @param _extension The candidate's additional testing time; none for a candidate allowed none.
- * @returns The seconds allowed, or none for a limit the extension lifts; until issue m4-03, the
- *   `max-time` unchanged.
+ * @returns The `max-time` unchanged, whatever the extension: for the time a candidate with
+ *   additional testing time is allowed, read {@link allowedMaxTime}.
  */
 export const extendedMaxTime = (
   maxTime: number,

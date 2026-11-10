@@ -20,6 +20,7 @@ import { UnknownItemRef } from "#plate/session/control.ts";
 import type { Intent, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import { ItemNotInSession, present, recordStep } from "#plate/session/start.ts";
 import type { InvalidTime, TestNotDeliverable } from "#plate/session/start.ts";
+import type { Supports } from "#plate/supports.ts";
 import type { FeatureRefusal } from "#plate/test-features/contract.ts";
 import { gatedBy } from "#plate/test-features/dispatch.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
@@ -307,6 +308,8 @@ const targetOf = (standing: Standing, intent: MoveIntent): Result.Result<number,
  * @param now The time of the move, where the caller has one; none for a read of the moves allowed.
  * @param items The test's items, where the caller has them, which the gate is handed; none for a
  *   read of the moves allowed without them.
+ * @param supports The candidate's supports, which the gate is handed (`GateContext.supports`); none
+ *   for a candidate with none, as `noSupports`.
  * @returns The function that decides a move, failing with {@link MoveRefused} when the test's
  *   rules forbid it now and, once the test has closed, for every move; {@link ItemNotInSession} for
  *   an open session whose position is past its items; {@link UnknownItemRef} when the test holds
@@ -318,6 +321,7 @@ export const moveTargets = (
   features: TestFeatureTable = testFeatures,
   now: Option.Option<Date> = Option.none(),
   items?: ReadonlyMap<string, Accepted>,
+  supports?: Supports,
 ): Result.Result<
   (intent: MoveIntent) => Result.Result<number, MoveRefused>,
   ItemNotInSession | UnknownItemRef
@@ -342,6 +346,7 @@ export const moveTargets = (
       items: Option.fromUndefinedOr(items),
       now,
       session,
+      supports,
       test: test.test,
     });
     if (Option.isSome(gated) && gated.value.kind === "target") {
@@ -415,6 +420,8 @@ export const moveTarget = (
  * @param now The time of the move.
  * @param features The test-feature modules the move's gate consults, the table by default; a test
  *   hands in one holding a module that has landed.
+ * @param supports The candidate's supports, which the move's gate is handed; none for a candidate
+ *   with none.
  * @returns The session after the move; {@link MoveRefused} when the test's rules forbid it now;
  *   `InvalidTime` for an invalid `now`; {@link ItemNotInSession} for a session whose position is
  *   past its items; {@link UnknownItemRef} when the test holds no item ref the current item names;
@@ -429,12 +436,13 @@ export const move = (
   step: MoveStep,
   now: Date,
   features: TestFeatureTable = testFeatures,
+  supports?: Supports,
 ): Result.Result<
   TestSession,
   EngineFailure | InvalidTime | ItemNotInSession | MoveRefused | TestNotDeliverable | UnknownItemRef
 > =>
   Result.gen(function* moveOne() {
-    const decide = yield* moveTargets(test, session, features, Option.some(now), items);
+    const decide = yield* moveTargets(test, session, features, Option.some(now), items, supports);
     const target = yield* decide(step.intent);
     const saved = yield* recordStep(session, step, now);
     const position = yield* Result.fromOption(

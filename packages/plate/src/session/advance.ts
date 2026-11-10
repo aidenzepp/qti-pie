@@ -62,6 +62,7 @@ import type {
   SubmissionFailure,
   SubmissionRefused,
 } from "#plate/session/submit.ts";
+import type { Supports } from "#plate/supports.ts";
 import type { FeatureRefusal, TimedScope } from "#plate/test-features/contract.ts";
 import { enteredBy, gatedBy } from "#plate/test-features/dispatch.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
@@ -256,6 +257,11 @@ interface Advancing {
    */
   readonly linearSimultaneous: boolean;
   readonly now: Date;
+  /**
+   * The candidate's supports, as the caller passed them, which the gate is handed; none when the
+   * caller passed none.
+   */
+  readonly supports: Supports | undefined;
   readonly test: AcceptedTest;
 }
 
@@ -794,7 +800,15 @@ const moved = (
 ): Result.Result<TestSession, AdvanceFailure> =>
   Result.orElse(
     Result.flatMap(
-      move(advancing.test, advancing.items, session, step, advancing.now, advancing.features),
+      move(
+        advancing.test,
+        advancing.items,
+        session,
+        step,
+        advancing.now,
+        advancing.features,
+        advancing.supports,
+      ),
       (after): Result.Result<TestSession, AdvanceFailure> =>
         step.intent.kind === "next" && advancing.linearSimultaneous
           ? leftScoreable(advancing, session, after, step.intent)
@@ -963,6 +977,7 @@ const gatedIntent = (
       items: Option.some(advancing.items),
       now: Option.some(advancing.now),
       session,
+      supports: advancing.supports,
       test: advancing.test.test,
     }),
     (gated): Option.Option<Gating> => {
@@ -1332,6 +1347,9 @@ const stepTaken = (
  * @param context.features The test-feature modules the gate consults, the table by default; a
  *   test hands in one holding a module that has landed.
  * @param context.now When it happens.
+ * @param context.supports The candidate's supports, which the gate is handed
+ *   (`GateContext.supports`): `qti-time-limits` reads their `additionalTestingTime` (A-6) to
+ *   extend every `max-time`. None for a candidate with none, as `noSupports`.
  * @returns The session after the intent; {@link StepResponseMisfit} when a response the step
  *   carries does not fit the current item; {@link IntentRefused} when the test's rules forbid it
  *   now; another {@link AdvanceFailure} when `score` refuses the responses or the host's arguments
@@ -1343,7 +1361,11 @@ export const advance = (
   session: TestSession,
   step: Step,
   configuration: Configuration,
-  context: { readonly features?: TestFeatureTable; readonly now: Date },
+  context: {
+    readonly features?: TestFeatureTable;
+    readonly now: Date;
+    readonly supports?: Supports;
+  },
 ): Result.Result<TestSession, AdvanceFailure> => {
   if (session.status === "closed") {
     return Result.fail(closedRefusal(step.intent));
@@ -1365,6 +1387,7 @@ export const advance = (
         linearIndividual: shown.navigation === "linear" && shown.submission === "individual",
         linearSimultaneous: shown.navigation === "linear" && shown.submission === "simultaneous",
         now: context.now,
+        supports: context.supports,
         test,
       };
 
