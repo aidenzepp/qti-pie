@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A hand-written item for A-29: an image with a default long description, visually hidden and named by aria-describedby, and a catalog whose long-description card supplements it for a candidate with the support. A second card, audio-description, stays dormant unless its own support is requested. -->
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m4-catalog-long-description" title="Long description" adaptive="false" time-dependent="false" xml:lang="en">
+  <qti-item-body>
+    <p>The chart shows how deep three tide pools are at low tide.</p>
+    <p><img src="images/tide-pools.png" alt="A bar chart of three tide pool depths" aria-describedby="ld-1" data-catalog-idref="chart-catalog"/></p>
+    <div id="ld-1" class="qti-visually-hidden">
+      <p>The default long description reads the bars from left to right: the north pool is shallow, the middle pool is deepest and the south pool lies between them.</p>
+    </div>
+  </qti-item-body>
+  <qti-catalog-info>
+    <qti-catalog id="chart-catalog">
+      <qti-card support="long-description">
+        <qti-html-content>
+          <p>The long description card adds a table that lists each pool with its depth in centimetres.</p>
+        </qti-html-content>
+      </qti-card>
+      <qti-card support="audio-description">
+        <qti-html-content>
+          <p>The audio description card tells the listener that three bars rise and fall across the picture.</p>
+        </qti-html-content>
+      </qti-card>
+    </qti-catalog>
+  </qti-catalog-info>
+</qti-assessment-item>
