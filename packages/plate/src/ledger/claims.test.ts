@@ -10,9 +10,21 @@ describe("the claims", () => {
 
     assert.deepStrictEqual(
       claimAreas.map((area) => area.area),
-      ["shared", "m3f", "m4", "m5"],
+      ["shared", "m3f", "m4", "m5", "pci"],
     );
-    assert.sameMembers(files, ["shared", "m3f", "m4", "m5"]);
+    assert.sameMembers(files, ["shared", "m3f", "m4", "m5", "pci"]);
+  });
+
+  it("[W0-AZ] the pci area has a claims file joined after m5", () => {
+    const files = readdirSync(new URL("claims/", import.meta.url))
+      .filter((file) => file.endsWith(".ts"))
+      .map((file) => file.slice(0, -".ts".length));
+    const areas = claimAreas.map((area) => area.area);
+
+    assert.deepStrictEqual(areas, ["shared", "m3f", "m4", "m5", "pci"]);
+    assert.strictEqual(areas.indexOf("pci"), areas.indexOf("m5") + 1);
+    assert.include(files, "pci");
+    assert.deepStrictEqual(claimAreas.find((area) => area.area === "pci")?.claims, []);
   });
 
   it("are every area's claims in the areas' order, each row once, and hold I-19 from the shared file", () => {
