@@ -29,8 +29,7 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as unit, layer } from "@effect/vitest";
-import { Console, Effect, FileSystem, Layer, Option } from "effect";
-import { Digest } from "effect/crypto";
+import { Console, Effect, FileSystem, Option } from "effect";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
@@ -59,10 +58,10 @@ import {
 import type { Probe } from "#pantry/test/lexical-harness.ts";
 import { liveReadings, stillSays } from "#pantry/test/live-readings.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
-import { writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
-import { checkCache } from "#pantry/vocab/derive/sources.ts";
+import { XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
+import { writeXsdOracle, xsdCached } from "#pantry/test/xsd-catalog.ts";
 import type { Domain } from "#pantry/vocab/inventory/types.ts";
-import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
+import { xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
  * The timeout, in milliseconds, for the one test: one `xmllint` run per version over every probe,
@@ -71,26 +70,6 @@ import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
  * recorded here, never to make a run pass.
  */
 const testTimeoutMs = 300_000;
-
-/**
- * Whether the XSD cache holds every pin.
- */
-const cached = await Effect.runPromise(
-  checkCache().pipe(
-    Effect.as(true),
-    Effect.catchTag("XsdSourceMissing", () => Effect.succeed(false)),
-    Effect.provide(NodeServices.layer),
-  ),
-);
-
-/**
- * The services the test reads and spawns with.
- */
-const TestLayer = Layer.mergeAll(
-  NodeServices.layer,
-  Digest.layerWebCrypto,
-  OracleLayer.pipe(Layer.provide(NodeServices.layer)),
-);
 
 /**
  * Draw the values a group is probed with, each with the variant that drew it.
@@ -203,8 +182,8 @@ describe("lexical.oracle.test.ts, the records' readings", () => {
   });
 });
 
-describe.skipIf(!cached)("lexical.oracle.test.ts, the domains against xmllint", () => {
-  layer(TestLayer, { excludeTestServices: true })("raw lexical forms", (it) => {
+describe.skipIf(!xsdCached)("lexical.oracle.test.ts, the domains against xmllint", () => {
+  layer(XsdOracleLayer, { excludeTestServices: true })("raw lexical forms", (it) => {
     it.effect(
       "every domain's pattern agrees with the XSD's validator on every probe, but as recorded",
       () =>
@@ -302,8 +281,8 @@ describe.skipIf(!cached)("lexical.oracle.test.ts, the domains against xmllint", 
   });
 });
 
-describe.skipIf(!cached)("lexical.oracle.test.ts, libxml2's recorded departures", () => {
-  layer(TestLayer, { excludeTestServices: true })("the proofs the records name", (it) => {
+describe.skipIf(!xsdCached)("lexical.oracle.test.ts, libxml2's recorded departures", () => {
+  layer(XsdOracleLayer, { excludeTestServices: true })("the proofs the records name", (it) => {
     it.effect("libxml2 still departs from XML Schema as each xmllint record says", () =>
       Effect.gen(function* proveDepartures() {
         const fs = yield* FileSystem.FileSystem;

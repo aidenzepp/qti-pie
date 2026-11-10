@@ -1,29 +1,17 @@
-import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import { loadXsd, resolverOf, XsdOracleLayer, xsdContents } from "#pantry/test/gen/grammar.ts";
+import { xsdCached } from "#pantry/test/xsd-catalog.ts";
 
 /**
  * The composed grammar of production, whose kind resolution the walk reads kinds through.
  */
 const grammar = Effect.fromResult(composed());
-
-/**
- * Whether every pinned XSD is in the cache; without them the reader has nothing to read.
- */
-const cached = await Effect.runPromise(
-  checkCache().pipe(
-    Effect.as(true),
-    Effect.catchTag("XsdSourceMissing", () => Effect.succeed(false)),
-    Effect.provide(NodeServices.layer),
-  ),
-);
 
 /**
  * The two ASI schema sets, the only pinned ones whose kinds declare `xml:` attributes, with the
@@ -46,7 +34,7 @@ const xmlAttributes: ReadonlySet<string> = new Set(["base", "id", "lang", "space
  */
 const xsdTimeout = 240_000;
 
-describe.skipIf(!cached)("the XSD reader's QNames", () => {
+describe.skipIf(!xsdCached)("the XSD reader's QNames", () => {
   it.effect(
     "reads the xml prefix as the XML namespace, so a kind declaring lang and xml:lang has two names",
     () =>

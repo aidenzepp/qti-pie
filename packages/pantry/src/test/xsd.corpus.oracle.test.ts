@@ -24,11 +24,9 @@
  * run's own, so two runs at once never remove each other's documents under xmllint.
  */
 import path from "node:path";
-import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as unit, layer } from "@effect/vitest";
-import { Console, Effect, FileSystem, Layer, Result } from "effect";
+import { Console, Effect, FileSystem, Result } from "effect";
 import type { Option } from "effect";
-import { Digest } from "effect/crypto";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { composed } from "#pantry/grammar/compose.ts";
@@ -40,7 +38,13 @@ import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 import { settings } from "#pantry/test/settings.ts";
-import { compareJudgments, schemaSetOf, writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
+import { XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
+import {
+  compareJudgments,
+  schemaSetOf,
+  writeXsdOracle,
+  xsdCached,
+} from "#pantry/test/xsd-catalog.ts";
 import type { Comparison, Difference } from "#pantry/test/xsd-catalog.ts";
 import {
   absentTypeRecord,
@@ -71,8 +75,7 @@ import {
   validated,
 } from "#pantry/test/xsd-differential.ts";
 import type { ForeignNames, Recorded } from "#pantry/test/xsd-differential.ts";
-import { checkCache } from "#pantry/vocab/derive/sources.ts";
-import { OracleLayer, verdictsOf, xmllintValidate } from "#pantry/xml/oracle.ts";
+import { verdictsOf, xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
  * The folder the corpus comparison writes to, `packages/pantry/work/xsd-corpus-*`, the run's own.
@@ -96,26 +99,6 @@ const oracleRoot = fileScratchDirectory("xsd-oracle-");
  * minute. Raise it only on a new measurement recorded here, never to make a run pass.
  */
 const testTimeoutMs = 360_000;
-
-/**
- * Whether the XSD cache holds every pin, so `xmllint` can read them.
- */
-const cached = await Effect.runPromise(
-  checkCache().pipe(
-    Effect.as(true),
-    Effect.catchTag("XsdSourceMissing", () => Effect.succeed(false)),
-    Effect.provide(NodeServices.layer),
-  ),
-);
-
-/**
- * The services the test reads and spawns with.
- */
-const TestLayer = Layer.mergeAll(
-  NodeServices.layer,
-  Digest.layerWebCrypto,
-  OracleLayer.pipe(Layer.provide(NodeServices.layer)),
-);
 
 /**
  * One corpus document: the zip it is in, its path in the zip, the version its package declares,
@@ -254,10 +237,10 @@ const corpusDocuments = Effect.fn("xsd.corpusDocuments")(function* corpusDocumen
   return documents;
 });
 
-describe.skipIf(!settings.corpusRequested || !cached)(
+describe.skipIf(!settings.corpusRequested || !xsdCached)(
   "xsd.corpus.oracle.test.ts, the corpus",
   () => {
-    layer(TestLayer, { excludeTestServices: true })("xmllint against the law oracle", (it) => {
+    layer(XsdOracleLayer, { excludeTestServices: true })("xmllint against the law oracle", (it) => {
       it.effect(
         "every corpus document's two verdicts, per class, differ only as recorded",
         () =>
@@ -588,10 +571,10 @@ const controlled = Effect.fn("test.controlled")(function* controlled(
   );
 });
 
-describe.skipIf(!cached)(
+describe.skipIf(!xsdCached)(
   "xsd.corpus.oracle.test.ts, the libxml2 classes and reading 6 on their controls, and xmllint on a retyped element",
   () => {
-    layer(TestLayer, { excludeTestServices: true })("the control", (it) => {
+    layer(XsdOracleLayer, { excludeTestServices: true })("the control", (it) => {
       it.effect(
         "libxml2 refuses a repeated ID in item-body content and under ssml:mark/figcaption, and accepts a dangling IDREF in both",
         () =>

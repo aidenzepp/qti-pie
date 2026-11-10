@@ -25,6 +25,7 @@
  * Under the union driver a `strict` wildcard would find a declaration no XSD of the document's
  * set imports, as a DRD element under an item's `qti-companion-materials-info`.
  */
+import { NodeServices } from "@effect/platform-node";
 import { Array as Arr, Effect, FileSystem, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -38,6 +39,18 @@ import {
 } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import type { XsdMessage, XsdVerdict } from "#pantry/xml/oracle.ts";
+
+/**
+ * Whether the XSD cache holds every pin ({@link checkCache}), read once at load: a test that reads
+ * the XSDs, or runs `xmllint` against them, skips when it does not.
+ */
+export const xsdCached: boolean = await Effect.runPromise(
+  checkCache().pipe(
+    Effect.as(true),
+    Effect.catchTag("XsdSourceMissing", () => Effect.succeed(false)),
+    Effect.provide(NodeServices.layer),
+  ),
+);
 
 /**
  * The namespace the driver schemas and their probe elements are in, which no pinned XSD uses.

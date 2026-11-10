@@ -21,14 +21,12 @@
  * Gated on the XSD cache. Each run writes a folder of its own, `work/genetic-lexical-*`, removed
  * when the run ends.
  */
-import { NodeServices } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
 import { swarm } from "@grizzle/testing/swarm";
 import { floorSeed, rotatingSeed } from "@grizzle/testing/random";
 import { sample } from "@grizzle/testing/source";
 import { runOfProcess } from "@grizzle/testing/vitest/run";
-import { Console, Effect, Layer, Option } from "effect";
-import { Digest } from "effect/crypto";
+import { Console, Effect, Option } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { evolve, reduce } from "#pantry/test/gen/genetic/engine.ts";
 import type { Budget } from "#pantry/test/gen/genetic/engine.ts";
@@ -49,29 +47,8 @@ import type {
 import { disagreementOf, recordOf, sitesOf, subjectName } from "#pantry/test/lexical-harness.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { settings } from "#pantry/test/settings.ts";
-import { writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
-import { checkCache } from "#pantry/vocab/derive/sources.ts";
-import { OracleLayer } from "#pantry/xml/oracle.ts";
-
-/**
- * Whether the XSD cache holds every pin.
- */
-const cached = await Effect.runPromise(
-  checkCache().pipe(
-    Effect.as(true),
-    Effect.catchTag("XsdSourceMissing", () => Effect.succeed(false)),
-    Effect.provide(NodeServices.layer),
-  ),
-);
-
-/**
- * The services the search reads and spawns with.
- */
-const TestLayer = Layer.mergeAll(
-  NodeServices.layer,
-  Digest.layerWebCrypto,
-  OracleLayer.pipe(Layer.provide(NodeServices.layer)),
-);
+import { XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
+import { writeXsdOracle, xsdCached } from "#pantry/test/xsd-catalog.ts";
 
 /**
  * The bounded budget, the free suite's: every seed and two generations, each generation one
@@ -117,8 +94,8 @@ const longTimeoutMs = 1_260_000;
 const findingLine = ({ disagreement, edges }: Finding): string =>
   `${disagreement.probe.version} ${disagreement.probe.kind}@${subjectName(disagreement.probe.subject)} ${disagreement.probe.domain.handle}: ${JSON.stringify(disagreement.probe.value)} xmllint ${disagreement.xsd}, grammar ${disagreement.grammar ? "accepts" : "refuses"} [${edges.join(" ")}]${disagreement.messages === "" ? "" : ` (${disagreement.messages.slice(0, 160)})`}`;
 
-describe.skipIf(!cached)("genetic-lexical.oracle.test.ts, bred values against xmllint", () => {
-  layer(TestLayer, { excludeTestServices: true })("the lexical search", (it) => {
+describe.skipIf(!xsdCached)("genetic-lexical.oracle.test.ts, bred values against xmllint", () => {
+  layer(XsdOracleLayer, { excludeTestServices: true })("the lexical search", (it) => {
     it.effect(
       "breeds no value the grammar's domain and the XSD's validator judge apart, but as recorded",
       () =>

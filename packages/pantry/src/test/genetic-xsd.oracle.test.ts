@@ -35,8 +35,7 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as unit, layer } from "@effect/vitest";
-import { Console, Effect, FileSystem, Layer, Option, Result } from "effect";
-import { Digest } from "effect/crypto";
+import { Console, Effect, FileSystem, Option, Result } from "effect";
 import { encode } from "@qti-pie/crust/encode.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
@@ -74,7 +73,13 @@ import { lawsOf } from "#pantry/test/oracle.ts";
 import type { Laws } from "#pantry/test/oracle.ts";
 import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 import { settings } from "#pantry/test/settings.ts";
-import { compareJudgments, schemaSetOf, writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
+import { XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
+import {
+  compareJudgments,
+  schemaSetOf,
+  writeXsdOracle,
+  xsdCached,
+} from "#pantry/test/xsd-catalog.ts";
 import type { Difference, XsdOracle } from "#pantry/test/xsd-catalog.ts";
 import { liveReadings, stillSays } from "#pantry/test/live-readings.ts";
 import {
@@ -88,8 +93,7 @@ import {
   validated,
 } from "#pantry/test/xsd-differential.ts";
 import type { Recorded } from "#pantry/test/xsd-differential.ts";
-import { checkCache } from "#pantry/vocab/derive/sources.ts";
-import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
+import { xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -97,26 +101,6 @@ import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
  * its slowest test.
  */
 const testTimeoutMs = 120_000;
-
-/**
- * Whether the XSD cache holds every pin, so `xmllint` can read them.
- */
-const cached = await Effect.runPromise(
-  checkCache().pipe(
-    Effect.as(true),
-    Effect.catchTag("XsdSourceMissing", () => Effect.succeed(false)),
-    Effect.provide(NodeServices.layer),
-  ),
-);
-
-/**
- * The services the test reads and spawns with.
- */
-const TestLayer = Layer.mergeAll(
-  NodeServices.layer,
-  Digest.layerWebCrypto,
-  OracleLayer.pipe(Layer.provide(NodeServices.layer)),
-);
 
 /**
  * The folder the bred documents are written to for `xmllint`, the run's own.
@@ -760,207 +744,210 @@ const seedsOf = (grammar: ComposedGrammar, stream: Stream, count: number): Seeds
   };
 };
 
-describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
-  layer(TestLayer, { excludeTestServices: true })("the grammar against xmllint, bred", (it) => {
-    it.effect(
-      "every lawful seed, every drawn seed of the floor stream and every kept document, in both versions, has one verdict from both but for the recorded classes, and every known disagreement still shows",
-      () =>
-        Effect.gen(function* replayAgainstXmllint() {
-          const grammar = yield* Effect.fromResult(composed()).pipe(Effect.orDie);
-          const laws = lawsOf(grammar);
-          const { names: seedNames, seeds } = seedsOf(
-            grammar,
-            floorSeed("pantry/genetic-xsd"),
-            fixedDrawn,
-          );
-          const oracle = yield* writeXsdOracle(oracleRoot);
-          const judge = (folder: string, genomes: readonly XsdGenome[]) =>
-            judgeAll({
-              folder: `${scratchRoot}/${folder}`,
-              genomes,
+describe.skipIf(!xsdCached)("genetic-xsd.oracle.test.ts", () => {
+  layer(XsdOracleLayer, { excludeTestServices: true })(
+    "the grammar against xmllint, bred",
+    (it) => {
+      it.effect(
+        "every lawful seed, every drawn seed of the floor stream and every kept document, in both versions, has one verdict from both but for the recorded classes, and every known disagreement still shows",
+        () =>
+          Effect.gen(function* replayAgainstXmllint() {
+            const grammar = yield* Effect.fromResult(composed()).pipe(Effect.orDie);
+            const laws = lawsOf(grammar);
+            const { names: seedNames, seeds } = seedsOf(
               grammar,
-              laws,
-              oracle,
-              versions: schemaVersions,
-            });
-          const seedJudgments = yield* judge("seeds", seeds);
-          const kept = yield* keptGenomes;
-          // The kept documents run last, so the counts that follow are theirs alone.
-          knownCounts.clear();
+              floorSeed("pantry/genetic-xsd"),
+              fixedDrawn,
+            );
+            const oracle = yield* writeXsdOracle(oracleRoot);
+            const judge = (folder: string, genomes: readonly XsdGenome[]) =>
+              judgeAll({
+                folder: `${scratchRoot}/${folder}`,
+                genomes,
+                grammar,
+                laws,
+                oracle,
+                versions: schemaVersions,
+              });
+            const seedJudgments = yield* judge("seeds", seeds);
+            const kept = yield* keptGenomes;
+            // The kept documents run last, so the counts that follow are theirs alone.
+            knownCounts.clear();
 
-          const keptJudgments = yield* judge("kept", kept);
-          const reports: string[] = [
-            ...(yield* Effect.forEach(
-              seedJudgments.entries(),
-              ([at, { disagreements }]) =>
-                Effect.gen(function* seedReports() {
-                  const genome = seeds[at];
-                  if (genome === undefined || disagreements.length === 0) {
-                    return [];
-                  }
+            const keptJudgments = yield* judge("kept", kept);
+            const reports: string[] = [
+              ...(yield* Effect.forEach(
+                seedJudgments.entries(),
+                ([at, { disagreements }]) =>
+                  Effect.gen(function* seedReports() {
+                    const genome = seeds[at];
+                    if (genome === undefined || disagreements.length === 0) {
+                      return [];
+                    }
 
-                  const text = yield* shown(genome);
+                    const text = yield* shown(genome);
 
-                  return disagreements.map(
-                    (disagreement) =>
-                      `${seedNames.get(genome.seed) ?? "a seed"} ${shownOf(disagreement)}\n  document: ${text}`,
-                  );
-                }),
-              { concurrency: 1 },
-            )).flat(),
-            ...keptJudgments.flatMap(({ disagreements }, at) =>
-              disagreements.map(
-                (disagreement) =>
-                  `kept document "${keptDocuments[at]?.name ?? ""}" ${shownOf(disagreement)}`,
+                    return disagreements.map(
+                      (disagreement) =>
+                        `${seedNames.get(genome.seed) ?? "a seed"} ${shownOf(disagreement)}\n  document: ${text}`,
+                    );
+                  }),
+                { concurrency: 1 },
+              )).flat(),
+              ...keptJudgments.flatMap(({ disagreements }, at) =>
+                disagreements.map(
+                  (disagreement) =>
+                    `kept document "${keptDocuments[at]?.name ?? ""}" ${shownOf(disagreement)}`,
+                ),
               ),
-            ),
-            ...knownDisagreements.flatMap((entry) =>
-              (knownCounts.get(entry) ?? 0) === 0
-                ? [
-                    `known disagreement of ${entry.owner} is stale: no kept document shows it any more, so its fix has landed and the record goes (${entry.why})`,
-                  ]
-                : [],
-            ),
-          ];
-          yield* Console.log(
-            [
-              `genetic-xsd replay: ${String(seeds.length)} seeds (${String(seeds.length - fixedDrawn)} lawful, ${String(fixedDrawn)} drawn of the floor stream) and ${String(kept.length)} kept documents, judged in ${schemaVersions.join(" and ")}`,
-              `  recorded classes matched: ${[...matchedCounts].map(([reason, count]) => `${reason}… ${String(count)}`).join("; ")}`,
-              ...reports,
-            ].join("\n"),
-          );
+              ...knownDisagreements.flatMap((entry) =>
+                (knownCounts.get(entry) ?? 0) === 0
+                  ? [
+                      `known disagreement of ${entry.owner} is stale: no kept document shows it any more, so its fix has landed and the record goes (${entry.why})`,
+                    ]
+                  : [],
+              ),
+            ];
+            yield* Console.log(
+              [
+                `genetic-xsd replay: ${String(seeds.length)} seeds (${String(seeds.length - fixedDrawn)} lawful, ${String(fixedDrawn)} drawn of the floor stream) and ${String(kept.length)} kept documents, judged in ${schemaVersions.join(" and ")}`,
+                `  recorded classes matched: ${[...matchedCounts].map(([reason, count]) => `${reason}… ${String(count)}`).join("; ")}`,
+                ...reports,
+              ].join("\n"),
+            );
 
-          assert.deepStrictEqual(
-            reports,
-            [],
-            "both oracles judge every replayed document alike, but for the recorded classes",
-          );
-        }),
-      { timeout: replayTimeoutMs },
-    );
+            assert.deepStrictEqual(
+              reports,
+              [],
+              "both oracles judge every replayed document alike, but for the recorded classes",
+            );
+          }),
+        { timeout: replayTimeoutMs },
+      );
 
-    it.effect.skipIf(!settings.geneticRequested)(
-      "every bred document, in both versions, has one verdict from both but for the recorded classes",
-      () =>
-        Effect.gen(function* breedAgainstXmllint() {
-          const grammar = yield* Effect.fromResult(composed()).pipe(Effect.orDie);
-          const laws = lawsOf(grammar);
-          const run = yield* runOfProcess;
-          const stream = rotatingSeed(run.seed, floorSeed("pantry/genetic-xsd"));
-          const { names: seedNames, seeds } = seedsOf(grammar, stream, budget.initial);
-          const lawful = new Set(seeds.slice(0, seeds.length - budget.initial));
-          const oracle = yield* writeXsdOracle(oracleRoot);
-          const breeding: Breeding = {
-            corpus: corpusFrom(
+      it.effect.skipIf(!settings.geneticRequested)(
+        "every bred document, in both versions, has one verdict from both but for the recorded classes",
+        () =>
+          Effect.gen(function* breedAgainstXmllint() {
+            const grammar = yield* Effect.fromResult(composed()).pipe(Effect.orDie);
+            const laws = lawsOf(grammar);
+            const run = yield* runOfProcess;
+            const stream = rotatingSeed(run.seed, floorSeed("pantry/genetic-xsd"));
+            const { names: seedNames, seeds } = seedsOf(grammar, stream, budget.initial);
+            const lawful = new Set(seeds.slice(0, seeds.length - budget.initial));
+            const oracle = yield* writeXsdOracle(oracleRoot);
+            const breeding: Breeding = {
+              corpus: corpusFrom(
+                grammar,
+                seeds.map(({ genome }, at) => ({ genome, name: `seed#${String(at)}` })),
+              ),
               grammar,
-              seeds.map(({ genome }, at) => ({ genome, name: `seed#${String(at)}` })),
-            ),
-            grammar,
-            lastEdit: new WeakMap(),
-            rewards: new Map(),
-            swarm: {},
-          };
-          let generation = 0;
-          let disagreeing = 0;
-          const lawfulVerdicts = new Map<string, number>();
-          const started = Date.now();
-          const judge = (
-            genomes: readonly XsdGenome[],
-            versions: readonly SchemaVersion[] = schemaVersions,
-          ) => {
-            generation += 1;
+              lastEdit: new WeakMap(),
+              rewards: new Map(),
+              swarm: {},
+            };
+            let generation = 0;
+            let disagreeing = 0;
+            const lawfulVerdicts = new Map<string, number>();
+            const started = Date.now();
+            const judge = (
+              genomes: readonly XsdGenome[],
+              versions: readonly SchemaVersion[] = schemaVersions,
+            ) => {
+              generation += 1;
 
-            return judgeAll({
-              folder: `${scratchRoot}/g${String(generation)}`,
-              genomes,
-              grammar,
-              laws,
-              oracle,
-              versions,
-            }).pipe(
-              Effect.tap((judgments) => {
-                for (const [at, { features }] of judgments.entries()) {
-                  const genome = genomes[at];
-                  for (const feature of genome !== undefined && lawful.has(genome)
-                    ? features
-                    : []) {
-                    if (feature.startsWith("verdict:")) {
-                      lawfulVerdicts.set(feature, (lawfulVerdicts.get(feature) ?? 0) + 1);
+              return judgeAll({
+                folder: `${scratchRoot}/g${String(generation)}`,
+                genomes,
+                grammar,
+                laws,
+                oracle,
+                versions,
+              }).pipe(
+                Effect.tap((judgments) => {
+                  for (const [at, { features }] of judgments.entries()) {
+                    const genome = genomes[at];
+                    for (const feature of genome !== undefined && lawful.has(genome)
+                      ? features
+                      : []) {
+                      if (feature.startsWith("verdict:")) {
+                        lawfulVerdicts.set(feature, (lawfulVerdicts.get(feature) ?? 0) + 1);
+                      }
                     }
                   }
-                }
 
-                disagreeing += judgments.filter(
-                  ({ disagreements }) => disagreements.length > 0,
-                ).length;
+                  disagreeing += judgments.filter(
+                    ({ disagreements }) => disagreements.length > 0,
+                  ).length;
 
-                return Console.log(
-                  `genetic-xsd: round ${String(generation)}, ${String(genomes.length)} documents in ${versions.join(" and ")}, ${String(disagreeing)} disagreeing so far, ${String(Math.round((Date.now() - started) / 1000))} s`,
-                );
-              }),
+                  return Console.log(
+                    `genetic-xsd: round ${String(generation)}, ${String(genomes.length)} documents in ${versions.join(" and ")}, ${String(disagreeing)} disagreeing so far, ${String(Math.round((Date.now() - started) / 1000))} s`,
+                  );
+                }),
+              );
+            };
+
+            const evolved = yield* evolve(
+              {
+                familyOf: xsdFamilyOf,
+                judge: (genomes) => judge(genomes),
+                mutate: xsdMutationOf(breeding),
+                seeds,
+                signatureOf,
+              },
+              { ...budget, initial: seeds.length },
+              stream,
             );
-          };
 
-          const evolved = yield* evolve(
-            {
-              familyOf: xsdFamilyOf,
-              judge: (genomes) => judge(genomes),
-              mutate: xsdMutationOf(breeding),
-              seeds,
-              signatureOf,
-            },
-            { ...budget, initial: seeds.length },
-            stream,
-          );
-
-          const found = [...evolved.found];
-          yield* Console.log(
-            [
-              `genetic-xsd: TEST_SEED=${String(run.seed)}, budget ${JSON.stringify(budget)} beside ${String(lawful.size)} lawful seeds, ${String(evolved.evaluated)} documents judged in ${schemaVersions.join(" and ")}, population ${String(evolved.population)}, ${String(evolved.features.size)} features, ${String(evolved.found.size)} disagreement classes`,
-              `  lawful seeds' verdicts: ${[...lawfulVerdicts].map(([verdict, count]) => `${verdict.slice("verdict:".length)} ${String(count)}`).join("; ")}`,
-              `  residual (Good–Turing f1/n) by family: ${evolved.residual.map(({ candidates, estimate, family, observed, singletons }) => `${family} ${String(singletons)}/${String(candidates)} = ${estimate.toFixed(3)} of ${String(observed)} seen`).join("; ")}`,
-              `  recorded classes matched: ${[...matchedCounts].map(([reason, count]) => `${reason}… ${String(count)}`).join("; ")}`,
-              ...found.map(([signature]) => `  class: ${signature.slice(0, 300)}`),
-            ].join("\n"),
-          );
-
-          const reports: string[] = [];
-          for (const [at, [signature, finding]] of found.entries()) {
-            const { difference, version } = finding.disagreement;
-            // Reduce while the test's budget allows, so every class is reported before its timeout.
-            const reducing = at < reduction.findings && Date.now() - started < reduction.until;
-            const reduced = yield* reduce(
-              finding.genome,
-              smallerXsd,
-              (genomes) =>
-                Effect.map(judge(genomes, [version]), (judgments) =>
-                  judgments.map(({ disagreements }) =>
-                    disagreements.some((held) => signatureOf(held) === signature),
-                  ),
-                ),
-              reducing ? reduction.tries : 0,
-              reduction.batch,
-            );
-            const report = [
-              `${difference.direction} ${difference.class} ${difference.rule} in ${version}: ${difference.detail.slice(0, 600)}`,
-              `  bred from ${seedNames.get(finding.genome.seed) ?? "a seed"} by: ${finding.lineage.join(" ; ") || "(no edit)"}`,
-              `  ${reducing ? `reduced in ${String(reduced.tries)} tries` : "unreduced"} to: ${yield* shown(reduced.genome)}`,
-            ].join("\n");
-            reports.push(report);
+            const found = [...evolved.found];
             yield* Console.log(
-              `genetic-xsd: finding ${String(at + 1)} of ${String(found.length)}\n${report}`,
+              [
+                `genetic-xsd: TEST_SEED=${String(run.seed)}, budget ${JSON.stringify(budget)} beside ${String(lawful.size)} lawful seeds, ${String(evolved.evaluated)} documents judged in ${schemaVersions.join(" and ")}, population ${String(evolved.population)}, ${String(evolved.features.size)} features, ${String(evolved.found.size)} disagreement classes`,
+                `  lawful seeds' verdicts: ${[...lawfulVerdicts].map(([verdict, count]) => `${verdict.slice("verdict:".length)} ${String(count)}`).join("; ")}`,
+                `  residual (Good–Turing f1/n) by family: ${evolved.residual.map(({ candidates, estimate, family, observed, singletons }) => `${family} ${String(singletons)}/${String(candidates)} = ${estimate.toFixed(3)} of ${String(observed)} seen`).join("; ")}`,
+                `  recorded classes matched: ${[...matchedCounts].map(([reason, count]) => `${reason}… ${String(count)}`).join("; ")}`,
+                ...found.map(([signature]) => `  class: ${signature.slice(0, 300)}`),
+              ].join("\n"),
             );
-          }
 
-          assert.deepStrictEqual(
-            reports,
-            [],
-            "both oracles judge every bred document alike, but for the recorded classes",
-          );
-        }),
-      { timeout: exploreTimeoutMs },
-    );
-  });
+            const reports: string[] = [];
+            for (const [at, [signature, finding]] of found.entries()) {
+              const { difference, version } = finding.disagreement;
+              // Reduce while the test's budget allows, so every class is reported before its timeout.
+              const reducing = at < reduction.findings && Date.now() - started < reduction.until;
+              const reduced = yield* reduce(
+                finding.genome,
+                smallerXsd,
+                (genomes) =>
+                  Effect.map(judge(genomes, [version]), (judgments) =>
+                    judgments.map(({ disagreements }) =>
+                      disagreements.some((held) => signatureOf(held) === signature),
+                    ),
+                  ),
+                reducing ? reduction.tries : 0,
+                reduction.batch,
+              );
+              const report = [
+                `${difference.direction} ${difference.class} ${difference.rule} in ${version}: ${difference.detail.slice(0, 600)}`,
+                `  bred from ${seedNames.get(finding.genome.seed) ?? "a seed"} by: ${finding.lineage.join(" ; ") || "(no edit)"}`,
+                `  ${reducing ? `reduced in ${String(reduced.tries)} tries` : "unreduced"} to: ${yield* shown(reduced.genome)}`,
+              ].join("\n");
+              reports.push(report);
+              yield* Console.log(
+                `genetic-xsd: finding ${String(at + 1)} of ${String(found.length)}\n${report}`,
+              );
+            }
+
+            assert.deepStrictEqual(
+              reports,
+              [],
+              "both oracles judge every bred document alike, but for the recorded classes",
+            );
+          }),
+        { timeout: exploreTimeoutMs },
+      );
+    },
+  );
 });
 
 describe("genetic-xsd.oracle.test.ts, the records' readings", () => {
@@ -1094,8 +1081,8 @@ const laxSchema = [
 const laxTyped = (type: string): string =>
   `<w xmlns="urn:t"><config xmlns="urn:w"><widget xmlns="" xmlns:zs="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" zs:type="${type}">a b</widget></config></w>`;
 
-describe.skipIf(!cached)("genetic-xsd.oracle.test.ts, libxml2's padded xsi:type", () => {
-  layer(TestLayer, { excludeTestServices: true })("the control", (it) => {
+describe.skipIf(!xsdCached)("genetic-xsd.oracle.test.ts, libxml2's padded xsi:type", () => {
+  layer(XsdOracleLayer, { excludeTestServices: true })("the control", (it) => {
     it.effect(
       "a built-in type named with a trailing space resolves to no type, so the text it refuses is never assessed, and named plain refuses it",
       () =>
@@ -1144,8 +1131,8 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts, libxml2's padded xsi:type"
   });
 });
 
-describe.skipIf(!cached)("genetic-xsd.oracle.test.ts, libxml2's widened ##other", () => {
-  layer(TestLayer, { excludeTestServices: true })("the control", (it) => {
+describe.skipIf(!xsdCached)("genetic-xsd.oracle.test.ts, libxml2's widened ##other", () => {
+  layer(XsdOracleLayer, { excludeTestServices: true })("the control", (it) => {
     it.effect(
       "an attribute group's ##other admits an attribute in no namespace once a type extending an ##any base references the group, and not alone",
       () =>
