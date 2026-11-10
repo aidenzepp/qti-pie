@@ -69,6 +69,8 @@ It exits 0 only when every test whose title carries the tag passed and none was 
 
 Browser tests: `pnpm --filter @qti-pie/plate test:browser`. It runs Chromium and WebKit, and both must pass. Report the counts per engine.
 
+Keyboard rows in an in-page test (`*.dom.test.ts`) move focus with `tabTo` or `nextControlKey` from `packages/plate/src/test/tab.dom.ts`, never with a bare `userEvent.tab()` or `userEvent.keyboard("{Tab}")`: WebKit on macOS moves Tab between text fields only, so a bare Tab passes in CI and fails on the maintainers' machines, which run the browser suite before an area merges.
+
 Caches. The environment pre-fetches `~/.cache/gr8des`. `PLATE_REQUIRE_CACHES` is not set in the cloud. The three `conformance-text` tests skip there, because the source text cannot be reproduced on the VM, and that is expected. Every other test must run and pass.
 
 ## Rules
