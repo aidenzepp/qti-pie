@@ -3,7 +3,8 @@
  * over the every-relation package (`#pantry/test/gen/every-relation.ts`), whose import writes a row
  * of every stored relation of `Qti`: its ChangeSet compiles, it imports in one transaction, its
  * export gives back its source, and a failure injected through `WrapApply` while the
- * import's transaction runs leaves no row of it.
+ * import's transaction runs leaves no row of it. Each test reads only the rows of its own import's
+ * transactions, never a table's whole count, so it holds beside another file's imports.
  *
  * The oracles are PostgreSQL's own: the catalog and the system columns of every table of the
  * installation, read as the author role by a direct SQL reader (grizzle's README, "Direct SQL
@@ -106,63 +107,39 @@ const tablesOf = (client: Client) =>
   );
 
 /**
- * One table's rows as one transaction left them: how many it holds, how many the transaction
- * inserted, and the first command of the transaction that inserted any.
+ * One table's rows as a set of transactions left them: how many they inserted, and the first
+ * command of theirs that inserted any.
  */
 interface TableRows {
   readonly at: number;
   readonly first: number;
-  readonly total: number;
 }
 
 /**
- * Read each table's rows against one transaction id.
+ * Read each table's rows against a set of transaction ids.
  *
  * @param client - The session.
  * @param tables - The tables.
- * @param xid - The transaction's id, as `xmin` prints it.
- * @returns Each table's rows, by name; `first` is -1 for a table the transaction inserted into
+ * @param xids - The transactions' ids, as `xmin` prints them.
+ * @returns Each table's rows, by name; `first` is -1 for a table the transactions inserted into
  *   nothing.
  */
-const rowsAt = (client: Client, tables: readonly string[], xid: string) =>
+const rowsAt = (client: Client, tables: readonly string[], xids: readonly string[]) =>
   Effect.forEach(
     tables,
     (table) =>
-      rowsOf<{ readonly at: string; readonly first: string; readonly total: string }>(
+      rowsOf<{ readonly at: string; readonly first: string }>(
         client,
-        `SELECT count(*) FILTER (WHERE xmin::text = $1)::text AS at,
-              coalesce(min(cmin::text::bigint) FILTER (WHERE xmin::text = $1), -1)::text AS first,
-              count(*)::text AS total
+        `SELECT count(*) FILTER (WHERE xmin::text = ANY ($1::text[]))::text AS at,
+              coalesce(min(cmin::text::bigint) FILTER (WHERE xmin::text = ANY ($1::text[])), -1)::text AS first
          FROM ${table}`,
-        [xid],
+        [`{${xids.join(",")}}`],
       ).pipe(
         Effect.map((rows): readonly [string, TableRows] => [
           table,
-          {
-            at: Number(rows[0]?.at ?? 0),
-            first: Number(rows[0]?.first ?? -1),
-            total: Number(rows[0]?.total ?? 0),
-          },
+          { at: Number(rows[0]?.at ?? 0), first: Number(rows[0]?.first ?? -1) },
         ]),
       ),
-    { concurrency: 1 },
-  ).pipe(Effect.map((entries) => new Map(entries)));
-
-/**
- * Count each table's rows.
- *
- * @param client - The session.
- * @param tables - The tables.
- * @returns Each table's count, by name.
- */
-const countsOf = (client: Client, tables: readonly string[]) =>
-  Effect.forEach(
-    tables,
-    (table) =>
-      rowsOf<{ readonly total: string }>(
-        client,
-        `SELECT count(*)::text AS total FROM ${table}`,
-      ).pipe(Effect.map((rows) => [table, Number(rows[0]?.total ?? 0)] as const)),
     { concurrency: 1 },
   ).pipe(Effect.map((entries) => new Map(entries)));
 
@@ -215,6 +192,12 @@ type HeldSituation = "held before any other write" | "held after another table's
 interface Waiter {
   readonly pid: string;
   /**
+   * The ids of the transactions the session runs, each one it holds its own exclusive lock on
+   * (PostgreSQL 19, §53.12 `pg_locks`, `transactionid`): every row the import's transaction has
+   * inserted carries one as its `xmin`. None before the transaction's first write.
+   */
+  readonly xids: readonly string[];
+  /**
    * How many other tables of the installation the session holds a row exclusive lock on: each one
    * an INSERT it has run, since its pipeline parses a statement only after the one before it has
    * run.
@@ -237,9 +220,13 @@ const pollBound = Duration.minutes(1);
  * @returns The waiting session; dies when none waits within the bound.
  */
 const waitedOn = (client: Client, table: string) =>
-  rowsOf<{ readonly pid: string; readonly written: string }>(
+  rowsOf<{ readonly pid: string; readonly written: string; readonly xids: readonly string[] }>(
     client,
     `SELECT l.pid::text AS pid,
+            ARRAY(SELECT x.transactionid::text
+                    FROM pg_catalog.pg_locks x
+                   WHERE x.pid = l.pid AND x.locktype = 'transactionid' AND x.granted
+                     AND x.mode = 'ExclusiveLock') AS xids,
             (SELECT count(DISTINCT o.relation)
                FROM pg_catalog.pg_locks o
                JOIN pg_catalog.pg_class c ON c.oid = o.relation
@@ -260,7 +247,7 @@ const waitedOn = (client: Client, table: string) =>
       orElse: () => Effect.die(new Error(`The import never waited on ${table}'s lock.`)),
     }),
     Effect.orDie,
-    Effect.map(({ pid, written }): Waiter => ({ pid, written: Number(written) })),
+    Effect.map(({ pid, written, xids }): Waiter => ({ pid, written: Number(written), xids })),
   );
 
 /**
@@ -320,9 +307,10 @@ describe.skipIf(!hasLease)(
       it.effect(
         "imports the every-relation package in one transaction that writes every stored relation of Qti",
         (ctx) =>
-          // Oracle: PostgreSQL's system columns. Every row the import adds to any table of the
-          // installation carries the `xmin` of the package's own row, so one transaction inserted
-          // them all, and the tables it inserted into are as many as `Qti`'s stored relations.
+          // Oracle: PostgreSQL's system columns. The transaction that inserted the package's own
+          // row (its `xmin`) inserted rows into as many tables as `Qti` has stored relations, so
+          // one transaction wrote every relation of the package. A second transaction of the
+          // import would leave that one short of a table.
           // Bound: every count the generator draws, 8 cases.
           searched(
             ctx,
@@ -341,14 +329,9 @@ describe.skipIf(!hasLease)(
                 Effect.gen(function* oneTransaction() {
                   const client = yield* authorSession;
                   const tables = yield* tablesOf(client);
-                  const before = yield* countsOf(client, tables);
                   const { id } = yield* importDrawn(members);
-                  const after = yield* rowsAt(client, tables, yield* packageXid(client, id));
+                  const after = yield* rowsAt(client, tables, [yield* packageXid(client, id)]);
                   const written = [...after].filter(([, { at }]) => at > 0);
-
-                  for (const [table, { at, total }] of after) {
-                    assert.strictEqual(total, (before.get(table) ?? 0) + at, table);
-                  }
 
                   assert.strictEqual(
                     written.length,
@@ -412,8 +395,9 @@ describe.skipIf(!hasLease)(
           // one transaction stops there with every statement before it run. The failure injected
           // through `WrapApply` then interrupts the apply (grizzle cancels the statement and
           // destroys its session, README "Transactions and concurrency") and fails it as
-          // `CommitUnknown`, whose read-back finds no package. Every table's count is then what it
-          // was before the import.
+          // `CommitUnknown`, whose read-back finds no package. No table then holds a row of the
+          // import's transaction: none whose `xmin` is a transaction id its session held while it
+          // waited.
           // Bound: the package of 3 choices, 2 hottexts and 2 hotspots, the table held the first,
           // the middle and the last of the tables a committed import of it writes, by command, 3
           // cases; the box must reach a hold before any other write and one after another
@@ -426,7 +410,7 @@ describe.skipIf(!hasLease)(
               const tables = yield* tablesOf(session);
               const reference = yield* importDrawn(members);
               const order = [
-                ...(yield* rowsAt(session, tables, yield* packageXid(session, reference.id))),
+                ...(yield* rowsAt(session, tables, [yield* packageXid(session, reference.id)])),
               ]
                 .filter(([, { at }]) => at > 0)
                 .toSorted(([, a], [, b]) => a.first - b.first)
@@ -450,7 +434,10 @@ describe.skipIf(!hasLease)(
                   generator: element<HeldAt>(["first", "middle", "last"]),
                   limit: 3,
                   literal: JSON.stringify,
-                  oracle: { kind: "postgresql", name: "every table's count, before and after" },
+                  oracle: {
+                    kind: "postgresql",
+                    name: "every table's rows of the import's transaction",
+                  },
                   suite: "pantry/import/transaction-injected",
                 },
                 (at, c) =>
@@ -472,13 +459,6 @@ describe.skipIf(!hasLease)(
 
                     yield* rowsOf(holder, "BEGIN");
                     yield* rowsOf(holder, `LOCK TABLE ${table} IN SHARE MODE`);
-
-                    // The holder's SERIALIZABLE transaction takes its snapshot at this first read,
-                    // after the lock (LOCK takes none) and before the import begins, so every
-                    // transaction the import commits from here on keeps its SIRead locks until the
-                    // holder's ends, listed under the import's session: `ended` meets them in every
-                    // case, as it met another installation's overlap on a shared cluster.
-                    const before = yield* countsOf(holder, tables);
 
                     const failed = yield* Effect.flip(
                       importDrawn(members).pipe(Effect.provideService(WrapApply, held)),
@@ -505,7 +485,13 @@ describe.skipIf(!hasLease)(
                         : "held before any other write",
                     );
                     assert.strictEqual(failed._tag, "CommitUnknown", table);
-                    assert.deepStrictEqual(yield* countsOf(holder, tables), before, table);
+                    assert.deepStrictEqual(
+                      [...(yield* rowsAt(holder, tables, found.xids))].flatMap(([name, rows]) =>
+                        rows.at > 0 ? [name] : [],
+                      ),
+                      [],
+                      table,
+                    );
                   }).pipe(Effect.scoped),
               );
             }).pipe(Effect.scoped),

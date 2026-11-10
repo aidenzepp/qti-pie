@@ -17,11 +17,6 @@ const databaseFiles = globSync("src/**/*.test.ts", { cwd: import.meta.dirname })
 // Each project's testTimeout and hookTimeout is a hang guard, never a budget: the slowest test that
 // takes it ran 12.2 s at a load average of 83 on 2026-11-07, and every test slower than half of it
 // states its own (src/test/timeouts.test.ts holds both).
-//
-// Measured on a 14-core M4 Pro: the database files at one worker after the rest in parallel passed a full
-// GR8DES_CORPUS=1 run in 1408 s; one-pool runs failed at 6, 4 and 3 workers (40001, timeouts).
-// On grizzle 26e3c15f, which carries c4f77a3d's fix of the owner insert's scan, 9 workers still met 1,008
-// 40001s in 12 minutes, and imports failed after the importer's 30 s of retries (2026-11-09).
 export default defineConfig({
   test: {
     // @grizzle/testing's setup draws the run seed every searched() test reads, or replays a given one.
@@ -43,6 +38,13 @@ export default defineConfig({
         test: {
           hookTimeout: 60_000,
           include: databaseFiles,
+          // GRIZZLE-PENDING: SSISCAN. An insert's stored-absent check reads its own table by a
+          // sequential scan, whose relation-level SIRead lock fails overlapping imports with 40001:
+          // on grizzle 26e3c15f, 9 workers met 1,008 40001s in 12 minutes and imports failed after
+          // the importer's 30 s of retries (2026-11-09). Every database test reads only its own
+          // package's rows, so the width waits on grizzle's per-key probes alone. Measured on a
+          // 14-core M4 Pro: at one worker, after the rest in parallel, a full GR8DES_CORPUS=1 run
+          // passed in 1408 s.
           maxWorkers: 1,
           name: "database",
           sequence: { groupOrder: 2 },

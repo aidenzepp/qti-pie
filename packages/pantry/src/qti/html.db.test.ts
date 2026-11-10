@@ -21,27 +21,22 @@
  *   ID values whose form names something (`namingIdAttributes`) and into `DocumentId` ("E1
  *   derived").
  */
-import { Db, login, query, v, workload } from "@bjornpagen/grizzle";
-import type { ApplyOutcome, Law } from "@bjornpagen/grizzle";
+import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Layer } from "effect";
 import { describe } from "vitest";
-
-import { readProgram } from "#pantry/import/program.ts";
-
-import type { PackageInputs } from "#pantry/import/write.ts";
-
-import { Package } from "#pantry/qti/package.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import {
+  applyEdited,
+  checkNamed,
+  keyOn,
+  packageStored,
+  rejectedBy,
+} from "#pantry/test/apply-edited.ts";
 import { materializeSpec } from "#pantry/test/fixtures.ts";
 import type { TextEdit } from "#pantry/test/fixtures.ts";
-import { probeLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
-import { packageFactsOf } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/own.ts";
-import { authorRoleOf } from "#pantry/qti/roles.ts";
-import { authorWorkloadsOf } from "#pantry/qti/logins.ts";
-import { servedProbe } from "#pantry/test/served-members.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The tarball member `simple` is extracted from.
@@ -73,18 +68,6 @@ const withBody = (name: string, markup: string) => {
 };
 
 /**
- * Pick a check of one relation by its name.
- *
- * @param relation - The relation.
- * @param name - The check's name.
- * @returns The predicate.
- */
-const checkNamed =
-  (relation: string, name: string) =>
-  (law: Law): boolean =>
-    law.kind === "check" && law.relation === relation && law.name === name;
-
-/**
  * Pick a containment by the relations and fields of its two sides.
  *
  * @param from - The source's relation and its terms.
@@ -97,92 +80,6 @@ const containedIn =
     law.kind === "contained" &&
     [law.from.relation, ...law.from.terms.map(({ field }) => field)].join(" ") === from.join(" ") &&
     [law.to.relation, ...law.to.terms.map(({ field }) => field)].join(" ") === to.join(" ");
-
-/**
- * Pick a key by its relation and the fields it reads, in order.
- *
- * @param relation - The relation.
- * @param fields - The key's fields.
- * @returns The predicate.
- */
-const keyOn =
-  (relation: string, ...fields: readonly string[]) =>
-  (law: Law): boolean =>
-    law.kind === "key" &&
-    law.side.relation === relation &&
-    law.side.terms.map(({ field }) => field).join(" ") === fields.join(" ");
-
-/**
- * Whether an outcome is `invariant-rejected` with a law among its `refused.laws` one of the
- * predicates picks.
- *
- * @param outcome - The apply's outcome.
- * @param picks - The laws the case may be refused under.
- * @returns Whether it is.
- */
-const rejectedBy = (
-  outcome: ApplyOutcome<unknown>,
-  picks: readonly ((law: Law) => boolean)[],
-): boolean =>
-  outcome.kind === "invariant-rejected" &&
-  outcome.refused.laws.map(({ law }) => law).some((law) => picks.some((pick) => pick(law)));
-
-/**
- * The author role of this file's probe login: grizzle puts a role in one login only, so the probe
- * holds a role of its own, named as the installed one.
- */
-const probeAuthor = authorRoleOf(Qti);
-
-/**
- * The author login with this file's count of the packages stored beside its own members, over an
- * author role of its own (`#pantry/test/served-members.ts` `servedProbe`): `ProbeLogin` opens the
- * role that reads it, and `probeLayer` serves every test of the file, `AuthorLogin` included.
- */
-const { layer: probeLayer, ProbeLogin } = servedProbe(
-  login(Qti, "author_app", [probeAuthor], {
-    workload: [
-      ...authorWorkloadsOf(Qti, probeAuthor),
-      workload(probeAuthor, {
-        packagesCounted: query(probeAuthor).rule((r) => {
-          const { id } = v(Package, "package");
-
-          return r.match(Package, { id }).find({ total: r.count() });
-        }),
-      }),
-    ],
-  }),
-);
-
-/**
- * Count the packages stored.
- */
-const storedPackages = Effect.gen(function* storedPackages() {
-  const db = yield* Db.open((yield* ProbeLogin).roles.author, {});
-  const rows = yield* (yield* db.workload.packagesCounted.execute({})).collect;
-
-  return rows[0]?.total ?? 0n;
-});
-
-/**
- * Build a package's ChangeSet with one edit of its inputs, and apply it.
- *
- * @param dir - The valid package.
- * @param edit - The edit of its inputs; none applies the package as read.
- * @returns The apply's outcome.
- */
-const applyEdited = (
-  dir: string,
-  edit: (inputs: PackageInputs) => PackageInputs = (held) => held,
-) =>
-  Effect.gen(function* appliesEdited() {
-    const program = yield* readProgram(dir);
-    const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
-
-    return yield* db.workload.importWrite.apply(
-      { insert: packageFactsOf(edit(program.inputs)) },
-      {},
-    );
-  });
 
 /**
  * The two containments that hold a `TableHeader` to an ID its `th` carries (E1 derived): its copy
@@ -404,19 +301,17 @@ describe.skipIf(!hasLease)(
   "qti/html.db.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(probeLayer, NodeServices.layer), {
+    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: probeLayerHookTimeoutMs,
     })("the HTML element laws, judged by PostgreSQL", (it) => {
       it.effect("accepts simple with every valid form of readings 124 to 126 in its body", () =>
         // Oracle: PostgreSQL, every law of the schema over a package whose sources, tracks and
         // cells each meet readings 124, 125 and 126.
         Effect.gen(function* accepted() {
-          const before = yield* storedPackages;
-          const outcome = yield* applyEdited(yield* withBody("valid", validBody));
+          const { outcome, packageId } = yield* applyEdited(yield* withBody("valid", validBody));
 
           assert.strictEqual(outcome.kind, "accepted", Formatter.format(outcome));
-          assert.strictEqual(yield* storedPackages, before + 1n);
+          assert.isTrue(yield* packageStored(packageId));
         }),
       );
 
@@ -424,11 +319,10 @@ describe.skipIf(!hasLease)(
         it.effect(`refuses ${name}`, () =>
           // Oracle: PostgreSQL, the law the case's one edit breaks, named in the outcome's `refused.laws`.
           Effect.gen(function* refused() {
-            const before = yield* storedPackages;
-            const outcome = yield* apply();
+            const { outcome, packageId } = yield* apply();
 
             assert.isTrue(rejectedBy(outcome, laws), `${name}: ${Formatter.format(outcome)}`);
-            assert.strictEqual(yield* storedPackages, before);
+            assert.isFalse(yield* packageStored(packageId), name);
           }),
         );
       }

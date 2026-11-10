@@ -17,36 +17,36 @@
  * Each case also logs how long its apply takes: the author login's `importWrite` member, compiled
  * once by `grizzle generate` into the login's served file, applied to the package's facts.
  */
-import { CommitUnknown, Db, login, query, v, workload } from "@bjornpagen/grizzle";
-import type { ApplyOutcome, Law } from "@bjornpagen/grizzle";
+import { CommitUnknown } from "@bjornpagen/grizzle";
+import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Duration, Effect, Formatter, Layer, Option, Result } from "effect";
+import { Effect, Formatter, Layer, Option, Result } from "effect";
 import { describe, inject } from "vitest";
 import { composed } from "#pantry/grammar/compose.ts";
 
 import { WrapApply } from "#pantry/import/package.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
-import { readProgram } from "#pantry/import/program.ts";
 
 import type { NodeMember, NodeRoot, PackageInputs } from "#pantry/import/write.ts";
 import { readEntries } from "#pantry/package/read.ts";
 
-import { Package } from "#pantry/qti/package.ts";
 import { materialize, materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/test/processing-fixtures.ts";
 import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
 import { resourceTypeCases } from "#pantry/test/resource-type-cases.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
-import { probeLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
-import { packageFactsOf } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/own.ts";
-import { authorRoleOf } from "#pantry/qti/roles.ts";
-import { authorWorkloadsOf } from "#pantry/qti/logins.ts";
-import { servedProbe } from "#pantry/test/served-members.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import {
+  applyEdited,
+  checkNamed,
+  keyOn,
+  packageStored,
+  rejectedBy,
+} from "#pantry/test/apply-edited.ts";
 
 const fixtures = inject("fixtures");
 
@@ -120,18 +120,6 @@ const resourceBefore = (markup: string): TextEdit => ({
 });
 
 /**
- * Pick a check of one relation by its name.
- *
- * @param relation - The relation.
- * @param name - The check's name.
- * @returns The predicate.
- */
-const checkNamed =
-  (relation: string, name: string) =>
-  (law: Law): boolean =>
-    law.kind === "check" && law.relation === relation && law.name === name;
-
-/**
  * Pick a containment by the relations of its two sides.
  *
  * @param from - The source's relation.
@@ -142,95 +130,6 @@ const containedIn =
   (from: string, to: string) =>
   (law: Law): boolean =>
     law.kind === "contained" && law.from.relation === from && law.to.relation === to;
-
-/**
- * Pick a key by its relation and the fields it reads, in order.
- *
- * @param relation - The relation.
- * @param fields - The key's fields.
- * @returns The predicate.
- */
-const keyOn =
-  (relation: string, ...fields: readonly string[]) =>
-  (law: Law): boolean =>
-    law.kind === "key" &&
-    law.side.relation === relation &&
-    law.side.terms.map((term) => term.field).join(" ") === fields.join(" ");
-
-/**
- * Whether an outcome is `invariant-rejected` with a law among its `refused.laws` one of the
- * predicates picks.
- *
- * @param outcome - The apply's outcome.
- * @param picks - The laws the case may be refused under.
- * @returns Whether it is.
- */
-const rejectedBy = (
-  outcome: ApplyOutcome<unknown>,
-  picks: readonly ((law: Law) => boolean)[],
-): boolean =>
-  outcome.kind === "invariant-rejected" &&
-  outcome.refused.laws.map(({ law }) => law).some((law) => picks.some((pick) => pick(law)));
-
-/**
- * The author role of this file's probe login: grizzle puts a role in one login only, so the probe
- * holds a role of its own, named as the installed one.
- */
-const probeAuthor = authorRoleOf(Qti);
-
-/**
- * The author login with this file's count of the packages stored beside its own members, over an
- * author role of its own (`#pantry/test/served-members.ts` `servedProbe`): `ProbeLogin` opens the
- * role that reads it, and `probeLayer` serves every test of the file, `AuthorLogin` included.
- */
-const { layer: probeLayer, ProbeLogin } = servedProbe(
-  login(Qti, "author_app", [probeAuthor], {
-    workload: [
-      ...authorWorkloadsOf(Qti, probeAuthor),
-      workload(probeAuthor, {
-        packagesCounted: query(probeAuthor).rule((r) => {
-          const { id } = v(Package, "package");
-
-          return r.match(Package, { id }).find({ total: r.count() });
-        }),
-      }),
-    ],
-  }),
-);
-
-/**
- * Count the packages stored.
- */
-const storedPackages = Effect.gen(function* storedPackages() {
-  const db = yield* Db.open((yield* ProbeLogin).roles.author, {});
-  const rows = yield* (yield* db.workload.packagesCounted.execute({})).collect;
-
-  return rows[0]?.total ?? 0n;
-});
-
-/**
- * Build a package's ChangeSet with one edit of its inputs, and apply it, logging the apply's time.
- *
- * @param dir - The valid package.
- * @param edit - The edit of its inputs; none applies the package as read.
- * @returns The package's id and the apply's outcome.
- */
-const applyEdited = (
-  dir: string,
-  edit: (inputs: PackageInputs) => PackageInputs = (held) => held,
-) =>
-  Effect.gen(function* appliesEdited() {
-    const program = yield* readProgram(dir);
-    const facts = packageFactsOf(edit(program.inputs));
-    const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
-    const [applied, outcome] = yield* Effect.timed(
-      db.workload.importWrite.apply({ insert: facts }, {}),
-    );
-
-    yield* Effect.log("import apply", { applyMillis: Duration.toMillis(applied), dir });
-
-    return { outcome, packageId: program.packageId };
-  });
 
 /**
  * Hold PostgreSQL to a verdict on a package: an accepted one commits, and a refused one is
@@ -379,9 +278,8 @@ describe.skipIf(!hasLease)(
   "import/program.oracle.db.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(probeLayer, NodeServices.layer), {
+    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: probeLayerHookTimeoutMs,
     })("one ChangeSet per package, judged by PostgreSQL", (it) => {
       it.effect(
         "accepts simple, sharedMedia and svg whole, each in one apply, logging the apply time",
@@ -390,39 +288,35 @@ describe.skipIf(!hasLease)(
           // (Q5.03's "accepted through grizzle", for the whole package), and the package read
           // back by its id.
           Effect.gen(function* acceptsCorpus() {
-            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
             for (const [name, dir] of Object.entries(yield* acceptedPackages)) {
               const { outcome, packageId } = yield* applyEdited(dir);
 
               assert.strictEqual(outcome.kind, "accepted", name);
-              assert.isTrue(
-                Option.isSome(yield* db.workload.packageOf.get({ id: packageId })),
-                name,
-              );
+              assert.isTrue(yield* packageStored(packageId), name);
             }
           }),
       );
 
       it.effect("imports one package twice as two packages, every id fresh, both accepted", () =>
         // Oracle: the specification as a checker, the brief's "the same package imported twice is
-        // two packages, with fresh ids each time": both imports are accepted and the count of
-        // packages grows by two.
+        // two packages, with fresh ids each time": both imports are accepted under two ids, and
+        // each is read back by its own.
         Effect.gen(function* twice() {
-          const before = yield* storedPackages;
           const first = yield* importDir(fixtures.simple);
           const second = yield* importDir(fixtures.simple);
 
           assert.notStrictEqual(first, second);
-          assert.strictEqual(yield* storedPackages, before + 2n);
+          assert.isTrue(yield* packageStored(first), first);
+          assert.isTrue(yield* packageStored(second), second);
         }),
       );
 
       it.effect("leaves no row when a failure is injected in place of the apply", () =>
-        // Oracle: the specification as a checker, one transaction per package and `CommitUnknown`'s
-        // resolution: an apply that never ran commits nothing, the read-back finds no package, and
-        // the import fails with the injected failure while the count of packages is unchanged.
+        // Oracle: the specification as a checker, `CommitUnknown`'s resolution: the failure stands
+        // in for the apply, so nothing ran, and the import's read-back by the package's own id
+        // finds no package, so the import fails with the injected failure. A read-back that found
+        // one, or an apply run outside `WrapApply`, would answer the package's id instead.
         Effect.gen(function* noRow() {
-          const before = yield* storedPackages;
           const failed = yield* Effect.flip(
             importDir(fixtures.simple).pipe(
               Effect.provideService(WrapApply, () => Effect.fail(new CommitUnknown())),
@@ -430,7 +324,6 @@ describe.skipIf(!hasLease)(
           );
 
           assert.strictEqual(failed._tag, "CommitUnknown");
-          assert.strictEqual(yield* storedPackages, before);
         }),
       );
 
@@ -1044,11 +937,10 @@ describe.skipIf(!hasLease)(
         it.effect(`refuses ${name}`, () =>
           // Oracle: PostgreSQL, the law the case's one edit breaks, named in the outcome's `refused.laws`.
           Effect.gen(function* refused() {
-            const before = yield* storedPackages;
-            const { outcome } = yield* apply();
+            const { outcome, packageId } = yield* apply();
 
             assert.isTrue(rejectedBy(outcome, laws), `${name}: ${Formatter.format(outcome)}`);
-            assert.strictEqual(yield* storedPackages, before);
+            assert.isFalse(yield* packageStored(packageId), name);
           }),
         );
       }
@@ -1170,9 +1062,8 @@ describe.skipIf(!hasLease)(
               Effect.andThen(apply, Effect.fail(new CommitUnknown())),
             ),
           );
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
 
-          assert.isTrue(Option.isSome(yield* db.workload.packageOf.get({ id })), id);
+          assert.isTrue(yield* packageStored(id), id);
         }),
       );
     });
