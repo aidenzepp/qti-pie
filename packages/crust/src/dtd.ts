@@ -392,8 +392,9 @@ export const charge = (
  * DOCTYPE's external identifier and `referencesParameters` as the subset is read, and at the
  * subset's end the two and `standalone` decide WFC Entity Declared's scope, under which every
  * attribute default is judged as the body is. `kept` lists each reference to an entity not yet
- * declared that an attribute default holds, with the attribute, so the end of the subset can refuse
- * one the subset declares after it, or one it never declares in the WFC's scope.
+ * declared that an attribute default holds, with the attribute and the reference's line and column
+ * in the decoded source, so the end of the subset can refuse one the subset declares after it, or
+ * one it never declares in the WFC's scope, at the reference.
  */
 interface Tables {
   readonly attlists: Map<string, Map<string, AttlistEntry>>;
@@ -404,7 +405,11 @@ interface Tables {
    * Whether the DOCTYPE names a `SYSTEM` or `PUBLIC` identifier, read before the internal subset.
    */
   externalSubset: boolean;
-  readonly kept: { readonly name: string; readonly owner: DefaultOwner }[];
+  readonly kept: {
+    readonly name: string;
+    readonly owner: DefaultOwner;
+    readonly position: { readonly column: number; readonly line: number };
+  }[];
   readonly parameters: Map<string, string>;
   /**
    * Whether the subset has referenced a parameter entity, read or not, which takes the document
@@ -457,26 +462,33 @@ const found = (cursor: Cursor): string => {
 };
 
 /**
+ * Find the line and column to report for `offset`, or for the reference that brought a replacement
+ * text in.
+ *
+ * @param cursor - The read position, which says whether `offset` is a position in the document.
+ * @param offset - A position in `cursor.text`; the read position by default.
+ * @returns The 1-based line and column in `cursor.source`; no substitution precedes the prolog.
+ */
+const placeOf = (cursor: Cursor, offset: number = cursor.offset) =>
+  positionOf(
+    cursor.source,
+    Option.getOrElse(cursor.anchor, () => offset),
+  );
+
+/**
  * Build the well-formedness error for a failure at `offset`, or at the reference that brought a
  * replacement text in.
  *
  * @param cursor - The read position, which says whether `offset` is a position in the document.
  * @param message - What the lexer expected and what it found.
  * @param offset - Where the failure lies in `cursor.text`; the read position by default.
- * @returns An error with the line and column to report; no substitution precedes the prolog.
+ * @returns An error with the line and column {@link placeOf} gives.
  */
 const failure = (
   cursor: Cursor,
   message: string,
   offset: number = cursor.offset,
-): WellFormednessError => {
-  const where = Option.getOrElse(cursor.anchor, () => offset);
-
-  return new WellFormednessError({
-    ...positionOf(cursor.source, where),
-    message,
-  });
-};
+): WellFormednessError => new WellFormednessError({ ...placeOf(cursor, offset), message });
 
 /**
  * Read `pattern` at the read position and advance past it when it matches.
@@ -959,12 +971,18 @@ const expandDefault = (
       if (replacement === undefined) {
         // Kept until the subset ends, when WFC Entity Declared's scope is known (section 4.1): a
         // parameter-entity reference after the list still takes the document out of it.
-        tables.kept.push({ name: entity, owner });
+        tables.kept.push({ name: entity, owner, position: placeOf(cursor, where) });
 
         return [{ kind: "reference", name: entity }];
       }
 
-      yield* charge(tables.budget, replacement.length, depth + 1, entity, Option.none());
+      yield* charge(
+        tables.budget,
+        replacement.length,
+        depth + 1,
+        entity,
+        Option.some(placeOf(cursor, where)),
+      );
 
       return yield* expandDefault(
         tables,
@@ -1268,6 +1286,7 @@ const readParameterReference = Effect.fnUntraced(function* readParameterEntityRe
   Option.Option<{ name: string; replacement: string }>,
   WellFormednessError | ReaderRefusal
 > {
+  const start = cursor.offset;
   cursor.offset += "%".length;
   const name = yield* readName(cursor, "parameter-entity reference", "NCName");
   yield* expect(cursor, ";", "parameter-entity reference");
@@ -1287,7 +1306,7 @@ const readParameterReference = Effect.fnUntraced(function* readParameterEntityRe
   if (active.has(name)) {
     return yield* new ReaderRefusal({
       detail: `The parameter entity "${name}" refers to itself, which XML 1.0 forbids (well-formedness constraint "No Recursion"). Remove the reference from its replacement text.`,
-      position: Option.none(),
+      position: Option.some(placeOf(cursor, start)),
       rule: "entity-cycle",
     });
   }
@@ -1445,7 +1464,7 @@ const lexSubset: (
             used.value.replacement.length,
             active.size + 1,
             used.value.name,
-            Option.none(),
+            Option.some(placeOf(cursor, start)),
           );
           yield* lexSubset(tables, inside, new Set([...active, used.value.name]));
           if (inside.offset < inside.text.length) {
@@ -1637,13 +1656,18 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
       early.name,
       early.owner,
       undeclared._tag === "refused",
-      Option.none(),
+      Option.some(early.position),
     );
   }
 
   const never = tables.kept.find(({ name }) => !tables.bound.has(`&${name}`));
   if (never !== undefined && undeclared._tag === "refused") {
-    return yield* undeclaredEntity(never.name, undeclared.why, Option.none(), never.owner);
+    return yield* undeclaredEntity(
+      never.name,
+      undeclared.why,
+      Option.some(never.position),
+      never.owner,
+    );
   }
 
   const cycle = findCycle(tables.entities);

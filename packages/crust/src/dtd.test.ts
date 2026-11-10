@@ -803,3 +803,74 @@ describe("the expansion budget", () => {
     }),
   );
 });
+
+/**
+ * Asserts that `error` is a `ReaderRefusal` under `rule` positioned at `line` and `column`.
+ */
+const assertPositioned = (
+  error: ReaderRefusal | WellFormednessError,
+  rule: ReaderRefusal["rule"],
+  line: number,
+  column: number,
+) => {
+  assert.instanceOf(error, ReaderRefusal);
+  assert.strictEqual(error._tag === "ReaderRefusal" && error.rule, rule);
+  assert.deepStrictEqual(
+    error._tag === "ReaderRefusal" ? error.position : Option.none(),
+    Option.some({ column, line }),
+  );
+};
+
+describe("a refusal from the internal subset", () => {
+  it.effect("is placed at a default's reference to an entity the subset declares after it", () =>
+    Effect.gen(function* placesEarlyReference() {
+      const error = yield* refusalOf(
+        '<!DOCTYPE a [\n<!ATTLIST a d CDATA "1&e;2">\n<!ENTITY e "x">\n]><a/>',
+      );
+
+      assertPositioned(error, "undeclared-entity", 2, 23);
+    }),
+  );
+
+  it.effect("is placed at a default's reference to an entity the subset never declares", () =>
+    Effect.gen(function* placesUndeclaredReference() {
+      const error = yield* refusalOf('<!DOCTYPE a [\n<!ATTLIST a d CDATA "1&e;2">\n]><a/>');
+
+      assertPositioned(error, "undeclared-entity", 2, 23);
+    }),
+  );
+
+  it.effect("is placed at the percent sign of a parameter entity that names itself", () =>
+    Effect.gen(function* placesParameterCycle() {
+      const error = yield* refusalOf('<!DOCTYPE a [\n<!ENTITY % p "&#37;p;">\n  %p;\n]><a/>');
+
+      assertPositioned(error, "entity-cycle", 3, 3);
+    }),
+  );
+
+  it.effect("is placed at a default's reference that opens entities 21 deep", () =>
+    Effect.gen(function* placesDeepDefault() {
+      let subset = '<!ENTITY e0 "x">';
+      for (let n = 1; n <= 20; n += 1) {
+        subset += `<!ENTITY e${n} "&e${n - 1};">`;
+      }
+      const error = yield* refusalOf(
+        `<!DOCTYPE a [\n${subset}\n<!ATTLIST a d CDATA "&e20;">\n]><a/>`,
+      );
+
+      assertPositioned(error, "entity-expansion", 3, 22);
+    }),
+  );
+
+  it.effect("is placed at the percent sign of a parameter entity that opens 21 deep", () =>
+    Effect.gen(function* placesDeepParameter() {
+      let subset = '<!ENTITY % p0 "<!-- c -->">';
+      for (let n = 1; n <= 20; n += 1) {
+        subset += `<!ENTITY % p${n} "&#37;p${n - 1};">`;
+      }
+      const error = yield* refusalOf(`<!DOCTYPE a [\n${subset}\n\n  %p20;\n]><a/>`);
+
+      assertPositioned(error, "entity-expansion", 4, 3);
+    }),
+  );
+});
