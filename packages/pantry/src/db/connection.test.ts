@@ -87,7 +87,7 @@ const rootLogin = login(ProbeRoot, "app", [
  * above it. grizzle names a login's PostgreSQL role by the level it is over (README, "Levels"), so
  * the two roles differ, and the level's spells nothing of the root's name.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/README.md#levels
+ * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/README.md#levels
  */
 const loginsByLevel: Readonly<Record<"level" | "root", AnyLogin>> = {
   level: login(ProbeLevel, "app", [worldRole(ProbeLevel, "reader", wholeEntriesOf(ProbeRoot))]),

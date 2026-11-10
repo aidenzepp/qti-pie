@@ -1,19 +1,19 @@
 /**
  * The export's reads (fin.md §4.6, trees.md §3, plan N11; the W5 amendment's C20): one ordered
  * scan per document, and the documents and entries of a package. The author login's workload
- * (`#pantry/qti/logins.ts` `authorAppOf`) holds all three, so each is compiled once per pool and
- * its indexes are planned by `grizzle generate`.
+ * (`#pantry/qti/logins.ts` `authorAppOf`) holds all three, so `grizzle generate` compiles each
+ * into the login's served file and plans its indexes.
  *
  * `documentScan` reads one document's `Node` rows by T1's key, `(document, start)`: filtered by
  * `document` and ordered by `start`, it is one index range in document order, with no sort and no
- * recursion, and `db.page` pages it by that key. Each row carries its own characters (`Node.chars`:
- * a text or whitespace run's, an entity reference's `&name;`) and what its node owns, each as its
- * own attachment: its comment, instruction, doctype, `Document` row, foreign element's name and
- * governing type (an `ElementType` or an `OpenElementType`) at most once (each keyed by its
- * node), the `Document` row with its XML declaration at most once
- * and the declaration with its encoding and standalone at most once each, and its attribute and
- * namespace families as lists in `at` order. The arms stay apart, never a union, because an
- * attachment over a union is never paged.
+ * recursion, and its workload handle's `page` pages it by that key. Each row carries its own
+ * characters (`Node.chars`: a text or whitespace run's, an entity reference's `&name;`) and what
+ * its node owns, each as its own attachment: its comment, instruction, doctype, `Document` row,
+ * foreign element's name and governing type (an `ElementType` or an `OpenElementType`) at most once
+ * (each keyed by its node), the `Document` row with its XML declaration at most once and the
+ * declaration with its encoding and standalone at most once each, and its attribute and namespace
+ * families as lists in `at` order. The arms stay apart, never a union, because an attachment over a
+ * union is never paged.
  */
 import { query, uuid, v } from "@bjornpagen/grizzle";
 import { Attribute, AttributeEntity, OpenAttributeName } from "#pantry/qti/attributes.ts";

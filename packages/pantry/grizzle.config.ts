@@ -47,7 +47,7 @@ const synchronousFiles = FileSystem.layerNoop({
  * standard error first: the message names the variable or the file, and the repair.
  *
  * @returns The connection. Throws where a setting is missing or malformed or the CA is unreadable.
- * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/grizzle/src/cli/connection.ts#L41-L59
+ * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/packages/grizzle/src/cli/connection.ts#L41-L59
  */
 const connection = (): MigrationConnectionConfig =>
   Effect.runSync(

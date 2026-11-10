@@ -221,8 +221,8 @@ const localCluster = Config.all({
  * the command within seconds rather than holding it. A password command's run is not part of it:
  * {@link connectTimeoutMsOf} adds the command's own bound.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/grizzle/src/adapter/types/layer.ts#L70-L87
- * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/README.md#connecting
+ * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/packages/grizzle/src/adapter/types/layer.ts#L71-L88
+ * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/README.md#connecting
  */
 const networkTimeoutMs = 5000;
 
@@ -470,7 +470,7 @@ const primedPassword = Effect.fnUntraced(function* primedPassword(
  * It fails with Effect's `ConfigError` for a missing or malformed setting, before any file is read,
  * and with a {@link ClusterConfigError} when the CA is unreadable.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/grizzle/src/adapter/types/config.ts#L41-L45
+ * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/packages/grizzle/src/adapter/types/config.ts#L41-L45
  */
 const clusterConnection = Effect.gen(function* clusterConnection() {
   const fs = yield* FileSystem.FileSystem;
@@ -574,7 +574,7 @@ const filePassword = (
  * It fails with Effect's `ConfigError` for a missing or malformed setting, before any file is read,
  * and with a {@link ClusterConfigError} when the CA is unreadable.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/engine/src/program/names.ts#L61-L76
+ * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/packages/engine/src/program/names.ts#L61-L76
  */
 export const loginConnection = Effect.gen(function* loginConnection() {
   const fs = yield* FileSystem.FileSystem;

@@ -334,11 +334,11 @@ const isCredentialFailure = (failure: unknown): boolean =>
   tagOf(failure.reason) === "CredentialError";
 
 /**
- * Whether `failure` is grizzle refusing to compile one of qti's programs, before any SQL is sent:
- * an `ExecutionFailure` (a ChangeSet that `db.apply` compiles) or an `OpenError` (the schema and
- * the workload that `DbLayer.make` and `Db.open` compile) whose `reason` is a `CompileError`, such
- * as the `UnsupportedOperation` of a value grizzle's write filler cannot fill. The cause is qti's
- * schema or program, the same for every package, so retrying or checking the cluster cannot help.
+ * Whether `failure` is grizzle refusing one of qti's programs as uncompiled, before any SQL is
+ * sent: an `ExecutionFailure` (a write) or an `OpenError` (the served file `DbLayer.make` loads and
+ * the role `Db.open` opens) whose `reason` is a `CompileError`, such as a program outside the
+ * login's served workload, which a served `Db` refuses. The cause is qti's schema or program, the
+ * same for every package, so retrying or checking the cluster cannot help.
  * It is matched by tag, so this module imports neither grizzle nor its engine.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
