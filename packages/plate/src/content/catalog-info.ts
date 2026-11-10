@@ -80,11 +80,10 @@ export interface CatalogFile {
  * its files, its `xml:lang`, and its other attributes in no namespace (the `data-*` parameters a
  * candidate's PNP aligns with), each as written. Only the chosen entry's content reaches the page.
  *
- * The module reads the element `check` secured: that step keeps an attribute the XSD declares on
- * the entry by name (`default`, `xml:lang`) and removes each one its wildcard alone admits, marking
- * it `attribute:<name>` on the verdict (`secureAttributes` in `#plate/validate/verdict.ts`). So
- * `attributes` holds a `data-*` parameter only where that step keeps it, and an entry chosen by
- * `data-reading-type` or `data-braille-type` depends on it being kept.
+ * The module reads the element `check` secured: that step removes each attribute the XSD's
+ * wildcard alone admits, but keeps a `qti-card-entry`'s `data-*` parameters as written
+ * (`isDataParameter` in `#plate/validate/verdict.ts`), so `attributes` holds `data-reading-type`
+ * and `data-braille-type` for steps 5's `spoken` and `braille` matches to read.
  */
 export interface CatalogEntryNode {
   readonly attributes: readonly BodyAttribute[];
