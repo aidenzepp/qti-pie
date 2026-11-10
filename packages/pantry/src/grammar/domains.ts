@@ -3186,6 +3186,7 @@ const narrowed = (left: Regex, right: Regex): readonly [Regex, Regex] => {
   return narrowed(narrow(left), narrow(right));
 };
 
+// GRIZZLE-PENDING: Q8 (patterns held as data, one row per constraint) deletes this product.
 /**
  * The intersection of two languages, as one tree of their product, exactly or not at all:
  *
