@@ -1,8 +1,9 @@
 /**
  * Slider (Q-19), a stub module: its `parse` gives the notice the body walk gives any QTI element it
- * does not read, so a `qti-slider-interaction` renders as it did, and every other step throws
- * {@link NotImplemented}. No hub reaches those: the model holds no node of this kind. Issue ei-16
- * fills the module.
+ * does not read, so a `qti-slider-interaction` renders as it did; its `payloadSchema` refuses the
+ * kind, its `content`, `regions` and `replaceRegions` give no content, no region and the node
+ * itself, and every other step throws {@link NotImplemented}. No hub reaches those: the model holds
+ * no node of this kind. Issue ei-16 fills the module.
  *
  * @module
  */

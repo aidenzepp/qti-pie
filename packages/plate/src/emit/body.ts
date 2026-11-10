@@ -12,6 +12,12 @@
  * becomes the Notice part, a `span` at a phrasing position and a `div` where the parent takes flow
  * content.
  *
+ * The emitter value-imports no interaction module and nothing that reaches one, neither
+ * `#plate/model/interactions.ts` nor `#plate/emit/item.ts` (which reaches them through the
+ * payload), so a module may value-import {@link emitNodes} to write its content without a cycle: a
+ * module's render and content reach the walk only through the render function `render` hands in
+ * (`RenderInteraction.modules` and `RenderInteraction.moduleContent`).
+ *
  * URL attributes are `url.ts`'s, and so is every decision about them: `check` has already dropped
  * each refused value, placed its notice, and written each kept value in its parsed form. The walk
  * classifies a value again only to write it, rebasing a package path onto the asset base and
@@ -28,16 +34,15 @@
  * @see {@link Payload} for what the walk reads.
  */
 import { Data, Option, Result } from "effect";
-import { itemPart } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { authoredId, authoredIdrefs, headings, positionUnder, rowFor } from "#plate/emit/parts.ts";
 import type { Position, Resolved } from "#plate/emit/parts.ts";
+import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { isModuleKind } from "#plate/interactions/contract.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
-import { moduleContent } from "#plate/model/interactions.ts";
 import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
 import type { ModuleKind } from "#plate/interactions/contract.ts";
 import type { KeptUrl, UrlContext } from "#plate/model/url.ts";
@@ -63,6 +68,14 @@ import type {
 export type RenderModule = (interaction: ModulePayload) => Result.Result<Element, PartSwapRefused>;
 
 /**
+ * Give the payload nodes an interaction a module parses writes as content: its module's `content`.
+ *
+ * @param interaction The interaction's payload node.
+ * @returns The nodes its module's render writes as content, in document order.
+ */
+export type ModuleContent = (interaction: ModulePayload) => readonly PayloadNode[];
+
+/**
  * Render one interaction of the body: the interaction module's render function, with the payload
  * and the state already applied.
  */
@@ -81,7 +94,24 @@ export interface RenderInteraction {
    * the payload defines: only a payload built by hand reaches it so.
    */
   readonly modules?: RenderModule;
+  /**
+   * Give the content of an interaction a module parses, as `render`'s renderer does through its
+   * module, so the headings in it count in the item's heading shift ({@link headingLevelsIn}). A
+   * render function without it reads no content for one, as one without {@link modules} writes
+   * none.
+   */
+  readonly moduleContent?: ModuleContent;
 }
+
+/**
+ * Give the content a render function reads for an interaction a module parses.
+ *
+ * @param renderInteraction The render function.
+ * @returns Its `moduleContent`, or, for a render function without one, a function that gives no
+ *   content.
+ */
+const contentOf = (renderInteraction: RenderInteraction): ModuleContent =>
+  renderInteraction.moduleContent ?? (() => []);
 
 /**
  * Where a nested interaction was met: inside a Choice's Prompt or choice content, an Extended
@@ -667,14 +697,16 @@ const withBodies = (children: readonly Node[]): readonly Node[] => {
  * @returns The Notice, a `span` at a phrasing position and a `div` at a flow position by default,
  *   or the refusal of its replacement.
  */
-const noticeOf = (notice: NoticePayload, walk: Walk): Result.Result<Element, PartSwapRefused> =>
-  itemPart(
-    walk.parts,
-    "notice",
-    { role: "note" },
+const noticeOf = (notice: NoticePayload, walk: Walk): Result.Result<Element, PartSwapRefused> => {
+  const row = rowFor("item", "notice", { position: walk.position });
+
+  return applyPart(
+    row,
+    { "data-slot": row.slot, role: "note" },
     [text(message(walk.locale, "notice", { feature: notice.feature }))],
-    { position: walk.position },
+    Option.getOrUndefined(walk.parts.replacementFor("item", "notice")),
   );
+};
 
 /**
  * Give the walk below an authored element: its children stand where the element's content stands.
@@ -777,18 +809,23 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
 /**
  * Collect the levels of the headings the emitter writes among payload nodes, in document order: a
  * heading the HTML subset keeps, below elements it keeps, and in an interaction's Prompt, choice
- * content or Inline Choice Label, or a module kind's content (`moduleContent`), which
+ * content or Inline Choice Label, or a module kind's content as `content` gives it, which
  * {@link emitNodes} writes with the same shift. An Inline Choice's choice content is written as
  * option text, never as nodes, so it gives none. A heading below an element outside
  * {@link htmlSubset} is dropped with that element, so it is left out.
  *
  * @param nodes The payload nodes.
+ * @param content The content of an interaction a module parses, the render function's
+ *   ({@link contentOf}).
  * @returns Each written heading's authored level, 1 to 6.
  */
-const headingLevelsIn = (nodes: readonly PayloadNode[]): readonly number[] =>
+const headingLevelsIn = (
+  nodes: readonly PayloadNode[],
+  content: ModuleContent,
+): readonly number[] =>
   nodes.flatMap((node): readonly number[] => {
     if (isModulePayload(node)) {
-      return headingLevelsIn(moduleContent(node));
+      return headingLevelsIn(content(node), content);
     }
 
     switch (node.kind) {
@@ -797,21 +834,30 @@ const headingLevelsIn = (nodes: readonly PayloadNode[]): readonly number[] =>
           return [];
         }
 
-        const nested = headingLevelsIn(node.children);
+        const nested = headingLevelsIn(node.children, content);
 
         return headings.has(node.tag) ? [Number(node.tag.slice(1)), ...nested] : nested;
       }
       case "choice": {
-        return headingLevelsIn([
-          ...Option.getOrElse(node.prompt, () => []),
-          ...node.choices.flatMap(({ content }) => content),
-        ]);
+        return headingLevelsIn(
+          [
+            ...Option.getOrElse(node.prompt, () => []),
+            ...node.choices.flatMap((choice) => choice.content),
+          ],
+          content,
+        );
       }
       case "extended-text": {
-        return headingLevelsIn(Option.getOrElse(node.prompt, () => []));
+        return headingLevelsIn(
+          Option.getOrElse(node.prompt, () => []),
+          content,
+        );
       }
       case "inline-choice": {
-        return headingLevelsIn(Option.getOrElse(node.label, () => []));
+        return headingLevelsIn(
+          Option.getOrElse(node.label, () => []),
+          content,
+        );
       }
       case "notice":
       case "text":
@@ -839,6 +885,11 @@ const headingLevelsIn = (nodes: readonly PayloadNode[]): readonly number[] =>
  * once built: `payload` builds a fresh body for every render, every payload field is `readonly`,
  * and the emitter writes to none of them. So the level read from a body stays that body's level
  * for as long as the body lives, and the weak key lets the entry go with it.
+ *
+ * The first walk's render function decides what a module kind's content gives
+ * ({@link contentOf}), and every later walk keeps its level. In `render` the first walk is the
+ * body's, under the render function that reads each module's content, so a module's own walks
+ * (under {@link nestedInteraction}, which reads none) shift its headings as the body's shift.
  */
 const shallowestLevels = new WeakMap<readonly PayloadNode[], number>();
 
@@ -847,16 +898,17 @@ const shallowestLevels = new WeakMap<readonly PayloadNode[], number>();
  * body on the first call for it, and from {@link shallowestLevels} after.
  *
  * @param body The payload's body, which holds every heading the emitter writes for the item.
+ * @param content The content of an interaction a module parses, read on the first call only.
  * @returns The least level {@link headingLevelsIn} gives for the body, or 1 when it gives none.
  */
-const shallowestLevelOf = (body: readonly PayloadNode[]): number => {
+const shallowestLevelOf = (body: readonly PayloadNode[], content: ModuleContent): number => {
   const known = shallowestLevels.get(body);
 
   if (known !== undefined) {
     return known;
   }
 
-  const levels = headingLevelsIn(body);
+  const levels = headingLevelsIn(body, content);
   let shallowest = levels[0] ?? 1;
 
   for (const level of levels) {
@@ -878,10 +930,15 @@ const shallowestLevelOf = (body: readonly PayloadNode[]): number => {
  *
  * @param body The payload's body, which holds every heading the emitter writes for the item.
  * @param headingLevel The configured heading level, 1 to 6.
+ * @param content The content of an interaction a module parses, as {@link shallowestLevelOf}
+ *   reads it.
  * @returns The offset {@link tagFor} adds to an authored level.
  */
-const headingOffsetOf = (body: readonly PayloadNode[], headingLevel: number): number =>
-  headingLevel - shallowestLevelOf(body);
+const headingOffsetOf = (
+  body: readonly PayloadNode[],
+  headingLevel: number,
+  content: ModuleContent,
+): number => headingLevel - shallowestLevelOf(body, content);
 
 /**
  * Tell whether a body writes a heading whose tag names no heading level, because its level, shifted
@@ -890,27 +947,32 @@ const headingOffsetOf = (body: readonly PayloadNode[], headingLevel: number): nu
  *
  * `render` asks it before it writes an item (`InvalidHeadingLevel` in `#plate/render.ts`), so a
  * hand-built configuration's heading level of `NaN`, `-Infinity` or a fraction below 6 is refused
- * where the emitter would write a tag such as `h5.5`. It reads the headings
- * {@link headingLevelsIn} gives (the body's, a Prompt's, a choice's content and an Inline Choice's
- * Label, never one below an element the second line drops) and applies {@link shiftedLevel}, the
- * function `tagFor` writes with, rather than a second expression for the rule, so the two cannot
- * disagree. So a level above 6 and `Infinity` are not refused, since they cap at `h6`, and a body
- * with no heading is never refused. At its corners it follows `tagFor`, not a test of the capped
- * heading level alone: where floating-point rounding makes the shifted level an integer (a heading
- * level of `1e-17` writes `h0`, as 0 does) it is false, and so it is for an integer level at or
- * below -10^21, whose tag `h-1e+21` the serialiser then refuses as a `MalformedTagName`.
+ * where the emitter would write a tag such as `h5.5`. It reads the headings {@link headingLevelsIn}
+ * gives (the body's, a Prompt's, a choice's content, an Inline Choice's Label and a module kind's
+ * content as the render function gives it, never one below an element the second line drops) and
+ * applies {@link shiftedLevel}, the function `tagFor` writes with, rather than a second expression
+ * for the rule, so the two cannot disagree. So a level above 6 and `Infinity` are not refused,
+ * since they cap at `h6`, and a body with no heading is never refused. At its corners it follows
+ * `tagFor`, not a test of the capped heading level alone: where floating-point rounding makes the
+ * shifted level an integer (a heading level of `1e-17` writes `h0`, as 0 does) it is false, and so
+ * it is for an integer level at or below -10^21, whose tag `h-1e+21` the serialiser then refuses as
+ * a `MalformedTagName`.
  *
  * @param body The payload's body, which holds every heading the emitter writes for the item.
  * @param headingLevel The configured heading level, as the emit state holds it.
+ * @param renderInteraction The render function the body is emitted with, whose `moduleContent`
+ *   gives a module kind's content.
  * @returns Whether a heading the body writes would get a level that is not an integer.
  */
 export const writesMalformedHeading = (
   body: readonly PayloadNode[],
   headingLevel: number,
+  renderInteraction: RenderInteraction,
 ): boolean => {
-  const headingOffset = headingOffsetOf(body, headingLevel);
+  const content = contentOf(renderInteraction);
+  const headingOffset = headingOffsetOf(body, headingLevel, content);
 
-  return headingLevelsIn(body).some(
+  return headingLevelsIn(body, content).some(
     (level) => !Number.isInteger(shiftedLevel(level, headingOffset)),
   );
 };
@@ -934,7 +996,7 @@ const walkOf = (
   position: Position,
 ): Walk => ({
   assetBase: state.assetBase,
-  headingOffset: headingOffsetOf(payload.body, state.headingLevel),
+  headingOffset: headingOffsetOf(payload.body, state.headingLevel, contentOf(renderInteraction)),
   instance: payload.instance,
   locale: state.locale,
   parts: state.parts,
