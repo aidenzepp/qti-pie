@@ -23,7 +23,7 @@ import { ObjectIdentifier } from "#pantry/qti/metadata.ts";
 import { TestDocument } from "#pantry/qti/tests.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { probeLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { testKind } from "#pantry/vocab/terms/tests.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
@@ -147,7 +147,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(probeLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: probeLayerHookTimeoutMs,
     })("a test keyed by its package and its root's identifier", (it) => {
       it.effect(
         "accepts a test whose identifier is keyTextBytes bytes, and reads it back by its package and identifier",
