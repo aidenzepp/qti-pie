@@ -8,11 +8,20 @@
  * - **Its installation compiles**: grizzle's own check compiles an installation whose top level is
  *   the `Cdn` level, every statement of it, as `src/test/compile.test.ts` compiles `Qti`, so the
  *   rule's checks are known to compile however `lawsOf` reads them.
+ * - **What it selects**, #55's case (`src/qti/cdn.test.ts` at `b340be09`), every kind and every
+ *   attribute name exhausted: exactly the three foreign element kinds and the three open classes
+ *   but `data-*`.
  */
 import { lawsOf } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Formatter } from "effect";
+import { exhaust } from "@grizzle/testing/explore";
+import { requiredInSpace } from "@grizzle/testing/features";
+import { element } from "@grizzle/testing/gen";
+import { searched } from "@grizzle/testing/vitest";
+import { Array as Arr, Duration, Effect, Formatter } from "effect";
+import { grammar } from "#pantry/grammar/install.ts";
 import { singleCdn } from "#pantry/levels/cdn.ts";
+import { foreignElementKinds, uninterpretedClasses } from "#pantry/levels/cdn-foreign.ts";
 import { qti } from "#pantry/qti/schema.ts";
 import { grizzleCheck, writtenCdnConfig } from "#pantry/test/grizzle-check.ts";
 import { addedLaws } from "#pantry/test/level-laws.ts";
@@ -105,5 +114,66 @@ describe("levels/cdn-foreign.ts", () => {
         }),
       ),
     compileTimeoutMs,
+  );
+});
+
+/**
+ * Every element kind and every attribute name, each one handle the case judges.
+ */
+const handles = [
+  ...grammar.kinds.nodeKind.handles.map((handle) => ({ _tag: "kind" as const, handle })),
+  ...grammar.kinds.attributeName.handles.map((handle) => ({ _tag: "name" as const, handle })),
+];
+
+describe("levels/cdn-foreign.ts, what it selects", () => {
+  it.effect(
+    "selects a node exactly when it is a foreign element, and an attribute exactly when its name is the foreign, no-namespace or own-namespace class: every kind and every attribute name, exhausted",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every NodeKind and every AttributeName handle",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace([
+              "kind admitted",
+              "kind refused",
+              "name admitted",
+              "name refused",
+            ] as const),
+            generator: (source) =>
+              source.draw(
+                element(
+                  Arr.isReadonlyArrayNonEmpty(handles)
+                    ? handles
+                    : assert.fail("no kind or name to draw from"),
+                ),
+              ),
+            limit: handles.length,
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "#55's uninterpretable markup: the three foreign element kinds and the three open attribute classes but data-*",
+            },
+            suite: "levels/cdn-foreign/selects",
+          },
+          (handle, c) =>
+            Effect.sync(() => {
+              const refused =
+                handle._tag === "kind"
+                  ? ["foreign-element", "no-namespace-element", "own-namespace-element"].includes(
+                      handle.handle,
+                    )
+                  : ["foreign", "no-namespace", "own-namespace"].includes(handle.handle);
+              const selected =
+                handle._tag === "kind"
+                  ? foreignElementKinds.some((kind) => kind === handle.handle)
+                  : uninterpretedClasses.some((name) => name === handle.handle);
+
+              assert.strictEqual(selected, refused, handle.handle);
+              c.note(`${handle._tag} ${selected ? "refused" : "admitted"}`);
+            }),
+        ),
+      ),
   );
 });

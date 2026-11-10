@@ -32,8 +32,9 @@ const packagesQuery = (qti: QtiSchema) =>
 
 /**
  * Build the document listing of one package over a `Qti` schema: each `Document` row of the
- * package, its node (the document's id), its entry path, the manifest resource type that names it
- * and its root element's kind, ordered by `path`.
+ * package, its node (the document's id), its entry path, its document type (`manifest` for the
+ * manifest, else the type of the resource that lists it) and its root element's kind, ordered by
+ * `path`.
  *
  * `package` is in the head so that the order is total by `path` alone: `(package, path)` is a key
  * of `Document` (`#pantry/qti/package.ts`), and with `package` fixed by its parameter, `path`
@@ -48,12 +49,12 @@ const packagesQuery = (qti: QtiSchema) =>
 const documentsQuery = (qti: QtiSchema) =>
   query(qti)
     .rule((r) => {
-      const { node, package: pkg, path, resourceType, rootKind } = v(Document, "document");
+      const { documentType, node, package: pkg, path, rootKind } = v(Document, "document");
 
       return r
-        .match(Document, { node, package: pkg, path, resourceType, rootKind })
+        .match(Document, { documentType, node, package: pkg, path, rootKind })
         .where(r.eq(pkg, r.param("package", uuid)))
-        .find({ node, package: pkg, path, resourceType, rootKind });
+        .find({ documentType, node, package: pkg, path, rootKind });
     })
     .orderBy(["path", "asc"]);
 

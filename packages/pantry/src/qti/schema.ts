@@ -1,582 +1,53 @@
 /**
- * The `Qti` schema's builder, {@link qti}: it composes by name every roster and closed relation
- * `install.ts` declares, every stored relation of the `src/qti/` modules, and every module's laws,
- * each array once (plan §1.1, the W5 amendment's §C), on its first call and never at load.
+ * The `Qti` schema's builder, {@link qti}: its stored level, `QtiBase` (`#pantry/qti/base.ts`),
+ * every roster, closed relation and stored relation with the laws over them, and over it the level
+ * that names the queries its rules read, with those rules (`#pantry/qti/queries.ts`). The two
+ * levels are one installation, under the stored level's name: grizzle installs each level in a
+ * PostgreSQL schema of its own, the stored level's holding every table, and judges a rule over a
+ * query by deferred triggers on the tables below it (README, "Levels").
  *
- * No relation is `mutable`: qti-pie writes each package once, every owner inserted with its whole
- * family in one ChangeSet step (the W5 amendment's A). A module joins the composition when it
- * lands; `schema.test.ts` lists the modules composed and checks each law array is here once.
+ * Every reader of the schema, the author role, its login and the importer among them, reads the top
+ * level, so a refusal by a rule over a query is its own law, never a law of a level above.
+ *
+ * Loading this module builds no schema and reads no environment: the first call of {@link qti}
+ * builds both levels once, and every later call returns them.
  */
 import { schema } from "@bjornpagen/grizzle";
 import { Option } from "effect";
-import {
-  AttributeCountOf,
-  AttributeGrammar,
-  AttributeModel,
-  AttributeModelOf,
-  AttributeName,
-  AttributeSlot,
-  AttributeSlotOf,
-  AttributeSlots,
-  Banned,
-  BarredOf,
-  BaseType,
-  BaseTypeLexical,
-  BindingFit,
-  BoundFacet,
-  BoundZero,
-  BuiltIn,
-  BuiltInVariable,
-  Capped,
-  Cardinality,
-  CardinalityLexical,
-  ChildGrammar,
-  ChoiceBound,
-  ChoiceCount,
-  CnBase,
-  CnForm,
-  CnPart,
-  CnParts,
-  CnPartForm,
-  CnPattern,
-  CnType,
-  ContentModel,
-  ContentModelOf,
-  ContentReference,
-  CountedOf,
-  CountedSlot,
-  DeclarationKind,
-  Declares,
-  DomainPrimitive,
-  DoubleBound,
-  Enters,
-  Flag,
-  Follow,
-  GoverningOf,
-  Governor,
-  HeadQualifier,
-  HeldRootsUnder,
-  Identity,
-  IncludeParent,
-  IncludeParentKind,
-  IncludeRoot,
-  KindByNameUnder,
-  KindNamespace,
-  Last,
-  MappableBaseType,
-  MathArity,
-  MathHeadOperator,
-  ModelPositions,
-  Needs,
-  NodeKind,
-  OperatorArity,
-  Position,
-  RecordBindingFit,
-  ReferenceAttribute,
-  ReferenceForm,
-  ReferenceSpelling,
-  Required,
-  ResourceType,
-  ResourceTypeLexical,
-  RootOfType,
-  SchemaVersion,
-  SectionPart,
-  SharedModel,
-  SharedModelOf,
-  SharedPositions,
-  StrictlyHeld,
-  Symbol,
-  TextDomain,
-  TypeAvailable,
-  TypeName,
-  Use,
-  ValueDomain,
-  ValueDomainOf,
-  ValueIdentity,
-  VariableReference,
-  XsiType,
-} from "#pantry/grammar/install.ts";
-import {
-  Attribute,
-  AttributeEntity,
-  DoubleValue,
-  attributeLaws,
-  Idref,
-  OpenAttributeName,
-  TextDoubleValue,
-} from "#pantry/qti/attributes.ts";
-import {
-  Comment,
-  chardataLaws,
-  Doctype,
-  Document,
-  EncodingDecl,
-  Namespace,
-  OpenElementName,
-  Pi,
-  SdDecl,
-  XmlDecl,
-  XmlStandalone,
-} from "#pantry/qti/chardata.ts";
-import {
-  Declaration,
-  DeclarationBaseType,
-  DeclarationCardinality,
-  DeclarationIdentifier,
-  declarationLaws,
-  DeclarationName,
-  FieldValue,
-  MasteryCeiling,
-  MasteryFloor,
-  MasteryValue,
-  NormalMaximum,
-  NormalMinimum,
-  RecordField,
-  RecordFieldName,
-  TypedValue,
-  Value,
-  ValueBaseType,
-  ValueSet,
-  ValueSetCardinality,
-} from "#pantry/qti/declarations.ts";
-import { htmlLaws, htmlRelations } from "#pantry/qti/html.ts";
-import { identityLaws, identityRelations } from "#pantry/qti/identity.ts";
-import { interactionLaws, interactionRelations } from "#pantry/qti/interactions.ts";
-import {
-  AreaMapping,
-  AreaMappingCardinality,
-  LookupTableCardinality,
-  LookupValue,
-  LookupValueType,
-  MapKey,
-  MapKeyDirectedPair,
-  MapKeyFloat,
-  MapKeyInteger,
-  MapKeyPair,
-  MapKeyPoint,
-  MapKeyType,
-  Mapping,
-  MappingBaseType,
-  MappingCardinality,
-  mappingLaws,
-  LookupTable,
-} from "#pantry/qti/mapping.ts";
-import { metadataLaws, metadataRelations } from "#pantry/qti/metadata.ts";
-import {
-  BaseTypePattern,
-  Language,
-  LeadCardinality,
-  OperandBase,
-  ReadingForm,
-  ReadingSource,
-  ReferenceBase,
-  ReferenceDeclaration,
-  ReferencedTable,
-  ReferenceResolution,
-  ReferenceRole,
-  ResultBase,
-  ResultCardinality,
-  RpTemplate,
-  TableReader,
-  TailCardinality,
-  ValueBase,
-  ValueBaseBit,
-  ValueBaseForm,
-  ValueBaseOf,
-  ValueCardinality,
-  ValueCardinalityBit,
-  ValueCardinalityOf,
-} from "#pantry/qti/expression-types.ts";
-import {
-  Expression,
-  ExpressionAttribute,
-  expressionLaws,
-  Literal,
-  LiteralTyped,
-  Operand,
-  Processing,
-  ProcessingTemplate,
-  referenceRelations,
-  VariableRef,
-} from "#pantry/qti/expressions.ts";
-import { Node, nodeLaws } from "#pantry/qti/node.ts";
-import { mathmlLaws, mathmlRelations } from "#pantry/qti/mathml.ts";
-import { operatorLaws, operatorRelations } from "#pantry/qti/operators.ts";
-import {
-  Dependency,
-  DependencyTarget,
-  Entry,
-  File,
-  FileHref,
-  HrefScope,
-  ManifestId,
-  ManifestIdSpace,
-  NamedHref,
-  Package,
-  packageLaws,
-  Reference,
-  ReferencePath,
-  Resource,
-  ResourceFile,
-  ResourceHref,
-  ResourceId,
-  ResourceTyped,
-  TextReference,
-  TextReferencePath,
-  TypedHref,
-  UnreadTypeHref,
-  UnreadTypePath,
-} from "#pantry/qti/package.ts";
-import { catalogLaws, catalogRelations } from "#pantry/qti/catalog.ts";
-import { quotationLaws, quotationRelations } from "#pantry/qti/quotation.ts";
-import { testLaws, testRelations } from "#pantry/qti/tests.ts";
+import { qtiBaseOf } from "#pantry/qti/base.ts";
+import { queriesOf } from "#pantry/qti/queries.ts";
 
 /**
- * The rosters `install.ts` declares: each a closed id's code space, read as codes, never a table.
- */
-const grammarRosters = {
-  AttributeModel,
-  AttributeName,
-  AttributeSlot,
-  BaseType,
-  BoundFacet,
-  BoundZero,
-  BuiltIn,
-  Cardinality,
-  CnBase,
-  CnPart,
-  CnPartForm,
-  CnType,
-  ContentModel,
-  DeclarationKind,
-  DomainPrimitive,
-  Flag,
-  Governor,
-  Identity,
-  IncludeParent,
-  NodeKind,
-  Position,
-  ReferenceForm,
-  ReferenceSpelling,
-  ResourceType,
-  SchemaVersion,
-  SharedModel,
-  TypeName,
-  Use,
-  ValueDomain,
-};
-
-/**
- * The closed relations `install.ts` declares: the grammar's rows, installed as constants only where
- * a law or a generated field reads them.
- */
-const grammarRelations = {
-  AttributeCountOf,
-  AttributeGrammar,
-  AttributeModelOf,
-  AttributeSlotOf,
-  AttributeSlots,
-  Banned,
-  BarredOf,
-  BaseTypeLexical,
-  BindingFit,
-  BuiltInVariable,
-  Capped,
-  CardinalityLexical,
-  ChildGrammar,
-  ChoiceBound,
-  ChoiceCount,
-  CnForm,
-  CnParts,
-  CnPattern,
-  ContentModelOf,
-  ContentReference,
-  CountedOf,
-  CountedSlot,
-  Declares,
-  DoubleBound,
-  Enters,
-  Follow,
-  GoverningOf,
-  HeadQualifier,
-  HeldRootsUnder,
-  IncludeParentKind,
-  IncludeRoot,
-  KindByNameUnder,
-  KindNamespace,
-  Last,
-  MappableBaseType,
-  MathArity,
-  MathHeadOperator,
-  ModelPositions,
-  Needs,
-  OperatorArity,
-  RecordBindingFit,
-  ReferenceAttribute,
-  Required,
-  ResourceTypeLexical,
-  RootOfType,
-  SectionPart,
-  SharedModelOf,
-  SharedPositions,
-  StrictlyHeld,
-  Symbol,
-  TextDomain,
-  TypeAvailable,
-  ValueDomainOf,
-  ValueIdentity,
-  VariableReference,
-  XsiType,
-};
-
-/**
- * `node.ts`'s relation: every node of every document.
- */
-const nodeRelations = { Node };
-
-/**
- * `chardata.ts`'s relations and roster: character data, documents, namespaces and foreign names.
- */
-const chardataRelations = {
-  Comment,
-  Doctype,
-  Document,
-  EncodingDecl,
-  Namespace,
-  OpenElementName,
-  Pi,
-  SdDecl,
-  XmlDecl,
-  XmlStandalone,
-};
-
-/**
- * `attributes.ts`'s relations: every attribute, its IDREF tokens, its entity references, its open
- * name and its typed value.
- */
-const attributeRelations = {
-  Attribute,
-  AttributeEntity,
-  DoubleValue,
-  Idref,
-  OpenAttributeName,
-  TextDoubleValue,
-};
-
-/**
- * `package.ts`'s relations: the package, its entries, the manifest's resources, files and
- * dependencies, the hrefs that tie them, and each document's references with the entries they
- * resolve to, each href's outcome read under the `HrefScope` roster.
- */
-const packageRelations = {
-  Dependency,
-  DependencyTarget,
-  Entry,
-  File,
-  FileHref,
-  HrefScope,
-  ManifestId,
-  ManifestIdSpace,
-  NamedHref,
-  Package,
-  Reference,
-  ReferencePath,
-  Resource,
-  ResourceFile,
-  ResourceHref,
-  ResourceId,
-  ResourceTyped,
-  TextReference,
-  TextReferencePath,
-  TypedHref,
-  UnreadTypeHref,
-  UnreadTypePath,
-};
-
-/**
- * `declarations.ts`'s relations: each variable's declaration, its cardinality, its base type, its
- * identifier and its name, its value sets and values, each set beside its declaration's
- * cardinality, a value's text beside its declaration's base type, a value's own base type and its
- * text beside it, a record's fields and their names, and an outcome's mastery value and normal
- * range, each end and each pair of them.
- */
-const declarationRelations = {
-  Declaration,
-  DeclarationBaseType,
-  DeclarationCardinality,
-  DeclarationIdentifier,
-  DeclarationName,
-  FieldValue,
-  MasteryCeiling,
-  MasteryFloor,
-  MasteryValue,
-  NormalMaximum,
-  NormalMinimum,
-  RecordField,
-  RecordFieldName,
-  TypedValue,
-  Value,
-  ValueBaseType,
-  ValueSet,
-  ValueSetCardinality,
-};
-
-/**
- * `mapping.ts`'s relations: each response mapping, its declaration's base type and its map keys,
- * each beside that base type, with the typed values of its integer, float, point, pair and
- * directed pair keys, each area mapping, each outcome's lookup table and its tables' typed values,
- * each beside its declaration's base type, and each mapping, area mapping and lookup table beside
- * its declaration's cardinality.
- */
-const mappingRelations = {
-  AreaMapping,
-  AreaMappingCardinality,
-  LookupTable,
-  LookupTableCardinality,
-  LookupValue,
-  LookupValueType,
-  MapKey,
-  MapKeyDirectedPair,
-  MapKeyFloat,
-  MapKeyInteger,
-  MapKeyPair,
-  MapKeyPoint,
-  MapKeyType,
-  Mapping,
-  MappingBaseType,
-  MappingCardinality,
-};
-
-/**
- * `expression-types.ts`'s rosters and closed relations, the expression-typing codes and the
- * per-kind typing, and `expressions.ts`'s relations: every expression and its operands, every rule
- * and its language, every processing reference, the attributes and text an expression's type
- * follows from, and a response processing's published template; and the readings of a test's
- * references with the lookups they read (`referenceRelations`).
- */
-const expressionRelations = {
-  ...referenceRelations,
-  BaseTypePattern,
-  Expression,
-  ExpressionAttribute,
-  Language,
-  LeadCardinality,
-  Literal,
-  LiteralTyped,
-  Operand,
-  OperandBase,
-  Processing,
-  ProcessingTemplate,
-  ReadingForm,
-  ReadingSource,
-  ReferenceBase,
-  ReferenceDeclaration,
-  ReferenceResolution,
-  ReferenceRole,
-  ReferencedTable,
-  ResultBase,
-  ResultCardinality,
-  RpTemplate,
-  TableReader,
-  TailCardinality,
-  ValueBase,
-  ValueBaseBit,
-  ValueBaseForm,
-  ValueBaseOf,
-  ValueCardinality,
-  ValueCardinalityBit,
-  ValueCardinalityOf,
-  VariableRef,
-};
-
-/**
- * One statement of any module, as its module states it. Written as a type, the union is reduced by
- * identity alone: an array literal of every module's statements would ask the checker to reduce it
- * by subtype, which past about a thousand statement types it refuses as too complex (TS2590).
- */
-type QtiStatement =
-  | (typeof nodeLaws)[number]
-  | (typeof chardataLaws)[number]
-  | (typeof attributeLaws)[number]
-  | (typeof packageLaws)[number]
-  | (typeof identityLaws)[number]
-  | (typeof declarationLaws)[number]
-  | (typeof testLaws)[number]
-  | (typeof mappingLaws)[number]
-  | (typeof interactionLaws)[number]
-  | (typeof expressionLaws)[number]
-  | (typeof metadataLaws)[number]
-  | (typeof htmlLaws)[number]
-  | (typeof quotationLaws)[number]
-  | (typeof operatorLaws)[number]
-  | (typeof mathmlLaws)[number]
-  | (typeof catalogLaws)[number];
-
-/**
- * Every module's statements, in module order, each module's list one element: a list of lists
- * holds sixteen types, where a list literal of every statement would hold them all.
- */
-const moduleLaws: readonly (readonly QtiStatement[])[] = [
-  nodeLaws,
-  chardataLaws,
-  attributeLaws,
-  packageLaws,
-  identityLaws,
-  declarationLaws,
-  testLaws,
-  mappingLaws,
-  interactionLaws,
-  expressionLaws,
-  metadataLaws,
-  htmlLaws,
-  quotationLaws,
-  operatorLaws,
-  mathmlLaws,
-  catalogLaws,
-];
-
-/**
- * Every module's statements, in module order.
- */
-const qtiLaws = moduleLaws.flat();
-
-/**
- * Compose the QTI 3.0 schema: the grammar's rosters and closed relations, then each module's
- * relations, each under its own name, and every module's laws.
+ * Build the QTI 3.0 schema's levels: the stored level with every module's relations and laws; over
+ * it the level `QtiQueries`, every query and every rule over one, each defined over that stored
+ * level; and the groups of the queries' statements by the law each states, which the schema's own
+ * naming of its laws reads (`#pantry/test/law-namer.ts` `namedLaws`, the source of the committed
+ * law-name dictionary), since it knows a statement by its identity.
  *
- * @returns The composed `Qti` schema.
+ * @returns The stored level (`base`), the schema (`qti`) and the groups of the statements built
+ *   with it (`lawsByName`).
  */
-const buildQti = () =>
-  schema(
-    "Qti",
-    {
-      ...grammarRosters,
-      ...grammarRelations,
-      ...nodeRelations,
-      ...chardataRelations,
-      ...attributeRelations,
-      ...packageRelations,
-      ...identityRelations,
-      ...declarationRelations,
-      ...testRelations,
-      ...mappingRelations,
-      ...interactionRelations,
-      ...expressionRelations,
-      ...metadataRelations,
-      ...htmlRelations,
-      ...quotationRelations,
-      ...operatorRelations,
-      ...mathmlRelations,
-      ...catalogRelations,
-    },
-    qtiLaws,
-  );
+const buildLevels = () => {
+  const base = qtiBaseOf();
+  const queries = queriesOf(base);
+
+  return {
+    base,
+    lawsByName: queries.lawsByName,
+    qti: schema.extend(base, "QtiQueries", queries.relations, queries.laws),
+  };
+};
 
 /**
- * The composed QTI 3.0 schema, as {@link qti} returns it: the root level an installation's other
- * levels are over.
+ * The QTI 3.0 schema's levels, as {@link qtiLevels} returns them.
  */
-export type QtiSchema = ReturnType<typeof buildQti>;
+type QtiLevels = ReturnType<typeof buildLevels>;
+
+/**
+ * The composed QTI 3.0 schema, as {@link qti} returns it: the top level, which the author role, its
+ * login and the export's reads are built over.
+ */
+export type QtiSchema = QtiLevels["qti"];
 
 /**
  * The options {@link qti} builds the schema with. Phase 1 holds none: every call gives the one
@@ -585,27 +56,55 @@ export type QtiSchema = ReturnType<typeof buildQti>;
 export type QtiOptions = Readonly<Record<never, never>>;
 
 /**
- * The schema {@link qti} built on its first call, or nothing before it.
+ * The levels {@link qtiLevels} built on its first call, or nothing before it.
  */
-let built: Option.Option<QtiSchema> = Option.none();
+let built: Option.Option<QtiLevels> = Option.none();
 
 /**
- * Build the QTI 3.0 schema on the first call and return that one value on every call, so loading
- * this module composes nothing and a caller pays for the composition only when it asks.
+ * Build the QTI 3.0 schema's levels on the first call and return that one value on every call, so
+ * loading this module composes nothing and {@link qti} returns the top level of this one build.
  *
- * @param _options - The schema's options, empty in phase 1: every call returns the same schema.
- * @returns The composed `Qti` schema.
+ * It exists for the test fixture (`#pantry/test/qti.ts`) and the schema's naming of its laws
+ * (`#pantry/test/law-namer.ts`), which read the stored level and the statements' groups. It is
+ * never exported from the package entry.
+ *
+ * @returns The stored level (`base`), the schema (`qti`) and the groups of the queries' statements
+ *   by the law each states (`lawsByName`).
  */
-export const qti = (_options: QtiOptions = {}): QtiSchema => {
+export const qtiLevels = (): QtiLevels => {
   if (Option.isSome(built)) {
     return built.value;
   }
 
-  const composed = buildQti();
-  built = Option.some(composed);
+  const levels = buildLevels();
+  built = Option.some(levels);
 
-  return composed;
+  return levels;
 };
+
+/**
+ * Pantry's own levels, the stored level `Qti` and the level `QtiQueries` over it: the two levels of
+ * {@link qtiLevels}' one build, installed in the PostgreSQL schemas `qti` and `qti_queries`. A law
+ * either one states is `Qti`'s, so a refusal by it names the level `Qti` (decision 499), never a
+ * level above; a level is matched by its `name`, as grizzle reports the level of an `above` law.
+ *
+ * @returns The stored level and the top level, in that order.
+ */
+export const qtiOwnLevels = (): readonly [QtiLevels["base"], QtiSchema] => {
+  const { base, qti: top } = qtiLevels();
+
+  return [base, top];
+};
+
+/**
+ * Build the QTI 3.0 schema on the first call and return that one value on every call, so loading
+ * this module composes nothing and a caller pays for the composition only when it asks. The value
+ * is the top level of {@link qtiLevels}' one build.
+ *
+ * @param _options - The schema's options, empty in phase 1: every call returns the same schema.
+ * @returns The composed `Qti` schema.
+ */
+export const qti = (_options: QtiOptions = {}): QtiSchema => qtiLevels().qti;
 
 /**
  * Decide whether {@link qti} has built the schema yet: a probe for the tests that hold loading a

@@ -9,19 +9,20 @@ import { Effect, Runtime, Schema } from "effect";
 import type { Refusal } from "#pantry/api/verdict.ts";
 import { cliKind, kindExitCode } from "#pantry/cli/errors.ts";
 import type { Kind } from "#pantry/cli/errors.ts";
-import type { ImportRefused } from "#pantry/import/refusal.ts";
+import type { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * A level an app builds above `Qti` refused the package, under that level's own rule, which
  * pantry's roster does not hold. Nothing was written: the import refused the whole package.
  *
- * `level` names the level, `rule` its rule and `detail` what the rule refused, as the refused
- * verdict carries them.
+ * `level` names the level, `rules` the rules of its laws, `rule` the first of them, and `detail`
+ * what the rules refused, as the refused verdict carries them.
  */
 export class RefusedByLevel extends Schema.TaggedError<RefusedByLevel>()("RefusedByLevel", {
   detail: Schema.String,
   level: Schema.String,
   rule: Schema.String,
+  rules: Schema.NonEmptyArray(Schema.String),
 }) {
   /**
    * This error's kind, `import-refused`, the kind of a package `Qti` refused: a refused package is
@@ -57,11 +58,11 @@ export class RefusedByLevel extends Schema.TaggedError<RefusedByLevel>()("Refuse
 
 /**
  * Fail with the error a refused verdict stands for: a `qti` refusal as the `ImportRefused` it came
- * from, with the same rule, detail and origin, so the command line prints it, exits and writes its
+ * from, with the same rules, detail and origin, so the command line prints it, exits and writes its
  * JSON as it does for any refusal of `Qti`; an `above` refusal as {@link RefusedByLevel}.
  *
- * The refusal module loads the composed grammar, so it is imported when a refusal is failed, never
- * when the command line starts; the program that returned the verdict has loaded it already.
+ * The rules module loads the law table, so it is imported when a refusal is failed, never when the
+ * command line starts; the program that returned the verdict has loaded it already.
  *
  * @param refusal - The refused verdict's refusal.
  * @returns An effect that fails with `ImportRefused` or {@link RefusedByLevel}.
@@ -71,12 +72,17 @@ export const failRefused = (
 ): Effect.Effect<never, ImportRefused | RefusedByLevel> =>
   refusal.kind === "qti"
     ? Effect.flatMap(
-        Effect.promise(() => import("#pantry/import/refusal.ts")),
+        Effect.promise(() => import("#pantry/import/rules.ts")),
         ({ ImportRefused: Refused }) =>
           Effect.fail(
-            new Refused({ detail: refusal.detail, origin: refusal.origin, rule: refusal.rule }),
+            new Refused({ detail: refusal.detail, origin: refusal.origin, rules: refusal.rules }),
           ),
       )
     : Effect.fail(
-        new RefusedByLevel({ detail: refusal.detail, level: refusal.level, rule: refusal.rule }),
+        new RefusedByLevel({
+          detail: refusal.detail,
+          level: refusal.level,
+          rule: refusal.rule,
+          rules: refusal.rules,
+        }),
       );

@@ -8,9 +8,10 @@
  * attribute count").
  */
 import { assert, describe, it } from "@effect/vitest";
-import { lawNames, namedLaws, statedLaws } from "#pantry/import/refusal.ts";
+import { lawNames } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import { statedInParts } from "#pantry/test/oracle-laws.ts";
+import { namedLaws, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * The laws no module names a statement of, each stated by grizzle's own structure: the statement

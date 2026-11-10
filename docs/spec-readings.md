@@ -298,7 +298,7 @@ operator ruling. A new reading lands here by pull request, and a package that ne
 
    Every other normative sentence of chapters 2 to 4 is one of the laws above, the content models and value domains of
    the XSD under this reading's edits, or binds a processor rather than a document (§2.3). (Listed 2026-11-06 by
-   RV seat I, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+   RV seat I, on the review of PR #46, under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 
 ## Scope of names and references
 
@@ -311,8 +311,8 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    A name is an `xsd:token` (`mark`'s `name`, `speak`'s `startmark` and `endmark`, SSML 1.1 §3.3.2 and
    `synthesis-nonamespace.xsd`), whose whiteSpace is `collapse` (XML Schema Part 2, §4.3.6), so names are compared by
    their collapsed value: `startmark="a  b"` names `<mark name="a b"/>`, and two marks named `a b` and `a  b` define
-   one name twice. (Names compared collapsed, decided 2026-11-06 by RV seat I, on the review of PR #46, under the
-   operator's standing ruling of 2026-11-05 that the spec wins.)
+   one name twice. (Names compared collapsed, decided 2026-11-06 by RV seat I, on the review of PR #46, under
+   Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 4. **Prefixed variable references** (`ITEMREF.N.VAR`) are valid in a test's pre-conditions and branch rules as well as
    in its outcome processing, as QTI's information model and 1EdTech's own examples use them. (2026-11-03.)
 5. **A section document** may hold prefixed references and `section-identifier`. They resolve once for each test that
@@ -385,10 +385,10 @@ against it. A reading that is not an information-model-over-XSD case says which 
 
    Both rules hold by the element's name, so an `h1` or a `source` that an `xsi:type` governs is held to them too
    (reading 84). Main enforced both, as `AriaRoleH1` and `AriaRoleNotSource` at 2b276d76. These rules were set aside on
-   2026-11-05, under the ruling that attributes follow the XSD exactly. The operator's ruling of 2026-11-06, to take
+   2026-11-05, under the ruling that attributes follow the XSD exactly. Bjorn's ruling of 2026-11-06, to take
    Aiden's review of PR #46, withdrew that ruling wherever a normative source is stricter than the XSD, and Aiden ruled
    on 2026-11-06 that both rules come back, normative where the binding's Schematron states them. No corpus package
-   carries a `role` on `source` or on `h1`, so no verdict moves. (Aiden's ruling of 2026-11-06, under the operator's
+   carries a `role` on `source` or on `h1`, so no verdict moves. (Aiden's ruling of 2026-11-06, under Bjorn's
    ruling of that day; from RV seat X.)
    The Schematron's extension-attribute lists bind, read by their intent as reading 90 states.
 
@@ -428,7 +428,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     (UniqueIdentifierRef). A response declaration's `identifier` is `UniqueIdentifierDType`, a restriction of `xs:ID`
     (3.0.1 line 30814, 3.0.0 line 30664), so each reference resolves to the declaration it names, as the information
     model describes, and an element `id` equal to a response identifier is a duplicate ID and invalid. This follows the
-    XSD exactly. _(Restated by the operator, 2026-11-05: the earlier reading's premise, that a response declaration's
+    XSD exactly. _(Restated by Bjorn, 2026-11-05: the earlier reading's premise, that a response declaration's
     identifier is not an `xs:ID`, contradicted both XSDs.)_
 15. **A `variable-identifier-ref` names an outcome declaration, not an `xs:ID`.** The XSD types
     `variable-identifier-ref` as `xs:IDREF`, which must match an `xs:ID` in the same document, and the information
@@ -523,7 +523,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     selection by them, zero included. This binds pantry and plate alike. This is not a case of documents in
     conflict: the normative sources agree. (2026-11-04; amended 2026-11-06 by RV seat VD (`7858a46c`), on the corpus
     verdict review, the earlier rule, that a section holds at least one child, withdrawn because its one source is
-    non-normative; under the operator's standing ruling of 2026-11-05 that the spec wins. The earlier rule was
+    non-normative; under Bjorn's standing ruling of 2026-11-05 that the spec wins. The earlier rule was
     upstream's, so the change is recorded in PR #46's decisions for Sterling and Aiden.)
 27. **`count-attempt` is a boolean.** The information model's description of `count-attempt` on
     `qti-end-attempt-interaction` reads as a count of attempts. Its type is boolean in both the XSD and the information
@@ -999,7 +999,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     information model and the binding make it a requirement, so this reading is no exception to reading 1. This
     binds pantry and plate alike. This is not a case of documents in conflict: the information model and the binding
     agree, and the XSDs say nothing of it. (Upstream's reading 62 of 2026-11-06, merged with this repository's 62 of
-    2026-11-05, which read the identifier only and from the guide; merged 2026-11-06 under the operator's standing
+    2026-11-05, which read the identifier only and from the guide; merged 2026-11-06 under Bjorn's standing
     ruling of 2026-11-05 that the spec wins. Amended 2026-11-07 by RV seat PG (`0ed523e1`), on the law oracle's LOM
     records: the record the rule reads named, as the schema reads it; no verdict moved.)
 
@@ -1081,7 +1081,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     example packages declare `3.0.0` and give resources the type `imslti_xmlv1p1`, which only the 3.0.1 profile lists,
     so they are refused, under `attribute-lexical`. This follows the profile XSDs, the schemas a manifest is validated
     against, and sets aside the implementation guide's version and spelling. This binds pantry and plate alike, so the
-    two never read the same package differently, and both implement it. (The operator's ruling, accepting the
+    two never read the same package differently, and both implement it. (Bjorn's ruling, accepting the
     renderer's default; applied in plate by its phase-4 delivery spec, section 4.3; 2026-11-04. Amended 2026-11-07 by
     RV seat VD (`6fd1d67d`), on the corpus verdict review: the rule was stated twice, by the enumeration and by a
     `ResourceTypeOf` relation read from it under the rule `resource-type`; the coordinator ruled the XSD's enumeration
@@ -1144,7 +1144,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     address (`[v1.x]`, `[zz]`, `[]`): libxml2 accepts it without reading it. Square brackets in a fragment
     (`#[x]`) are admitted by both. This binds pantry and plate alike, so the two never read the same URI
     differently. This is not a case of documents in conflict: XML Schema 1.0 decides, and libxml2 is a second
-    implementation that reads the RFC that later replaced XML Schema 1.0's references. (Operator ruling "the spec
+    implementation that reads the RFC that later replaced XML Schema 1.0's references. (Bjorn's ruling "the spec
     wins", 2026-11-05.)
 72. **The built-in outcome variable is `completionStatus`, spelled exactly; `completion_status` and
     `completion-status` name variables nothing declares.** The information model defines one built-in outcome
@@ -1164,7 +1164,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     `completionStatus` and is not. The underscore in the value `not_attempted` belongs to a value of the identifier
     base type, not to a variable's name, and does not bear on it. This is not a case of documents in conflict: the
     XSD types the identifier as an `xs:NCName` and names no built-in, the information model defines the name, and
-    every other QTI 3.0 source agrees with it; one example disagrees with all of them. (Operator ruling "the spec
+    every other QTI 3.0 source agrees with it; one example disagrees with all of them. (Bjorn's ruling "the spec
     wins", 2026-11-05.)
 73. **`xs:unsignedLong`, `xs:unsignedInt`, `xs:unsignedShort` and `xs:unsignedByte` admit a sign as
     `xs:nonNegativeInteger` does: `+` before any value, `-` only before zero.** XML Schema Part 2 (W3C
@@ -1189,7 +1189,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     MathML's `m:unsigned-integer`, and whether MathML's own notation (MathML 3, section 2.1.5.1) narrows it is
     reading 2's question, not this one's. This binds pantry and plate alike. This is not a case of documents in
     conflict: XML Schema decides its own types, and where its prose and its derivation disagree, the derivation it
-    validates by is followed. (Operator ruling "the spec wins", 2026-11-05.)
+    validates by is followed. (Bjorn's ruling "the spec wins", 2026-11-05.)
 74. **An identifier names one variable among the declarations of its document.** The information model says "The
     purpose of the declaration is to associate an identifier with the variable" (section 2.2.2, Item Variables,
     https://www.imsglobal.org/spec/qti/v3p0/info#Variables). Each declaration's `identifier` adds "All item
@@ -1407,7 +1407,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     it.)
 
     This binds pantry and plate alike in what they refuse; how each enforces it is its own. This is not a case of
-    documents in conflict: Namespaces in XML and XML Schema agree. (Operator ruling "the spec wins", 2026-11-05.)
+    documents in conflict: Namespaces in XML and XML Schema agree. (Bjorn's ruling "the spec wins", 2026-11-05.)
 
 84. **An element is judged under its governing type for everything XML Schema decides, and under its name for every
     rule QTI adds.** An element whose valid `xsi:type` names a type derived from its declared one is validated against
@@ -1430,7 +1430,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     no response and no interaction rule judges it, while its `response-identifier`, an `xs:IDREF` under that type,
     must still name an ID of its document, as XML Schema requires. This binds pantry and plate alike. This is not a
     case of documents in conflict: XML Schema decides validity against a type, and the information model names the
-    elements its rules are about. (Operator ruling "the spec wins", 2026-11-05.)
+    elements its rules are about. (Bjorn's ruling "the spec wins", 2026-11-05.)
 85. **An inclusion never reaches itself, and an included fragment is read in place, as XML, with no `xpointer`.** A
     `qti-assessment-section-ref` "functions as a facade for the qti-assessment-section to which it refers", and the
     document that holds it, "with the refered-to section merged in, should behave exactly the same as a document that
@@ -1450,7 +1450,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     `xpointer` attribute, or with `parse="text"`, is refused, though the XSD admits both (`w3/XInclude.xsd` lines 22
     to 24), and an included fragment is judged as part of the document that includes it: its interactions bind that
     item's responses, and its identifiers count among that document's. This follows the information model and sets
-    the XSD aside where the XSD is wider. This binds pantry and plate alike. (Operator ruling "the spec wins",
+    the XSD aside where the XSD is wider. This binds pantry and plate alike. (Bjorn's ruling "the spec wins",
     2026-11-05.)
 86. **The identifiers of a test's parts, sections, section refs and item refs are one namespace across the assembled
     test, and a section document a test places twice is written once.** The information model says "The identifier of
@@ -1470,7 +1470,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     exactly one reading resolves, so it is refused, its refusal naming both placements. A section ref, the facade of
     its placement (section 7.5), keeps its own distinct identifier and names that placement as a section does. This is
     a conflict inside the information model, between section 4.2.1's general sentence read across placements and
-    section 7.5.3's specific one, and the specific one is followed for the case it names. (Operator ruling "the spec
+    section 7.5.3's specific one, and the specific one is followed for the case it names. (Bjorn's ruling "the spec
     wins", 2026-11-05.)
 87. **A branch rule names a reserved exit, or a later part of its own kind in its own test part, never inside a
     section a ref places from outside it, and never an item a replacement can repeat.** The information model says a
@@ -1520,7 +1520,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
 
     Pre-conditions and branch rules are ignored in nonlinear mode (section 2.8.3), but the target rules are stated
     without that condition, so they hold in every mode. This binds pantry and plate alike. This is not a case of
-    documents in conflict. (Operator ruling "the spec wins", 2026-11-05; amended in phase 15, 2026-11-06, for the
+    documents in conflict. (Bjorn's ruling "the spec wins", 2026-11-05; amended in phase 15, 2026-11-06, for the
     operator; decision 321.)
 
 88. **A numbered reference such as `Q01.2.SCORE` names an instance of an item ref that a selection with replacement can
@@ -1536,7 +1536,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     the numbered form names nothing, so a reference whose only resolving reading would be numbered names no declared
     variable and is refused (P8). An unnumbered reference to a repeatable item ref, `Q01.SCORE`, is valid; the same
     section says which instance's value it reads. This binds pantry and plate alike. This is not a case of documents
-    in conflict. (Operator ruling "the spec wins", 2026-11-05.)
+    in conflict. (Bjorn's ruling "the spec wins", 2026-11-05.)
 89. **A document whose root element is in a namespace of QTI 2 is not a QTI 3 document, and is refused as `not-qti3`
     before any name in it is read.** QTI 3.0's schemas declare their own namespaces, each XSD's `targetNamespace`, the
     usage data's among them: `http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0`
@@ -1552,7 +1552,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     `unmodeled-vocabulary`. 1EdTech's `usageData` example package is refused this way: its manifest declares QTI 3.0.0,
     and its three usage-data files are in `imsqti_usagedata_v2p2`. This binds pantry and plate alike, wherever each
     reads such a document. This is not a case of documents in conflict: QTI 3.0 and QTI 2 declare disjoint namespaces.
-    (Operator ruling "the spec wins", 2026-11-05.)
+    (Bjorn's ruling "the spec wins", 2026-11-05.)
 90. **On an element the Schematron's extension-attribute lists cover, an attribute its XSD does not declare is a
     `data-` attribute, or the document is refused.** QTI's ASI binding says "5. The Schematron Rules. This Section is
     NORMATIVE" (`bind.txt` lines 431722 to 431724), and that its section 5.2, The Constrained Namespace Extension Rule
@@ -1577,7 +1577,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     otherwise accepts, is refused `attribute-admission`, for `object@alt` (120 occurrences; `object` declares no `alt`
     in either ASI XSD) and `qti-extended-text-interaction@patternMask` (one, for `pattern-mask`). The committed
     verdict file's row stays `refused`; only its rule moves, from `unmodeled-vocabulary` to `attribute-admission`.
-    (Operator ruling "the spec wins", 2026-11-05.)
+    (Bjorn's ruling "the spec wins", 2026-11-05.)
 91. **No reading is advisory.** Every rule a reading here states is enforced wherever a package decides validity, as
     every rule of the XSDs is. In pantry that is a law PostgreSQL checks over the stored rows: "Every rule QTI states
     becomes a rule PostgreSQL enforces through grizzle, so invalid QTI cannot be stored", including "every structure
@@ -1586,7 +1586,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     43 (SSML's `version`, `meta`, `voice` languages and surviving attributes) and 47 (the `xsi:` attributes), are each
     a law, as every reading after them is. A rule a package cannot yet check is a recorded limit with its reason, as
     readings 50, 60 and 81 record theirs, never a rule followed only where it is convenient. This rules how the
-    readings bind, not what the specification says, and it changes no verdict. (Operator ruling "the spec wins",
+    readings bind, not what the specification says, and it changes no verdict. (Bjorn's ruling "the spec wins",
     2026-11-05.)
 92. **The information model's binding and count sentences that no other reading restates hold as written.** Each is
     stated, and each admits content the XSD accepts, so a package that lacks it under-refuses:
@@ -1608,7 +1608,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     The other rules found with these live in the reading that states their kind: `min-strings` at most `max-strings`
     in reading 76, a feedback outcome's base type and cardinality in reading 77, no default hotspot in a graphic gap
     match in reading 80, the order interactions' counts against their choices in reading 18, and the XInclude rules in
-    reading 85. This binds pantry and plate alike. This is not a case of documents in conflict. (Operator ruling "the
+    reading 85. This binds pantry and plate alike. This is not a case of documents in conflict. (Bjorn's ruling "the
     spec wins", 2026-11-05.)
 
 93. **A resource names a document only through its `href`, and a resource with no `href` names none: its files are
@@ -1629,7 +1629,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     package, `qtiv3-examples/packaging/maxfiles/maxfiles.zip`, has hrefless document-typed resources (two
     `imsqti_rptemplate_xmlv3p0` resources of one file each), and the oracle judges it refused under `P8` with those two
     files read as documents and without them. This binds pantry and plate alike. This is not a case of documents in
-    conflict. (Decided 2026-11-06 by W5 Q5.06 under the operator's standing ruling of 2026-11-05 that the spec wins.)
+    conflict. (Decided 2026-11-06 by W5 Q5.06 under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 94. **An `xs:NCName` takes its name characters from XML 1.0 Second Edition, as XML Schema 1.0 reads them, and the
     production states no length.** XML Schema Part 2 (W3C Recommendation, 28 October 2004) gives `NCName` the lexical
     space of the `NCName` production of Namespaces in XML (section 3.3.7), whose 1999 Recommendation writes it as
@@ -1653,7 +1653,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     Reading 55 is not changed by this: a `pattern-mask` is a response pattern plate checks, and its `\i` and `\c` follow
     the later edition by that reading's own decision. This binds pantry and plate alike. This is not a case of documents
     in conflict: QTI's XSDs are XML Schema 1.0 (reading 71), and XML Schema 1.0 decides the lexical space of its own
-    types. (Decided 2026-11-06 under the operator's standing ruling of 2026-11-05 that the spec wins.)
+    types. (Decided 2026-11-06 under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 
 95. **An entity reference's name is an `NCName`: no entity name holds a colon.** Namespaces in XML 1.0 (Third
     Edition), section 7, Conformance of Documents: in a namespace-well-formed document, "No entity names, processing
@@ -1665,7 +1665,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     colon, counted by a byte scan of every `.xml`, `.xhtml`, `.html`, `.svg` and `.xsd` file of each package's
     directory form for `&name;` with a colon in `name`. This binds pantry and plate alike. This is not a case of
     documents in conflict: Namespaces in XML decides the names a namespace-well-formed document holds, and every QTI
-    document is read under it. (Decided 2026-11-06 by W5 Q5.04 under the operator's standing ruling of 2026-11-05 that
+    document is read under it. (Decided 2026-11-06 by W5 Q5.04 under Bjorn's standing ruling of 2026-11-05 that
     the spec wins.)
 96. **A repeated wildcard keeps its sequence's order: after a child the wildcard holds, no element of an earlier
     particle follows.** XML Schema 1.0 Part 1 (W3C Recommendation, 28 October 2004), section 3.8.4, Validation Rule:
@@ -1692,7 +1692,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     `qti-companion-materials-info` (`testWithLti.zip`'s `elements.xml`) holds a lone `qti-digital-material`, and no
     corpus document holds an `accessForAllResource`. This binds pantry and plate alike. This is not a case of
     documents in conflict: XML Schema decides how a sequence partitions its children. (Decided 2026-11-06 by W5 seat GX
-    under the operator's standing ruling of 2026-11-05 that the spec wins.)
+    under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 
 97. **A variable mapping's target names no other variable its item ref's item holds.** The information model says
     "Variable mappings allow outcome variables declared with the name source-identifier in the corresponding item to
@@ -1705,7 +1705,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     variables of one name there: one the item declares, other than the mapping's own source; one another mapping of
     the same item ref names; or a built-in session variable. Each is refused, the identifiers compared collapsed. A
     mapping whose target is its own source maps nothing away and is valid. This binds pantry and plate alike. This is
-    not a case of documents in conflict. (Decided 2026-11-06 by W5 seats UP and Q5.13 under the operator's standing
+    not a case of documents in conflict. (Decided 2026-11-06 by W5 seats UP and Q5.13 under Bjorn's standing
     ruling of 2026-11-05 that the spec wins.)
 98. **A mapping's map keys are distinct, compared as values of its base type.** The information model says "The map
     is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float"
@@ -1726,15 +1726,15 @@ against it. A reading that is not an information-model-over-XSD case says which 
     both takes is delivery's, which is plate's. So `1` and `01` repeat in an integer mapping, `A B` and `B A` in a pair
     mapping, `York` and `york` in a string mapping whose entries leave `case-sensitive` at its default, and `York` and
     `york` are two keys where both entries write `case-sensitive="true"`. The corpus holds no repeated key. This binds
-    pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat Q5.11 under the
-    operator's standing ruling of 2026-11-05 that the spec wins; amended by decision 321 (6), which replaces the
+    pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat Q5.11 under
+    Bjorn's standing ruling of 2026-11-05 that the spec wins; amended by decision 321 (6), which replaces the
     code-point comparison of every string key.) (Proposed in phase 15, 2026-11-06, for the operator; decision 321.)
 99. **An area mapping maps points.** The information model says of AreaMapping "A special class used to create a
     mapping from a source set of point values to a target set of float values" (section 5.5,
     https://www.imsglobal.org/spec/qti/v3p0/info#Data_AreaMapping), so a `qti-area-mapping`'s response declaration is
     of base type point, and one under a declaration of any other base type is refused. The XSD admits the element
     under any response declaration and does not decide this. This binds pantry and plate alike. This is not a case of
-    documents in conflict. (Decided 2026-11-06 by W5 seat Q5.11 under the operator's standing ruling of 2026-11-05 that
+    documents in conflict. (Decided 2026-11-06 by W5 seat Q5.11 under Bjorn's standing ruling of 2026-11-05 that
     the spec wins.)
 100. **A lookup table sets a single outcome.** The information model says a lookup table maps "a numeric source value
      to a single outcome value in the declared value set" (section 4.5.13,
@@ -1743,7 +1743,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      under a multiple, ordered or record outcome is refused. Its entries' `target-value` and its own `default-value`
      are values of that outcome's base type (reading 8), written exactly (reading 7). The XSD does not decide this. This
      binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat Q5.11
-     under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 101. **An ID that an element's text carries is bound to that element's parent.** XML Schema 1.0 Part 1 (§3.15.5,
      Schema Information Set Contribution: ID/IDREF Table) enters in the table "every attribute or element information
      item" validated by a type that "is the built-in ID, IDREF or IDREFS simple type definition or a type derived from
@@ -1766,7 +1766,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      it accepts two parents each holding the id `a`, and a `ref` that names no id, while it refuses two attributes
      of the one value `a`. Its verdict is recorded against this reading. No corpus document writes an `xsi:type`, so
      no verdict moves. This binds pantry and plate alike. This is not a case of documents in conflict: XML Schema
-     decides its own ID table. (Decided 2026-11-06 by W5 seat PI under the operator's standing ruling of 2026-11-05 that
+     decides its own ID table. (Decided 2026-11-06 by W5 seat PI under Bjorn's standing ruling of 2026-11-05 that
      the spec wins.)
 102. **An href is read as its path and its params, and the importer resolves its path before any row is written:
      merged with its base, its dot segments removed and each segment percent-decoded, so a law compares resolved
@@ -1871,7 +1871,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      thirteen absolute `http:` references in `a@href` and `img@src`, external; the four `srcset` values are each one URL
      with no descriptor. This binds pantry and plate alike. This is not a case of documents in conflict: Content
      Packaging states the launch parameters and the base, and RFC 3986 decides where a path ends and what it names.
-     (Decided 2026-11-06 by W5 seat HP under the operator's standing ruling of 2026-11-05 that the spec wins; restated
+     (Decided 2026-11-06 by W5 seat HP under Bjorn's standing ruling of 2026-11-05 that the spec wins; restated
      2026-11-06 by RV seat P, on the review of PR #46, under Aiden's ruling of 2026-11-06 on percent-decoding.)
 
 103. **A document's file references are the attributes its vocabularies define as the location of a file, and each one
@@ -1921,8 +1921,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
      of `qti-stylesheet` and the four other `qti-*-ref` files above, and `xi:include@href`; the rest are added here by
      the same rule, and the three refs' `href` is the one path their targets are read through. This binds pantry and
      plate alike. This is not a case of documents in conflict: Content Packaging states the rule, each vocabulary says
-     which of its attributes name files, and XML Base says what a base is. (Decided 2026-11-06 by W5 seat PG under the
-     operator's standing ruling of 2026-11-05 that the spec wins; the `xml:base` clause restated 2026-11-06 by
+     which of its attributes name files, and XML Base says what a base is. (Decided 2026-11-06 by W5 seat PG under
+     Bjorn's standing ruling of 2026-11-05 that the spec wins; the `xml:base` clause restated 2026-11-06 by
      RV seat P, on the review of PR #46.)
 
 104. **A choice's identifier is used by no other choice of any class in its document, and names no item variable.** Four
@@ -1955,7 +1955,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      to `D`), and that package is refused already; no item gives a choice the identifier of a declaration or of a
      built-in variable. So no verdict moves. This binds pantry and plate alike. This is not a case of documents in
      conflict: the XSD types a choice's identifier `IdentifierDType` and decides nothing of its uniqueness. (Decided
-     2026-11-06 by W5 seat PM under the operator's standing ruling of 2026-11-05 that the spec wins. Amended 2026-11-08
+     2026-11-06 by W5 seat PM under Bjorn's standing ruling of 2026-11-05 that the spec wins. Amended 2026-11-08
      by the overseer under the operator's delegation, mail 7a7e6287, ruling 1: the four classes' "any other choice" is
      read across classes, the stricter normative reading, and the nine classes share one space of identifiers; the
      reading of those four one class at a time is withdrawn.)
@@ -1985,7 +1985,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      fixtures, `usage3-integer-float` (`<value baseType="integer">0.87</value>`, outside a record) is accepted untyped,
      as are `usage3-typed` and `usage3-float-padded`. This binds pantry and plate alike. This is not a case of documents
      in conflict: the XSD types the text `xs:normalizedString` and the binding types the value by the base type it names
-     where it forms part of a record. (Decided 2026-11-06 by W5 seat PM under the operator's standing ruling of
+     where it forms part of a record. (Decided 2026-11-06 by W5 seat PM under Bjorn's standing ruling of
      2026-11-05 that the spec wins; amended by decision 321 (6).) (Proposed in phase 15, 2026-11-06, for the operator;
      decision 321.)
 106. **A prefixed reference reaches every built-in variable its item ref's item holds, `QTI_CONTEXT` among them.** The
@@ -2005,7 +2005,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      `test_package_minfiles`, reads `item034.SCORE`,
      `item063.SCORE`, `item065.SCORE` and `item160.SCORE`, each declared and each resolving once, and every test
      package is refused at the codec today, so no verdict moves. This binds pantry and plate alike. This is not a case
-     of documents in conflict. (Decided 2026-11-06 by W5 seat PE under the operator's standing ruling of 2026-11-05 that
+     of documents in conflict. (Decided 2026-11-06 by W5 seat PE under Bjorn's standing ruling of 2026-11-05 that
      the spec wins; its LTI clause amended by decision 321 (6); amended 2026-11-07 by the coordinator from seat FIX-A1,
      the bar on a `duration` read so, which section 2.2.2.2 alone carried, withdrawn by reading 150.) (Proposed in
      phase 15, 2026-11-06, for the operator; decision 321.)
@@ -2020,8 +2020,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
      outcome declaration of the item its item ref names, and reading 97 keeps its target from naming any other
      variable the item declares, so no name of an item ref reaches two variables. Refusing `Q01.SCORE` would refuse
      what section 2.11.1.2 states (reading 1). The corpus holds no variable mapping, so no verdict moves. This binds
-     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat PE under the
-     operator's standing ruling of 2026-11-05 that the spec wins.)
+     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat PE under
+     Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 108. **A template default names a template variable of its item, and its expression is a value of that variable's
      type.** The information model says of TemplateDefault "The default value of a template variable in an item can be
      overridden based on the test context in which the template is instantiated. The value is obtained by evaluating
@@ -2036,7 +2036,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      defaults beside pre-conditions and branch rules (the UP audit's A38). An item ref that names an LTI link has no
      template variable, so a template default under one is refused. The corpus holds no template default, so no
      verdict moves. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06
-     by W5 seat PE under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     by W5 seat PE under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 109. **An element whose type has an ID attribute use holds no wildcard `xml:id`.** XML Schema 1.0 Part 1 (section 3.4.4,
      Element Locally Valid (Complex Type), clause 5) calls "wild IDs" the attributes an attribute wildcard admits whose
      declaration's "{type definition} is or is derived from ID", and requires: "5.1 There must be no more than one item
@@ -2057,7 +2057,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      (`xmlschemas.c` lines 25642 to 25656, "URGENT VAL TODO: implement"): it prints "Unimplemented block" and accepts
      such an element, and its verdict is recorded against this reading. No corpus document writes an `xsi:type`, so no
      corpus verdict moves. This binds pantry and plate alike. This is not a case of documents in conflict: XML Schema
-     decides its own validity. (Decided 2026-11-06 by W5 seats UP and PG under the operator's standing ruling of
+     decides its own validity. (Decided 2026-11-06 by W5 seats UP and PG under Bjorn's standing ruling of
      2026-11-05 that the spec wins.)
 110. **A variable mapping and a template default name variables an item declares; under an item ref that names an LTI
      link a variable mapping is accepted unchecked, a recorded limit, and a template default is refused.** The
@@ -2078,7 +2078,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      an item ref that names an item is still refused under `variable-mapping-source` where its source is a variable the
      item does not declare, and never as a derived field. The corpus's LTI item refs (testWithLti) hold neither, so no
      verdict moves. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06
-     by W5 seat PE under the operator's standing ruling of 2026-11-05 that the spec wins; amended by decision 321 (6).)
+     by W5 seat PE under Bjorn's standing ruling of 2026-11-05 that the spec wins; amended by decision 321 (6).)
      (Proposed in phase 15, 2026-11-06, for the operator; decision 321.)
 111. **A processing element's `identifier` names a variable of the kind the element reads or sets.** The information
      model defines each: a correct value is of "the associated response variable" (section 7.10.1), a map response's
@@ -2091,7 +2091,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      by a set outcome value is refused and setting `completionStatus` is not. Through a test's prefix the variable
      is the item's, typed by its own declaration (reading 48). In the corpus, 2,462 such references name a variable,
      each of a kind its element admits, so no verdict moves. This binds pantry and plate alike. This is not a case
-     of documents in conflict. (Decided 2026-11-06 by W5 seat PE under the operator's standing ruling of 2026-11-05 that
+     of documents in conflict. (Decided 2026-11-06 by W5 seat PE under Bjorn's standing ruling of 2026-11-05 that
      the spec wins.)
 112. **A test's setter sets a variable of its own document, so a prefixed reading never resolves it.** The
      information model names a setter's `identifier` "The identifier of the variable to be set" (section 5.130.1,
@@ -2107,8 +2107,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
      that sets `a.SCORE` without declaring it is refused (`variable-kind`), since it would set an item's variable. In
      the corpus, the 27 setters of the 14 test and section documents name `SCORE`, `TEST_total`, `TEST_FEEDBACK`,
      `SECTION_1_total` to `SECTION_4_total` and `s1FB` to `s4FB`, none prefixed, so no verdict moves. This binds
-     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat PE under the
-     operator's standing ruling of 2026-11-05 that the spec wins.)
+     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat PE under
+     Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 113. **A root that reading 6 keeps foreign stands under a `strict` wildcard that finds its declaration.** Reading 6
      keeps a QTI root, a processing root or the manifest, nested inside wildcard content, as foreign content: it is not
      refused and not read as QTI. A `strict` wildcard requires "a top-level declaration for the item available, or the
@@ -2123,7 +2123,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      namespace is no element `##other` admits. libxml2 agrees on every arm of the box: two roots under the three
      `strict` wildcards in both versions. No corpus document holds a root under a `strict` wildcard, so no verdict
      moves. This binds pantry and plate alike. This is not a case of documents in conflict. (The UP audit's C13, decided
-     2026-11-06 by W5 seat PX under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     2026-11-06 by W5 seat PX under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 114. **An `xi:include` is the information model's Include only where its parent's model holds one, and there it stands
      for its fragment's root, one of that include's alternatives.** The information model lists the classes that hold
      Include (Table 9.4.1, Include's parent classes: `BlockGroup`, `FlowGroup`, `FlowStaticGroup`, `InlineGroup`,
@@ -2149,7 +2149,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      its own; it is judged where it is included (reading 117). No corpus zip holds an include or a fragment resource, so
      no verdict moves; the examples' loose `tests/rtest01-set01.xml` to `rtest01-set03.xml`, packaged with
      `rtest01-fragment.xml`, are accepted. This follows the information model. This binds pantry and plate alike. This
-     is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of
+     is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat IN under Bjorn's standing ruling of
      2026-11-05 that the spec wins.)
 115. **An include names a document of its package or a resource outside it, by an href with no fragment identifier.**
      The information model says
@@ -2186,8 +2186,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
        external breaks the stated limit "Remote section ref" alone (reading 170).
 
      This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat IN
-     under the operator's standing ruling of 2026-11-05 that the spec wins; amended by the audit of PR #46, C B2.
-     Amended 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from RV seat NIL
+     under Bjorn's standing ruling of 2026-11-05 that the spec wins; amended by the audit of PR #46, C B2.
+     Amended 2026-11-07 by the coordinator, under Bjorn's standing ruling of 2026-11-05, from RV seat NIL
      (`25d16460`), on the review of the import's sentinel values: the schema's statement recorded; nothing it refuses
      changed.) (Amended 2026-11-07 by the Mind, decision 416, on audit e8db90e1's F9: the refusal of an IDREF into an
      external include's content recorded; nothing it refuses changed.) (Proposed in phase 15, 2026-11-06, for the
@@ -2263,9 +2263,9 @@ against it. A reading that is not an information-model-over-XSD case says which 
      record reference move a verdict: the import accepts a package whose fragment holds such a type error, which the
      law oracle, typing the fragment in its item, refuses. Typing an expression once per placement is planned as its
      own goal. This binds pantry and plate alike. This is not a case of documents in conflict.
-     (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins. Amended
+     (Decided 2026-11-06 by W5 seat IN under Bjorn's standing ruling of 2026-11-05 that the spec wins. Amended
      2026-11-07 by the Mind, decision 416, on audit e8db90e1's F2, and decision 417, on its F3. Amended 2026-11-07 by
-     the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-ASM: the content references of
+     the coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FIX-ASM: the content references of
      a fragment a section document or a test places resolve in the test, reading 145. Amended 2026-11-09 by the Mind,
      decision 463, on research aeced65a's O18 and O38: a placed reference's mapping and its type as a condition, typed
      in its item; and decisions 465 and 466: a rule fragment's composite expressions and its condition references to a
@@ -2289,7 +2289,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      XInclude's globals as their kinds, so a fallback in wildcard content is read as XInclude's element and not refused:
      a known under-refusal, until a law holds a fallback to its parent. No corpus document holds an include. This binds
      pantry and plate alike. This is not a case of documents in conflict.
-     (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins. Amended
+     (Decided 2026-11-06 by W5 seat IN under Bjorn's standing ruling of 2026-11-05 that the spec wins. Amended
      2026-11-09 by the operator under delegation, decision 470: the content of a resolving include other than its
      fallback is ignored, not assessed laxly.)
 119. **A rounding operator's integer `figures` is at least 1 under significant figures and at least 0 under decimal
@@ -2305,7 +2305,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      that union and does not decide this. This follows the information model and sets the XSD aside (readings 16 and
      17). Law "Rounding figures" (rule `P10`, main's), a check on `Rounding`, one row per rounding operator that copies
      its `figures` and its `rounding-mode` and holds the mode in force (`src/qti/operators.ts`). (Decided 2026-11-06 by
-     RV seat O, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     RV seat O, on the review of PR #46, under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 120. **A `qti-index`'s `n` is at least 1 where it is a number.** The information model says of Index "'n' must be a
      positive integer. If 'n' exceeds the number of values in the container (or the sub-expression is NULL) then the
      result of the index operator is NULL. If 'n' is an identifier, it is the value of 'n' at runtime that is used"
@@ -2317,7 +2317,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      digit or a sign, so `0`, `+0`, `-0` and `-1` meet only the integer member and are refused under
      `attribute-lexical`, while `1`, `+1`, `n=" 2 "` and `2147483647` are admitted. An `n` that is an NCName names a
      variable whose value is read at run time; that its value is positive is the renderer's, and pantry checks only
-     that the variable is declared. (Decided 2026-11-06 by RV seat G, on the review of PR #46, under the operator's
+     that the variable is declared. (Decided 2026-11-06 by RV seat G, on the review of PR #46, under Bjorn's
      standing ruling of 2026-11-05 that the spec wins.)
 121. **Under `tolerance-mode` absolute or relative, a `qti-equal` carries a `tolerance`; every `tolerance` is one or two
      values, each number among them above 0.** The information model says of Equal's `tolerance` "If the tolerance
@@ -2339,7 +2339,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      aside (readings 16 and 17). Law "Equal tolerance" (rule `P36`, main's): the containment of an `absolute` or
      `relative` mode's `Attribute` selection in `Tolerance(node)`, a check on `Tolerance` for the count, and a check
      on `ToleranceToken` for each value's sign, the values split as `TextIdref` splits a text
-     (`src/qti/operators.ts`). (Decided 2026-11-06 by RV seat O, on the review of PR #46, under the operator's standing
+     (`src/qti/operators.ts`). (Decided 2026-11-06 by RV seat O, on the review of PR #46, under Bjorn's standing
      ruling of 2026-11-05 that the spec wins.)
 122. **A LOM `learningResourceType` of the LOM vocabulary is neither `exam` nor `self assessment`.** The QTI 3.0
      Metadata binding says: "QTI objects are designed to be reusable in a variety of assessment scenarios. Therefore,
@@ -2365,7 +2365,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      `src/qti/metadata.ts`). The 1EdTech corpus holds 18 `learningResourceType`s, every one of source `RDNLTSNType`,
      so no verdict moves. Main refused the two values whatever the source; this reading refuses only the LOM
      vocabulary's. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06
-     by RV seat M, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     by RV seat M, on the review of PR #46, under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
      (Amended 2026-11-09 by the Mind, decision 460, on gr2-close's class B: the records the law reads stated, as the
      import already read them; nothing the import refuses changed.)
 123. **A `bdo` carries `dir`, and its value is `ltr` or `rtl`.** The information model says of BDO "Authors must
@@ -2377,8 +2377,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
      `attribute-lexical`. The XSD's default is never read, since a valid `bdo` always writes the attribute. Every other
      element's `dir` keeps `auto`. The rule holds by the element's name, so a `bdo` an `xsi:type` governs carries `dir`
      too (reading 84). This restores the rule that the ruling of 2026-11-05 that attributes follow the XSD (reading 9)
-     had removed; the operator's ruling of 2026-11-06 overrules that ruling wherever the information model is stricter.
-     (Decided 2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that
+     had removed; Bjorn's ruling of 2026-11-06 overrules that ruling wherever the information model is stricter.
+     (Decided 2026-11-06 by RV seat G, on the review of PR #46, under Bjorn's standing ruling of 2026-11-05 that
      the spec wins.)
 124. **A `source` in a `picture` carries `srcset`, and one in an `audio` or a `video` carries `src`.** The information
      model's Source class says of `srcset` "This attribute is required when 'source' is used in 'picture'" (§5.135.3),
@@ -2413,7 +2413,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      Standard and the HTML Standard are living documents that no pinned source holds. What would lift it is a dated
      copy of each pinned beside the XSDs, with a domain for the valid URL string and a family of a `srcset`'s
      candidates under its attribute, as `Idref` splits tokens. (Decided 2026-11-06 by RV seats H and G, on the review of
-     PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     PR #46, under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 125. **A `track` in the subtitles state carries `srclang`, and a `track` with no `kind` is in that state.** The
      information model's Track class says of `srclang` "This attribute must be present if the tag's kind attribute is
      in the subtitles state" (§5.163.3), and maps `kind`'s keywords to HTML's states with no default of its own
@@ -2431,7 +2431,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      surrounded by spaces. This attribute must be present" (section 5.163.2). Its type is `URLDType`, read as reading
      124 reads a media URL, with reading 124's limit on the URL's own syntax. A `track`'s `srclang`, where written, is
      a BCP 47 language tag and never empty (reading 129), so `srclang="english language"` and `srclang=""` are refused
-     under `attribute-lexical`. (Decided 2026-11-06 by RV seats H and G, on the review of PR #46, under the operator's
+     under `attribute-lexical`. (Decided 2026-11-06 by RV seats H and G, on the review of PR #46, under Bjorn's
      standing ruling of 2026-11-05 that the spec wins.)
 126. **Each token of a `td`'s or a `th`'s `headers` is the `id` of a `th` of the cell's own table, and no token is
      written twice.** The information model's TDH class says of `headers`: "This is a string consisting of an
@@ -2444,12 +2444,12 @@ against it. A reading that is not an information-model-over-XSD case says which 
      compared case-sensitively; a token that names no element, a `td`, any other element or a `th` of another table,
      enclosing or nested, is refused, and so is a token written twice. This follows the information model and sets
      aside the XSD's plain identifier list, the stricter source being the rule (readings 16 and 17); it restores the
-     rule the operator's ruling of 2026-11-05 (question 3) removed, which the operator's ruling of 2026-11-06 on
+     rule Bjorn's ruling of 2026-11-05 (question 3) removed, which Bjorn's ruling of 2026-11-06 on
      Aiden's review reverses. HTML's further rule, "A th element must not be targeted by itself", is not stated by the
      information model and is not read. Law "Table headers" (rule `table-headers`): each `HeaderToken(table, token)` is
      a `(table, id)` of the `th`s that take part in a table, and `HeaderToken` is keyed by `(node, token)`
      (`src/qti/html.ts`: `TableScope`, `CellHeaders`, `HeaderToken`, `TableHeader`). (Decided 2026-11-06 by RV seat H,
-     on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     on the review of PR #46, under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 127. **No quotation punctuation stands immediately before, after or inside a `q`.** The information model says of Q:
      "Quotation punctuation (such as quotation marks) that is quoting the contents of the tag must not appear
      immediately before, after, or inside q tags; they will be inserted into the rendering by the user agent" (section
@@ -2469,7 +2469,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      it (XML 1.0 section 4.6), so `&quot;` beside a `q` is refused and `&apos;` is not; a reference to an entity the
      document does not declare is read as written, `&` and `;`, since its replacement text is unknown. A `q` inside a
      `q` is judged by its own neighbours and content. This binds pantry and plate alike. This is not a case of
-     documents in conflict. (Decided 2026-11-06 by RV seat Q, on the review of PR #46, under the operator's standing
+     documents in conflict. (Decided 2026-11-06 by RV seat Q, on the review of PR #46, under Bjorn's standing
      ruling of 2026-11-05 that the spec wins.)
 128. **A `label` asks for the tool that labelled it where its own characteristic's description says so: a body
      element's in both versions, and a QTI 3.0.1 item's own.** The information model states the sentence "If an
@@ -2503,7 +2503,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      plate alike. This is not a case of documents in conflict: each characteristic's text is read for its own elements,
      and each version's for its own documents. (Decided 2026-11-06 by RV seat I, on the review of PR #46; amended
      2026-11-06 by RV seat VD (`d389fca9`) on the corpus verdict review, the ItemFileInfo and printed-variable labels
-     read by their own descriptions; both under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     read by their own descriptions; both under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 
 129. **`xml:lang`, `lang` and a track's `srclang` hold BCP 47 language tags, well-formed as RFC 5646 defines them.**
      XML 1.0 says of `xml:lang` "The values of the attribute are language identifiers as defined by [IETF BCP 47], Tags
@@ -2536,7 +2536,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      subtag is a comparison between a tag's subtags that no pattern over the value states. What would lift it is a
      closed relation of a pinned registry's subtags, with each tag split into its subtags as `Idref` splits tokens, so
      a law can look each subtag up and key a tag's variants and singletons. (Decided 2026-11-06 by RV seat G, on the
-     review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     review of PR #46, under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 
 130. **A LOM element repeats no more than the loose binding's Schematron allows.** QTI 3.0 packages bind LOM with IMS
      Metadata v1.3.2, "a 'loose' binding of the IEEE LOM information model i.e. it permits extensions and does not
@@ -2564,7 +2564,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      one binding, and where they differ the stricter part is the rule (readings 16 and 17). The law is N7 Counted, rule
      `child-set`: `Counted` holds each cap as at most one child at the capped element's position, and in the database a
      key over each family's children at a capped position holds it. (Decided 2026-11-06 by RV seat K, on the review of
-     PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     PR #46, under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 131. **A namespace declaration's value is an RFC 3986 URI reference, or empty.** Namespaces in XML 1.0 (Third Edition)
      says "The attribute's normalized value MUST be either a URI reference — the namespace name identifying the
      namespace — or an empty string" (section 3), and "An XML namespace is identified by a URI reference [RFC3986]"
@@ -2584,7 +2584,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      four refused names above, says nothing of `a/b`, and exits 0 for all five: it warns where this reading refuses,
      so its verdict is not this reading's. A foreign element's or attribute's namespace comes from a
      declaration, so each holds a name this law has judged. This binds pantry and plate alike. This is not a case of
-     documents in conflict. (Decided 2026-11-06 by RV seat I, on the review of PR #46, under the operator's standing
+     documents in conflict. (Decided 2026-11-06 by RV seat I, on the review of PR #46, under Bjorn's standing
      ruling of 2026-11-05 that the spec wins.)
 132. **A printed variable's `format` is a printf format string of at most one conversion, over the information
      model's conversion codes.** The information model says "The syntax of the format attribute is based on the format
@@ -2603,11 +2603,11 @@ against it. A reading that is not an information-model-over-XSD case says which 
      admitted, and `%q`, `2f%`, `%`, `%d`, `%i of %i` and `%%%e%%%G` are refused under `attribute-lexical`: `d` is no
      listed code, though the implementation guide's informative example writes `format="%d"`. "Float values should
      only be formatted in the e, E, f, g, G, r or R styles" (section 7.30) is advice and is not read. (Decided
-     2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec
-     wins; at most one conversion is the operator's decision of 2026-11-06 on item L4.)
+     2026-11-06 by RV seat G, on the review of PR #46, under Bjorn's standing ruling of 2026-11-05 that the spec
+     wins; at most one conversion is Bjorn's decision of 2026-11-06 on item L4.)
 
-     Reading 161 sets aside this reading's rule that a format holds at most one conversion specifier, and with it the
-     operator's decision on item L4: a format of any number of specifiers is accepted and stored as written, so
+     Reading 161 sets aside this reading's rule that a format holds at most one conversion specifier, and with it
+     Bjorn's decision on item L4: a format of any number of specifiers is accepted and stored as written, so
      `%i of %i` and `%%%e%%%G` are admitted. The rest of this reading stands: each specifier ends in one of the listed
      codes, and `%q`, `2f%` and `%` are still refused under `attribute-lexical`; reading 171 adds `d` to the listed
      codes.
@@ -2633,13 +2633,13 @@ against it. A reading that is not an information-model-over-XSD case says which 
      An open attribute's local name and its namespace name share their key, `(node, uri, local)`, evenly: 1,329 bytes
      each. A namespace prefix holds 2,665 bytes, what its key `Namespace(node, prefix)` leaves beside the element's id.
 
-     The bound is in UTF-8 bytes, as the operator ruled, and in no other measure: grizzle 27c4cd2 gives the byte bound
+     The bound is in UTF-8 bytes, as Bjorn ruled, and in no other measure: grizzle 27c4cd2 gives the byte bound
      as a refinement, `str.bytes(n, pattern)`, after a text contract proved unable to be a copy's target
      (`docs/grizzle-findings.md`). On what would lift the bound itself, grizzle's statement: "The bound is permanent for
      any key a foreign key references or a put arbitrates on, while PostgreSQL's B-tree is its only unique index. For
      other keys it would be lifted by a hash-exclusion key form, which grizzle does not plan." This binds pantry alone:
      plate holds no key. (Decided 2026-11-06 by RV seat S-ORACLE, on the review of PR #46 and Aiden's question of
-     2026-11-06, under the operator's ruling that the bound is applied evenly.)
+     2026-11-06, under Bjorn's ruling that the bound is applied evenly.)
 
 134. **An item's or a test's languages are listed by its records' general categories, compared as language tags.** The
      QTI 3.0 Metadata binding says "There must be one value for each of the languages referred to by the language
@@ -2657,7 +2657,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      129 before this reading reads it. Each general category of each record that names the document (reading 93) lists
      every language its item or test, and the item's body elements, state; a document no such category describes is not
      judged. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by RV
-     seat I, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     seat I, on the review of PR #46, under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
 135. **A MIME type is RFC 2045's type and subtype: two tokens joined by a slash.** The information model types eight
      characteristics `MimeType` (the `type` of `a`, `object`, `param`, `source` and `qti-stylesheet`, and the
      `mime-type` of `qti-file-href`, `qti-calculator-info` and `qti-digital-material`) and the upload interaction's
@@ -2694,8 +2694,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
      an `xsi:type` gives a `type` (24 governed rows in all), and a foreign element whose `xsi:type` names
      `MimeTypeDType` (reading 60), are judged by XML Schema's pattern only. No corpus package carries a MIME type this
      refuses, so no verdict moves. This restores the rule that the ruling of 2026-11-05 that attributes follow the XSD
-     (reading 9) had removed; the operator's ruling of 2026-11-06 overrules that ruling wherever the information model
-     is stricter. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under the operator's standing ruling of
+     (reading 9) had removed; Bjorn's ruling of 2026-11-06 overrules that ruling wherever the information model
+     is stricter. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under Bjorn's standing ruling of
      2026-11-05 that the spec wins.)
 
 136. **A `default` shape carries `coords`, as every shape does, and they are a `CoordsDType`.** The information model
@@ -2716,7 +2716,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      (`CoordsDefault` at 2b276d76 holds the `CoordsDType` pattern). What a `default` area's coordinates mean is reading
      59's: they are ignored, and the area is the whole image. `qti-media-interaction`'s `coords`, which no shape reads,
      stays optional, as the XSD declares it. This is no departure from the XSD, so the attribute grammar states nothing
-     for it. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under the operator's standing ruling of
+     for it. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under Bjorn's standing ruling of
      2026-11-05 that the spec wins.)
 137. **An element's attributes and its namespace declarations are kept in the order they are written, the export
      writes each family back in that order, and no law reads either order.** XML 1.0 says "Note that the order of
@@ -2737,7 +2737,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      first of them by namespace name and then local name, Canonical XML's keys, never the first written, so `<div
      foo="1" data-="x">` and `<div data-="x" foo="1">` are both refused under `unmodeled-vocabulary`, for `data-`.
      Main stored no order: its `AttributeLexical` was keyed by `(node, attribute)` (`2b276d76`). This binds pantry
-     and plate alike. This is not a case of documents in conflict. (Operator ruling of 2026-11-06 that attribute and
+     and plate alike. This is not a case of documents in conflict. (Bjorn's ruling of 2026-11-06 that attribute and
      namespace-declaration order is kept as written, from RV seat AO.)
 
 **R6-hexdouble** (a proposal for the operator; numbered at integration). A MathML `cn` of type `hexdouble` holds
@@ -2857,7 +2857,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      and a reference that begins `C:` parses as one whose scheme is `C` (section 3.1), so neither names an entry of the
      package. A zip and a directory are read alike: one rule refuses both forms in either, with the reason it gives, and
      the import names it `href-path`, as it names every entry path outside the package. This binds pantry and plate
-     alike. (Decided 2026-11-07 by the coordinator, ruling P-7, under the operator's standing ruling of 2026-11-05, from
+     alike. (Decided 2026-11-07 by the coordinator, ruling P-7, under Bjorn's standing ruling of 2026-11-05, from
      RV seat REP-B (`5502d569`): the zip reader refused both forms, and the directory reader read a `\` as a character
      of a file name and a drive prefix as the start of a relative path, so one package was read two ways by its form.)
 139. **A package zip's central directory ends where its end record begins: other bytes between them are refused under
@@ -2871,7 +2871,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      format of its own: "Physical encapsulation shall be as a compressed binary file conforming to RFC1951" (section
      6.3, condition a), so the container's form is APPNOTE's. Refusing a malformed container is no refusal of valid QTI:
      reading 1 protects valid content, and these bytes make the file no valid package interchange file. This binds
-     pantry and plate alike. (Decided 2026-11-07 by the coordinator, on GEN-B/zip's finding, under the operator's
+     pantry and plate alike. (Decided 2026-11-07 by the coordinator, on GEN-B/zip's finding, under Bjorn's
      standing ruling of 2026-11-05, from RV seat REP-B (`8558cbaa`, its comments renumbered in `bcafe951`).)
 140. **A reader refuses where the infoset the specification defines is undetermined.** crust checks no DTD validity in
      general, since QTI validity is XSD validity, but a default that references a general entity the internal subset
@@ -2892,7 +2892,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
        reference outside it. A parameter-entity reference in the internal subset takes a document out of the scope, as
        an external subset does.
 
-     This binds pantry and plate alike. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of
+     This binds pantry and plate alike. (Decided 2026-11-07 by the coordinator, under Bjorn's standing ruling of
      2026-11-05, from RV seat GEN-B/codec (`3fe6a888`, `bb71b197`; its guard `2e4d053b`).)
 
 141. **A document's encoding is the row of XML 1.0 Appendix F.1 its first bytes are in, and the label it is read as must
@@ -2925,7 +2925,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      its verdict is not this reading's. The 1EdTech example corpus holds no document with a mark or in UTF-16, and of
      the QTI 3.0 schema set only `w3/XInclude.xsd` opens with one (`FF FE`, no declaration), which reads as `UTF-16` as
      before. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
-     coordinator, under the operator's standing ruling of 2026-11-05, from RV seat CRUST (`23329950`), on GEN-B/codec's
+     coordinator, under Bjorn's standing ruling of 2026-11-05, from RV seat CRUST (`23329950`), on GEN-B/codec's
      findings N3 and N4.)
 142. **crust's reader holds a namespace declaration's normalized value to RFC 3986's `URI-reference` in an XML 1.0
      document and to RFC 3987's `IRI-reference` in an XML 1.1 one, and an XML 1.1 document is one whose version is
@@ -2951,7 +2951,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      reading refuses them; with `--noout` it reports nothing for `&#38;f;http://x`, whose first segment holds a colon
      (RFC 3986 section 4.2), which this reading refuses, and only `--c14n` refuses it. This binds pantry and plate
      alike, which read through crust. This is not a case of documents in conflict. (Decided 2026-11-07 by the
-     coordinator, under the operator's standing ruling of 2026-11-05, from RV seat CRUST (`daed3e96`), on GEN-B/codec's
+     coordinator, under Bjorn's standing ruling of 2026-11-05, from RV seat CRUST (`daed3e96`), on GEN-B/codec's
      finding N2.)
 
 143. **An interaction is banned at any depth of a template block, and in a template inline only as its own content model
@@ -2967,8 +2967,8 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      ban, is entered under the template block and its rubric variant alone (`templateBlockKinds`), and every other
      template facet still reads all four template kinds. Lane GEN-B's XSD search found the grammar refusing an XSD-valid
      interaction inside a template inline's span. This is a case of documents in conflict: the information model's prose
-     against its tables and the XSD, for the template block. (Decided 2026-11-07 by the coordinator, under the
-     operator's standing ruling of 2026-11-05, from seat FIX-TMPL, on lane VD's ruling.)
+     against its tables and the XSD, for the template block. (Decided 2026-11-07 by the coordinator, under
+     Bjorn's standing ruling of 2026-11-05, from seat FIX-TMPL, on lane VD's ruling.)
 
 144. **A bounded `xs:double` is judged on its IEEE value: a `NonNegativeDoubleDType` value is not below 0, and a
      `normal-maximum` is above 0, each as XML Schema's value bound states it, held by a typed value beside the lexical
@@ -2988,12 +2988,13 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      pattern states the lexical space alone, XML Schema 1.0's (reading 71's edition, in which `+INF` is outside it)
      less `NaN`, since a datatype's lexical space is "the prescribed set of strings which the lexical mapping for that
      datatype maps to values of that datatype" (XML Schema 1.1 Part 2 §2.3) and NaN meets no bound, so it is no value
-     of the bounded type; the value is a row of its own: the import reads the double once from the lexical form or the
-     text (`DoubleValue`, `TextDoubleValue`), where the form is in the lexical space, and the bound is a check on that
-     value (`Double bound`), read from the domain's `DoubleBound`. grizzle stores a `float8` with one zero, `-0` as 0,
-     which no bound tells apart. G1-2 found the database accepting `min-time="-1"`, `step="-1"` and
-     `normal-maximum="0"` while the law oracle refused them: the bound had been an unread `facets` column. (Decided
-     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-G12.)
+     of the bounded type; the database reads the value from the lexical form or the text, collapsed, by grizzle's
+     `Compute.parseDouble`, where the form is in the lexical space, and the bound is a check on that value
+     (`Double bound`) on the attribute or the element itself, read from the domain's `DoubleBound`; no row holds the
+     value (Bjorn, 2026-11-09). PostgreSQL's `float8` orders `-0` equal to 0, so no bound tells them apart. G1-2 found
+     the database accepting `min-time="-1"`, `step="-1"` and `normal-maximum="0"` while the law oracle refused them: the
+     bound had been an unread `facets` column. (Decided 2026-11-07 by the coordinator, under Bjorn's standing
+     ruling of 2026-11-05, from seat FIX-G12.)
 145. **A fragment a test or a section document splices is judged in the test that places it, once per placement: its
      content references name the test's variables, and a rule fragment's variable references are the test's own.**
      Reading 117 reads an included fragment as XInclude's result holds it, "in the context of the item in which it is
@@ -3015,7 +3016,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      own declarations, and no test places an item. This lifts reading 117's known under-refusal of the content
      references of a fragment a section document or a test places; that fragment's `xml:lang` forms, and a rule
      fragment's types and language, stay the under-refusals reading 117 lists. This binds pantry and plate alike. This
-     is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing
+     is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under Bjorn's standing
      ruling of 2026-11-05, from seat FIX-ASM.)
 
 146. **The manifest is the package's one document at `imsmanifest.xml`, and no resource's: a document-typed resource
@@ -3044,7 +3045,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      package ("Manifest overlay"), broke "DocumentId key", "E1 derived" and `RootOfType`, and a site could target it.
      The corpus moves no verdict: no resource or file of any manifest of its 29 zips names `imsmanifest.xml`, by a
      scan of their 1,100 `resource` and `file` elements. This binds pantry and plate alike. This is not a case of
-     documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of
+     documents in conflict. (Decided 2026-11-07 by the coordinator, under Bjorn's standing ruling of
      2026-11-05, from seat FIX-MANIFEST.)
 147. **A test part, section, section ref, item ref or stimulus ref that writes no `identifier` names nothing: it holds
      no place in its document's namespace, and AL3 alone refuses it.** The ASI XSD requires the identifier of each,
@@ -3060,7 +3061,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      the importer's, under which "Test overlay"'s copy of the identifier broke beside AL3, and the law oracle's
      (`testDocumentOf`'s empty default, `src/test/oracle-laws/assembly.ts`), under which two such elements of one
      document broke "Structure identifier". This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07
-     by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FB-TESTS.)
+     by the coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FB-TESTS.)
 148. **An assessment item or test that writes no `identifier` or no `title` has none for its LOM record to match: no
      entry or title string names it, the empty one included, and AL3 refuses the root while `lom-identifier` or
      `lom-title` refuses a record that lists an entry or a title.** The ASI XSD requires both, with no default:
@@ -3078,7 +3079,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      broke beside AL3 and an empty entry matched an unwritten identifier; and the law oracle's (`lomTitleLawsOf`'s
      empty default, `src/test/oracle-laws/documents.ts`), under which an empty title string matched an unwritten
      title. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
-     coordinator, under the operator's standing ruling of 2026-11-05, from seat FB-META.)
+     coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FB-META.)
 149. **An outcome declaration's `normal-minimum` is 0.0 where a QTI 3.0.1 document writes none, and has no value where a
      QTI 3.0 document writes none, so `Mastery range` judges a 3.0.1 mastery value against 0.0.** QTI 3.0.1's
      information model gives the characteristic a default: its value space reads "See Appendix A1.3. Default =
@@ -3105,7 +3106,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      oracle admitted a 3.0.1 mastery value below its default floor. The corpus moves no verdict: no document of its 29
      zips writes a `mastery-value`. This binds pantry and plate alike: a 3.0.1 outcome that writes no
      `normal-minimum` has 0.0 wherever its minimum is read. This is not a case of documents in conflict. (Decided
-     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-NORMALMIN.)
+     2026-11-07 by the coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FIX-NORMALMIN.)
 150. **An item's built-in `duration` may be read whether or not the item is time dependent.** The one sentence that bars
      it, "The value of duration for items that are not time dependent must not be used in any item or test-level
      expression, though systems should still report it in itemResults when it is known" (section 2.2.2.2, `info.txt`
@@ -3122,7 +3123,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      in the item and through an item ref, in the time-dependent items' `ItemTiming` rows, and the law oracle's, which
      judged a read in the item. This binds pantry and plate alike. This is not a case of documents in conflict: the
      normative sources agree. The earlier rule was upstream's, so the change is recorded in PR #46's decisions. (Decided
-     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-A1.)
+     2026-11-07 by the coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FIX-A1.)
 151. **An item's `xml:lang` outside its value domain states no language, so `lom-title` judges the record's title
      without one, beside AL1.** QTI 3.0 Metadata says "The title must have a value that matches the value of the
      title attribute of the associated item, test or object bank. The language used to interpret the title is taken
@@ -3145,7 +3146,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      form as a language only where it matches the tag pattern (`languageTagPattern`); the law oracle reads the
      attribute through its own AL1 reading (`typedValueOf`). It reads `lom-title` alone: `document-lang`'s reading of
      the same attribute is reading 134's. This binds pantry and plate alike. This is not a case of documents in
-     conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat
+     conflict. (Decided 2026-11-07 by the coordinator, under Bjorn's standing ruling of 2026-11-05, from seat
      FIX-LOMLANG.)
 152. **A value names something only where it is an NCName: a variable reference's, an interaction's binding, a
      declaration's `identifier`, a record field's `field-identifier`, a test part's, section's, section ref's or item
@@ -3171,7 +3172,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      ask a row of every declaration, still break beside its value domain, as they did for an empty identifier
      before; that wants the declaration's name as a row of its own, as `RecordFieldName` is a field's. This
      binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
-     coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-NCNAME.) (Amended 2026-11-09,
+     coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FIX-NCNAME.) (Amended 2026-11-09,
      decision 457 (2).)
 153. **A record has no base type, so no value stands for one: a law about a record's whole value judges its cardinality,
      and a law over a base type reads the declaration's own, where it writes one.** The information model says
@@ -3195,7 +3196,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      and the law oracle's reading of an unwritten base type as empty or `none`, under which it refused a single
      variable that writes none under each law over a type, read a single variable's values in their own base type,
      and a record's in its declaration's. This binds pantry and plate alike. This is not a case of documents in
-     conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat
+     conflict. (Decided 2026-11-07 by the coordinator, under Bjorn's standing ruling of 2026-11-05, from seat
      FIX-B12.)
 154. **A float mapping's map keys are compared by the doubles reading 144 maps them to, and every key in the float
      domain has one: `1e400`, `2e400` and `INF` repeat, as do `0`, `-0` and `1e-400`, and two `NaN`s.** Reading 98
@@ -3218,7 +3219,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      most 255) had no typed value and was distinct by its text alone, so a mapping keyed `1e400` and `2e400` was
      accepted. The corpus holds no float mapping, so no verdict moves. This binds pantry and plate alike; plate's own
      reading of a double is the renderer team's follow-up. This is not a case of documents in conflict. (Decided
-     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-FLOATKEY.)
+     2026-11-07 by the coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FIX-FLOATKEY.)
 155. **An item ref that writes no `href` names nothing, so AL3 alone refuses it; and the laws over what an item ref
      names judge every item ref, whether or not it, its sections or its test part write an `identifier`.** The ASI XSD
      requires the href, with no default: `<xs:attribute name="href" use="required" type="xs:anyURI" />` in
@@ -3238,7 +3239,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      `documentLawsOf`, `src/test/oracle-laws/tests.ts`), under which an item ref that writes no identifier escaped them.
      The corpus moves no verdict: each of the 209 item refs of its 29 zips writes an href and an identifier, by a scan
      of their XML entries. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
-     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-ITEMREF.)
+     2026-11-07 by the coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FIX-ITEMREF.)
 156. **An ID-typed attribute or text is one of its document's IDs only where its value is an NCName. Any other value is
      no ID: it binds nothing, no IDREF and no cell's `headers` token names it, and its value domain alone refuses it.**
      `xs:ID` restricts `xs:NCName`, whose lexical space it keeps (XML Schema Part 2, §3.3.8), as does the
@@ -3256,8 +3257,8 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      which an empty identifier, or one with whitespace inside, had a `DocumentId` row that "E1 derived" refused beside
      its value domain, and `1a` was an ID an IDREF of `1a` resolved to; and the law oracle's reading of a `th`'s
      `id` as a header whatever its form, under which `headers="1a"` named `<th id="1a">`. This binds pantry and plate
-     alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the
-     operator's standing ruling of 2026-11-05, from seat FIX-IDNCNAME.)
+     alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under
+     Bjorn's standing ruling of 2026-11-05, from seat FIX-IDNCNAME.)
 157. **A declaration whose identifier names nothing is still a declaration: its type, its values, its mapping and its
      tables are judged by their own laws, and only its name is missing.** The ASI XSD requires a declaration's
      `identifier`, typed `IdentifierDType`, an `xs:NCName` (`imsqti_asiv3p0_v1p0.xsd`, each of
@@ -3283,7 +3284,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      whose cardinality is unwritten or spells nothing, or whose base type spells nothing, still has no row (lane NIL's
      audit, B11), and the copies its children ask still break beside its own law; that is a case of its own, which
      `known.ts` records. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
-     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-DECLNAME.)
+     2026-11-07 by the coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FIX-DECLNAME.)
 158. **A declaration whose cardinality or base type spells nothing is still a declaration: each law over it judges what
      it does spell, and the attribute that spells nothing is refused by AL3 or its value domain alone.** The ASI XSD
      requires a declaration's `cardinality` and types it, and its `base-type`, by enumerations that restrict
@@ -3314,7 +3315,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      "Declaration overlay"'s copy of its cardinality and "Mapping overlay"'s copy of each map key beside the value
      domain, and judged none of its values, map keys or tables; and it sets aside the law oracle's reading, which
      judged no law of such a declaration's own, and none of its mapping's but its map keys. This binds pantry and plate
-     alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's
+     alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under Bjorn's
      standing ruling of 2026-11-05, from seat FIX-DECLCARD.)
 159. **A binding or a reference resolves by name to every declaration whose identifier names something, whatever its
      cardinality spells, and each law over it judges what the declaration does spell.** The information model reads a
@@ -3338,7 +3339,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      only such a declaration holds resolved to nothing, so the importer's rows broke Binding declared, or held no
      reference row and broke "E1 derived"'s copy of the attribute, beside the AL3 or value domain the law oracle alone
      raised. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
-     coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-BINDCARD.)
+     coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FIX-BINDCARD.)
 160. **A mapping's keys repeat as written whatever its declaration's base type spells, and as values of the base type
      only where it spells one.** Reading 98 makes a mapping's keys distinct as values of its base type, since "The map
      is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float"
@@ -3361,14 +3362,14 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      broke its value domain alone; reading 158 left it at 6fea789a, and `src/test/unspelled-declarations.oracle.test.ts`
      expected it until this reading. The corpus holds no repeated key (reading 98), so no verdict moves. This binds
      pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under
-     the operator's standing ruling of 2026-11-05, from seat FIX-MAPKEYDUP.)
+     Bjorn's standing ruling of 2026-11-05, from seat FIX-MAPKEYDUP.)
 161. **A printed variable's `format` may hold any number of conversion specifiers, two or more included, and pantry
      stores it as written; each specifier is still one reading 132 admits.** The upstream reviewer of PR #46 ruled
      "`qti-printed-variable@format` with two or more conversions, such as `%d %d`: our side has ruled it should be
      accepted and stored as written. QTI defines `format` by reference to printf for one value, but it doesn't ban a
      second conversion, and C's undefined behaviour isn't a QTI prohibition. Pantry never renders, so it can store the
      value. How a renderer prints the extra conversion is the renderer's call" (comment 6701102861, 2026-11-07,
-     https://github.com/aidenzepp/qti-pie/pull/46#issuecomment-6701102861), and the operator's standing steer takes that
+     https://github.com/aidenzepp/qti-pie/pull/46#issuecomment-6701102861), and Bjorn's standing steer takes that
      reviewer's advice. The information model defines `format` as "The format conversion specifier to use when
      converting numerical values to strings" (section 7.30.7) and the syntax of a specifier (section 2.3.4), and states
      no count; ISO/IEC 9899:2011's "If there are insufficient arguments for the format, the behavior is undefined"
@@ -3379,10 +3380,10 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      refused under `attribute-lexical`, since a `%` at the end ends in no code at all. (Before reading 171 the first
      two were refused too, since reading 132 read `d` as no listed code.) The law oracle reads
      the composed grammar's domain, so both sides judge by the one pattern. This sets aside reading 132's rule of at
-     most one specifier, and the operator's decision of 2026-11-06 on item L4 that it recorded. The corpus writes only
+     most one specifier, and Bjorn's decision of 2026-11-06 on item L4 that it recorded. The corpus writes only
      `%.1f`, so no verdict moves. This binds pantry and plate alike in what a document may write; how a renderer prints
      a second conversion is plate's own reading. This is not a case of documents in conflict. (Decided 2026-11-07 by the
-     coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-PRINTFMT.)
+     coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FIX-PRINTFMT.)
 162. **A path two document types name is the document its root bears out: of the types its resources name, the first in
      the manifest's order whose `RootOfType` pair holds its root's kind, and the first of all where none does.** Reading
      93 has a resource of a type `RootOfType` maps name the document at its `href`, "read as a document of that type",
@@ -3412,7 +3413,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      QTI 3 packages the corpus witness judges, nor of the tarball's one QTI 2.2 zip
      (`qtiv2p2-examples/items/items.zip`), names one `href` under two types, by a scan of their resources. This binds
      pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under
-     the operator's standing ruling of 2026-11-05, from seat DBLANE-1.)
+     Bjorn's standing ruling of 2026-11-05, from seat DBLANE-1.)
 163. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 4.5, OutcomeDeclaration (https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration), says
      of SCORE "Items that declare a numeric outcome variable representing the candidate's overall performance on the item
@@ -3615,10 +3616,130 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      under which an order interaction bound to a variable of another type was refused under "BindingFit", and one bound
      to a record under "RecordBindingFit". In the corpus, each of the 9 order interactions, in 5 zips, binds an
      identifier response of ordered cardinality, so no verdict moves. This binds pantry and plate alike. It matches
-     reading 165 of PR #55. (Decided 2026-11-09 by the overseer under the operator's delegation, decision 448, overseer
-     mail f74ee547.)
-
-<!-- Readings 173 to 177 arrive with PR #55, which lands first (decision 485), so this reading is numbered 178. -->
+     reading 165 of PR #55, which this reading now holds. That reading adds: the sentence states no requirement as
+     reading 150 reads section 2.2.2.2's sentence on `duration`; every other interaction class with a binding states it
+     in its own (section 5.30, ChoiceInteraction, "must be bound to a response variable with a base-type of identifier
+     and single or multiple cardinality", and the others `BindingFit`'s law source cites); the XML binding's
+     `OrderInteractionDType` states none (section 4.5.97, `bind.txt` line 328632); and the ASI XSDs' Schematron rules
+     for it state only the attributes it admits, the interactions it may not hold (8Aa) and its counts (8Ba). With it,
+     the law oracle's "Binding unique", which read only the interactions a fit relation names, reads every interaction,
+     the custom ones among them. This is not a case of documents in conflict: the normative sources agree. (Decided
+     2026-11-09 by the overseer under the operator's delegation, decision 448, overseer mail f74ee547; and, as PR #55's
+     reading 165, decided 2026-11-07 by the coordinator, under Bjorn's standing ruling of 2026-11-05, from seat
+     SWEEP-A1ORDER.)
+173. **A section's visibility is its own `visible` alone: a section that writes none is neither visible nor invisible,
+     so AL3 alone refuses it, and no law reads a visibility it never wrote.** The ASI XSD requires the attribute, with
+     no default: `<xs:attribute name="visible" use="required" type="xs:boolean" />` in `AssessmentSectionDType`
+     (`imsqti_asiv3p0_v1p0.xsd` line 24711), and the information model gives it multiplicity `[1]`: "The visibility of
+     each section is determined solely by the value of its own visible attribute" (section 4.2.6, line 12755 of
+     `info301.txt`). The one rule that reads it is the ordering's: "an invisible sub-section is only treated as a single
+     block if its keep-together characteristic is 'true'. Otherwise, the child elements of the invisible sub-section are
+     mixed into the parent's selection prior to shuffling" (section 5.98, Ordering, line 51976). So a section is loose,
+     its children mixed into its parent's order, only where it writes `visible` and that value reads false (a malformed
+     one, which AL1 refuses, reads false as every `TestFlag` value that does not spell true does) and it is not kept
+     together. One that writes no `visible` is never loose, whatever its `keep-together`, and AL3 ("required-attribute")
+     refuses it under its own rule. In the importer a section's visibility is its `visible` flag, a row of its own
+     (`TestFlag`), and `Section.loose` holds exactly where that row reads false and `keepTogether` is false ("Test
+     overlay" and `E1_derived`, `src/qti/tests.ts`; `sectionsOf`, `src/import/overlays/tests.ts`); the law oracle reads
+     the same (`testDocumentOf`, `src/test/oracle-laws/assembly.ts`). This sets aside the importer's `Section.visible`,
+     false where the section writes none, under which such a section broke "Test overlay"'s copy of it beside AL3, and
+     both sides' reading of an unwritten `visible` as false, under which a section not kept together mixed its children
+     into a shuffling parent's order on a value it never wrote. The corpus moves no verdict: each of the 38 sections of
+     the 14 zips that hold one writes `visible` (4 of them false, none of them with `keep-together="false"`), by a scan
+     of their XML entries. This binds pantry and plate alike. This is not a case of documents in conflict. (Proposed in
+     PR #55, 2026-11-07, for the operator; from seat SWEEP-VISIBLE, under Bjorn's standing ruling of 2026-11-05.)
+174. **An `xml:lang` that is no language tag once collapsed states no language, so `document-lang` asks no record to
+     list it, and its value domain alone refuses it.** QTI 3.0 Metadata asks for "one value for each of the languages
+     referred to by the language attributes on the associated assessmentItem, test or object bank and its
+     'bodyElements'" (section 2.7.1.3, normative by its section 1.2). An `xml:lang` refers to a language by a language
+     identifier as BCP 47 defines it (XML 1.0, section 2.12), read by its value, its form collapsed (reading 134). A
+     form whose value RFC 5646's ABNF does not produce is no language tag (sections 2.1 and 2.2.9), so it identifies no
+     language, as reading 151 reads it for `lom-title`, and refers to none a record could list. Reading 129 refuses it
+     under `attribute-lexical`, since a form outside a type's lexical space denotes no value of it (XML Schema Part 2,
+     section 2.3), as reading 152 reads a name that names nothing. So `en_GB`, `a-value` and `english language`, on a
+     root or on a body element, ask no record for a language, as the empty form and one of whitespace alone already did
+     not, and AL1 alone refuses them. This sets aside reading 134's listing of every other form, under which the
+     importer, the schema (`statedLangs`, `src/qti/identity.ts`) and the law oracle (`documentLangBreaches`,
+     `src/test/oracle.ts`) asked each record for `en_gb` beside AL1, a value no tag has, and the last sentence of
+     reading 151, which left `document-lang` to reading 134. The schema states the forms that state a language once
+     (`statedLanguagePattern`, over the grammar's one `languageTag`), R26's witnesses are of those forms only, and the
+     importer writes them by the same test (`statesLanguage`, `src/import/overlays/metadata.ts`). This binds pantry and
+     plate alike. This is not a case of documents in conflict. (Proposed in PR #55, 2026-11-08, for the operator; from
+     seat SWEEP-DELETELANG, under Bjorn's standing ruling of 2026-11-05.)
+175. **A reference that names no declaration holds no declaration row, and stands as no declaration kind: a test's
+     reading of a built-in variable, of nothing, or through a variable mapping whose source its item declares nothing
+     under has no declaration, and a processing reference that claims no table of its declaration has no claim.** The
+     information model maps a name to the item's own variable: "Variable mappings allow outcome variables declared with
+     the name source-identifier in the corresponding item to be treated as if they were declared with the name
+     target-identifier during outcome processing" (section 7.48, line 112601 of `info301.txt`), so a mapped name stands
+     as the item's declaration of its source, and where the item declares nothing under the source there is no variable
+     to stand as, and "Variable mapping source" refuses the mapping (A34). A built-in variable stands as the declaration
+     kind `BuiltInVariable` gives it under its scope's root (section 2.2.2, section 2.2.2.1; reading 29), which
+     "Variable kind" judges as it judges a declaration's, and which "Reference type" refuses in place of a literal,
+     which is "replaced with the value of a template or outcome variable of base-type integer and single cardinality"
+     (line 9889, P24); neither reads a declaration it does not have. A map response, a map response point and a lookup
+     claim the table their declaration holds of those they read (sections 2.11.3.29, 2.11.3.30, 2.5.1.4), and one whose
+     declaration holds none claims none, which "Mapped response" or "Lookup type" refuses. AGENTS.md's Schema intent
+     settles the representation: a value that may be missing is a row of its own relation, never a sentinel. In the
+     importer a resolving reading's declaration is a row of its own, `ReadingDeclaration`, only where its variable is
+     declared, or mapped from a declared source, and a reference's table claim is a row of its own, `VariableRefTable`,
+     only where it claims one (`src/qti/expressions.ts`; `readingOf` and `referenceDeclarationsOf`,
+     `src/import/overlays/expressions.ts`); the law oracle reads the same (`readingsOf`,
+     `src/test/oracle-laws/tests.ts`, a mapped name standing as its source's declaration kind, none where its item
+     declares nothing under the source; `referenceBreachesOf`, `src/test/oracle-laws/expressions.ts`, a reference's
+     table and declaration kind none where it has none). This sets aside the null-object declaration codes a reading
+     held where it named no declaration (its lookup document, `qti-outcome-declaration`, no cardinality and no base
+     type), the table `none` a reference held where it claimed none, and both sides' reading of a name mapped from an
+     undeclared source as an outcome, under which a reading of it by an element that names no outcome, a correct, broke
+     "Variable kind" beside "Variable mapping source" on a kind no declaration gave it. The corpus moves no verdict:
+     none of its 29 zips writes a variable mapping, by a scan of their XML entries. This binds pantry and plate alike.
+     This is not a case of documents in conflict. (Proposed in PR #55, 2026-11-08, for the operator; from seat
+     SWEEP-REFNONE, under Bjorn's standing ruling of 2026-11-05.)
+176. **A document's type in its package is total: the manifest is of type `manifest`, every other document of the type of
+     the resource that lists it, and a document's resource type, where a resource lists it, is a row of its own.** IMS
+     Content Packaging 1.2 gives a package two roles of document: "The InterchangePackage shall include a Manifest
+     object and may include content files and control files" (Information Model, Version 1.2 Public Draft v2.0,
+     section 6.3, the InterchangePackage class), and "Resource and File are used to reference content files and control
+     files" (section 6.4.1, the Manifest class). A Resource "is a container for information relating to a particular
+     collection of files used by the ancestor Manifest object" (section 6.6.2, the Resource class), and its Type
+     "indicates the type of resource being described by the parent Resource object", one per resource (section 6.11.13,
+     the Type class, multiplicity 1..1). So a resource's file has the type of the resource that lists it, and the
+     manifest, the bound instance of the information model (reading 146), has the role of the manifest and no resource
+     type: no resource describes it. Every node and attribute of a document copies the document's type, so a law tells
+     the manifest's content packaging elements and records from another document's (170356bd's reading), and that type
+     is the document's role, `manifest` or a resource type, held on every row (`DocumentType`, `src/grammar/install.ts`;
+     `Node.documentType`, `Attribute.documentType` and `Site.documentType`). The resource type alone may be absent, so
+     it is a row of its own, `ResourceDocument`, keyed by the document node, which "RootOfType" and "Document entry"
+     read and "E1 derived" ties to the document's type (`ResourceDocumentType`, `src/qti/package.ts`); the manifest has
+     none. This sets aside the `ResourceType` handle `none` as every manifest row's type (reading 146's "of no resource
+     type (`none`)"), a null object of a type the manifest does not have, which the manifest attributes' selections,
+     the record documents' (`recordDocumentTypes`) and the manifest's identifier copy-backs read. It moves no law and no
+     verdict: each selection reads `manifest` where it read `none`. `NameLookup`'s `none` for a name that is no item ref
+     of a resource, and the records' `named`, are join copies of another kind, which grizzle's rules over queries
+     delete. This binds pantry and plate alike. This is not a case of documents in conflict. (Proposed in PR #55,
+     2026-11-08, for the operator; from seat SWEEP-NODESENT, under Bjorn's standing ruling of 2026-11-05.)
+177. **The database judges a closed `data-ssml` against Data-SSML 1.0, over the rows the importer reads the value into;
+     the importer judges nothing of it.** Reading R7-a states what a `data-ssml` value must be (one JSON object that
+     Data-SSML 1.0's normative JSON Schema admits, section 3.4) and has the importer check it, with the database holding
+     the text unchecked. This keeps R7-a's content and moves its check into the database, as Bjorn's ruling that the
+     database checks everything requires (no host judge of what a law can state). The JSON grammar is not a law grizzle
+     can state (one pattern needs about 4,400 positions where grizzle admits 4,096, `docs/grizzle-findings.md`), so the
+     importer reads the value once, before any row exists, as it reads a document's XML: one JSON object of objects of
+     strings, each member and each property in the order written and each name and value decoded, a name written twice
+     kept twice (`dataSsmlOf`, `src/vocab/data-ssml.ts`). It decides nothing else. The schema is the database's, law
+     "Data SSML" under `attribute-lexical` (`src/qti/data-ssml.ts`): every closed `data-ssml` has its `DataSsml` row,
+     so a value that is no such JSON has none and is refused; every member is one the schema lists, every property one its
+     member lists, an enumerated value one of the schema's, and a normalized value (`time`, `rate`) free of tab, line feed
+     and carriage return, each a check (`Data_SSML`) over the schema's table (`dataSsmlMembers`); and each required
+     property (`ph`, `interpret-as`, `alias`) written, a rule over a query (`RequiredSsmlProperty`,
+     `src/qti/queries.ts`). So a ChangeSet written without the importer is held to the same law, and R7-a's stated limit
+     goes. A new one replaces R7-a's "no length bound": each member's and property's name and value is compared by the
+     database, so it is a `keyText`, and one past the key-text bound is refused under that limit (reading 1's list), a
+     length no Data-SSML value needs. The value as written is still the document's attribute, exported as written. The
+     law oracle judges the same values with its own reader as before (`src/test/oracle-laws/data-ssml.ts`), now as the
+     law "Data SSML" over a document's rows, not a refusal before any row. This binds pantry and plate alike as to what
+     is valid. This is not a case of documents in conflict. (Proposed in PR #55, 2026-11-09, for the operator; Bjorn's
+     direction that the database checks everything, with no checker outside it.)
 
 178. **An attribute's value holds at most 268,435,454 UTF-8 bytes: a stated limit of the representation, not a law of
      QTI.** No QTI specification bounds the length of an attribute's value, and XML bounds none (reading 94). pantry's

@@ -38,7 +38,7 @@ import {
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { namespaceText } from "#pantry/qti/limits.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { Qti } from "#pantry/test/qti.ts";
+import { qtiRelations } from "#pantry/qti/base.ts";
 import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
@@ -54,7 +54,8 @@ const isOpen = (name: string): boolean => openClasses.some((open) => open === na
 
 /**
  * The installed `GoverningOf`, keyed `version kind governs` by its rows: the second implementation
- * the host's governor lookup is checked against.
+ * the host's governor lookup is checked against. A node no named type governs, or one under a
+ * type `GoverningOf` holds no row of, is governed by its kind (`KindGovernor`).
  */
 const governing: ReadonlyMap<string, string> = new Map(
   GoverningOf.rows.map(({ governor, governs, kind, version }) => [
@@ -75,7 +76,7 @@ const slots: ReadonlyMap<string, number> = new Map(
 
 describe("qti/attributes.ts, declared", () => {
   it("builds a schema of the closed relations, Node, the character data and the attribute layer with every law, each statement once", () => {
-    const built = schema("AttributeLayer", { ...Qti.relations }, [
+    const built = schema("AttributeLayer", { ...qtiRelations }, [
       ...nodeLaws,
       ...chardataLaws,
       ...attributeLaws,
@@ -120,7 +121,6 @@ describe("qti/attributes.ts, declared", () => {
       "AL5 attribute count",
       "Attribute prefix",
       "Double bound",
-      "Double value",
       "E1 derived",
       "Foreign attribute class",
       "TextDomain",
@@ -217,18 +217,25 @@ describe("qti/attributes.ts, the host's view", { timeout: searchTimeout }, () =>
               const byNode = Map.groupBy(rows.attributes, ({ node }) => node);
 
               for (const node of rows.nodes) {
-                const governor = governing.get(`${node.version} ${node.kind} ${node.governs}`);
+                const governor = Option.match(
+                  node.governs.pipe(
+                    Option.flatMap((type) =>
+                      Option.fromNullishOr(governing.get(`${node.version} ${node.kind} ${type}`)),
+                    ),
+                  ),
+                  { onNone: () => node.kind, onSome: (held) => held },
+                );
                 const expected = new Set(
                   (byNode.get(node.id) ?? [])
                     .filter(({ name }) => !isOpen(name))
-                    .map(({ name }) => slots.get(`${node.version} ${governor ?? ""} ${name}`)),
+                    .map(({ name }) => slots.get(`${node.version} ${governor} ${name}`)),
                 );
 
                 assert.isFalse(expected.has(undefined), `${node.kind}: a closed name no row holds`);
                 assert.deepStrictEqual(
                   [...node.attrs].toSorted((a, b) => a - b),
                   [...expected].toSorted((a, b) => (a ?? 0) - (b ?? 0)),
-                  `${node.version} ${node.kind} under ${node.governs}`,
+                  `${node.version} ${node.kind} under ${Formatter.format(node.governs)}`,
                 );
               }
             }),

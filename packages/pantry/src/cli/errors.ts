@@ -1,5 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-
 /**
  * How the program's failures are told apart: the closed roster of kinds a failure may have, the
  * exit code each kind ends the process with, and {@link describeFailure}, which names the kind of
@@ -10,10 +8,9 @@ import type { Effect } from "effect";
 import { CliError } from "effect/cli";
 import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
 import type { DatabaseRefusal } from "#pantry/cli/refused.ts";
-import type { exportPackage } from "#pantry/api/export.ts";
-import type { importPackage } from "#pantry/api/import.ts";
+import type { exportPackage } from "#pantry/export/package.ts";
 import type { OverlayConflict } from "#pantry/import/overlays/index.ts";
-import type { UnownedLaws } from "#pantry/import/refusal.ts";
+import type { importPackage } from "#pantry/import/package.ts";
 
 /**
  * Every kind a failure of this program has.
@@ -117,21 +114,23 @@ export const grizzleErrorTags: ReadonlySet<string> = new Set(grizzleTags);
 
 /**
  * The tags of the failures {@link describeFailure} maps to a kind of their own: grizzle's, the
- * file system's, a refused import's, an import's unsettled commit and an absent package's.
+ * file system's, a refused import's (`ImportRefused`, or `RefusedAbove` of
+ * `#pantry/import/above.ts` when a level above `Qti` refused it), an import's unsettled commit and
+ * an absent package's.
  */
 type KindedTag =
   | (typeof grizzleTags)[number]
   | "CommitUnresolved"
   | "ImportRefused"
   | "PackageNotFound"
-  | "PlatformError";
+  | "PlatformError"
+  | "RefusedAbove";
 
 /**
- * Every other failure the export ends with (pantry's public `exportPackage`,
- * `#pantry/api/export.ts`): the database holds the package, but the export cannot rebuild a
- * document of it from its rows (`assemble`'s refusals, `DocumentRowCount`, `XmlVersionUnread`),
- * page through them (grizzle's `CursorError`) or write it in its charset (crust's `EncodeError`).
- * Each is a defect of qti, never of the package.
+ * Every other failure the export ends with (`#pantry/export/package.ts`): the database holds the
+ * package, but the export cannot rebuild a document of it from its rows (`assemble`'s refusals,
+ * `DocumentRowCount`, `XmlVersionUnread`), page through them (grizzle's `CursorError`) or write it
+ * in its charset (crust's `EncodeError`). Each is a defect of qti, never of the package.
  */
 export type ExportDefectTag = Exclude<
   Effect.Error<ReturnType<typeof exportPackage>>["_tag"],
@@ -139,15 +138,13 @@ export type ExportDefectTag = Exclude<
 >;
 
 /**
- * Every other way the import ends (pantry's public `importPackage`, `#pantry/api/import.ts`): the
- * codec refusing a value the builders wrote (grizzle's `EncodingFailure`), and the two defects it
- * dies with, laws no rule owns and two builders that disagree on a row. Each is a defect of qti,
- * never of the package.
+ * Every other way the import ends (`#pantry/import/package.ts`): the codec refusing a value the
+ * builders wrote (grizzle's `EncodingFailure`), and the defect it dies with, two builders that
+ * disagree on a row. Each is a defect of qti, never of the package.
  */
 export type ImportDefectTag =
   | Exclude<Effect.Error<ReturnType<typeof importPackage>>["_tag"], KindedTag>
-  | OverlayConflict["_tag"]
-  | UnownedLaws["_tag"];
+  | OverlayConflict["_tag"];
 
 /**
  * What to do next after an export that cannot rebuild a package the database holds.
@@ -194,7 +191,6 @@ const namedHelp = {
   RootMissing: exportDefectHelp,
   RowMissing: exportDefectHelp,
   RowsOutsideImage: exportDefectHelp,
-  UnownedLaws: importDefectHelp,
   XmlVersionUnread: exportDefectHelp,
 } as const satisfies Readonly<Record<NamedTag, string>>;
 
@@ -320,23 +316,25 @@ export const namedFailureOf = (failure: unknown): Option.Option<NamedTag> =>
 
 /**
  * The tags of the failures that mean the local set-up is missing or unreadable: the layer's two
- * (`db/connection.ts` and `db/layer.ts`) and Effect's `ConfigError`, which a missing or malformed
+ * (`db/connection.ts` and `db/served.ts`) and Effect's `ConfigError`, which a missing or malformed
  * setting raises. They are matched by tag so this module imports neither the layer nor the engine.
  */
 const configTags: ReadonlySet<string> = new Set([
   "ClusterConfigError",
   "ConfigError",
-  "SnapshotLoadError",
+  "ServedLoadError",
 ]);
 
 /**
  * Whether `failure` is grizzle's report of a password file that could not be read. grizzle never
- * raises a bare `CredentialError`: `Db.open` contacts no database, so a call's failed acquisition
- * is a `TransportFailure` that carries it as its `reason`.
+ * raises a bare `CredentialError`: the first call that connects asks for the password, and its
+ * failed acquisition is a `ReadFailure` (a read) or a `TransportFailure` (a write) at stage
+ * `acquire` that carries it as its `reason` (grizzle `1ab38472`). `Db.open` contacts nothing of
+ * the database (grizzle `d994809c`), so no `OpenError` carries one.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
 const isCredentialFailure = (failure: unknown): boolean =>
-  tagOf(failure) === "TransportFailure" &&
+  (tagOf(failure) === "ReadFailure" || tagOf(failure) === "TransportFailure") &&
   Predicate.hasProperty(failure, "reason") &&
   tagOf(failure.reason) === "CredentialError";
 
@@ -385,7 +383,7 @@ const kindOf = (failure: unknown): Kind => {
 
   const tag = tagOf(failure);
 
-  if (tag === "ImportRefused") {
+  if (tag === "ImportRefused" || tag === "RefusedAbove") {
     return "import-refused";
   }
 
@@ -456,7 +454,8 @@ const helpOf = (failure: unknown, kind: Kind): string => {
  * (`#pantry/cli/verdict.ts`), a package a level above `Qti` refused, names `import-refused`. Every
  * other failure is mapped by what it is, without importing the module that defines it, so the
  * program starts without loading the engine: Effect's CLI errors are `cli-usage`, an
- * `ImportRefused` is `import-refused`, a `PackageNotFound` is `not-found`, an import's
+ * `ImportRefused` is `import-refused`, and so is a `RefusedAbove`, a package a level above `Qti`
+ * refused (decisions 483 and 499), a `PackageNotFound` is `not-found`, an import's
  * `CommitUnresolved` is `database`, a `PlatformError` is `io`, a missing or unreadable local set-up
  * is `config`, a program grizzle refused to compile before sending any SQL is `internal`, and
  * grizzle's other errors are `database`. Anything else, a defect included, is `internal`; the

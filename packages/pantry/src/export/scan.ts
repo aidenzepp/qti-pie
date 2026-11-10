@@ -2,8 +2,9 @@
  * The export's reads (fin.md §4.6, trees.md §3, plan N11; the W5 amendment's C20): one ordered
  * scan per document, and the documents and entries of a package, each built over the `Qti` schema
  * value it is handed. The author login's export workload (`#pantry/qti/logins.ts` `authorLogin`)
- * holds all three, with the listing queries (`#pantry/export/listing.ts`), so each is compiled once
- * per pool and its indexes are planned by `grizzle generate`.
+ * holds all three, with the `Package` row by its key and the listing queries
+ * (`#pantry/export/listing.ts`), so each is compiled once per pool and its indexes are planned by
+ * `grizzle generate`.
  *
  * Each query is written over the schema, never over a role: a role that holds every table of `Qti`
  * whole runs every query over `Qti`, so the author role runs them, and so does a role over an
@@ -14,11 +15,11 @@
  * `document` and ordered by `start`, it is one index range in document order, with no sort and no
  * recursion, and `db.page` pages it by that key. Each row carries its own characters (`Node.chars`:
  * a text or whitespace run's, an entity reference's `&name;`) and what its node owns, each as its
- * own attachment: its comment, instruction, doctype, `Document` row and foreign element's name at
- * most once (each keyed by its node), the `Document` row with its XML declaration at most once
- * and the declaration with its encoding and standalone at most once each, and its attribute and
- * namespace families as lists in `at` order. The arms stay apart, never a union, because an
- * attachment over a union is never paged.
+ * own attachment: its comment, instruction, doctype, `Document` row, foreign element's name and
+ * governing type (an `ElementType` or an `OpenElementType`) at most once (each keyed by its node),
+ * the `Document` row with its XML declaration at most once and the declaration with its encoding
+ * and standalone at most once each, and its attribute and namespace families as lists in `at`
+ * order. The arms stay apart, never a union, because an attachment over a union is never paged.
  */
 import { paged, query, uuid, v } from "@bjornpagen/grizzle";
 import { Function as Fn } from "effect";
@@ -31,11 +32,12 @@ import {
   EncodingDecl,
   Namespace,
   OpenElementName,
+  OpenElementType,
   Pi,
   SdDecl,
   XmlDecl,
 } from "#pantry/qti/chardata.ts";
-import { Node } from "#pantry/qti/node.ts";
+import { ElementType, Node } from "#pantry/qti/node.ts";
 import { Entry } from "#pantry/qti/package.ts";
 import type { QtiSchema } from "#pantry/qti/schema.ts";
 
@@ -67,27 +69,15 @@ import type { QtiSchema } from "#pantry/qti/schema.ts";
 export const documentScanOf = Fn.memoize((qti: QtiSchema) =>
   query(qti)
     .rule((r) => {
-      const { at, chars, document, end, governs, id, kind, parent, prefix, start, version } = v(
+      const { at, chars, document, end, id, kind, parent, prefix, start, version } = v(
         Node,
         "node",
       );
 
       return r
-        .match(Node, {
-          at,
-          chars,
-          document,
-          end,
-          governs,
-          id,
-          kind,
-          parent,
-          prefix,
-          start,
-          version,
-        })
+        .match(Node, { at, chars, document, end, id, kind, parent, prefix, start, version })
         .where(r.eq(document, r.param("document", uuid)))
-        .find({ at, chars, document, end, governs, id, kind, parent, prefix, start, version });
+        .find({ at, chars, document, end, id, kind, parent, prefix, start, version });
     })
     .attach(
       "comment",
@@ -116,6 +106,26 @@ export const documentScanOf = Fn.memoize((qti: QtiSchema) =>
           const { value } = v(Doctype, "doctype");
 
           return r.match(Doctype, { node: node.id, value }).find({ value });
+        }),
+      "option",
+    )
+    .attach(
+      "elementType",
+      (node) =>
+        query(qti).rule((r) => {
+          const { type } = v(ElementType, "elementType");
+
+          return r.match(ElementType, { node: node.id, type }).find({ type });
+        }),
+      "option",
+    )
+    .attach(
+      "openElementType",
+      (node) =>
+        query(qti).rule((r) => {
+          const { type } = v(OpenElementType, "openElementType");
+
+          return r.match(OpenElementType, { node: node.id, type }).find({ type });
         }),
       "option",
     )
@@ -287,9 +297,12 @@ const entriesQuery = (qti: QtiSchema) =>
 /**
  * Build the author workload's reads over a `Qti` schema: one document's ordered scan,
  * `documentScan`, which the export pages; the documents of a package, `documentsOf`; a package's
- * record, `entriesOf`; and the listing queries an app pages, `packages` and `documents`
+ * record, `entriesOf`; `packageOf`, the `Package` row by its key, a key member whose handle's `get`
+ * the export reads to refuse an id no package has and the import reads back after a commit with no
+ * answer; and the listing queries an app pages, `packages` and `documents`
  * (`#pantry/export/listing.ts`). A `Db` opened on the author login runs them as
- * `db.workload.<name>`, and pages the paged members with `db.workload.<name>.page`.
+ * `db.workload.<name>`, and pages the paged members with `db.workload.<name>.page`, so every read
+ * pantry runs is a member of the workload.
  *
  * Built once per schema value, so the login's workload holds the queries {@link documentScanOf}
  * and `listingQueriesOf` give.
@@ -305,6 +318,7 @@ export const authorReadsOf = Fn.memoize((qti: QtiSchema) => {
     documents: paged(listing.documents),
     documentsOf: documentsQuery(qti),
     entriesOf: entriesQuery(qti),
+    packageOf: qti.relations.Package,
     packages: paged(listing.packages),
   };
 });

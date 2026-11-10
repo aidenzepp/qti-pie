@@ -1,9 +1,8 @@
 /**
- * One transaction per package (plan W5, Q5.20; the operator's ruling of 2026-11-05 on issue #3),
+ * One transaction per package (plan W5, Q5.20; Bjorn's ruling of 2026-11-05 on issue #3),
  * over the every-relation package (`#pantry/test/gen/every-relation.ts`), whose import writes a row
- * of every stored relation of `Qti` but those only a refused package writes (`refusedOnly`): its
- * ChangeSet compiles, it imports in one transaction, its
- * export gives back its source, and a failure injected through `ImportOptions.wrapApply` while the
+ * of every stored relation of `Qti`: its ChangeSet compiles, it imports in one transaction, its
+ * export gives back its source, and a failure injected through `WrapApply` while the
  * import's transaction runs leaves no row of it.
  *
  * The oracles are PostgreSQL's own: the catalog and the system columns of every table of the
@@ -17,69 +16,41 @@
  *
  * @see {@link https://www.postgresql.org/docs/19/ddl-system-columns.html | PostgreSQL 19, §5.6 System Columns}
  */
-import { CommitUnknown, Db, writableNamesOf } from "@bjornpagen/grizzle";
-import type { DbConnection } from "@bjornpagen/grizzle";
-import { NodeFileSystem, NodeServices } from "@effect/platform-node";
+import { CommitUnknown, writableNamesOf } from "@bjornpagen/grizzle";
+import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage, requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, FileSystem, Layer, Option, Path, Redacted, Ref, Schedule } from "effect";
-import { Client } from "pg";
-import type { QueryResultRow } from "pg";
+import { Duration, Effect, FileSystem, Layer, Option, Path, Ref, Schedule } from "effect";
+import type { Client, QueryResultRow } from "pg";
 import { describe } from "vitest";
-import { loginConnection } from "#pantry/db/connection.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import type { ImportOptions } from "#pantry/import/package.ts";
-import { readProgram } from "#pantry/import/program.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
-import { AuthorApp } from "#pantry/test/author.ts";
+import { importPackage, WrapApply } from "#pantry/import/package.ts";
+
 import { Qti } from "#pantry/test/qti.ts";
+
 import {
   everyRelationPackage,
   scopedPackage,
   memberCounts,
-  refusedOnly,
 } from "#pantry/test/gen/every-relation.ts";
 import type { MemberCounts } from "#pantry/test/gen/every-relation.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
-
-/**
- * The author login's PostgreSQL role, `<schema>__<login>`.
- */
-const authorAppRole = "qti__author_app";
-
-/**
- * The author role's PostgreSQL role, which holds SELECT, INSERT and DELETE on every table of `Qti`
- * it writes whole, every stored relation's (grizzle's README, "Exactly what a role holds").
- */
-const authorRole = "qti__author";
-
-/**
- * The PostgreSQL schema of `Qti`'s tables.
- */
-const qtiSchema = "qti";
+import {
+  authorRole,
+  loginSession,
+  qtiSchemaName,
+  rowsOf as sessionRows,
+} from "#pantry/test/direct-sql.ts";
+import { hasLease } from "#pantry/test/settings.ts";
 
 /**
  * `Package`'s table, by grizzle's conversion of a relation's name (`grizzle names`).
  */
-const packageTable = `${qtiSchema}.package`;
-
-/**
- * A relation's table, by grizzle's conversion of a relation's name for a name of capitalized words
- * alone: each word lowercased, joined by underscores (`UnreadTypeHref` is `unread_type_href`). The
- * one-transaction test asserts each table it names this way is installed, so a name it misreads
- * fails there instead of passing unnoticed.
- *
- * @param relation - The relation's name.
- * @returns Its table's qualified name.
- */
-const tableOf = (relation: string) =>
-  `${qtiSchema}.${relation.replaceAll(/(?<=[a-z0-9])(?=[A-Z])/gu, "_").toLowerCase()}`;
+const packageTable = `${qtiSchemaName}.package`;
 
 /**
  * The timeout of each test here: every one imports the package once per case of its box.
@@ -92,40 +63,13 @@ const boxTimeoutMs = 900_000;
 const memberBox = "every count of 2 or 3 choices, 1 or 2 hottexts and 1 or 2 hotspots";
 
 /**
- * The password a connection authenticates with, read once.
- *
- * @param password - The connection's password.
- * @returns The password's text.
- */
-const passwordText = (password: DbConnection["password"]) =>
-  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
-    Effect.map(Redacted.value),
-  );
-
-/**
  * A session of the author login on the lease, over verify-full TLS against the cluster's CA, as the
  * author role, closed with its scope: a direct reader of the catalog and the tables.
  */
-const authorSession = Effect.gen(function* authorSession() {
-  const connection = yield* loginConnection(authorAppRole);
-  const password = yield* passwordText(connection.password);
-  const client = new Client({
-    database: connection.database,
-    host: connection.transport.host,
-    password,
-    port: connection.transport.port,
-    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
-  });
-  const opened = yield* Effect.acquireRelease(
-    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
-    () => Effect.promise(() => client.end()),
-  );
-
-  yield* Effect.tryPromise(() => opened.query(`SET ROLE ${authorRole}`));
-
-  return opened;
-}).pipe(Effect.provide(NodeFileSystem.layer), Effect.orDie);
+const authorSession = loginSession.pipe(
+  Effect.tap((client) => sessionRows(client, `SET ROLE ${authorRole}`)),
+  Effect.orDie,
+);
 
 /**
  * Run one statement on a session and return its rows; a failure is the test's defect.
@@ -139,11 +83,7 @@ const rowsOf = <R extends QueryResultRow>(
   client: Client,
   text: string,
   values: readonly string[] = [],
-) =>
-  Effect.tryPromise(() => client.query<R>(text, [...values])).pipe(
-    Effect.map(({ rows }) => rows),
-    Effect.orDie,
-  );
+) => sessionRows<R>(client, text, values).pipe(Effect.orDie);
 
 /**
  * List the tables of the installation the author role reads, each by its quoted qualified name.
@@ -159,7 +99,7 @@ const tablesOf = (client: Client) =>
          FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = $1 AND c.relkind = 'r' AND has_table_privilege(c.oid, 'SELECT')
         ORDER BY name`,
-      [qtiSchema],
+      [qtiSchemaName],
     ),
     (rows) => rows.map(({ name }) => name),
   );
@@ -246,13 +186,12 @@ const packageXid = (client: Client, id: string) =>
  * Import the every-relation package of member counts, its directory removed with the scope.
  *
  * @param members - The counts it is drawn by.
- * @param options - The import's options.
  * @returns The package's directory and its id.
  */
-const importDrawn = (members: MemberCounts, options?: ImportOptions) =>
+const importDrawn = (members: MemberCounts) =>
   Effect.gen(function* importsDrawn() {
     const dir = yield* scopedPackage(everyRelationPackage(members));
-    const id = yield* importPackage(dir, options);
+    const id = yield* importPackage(dir);
 
     return { dir, id };
   });
@@ -309,7 +248,7 @@ const waitedOn = (client: Client, table: string) =>
        FROM pg_catalog.pg_locks l
       WHERE l.locktype = 'relation' AND l.relation = $1::regclass AND NOT l.granted
         AND l.pid <> pg_backend_pid()`,
-    [table, qtiSchema],
+    [table, qtiSchemaName],
   ).pipe(
     Effect.flatMap((rows) =>
       rows[0] === undefined ? Effect.fail("not waiting" as const) : Effect.succeed(rows[0]),
@@ -324,19 +263,40 @@ const waitedOn = (client: Client, table: string) =>
   );
 
 /**
- * Wait until a session holds no lock, polling the lock manager every 10 ms for at most
- * {@link pollBound}: so an interrupted import's session, which grizzle destroys, has ended and its
- * transaction rolled back before the table it waited on is released.
+ * The mode `pg_locks` gives every predicate lock: SIRead locks are the only predicate locks
+ * PostgreSQL takes, and the view lists them after the regular locks under this one mode, each under
+ * the process id its serializable transaction ran in.
+ *
+ * @see {@link https://github.com/postgres/postgres/blob/REL_19_RC1/src/backend/utils/adt/lockfuncs.c#L421-L433 | PostgreSQL 19rc1, lockfuncs.c pg_lock_status: the holder's pid from its SERIALIZABLEXACT, and "Currently all predicate locks are SIReadLocks"}
+ */
+const predicateLockMode = "SIReadLock";
+
+/**
+ * Wait until a session holds no lock of its own, polling the lock manager every 10 ms for at most
+ * {@link pollBound}: so an interrupted import's transaction, which grizzle's cancel aborts before
+ * it destroys the session, has ended before the table it waited on is released. A transaction holds
+ * an exclusive lock on its virtual transaction id from its start to its end (PostgreSQL 19, §53.12
+ * `pg_locks`), so a session that holds no lock runs no transaction.
+ *
+ * The SIRead locks `pg_locks` lists under the session's process id are not the session's: the view
+ * lists each predicate lock under the process id of the serializable transaction that took it,
+ * and PostgreSQL keeps a committed one's "past transaction commit, until overlapping read write
+ * transactions complete" (§13.2.3), past its session's end too. Every transaction here is
+ * SERIALIZABLE, the holder's included, and so is every transaction of any other installation on
+ * the cluster, so they are left out: the earlier transactions the import's session committed stay
+ * listed for as long as the holder's runs, which outlives this wait.
  *
  * @param client - The session that holds the held table's lock.
  * @param pid - The session's backend.
- * @returns Nothing; dies when the session still holds a lock after the bound.
+ * @returns Nothing; dies when the session still holds a lock of its own after the bound.
+ * @see {@link https://www.postgresql.org/docs/19/view-pg-locks.html | PostgreSQL 19, §53.12 pg_locks}
+ * @see {@link https://www.postgresql.org/docs/19/transaction-iso.html#XACT-SERIALIZABLE | PostgreSQL 19, §13.2.3 Serializable Isolation Level}
  */
 const ended = (client: Client, pid: string) =>
   rowsOf<{ readonly held: string }>(
     client,
-    "SELECT count(*)::text AS held FROM pg_catalog.pg_locks WHERE pid = $1::integer",
-    [pid],
+    "SELECT count(*)::text AS held FROM pg_catalog.pg_locks WHERE pid = $1::integer AND mode <> $2",
+    [pid, predicateLockMode],
   ).pipe(
     Effect.flatMap((rows) =>
       Number(rows[0]?.held ?? 0) === 0 ? Effect.void : Effect.fail("still running" as const),
@@ -355,51 +315,13 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("one transaction per package, over the every-relation package", (it) => {
-      it.effect("compiles the every-relation package's ChangeSet", (ctx) =>
-        // Oracle: PostgreSQL's installation through grizzle's compiler: `db.compile` over the
-        // package's one ChangeSet (`changeSetOf` of its program) succeeds against the snapshot
-        // the database holds.
-        // Bound: every count the generator draws, 8 cases.
-        searched(
-          ctx,
-          exhaust(
-            {
-              box: memberBox,
-              caseHang: Duration.minutes(5),
-              coverage: noCoverage,
-              generator: memberCounts,
-              limit: 8,
-              literal: JSON.stringify,
-              oracle: { kind: "postgresql", name: "db.compile against the installed snapshot" },
-              suite: "pantry/import/transaction-compiles",
-            },
-            (members) =>
-              Effect.gen(function* compiles() {
-                const dir = yield* scopedPackage(everyRelationPackage(members));
-                const program = yield* readProgram(dir);
-                const db = yield* Db.open(AuthorApp.roles.author, {});
-                const [elapsed] = yield* Effect.timed(
-                  db.compile(changeSetOf(AuthorApp.roles.author.role, program.inputs)),
-                );
-
-                yield* Effect.log("every-relation compile", {
-                  compileMillis: Duration.toMillis(elapsed),
-                  members: JSON.stringify(members),
-                });
-              }).pipe(Effect.scoped),
-          ),
-        ),
-      );
-
       it.effect(
-        "imports the every-relation package in one transaction that writes every stored relation of Qti but the refused-only ones",
+        "imports the every-relation package in one transaction that writes every stored relation of Qti",
         (ctx) =>
           // Oracle: PostgreSQL's system columns. Every row the import adds to any table of the
           // installation carries the `xmin` of the package's own row, so one transaction inserted
-          // them all; the tables it inserted into are as many as `Qti`'s stored relations without
-          // those only a refused package writes (`refusedOnly`), and none of those is among them.
+          // them all, and the tables it inserted into are as many as `Qti`'s stored relations.
           // Bound: every count the generator draws, 8 cases.
           searched(
             ctx,
@@ -427,18 +349,10 @@ describe.skipIf(!hasLease)(
                     assert.strictEqual(total, (before.get(table) ?? 0) + at, table);
                   }
 
-                  const writtenTables = written.map(([table]) => table);
-                  const refusedTables = [...refusedOnly.keys()].map(tableOf);
-
-                  for (const table of refusedTables) {
-                    assert.include(tables, table, "a refused-only relation's table is installed");
-                    assert.notInclude(writtenTables, table, "a refused-only table is written");
-                  }
-
                   assert.strictEqual(
                     written.length,
-                    writableNamesOf(Qti).filter((name) => !refusedOnly.has(name)).length,
-                    `tables written: ${writtenTables.join(", ")}`,
+                    writableNamesOf(Qti).length,
+                    `tables written: ${written.map(([table]) => table).join(", ")}`,
                   );
                 }).pipe(Effect.scoped),
             ),
@@ -495,7 +409,7 @@ describe.skipIf(!hasLease)(
           // Oracle: PostgreSQL's catalog. A second session holds one table the import writes in
           // SHARE mode, which blocks the import's INSERT into it and nothing else, so the import's
           // one transaction stops there with every statement before it run. The failure injected
-          // through `wrapApply` then interrupts the apply (grizzle cancels the statement and
+          // through `WrapApply` then interrupts the apply (grizzle cancels the statement and
           // destroys its session, README "Transactions and concurrency") and fails it as
           // `CommitUnknown`, whose read-back finds no package. Every table's count is then what it
           // was before the import.
@@ -542,7 +456,6 @@ describe.skipIf(!hasLease)(
                   Effect.gen(function* noRow() {
                     const table = heldAt(at);
                     const holder = yield* authorSession;
-                    const before = yield* countsOf(holder, tables);
                     const waiter = yield* Ref.make(Option.none<Waiter>());
                     const held = <A, E, R>(
                       apply: Effect.Effect<A, E, R>,
@@ -559,8 +472,15 @@ describe.skipIf(!hasLease)(
                     yield* rowsOf(holder, "BEGIN");
                     yield* rowsOf(holder, `LOCK TABLE ${table} IN SHARE MODE`);
 
+                    // The holder's SERIALIZABLE transaction takes its snapshot at this first read,
+                    // after the lock (LOCK takes none) and before the import begins, so every
+                    // transaction the import commits from here on keeps its SIRead locks until the
+                    // holder's ends, listed under the import's session: `ended` meets them in every
+                    // case, as it met another installation's overlap on a shared cluster.
+                    const before = yield* countsOf(holder, tables);
+
                     const failed = yield* Effect.flip(
-                      importDrawn(members, { wrapApply: held }),
+                      importDrawn(members).pipe(Effect.provideService(WrapApply, held)),
                     ).pipe(
                       Effect.tap(() =>
                         Ref.get(waiter).pipe(

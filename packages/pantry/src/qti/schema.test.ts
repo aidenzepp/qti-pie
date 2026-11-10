@@ -14,6 +14,8 @@ import * as catalog from "#pantry/qti/catalog.ts";
 import { catalogLaws } from "#pantry/qti/catalog.ts";
 import * as chardata from "#pantry/qti/chardata.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
+import * as dataSsml from "#pantry/qti/data-ssml.ts";
+import { dataSsmlLaws } from "#pantry/qti/data-ssml.ts";
 import * as declarations from "#pantry/qti/declarations.ts";
 import { declarationLaws } from "#pantry/qti/declarations.ts";
 import * as expressionTypes from "#pantry/qti/expression-types.ts";
@@ -25,8 +27,6 @@ import * as identity from "#pantry/qti/identity.ts";
 import { identityLaws } from "#pantry/qti/identity.ts";
 import * as interactions from "#pantry/qti/interactions.ts";
 import { interactionLaws } from "#pantry/qti/interactions.ts";
-import { Author, AuthorApp, exportWork, importWork } from "#pantry/test/author.ts";
-import { Qti } from "#pantry/test/qti.ts";
 import * as mapping from "#pantry/qti/mapping.ts";
 import { mappingLaws } from "#pantry/qti/mapping.ts";
 import * as metadata from "#pantry/qti/metadata.ts";
@@ -41,6 +41,8 @@ import * as pkg from "#pantry/qti/package.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
 import * as quotation from "#pantry/qti/quotation.ts";
 import { quotationLaws } from "#pantry/qti/quotation.ts";
+import { builtLawsByName, Qti } from "#pantry/test/qti.ts";
+import { Author, AuthorApp, exportWork, importWork } from "#pantry/test/author.ts";
 import * as tests from "#pantry/qti/tests.ts";
 import { testLaws } from "#pantry/qti/tests.ts";
 
@@ -64,6 +66,13 @@ const composedLaws: readonly (readonly [string, readonly Statement[]])[] = [
   ["src/qti/operators.ts operatorLaws", operatorLaws],
   ["src/qti/mathml.ts mathmlLaws", mathmlLaws],
   ["src/qti/catalog.ts catalogLaws", catalogLaws],
+  ["src/qti/data-ssml.ts dataSsmlLaws", dataSsmlLaws],
+  [
+    "src/test/qti.ts builtLawsByName, the queries' built with Qti",
+    builtLawsByName.flatMap((byName: Readonly<Partial<Record<string, readonly Statement[]>>>) =>
+      Object.values(byName).flatMap((statements) => statements ?? []),
+    ),
+  ],
 ];
 
 /**
@@ -89,12 +98,26 @@ const composedModules = [
   ["src/qti/operators.ts", operators],
   ["src/qti/mathml.ts", mathml],
   ["src/qti/catalog.ts", catalog],
+  ["src/qti/data-ssml.ts", dataSsml],
 ] as const;
 
 /**
- * The kinds of a schema member's value: a stored relation, a roster, and a closed relation.
+ * The kinds of a schema member's value: a stored relation, a roster, a closed relation, and a
+ * derived one, a query of the level of queries (`#pantry/qti/queries.ts`).
  */
-const memberKinds: ReadonlySet<unknown> = new Set(["closed", "closedRelation", "relation"]);
+const memberKinds: ReadonlySet<unknown> = new Set([
+  "closed",
+  "closedRelation",
+  "derived",
+  "relation",
+]);
+
+/**
+ * The kinds of a member the author role holds no entry of: a closed relation, whose rows the role
+ * reads inline, and a derived one, which a role reads through the tables its definition reads,
+ * never whole (grizzle's README, "Derived tables").
+ */
+const unheldKinds: ReadonlySet<unknown> = new Set(["closedRelation", "derived"]);
 
 describe("qti/schema.ts, composed", () => {
   it("holds every roster, closed relation and relation each composed module exports, under its own name", () => {
@@ -141,17 +164,17 @@ describe("qti/schema.ts, composed", () => {
 });
 
 describe("qti/roles.ts, the author role", () => {
-  it("holds every stored relation and roster of Qti whole, and no closed relation", () => {
+  it("holds every stored relation and roster of Qti whole, and no closed or derived relation", () => {
     for (const [name, member] of Object.entries(Qti.relations)) {
       const entry: unknown = Object.getOwnPropertyDescriptor(Author.relations, name)?.value;
 
-      assert.strictEqual(entry, member.kind === "closedRelation" ? undefined : member, name);
+      assert.strictEqual(entry, unheldKinds.has(member.kind) ? undefined : member, name);
     }
 
     assert.sameMembers(
       Object.keys(Author.relations),
       Object.entries(Qti.relations).flatMap(([name, member]) =>
-        member.kind === "closedRelation" ? [] : [name],
+        unheldKinds.has(member.kind) ? [] : [name],
       ),
     );
   });

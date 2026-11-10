@@ -11,15 +11,14 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Formatter, Option } from "effect";
+import { Array as Arr, Effect, Formatter, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { ruleOfLaws } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/test/qti.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { itemResource, manifestOf, packageOf, withItem } from "#pantry/test/probe.ts";
+import { schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 /**
  * A `cn` case: its markup, whether both judges must accept it, and the rule they refuse it under.
@@ -155,7 +154,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("the parts of a typed c
         const rule =
           first === undefined
             ? "accepted"
-            : Option.getOrElse(ruleOfLaws([first, ...rest]), () => "unnamed");
+            : Option.getOrElse(Arr.head(schemaRulesOf([first, ...rest])), () => "unnamed");
         const rules = verdict.kind === "accepted" ? new Set(["accepted"]) : verdict.rules;
         const shown = `${name}: the import's rows give ${rule} (${broken.map(({ law }) => Formatter.format(law)).join("; ") || "no law"}), the oracle ${[...rules].join(", ")}`;
 

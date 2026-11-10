@@ -23,12 +23,11 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { cases, packageOf, shown } from "#pantry/test/placed-id-copy-cases.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
 
 describe.skipIf(!hasLease)("import/placed-id-copy.db.test.ts, on the lease", () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
-    timeout: authorLayerHookTimeoutMs,
   })("a placed ID's copy, judged by PostgreSQL", (it) => {
     it.effect(
       "the database gives every case the law oracle's verdict, a merged test that holds one ID twice refused under document-key",

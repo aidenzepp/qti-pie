@@ -4,24 +4,33 @@
  * every program of every login, and reads what it prints. A statement grizzle refuses ("does not
  * compile") fails here, in the free suite, instead of waiting for a regenerate or a leased run.
  *
- * Its bound is the one schema, every login and every program. Drift between the schema and
- * `snapshot.json` ("an ungenerated change", "is not the one snapshot.json records") is not a
- * compile failure and passes: `src/qti/logins.test.ts` owns that state.
+ * Its bound is the one schema, every login and every program. Drift between the schema and the
+ * committed migrations ("an ungenerated change", "is not the one snapshot.json records", a served
+ * file generate did not write) is no compile failure and passes: the integration checks' own
+ * `grizzle check` refuses it (AGENTS.md, Workflow, Integration).
  *
- * It spawns `grizzle check` (`#pantry/test/grizzle-check.ts`) because grizzle exports no compile
- * function to this package.
+ * It spawns `grizzle check` (`#pantry/test/grizzle-check.ts`) because the check is the whole
+ * compile: `compileSchema` over the schema and every login's served compile, which `grizzle
+ * generate` commits. `@bjornpagen/grizzle/compile` exports only one login's served compile under a
+ * given snapshot (`compileServed`, a test's probe, `#pantry/test/served-members.ts`), which checks
+ * no schema.
  */
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { grizzleCheck } from "#pantry/test/grizzle-check.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 /**
  * How long the check may take. Measured wall time of `pnpm exec grizzle check`: 8.2 s at load 11,
  * 14.7 s at load 47 (refused at the schema), 22.1 s at load 50 (a full compile to drift).
  * Measured 2026-11-07: 33.9 s at a load average of 68 to 116; the same day, 48.3 s while the load
- * rose from 35 to 123.
+ * rose from 35 to 123. At nice 19, as lanes run the free suite beside the database tier, the check
+ * gets a fraction of a core: Measured 2026-11-09: 475.1 s at a load average of 47.6 to 82.9, the
+ * check alone at nice 19 (the same day 337 s alone, and the test 255.4 s at 38 to 47), so the
+ * constant is over twice the slowest. A measurement at nice 19 whose least load is 60 or more for
+ * the whole run is owed.
  */
-const checkTimeoutMs = 300_000;
+const checkTimeoutMs = 1_000_000;
 
 it.effect(
   "grizzle check reaches the end of compilation: no statement or program of Qti does not compile",
@@ -33,9 +42,10 @@ it.effect(
       // Oracle: grizzle's `compileSchema` and program compilation, as `grizzle check` runs them.
       // Bound: the one schema, every login and every program; residual none.
       assert.isTrue(code === 0 || code === 1, `grizzle check exited ${String(code)}:\n${output}`);
+      // grizzle check names each schema by its declared name, the top level's (`QtiQueries`).
       assert.isTrue(
-        lines.some((line) => line.startsWith("Qti: ")),
-        `grizzle check printed no Qti line:\n${output}`,
+        lines.some((line) => line.startsWith(`${Qti.name}: `)),
+        `grizzle check printed no ${Qti.name} line:\n${output}`,
       );
       assert.deepStrictEqual(
         lines.filter((line) => line.includes("does not compile")),

@@ -34,7 +34,7 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Effect, Formatter, Option, Predicate } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
-import { stepOf } from "#pantry/grammar/content.ts";
+import { followPairsOf, stepOf } from "#pantry/grammar/content.ts";
 import * as install from "#pantry/grammar/install.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
 import { readProgram } from "#pantry/import/program.ts";
@@ -44,16 +44,17 @@ import { endsOf, fold } from "#pantry/model/folds.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import type { XdmDocument } from "#pantry/model/xdm.ts";
-import { EndCharacter, Node, nodeLaws } from "#pantry/qti/node.ts";
+import { ElementType, EndCharacter, Node, nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/test/qti.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
-import { hostRowsOf } from "#pantry/test/host-judge.ts";
+import { datumText } from "#pantry/test/predicates.ts";
+import type { Datum } from "#pantry/test/predicates.ts";
+import { hostRowsOf, judgedLaws } from "#pantry/test/host-judge.ts";
 import type { HostRow } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
-import { checkOf, checkValueOf, datumText } from "#pantry/test/key-copies.ts";
-import type { Datum } from "#pantry/test/key-copies.ts";
+import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
+import { checkOf, checkValueOf } from "#pantry/test/key-copies.ts";
 import { documentBreaches, lawNames, lawsOf, oracleRules, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import { edit, item, itemResource, manifestOf, packageOf } from "#pantry/test/probe.ts";
@@ -105,20 +106,25 @@ const scratchSchema = () =>
   schema(
     "NodeScratch",
     {
+      AdmissionIn: install.AdmissionIn,
+      AdmissionMap: install.AdmissionMap,
+      AnonymousType: install.AnonymousType,
       AttributeSlot: install.AttributeSlot,
       Banned: install.Banned,
       BarredOf: install.BarredOf,
       Capped: install.Capped,
-      ChildGrammar: install.ChildGrammar,
       ContentModel: install.ContentModel,
       ContentModelOf: install.ContentModelOf,
       CountedOf: install.CountedOf,
+      ElementType,
       Enters: install.Enters,
       Flag: install.Flag,
-      Follow: install.Follow,
+      FollowMember: install.FollowMember,
+      FollowSet: install.FollowSet,
+      FollowSetOf: install.FollowSetOf,
       GoverningOf: install.GoverningOf,
       Governor: install.Governor,
-      Last: install.Last,
+      KindGovernor: install.KindGovernor,
       ModelPositions: install.ModelPositions,
       Needs: install.Needs,
       Node,
@@ -127,10 +133,11 @@ const scratchSchema = () =>
       SchemaVersion: install.SchemaVersion,
       SharedModel: install.SharedModel,
       SharedModelOf: install.SharedModelOf,
-      SharedPositions: install.SharedPositions,
       StandInAttribute,
       StandInNamespace,
-      Symbol: install.Symbol,
+      SymbolMember: install.SymbolMember,
+      SymbolSet: install.SymbolSet,
+      SymbolSetOf: install.SymbolSetOf,
       TextDomain: install.TextDomain,
       TypeName: install.TypeName,
       ValueDomain: install.ValueDomain,
@@ -166,7 +173,8 @@ const lawOf = (name: string): string => name.replaceAll("_", " ");
 
 /**
  * The oracle laws `nodeLaws` states as named checks. Every other statement is a family, a fold or a
- * containment, which a refusal names by its kind and sides (Q5.17).
+ * containment, which a refusal names by its kind and sides (Q5.17). "E1 derived" is a check on
+ * `Node` and one on `ElementType`, each relation's own.
  */
 const checkedLaws: readonly LawName[] = [
   "E1 derived",
@@ -195,7 +203,7 @@ const written = {
   chars: "",
   documentType: "imsqti_item_xmlv3p0",
   first: "",
-  governs: "none",
+  governor: "qti-assessment-item",
   id: someId,
   kind: "qti-assessment-item",
   last: "",
@@ -230,15 +238,18 @@ describe("Node's declarations", () => {
     testTimeoutMs,
   );
 
-  it("names every check by an oracle law, each mapped to a rule, and states each law once", () => {
+  it("names every check by an oracle law, each mapped to a rule, and states each law once on each relation", () => {
     // Oracle: the specification as a checker, the oracle's law list and its rule map
     // (`#pantry/test/oracle.ts`), which Q5.17's refusals read.
-    const names = nodeLaws.flatMap((statement) =>
-      statement.kind === "check" ? [lawOf(statement.name)] : [],
+    const checks = nodeLaws.flatMap((statement) =>
+      statement.kind === "check"
+        ? [{ checked: statement.relation.name, law: lawOf(statement.name) }]
+        : [],
     );
+    const placed = checks.map(({ checked, law }) => `${checked} ${law}`);
 
-    assert.sameMembers(names, [...checkedLaws]);
-    assert.strictEqual(new Set(names).size, names.length);
+    assert.sameMembers([...new Set(checks.map(({ law }) => law))], [...checkedLaws]);
+    assert.strictEqual(new Set(placed).size, placed.length);
     for (const law of checkedLaws) {
       assert.include(lawNames, law);
       assert.include(oracleRules, ruleOf(law));
@@ -260,7 +271,7 @@ describe("Node's declarations", () => {
       document: true,
       documentType: true,
       first: true,
-      governs: true,
+      governor: true,
       id: true,
       kind: true,
       last: true,
@@ -330,11 +341,16 @@ describe("Node's declarations", () => {
 const familyKey = (version: string, parent: string): string => `${version} ${parent}`;
 
 /**
- * `ChildGrammar`'s rows as installed, by family, each kind's position.
+ * The installed admission maps spelled out as (version, parent, child) → position rows.
+ */
+const admitted = admittedOf(install.ContentModelOf, install.AdmissionIn);
+
+/**
+ * The admission maps' rows as installed (`admittedOf`), by family, each kind's position.
  */
 const childGrammar: ReadonlyMap<string, ReadonlyMap<string, string>> = (() => {
   const byFamily = new Map<string, Map<string, string>>();
-  for (const { child, parent, position, version } of install.ChildGrammar.rows) {
+  for (const { child, parent, position, version } of admitted) {
     const key = familyKey(version, parent);
     byFamily.set(key, (byFamily.get(key) ?? new Map<string, string>()).set(child, position));
   }
@@ -360,10 +376,18 @@ const modelPositions: ReadonlyMap<string, number> = new Map(
 );
 
 /**
- * `Follow`'s rows as installed, each `<model> <from> <to>`.
+ * The transitions `FollowSetOf` and `FollowMember` install, each `<model> <from> <to>`.
+ */
+const transitions = followPairsOf({
+  followMember: install.FollowMember,
+  followSetOf: install.FollowSetOf,
+});
+
+/**
+ * The installed transitions as a set of `<model> <from> <to>`.
  */
 const follow: ReadonlySet<string> = new Set(
-  install.Follow.rows.map(({ from, model, to }) => `${model} ${from} ${to}`),
+  transitions.map(({ from, model, to }) => `${model} ${from} ${to}`),
 );
 
 /**
@@ -377,12 +401,12 @@ const sharedModelOf: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * `Symbol`'s rows as installed, by `<model> <kind>`: the positions a shared model names the kind
- * at.
+ * The installed symbol sets spelled out (`symbolRowsOf`), by `<model> <kind>`: the positions a
+ * shared model names the kind at.
  */
 const symbol: ReadonlyMap<string, readonly string[]> = (() => {
   const byKind = new Map<string, string[]>();
-  for (const { kind, model, position } of install.Symbol.rows) {
+  for (const { kind, model, position } of symbolRowsOf(install.SymbolSetOf, install.SymbolMember)) {
     const key = `${model} ${kind}`;
     byKind.set(key, [...(byKind.get(key) ?? []), position]);
   }
@@ -445,17 +469,17 @@ interface Family {
 }
 
 /**
- * Every family `ChildGrammar` admits a child under, in its rows' order.
+ * Every family whose admission map admits a child, in `ContentModelOf`'s order.
  */
 const families: readonly [Family, ...Family[]] = (() => {
   const seen = new Map<string, Family>();
-  for (const { parent, version } of install.ChildGrammar.rows) {
+  for (const { parent, version } of admitted) {
     seen.set(familyKey(version, parent), { parent, version });
   }
 
   const [first, ...rest] = [...seen.values()];
   if (first === undefined) {
-    throw new Error("The installed ChildGrammar admits no child, so N5 has no family to judge.");
+    throw new Error("The installed admission maps admit no child, so N5 has no family to judge.");
   }
 
   return [first, ...rest];
@@ -688,10 +712,11 @@ const orderingCases: readonly [OrderingCase, ...OrderingCase[]] = (() => {
 })();
 
 /**
- * `Last`'s rows as installed, each `<model> <position>`.
+ * The states `FollowSetOf` marks a family may end at, as installed, each `<model> <position>`: the
+ * content grammar's `Last`.
  */
 const last: ReadonlySet<string> = new Set(
-  install.Last.rows.map(({ model, position }) => `${model} ${position}`),
+  install.FollowSetOf.rows.filter(({ ends }) => ends).map(({ from, model }) => `${model} ${from}`),
 );
 
 /**
@@ -907,7 +932,7 @@ const foreignCases: readonly {
   {
     corrupt: {
       _tag: "edit",
-      edit: (rows) => editedForeign(rows, "foreign-element", { governs: "none" }),
+      edit: (rows) => editedForeign(rows, "foreign-element", { governs: Option.none() }),
     },
     law: "Strictly held",
     lawful: `<qti-assessment-item xmlns="${asi}" xmlns:f="urn:f" xmlns:xsi="${xsiNamespace}" xmlns:xs="${xsNamespace}" identifier="item" title="Item" time-dependent="false" adaptive="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-companion-materials-info><f:x xsi:type="xs:string"/></qti-companion-materials-info><qti-item-body><p>x</p></qti-item-body></qti-assessment-item>`,
@@ -935,7 +960,8 @@ const foreignCases: readonly {
   {
     corrupt: {
       _tag: "edit",
-      edit: (rows) => editedForeign(rows, "foreign-element", { governs: otherSetType }),
+      edit: (rows) =>
+        editedForeign(rows, "foreign-element", { governs: Option.some(otherSetType) }),
     },
     law: "XsiType available",
     lawful: sectionTest(
@@ -1002,7 +1028,7 @@ const familyWith = (holds: (family: Family, kind: string, position: string) => b
     const kind = [...(childGrammar.get(family) ?? [])].find(
       ([child, position]) => !nonElements.has(child) && holds(at, child, position),
     )?.[0];
-    const from = install.Follow.rows.find((row) => row.model === model)?.from;
+    const from = transitions.find((row) => row.model === model)?.from;
     if (kind !== undefined && from !== undefined) {
       return { ...at, from, kind, model };
     }
@@ -1039,15 +1065,23 @@ type MembershipLaw = "N5 Follow" | "N5 admitted" | "N7 Counted" | "N7 Last";
  * evaluates the predicate grizzle keeps for it, the field whose handle it tests, and the set it
  * tests the handle in, read off `install.ts`'s rows. Every other field of its row reaches the
  * membership, and each other `Position` field holds the state the family steps from, so a
- * membership of another `Position` field would give one verdict for every handle.
+ * membership of another `Position` field would give one verdict for every handle. `over` is the
+ * handles a stored row's field can hold, the ones the membership is judged at.
  */
 interface Membership {
   readonly field: "lastState" | "state";
   readonly held: ReadonlySet<string>;
   readonly law: MembershipLaw;
   readonly meets: (row: Readonly<Record<string, Datum>>) => boolean;
+  readonly over: ReadonlySet<string>;
   readonly row: Readonly<Record<string, Datum>>;
 }
+
+/**
+ * Every handle of the `Position` roster, the handles a member's own `state` is judged at: N5
+ * admits only the states its model's transitions reach, and that is the law under test.
+ */
+const everyPosition: ReadonlySet<string> = new Set(install.Position.handles);
 
 /**
  * Read a check of `Node` as the schema states it.
@@ -1104,18 +1138,22 @@ const childRow = ({ from, kind, parent, version }: ReturnType<typeof familyWith>
  * The four memberships of `node.ts`: N5 Follow's `{state} ⊆ Follow(model, was)` and N5 admitted's
  * `{state} ⊆ Symbol(shared, kind)` for a member element, N7 Counted's capped children,
  * `{state} ⊆ Capped(version, parent)`, and N7 Last's `{lastState} ⊆ Last(model)` for the parent's
- * own row.
+ * own row. N7 Last is judged over its model's own states alone: it reads
+ * `FollowSetOf.at("ends", model, lastState)`, unknown at a state no `FollowSetOf` row of the model
+ * holds, so the check passes there, as PostgreSQL's `CHECK` does; and no stored row holds such a
+ * state, since N5 and "N7 last slot" admit only the model's own.
  */
 const memberships: readonly Membership[] = [
   {
     field: "state",
     held: new Set(
-      install.Follow.rows
+      transitions
         .filter(({ from, model }) => model === sharedFamily.model && from === sharedFamily.from)
         .map(({ to }) => to),
     ),
     law: "N5 Follow",
     meets: nodeCheck("N5 Follow"),
+    over: everyPosition,
     row: childRow(sharedFamily),
   },
   {
@@ -1127,6 +1165,7 @@ const memberships: readonly Membership[] = [
     ),
     law: "N5 admitted",
     meets: nodeCheck("N5 admitted"),
+    over: everyPosition,
     row: childRow(sharedFamily),
   },
   {
@@ -1141,17 +1180,23 @@ const memberships: readonly Membership[] = [
     ),
     law: "N7 Counted",
     meets: (row) => cappedKey.selection(row) === true,
+    over: everyPosition,
     row: childRow(cappedFamily),
   },
   {
     field: "lastState",
     held: new Set(
-      install.Last.rows
-        .filter(({ model }) => model === sharedFamily.model)
-        .map(({ position }) => position),
+      install.FollowSetOf.rows
+        .filter(({ ends, model }) => ends && model === sharedFamily.model)
+        .map(({ from }) => from),
     ),
     law: "N7 Last",
     meets: nodeCheck("N7 Last"),
+    over: new Set(
+      install.FollowSetOf.rows
+        .filter(({ model }) => model === sharedFamily.model)
+        .map(({ from }) => from),
+    ),
     row: { ...childRow(sharedFamily), kind: sharedFamily.parent },
   },
 ];
@@ -1169,7 +1214,8 @@ describe("the memberships of a node's own position, by the host judge", () => {
       // Oracle: the specification, the meaning of the diagonal `Compute.singleton` replaced:
       // {h} ⊆ S exactly where h ∈ S, S read off `install.ts`'s rows, over the predicates grizzle
       // keeps for the laws, evaluated on the host (`#pantry/test/key-copies.ts`).
-      // Bound: every handle of the Position roster in each of the four memberships.
+      // Bound: every handle of the Position roster in each of the four memberships, each judged
+      // at the handles its field can hold.
       searched(
         ctx,
         exhaust(
@@ -1195,7 +1241,9 @@ describe("the memberships of a node's own position, by the host judge", () => {
           (code, c) =>
             Effect.sync(() => {
               const handle = install.Position.handles[code] ?? "";
-              for (const { field, held, law, meets, row } of memberships) {
+              for (const { field, held, law, meets, row } of memberships.filter(({ over }) =>
+                over.has(handle),
+              )) {
                 const expected = held.has(handle);
                 c.note(`${law} ${expected ? "held" : "not held"}`);
                 assert.strictEqual(

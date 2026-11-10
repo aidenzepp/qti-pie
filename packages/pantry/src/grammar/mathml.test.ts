@@ -39,19 +39,22 @@ import {
   Option,
   Result,
 } from "effect";
-import { admits, step } from "#pantry/grammar/ancestry.ts";
+import { step } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { accepts } from "#pantry/grammar/content.ts";
+import { mixedEndingsOf } from "#pantry/grammar/content.ts";
+import type { ModelEdit } from "#pantry/grammar/content.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { breachesOf, judged as judgedPackage, shown, withItem } from "#pantry/test/probe.ts";
+import { accepts, admits, admittedOf } from "#pantry/test/indexes.ts";
 import { xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";
 import { namespaceClassOf, namespaceNameOf } from "#pantry/vocab/namespaces.ts";
+import { automatonOf } from "#pantry/vocab/sequencing.ts";
 import {
   resolverOf,
   toyFacets,
@@ -526,14 +529,15 @@ describe("spec reading 2: MathML's content models (the MathML 3 RelaxNG)", () =>
       // Oracle: the RelaxNG's `start = math` (`mathml3-common.rnc` line 15) and §2.2, "All other MathML
       // content must be contained in a math element". Bound: every Admission row.
       Effect.gen(function* everyRow() {
-        const { admission } = yield* grammar;
-        const wrong = admission.rows
+        const { content } = yield* grammar;
+        const admission = admittedOf(content.contentModelOf, content.admissionIn);
+        const wrong = admission
           .filter(
             ({ child, parent }) =>
               child.startsWith("m:") && !parent.startsWith("m:") && child !== mathmlRoot,
           )
           .map(({ child, parent, version }) => `${version} ${parent} admits ${child}`);
-        const roots = admission.rows.filter(
+        const roots = admission.filter(
           ({ child, parent }) => child === mathmlRoot && !parent.startsWith("m:"),
         );
 
@@ -1109,6 +1113,19 @@ const endedToy = (model: ContentModel, ending: readonly [string, ...string[]]) =
     },
   ]);
 
+/**
+ * A toy ending of `p`'s families at some kinds.
+ *
+ * @param kinds - The kinds its families end with.
+ * @returns The edit.
+ */
+const endingOf = (kinds: readonly [string, ...string[]]): ModelEdit => ({
+  _tag: "ends",
+  kinds,
+  parent: "p",
+  source: "a toy ending",
+});
+
 describe("MathML 3 §3.6.5.1: mscarries is never the last element of an mstack or mlongdiv", () => {
   it.effect(
     "refuses a package whose mstack ends in an mscarries, under N7 Last and child-set",
@@ -1254,19 +1271,28 @@ describe("the ending edit, which lambda's restatement reads (content.ts, endedBy
       }),
   );
 
-  it("refuses an ending that lists some of one position's kinds, and states one that lists them all", () => {
+  it("finds an ending that lists some of one position's kinds, and none in one that lists them all", () => {
     // Oracle: the edit's contract, a position's state cannot tell which of its kinds ended the
-    // family. Bound: `([a, b] | c)*`, ended by `a`, by `a` and `b`, and by `c`.
+    // family. A load checks no ending; `mixedEndingsOf` is the tests' check, which
+    // `content.test.ts` runs over every ending of the composition. Bound: `([a, b] | c)*`, ended by
+    // `a`, by `a` and `b`, and by `c`.
     const mixed = repeatedChoice([["a", "b"], ["c"]]);
+    const automaton = automatonOf(
+      mixed.content._tag === "element-only"
+        ? mixed.content.particle
+        : assert.fail("the toy model holds a particle"),
+    );
 
-    assert.strictEqual(
-      Result.match(endedToy(mixed, ["a"]), {
-        onFailure: (error) => error._tag,
-        onSuccess: () => "composed",
-      }),
-      "MixedEnding",
+    assert.deepStrictEqual(
+      mixedEndingsOf(automaton, [endingOf(["a"])], "p").map(({ kinds }) => kinds),
+      [["a", "b"]],
     );
     for (const ending of [["a", "b"], ["c"]] as const) {
+      assert.deepStrictEqual(
+        mixedEndingsOf(automaton, [endingOf(ending)], "p"),
+        [],
+        ending.join(" "),
+      );
       assert.isTrue(Result.isSuccess(endedToy(mixed, ending)), ending.join(" "));
     }
   });

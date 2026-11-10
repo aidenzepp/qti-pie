@@ -6,6 +6,7 @@ import {
   closed,
   closedId,
   Compute,
+  constraintNamesOf,
   contained,
   counted,
   drawn,
@@ -30,46 +31,32 @@ import {
   tree,
   uuid,
 } from "@bjornpagen/grizzle";
-import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";
+import type { Law, LawSide, RegexText } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import {
-  Array as Arr,
-  Duration,
-  Effect,
-  Function as Fn,
-  Formatter,
-  Option,
-  pipe,
-  Predicate,
-  Result,
-  Schema,
-} from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Result, Schema } from "effect";
 import { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import { composed } from "#pantry/grammar/compose.ts";
+import { followPairsOf } from "#pantry/grammar/content.ts";
 import {
   checkNameOf,
+  contractNames,
   explain,
-  ImportRefused,
-  ImportRule,
-  lawNameOf,
-  limitRules,
+  generatedNames,
   owedRules,
-  patternLawsOf,
-  plainTexts,
-  refusalOfLaws,
-  ruleOfError,
-  ruleOfLaws,
-  statedLaws,
-  textLaws,
+  refusalOf,
 } from "#pantry/import/refusal.ts";
+import type { LawName, RefusalLaw } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
-import type { ReadRefusal, Rule } from "#pantry/import/refusal.ts";
+import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
+import { beginsWith, mergedAxes } from "#pantry/test/merged-axes.ts";
+import type { Axis } from "#pantry/test/merged-axes.ts";
 import {
   NotQti3,
   notQti3Reasons,
@@ -78,6 +65,20 @@ import {
 } from "#pantry/model/shred.ts";
 import { PackageReadError } from "#pantry/package/read.ts";
 import { ZipRefusal } from "#pantry/package/zip.ts";
+import { ImportRefused, ImportRule, limitRules, ruleOfError } from "#pantry/import/rules.ts";
+import type { ReadRefusal, Rule } from "#pantry/import/rules.ts";
+import {
+  keyNames,
+  patternNameIn,
+  patternTypeOf,
+  schemaLawNameOf,
+  schemaLawsOf,
+  schemaRuleOfLaw,
+  schemaRulesOf,
+  statedLaws,
+  textLaws,
+} from "#pantry/test/law-namer.ts";
+import { refusedOf } from "#pantry/test/law-names.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -93,169 +94,21 @@ const testTimeoutMs = 120_000;
 const grammar = Result.getOrThrow(composed());
 
 /**
- * The primary key of every stored relation of a schema, as its law.
- *
- * @param relations - The schema's `relations`.
- * @returns The laws.
+ * The laws a refusal of `laws` prints, as the database reported them: empty unless its origin is
+ * the database's.
  */
-const primaryKeysOf = (relations: AnySchema["relations"]): readonly Law[] =>
-  Object.values(relations).flatMap((value) =>
-    Option.toArray(
-      Option.map(
-        Schema.decodeUnknownOption(
-          Schema.Struct({
-            kind: Schema.Literal("relation"),
-            name: Schema.String,
-            primaryKey: Schema.Array(Schema.String),
-          }),
-        )(value),
-        ({ name, primaryKey }): Law => ({ fields: primaryKey, kind: "primaryKey", relation: name }),
-      ),
-    ),
-  );
+const printed = (laws: Arr.NonEmptyReadonlyArray<RefusalLaw>) => {
+  const refused = refusalOf({ kind: "every", laws }, { kind: "unreported" }, grammar);
 
-/**
- * One axis of a family and every law its foreign key carries.
- */
-interface Axis {
-  readonly label: string;
-  readonly laws: Arr.NonEmptyReadonlyArray<Law>;
-}
-
-/**
- * Whether a side's terms begin with `prefix`, each a field or `pred` of the same field.
- *
- * @param side - The side.
- * @param prefix - The terms.
- * @returns Whether they begin it.
- */
-const beginsWith = (side: LawSide, prefix: readonly LawSide["terms"][number][]): boolean =>
-  prefix.every((term, at) => {
-    const own = side.terms[at];
-
-    return own !== undefined && own.kind === term.kind && own.field === term.field;
-  });
-
-/**
- * Whether a law side reads a selection of its relation rather than every fact.
- *
- * @param side - The side.
- * @returns Whether it selects.
- */
-const selects = (side: LawSide): boolean => side.selection.conjuncts.length > 0;
-
-/**
- * Read the axes of every family of a schema, each with the laws its foreign key carries: the
- * family's own law, every containment that rides the axis, and on the predecessor and last axes
- * every fold over the family.
- *
- * It restates grizzle's riding rule (`analysis/theory/families.ts` `axisShapes` and `ridesOf`, at
- * 4016b69): the owner axis is member `F(g…)` to owner `O(k…)`; the predecessor axis
- * `F(g…, pred(i))` to `F(g…, i)` and the last axis `O(k…, pred(n))` to `F(g…, i)` for a family
- * whose index is a field. A tree's member ends read its members, a selection, and every other end
- * reads every fact; the reader takes any selection of a tree's member for the members.
- *
- * @param laws - The schema's laws, as grizzle's `lawsOf` names them.
- * @param relations - Its relations, for each owner's primary key.
- * @returns The axes.
- */
-const mergedAxes = (laws: readonly Law[], relations: AnySchema["relations"]): readonly Axis[] => {
-  const keys = new Map(
-    primaryKeysOf(relations).flatMap((law) =>
-      law.kind === "primaryKey" ? [[law.relation, law.fields] as const] : [],
-    ),
-  );
-  const containments = laws.flatMap((law) => (law.kind === "contained" ? [law] : []));
-
-  return laws.flatMap((own): readonly Axis[] => {
-    if (own.kind !== "family" && own.kind !== "tree") {
-      return [];
-    }
-
-    const { member, slots } = own;
-    const { owner } = slots;
-    const isTree = own.kind === "tree";
-    const byCount = own.kind === "family" && own.order === "counted";
-    const { terms } = member;
-    const group = byCount ? [...terms] : terms.slice(0, -1);
-    const index = byCount ? undefined : terms.at(-1);
-    const ownerKey = (keys.get(owner) ?? []).map((field) => ({ field, kind: "field" as const }));
-    const folds = laws.filter(
-      (other) =>
-        other.kind === "fold" && other.family.owner === owner && other.family.count === slots.count,
-    );
-    const riding = (
-      from: { readonly relation: string; readonly members: boolean },
-      to: { readonly relation: string; readonly members: boolean },
-      fromKey: readonly LawSide["terms"][number][],
-      toKey: readonly LawSide["terms"][number][],
-    ): readonly Law[] =>
-      containments.filter(
-        (law) =>
-          law.from.relation === from.relation &&
-          law.to.relation === to.relation &&
-          selects(law.from) === (from.members && isTree) &&
-          selects(law.to) === (to.members && isTree) &&
-          beginsWith(law.from, fromKey) &&
-          beginsWith(law.to, toKey),
-      );
-    const ownerAxis: Axis = {
-      label: `${member.relation} owner`,
-      laws: [
-        own,
-        ...riding(
-          { members: true, relation: member.relation },
-          { members: false, relation: owner },
-          group,
-          ownerKey,
-        ),
-      ],
-    };
-    if (index === undefined) {
-      return [
-        ownerAxis,
-        { label: `${member.relation} predecessor and last`, laws: [own, ...folds] },
-      ];
-    }
-
-    return [
-      ownerAxis,
-      {
-        label: `${member.relation} predecessor`,
-        laws: [
-          own,
-          ...riding(
-            { members: true, relation: member.relation },
-            { members: true, relation: member.relation },
-            [...group, { field: index.field, kind: "pred" }],
-            [...group, index],
-          ),
-          ...folds,
-        ],
-      },
-      {
-        label: `${member.relation} last`,
-        laws: [
-          own,
-          ...riding(
-            { members: false, relation: owner },
-            { members: true, relation: member.relation },
-            [...ownerKey, { field: slots.count, kind: "pred" }],
-            [...group, index],
-          ),
-          ...folds,
-        ],
-      },
-    ];
-  });
+  return refused.origin._tag === "Database" ? refused.origin.laws : [];
 };
 
 /**
  * A scratch schema, in the shapes `node.ts` and `attributes.ts` state, built with grizzle's own
  * constructors: a tree with its parent copy, predecessor copy, last slot, `Follow` step and two
  * count folds, an ordered family with its owner copy and `or` fold, and a counted family whose
- * owner copy rides its owner axis; its laws as grizzle's `lawsOf` names them, and the law of each
- * statement an axis carries, by the statement's name.
+ * owner copy rides its owner axis; its laws as grizzle's `lawsOf` lists them, and the law
+ * of each statement an axis carries, by the statement's name.
  *
  * `grizzle generate` compiled this schema at 4016b69, with no database, and its foreign keys carry
  * exactly: the tree's owner axis (parent, ‹n›, document, parentKind, parentNearest, ‹ps›, version);
@@ -403,7 +256,7 @@ const scratch = (() => {
     );
 
   return {
-    laws: built.statements.flatMap((statement) => lawsOfStatement(statement)),
+    laws: schemaLawsOf(built),
     named: {
       attributeFamily: lawOf(attributeFamily),
       attributeOwner: lawOf(attributeOwner),
@@ -417,7 +270,6 @@ const scratch = (() => {
       parentCopy: lawOf(parentCopy),
       predecessorCopy: lawOf(predecessorCopy),
     },
-    relations,
   };
 })();
 
@@ -647,44 +499,58 @@ const tierOf = (rule: Rule): number => {
 };
 
 /**
- * Read the rule of each law of a set by its name.
+ * Read the rule of each law of a set by its name, straight from the table.
  *
  * @param laws - The laws.
- * @returns Their rules, one per law the table owns.
+ * @returns Their rules, one per law the table owns, repeats and order kept.
  */
-const rulesOf = (laws: readonly Law[]): readonly Rule[] =>
-  laws.flatMap((law) => Option.toArray(Option.map(lawNameOf(law), (name) => lawTable[name].rule)));
+const lawRules = (laws: readonly Law[]): readonly (typeof precedence)[number][] =>
+  laws.flatMap((law) =>
+    Option.toArray(Option.map(schemaLawNameOf(law), (name) => lawTable[name].rule)),
+  );
 
 /**
- * Check one set of laws one native object carries: it resolves to exactly one rule, one of its
- * laws', of the most specific tier among them, whatever their order or repeats.
+ * Write rules as one text, so two listings compare by a string's equality.
+ *
+ * @param named - The rules.
+ * @returns Them, space separated.
+ */
+const listed = (named: readonly string[]): string => named.join(" ");
+
+/**
+ * Check the rules of one set of laws one native object carries: every rule of its laws, each once
+ * and no other, most specific first by the precedence, whatever the laws' order or repeats, and
+ * the first of the most specific tier among them. No law is singled out: a refusal carries them
+ * all.
  *
  * @param laws - The laws, in any order, with any repeats.
  */
-const assertResolves = (laws: Arr.NonEmptyReadonlyArray<Law>): void => {
-  const rule = ruleOfLaws(laws);
-  const reversed = Arr.reverse(laws);
+const assertRules = (laws: Arr.NonEmptyReadonlyArray<Law>): void => {
+  const rules = schemaRulesOf(laws);
+  const expected = Arr.dedupe(lawRules(laws)).toSorted(
+    (a, b) => precedence.indexOf(a) - precedence.indexOf(b),
+  );
+  const reversed = schemaRulesOf(Arr.reverse(laws));
   // A repeat is a drawn law again, the same value, so the set keeps each value once.
-  const once = Arr.dedupeWith(laws, (a, b) => a === b);
-  const resolved = Option.getOrUndefined(rule);
-  const rules = rulesOf(laws);
+  const once = schemaRulesOf(Arr.dedupeWith(laws, (a, b) => a === b));
+  const [first] = rules;
   if (
-    resolved !== undefined &&
-    Option.getOrUndefined(ruleOfLaws(reversed)) === resolved &&
-    Option.getOrUndefined(ruleOfLaws(once)) === resolved &&
-    rules.includes(resolved) &&
-    tierOf(resolved) === Math.min(...rules.map(tierOf))
+    first !== undefined &&
+    listed(rules) === listed(expected) &&
+    listed(reversed) === listed(rules) &&
+    listed(once) === listed(rules) &&
+    tierOf(first) === Math.min(...rules.map(tierOf))
   ) {
     return;
   }
 
   const identities = laws.map((law) => Formatter.format(law)).join(" & ");
-  assert.isTrue(Option.isSome(rule), identities);
-  assert.deepStrictEqual(ruleOfLaws(reversed), rule, identities);
-  assert.deepStrictEqual(ruleOfLaws(once), rule, identities);
-  if (Option.isSome(rule)) {
-    assert.include(rules, rule.value, identities);
-    assert.strictEqual(tierOf(rule.value), Math.min(...rules.map(tierOf)), identities);
+  assert.isNotEmpty(rules, identities);
+  assert.deepStrictEqual(rules, expected, identities);
+  assert.deepStrictEqual(reversed, rules, identities);
+  assert.deepStrictEqual(once, rules, identities);
+  if (first !== undefined) {
+    assert.strictEqual(tierOf(first), Math.min(...rules.map(tierOf)), identities);
   }
 };
 
@@ -857,9 +723,20 @@ describe("the law table", () => {
   );
 });
 
+/**
+ * Write a set of laws as one value to compare: each law's text, sorted. An axis's laws are a set,
+ * the laws one `some` refusal names together, and `lawsOf` lists them in its canonical order, not
+ * as the schema declares them.
+ *
+ * @param laws - The laws.
+ * @returns Their texts, sorted.
+ */
+const asSet = (laws: readonly Law[]): readonly string[] =>
+  laws.map((law) => Formatter.format(law)).toSorted();
+
 describe("the merged axes and the laws no row states", () => {
   it("reads every merged axis of the scratch schema as grizzle generates its foreign key", () => {
-    const axes = mergedAxes(scratch.laws, scratch.relations);
+    const axes = mergedAxes(scratch.laws);
     const {
       attributeFamily,
       attributeOwner,
@@ -874,29 +751,84 @@ describe("the merged axes and the laws no row states", () => {
       predecessorCopy,
     } = scratch.named;
 
-    assert.deepStrictEqual(Object.fromEntries(axes.map(({ label, laws }) => [label, laws])), {
-      "Attribute last": [attributeFamily, attrsFold],
-      "Attribute owner": [attributeFamily, attributeOwner],
-      "Attribute predecessor": [attributeFamily, attrsFold],
-      "Choice owner": [choiceFamily, choiceOwner],
-      "Choice predecessor and last": [choiceFamily],
-      "Node last": [nodeTree, lastSlot, elementCount, countedCount],
-      "Node owner": [nodeTree, parentCopy],
-      "Node predecessor": [nodeTree, predecessorCopy, elementCount, countedCount],
-    });
+    assert.deepStrictEqual(
+      Object.fromEntries(axes.map(({ label, laws }) => [label, asSet(laws)])),
+      {
+        "Attribute last": asSet([attributeFamily, attrsFold]),
+        "Attribute owner": asSet([attributeFamily, attributeOwner]),
+        "Attribute predecessor": asSet([attributeFamily, attrsFold]),
+        "Choice owner": asSet([choiceFamily, choiceOwner]),
+        "Choice predecessor and last": asSet([choiceFamily]),
+        "Node last": asSet([nodeTree, lastSlot, elementCount, countedCount]),
+        "Node owner": asSet([nodeTree, parentCopy]),
+        "Node predecessor": asSet([nodeTree, predecessorCopy, elementCount, countedCount]),
+      },
+    );
   });
 
-  it("refuses to name a rule for laws no row states, naming each law", () => {
+  it("names no rule for laws no row states, and still carries each law as the outcome names it", () => {
+    // Oracle: the outcome itself, read back field by field: its decision, the law's display text
+    // with no name or rule, no source, the witness's kind, and no rule.
     const law: Law = { from: sideOf("Nowhere", "x"), kind: "contained", to: sideOf("Node", "id") };
-    const refused = refusalOfLaws([law], { kind: "unreported" }, grammar);
+    const refused = refusalOf(
+      { kind: "every", laws: [refusedOf(law)] },
+      { kind: "unreported" },
+      grammar,
+    );
 
-    assert.isTrue(Result.isFailure(refused));
-    if (Result.isFailure(refused)) {
-      assert.deepStrictEqual(refused.failure.laws, [Formatter.format(law)]);
-    }
-
-    assert.isTrue(Option.isNone(ruleOfLaws([law])));
+    assert.deepStrictEqual(refused.rules, []);
+    assert.deepStrictEqual(refused.origin, {
+      _tag: "Database",
+      kind: "every",
+      laws: [{ text: Formatter.format(law) }],
+      sources: [],
+      witness: "unreported",
+    });
+    assert.isTrue(
+      refused.message.startsWith(
+        "The package was refused under laws no rule of the law table names: ",
+      ),
+      refused.message,
+    );
+    assert.isTrue(Option.isNone(schemaRuleOfLaw(law)));
   });
+
+  it(
+    "gives a check the installed name of the constraint that refused it, and none where a statement did",
+    () => {
+      // Oracle: the refusing object the outcome names (grizzle's `RefusedLaw.by`), and the law
+      // table's name and rule for each law. A native check names the constraint PostgreSQL holds it
+      // under: AL1's admission on Attribute by grizzle's `constraintNamesOf(Qti)`. It prints with
+      // that name, its name and its rule; the same check refused by a write statement names no
+      // constraint, so it prints with no installed name.
+      const stated = {
+        kind: "check",
+        name: checkNameOf("AL1 admission"),
+        relation: "Attribute",
+      } as const;
+      const installed = constraintNamesOf(Qti)(stated);
+
+      assert.deepStrictEqual(
+        printed([{ ...refusedOf(stated), by: { kind: "constraint", name: installed } }]),
+        [
+          {
+            installed,
+            name: "AL1 admission",
+            rule: lawTable["AL1 admission"].rule,
+            text: Formatter.format(stated),
+          },
+        ],
+      );
+      assert.deepStrictEqual(printed([refusedOf(stated)]), [
+        {
+          name: "AL1 admission",
+          rule: lawTable["AL1 admission"].rule,
+          text: Formatter.format(stated),
+        },
+      ]);
+    },
+    testTimeoutMs,
+  );
 });
 
 /**
@@ -1182,7 +1114,7 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   [
     "entry-kind",
     "root-type-reverse",
-    "reading 93 and package.ts's P3: a path's listing before the type of the root it lists, so a path listed under two document types is named for its listing, the cause (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat OL (0b4d8ec9)). Since reading 162 the path is typed by the listing its root bears out, so both laws break only where its root fits neither type; there PostgreSQL's immediate RootOfType check reports root-type-reverse before the deferred Document entry key, and the import names that, a stated limit of package.ts's rule, while the law oracle names entry-kind by this order",
+    "reading 93 and package.ts's P3: a path's listing before the type of the root it lists, so a path listed under two document types is named for its listing, the cause (Decided 2026-11-07 by the coordinator, under Bjorn's standing ruling of 2026-11-05, from seat OL (0b4d8ec9)). Since reading 162 the path is typed by the listing its root bears out, so both laws break only where its root fits neither type; there PostgreSQL's immediate RootOfType check reports root-type-reverse before the deferred Document entry key, and the import names that, a stated limit of package.ts's rule, while the law oracle names entry-kind by this order",
   ],
   [
     "root-type-reverse",
@@ -1296,7 +1228,7 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   ],
 ];
 
-describe("the precedence over the laws one native object carries", () => {
+describe("the rules of the laws one native object carries, in the precedence's order", () => {
   it("holds each adjacent pair of the precedence to the reading or source that orders it", () => {
     // Oracle: the readings and the plan's tiers, pair by pair (precedencePairs). Bound: every
     // adjacent pair of the 103 rules, so a swap of any two neighbours, or a rule moved or added,
@@ -1309,15 +1241,15 @@ describe("the precedence over the laws one native object carries", () => {
     assert.isTrue(precedencePairs.every((pair) => pair[2].length > 0));
   });
 
-  it("resolves each planned axis whole to the rule the spec's order names", () => {
+  it("lists each planned axis's rules with the one the spec's order names first", () => {
     for (const { label, laws, rule } of plannedAxes) {
       assert.isAbove(laws.length, 0, label);
-      assert.deepStrictEqual(ruleOfLaws(laws), Option.some(rule), label);
+      assert.deepStrictEqual(Arr.head(schemaRulesOf(laws)), Option.some(rule), label);
     }
   });
 
   it.effect(
-    "resolves every sequence of at most 4 of each planned axis's laws, any order and repeats, to one rule of its most specific tier",
+    "lists the rules of every sequence of at most 4 of each planned axis's laws, any order and repeats, each once, most specific first",
     (ctx) =>
       searched(
         ctx,
@@ -1342,14 +1274,14 @@ describe("the precedence over the laws one native object carries", () => {
                 c.note(label);
               }
 
-              assertResolves(carried.laws);
+              assertRules(carried.laws);
             }),
         ),
       ),
   );
 
   it.effect(
-    "resolves every sequence of at most 3 laws across the tiers to one rule of its most specific tier",
+    "lists the rules of every sequence of at most 3 laws across the tiers each once, most specific first",
     (ctx) =>
       searched(
         ctx,
@@ -1370,7 +1302,7 @@ describe("the precedence over the laws one native object carries", () => {
           (carried, c) =>
             Effect.sync(() => {
               c.note("cross-tier");
-              assertResolves(carried.laws);
+              assertRules(carried.laws);
             }),
         ),
       ),
@@ -1404,7 +1336,7 @@ const modelStates: Arr.NonEmptyReadonlyArray<ModelState> = (() => {
   const add = (model: string, state: string): void => {
     states.set(model, (states.get(model) ?? new Set()).add(state));
   };
-  for (const { from, model } of grammar.content.follow.rows) {
+  for (const { from, model } of followPairsOf(grammar.content)) {
     add(model, from);
   }
 
@@ -1450,7 +1382,7 @@ const models: Arr.NonEmptyReadonlyArray<Arr.NonEmptyReadonlyArray<ModelState>> =
  */
 const followed: ReadonlyMap<string, ReadonlySet<string>> = (() => {
   const next = new Map<string, Set<string>>();
-  for (const { from, model, to } of grammar.content.follow.rows) {
+  for (const { from, model, to } of followPairsOf(grammar.content)) {
     const at = `${model} ${from}`;
     next.set(at, new Set([...(next.get(at) ?? []), to]));
   }
@@ -1460,19 +1392,26 @@ const followed: ReadonlyMap<string, ReadonlySet<string>> = (() => {
 
 /**
  * The kinds at each position of each family, read from the rows directly, keyed `version parent
- * position`: those `Admission` gives the position, and those `Symbol` gives it in the family's
- * shared model (`SharedModelOf`), each family's read once here so that no case reads a relation.
+ * position`: those `Admission` gives the position, and those the family's shared model
+ * (`SharedModelOf`) names there, its symbol sets spelled out (`symbolRowsOf`), each family's read
+ * once here so that no case reads a relation.
  */
 const positionKinds: ReadonlyMap<string, ReadonlySet<string>> = (() => {
   const kinds = new Map<string, Set<string>>();
   const add = (at: string, kind: string): void => {
     kinds.set(at, (kinds.get(at) ?? new Set()).add(kind));
   };
-  for (const { child, parent, position, version } of grammar.admission.rows) {
+  for (const { child, parent, position, version } of admittedOf(
+    grammar.content.contentModelOf,
+    grammar.content.admissionIn,
+  )) {
     add(`${version} ${parent} ${position}`, child);
   }
 
-  const symbols = Map.groupBy(grammar.content.symbol.rows, ({ model }) => model);
+  const symbols = Map.groupBy(
+    symbolRowsOf(grammar.content.symbolSetOf, grammar.content.symbolMember),
+    ({ model }) => model,
+  );
   for (const { model, parent, version } of grammar.content.sharedModelOf.rows) {
     for (const { kind, position } of symbols.get(model) ?? []) {
       add(`${version} ${parent} ${position}`, kind);
@@ -1548,7 +1487,7 @@ describe("the explanation of a content-order refusal", () => {
 
                   const at = `${state.version} ${state.parent} ${state.state}`;
                   const explained = explain(
-                    [first, ...rest],
+                    [refusedOf(first), ...rest.map(refusedOf)],
                     { kind: "row", relation: "Node", values },
                     grammar,
                   );
@@ -1574,7 +1513,7 @@ describe("the explanation of a content-order refusal", () => {
                   }
 
                   assert.isTrue(
-                    sources.has(lawTable[Option.getOrThrow(lawNameOf(first))].source),
+                    sources.has(lawTable[Option.getOrThrow(schemaLawNameOf(first))].source),
                     at,
                   );
                 }
@@ -1628,10 +1567,10 @@ describe("the refusals made before the database", () => {
     ];
 
     for (const [error, rule] of cases) {
-      assert.strictEqual(ruleOfError(error).rule, rule, error._tag);
+      assert.deepStrictEqual(ruleOfError(error).rules, [rule], error._tag);
     }
 
-    const refused = new ImportRefused({ detail: "x", origin: readerOrigin, rule: "admission" });
+    const refused = new ImportRefused({ detail: "x", origin: readerOrigin, rules: ["admission"] });
     assert.strictEqual(ruleOfError(refused), refused);
   });
 
@@ -1647,90 +1586,12 @@ describe("the refusals made before the database", () => {
       new ReaderRefusal({ detail: "d", position: Option.none(), rule: "element-depth" }),
     );
 
-    assert.strictEqual(placed.rule, "reader-refusal");
+    assert.deepStrictEqual(placed.rules, ["reader-refusal"]);
     assert.isTrue(placed.detail.endsWith(" at line 3, column 7"), placed.detail);
-    assert.strictEqual(unplaced.rule, "reader-refusal");
+    assert.deepStrictEqual(unplaced.rules, ["reader-refusal"]);
     assert.notInclude(unplaced.detail, " at line ");
   });
 });
-
-/**
- * Every text field of a schema's ordinary relations, a generated or accumulated one included, with
- * its type and its pattern law, one per field as grizzle states it: its relation and field, and its
- * type's source and flags. A field's type is the one `generated(type, term)` or `accumulated(type,
- * start)` declares, or its descriptor itself. A field's descriptor is read as any value, as
- * {@link generatedLaws} reads it, so a relation with a function-valued type (`MapKeyFloat`'s
- * `pg["double precision"]`) is read, and a pattern of another shape throws.
- *
- * @param relations - The schema's `relations`.
- * @returns Each relation's text fields.
- */
-const textFields = (
-  relations: AnySchema["relations"],
-): readonly { readonly law: Law; readonly type: unknown }[] => {
-  const Patterns = Schema.NonEmptyArray(
-    Schema.Struct({ flags: Schema.Literals(["u", "su"]), source: Schema.String }),
-  );
-  const Stored = Schema.Struct({
-    fields: Schema.Record(Schema.String, Schema.Unknown),
-    kind: Schema.Literal("relation"),
-    name: Schema.String,
-  });
-  const Written = Schema.Union([
-    Schema.Struct({ type: Schema.Unknown, writing: Schema.Literal("generated") }),
-    Schema.Struct({ field: Schema.Unknown, writing: Schema.Literal("accumulated") }),
-  ]);
-
-  return Object.values(relations).flatMap((value) =>
-    Option.toArray(Schema.decodeUnknownOption(Stored)(value)).flatMap(({ fields, name }) =>
-      Object.entries(fields).flatMap(([field, descriptor]) => {
-        const type = Option.match(Schema.decodeUnknownOption(Written)(descriptor), {
-          onNone: () => descriptor,
-          onSome: (written) => (written.writing === "generated" ? written.type : written.field),
-        });
-
-        return Predicate.hasProperty(type, "patterns")
-          ? [
-              {
-                law: {
-                  field,
-                  kind: "pattern",
-                  patterns: Schema.decodeUnknownSync(Patterns)(type.patterns),
-                  relation: name,
-                } satisfies Law,
-                type,
-              },
-            ]
-          : [];
-      }),
-    ),
-  );
-};
-
-/**
- * File a law for {@link missingFrom}: a pattern law by its field, any other by its kind.
- *
- * @param law - The law.
- * @returns Its bucket.
- */
-const censusBucket = (law: Law): string =>
-  law.kind === "pattern" ? `${law.relation}.${law.field}` : law.kind;
-
-/**
- * Write each law of `laws` that no law of `among` is, by grizzle's `sameLaw`, for a census's
- * message. Laws are matched within their bucket ({@link censusBucket}), so the scan stays linear.
- *
- * @param laws - The laws looked for.
- * @param among - The laws they are looked for among.
- * @returns The laws not found, as `Formatter` writes them.
- */
-const missingFrom = (laws: readonly Law[], among: readonly Law[]): readonly string[] => {
-  const held = Arr.groupBy(among, censusBucket);
-
-  return laws
-    .filter((law) => !(held[censusBucket(law)] ?? []).some((other) => sameLaw(other, law)))
-    .map((law) => Formatter.format(law));
-};
 
 /**
  * The pattern law of a field of the small schema of the per-field test, `Club`'s, of `^[a-z]*$`.
@@ -1752,76 +1613,36 @@ const clubLaw = (field: string): Extract<Law, { readonly kind: "pattern" }> => (
  * @param field - The field.
  * @returns Its law; a field with none fails the test, naming it.
  */
-const statedPatternLaw = (owner: string, field: string): Law =>
+const statedPatternLaw = (
+  owner: string,
+  field: string,
+): Extract<Law, { readonly kind: "pattern" }> =>
   pipe(
     Arr.findFirst(
-      statedLaws(),
-      ([law]) => law.kind === "pattern" && law.relation === owner && law.field === field,
+      statedLaws().flatMap(([law]) => (law.kind === "pattern" ? [law] : [])),
+      (law) => law.relation === owner && law.field === field,
     ),
-    Option.map(([law]) => law),
     Option.getOrThrowWith(() => new Error(`${owner}.${field} states no pattern law`)),
   );
 
 /**
- * The law of every generated field of a schema's stored relations, which grizzle names when the
- * field's column is NULL at a row (23502): it maps every generated column, whatever its term reads.
- * A field's type is read as any value, since some are functions (`pg["double precision"]` is
- * `pg.float(p)`'s), so every stored relation decodes and none drops out of the census unread.
+ * The keys a table names more than once, for a census's message.
  *
- * @param relations - The schema's `relations`.
- * @returns Each generated field's law.
+ * @param rows - The table's rows, each a key and its law's name.
+ * @returns Each repeated key, once.
  */
-const generatedLaws = (relations: AnySchema["relations"]): readonly Law[] => {
-  const Stored = Schema.Struct({
-    fields: Schema.Record(Schema.String, Schema.Unknown),
-    kind: Schema.Literal("relation"),
-    name: Schema.String,
-  });
+const repeatedIn = (rows: readonly (readonly [string, LawName])[]): readonly string[] => {
+  const keys = rows.map(([named]) => named);
 
-  return Object.values(relations).flatMap((value) =>
-    Option.toArray(Schema.decodeUnknownOption(Stored)(value)).flatMap(({ fields, name }) =>
-      Object.entries(fields).flatMap(([field, type]): readonly Law[] =>
-        Predicate.hasProperty(type, "writing") && type.writing === "generated"
-          ? [{ field, kind: "generated", relation: name }]
-          : [],
-      ),
-    ),
-  );
+  return Arr.dedupe(keys.filter((named, at) => keys.indexOf(named) !== at));
 };
 
-/**
- * The generated laws of a schema's relations that no row of the table owns.
- *
- * @param relations - The schema's `relations`.
- * @returns The laws, which an outcome naming one would refuse to rule.
- */
-const unownedGenerated = (relations: AnySchema["relations"]): readonly Law[] =>
-  generatedLaws(relations).filter((law) => Option.isNone(lawNameOf(law)));
-
-/**
- * The composed `Qti` schema, loaded by the census alone: it composes every `src/qti/` module that
- * has landed, and reading it runs `install.ts`'s generators.
- */
-const composedQti = Effect.promise(() => import("#pantry/test/qti.ts")).pipe(
-  Effect.map(({ Qti }) => Qti),
-);
-
-/**
- * Every law a schema's statements state, as grizzle's `lawsByStatement` names them, compiled once
- * per schema.
- */
-const statementLawsOf = Fn.memoize((built: AnySchema): readonly Law[] => {
-  const lawsOfStatement = lawsByStatement(built);
-
-  return built.statements.flatMap((statement) => lawsOfStatement(statement));
-});
-
 describe("the pattern laws, one per field", () => {
-  it("names each text field by its own type's row, a generated field's included, and refuses a field whose type no row holds", () => {
-    // Oracle: grizzle's installation, one pattern law per stored field a text domain types
-    // (`physical/install/compile.ts` `textDomainConstraintLaws` of the vendored engine), a
-    // tautology's field none. Live: two types of one pattern under two names, a generated field
-    // of one of them, a plain field. Wild: a field whose type no row holds.
+  it("names each law grizzle states by its field's own type's row, a generated field's included, and none whose field's type no row holds", () => {
+    // Oracle: grizzle's pattern laws (`lawsOf`), one pattern law per stored field whose pattern states
+    // one, by relation name and declared field order, a tautology's field none. Live: two types of
+    // one pattern under two names, a generated field of one of them, a tautology's field, which
+    // states no law, so no row names it. Wild: a field whose type no row holds.
     const code = str.regex("^[a-z]*$");
     const alias = str.regex("^[a-z]*$");
     const plain = str.regex("^.*$", "su");
@@ -1831,47 +1652,47 @@ describe("the pattern laws, one per field", () => {
       ["id"],
       (r) => ({ joined: generated(code, Compute.concat(r.code, r.alias)) }),
     );
+    const club = schema("Club", { Club }, []);
+    const laws = schemaLawsOf(club).flatMap((law) => (law.kind === "pattern" ? [law] : []));
+    const namesBy = (rows: readonly (readonly [RegexText<string>, LawName])[]) =>
+      laws.map((law) => [law, patternNameIn(club.relations, new Map(rows), law)] as const);
 
     assert.deepStrictEqual(
-      patternLawsOf(
-        { Club },
-        new Map([
-          [code, "Key text bound"],
-          [alias, "XML production"],
-        ]),
-        new Set([plain]),
-      ),
-      Result.succeed([
-        [clubLaw("alias"), "XML production"],
-        [clubLaw("code"), "Key text bound"],
-        [clubLaw("joined"), "Key text bound"],
+      namesBy([
+        [code, "Key text bound"],
+        [alias, "XML production"],
       ]),
+      [
+        [clubLaw("alias"), Option.some<LawName>("XML production")],
+        [clubLaw("code"), Option.some<LawName>("Key text bound")],
+        [clubLaw("joined"), Option.some<LawName>("Key text bound")],
+      ],
     );
-    assert.deepStrictEqual(
-      patternLawsOf({ Club }, new Map([[code, "Key text bound"]]), new Set([plain])),
-      Result.fail({ field: "alias", relation: "Club" }),
-    );
+    assert.deepStrictEqual(namesBy([[code, "Key text bound"]]), [
+      [clubLaw("alias"), Option.none<LawName>()],
+      [clubLaw("code"), Option.some<LawName>("Key text bound")],
+      [clubLaw("joined"), Option.some<LawName>("Key text bound")],
+    ]);
   });
 
   it(
     "names two fields of one pattern apart: Node.chars an XML production, OpenElementName.namespace a key text's bound",
     () => {
-      // Oracle: grizzle's per-field pattern law, its relation and field beside the source and flags
-      // the field spells (changeset.ts's Law), and the classes of `textLaws`: a node's characters
+      // Oracle: grizzle's per-field pattern law, its relation and field beside the patterns the
+      // field spells (changeset.ts's Law), and the classes of `textLaws`: a node's characters
       // and a foreign namespace name are both `Char*`, but only the name is bounded, so a refusal
       // of the one is crust's production and of the other the stated limit.
       const chars = statedPatternLaw("Node", "chars");
       const namespace = statedPatternLaw("OpenElementName", "namespace");
 
-      assert.isTrue(
-        chars.kind === "pattern" &&
-          namespace.kind === "pattern" &&
-          Formatter.format(chars.patterns) === Formatter.format(namespace.patterns),
+      assert.deepStrictEqual(
+        chars.patterns,
+        namespace.patterns,
         "the two fields spell one pattern",
       );
       assert.isFalse(sameLaw(chars, namespace));
       assert.deepStrictEqual(
-        [lawNameOf(chars), lawNameOf(namespace)],
+        [schemaLawNameOf(chars), schemaLawNameOf(namespace)],
         [Option.some("XML production"), Option.some("Key text bound")],
       );
     },
@@ -1890,10 +1711,10 @@ describe("the pattern laws, one per field", () => {
 
       assert.isFalse(sameLaw(chars, lexicalForm));
       assert.deepStrictEqual(
-        [lawNameOf(chars), lawNameOf(lexicalForm)],
+        [schemaLawNameOf(chars), schemaLawNameOf(lexicalForm)],
         [Option.some("XML production"), Option.some("Regex text bound")],
       );
-      assert.deepStrictEqual(ruleOfLaws([lexicalForm]), Option.some("regex-text-bound"));
+      assert.deepStrictEqual(schemaRuleOfLaw(lexicalForm), Option.some("regex-text-bound"));
     },
     testTimeoutMs,
   );
@@ -1901,20 +1722,21 @@ describe("the pattern laws, one per field", () => {
 
 describe("the census of the composed Qti schema", () => {
   it.effect(
-    "owns every statement and primary key of Qti, and resolves every merged axis of its families to one rule",
+    "names every law Qti states, and lists every merged axis's rules each once, most specific first",
     (ctx) =>
+      // Oracle: grizzle's laws (`lawsOf`), every law an outcome over Qti can name: each primary
+      // key, each statement's laws, each contract, each pattern law and each generated field's law.
       Effect.gen(function* census() {
-        const Qti = yield* composedQti;
-        const laws = [...statementLawsOf(Qti), ...primaryKeysOf(Qti.relations)];
+        const laws = schemaLawsOf(Qti);
         const unowned = laws
-          .filter((law) => Option.isNone(lawNameOf(law)))
+          .filter((law) => Option.isNone(schemaLawNameOf(law)))
           .map((law) => Formatter.format(law));
 
         assert.deepStrictEqual(unowned, [], "laws Qti states that no row of the table owns");
 
-        const axes = mergedAxes(statementLawsOf(Qti), Qti.relations);
+        const axes = mergedAxes(laws);
         for (const { laws: carried } of axes) {
-          assertResolves(carried);
+          assertRules(carried);
         }
 
         yield* Effect.promise(() =>
@@ -1927,70 +1749,55 @@ describe("the census of the composed Qti schema", () => {
     testTimeoutMs,
   );
 
-  it.effect(
-    "states the pattern law of every text field of Qti's ordinary relations, one per field, and no other",
-    () =>
-      // Oracle: grizzle's installation, one pattern law per stored field a text domain types, a
-      // generated or accumulated field included, a tautology's field none
-      // (`physical/install/compile.ts` `textDomainConstraintLaws` of the vendored engine), read
-      // here from the schema apart from `refusal.ts`'s reading.
-      Effect.gen(function* patterns() {
-        const Qti = yield* composedQti;
-        const fields = textFields(Qti.relations);
-        const plain: ReadonlySet<unknown> = plainTexts;
-        const owed = fields.flatMap(({ law, type }) => (plain.has(type) ? [] : [law]));
-        const stated = statedLaws().flatMap(([law]) => (law.kind === "pattern" ? [law] : []));
-        const typed: ReadonlySet<unknown> = new Set(fields.map(({ type }) => type));
+  it(
+    "names in each table only what Qti states, each once: a stored relation, a generated field, a contract, a pattern law's field's type",
+    () => {
+      // Oracle: grizzle's laws (`lawsOf`): each primary key's relation, each generated field's
+      // relation and field, each contract's name, and each pattern law's field's type, read from
+      // the schema's own descriptor. A row the schema no longer states, a key named twice, and a
+      // text type that types no field with a pattern law each fail here.
+      const laws = schemaLawsOf(Qti);
+      const held = {
+        contract: new Set(laws.flatMap((law) => (law.kind === "contract" ? [law.contract] : []))),
+        generated: new Set(
+          laws.flatMap((law) => (law.kind === "generated" ? [`${law.relation}.${law.field}`] : [])),
+        ),
+        primaryKey: new Set(
+          laws.flatMap((law) => (law.kind === "primaryKey" ? [law.relation] : [])),
+        ),
+      };
+      const typed: ReadonlySet<unknown> = new Set(
+        laws.flatMap((law) =>
+          law.kind === "pattern" ? Option.toArray(patternTypeOf(Qti.relations, law)) : [],
+        ),
+      );
 
+      for (const [table, named, stated] of [
+        ["keyNames", keyNames, held.primaryKey],
+        ["generatedNames", generatedNames, held.generated],
+        ["contractNames", contractNames, held.contract],
+      ] as const) {
+        assert.deepStrictEqual(repeatedIn(named), [], `${table}: keys named twice`);
         assert.deepStrictEqual(
-          missingFrom(owed, stated),
+          named.flatMap(([row]) => (stated.has(row) ? [] : [row])),
           [],
-          "text fields whose pattern law the table states not",
+          `${table}: rows that name no law Qti states`,
         );
-        assert.deepStrictEqual(
-          missingFrom(stated, owed),
-          [],
-          "pattern laws the table states of no text field",
-        );
-        assert.deepStrictEqual(
-          [...textLaws.keys(), ...plainTexts]
-            .filter((type) => !typed.has(type))
-            .map((type) => Formatter.format(type.patterns)),
-          [],
-          "rows of textLaws or plainTexts that type no field",
-        );
-      }),
+      }
+      assert.deepStrictEqual(
+        [...textLaws.keys()]
+          .filter((type) => !typed.has(type))
+          .map((type) => Formatter.format(type.patterns)),
+        [],
+        "rows of textLaws that type no field with a pattern law",
+      );
+    },
     testTimeoutMs,
   );
 
-  it.effect(
-    "owns the law of every generated field of Qti's stored relations, and states no other generated law",
-    () =>
-      Effect.gen(function* generations() {
-        const Qti = yield* composedQti;
-        const raised = generatedLaws(Qti.relations);
-        const stated = statedLaws().flatMap(([law]) => (law.kind === "generated" ? [law] : []));
-
-        assert.isNotEmpty(raised, "Qti declares no generated field the census reads");
-        assert.deepStrictEqual(
-          unownedGenerated(Qti.relations),
-          [],
-          "generated fields whose law no row of the table owns",
-        );
-        assert.deepStrictEqual(
-          stated
-            .filter((law) => !raised.some((held) => sameLaw(held, law)))
-            .map((law) => Formatter.format(law)),
-          [],
-          "generated laws the table states for no generated field of Qti",
-        );
-      }),
-    testTimeoutMs,
-  );
-
-  it.effect(
+  it(
     "refuses a site that names no document by its kind's law: an include under include-target, a section ref under entry-kind",
-    () =>
+    () => {
       // Oracle: the specification as a checker, reading 115 and information model §7.5: an
       // include whose path an entry holds but that names no document the manifest lists, or that
       // writes no href that names a path of the package, breaks "Include target", the oracle's law
@@ -2000,50 +1807,48 @@ describe("the census of the composed Qti schema", () => {
       // path no entry holds breaks "File exists", its SitePath's check, which gates both. Each is a
       // law Qti states, under its own rule, so a dangling site of either kind is refused under one
       // rule.
-      Effect.gen(function* siteKinds() {
-        const Qti = yield* composedQti;
-        const stated = statementLawsOf(Qti);
-        const kinds: readonly (readonly [LawSide, LawSide, Rule])[] = [
-          [sideOf("SitePath", "node"), sideOf("SiteTarget", "node"), "include-target"],
-          [sideOf("Site", "node", "kind"), sideOf("SitePath", "node", "kind"), "include-target"],
-          [
-            sideOf("SitePath", "package", "path"),
-            sideOf("Entry", "package", "path"),
-            "file-exists",
-          ],
-          [
-            sideOf("SitePath", "package", "path"),
-            sideOf("TestDocument", "package", "path"),
-            "entry-kind",
-          ],
-          [sideOf("Reference", "node"), sideOf("SitePath", "node"), "entry-kind"],
-        ];
+      const stated = schemaLawsOf(Qti);
+      const kinds: readonly (readonly [LawSide, LawSide, Rule])[] = [
+        [sideOf("SitePath", "node"), sideOf("SiteTarget", "node"), "include-target"],
+        [sideOf("Site", "node", "kind"), sideOf("SitePath", "node", "kind"), "include-target"],
+        [sideOf("SitePath", "package", "path"), sideOf("Entry", "package", "path"), "file-exists"],
+        [
+          sideOf("SitePath", "package", "path"),
+          sideOf("TestDocument", "package", "path"),
+          "entry-kind",
+        ],
+        [sideOf("Reference", "node"), sideOf("SitePath", "node"), "entry-kind"],
+      ];
 
-        for (const [from, to, rule] of kinds) {
-          const shown = Formatter.format({ from, to });
-          const laws = stated.filter(
-            (law) => law.kind === "contained" && readsAs(law.from, from) && readsAs(law.to, to),
-          );
+      for (const [from, to, rule] of kinds) {
+        const shown = Formatter.format({ from, to });
+        const laws = stated.filter(
+          (law) => law.kind === "contained" && readsAs(law.from, from) && readsAs(law.to, to),
+        );
 
-          assert.isNotEmpty(laws, `${shown}: no containment Qti states`);
-          for (const law of laws) {
-            assert.deepStrictEqual(ruleOfLaws([law]), Option.some(rule), shown);
-          }
+        assert.isNotEmpty(laws, `${shown}: no containment Qti states`);
+        for (const law of laws) {
+          assert.deepStrictEqual(schemaRuleOfLaw(law), Option.some(rule), shown);
         }
-      }),
+      }
+    },
     testTimeoutMs,
   );
 
-  it("names a generated field no row owns, so a field Qti gains without one fails the census", () => {
+  it("names no generated field no row owns, so a field Qti gains without one fails the census", () => {
+    // Oracle: grizzle's laws (`lawsOf`) of a schema of one generated field no row of
+    // `generatedNames` names: its law is listed, and named none, never another law's name.
     const Planted = relation.generated(
       "Planted",
       { form: lexical(pg.bigint), node: uuid },
       ["node"],
       (r) => ({ value: generated(pg.bigint, Compute.cast(r.form, pg.bigint)) }),
     );
+    const raised = schemaLawsOf(schema("Planted", { Planted }, [])).filter(
+      (law) => law.kind === "generated",
+    );
 
-    assert.deepStrictEqual(unownedGenerated({ Planted }), [
-      { field: "value", kind: "generated", relation: "Planted" },
-    ]);
+    assert.deepStrictEqual(raised, [{ field: "value", kind: "generated", relation: "Planted" }]);
+    assert.deepStrictEqual(raised.map(schemaLawNameOf), [Option.none()]);
   });
 });

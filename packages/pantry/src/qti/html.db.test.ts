@@ -15,22 +15,33 @@
  *   named twice by `HeaderToken`'s key (main's `same-table-headers` guard case, ported); and the
  *   overlay's rows held to the tree, by an edit of the package's inputs that writes a state no
  *   valid document shreds to.
+ * - **Reading 156:** a `th`'s `id` that is no NCName names no header and has no `TableHeader`, so its
+ *   value domain alone refuses it (AL1's lexical half). A `TableHeader` written for a `th` that
+ *   carries no ID value, by an edit of the package's inputs, is refused by its copy back into the
+ *   ID values whose form names something (`namingIdAttributes`) and into `DocumentId` ("E1
+ *   derived").
  */
-import { Db, query, v } from "@bjornpagen/grizzle";
+import { Db, login, query, v, workload } from "@bjornpagen/grizzle";
 import type { ApplyOutcome, Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Layer } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+
 import { readProgram } from "#pantry/import/program.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
+
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { Author, AuthorApp } from "#pantry/test/author.ts";
+
 import { Package } from "#pantry/qti/package.ts";
 import { materializeSpec } from "#pantry/test/fixtures.ts";
 import type { TextEdit } from "#pantry/test/fixtures.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { probeLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
+import { packageFactsOf } from "#pantry/import/write.ts";
+import { Qti } from "#pantry/test/qti.ts";
+import { authorRole } from "#pantry/qti/roles.ts";
+import { authorWorkloads } from "#pantry/qti/logins.ts";
+import { servedProbe } from "#pantry/test/served-members.ts";
 
 /**
  * The tarball member `simple` is extracted from.
@@ -114,23 +125,40 @@ const rejectedBy = (
   picks: readonly ((law: Law) => boolean)[],
 ): boolean =>
   outcome.kind === "invariant-rejected" &&
-  outcome.refused.laws.some((law) => picks.some((pick) => pick(law)));
+  outcome.refused.laws.map(({ law }) => law).some((law) => picks.some((pick) => pick(law)));
 
 /**
- * The number of packages stored, through a query that counts each by its key.
+ * The author role of this file's probe login, the one author role over `Qti`: grizzle puts a role
+ * in one login only, so this file never builds the author login nor loads `#pantry/test/author.ts`.
  */
-const packagesCounted = query(Author).rule((r) => {
-  const { id } = v(Package, "package");
+const probeAuthor = authorRole(Qti);
 
-  return r.match(Package, { id }).find({ total: r.count() });
-});
+/**
+ * The author login with this file's count of the packages stored beside its own members, over the
+ * author role (`#pantry/test/served-members.ts` `servedProbe`): `ProbeLogin` opens the
+ * role that reads it, and `probeLayer` serves every test of the file, `ServedAuthorLogin` included.
+ */
+const { layer: probeLayer, ProbeLogin } = servedProbe(
+  login(Qti, "author_app", [probeAuthor], {
+    workload: [
+      ...authorWorkloads(Qti),
+      workload(probeAuthor, {
+        packagesCounted: query(probeAuthor).rule((r) => {
+          const { id } = v(Package, "package");
+
+          return r.match(Package, { id }).find({ total: r.count() });
+        }),
+      }),
+    ],
+  }),
+);
 
 /**
  * Count the packages stored.
  */
 const storedPackages = Effect.gen(function* storedPackages() {
-  const db = yield* Db.open(AuthorApp.roles.author, {});
-  const rows = yield* (yield* db.execute(packagesCounted, {})).collect;
+  const db = yield* Db.open((yield* ProbeLogin).roles.author, {});
+  const rows = yield* (yield* db.workload.packagesCounted.execute({})).collect;
 
   return rows[0]?.total ?? 0n;
 });
@@ -148,10 +176,26 @@ const applyEdited = (
 ) =>
   Effect.gen(function* appliesEdited() {
     const program = yield* readProgram(dir);
-    const db = yield* Db.open(AuthorApp.roles.author, {});
+    const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
 
-    return yield* db.apply(changeSetOf(Author, edit(program.inputs)), {});
+    return yield* db.workload.importWrite.apply(
+      { insert: packageFactsOf(edit(program.inputs)) },
+      {},
+    );
   });
+
+/**
+ * The two containments that hold a `TableHeader` to an ID its `th` carries (E1 derived): its copy
+ * back into the ID-typed attributes whose form names something (`namingIdAttributes`, at the `th`
+ * kind), and into `DocumentId`. A row for a `th` that carries no ID value breaks both.
+ */
+const headerCopyBack = [
+  containedIn(["TableHeader", "node", "constant"], ["Attribute", "node", "kind"]),
+  containedIn(
+    ["TableHeader", "node", "document", "id", "owner"],
+    ["DocumentId", "node", "document", "id", "owner"],
+  ),
+];
 
 /**
  * The markup of every valid form the three readings read: a picture's source with `srcset`, a
@@ -316,15 +360,53 @@ const refusedCases = [
     laws: [containedIn(["TableScope", "parent", "table"], ["TableScope", "node", "table"])],
     name: "a tbody's scope that names itself as its table (E1 derived)",
   },
+  {
+    apply: () =>
+      Effect.flatMap(
+        withBody(
+          "header-id-no-ncname",
+          `<table><tbody><tr><th id="1a">h</th><td>a</td></tr></tbody></table>`,
+        ),
+        (dir) => applyEdited(dir),
+      ),
+    laws: [checkNamed("Attribute", "value_domain")],
+    name: "a th whose id is no NCName, which has no TableHeader (value domain, reading 156)",
+  },
+  {
+    apply: () =>
+      Effect.flatMap(
+        withBody(
+          "header-copy-back",
+          `<table><tbody><tr><th id="ho">h</th><th headers="ho">p</th></tr></tbody></table>`,
+        ),
+        (dir) =>
+          applyEdited(dir, (inputs) => {
+            const [cell] = [...inputs.CellHeaders.values()];
+            const [header] = [...inputs.TableHeader.values()];
+
+            return cell === undefined || header === undefined
+              ? assert.fail("the body writes a th with an id and a th with headers")
+              : {
+                  ...inputs,
+                  TableHeader: new Map([
+                    ...inputs.TableHeader,
+                    [cell.node, { ...header, id: "hp", node: cell.node, owner: cell.node }],
+                  ]),
+                };
+          }),
+      ),
+    laws: headerCopyBack,
+    name: "a TableHeader of a th that carries no id (E1 derived, reading 156)",
+  },
 ];
 
 describe.skipIf(!hasLease)(
   "qti/html.db.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+    layer(Layer.mergeAll(probeLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
+      timeout: probeLayerHookTimeoutMs,
     })("the HTML element laws, judged by PostgreSQL", (it) => {
       it.effect("accepts simple with every valid form of readings 124 to 126 in its body", () =>
         // Oracle: PostgreSQL, every law of the schema over a package whose sources, tracks and

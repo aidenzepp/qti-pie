@@ -138,12 +138,36 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: its 97-case exhaust ran 31.5 s at a load average of 21 to 34 in FIX-IDNCNAME's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
+    "pantry/src/import/refusal-ruling.oracle.test.ts",
+    "measurement owed: its 8-package exhaust, which compiles Qti's law model once, ran 137.4 s in the final run of 2026-11-08, whose load average was 4 to 47; its 1_800_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/qti/identity.copyback.test.ts",
+    "measurement owed: its three exhausts, of 440, 616 and 5,896 cases, ran 10.4 s at the slowest in the final run of 2026-11-08, whose load average was 4 to 47; its 120_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/import/overlays/reading-declarations.oracle.test.ts",
+    "measurement owed: its 280-case exhaust ran 53.6 s in the final run of 2026-11-08, whose load average was 4 to 47; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/import/overlays/section-template-references.oracle.test.ts",
+    "measurement owed: its 24-case exhaust ran 3.5 s in the final run of 2026-11-08, whose load average was 4 to 47; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/import/overlays/section-visibility.oracle.test.ts",
+    "measurement owed: its 64-case exhaust ran 39.2 s in the final run of 2026-11-08, whose load average was 4 to 47; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
     "pantry/src/levels/cdn-origin.test.ts",
     "measurement owed: its laws case ran 113.6 s, 83.7 s and 117.1 s at load averages of 22.5 to 66.2 and 259.1 s at 32 to 84, and its compile case 67.6 s, 158.9 s and 57.2 s at 22.5 to 66.2 and 118.5 s at 43 to 84, in pa1-15's and pa1-15.2's runs of 2026-11-10, never at 60 or more throughout; the load average stood at 12.85 12.06 12.44 when the wait stopped (decision 490); its 600_000 and 360_000 stay in place until they are remeasured at a load average of at least 60",
   ],
   [
     "pantry/src/levels/cdn-data.test.ts",
     "measurement owed: its lawsOf case ran 79.6 s, 102.8 s, 115.8 s and 265.7 s, the slowest at a load average of 31 to 63, and its installation compile ran 53.7 s to 136.6 s, the slowest at a load average of 24 to 59, in pa1-16's runs of 2026-11-10, after which the load average fell to 12 to 13 and stayed there; its 600_000 and 360_000 stay in place until they are remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/index.startup.test.ts",
+    "measurement owed: its fresh-process case ran past cliProcessTestTimeoutMs's 10 s at a load average of 40 to 58, and ran 2.1 s alone, in the pa1-tidy merge's runs of 2026-11-10 (decision 497), then 1.3 s, 2.7 s and 1.5 s alone at 42 to 54 and 8.9 s in the free suite at 57.0 to 58.9 in pa1-r12's runs of 2026-11-10, never at 60 or more throughout (decision 490); its 30_000 stays in place until it is remeasured at a load average of at least 60",
   ],
 ]);
 
@@ -195,11 +219,17 @@ interface Source {
 
 /**
  * The offset just past a string literal, a comment, or none: what the reader skips whole, so a
- * bracket or a comma inside one is no syntax.
+ * bracket or a comma inside one is no syntax. A string or a block comment the text never closes
+ * ends one past the text's end, so every reader stops there and {@link openIn} finds it: a block
+ * comment's missing close once read as offset 1, which sent the reader back to the text's start
+ * forever while its spans filled the heap. A quotation mark in a regular expression literal of
+ * `db/workload-only.test.ts` opened a string that a glob's quotation mark closed, and the glob's
+ * `/*` was then read as a comment.
  *
  * @param text - The module's text.
  * @param at - The offset of the character to read.
- * @returns The offset past the literal or comment that starts there, or -1.
+ * @returns The offset past the literal or comment that starts there, past the text's end for one
+ *   the text never closes, or -1.
  */
 const skipped = (text: string, at: number): number => {
   const quote = text[at];
@@ -218,7 +248,13 @@ const skipped = (text: string, at: number): number => {
     return end === -1 ? text.length : end;
   }
 
-  return text.startsWith("/*", at) ? text.indexOf("*/", at) + 2 : -1;
+  if (!text.startsWith("/*", at)) {
+    return -1;
+  }
+
+  const end = text.indexOf("*/", at + 2);
+
+  return end === -1 ? text.length + 1 : end + 2;
 };
 
 /**
@@ -286,6 +322,17 @@ const quotedIn = (text: string): readonly (readonly [number, number])[] => {
 
   return spans;
 };
+
+/**
+ * Find the string literal or block comment a module opens and never closes, as the reader reads it:
+ * a regular expression literal that holds a quotation mark or a backtick can open one, and every
+ * call after it then reads as quoted, so the guard reads none of them.
+ *
+ * @param text - The module's text.
+ * @returns The offset where the unclosed literal or comment starts, or none.
+ */
+const openIn = (text: string): number | undefined =>
+  quotedIn(text).find(([, past]) => past > text.length)?.[0];
 
 /**
  * Read the numeric literals of an initializer.
@@ -782,6 +829,17 @@ describe("the timeouts a test runs under", () => {
       .map(({ at, timeout }) => `${at} (${timeout})`);
 
     assert.deepStrictEqual(literal, [], "timeouts written in place, not as a measured constant");
+  });
+
+  it("reads a misread module to its end, where a comment it opens never closes", () => {
+    // Oracle: the reader's rule on a planted module. A regular expression's quotation mark opens a
+    // string that a glob's closes, and the glob's `/*` opens a comment the text never closes: the
+    // reader stops at the text's end, where it once went back to offset 1 forever.
+    const misread =
+      'const p = /"/u;\nconst g = "**/*.ts";\nit.effect("a", (ctx) => searched(ctx, x), 5_000);';
+
+    assert.strictEqual(openIn(misread), misread.indexOf("/*"));
+    assert.deepStrictEqual(planted(misread), []);
   });
 
   it("finds a planted search under a deadline, a project on the 5 s default and an unread timeout", () => {

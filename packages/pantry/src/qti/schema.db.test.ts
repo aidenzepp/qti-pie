@@ -1,12 +1,14 @@
 /**
  * The installed `Qti` on the lease, read the way a direct SQL reader reads it: as the author login,
- * with grizzle's catalogue its oracle (PostgreSQL itself judges each privilege and each policy).
+ * with PostgreSQL's catalog its oracle.
  *
  * - The login opens its one role through `AuthorAppLayer`.
  * - The role's view of `Node` decodes `kind`: `kind_name` stands beside it, and every row it shows
  *   names the handle of its code in `NodeKind`.
- * - No row-security policy is installed: `Author` holds every relation whole (G6).
- * - No relation is mutable: no role of the installation holds UPDATE on any of its relations.
+ *
+ * That `Author` holds every relation whole (G6) and that no relation is `mutable` are facts of the
+ * declarations, checked in `schema.test.ts`. The installation's lack of a policy and of an UPDATE
+ * grant follows from them in grizzle, which tests that derivation itself.
  */
 import { Db } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
@@ -14,87 +16,53 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { NodeKind } from "#pantry/grammar/install.ts";
-import { AuthorApp } from "#pantry/test/author.ts";
-import { authorRole, loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+
+import { authorRole, authorViews, loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
+import { hasLease } from "#pantry/test/settings.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 
 describe.skipIf(!hasLease)("qti/schema.db.test.ts, on the lease", () => {
-  layer(AuthorAppLayer, { timeout: authorLayerHookTimeoutMs })(
-    "the installed Qti, read as the author login",
-    (it) => {
-      it.effect("opens the author role through the login's layer", () =>
-        Effect.gen(function* opensTheAuthorRole() {
-          const db = yield* Db.open(AuthorApp.roles.author, {});
+  layer(AuthorAppLayer)("the installed Qti, read as the author login", (it) => {
+    it.effect("opens the author role through the login's layer", () =>
+      Effect.gen(function* opensTheAuthorRole() {
+        const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
 
-          assert.isDefined(db);
-        }),
-      );
+        assert.isDefined(db);
+      }),
+    );
 
-      it.effect(
-        "shows kind_name beside kind in the role's view of Node, each row naming its code's handle",
-        () =>
-          Effect.gen(function* decodesKind() {
-            const client = yield* loginSession;
-
-            yield* rowsOf(client, `SET ROLE ${authorRole}`);
-
-            const columns = yield* rowsOf<{
-              readonly column_name: string;
-              readonly ordinal_position: number;
-            }>(
-              client,
-              "SELECT column_name, ordinal_position FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'node' ORDER BY ordinal_position",
-              [authorRole],
-            );
-            const ordinal = (name: string) =>
-              columns.find((column) => column.column_name === name)?.ordinal_position;
-            const kind = ordinal("kind");
-
-            assert.isDefined(kind);
-            assert.strictEqual(ordinal("kind_name"), (kind ?? 0) + 1);
-
-            const rows = yield* rowsOf<{ readonly kind: number; readonly kind_name: string }>(
-              client,
-              `SELECT kind::integer AS kind, kind_name FROM ${authorRole}.node`,
-            );
-
-            for (const row of rows) {
-              assert.strictEqual(row.kind_name, NodeKind.handles[row.kind]);
-            }
-          }),
-      );
-
-      it.effect("installs no row-security policy on any relation", () =>
-        Effect.gen(function* noPolicy() {
+    it.effect(
+      "shows kind_name beside kind in the role's view of Node, each row naming its code's handle",
+      () =>
+        Effect.gen(function* decodesKind() {
           const client = yield* loginSession;
-          const policies = yield* rowsOf<{ readonly policyname: string }>(
+
+          yield* rowsOf(client, `SET ROLE ${authorRole}`);
+
+          const columns = yield* rowsOf<{
+            readonly column_name: string;
+            readonly ordinal_position: number;
+          }>(
             client,
-            "SELECT schemaname, tablename, policyname FROM pg_catalog.pg_policies WHERE schemaname = $1 OR schemaname LIKE $2",
-            [qtiSchema, `${qtiSchema}\\_\\_%`],
+            "SELECT column_name, ordinal_position FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'node' ORDER BY ordinal_position",
+            [authorViews],
+          );
+          const ordinal = (name: string) =>
+            columns.find((column) => column.column_name === name)?.ordinal_position;
+          const kind = ordinal("kind");
+
+          assert.isDefined(kind);
+          assert.strictEqual(ordinal("kind_name"), (kind ?? 0) + 1);
+
+          const rows = yield* rowsOf<{ readonly kind: number; readonly kind_name: string }>(
+            client,
+            `SELECT kind::integer AS kind, kind_name FROM ${authorViews}.node`,
           );
 
-          assert.deepStrictEqual(policies, []);
+          for (const row of rows) {
+            assert.strictEqual(row.kind_name, NodeKind.handles[row.kind]);
+          }
         }),
-      );
-
-      it.effect("grants no role of the installation UPDATE on any relation", () =>
-        Effect.gen(function* noUpdate() {
-          const client = yield* loginSession;
-          const relations = yield* rowsOf<{ readonly relations: number }>(
-            client,
-            "SELECT count(*)::integer AS relations FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE (n.nspname = $1 OR n.nspname LIKE $2) AND c.relkind IN ('r', 'p', 'v', 'm')",
-            [qtiSchema, `${qtiSchema}\\_\\_%`],
-          );
-          const updatable = yield* rowsOf<{ readonly relname: string }>(
-            client,
-            "SELECT n.nspname, c.relname, r.rolname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace CROSS JOIN pg_catalog.pg_roles r WHERE (n.nspname = $1 OR n.nspname LIKE $2) AND c.relkind IN ('r', 'p', 'v', 'm') AND r.rolname LIKE $2 AND pg_catalog.has_any_column_privilege(r.oid, c.oid, 'UPDATE')",
-            [qtiSchema, `${qtiSchema}\\_\\_%`],
-          );
-
-          assert.isAbove(Number(relations[0]?.relations), 0);
-          assert.deepStrictEqual(updatable, []);
-        }),
-      );
-    },
-  );
+    );
+  });
 });

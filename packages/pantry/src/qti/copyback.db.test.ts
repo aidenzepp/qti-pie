@@ -36,11 +36,11 @@ import {
   constraintDescribed,
   judgedCase,
   loginSession,
-  qtiSchema,
+  qtiSchemaName,
   writtenColumnsOf,
 } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
 
 /**
  * A node no stored row holds: an orphan copy's.
@@ -128,9 +128,9 @@ const copies = {
       starts: "foreign key ExpressionAttribute(node where ",
     },
     // A written copy of a `base-type`; the stored one reads `float`.
-    stored: `SELECT c.* FROM ${qtiSchema}.expression_attribute c
-       JOIN ${qtiSchema}.node n ON n.id = c.node
-       JOIN ${qtiSchema}.document d ON d.node = n.document
+    stored: `SELECT c.* FROM ${qtiSchemaName}.expression_attribute c
+       JOIN ${qtiSchemaName}.node n ON n.id = c.node
+       JOIN ${qtiSchemaName}.document d ON d.node = n.document
       WHERE d.package = $1 AND c.written AND c.lexical = 'float'
       ORDER BY c.node LIMIT 1`,
     table: "expression_attribute",
@@ -142,8 +142,8 @@ const copies = {
     },
     key: ["node"],
     reverse: { holds: "", starts: "foreign key SectionIdentifier(node) to Attribute(node where " },
-    stored: `SELECT c.* FROM ${qtiSchema}.section_identifier c
-       JOIN ${qtiSchema}.document d ON d.node = c.document
+    stored: `SELECT c.* FROM ${qtiSchemaName}.section_identifier c
+       JOIN ${qtiSchemaName}.document d ON d.node = c.document
       WHERE d.package = $1
       ORDER BY c.node LIMIT 1`,
     table: "section_identifier",
@@ -234,7 +234,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("an attribute's copy, held by its forward and its keyed reverse containment", (it) => {
       it.effect(
         "refuses a copy of another lexical form by the forward containment alone, and a copy of no attribute by the reverse alone",

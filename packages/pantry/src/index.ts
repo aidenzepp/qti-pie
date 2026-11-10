@@ -8,12 +8,17 @@
  * after, `authorRole` and `authorLogin` give the author role and the `author_app` login over it,
  * and `singleCdn` builds the refuse-only `Cdn` level over a base, its options decoded with the
  * `CdnOptions` schema (there is no `CdnOptions` type: read it as `typeof CdnOptions.Type`). The
- * published relations (`Package`, `Document`, `TestDocument`, `Named`, `Section`,
+ * published relations (`Package`, `Document`, `TestDocument`, `Named`, `Section`, `TestFlag`,
  * `SectionSelection`, `SectionMember`, `ItemRefDocument`, `DeclarationIdentifier` and the
  * `BaseType` roster) are the ones an app's own level references, and `publishedRelations` records
  * each one's key and published fields, whose rows `PublishedRow` types; every other relation and
  * field is internal. A `BaseType` handle is typed as a plain `string`, so
  * `PublishedRow<"BaseType">` does not narrow its `id` to the roster's handles.
+ *
+ * Runtime: the programs that read or write the database run on the author login. An app provides
+ * the login's `DbLayer<AuthorRole>` and, beside it, `ServedAuthorLogin`: the login served from its
+ * committed served file (grizzle's `served`), which that layer is built over and whose author role
+ * each program opens its `Db` on. It is the one thing an app provides beside its layer.
  *
  * Programs: `importPackage` stores a package and `previewPackage` reads it without a database, each
  * succeeding with a verdict (`ImportVerdict`, `PreviewVerdict`) that carries a `Refusal` when the
@@ -57,9 +62,12 @@ export {
   SectionMember,
   SectionSelection,
   TestDocument,
+  TestFlag,
 } from "#pantry/api/published.ts";
 
 export type { ImportVerdict, PreviewVerdict, Refusal } from "#pantry/api/verdict.ts";
+
+export { ServedAuthorLogin } from "#pantry/db/served.ts";
 
 export { PackageNotFound } from "#pantry/export/package.ts";
 

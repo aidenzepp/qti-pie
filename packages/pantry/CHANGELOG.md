@@ -9,7 +9,8 @@ readings, and the [README](README.md#versioning) states the versioning rule.
 ## Unreleased
 
 pantry is not tagged yet; the first `pantry-v0.<n>.0` tag carries these entries. Before them, pantry's `package.json`
-exported nothing, so no app could import any of its modules.
+exported eight module subpaths and the command line read an install folder. [Moving an app to the entry
+point](#moving-an-app-to-the-entry-point) says what replaces each.
 
 ### The entry point
 
@@ -17,30 +18,39 @@ exported nothing, so no app could import any of its modules.
   module of `src/` resolves from outside the package.
 - Importing the entry opens no file, needs no `GR8DES_*` variable, and builds no schema, role, login, workload or
   query.
-- `qti(options?)` builds pantry's `Qti` level on its first call and returns that one value on every call. `QtiSchema`
-  is its type. `QtiOptions` holds no option yet.
+- `qti(options?)` builds pantry's `Qti` level on its first call and returns that one value on every call. It reads no
+  environment variable and takes no policy. `QtiSchema` is its type. `QtiOptions` holds no option yet.
 - `authorRole(qti)` and `authorLogin(qti)` give the author role and the `author_app` login over a `Qti` value, with
   pantry's workloads, built once per value. `AuthorRole` and `AuthorLogin` are their types. The login's PostgreSQL
-  role stays `qti__author_app`.
+  role is `qti_queries__author_app`, named after the level of pantry's that the login is over.
+- `ServedAuthorLogin` is the served author login: the login an app serves from its own served file with grizzle's
+  `served<AuthorLogin>(file, "author_app")`. Every program but `previewPackage` requires
+  `ServedAuthorLogin | DbLayer<AuthorRole>`, and opens its `Db` on the served login's author role. The app provides
+  both, the `DbLayer` built over that same served login. The import and preview also require the platform's
+  `FileSystem`.
 - `importPackage(source)` stores a package and succeeds with an `ImportVerdict`: `accepted` with the `packageId`, or
   `refused` with a `Refusal`. A refusal is a value, never an error. It fails with the platform's error when the
   package cannot be read, `CommitUnresolved` when the commit got no answer and reading back failed, and grizzle's own
   error when the database fails for another reason.
 - `previewPackage(source)` reads and checks a package with no database, and succeeds with a `PreviewVerdict`:
   `previewed` with the relation and row counts and `databaseChecked: false`, or `refused` with a `Refusal`.
-- `Refusal` names the level and rule a package broke: `{ kind: "qti", level: "Qti", rule, detail, origin }` for
-  pantry's laws and its reader, or `{ kind: "above", level, rule, detail, origin }` for a level above `Qti`, whose
-  `rule` is the law's name as that level states it.
+- `Refusal` names the level and rules a package broke: `{ kind: "qti", level: "Qti", rule, rules, detail, origin }`
+  for pantry's laws and its reader, or `{ kind: "above", level, rule, rules, detail, origin }` for a level above `Qti`.
+  `rules` lists every rule the refusal names. The database does not always say which one law broke, so a `qti`
+  refusal lists every rule of the laws it named, in the order of pantry's rule roster. `rule` is the first of
+  `rules`. A `qti` refusal whose laws carry none of pantry's rules has an empty `rules` and no `rule`. An `above`
+  refusal's rules are its laws' names as that level states them.
 - `PackageSource` is a directory or `.zip` path, or `{ name, bytes }` holding a zip archive's bytes. The name stands
   where a path would, in a refusal and in the stored package's name.
 - `exportPackage(packageId)` gives a stored package's entries, each a `PackageEntry` (`path`, `bytes`), as QTI 3.0
   writes them. `readDocument(packageId, path)` gives one document's XML bytes. Both fail with `PackageNotFound` for an
   unknown id, and `readDocument` with `DocumentNotFound` for a path that names no document of the package. A
   document that cannot be written fails with `DocumentRowCount`, `XmlVersionUnread` or an `AssembleError`, which the
-  entry exports as types.
+  entry exports as types. A stored document with no recorded entry path is a defect, not an error: the export stops
+  naming it, before any document is read.
 - `listPackages(request)` and `listDocuments(packageId, request)` read one grizzle page of the stored packages,
   ordered by id, or of a package's documents, ordered by entry path. Their rows are `PackageListing` (`id`, `name`)
-  and `DocumentListing` (`node`, `package`, `path`, `resourceType`, `rootKind`).
+  and `DocumentListing` (`node`, `package`, `path`, `documentType`, `rootKind`).
 - `documentScanOf(qti)` is the document scan, a grizzle query an app runs in its own role's workload or its own
   transaction. `documentXml(document, rows)` writes a document's XML from the scan's rows with no database.
   `DocumentRows` is the rows' type; their shape is internal and changes with pantry.
@@ -50,70 +60,81 @@ exported nothing, so no app could import any of its modules.
   refuses a package that makes a player fetch from another origin, under the rules `CdnOrigin`, `CdnData`, `CdnStyle`
   and `CdnForeign`, each a `kind: "above"` refusal at level `Cdn`. `CdnOrigin`, `CdnData` and `CdnStyle` also refuse
   a value they read that keeps an entity reference, since a player may expand it to an address they never saw.
-- Every program but `previewPackage` requires the author login's `DbLayer<AuthorRole>`, and the import and preview
-  require the platform's `FileSystem`.
 
 ### The published relations
 
 These relations, their keys and their published fields are new, and are the contract `publishedRelations` records
 and `PublishedRow<Name>` types. Every other field and relation is internal.
 
-| Relation                | Key    | Published fields                                                                                             |
-| ----------------------- | ------ | ------------------------------------------------------------------------------------------------------------ |
-| `Package`               | `id`   | `id`, `name`                                                                                                 |
-| `Document`              | `node` | `node`, `package`, `path`, `resourceType`, `rootKind`                                                        |
-| `TestDocument`          | `node` | `node`, `package`, `path`, `rootKind`                                                                        |
-| `Named`                 | `node` | `node`, `document`, `identifier`, `kind`, `parent`, `part`                                                   |
-| `Section`               | `node` | `node`, `document`, `parent`, `visible`, `keepTogether`, `shuffle`, `withReplacement`, `members`, `required` |
-| `SectionSelection`      | `node` | `node`, `document`, `parent`, `select`, `withReplacement`                                                    |
-| `SectionMember`         | `node` | `node`, `section`, `document`, `kind`, `required`, `start`                                                   |
-| `ItemRefDocument`       | `node` | `node`, `document`, `package`, `path`                                                                        |
-| `DeclarationIdentifier` | `node` | `node`, `document`, `identifier`, `declarationKind`                                                          |
-| `BaseType`              | roster | Its handles, which an app's `closedId(BaseType)` columns name                                                |
+| Relation                | Key            | Published fields                                                                                  |
+| ----------------------- | -------------- | ------------------------------------------------------------------------------------------------- |
+| `Package`               | `id`           | `id`, `name`                                                                                      |
+| `Document`              | `node`         | `node`, `package`, `path`, `documentType`, `rootKind`                                             |
+| `TestDocument`          | `node`         | `node`, `package`, `path`, `rootKind`                                                             |
+| `Named`                 | `node`         | `node`, `document`, `identifier`, `kind`, `parent`, `part`                                        |
+| `Section`               | `node`         | `node`, `document`, `parent`, `keepTogether`, `shuffle`, `withReplacement`, `members`, `required` |
+| `SectionSelection`      | `node`         | `node`, `document`, `parent`, `select`, `withReplacement`                                         |
+| `SectionMember`         | `node`         | `node`, `section`, `document`, `kind`, `required`, `start`                                        |
+| `TestFlag`              | `node`, `name` | `node`, `name`, `value`                                                                           |
+| `ItemRefDocument`       | `node`         | `node`, `document`, `package`, `path`                                                             |
+| `DeclarationIdentifier` | `node`         | `node`, `document`, `identifier`, `declarationKind`                                               |
+| `BaseType`              | roster         | Its handles, which an app's `closedId(BaseType)` columns name                                     |
 
-`PublishedRow<"BaseType">` types a handle as a plain `string`, not as one of the roster's handles.
+- `Document`'s `resourceType` field is now `documentType`: `manifest` for the manifest, else the type of the manifest
+  resource that lists the document.
+- `Section` has no `visible` field. A section's visibility is its published `TestFlag` row named `visible`, a boolean
+  `value`. QTI requires the attribute on every section, so every section has that row.
+- `PublishedRow<"BaseType">` types a handle as a plain `string`, not as one of the roster's handles.
 
 ### Reading 178, the regex text bound, and the migration
 
 - An attribute's value is at most 268,435,454 UTF-8 bytes, the longest text PostgreSQL's regular expressions read.
   A longer value is refused under the new rule `regex-text-bound` (reading 178, proposed). Before, it failed with a
   raw database error, so no value that was stored before is refused now, and no corpus verdict changes.
-- The migration `20261110065101_pantry-api-1` puts that bound on `Attribute`'s value and records the listing
-  workloads. An app regenerates its own migration over it.
+- The migration `20261110175052_pantry-api-1`, after `20261110140649_init`, puts that bound on `Attribute`'s value.
+  An app regenerates its own migration over it, and its served file with it.
 
 ### The command line
 
 - `import`, `export` and `roundtrip` run the public programs. Their text, exit codes and `--output json` are
   unchanged for a package `Qti` refuses.
 - A package refused by a level above `Qti` fails with `RefusedByLevel`, of kind `import-refused` and exit code 1.
-  Under `--output json` its error object carries `rule` and `level`, and `schema/error.json` names the new optional
-  `level` key.
-- `pnpm --filter @qti-pie/pantry run rosters` writes `src/db/rosters.json`, the roster order the grammar reads, from
-  `migrations/qti/snapshot.json`. Run it after any `grizzle generate` that changes a roster.
+- Under `--output json` a refusal's error object carries `level`, `rule` and `rules`, and `schema/error.json` names
+  the new optional `level` and `rule` keys.
+- The command line reads no `GR8DES_QTI_INSTALL` folder. It runs this checkout's own installation, from its committed
+  served file.
 
 ### Moving an app to the entry point
 
-An app that reached pantry's modules through deep subpaths moves to `@qti-pie/pantry` in one step. Those subpaths no
-longer resolve, nothing is aliased, and a name the entry does not export fails the app's build.
+An app that reached pantry's modules through its eight subpaths, or ran it over an install folder, moves to
+`@qti-pie/pantry` and its own served file in one step. Those subpaths no longer resolve, nothing is aliased, and a
+name the entry does not export fails the app's build.
 
-| The app used                                                                                                                                                     | It now uses                                                                                                                                                                                                                  |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `migrationConnection` and `connectionServices` from `db/connection.ts` in its `grizzle.config.ts`, with pantry's `GR8DES_PG_*` settings, password command and CA | Its own `defineConfig` `connection` (host, port, database, CA, password or IAM token) through grizzle. pantry exports no connection code                                                                                     |
-| The module-level `Qti`, `Author`, `AuthorApp`, `exportWork` and `importWork`                                                                                     | `qti()`, `authorRole(qti())` and `authorLogin(qti())`. The workloads belong to the login                                                                                                                                     |
-| `authorAppOf(Qti)` from `qti/logins.ts` in its configuration's `logins`                                                                                          | `authorLogin(qti())`, the same login, `qti__author_app`                                                                                                                                                                      |
-| `qtiSchema(Option.some(policy))` from `qti/schema.ts`, single-CDN mode as checks of the root level                                                               | `qti()`, then `singleCdn(qti(), options)` with `options` decoded by `CdnOptions`. The app's level extends the `Cdn` level, and a CDN refusal names level `Cdn` and a rule such as `CdnOrigin`                                |
-| Its own policy file, `{ "cdn": "<origin>" }`                                                                                                                     | The same file, read by the app, its origin passed as `{ origin }`                                                                                                                                                            |
-| `import type { QtiSchema } from ".../qti/schema.ts"`                                                                                                             | `import type { QtiSchema } from "@qti-pie/pantry"`                                                                                                                                                                           |
-| `qti.relations.TestDocument` and the other relations, by the schema value                                                                                        | The published relations, imported by name, or still `qti().relations`, which holds the same objects. Only the published fields are the contract                                                                              |
-| `query(qti).rule(...)` and `schema.extend(qti, "<Level>", ...)`                                                                                                  | Queries over `qti()`; the app's level extends `singleCdn(qti(), options)`, or `qti()` with no CDN level                                                                                                                      |
-| `documentXml` from `export/render.ts`, and its rows as `Parameters<typeof documentXml>[1]`                                                                       | `documentXml` and `import type { DocumentRows }` from `@qti-pie/pantry`, with the same arguments                                                                                                                             |
-| A dynamic `import(".../qti/schema.ts")` that times the schema's load                                                                                             | `import("@qti-pie/pantry")`, which builds nothing. The schema is built on the first `qti()` call                                                                                                                             |
-| The scan workload, `scannedRows` from `export/pages.ts` and the export's queries from `export/scan.ts`                                                           | `documentScanOf(qti())` in its own role's workload, or read in its own transaction, by a role that holds every `Qti` relation whole (`wholeEntriesOf(qti())`). `scannedRows` is not exported; grizzle's own paging covers it |
-| `importPackage` failing with `ImportRefused`                                                                                                                     | An `ImportVerdict`: a refusal is `{ verdict: "refused", refusal }`                                                                                                                                                           |
+| The app used                                                                                                                                                      | It now uses                                                                                                                                                                                                                         |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `migrationConnection`, `loginConnection` and `connectionServices` from `db/connection.ts`, with pantry's `GR8DES_PG_*` settings, password command and CA          | Its own grizzle `connection` in its configuration, and its own connection for the login's role in its layer. pantry exports no connection code                                                                                      |
+| `GR8DES_QTI_INSTALL` and `db/install.ts` (`readInstall`, `installedPolicy`, `CdnPolicy`, `servedPathOf`): an install folder with `policy.json` and its migrations | No install folder. The app reads its own policy file and passes its origin to `singleCdn(qti(), { origin })`, and it reads its own served file                                                                                      |
+| `qtiSchema(Option.some(policy))` or `qtiSchema(Option.none())`, and `qtiLevelsOf`, from `qti/schema.ts`                                                           | `qti()`, which takes no policy. For one CDN origin, `singleCdn(qti(), options)` with `options` decoded by `CdnOptions`. The app's level extends the `Cdn` level, and a CDN refusal names level `Cdn` and a rule such as `CdnOrigin` |
+| `import type { QtiSchema } from ".../qti/schema.ts"`                                                                                                              | `import type { QtiSchema } from "@qti-pie/pantry"`                                                                                                                                                                                  |
+| `authorRoleOf(qti)` and `AuthorRole` from `qti/roles.ts`                                                                                                          | `authorRole(qti())` and `AuthorRole`                                                                                                                                                                                                |
+| `authorAppOf(qti)`, `authorWorkloadsOf` and `AuthorAppLogin` from `qti/logins.ts`                                                                                 | `authorLogin(qti())`, the same login, `qti_queries__author_app`, in its configuration's `logins`, and the type `AuthorLogin`. The workloads belong to the login                                                                     |
+| pantry's own layer, an import layer such as `ImportLive`, or the install folder's served file                                                                     | Its own `DbLayer` over `served<AuthorLogin>(file, "author_app")`, `file` being the served file its own `grizzle generate` writes, merged with `Layer.succeed(ServedAuthorLogin, login)`                                             |
+| `readPackage` from `import/read.ts`                                                                                                                               | Nothing: the programs read the package. Each takes a `PackageSource`, a path or `{ name, bytes }` of a zip archive                                                                                                                  |
+| `importPackage` failing with `ImportRefused`                                                                                                                      | `importPackage(source)` from the entry, which succeeds with an `ImportVerdict`: a refusal is `{ verdict: "refused", refusal }`                                                                                                      |
+| `documentXml` and `scanXml` from `export/render.ts`, with rows typed as `Parameters<typeof documentXml>[1]`                                                       | `documentXml` and `import type { DocumentRows }` from the entry, with the same arguments. `scanXml` is not exported                                                                                                                 |
+| `exportQueriesOf(qti)` from `export/scan.ts`, and `scannedRows`, `assembleScan` and the scan types from `export/pages.ts`                                         | `documentScanOf(qti())` in its own role's workload, or read in its own transaction, by a role that holds every `Qti` relation whole. Paging is grizzle's own. `DocumentRowCount` and `XmlVersionUnread` are entry types             |
+| `qti.relations.TestDocument` and the other relations, by the schema value                                                                                         | The published relations, imported by name, or still `qti().relations`, which holds the same objects. Only the published fields are the contract                                                                                     |
+| `Section`'s `visible` and `Document`'s `resourceType`                                                                                                             | A section's `TestFlag` row named `visible`, and `Document`'s `documentType`                                                                                                                                                         |
+| `Named` and `Section`                                                                                                                                             | The same relations, published. `Named`'s published fields are listed above                                                                                                                                                          |
+| `Attribute`, `Entry` and `ReferencePath`                                                                                                                          | Still `qti().relations`, but internal: they may change in any release without a changelog entry                                                                                                                                     |
 
 On upgrade, the app:
 
-- Regenerates its migration with `grizzle generate`. The `Cdn` level is a PostgreSQL schema of its own, and no CDN
-  check is left on the root level. The app resolves the drafted SQL against its deployed database.
-- Replaces each deep import with the entry's name, by the table above.
-- Reads verdicts: `importPackage` returns a `refused` value where it failed with `ImportRefused`.
+- Lists `authorLogin(qti())` in its grizzle configuration and regenerates its migration with `grizzle generate`. It
+  resolves the drafted SQL against its deployed database, and commits the migration and the served file
+  `migrations/qti/served/author_app.json` that `generate` writes. A `Cdn` level is a PostgreSQL schema of its own,
+  and no CDN check is left on the root level.
+- Builds its layer from that served file and provides `ServedAuthorLogin` beside it.
+- Replaces each subpath import with the entry's name, by the table above.
+- Reads verdicts: `importPackage` returns a `refused` value where it failed with `ImportRefused`, and reads `rules`
+  where a refusal names more than one rule.

@@ -46,8 +46,9 @@ import {
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
 import { Qti } from "#pantry/test/qti.ts";
+import type { Datum } from "#pantry/test/predicates.ts";
 import { checkValueOf } from "#pantry/test/key-copies.ts";
-import type { Datum } from "#pantry/test/key-copies.ts";
+import { admittedOf, indexesOf } from "#pantry/test/indexes.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 
 /**
@@ -114,7 +115,7 @@ const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
  * places an element kind at position 0, its cell for a kind several positions name.
  */
 const sharedFamilies: ReadonlySet<string> = new Set(
-  grammar.admission.rows
+  admittedOf(grammar.content.contentModelOf, grammar.content.admissionIn)
     .filter(({ child, position }) => position === "0" && !nonElements.has(child))
     .map(({ parent, version }) => `${version} ${parent}`),
 );
@@ -162,11 +163,13 @@ const barringOf = (
   version: (typeof families)[number]["version"],
   parent: string,
 ): Option.Option<Barring> =>
-  Option.flatMap(laws.grammar.barredBy.lookup({ parent, version }), ({ name, position }) =>
-    Option.map(
-      laws.grammar.attributes.admission.lookup({ kind: parent, name, version }),
-      (cell) => ({ position, slot: cell.position }),
-    ),
+  Option.flatMap(
+    indexesOf(laws.grammar).barredBy.lookup({ parent, version }),
+    ({ name, position }) =>
+      Option.map(
+        laws.grammar.attributes.admission.lookup({ kind: parent, name, version }),
+        (cell) => ({ position, slot: cell.position }),
+      ),
   );
 
 /**
@@ -226,7 +229,7 @@ const keyed: readonly Keyed[] = [
   })),
   ...GoverningOf.rows.map(({ governor, governs, kind, version }): Keyed => ({
     key: `${version} ${governor}`,
-    oracle: textDomainOf(laws.grammar.attributes, { governs, kind, version }),
+    oracle: textDomainOf(laws.grammar.attributes, { governs: Option.some(governs), kind, version }),
     relation: "TextDomain",
   })),
 ];
@@ -458,13 +461,17 @@ describe("the closed relations read at a key the grammar may give no value", () 
                   }
                 }
               } else {
-                const { governs, kind, version } = held.triple;
-                const domain = textDomainOf(laws.grammar.attributes, { governs, kind, version });
+                const { governor, governs, kind, version } = held.triple;
+                const domain = textDomainOf(laws.grammar.attributes, {
+                  governs: Option.some(governs),
+                  kind,
+                  version,
+                });
                 const at = Option.isSome(domain)
                   ? "at a governor of simple content"
                   : "at a governor of none";
                 for (const stringValue of texts) {
-                  const row = { governs, kind, stringValue, version };
+                  const row = { governor, stringValue, version };
                   const breaks = textBreaks(domain, stringValue);
                   c.note(`TextDomain ${at} ${breaks ? "refused" : "held"}`);
                   assert.strictEqual(

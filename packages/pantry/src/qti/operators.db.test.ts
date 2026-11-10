@@ -17,20 +17,26 @@
  *   values, an empty tolerance, a 0, NaN and a negative of 16 significant digits, each by a check
  *   `Equal_tolerance`; and a tolerance row whose values are not its text, by the concat fold.
  */
-import { Db, query, v } from "@bjornpagen/grizzle";
+import { Db, login, query, v, workload } from "@bjornpagen/grizzle";
 import type { ApplyOutcome, Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Layer } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+
 import { readProgram } from "#pantry/import/program.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
+
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { Author, AuthorApp } from "#pantry/test/author.ts";
+
 import { Package } from "#pantry/qti/package.ts";
 import { materializeSpec } from "#pantry/test/fixtures.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { probeLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
+import { packageFactsOf } from "#pantry/import/write.ts";
+import { Qti } from "#pantry/test/qti.ts";
+import { authorRole } from "#pantry/qti/roles.ts";
+import { authorWorkloads } from "#pantry/qti/logins.ts";
+import { servedProbe } from "#pantry/test/served-members.ts";
 
 /**
  * The tarball member `simple` is extracted from.
@@ -139,23 +145,40 @@ const rejectedBy = (
   picks: readonly ((law: Law) => boolean)[],
 ): boolean =>
   outcome.kind === "invariant-rejected" &&
-  outcome.refused.laws.some((law) => picks.some((pick) => pick(law)));
+  outcome.refused.laws.map(({ law }) => law).some((law) => picks.some((pick) => pick(law)));
 
 /**
- * The number of packages stored, through a query that counts each by its key.
+ * The author role of this file's probe login, the one author role over `Qti`: grizzle puts a role
+ * in one login only, so this file never builds the author login nor loads `#pantry/test/author.ts`.
  */
-const packagesCounted = query(Author).rule((r) => {
-  const { id } = v(Package, "package");
+const probeAuthor = authorRole(Qti);
 
-  return r.match(Package, { id }).find({ total: r.count() });
-});
+/**
+ * The author login with this file's count of the packages stored beside its own members, over the
+ * author role (`#pantry/test/served-members.ts` `servedProbe`): `ProbeLogin` opens the
+ * role that reads it, and `probeLayer` serves every test of the file, `ServedAuthorLogin` included.
+ */
+const { layer: probeLayer, ProbeLogin } = servedProbe(
+  login(Qti, "author_app", [probeAuthor], {
+    workload: [
+      ...authorWorkloads(Qti),
+      workload(probeAuthor, {
+        packagesCounted: query(probeAuthor).rule((r) => {
+          const { id } = v(Package, "package");
+
+          return r.match(Package, { id }).find({ total: r.count() });
+        }),
+      }),
+    ],
+  }),
+);
 
 /**
  * Count the packages stored.
  */
 const storedPackages = Effect.gen(function* storedPackages() {
-  const db = yield* Db.open(AuthorApp.roles.author, {});
-  const rows = yield* (yield* db.execute(packagesCounted, {})).collect;
+  const db = yield* Db.open((yield* ProbeLogin).roles.author, {});
+  const rows = yield* (yield* db.workload.packagesCounted.execute({})).collect;
 
   return rows[0]?.total ?? 0n;
 });
@@ -173,9 +196,12 @@ const applyEdited = (
 ) =>
   Effect.gen(function* appliesEdited() {
     const program = yield* readProgram(dir);
-    const db = yield* Db.open(AuthorApp.roles.author, {});
+    const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
 
-    return yield* db.apply(changeSetOf(Author, edit(program.inputs)), {});
+    return yield* db.workload.importWrite.apply(
+      { insert: packageFactsOf(edit(program.inputs)) },
+      {},
+    );
   });
 
 /**
@@ -395,9 +421,9 @@ describe.skipIf(!hasLease)(
   "qti/operators.db.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+    layer(Layer.mergeAll(probeLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
+      timeout: probeLayerHookTimeoutMs,
     })("the operator laws, judged by PostgreSQL", (it) => {
       it.effect("accepts simple with every valid form of readings 119 and 121 in its rules", () =>
         // Oracle: PostgreSQL, every law of the schema over a package whose rounding operators and

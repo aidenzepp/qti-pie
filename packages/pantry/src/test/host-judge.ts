@@ -1,8 +1,19 @@
 /**
  * The import's rows as the database holds them, rebuilt on the host from a program's inputs by the
- * schema's own statements, and judged by every law of the schema the host can read: each
- * containment and each half of a `mirrors`, each key and each check (`#pantry/test/judged-laws.ts`
- * `judgedLaws`).
+ * schema's own statements, judged by every law of the schema the host can read
+ * ({@link judgedLaws}): each containment and each half of a `mirrors`, each key, each check, and
+ * each family's and tree's owner axis.
+ *
+ * Only tests read it, to judge the import's rows without a database: production judges no law and
+ * reads no row of its own, since a refusal is what the database's outcome says
+ * (`#pantry/import/refusal.ts` `refusalOf`). The law oracle (`#pantry/test/oracle.ts`) never reads
+ * it, since it judges the import's own rows by the schema's own statements
+ * (`src/grammar/purity.test.ts`).
+ *
+ * It is a fast pre-filter, never the judge (the owner's Q4 ruling): a verdict of its counts only
+ * where PostgreSQL gives the same one. A statement over a derived relation, a rule over a query,
+ * it leaves unjudged ({@link readElsewhere}, `#pantry/test/predicates.ts` `judgedKinds`), since
+ * only the database evaluates the query.
  *
  * A program writes each row without the values grizzle fills, and nests a sequence's members under
  * their owner (`#pantry/import/write.ts`). {@link hostRowsOf} restores what grizzle's README says
@@ -24,32 +35,49 @@
  *   relation's description) where there is none, at a first member or an owner of no members;
  * - **each field PostgreSQL generates** (`relation.generated`): its term, as grizzle keeps it in the
  *   relation's description, evaluated over the row's written fields as a predicate is
- *   (`#pantry/test/key-copies.ts` `generatedFields`).
+ *   ({@link generatedFields}).
  *
  * What it does not restore stays absent: a tree root's copies along the axis, whose start values
  * grizzle keeps in its own field builders; a generated field whose term holds one the evaluator
- * does not read, a cast or a conditional. A float is read as grizzle's `float8` stores it, -0 as 0.
- * A law that reads an absent value on a row it reads is not judged, and {@link judge} names it with
- * every absent value, so a skip is always named by its cause.
+ * does not read (`#pantry/test/predicates.ts` `termOf`), such as a cast into a type but a double or
+ * a numeric, or a `Compute.when` over a guard but `Compute.matches`. A float is read as grizzle's
+ * `float8` stores it, -0 as 0. A law that reads an absent value on a row it reads is not judged,
+ * and {@link judge} names it with every absent value, so a skip is always named by its cause.
  *
  * A check is judged as PostgreSQL holds it: grizzle emits `CHECK ((…) IS TRUE)`, so a row whose
  * every read value the host holds breaks the check where its predicate is false or unknown, unknown
  * being SQL's NULL, such as a closed read at a key no row holds (decision 442).
  */
-import type { Law } from "@bjornpagen/grizzle";
-import { Option, Order, Predicate, Schema } from "effect";
+import type { Law, LawSide } from "@bjornpagen/grizzle";
+import { Array as Arr, Formatter, Function as Fn, Option, Order, Predicate, Schema } from "effect";
+import {
+  closedOf,
+  datumText,
+  evaluate,
+  fieldsOf,
+  floatDatum,
+  isJudged,
+  lawSideOf,
+  selectedBy,
+  SideSchema,
+  sourceOf,
+  StatementSchema,
+  StoredTermSchema,
+  subtermsOf,
+  termOf,
+  truthOf,
+  unreadIn,
+} from "#pantry/test/predicates.ts";
+import type { Datum, Row, Source, StoredSide } from "#pantry/test/predicates.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/test/qti.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
-import {
-  closedRows,
-  datumText,
-  floatDatum,
-  generatedFields,
-  judgedSideOf,
-  SideSchema,
-} from "#pantry/test/key-copies.ts";
-import type { Datum, JudgedLaw, JudgedSide } from "#pantry/test/key-copies.ts";
+import { statementLawsOf } from "#pantry/test/law-namer.ts";
+
+/**
+ * The composed `Qti`'s closed relations, which a predicate's closed reads look up and a law over a
+ * closed relation reads as its rows.
+ */
+const closed = closedOf(Qti.relations);
 
 /**
  * A row as the host holds it: each of its fields' values that is a datum.
@@ -92,11 +120,14 @@ const writingOf = (descriptor: unknown): Option.Option<string> =>
 
 /**
  * The kinds of schema member the host reads elsewhere than as a stored relation, each with why: a
- * roster and a closed relation are constants, read by `closedRows` of `#pantry/test/key-copies.ts`.
+ * roster and a closed relation are constants, read by {@link closedRows}, and a derived relation is
+ * a query no table stores, whose rules the database alone judges (`#pantry/test/predicates.ts`
+ * `judgedKinds`), so no side over one decodes and its statements go unjudged here.
  */
 const readElsewhere: ReadonlyMap<string, string> = new Map([
   ["closed", "a roster, whose handles a closed relation's rows hold"],
   ["closedRelation", "a closed relation, read by closedRows"],
+  ["derived", "a derived relation, a query whose rules the database alone judges"],
 ]);
 
 /**
@@ -153,7 +184,7 @@ export const modelledRelations = (members: readonly unknown[]): ReadonlyMap<stri
 
   if (unread.length > 0) {
     throw new Error(
-      `The host judge cannot read ${unread.join(", ")}: each is neither a stored relation it models nor a kind it reads elsewhere, so every law over it would go unjudged. Teach host-judge.ts the member's shape, or name its kind in readElsewhere with why.`,
+      `The host judge cannot read ${unread.join(", ")}: each is neither a stored relation it models nor a kind it reads elsewhere, so every law over it would go unjudged. Teach src/test/host-judge.ts the member's shape, or name its kind in readElsewhere with why.`,
     );
   }
 
@@ -172,6 +203,188 @@ const relations = modelledRelations(Object.values(Qti.relations));
  * @returns Its key's fields, none for a relation the schema does not store.
  */
 const keyOf = (relation: string): readonly string[] => relations.get(relation)?.key ?? [];
+
+/**
+ * Read a generated field's term as the host evaluates it: the term grizzle keeps at the field's
+ * writing in its relation's description (`relation.generated`), read as a predicate's terms are
+ * and evaluated over the row, as PostgreSQL computes the column from the row's written fields.
+ *
+ * @param expr - The term, as grizzle keeps it.
+ * @returns The field's value over a row: unknown where the term reads a field the row lacks, or
+ *   holds a term the host does not read (`#pantry/test/predicates.ts` `termOf`).
+ * @throws {Error} When grizzle keeps no term there: a defect of the host judge, which must learn
+ *   the description's shape before it restores the field.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A description's term is read here, by its shape.
+const generatedValueOf = (expr: unknown): ((row: Row) => Datum | undefined) => {
+  const term = termOf(Schema.decodeUnknownSync(StoredTermSchema)(expr));
+
+  return (row) => evaluate(term, row, () => false, closed);
+};
+
+/**
+ * A stored relation's description as grizzle keeps it, for its generated and its accumulated
+ * fields: each field's writing, a generated field's with the term PostgreSQL computes it by, an
+ * accumulated field's with the start it holds at its axis's base.
+ */
+const DescribedSchema = Schema.Struct({
+  desc: Schema.Struct({
+    fields: Schema.Record(
+      Schema.String,
+      Schema.Struct({
+        writing: Schema.Struct({
+          expr: Schema.optionalKey(Schema.Unknown),
+          kind: Schema.String,
+          start: Schema.optionalKey(Schema.Unknown),
+        }),
+      }),
+    ),
+  }),
+  name: Schema.String,
+});
+
+/**
+ * Every field PostgreSQL generates of each stored relation of the composed schema, by relation and
+ * then field: its value over a row ({@link generatedValueOf}), from the term grizzle keeps in the
+ * relation's description. A relation that generates no field has no entry. A stored relation's
+ * description is read strictly, so a shape grizzle changes fails here, by its decode, rather than
+ * leaving a generated field unrestored without a word.
+ */
+export const generatedFields: ReadonlyMap<
+  string,
+  ReadonlyMap<string, (row: Row) => Datum | undefined>
+> = new Map(
+  Object.values(Qti.relations).flatMap((member) => {
+    if (!Predicate.hasProperty(member, "kind") || member.kind !== "relation") {
+      return [];
+    }
+
+    const { desc, name } = Schema.decodeUnknownSync(DescribedSchema)(member);
+    const generated = Object.entries(desc.fields).flatMap(([field, { writing }]) =>
+      writing.kind === "generated" ? [[field, generatedValueOf(writing.expr)] as const] : [],
+    );
+
+    return generated.length === 0 ? [] : [[name, new Map(generated)] as const];
+  }),
+);
+
+/**
+ * One side of a statement as the host judges it: its relation and its terms as an outcome names
+ * them, the fields its selection reads and the terms of it the host cannot read, and its selection
+ * in SQL's three-valued logic: true, false, or unknown where a field it reads is absent and no
+ * operand decides it without that field.
+ */
+export interface JudgedSide {
+  readonly law: LawSide;
+  readonly reads: readonly string[];
+  readonly relation: string;
+  readonly selection: (row: Readonly<Record<string, Datum>>) => boolean | undefined;
+  readonly unread: readonly string[];
+}
+
+/**
+ * Read a side's relation and selection as the host judges them.
+ *
+ * @param source - The side's relation and predicate ({@link sourceOf}, {@link lawSourceOf}).
+ * @returns Its relation, its selection, and the fields and unread terms the selection holds.
+ */
+const selectionOf = (source: Source): Omit<JudgedSide, "law"> => {
+  const below = Option.match(source.predicate, { onNone: () => [], onSome: subtermsOf });
+
+  return {
+    reads: [...new Set(below.flatMap((term) => (term.kind === "field" ? [term.field] : [])))],
+    relation: source.name,
+    selection: truthOf(source.predicate, closed),
+    unread: unreadIn(below),
+  };
+};
+
+/**
+ * Read a stored side, of any statement grizzle keeps, a family's or a fold's among them, as the
+ * host judges it.
+ *
+ * @param side - The side.
+ * @returns Its relation, terms, selection, and the fields and unread terms the selection holds.
+ */
+export const judgedSideOf = (side: StoredSide): JudgedSide => ({
+  ...selectionOf(sourceOf(side)),
+  law: lawSideOf(side),
+});
+
+/**
+ * Read a law side as grizzle's `lawsOf` names it, its selection included: its relation, and the
+ * conjunction of its selection's conjuncts as its predicate, none where it has none.
+ *
+ * @param side - The side.
+ * @returns Its relation and predicate, or none where the host holds no row of its relation, a
+ *   derived one ({@link isJudged}), or where a conjunct does not decode as a stored term: each
+ *   leaves its law unjudged, as a statement that does not decode is.
+ */
+const lawSourceOf = (side: LawSide): Option.Option<Source> => {
+  if (!isJudged(Qti.relations, side.relation)) {
+    return Option.none();
+  }
+
+  return Arr.isReadonlyArrayNonEmpty(side.selection.conjuncts)
+    ? Option.map(
+        Schema.decodeUnknownOption(StoredTermSchema)({
+          args: side.selection.conjuncts,
+          kind: "and",
+        }),
+        (conjunction) => ({ name: side.relation, predicate: Option.some(termOf(conjunction)) }),
+      )
+    : Option.some({ name: side.relation, predicate: Option.none() });
+};
+
+/**
+ * An `alternatives` statement as grizzle keeps it: its kind alone, since it holds no side, and
+ * states its containments only as the laws `lawsOf` gives for it.
+ */
+const AlternativesSchema = Schema.Struct({ kind: Schema.Literal("alternatives") });
+
+/**
+ * A law the schema states that the host judges over rows: a containment, each half of a `mirrors`
+ * one, its source rows' projection among its target rows'; a family or a tree, judged as the
+ * containment of its owner axis ({@link familyLawOf}); a key, its rows' projection one tuple each;
+ * and a check, every row's predicate true, as grizzle's `CHECK ((…) IS TRUE)` reads it. Each is
+ * named as an outcome names it, and a check's predicate is read with the fields and unread terms it
+ * holds.
+ */
+export type JudgedLaw =
+  | {
+      readonly from: JudgedSide;
+      readonly kind: "contained";
+      readonly law: Law;
+      readonly to: JudgedSide;
+    }
+  | {
+      readonly kind: "check";
+      readonly law: Law;
+      readonly reads: readonly string[];
+      readonly relation: string;
+      readonly unread: readonly string[];
+      readonly value: (row: Readonly<Record<string, Datum>>) => boolean | undefined;
+    }
+  | { readonly kind: "key"; readonly law: Law; readonly side: JudgedSide };
+
+/**
+ * A key as grizzle keeps it: its side.
+ */
+const KeyStatementSchema = Schema.Struct({ kind: Schema.Literal("key"), side: SideSchema });
+
+/**
+ * Read a containment as the law the host judges it by.
+ *
+ * @param left - Its source side.
+ * @param right - Its target side.
+ * @returns The law.
+ */
+const containedOf = (left: StoredSide, right: StoredSide): JudgedLaw => ({
+  from: judgedSideOf(left),
+  kind: "contained",
+  law: { from: lawSideOf(left), kind: "contained", to: lawSideOf(right) },
+  to: judgedSideOf(right),
+});
 
 /**
  * A family as grizzle keeps it: its kind, its member's side, its slots and a tree's root field.
@@ -306,6 +519,302 @@ const foldFilled: ReadonlySet<string> = new Set(
 );
 
 /**
+ * Read a family or a tree as the law the host judges it by: the containment of its owner axis, each
+ * member its side selects holding its group among its owners' primary keys.
+ *
+ * That is the whole of the law over the host's rows. {@link hostRowsOf} fills a sequence's members'
+ * group from their owner, their index from their place and each owner's count from its members, as
+ * grizzle fills them (README, "Families"), so a member's index and an owner's count hold of
+ * themselves, and a member whose group names no owner, a counted family's written by the program,
+ * is the one breach the rows can hold.
+ *
+ * @param read - The family as grizzle keeps it.
+ * @returns The law, read from the statement, its member side's selection left out; none where the
+ *   family's group or its owner's primary key holds no field, which leaves the law unjudged.
+ * @throws {Error} When a tree states no root field, which grizzle's `tree` always states: a defect of
+ *   this reader, never of a document.
+ */
+const familyLawOf = (read: typeof FamilySchema.Type): readonly JudgedLaw[] => {
+  const family = familyOf(read);
+  const member = judgedSideOf(read.family);
+  const slots = { count: family.count, owner: family.owner };
+  const law: Law =
+    read.kind === "tree"
+      ? {
+          kind: "tree",
+          member: member.law,
+          root: Option.getOrThrowWith(
+            family.root,
+            () =>
+              new Error(
+                `The tree over ${family.member} states no root field. Read a tree's root as grizzle's tree keeps it.`,
+              ),
+          ),
+          slots,
+        }
+      : { kind: "family", member: member.law, order: read.kind, slots };
+  const group = member.law.terms.slice(0, family.group.length);
+  const ownerKey = keyOf(family.owner).map((field) => ({ field, kind: "field" as const }));
+  if (!Arr.isReadonlyArrayNonEmpty(group) || !Arr.isReadonlyArrayNonEmpty(ownerKey)) {
+    return [];
+  }
+
+  const from: LawSide = {
+    relation: family.member,
+    selection: { conjuncts: [] },
+    terms: group,
+  };
+  const to: LawSide = { relation: family.owner, selection: { conjuncts: [] }, terms: ownerKey };
+
+  return [
+    {
+      from: { ...member, law: from },
+      kind: "contained",
+      law,
+      to: { law: to, reads: [], relation: family.owner, selection: () => true, unread: [] },
+    },
+  ];
+};
+
+/**
+ * Read one statement as the laws the host judges it by, each law as this module reads it from the
+ * statement, its sides' selections left out: {@link judgedLaws} names each as grizzle's `lawsOf`
+ * does. An `alternatives` statement holds no side, so its containments are read from its laws,
+ * each side with its selection.
+ *
+ * @param statement - The statement as the schema states it.
+ * @param laws - Its laws, as grizzle's `lawsOf` names them.
+ * @returns Its laws: two for a `mirrors`, one for a containment, a family, a tree, a check or a key,
+ *   each of its containments for an `alternatives`, none for any other statement.
+ */
+export const judgedOf = (
+  statement: (typeof Qti.statements)[number],
+  laws: readonly Law[],
+): readonly JudgedLaw[] => {
+  if (Schema.is(AlternativesSchema)(statement)) {
+    return laws.flatMap((law): readonly JudgedLaw[] =>
+      law.kind === "contained"
+        ? Option.toArray(
+            Option.zipWith(lawSourceOf(law.from), lawSourceOf(law.to), (from, to) => ({
+              from: { ...selectionOf(from), law: law.from },
+              kind: "contained" as const,
+              law,
+              to: { ...selectionOf(to), law: law.to },
+            })),
+          )
+        : [],
+    );
+  }
+
+  const keyed = Option.map(
+    Schema.decodeUnknownOption(KeyStatementSchema)(statement),
+    ({ side }): readonly JudgedLaw[] => [
+      { kind: "key", law: { kind: "key", side: lawSideOf(side) }, side: judgedSideOf(side) },
+    ],
+  );
+  if (Option.isSome(keyed)) {
+    return keyed.value;
+  }
+
+  const family = Schema.decodeUnknownOption(FamilySchema)(statement);
+  if (Option.isSome(family)) {
+    return familyLawOf(family.value);
+  }
+
+  return Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
+    onNone: () => [],
+    onSome: (read): readonly JudgedLaw[] => {
+      if (read.kind === "check") {
+        const term = termOf(read.desc.predicate);
+        const below = subtermsOf(term);
+
+        return [
+          {
+            kind: "check",
+            law: { kind: "check", name: read.desc.name, relation: read.relation.name },
+            reads: [...new Set(below.flatMap((at) => (at.kind === "field" ? [at.field] : [])))],
+            relation: read.relation.name,
+            unread: unreadIn(below),
+            value: truthOf(Option.some(term), closed),
+          },
+        ];
+      }
+
+      if (read.kind === "fold") {
+        return [];
+      }
+
+      return read.kind === "mirrors"
+        ? [containedOf(read.left, read.right), containedOf(read.right, read.left)]
+        : [containedOf(read.left, read.right)];
+    },
+  });
+};
+
+/**
+ * Read a closed relation's facts as rows, for a law over it.
+ *
+ * @param relation - The relation's name.
+ * @returns Its rows; none for a name that is no closed relation of the schema.
+ */
+export const closedRows = (relation: string): Option.Option<readonly Row[]> =>
+  Option.map(closed.factsOf(relation), ({ rows }) => rows);
+
+/**
+ * A containment the schema states, read from the statement grizzle keeps for it: its law, each
+ * side's relation and fields, a `pred` term's field among them, and each side's selection as SQL's
+ * `WHERE` reads it, a value a target fixes beyond its terms included.
+ */
+export interface Containment {
+  readonly from: string;
+  readonly fromFields: readonly string[];
+  readonly law: Law;
+  readonly selected: (row: Readonly<Record<string, Datum>>) => boolean;
+  readonly targeted: (row: Readonly<Record<string, Datum>>) => boolean;
+  readonly to: string;
+  readonly toFields: readonly string[];
+}
+
+/**
+ * Read the containment one statement states from one relation, so a test can judge rows by the
+ * schema's own statements, their selections included: a source row its selection holds must meet
+ * a target row its selection holds on the paired fields. Its law is read as {@link judgedOf} reads
+ * it, its sides' selections left out; `#pantry/test/judged-laws.ts` `containmentsOf` names it as
+ * grizzle's `lawsOf` does ({@link statedAs}).
+ *
+ * @param statement - The statement as the schema states it.
+ * @param from - The source relation.
+ * @returns The containment, none for a statement that is no containment from `from`.
+ */
+export const containmentsIn = (
+  statement: (typeof Qti.statements)[number],
+  from: string,
+): readonly Containment[] =>
+  Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
+    onNone: () => [],
+    onSome: (read): readonly Containment[] => {
+      if (read.kind !== "contained" || sourceOf(read.left).name !== from) {
+        return [];
+      }
+
+      const left = sourceOf(read.left);
+      const right = sourceOf(read.right);
+
+      return [
+        {
+          from: left.name,
+          fromFields: fieldsOf(read.left),
+          law: containedOf(read.left, read.right).law,
+          selected: selectedBy(left.predicate, closed),
+          targeted: selectedBy(right.predicate, closed),
+          to: right.name,
+          toFields: fieldsOf(read.right),
+        },
+      ];
+    },
+  });
+
+/**
+ * Whether two law sides read one side, whatever their selections: one relation, and the same terms
+ * in pairing order, each a field or `pred` of one.
+ *
+ * @param stated - A side as grizzle's `lawsOf` names it.
+ * @param read - The side as {@link judgedOf} read it from its statement.
+ * @returns Whether they are one side.
+ */
+const readsSide = (stated: LawSide, read: LawSide): boolean =>
+  stated.relation === read.relation &&
+  stated.terms.length === read.terms.length &&
+  Arr.zip(stated.terms, read.terms).every(
+    ([held, term]) => held.kind === term.kind && held.field === term.field,
+  );
+
+/**
+ * Whether a law grizzle's `lawsOf` names for a statement is the law {@link judgedOf} read from it: a
+ * check of one name over one relation, a key over one side, a containment between one pair of
+ * sides, or a family or a tree of one member side and one owner's slots, whatever the sides'
+ * selections, since that reader reads a selection as the predicate the statement holds, not as
+ * grizzle's canonical conjuncts.
+ *
+ * @param stated - The law as `lawsOf` names it.
+ * @param read - The law as {@link judgedOf} read it.
+ * @returns Whether they are one law.
+ */
+const readsLaw = (stated: Law, read: Law): boolean => {
+  if (stated.kind === "check" && read.kind === "check") {
+    return stated.name === read.name && stated.relation === read.relation;
+  }
+
+  if (stated.kind === "key" && read.kind === "key") {
+    return readsSide(stated.side, read.side);
+  }
+
+  if (stated.kind === "family" && read.kind === "family") {
+    return (
+      stated.order === read.order &&
+      readsSide(stated.member, read.member) &&
+      stated.slots.owner === read.slots.owner &&
+      stated.slots.count === read.slots.count
+    );
+  }
+
+  if (stated.kind === "tree" && read.kind === "tree") {
+    return (
+      stated.root === read.root &&
+      readsSide(stated.member, read.member) &&
+      stated.slots.owner === read.slots.owner &&
+      stated.slots.count === read.slots.count
+    );
+  }
+
+  return (
+    stated.kind === "contained" &&
+    read.kind === "contained" &&
+    readsSide(stated.from, read.from) &&
+    readsSide(stated.to, read.to)
+  );
+};
+
+/**
+ * Name a law the host judges as grizzle's `lawsOf` names it, its sides' selections included: the
+ * one law of its statement's that it reads ({@link readsLaw}).
+ *
+ * @param judged - The law, a judged law or a containment, as {@link judgedOf} or
+ *   {@link containmentsIn} read it from its statement.
+ * @param laws - The statement's laws, as `lawsOf` names them.
+ * @returns The law, holding the statement's own law.
+ * @throws {Error} When none or several of the statement's laws are the law read, which `lawsOf`
+ *   rules out: a defect of this reader, never of a document.
+ */
+export const statedAs = <Judged extends { readonly law: Law }>(
+  judged: Judged,
+  laws: readonly Law[],
+): Judged => {
+  const held = laws.filter((stated) => readsLaw(stated, judged.law));
+  if (!Arr.isReadonlyArrayNonEmpty(held) || held.length > 1) {
+    throw new Error(
+      `The statement read as ${Formatter.format(judged.law)} has ${String(held.length)} laws of grizzle's lawsOf that read its sides, among ${Formatter.format(laws)}. Read each statement's sides as lawsOf pairs them.`,
+    );
+  }
+
+  return { ...judged, law: Arr.headNonEmpty(held) };
+};
+
+/**
+ * Every law a schema states that the host judges over rows ({@link JudgedLaw}), in statement order,
+ * each named as grizzle's `lawsOf` names its statement's law ({@link statedAs}).
+ *
+ * @param schema - The schema, `Qti`.
+ * @returns The laws.
+ */
+export const judgedLaws: (schema: typeof Qti) => readonly JudgedLaw[] = Fn.memoize(
+  (schema: typeof Qti): readonly JudgedLaw[] =>
+    statementLawsOf(schema).flatMap(({ laws, statement }) =>
+      judgedOf(statement, laws).map((judged) => statedAs(judged, laws)),
+    ),
+);
+
+/**
  * Whether a value is a datum the host judges: a text, a natural, a float, a truth value or a set
  * of handles.
  *
@@ -320,22 +829,6 @@ const isDatum = (value: unknown): value is Datum =>
   (value instanceof Set && [...value].every(Predicate.isString));
 
 /**
- * A stored relation's description as grizzle keeps it, for its accumulated fields: each field's
- * writing, an accumulated field's with the start it holds at its axis's base.
- */
-const StartsSchema = Schema.Struct({
-  desc: Schema.Struct({
-    fields: Schema.Record(
-      Schema.String,
-      Schema.Struct({
-        writing: Schema.Struct({ kind: Schema.String, start: Schema.optionalKey(Schema.Unknown) }),
-      }),
-    ),
-  }),
-  name: Schema.String,
-});
-
-/**
  * The start of each accumulated field of a stored relation of the schema, as `Relation.field`, read
  * from the relation's description (`accumulated(type, start)`). A description is read strictly, so
  * a shape grizzle changes fails here, by its decode.
@@ -346,7 +839,7 @@ const starts: ReadonlyMap<string, Datum> = new Map(
       return [];
     }
 
-    const { desc, name } = Schema.decodeUnknownSync(StartsSchema)(member);
+    const { desc, name } = Schema.decodeUnknownSync(DescribedSchema)(member);
 
     return Object.entries(desc.fields).flatMap(([field, { writing }]) => {
       const { start } = writing;
@@ -446,7 +939,7 @@ interface AxisCopy {
 /**
  * A law side's term that reads a field as it is: no `pred` term.
  */
-type FieldTerm = Extract<JudgedSide["law"]["terms"][number], { readonly kind: "field" }>;
+type FieldTerm = Extract<LawSide["terms"][number], { readonly kind: "field" }>;
 
 /**
  * Test whether a law side's term reads a field as it is.
@@ -454,8 +947,7 @@ type FieldTerm = Extract<JudgedSide["law"]["terms"][number], { readonly kind: "f
  * @param term - The term.
  * @returns Whether it is a field term.
  */
-const isFieldTerm = (term: JudgedSide["law"]["terms"][number]): term is FieldTerm =>
-  term.kind === "field";
+const isFieldTerm = (term: LawSide["terms"][number]): term is FieldTerm => term.kind === "field";
 
 /**
  * Read a containment as copies along a family's axis, where it is one.
@@ -858,14 +1350,21 @@ const foldAll = (rows: ReadonlyMap<string, FilledRow[]>): number => {
 };
 
 /**
- * Every copy along a family's axis the schema states.
+ * Every copy along a family's axis a schema's containments state, read on first use: they read
+ * {@link judgedLaws}, whose first call compiles the schema's law model, which loading this module
+ * never does.
  */
-const copies = axisCopies(judgedLaws(Qti));
+const copiesOf = Fn.memoize((schema: typeof Qti): readonly AxisCopy[] =>
+  axisCopies(judgedLaws(schema)),
+);
 
 /**
- * Every copy along a predecessor or a last axis the schema states, read once.
+ * Every copy along a predecessor or a last axis a schema's containments state, read on first use,
+ * as {@link copiesOf} is.
  */
-const steps = stepCopies(judgedLaws(Qti));
+const stepsOf = Fn.memoize((schema: typeof Qti): readonly StepCopy[] =>
+  stepCopies(judgedLaws(schema)),
+);
 
 /**
  * Rebuild a program's rows as the database holds them, every value grizzle fills that the
@@ -971,7 +1470,7 @@ export const hostRowsOf = (inputs: PackageInputs): HostRows => {
 
   countFamilies(rows);
   // Each round fills what the last one's copies and folds made readable, until one fills nothing.
-  while (copyAlong(rows, copies) + stepAlong(rows, steps) + foldAll(rows) > 0) {
+  while (copyAlong(rows, copiesOf(Qti)) + stepAlong(rows, stepsOf(Qti)) + foldAll(rows) > 0) {
     countFamilies(rows);
   }
 
@@ -1136,7 +1635,7 @@ const judgedBy = (rows: HostRows, law: JudgedLaw): LawRead => {
  * each other law is skipped, named with the values it lacks.
  *
  * @param rows - Every relation's rows ({@link hostRowsOf}).
- * @param laws - The laws (`#pantry/test/judged-laws.ts` `judgedLaws`).
+ * @param laws - The laws ({@link judgedLaws}).
  * @returns The judgment.
  */
 export const judge = (rows: HostRows, laws: readonly JudgedLaw[]): Judgment => {

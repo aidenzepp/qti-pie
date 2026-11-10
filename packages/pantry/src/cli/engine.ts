@@ -5,11 +5,12 @@ import { Effect } from "effect";
  * that module only once the pool's settings resolve.
  *
  * `Effect.provide` builds `AuthorAppLayer` before the effect it wraps runs, so the cluster's
- * settings, its CA and the snapshot are read first, and a run that cannot reach the database fails
- * there, with kind `config`, before `load` runs. The importer and the exporter reach the author
- * login (`#pantry/qti/logins.ts`), whose workload grizzle builds when that module is evaluated,
- * and the layer itself loads the login only after its settings, so a command that cannot reach the
- * database never builds the workload.
+ * settings, its CA and the login's served file (`#pantry/db/served.ts` `servedPath`) are read
+ * first, and a run that cannot reach the database fails there, with kind `config`, before `load`
+ * runs. The importer and the exporter take the served login from the layer
+ * (`#pantry/db/served.ts` `ServedAuthorLogin`), and the importer composes the grammar when its
+ * module is evaluated (`#pantry/grammar/install.ts`), so a command that cannot reach the database
+ * never loads either engine.
  *
  * @param load - Imports the engine module: a dynamic `import()` of it, so the command line's
  *   static graph never reaches it.

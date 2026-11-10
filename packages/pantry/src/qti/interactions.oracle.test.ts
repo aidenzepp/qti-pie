@@ -24,22 +24,16 @@ import {
 import {
   anyTypeKinds,
   cardinalityKinds,
-  choiceKinds,
-  countDefault,
-  hotspotKinds,
   interactionLaws,
   interactionRelations,
-  readAttributes,
-  references,
 } from "#pantry/qti/interactions.ts";
 import { Qti } from "#pantry/test/qti.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge as judgeRows } from "#pantry/test/host-judge.ts";
+import { hostRowsOf, judge as judgeRows, judgedLaws } from "#pantry/test/host-judge.ts";
 import { lawNamesOf } from "#pantry/test/host-law-names.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import { contentLawOf, judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import {
   base,
@@ -53,6 +47,13 @@ import {
   shown,
 } from "#pantry/test/probe.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+import {
+  choiceKinds,
+  countDefault,
+  hotspotKinds,
+  readAttributes,
+  references,
+} from "#pantry/vocab/terms/interactions.ts";
 
 /**
  * The fixtures the global setup materializes: `simple` among them.

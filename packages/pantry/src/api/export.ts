@@ -7,20 +7,21 @@
  * itself. `readDocument` reads one document by its package and entry path, the read plate needs: it
  * pages that document's scan (`#pantry/export/scan.ts` `documentScanOf`) as the export does and
  * writes the rows with `documentXml` (`#pantry/export/render.ts`). Both run on the author login,
- * so they require its `DbLayer`, the app's own connection to the installation of the `Qti` schema.
+ * so they require its `DbLayer`, the app's own connection to the installation of the `Qti` schema,
+ * and the served login that layer is built over (`ServedAuthorLogin`), whose author role each
+ * `Db.open` takes.
  */
-import { Db } from "@bjornpagen/grizzle";
-import type { CursorError, DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
+import { Db } from "@bjornpagen/grizzle/runtime";
+import type { CursorError, Uuid } from "@bjornpagen/grizzle";
+import type { DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
 import { Effect, Option, Schema, Stream } from "effect";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { PackageNotFound, exportEntries } from "#pantry/export/package.ts";
 import { scannedRows } from "#pantry/export/pages.ts";
 import type { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
 import { documentXml } from "#pantry/export/render.ts";
 import type { AssembleError } from "#pantry/model/assemble.ts";
-import { authorLogin } from "#pantry/qti/logins.ts";
-import { Package } from "#pantry/qti/package.ts";
 import type { AuthorRole } from "#pantry/qti/roles.ts";
-import { qti } from "#pantry/qti/schema.ts";
 import type { EncodeError } from "@qti-pie/crust/errors.ts";
 
 /**
@@ -76,6 +77,8 @@ export type ExportError = OpenError | ReadError | CursorError | PackageNotFound 
  * the bytes the import read. Nothing is written to a file; the entries are all read, assembled and
  * encoded before the program succeeds, so an export that cannot be made gives no entries.
  *
+ * Requires the served author login and its `DbLayer`.
+ *
  * @param packageId - The id `importPackage` accepted the package under.
  * @returns The package's entries. Fails with `PackageNotFound` when no stored package has the id,
  *   with a document's write error when one of its documents cannot be written, or with grizzle's
@@ -83,7 +86,7 @@ export type ExportError = OpenError | ReadError | CursorError | PackageNotFound 
  */
 export const exportPackage = (
   packageId: Uuid,
-): Effect.Effect<readonly PackageEntry[], ExportError, DbLayer<AuthorRole>> =>
+): Effect.Effect<readonly PackageEntry[], ExportError, ServedAuthorLogin | DbLayer<AuthorRole>> =>
   exportEntries(packageId);
 
 /**
@@ -92,7 +95,7 @@ export const exportPackage = (
  *
  * The package is checked first, then its documents are read for the path, then that document's
  * scan is paged; each read runs in a snapshot of its own, and they agree because a stored package
- * is never changed.
+ * is never changed. Requires the served author login and its `DbLayer`.
  *
  * @param packageId - The id `importPackage` accepted the package under.
  * @param path - The document's entry path in the package, as `listDocuments` gives it.
@@ -103,11 +106,16 @@ export const exportPackage = (
 export const readDocument = Effect.fn("api.readDocument")(function* readDocument(
   packageId: Uuid,
   path: string,
-): Effect.fn.Return<Uint8Array, ExportError | DocumentNotFound, DbLayer<AuthorRole>> {
+): Effect.fn.Return<
+  Uint8Array,
+  ExportError | DocumentNotFound,
+  ServedAuthorLogin | DbLayer<AuthorRole>
+> {
   yield* Effect.annotateCurrentSpan({ packageId, path });
 
-  const db = yield* Db.open(authorLogin(qti()).roles.author, {});
-  if (Option.isNone(yield* db.get(Package, { id: packageId }))) {
+  const login = yield* ServedAuthorLogin;
+  const db = yield* Db.open(login.roles.author, {});
+  if (Option.isNone(yield* db.workload.packageOf.get({ id: packageId }))) {
     return yield* new PackageNotFound({ packageId });
   }
 

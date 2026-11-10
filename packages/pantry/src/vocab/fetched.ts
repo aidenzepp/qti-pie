@@ -2,12 +2,13 @@
  * The addresses a QTI player fetches, declared once: the attributes and the texts whose value a
  * player loads as an image, a sound, a video, a stylesheet, a glyph, a module or its configuration
  * when it renders an item, and the address lists a player resolves. The single-CDN level holds each
- * to its origin (`#pantry/levels/cdn-origin.ts`), and the rules it states derive from these rows
- * alone.
+ * to its origin (`singleCdn`, `#pantry/levels/cdn.ts`), and the checks it states derive from these
+ * rows alone.
  *
- * Each row names an element kind, whose declared type a governing `xsi:type` names too: a rule
- * reads an attribute under every governor of that type, so an element that takes the type through
- * `xsi:type` fetches what the kind's element does.
+ * Each row names an element kind, whose declared type a governing `xsi:type` names too: the level
+ * reads an attribute under every governor of that type (`#pantry/levels/cdn-origin.ts`
+ * `governorsOf`), so an element that takes the type through `xsi:type` fetches what the kind's
+ * element does.
  *
  * A link (`a`'s `href`, MathML's `href`), a reference inside the package (an item, stimulus or
  * section ref's `href`, `xi:include`'s, the manifest's), response processing's `template` and

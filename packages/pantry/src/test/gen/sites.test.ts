@@ -21,15 +21,15 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawNameOf, ruleOfLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/test/qti.ts";
 import type { Site } from "#pantry/qti/tests.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { datumText } from "#pantry/test/predicates.ts";
+import type { Datum } from "#pantry/test/predicates.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
-import { checkOf, datumText } from "#pantry/test/key-copies.ts";
-import type { Datum } from "#pantry/test/key-copies.ts";
+import { checkOf } from "#pantry/test/key-copies.ts";
 import {
   hrefCases,
   outsideRulesOfBox,
@@ -43,6 +43,7 @@ import {
 } from "#pantry/test/gen/sites.ts";
 import type { HrefCase, SiteBox, SiteName } from "#pantry/test/gen/sites.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
+import { schemaLawNameOf, schemaRuleOfLaw } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -221,7 +222,7 @@ const siteContainments = [
   ...containmentsOf(Qti, "Site"),
   ...containmentsOf(Qti, "SitePath"),
   ...containmentsOf(Qti, "Reference").filter(({ law }) =>
-    Option.contains(lawNameOf(law), "Document entry"),
+    Option.contains(schemaLawNameOf(law), "Document entry"),
   ),
 ];
 
@@ -283,7 +284,7 @@ const schemaRules = (inputs: PackageInputs): ReadonlyMap<string, ReadonlySet<str
       if (containment.selected(row) && !present.has(sought)) {
         breach(
           row["node"],
-          Option.getOrElse(ruleOfLaws([containment.law]), () => "unnamed"),
+          Option.getOrElse(schemaRuleOfLaw(containment.law), () => "unnamed"),
         );
       }
     }

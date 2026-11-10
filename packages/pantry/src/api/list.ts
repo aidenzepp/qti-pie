@@ -8,28 +8,20 @@
  * last: n, before }` page backwards from `startCursor` the same way. A cursor belongs to the query
  * that made it, so a cursor from one listing handed to the other fails with grizzle's
  * `CursorError`. Each page is read in a snapshot of its own, so the pages of a listing see each
- * other's later writes.
+ * other's later writes. Both run on the author login, so they require its `DbLayer` and the served
+ * login that layer is built over (`ServedAuthorLogin`), whose author role each `Db.open` takes.
  *
  * @see https://github.com/bjornpagen/grizzle/blob/89e94c040262c587065e84df42829a2f12d9f0c3/packages/engine/src/types/page/page.ts
  */
-import { Db } from "@bjornpagen/grizzle";
-import type {
-  CursorError,
-  DbLayer,
-  Fact,
-  OpenError,
-  Page,
-  PageRequest,
-  ReadError,
-  Uuid,
-} from "@bjornpagen/grizzle";
+import { Db } from "@bjornpagen/grizzle/runtime";
+import type { CursorError, Fact, Page, PageRequest, Uuid } from "@bjornpagen/grizzle";
+import type { DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
 import { Effect } from "effect";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import type { listingQueriesOf } from "#pantry/export/listing.ts";
 import type { Document } from "#pantry/qti/chardata.ts";
-import { authorLogin } from "#pantry/qti/logins.ts";
 import type { Package } from "#pantry/qti/package.ts";
 import type { AuthorRole } from "#pantry/qti/roles.ts";
-import { qti } from "#pantry/qti/schema.ts";
 
 /**
  * One stored package as the package listing gives it: its id and the name of the directory or zip
@@ -39,12 +31,12 @@ export type PackageListing = Pick<Fact<typeof Package>, "id" | "name">;
 
 /**
  * One document of a package as the document listing gives it: its node, which is the document's id,
- * its package, its entry path, the manifest resource type that names it and its root element's
- * kind, each a published field of `Document`.
+ * its package, its entry path, its type in the package (`manifest` for the manifest, else the type
+ * of the resource that lists it) and its root element's kind, each a published field of `Document`.
  */
 export type DocumentListing = Pick<
   Fact<typeof Document>,
-  "node" | "package" | "path" | "resourceType" | "rootKind"
+  "node" | "package" | "path" | "documentType" | "rootKind"
 >;
 
 /**
@@ -77,8 +69,9 @@ export type ListError = OpenError | ReadError | CursorError;
  */
 export const listPackages = Effect.fn("api.listPackages")(function* listPackages(
   request: PageRequest,
-): Effect.fn.Return<PackagePage, ListError, DbLayer<AuthorRole>> {
-  const db = yield* Db.open(authorLogin(qti()).roles.author, {});
+): Effect.fn.Return<PackagePage, ListError, ServedAuthorLogin | DbLayer<AuthorRole>> {
+  const login = yield* ServedAuthorLogin;
+  const db = yield* Db.open(login.roles.author, {});
 
   return yield* db.workload.packages.page({}, request);
 });
@@ -95,10 +88,11 @@ export const listPackages = Effect.fn("api.listPackages")(function* listPackages
 export const listDocuments = Effect.fn("api.listDocuments")(function* listDocuments(
   packageId: Uuid,
   request: PageRequest,
-): Effect.fn.Return<DocumentPage, ListError, DbLayer<AuthorRole>> {
+): Effect.fn.Return<DocumentPage, ListError, ServedAuthorLogin | DbLayer<AuthorRole>> {
   yield* Effect.annotateCurrentSpan({ packageId });
 
-  const db = yield* Db.open(authorLogin(qti()).roles.author, {});
+  const login = yield* ServedAuthorLogin;
+  const db = yield* Db.open(login.roles.author, {});
 
   return yield* db.workload.documents.page({ package: packageId }, request);
 });

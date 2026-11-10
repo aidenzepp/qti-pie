@@ -25,6 +25,7 @@ import {
   SectionMember,
   SectionSelection,
   TestDocument,
+  TestFlag,
 } from "#pantry/qti/tests.ts";
 
 export { BaseType } from "#pantry/grammar/install.ts";
@@ -42,6 +43,7 @@ export {
   SectionMember,
   SectionSelection,
   TestDocument,
+  TestFlag,
 } from "#pantry/qti/tests.ts";
 
 /**
@@ -87,9 +89,11 @@ const published = <
 ): PublishedRelation<R, Key, Fields> => ({ fields, key, kind: "relation", relation });
 
 /**
- * The published relations by name (spec section 2.2): each relation's key and published fields,
- * and {@link BaseType} as a roster. The surface test pins this record, and its fields are the
- * contract {@link PublishedRow} types.
+ * The published relations by name (spec section 2.2, on the schema #55 brought: `Document`'s type
+ * field is `documentType`): each relation's key and published fields, and {@link BaseType} as a
+ * roster. A section's visibility is no field of `Section`: it is the section's {@link TestFlag}
+ * row named `visible`, which QTI's required attribute gives every section (decision 503). The
+ * surface test pins this record, and its fields are the contract {@link PublishedRow} types.
  */
 export const publishedRelations = {
   BaseType: { kind: "roster", relation: BaseType } satisfies PublishedRoster<typeof BaseType>,
@@ -98,7 +102,7 @@ export const publishedRelations = {
     ["node"],
     ["node", "document", "identifier", "declarationKind"],
   ),
-  Document: published(Document, ["node"], ["node", "package", "path", "resourceType", "rootKind"]),
+  Document: published(Document, ["node"], ["node", "package", "path", "documentType", "rootKind"]),
   ItemRefDocument: published(ItemRefDocument, ["node"], ["node", "document", "package", "path"]),
   Named: published(Named, ["node"], ["node", "document", "identifier", "kind", "parent", "part"]),
   Package: published(Package, ["id"], ["id", "name"]),
@@ -109,7 +113,6 @@ export const publishedRelations = {
       "node",
       "document",
       "parent",
-      "visible",
       "keepTogether",
       "shuffle",
       "withReplacement",
@@ -128,6 +131,7 @@ export const publishedRelations = {
     ["node", "document", "parent", "select", "withReplacement"],
   ),
   TestDocument: published(TestDocument, ["node"], ["node", "package", "path", "rootKind"]),
+  TestFlag: published(TestFlag, ["node", "name"], ["node", "name", "value"]),
 } as const;
 
 /**

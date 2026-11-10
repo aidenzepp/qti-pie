@@ -11,9 +11,9 @@
  *
  * A package is judged as the importer will read it: its entries once, the manifest's schema
  * version, then each document through shred, the codec, which refuses `unmodeled-vocabulary`,
- * `attribute-admission` (an attribute its kind admits under no name) and `not-qti3`, and then
- * through the importer's one other check before any row exists, a closed `data-ssml` value
- * Data-SSML does not admit (`attribute-lexical`), and nothing else ({@link CodecRefusal}). The
+ * `attribute-admission` (an attribute its kind admits under no name) and `not-qti3`, and nothing
+ * else ({@link CodecRefusal}): a closed `data-ssml` value Data-SSML does not admit is the law
+ * "Data SSML"'s, over the document's rows (spec reading 177). The
  * documents that shred are folded. A fold that meets a child or an attribute with no cell has no
  * rows, and its refusal is the one breach of its document; every law is evaluated over the rows of
  * the documents that fold, each breach reported with the law, the rule the law keeps from the guard
@@ -54,11 +54,10 @@
  * its document laws after its own over each document it judges and its package laws after its
  * own, and `src/test/complete.oracle.test.ts` holds every law the oracle declares to a package
  * drawn to break it. The overlays' other laws have no statement yet beyond the rule each replaces:
- * `lang-set-copy`, `string-identifier-distinct`, coords by shape, the gap and hottext owners
- * beyond N8, `template-derivation`, the CSM laws, and the typed values a domain derives beyond its
- * regex (G5).
+ * `lang-set-copy`, coords by shape, the gap and hottext owners beyond N8, `template-derivation`,
+ * the CSM laws, and the typed values a domain derives beyond its regex (G5).
  */
-import { Array as Arr, Effect, Option, Order, pipe, Record as Rec, Result } from "effect";
+import { Array as Arr, Effect, Equal, Option, Order, pipe, Record as Rec, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { rowOf } from "#pantry/grammar/ancestry.ts";
@@ -67,13 +66,14 @@ import {
   admittedOf,
   attributeCounts,
   governorOf,
+  languageTag,
   openDomain,
   requiredOf,
   textDomainOf,
 } from "#pantry/grammar/attributes.ts";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { contentEnds, contentFollows, contentModelOf } from "#pantry/grammar/content.ts";
+import { contentFollows, contentModelOf, followPairsOf } from "#pantry/grammar/content.ts";
 import {
   cnDefaultType,
   cnForms,
@@ -83,14 +83,14 @@ import {
   mathHeadQualifiers,
   mathQualifiers,
 } from "#pantry/grammar/expression.ts";
-import { booleanOf, compile, patternFlags } from "#pantry/grammar/domains.ts";
+import { booleanOf, compile, enumerationKept, patternFlags } from "#pantry/grammar/domains.ts";
 import type { DoubleBound } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { Spelling } from "#pantry/grammar/references.ts";
 import { expandedText } from "#pantry/grammar/names.ts";
-import { expandedNameOf, noType } from "#pantry/grammar/xsi.ts";
+import { expandedNameOf } from "#pantry/grammar/xsi.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
@@ -126,7 +126,14 @@ import {
   regexTextBytes,
   utf8Length,
 } from "#pantry/qti/limits.ts";
-import { datumText, keyCopies } from "#pantry/test/key-copies.ts";
+import {
+  admittedOf as admittedChildrenOf,
+  contentEnds,
+  indexesOf,
+  symbolRowsOf,
+} from "#pantry/test/indexes.ts";
+import { datumText } from "#pantry/test/predicates.ts";
+import { keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
 import {
@@ -136,7 +143,7 @@ import {
   lomNamedTypes,
   objectRoots,
 } from "#pantry/test/oracle-laws.ts";
-import { dataSsmlBreachIn } from "#pantry/test/oracle-laws/data-ssml.ts";
+import { dataSsmlBreachOf } from "#pantry/test/oracle-laws/data-ssml.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import { mathmlNamespace, namespaceNameOf, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import { oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
@@ -307,14 +314,11 @@ export type Breach = LawBreach<LawName>;
 /**
  * The rules the codec and the reader refuse a package under, before any row exists: an attribute
  * shred reads under no name or open class its kind admits is `attribute-admission`, the rule of
- * AL1, and every other name shred cannot represent is `unmodeled-vocabulary`. A closed `data-ssml`
- * value Data-SSML does not admit is `attribute-lexical`, which the importer checks and the database
- * does not (spec reading R7-a).
+ * AL1, and every other name shred cannot represent is `unmodeled-vocabulary`.
  */
 export type CodecRule = Extract<
   OracleRule,
   | "attribute-admission"
-  | "attribute-lexical"
   | "href-path"
   | "manifest-root"
   | "not-qti3"
@@ -373,6 +377,13 @@ const identity: Slot = { elements: 0n, state: 0 };
  */
 const caseFolded = (tag: string): string =>
   tag.replaceAll(/[A-Z]/gu, (capital) => capital.toLowerCase());
+
+/**
+ * A well-formed BCP 47 language tag as a whole text, RFC 5646's `Language-Tag` as the grammar reads
+ * it (`languageTag`, spec reading 129): the value of an `xml:lang` that states a language. A form
+ * whose collapsed value is no tag identifies no language (RFC 5646 §2.1; spec reading 174).
+ */
+const languageTagForm = new RegExp(`^(?:${languageTag})$`, patternFlags);
 
 /**
  * Split a collapsed list form into its tokens.
@@ -542,9 +553,9 @@ const kindKey = (version: string, kind: string): string => `${version} ${kind}`;
 
 /**
  * A table of the laws keyed by (version, kind, governing type), each cell computed from the grammar
- * the first time a law reads it.
+ * the first time a law reads it; an element no named type governs is keyed by its kind alone.
  */
-type ByKind<A> = (version: SchemaVersion, kind: string, governs: string) => A;
+type ByKind<A> = (version: SchemaVersion, kind: string, governs: Option.Option<string>) => A;
 
 /**
  * Compute a table keyed by (version, kind, governing type) on demand, each cell once.
@@ -556,7 +567,7 @@ const byKind = <A>(compute: ByKind<A>): ByKind<A> => {
   const cells = new Map<string, A>();
 
   return (version, kind, governs) => {
-    const key = `${kindKey(version, kind)} ${governs}`;
+    const key = [kindKey(version, kind), ...Option.toArray(governs)].join(" ");
     const held = cells.get(key);
     if (held !== undefined) {
       return held;
@@ -727,6 +738,16 @@ const unless = (holds: boolean, keys: () => Keys): Option.Option<Keys> =>
   holds ? Option.none() : Option.some(keys());
 
 /**
+ * Name an element's governing type among a breach's keys: `governs`, where a named type governs it,
+ * and no key where none does.
+ *
+ * @param governs - The element's governing type.
+ * @returns The keys.
+ */
+const governsKeys = (governs: Option.Option<string>): Keys =>
+  Option.match(governs, { onNone: () => ({}), onSome: (type) => ({ governs: type }) });
+
+/**
  * Write a set's members as one key field: their texts, space separated, in their order.
  *
  * @param set - The set.
@@ -750,7 +771,7 @@ const membersOf = (text: string | undefined): readonly string[] =>
  * @param laws - The grammar's tables.
  * @param version - The version.
  * @param kind - The kind.
- * @param governs - The element's governing type.
+ * @param governs - The element's governing type, none where no named type governs it.
  * @param name - The `AttributeName` handle.
  * @returns Its position, or none when the element does not admit the name.
  */
@@ -758,7 +779,7 @@ const positionOf = (
   laws: Laws,
   version: SchemaVersion,
   kind: string,
-  governs: string,
+  governs: Option.Option<string>,
   name: string,
 ): Option.Option<number> =>
   Option.map(
@@ -1280,7 +1301,10 @@ const tableHeadersOf = (view: View): ReadonlyMap<NodeId, ReadonlySet<string>> =>
 const heldRoot = (grammar: ComposedGrammar, view: View, node: FoldedNode<Composed>): boolean =>
   Option.exists(
     Option.all({
-      held: grammar.heldRootsUnder.lookup({ parent: node.parentKind, version: node.version }),
+      held: indexesOf(grammar).heldRootsUnder.lookup({
+        parent: node.parentKind,
+        version: node.version,
+      }),
       name: Option.fromNullishOr(view.rows.openElementNames.find((row) => row.node === node.id)),
     }),
     ({ held, name }) => new RegExp(held.names, patternFlags).test(expandedText(name)),
@@ -1556,8 +1580,8 @@ const nodeLaws: readonly NodeLaw[] = [
   },
   {
     breaks: (node, _view, { grammar }) => {
-      const banned = rowOf(grammar.ancestry.banned, node.kind).intersection(node.parentAncestry);
-      const missing = rowOf(grammar.ancestry.needs, node.kind).difference(node.parentAncestry);
+      const banned = rowOf(indexesOf(grammar).banned, node.kind).intersection(node.parentAncestry);
+      const missing = rowOf(indexesOf(grammar).needs, node.kind).difference(node.parentAncestry);
 
       return unless(banned.size === 0 && missing.size === 0, () => ({
         parentAncestry: spaced(node.parentAncestry),
@@ -1727,7 +1751,7 @@ const nodeLaws: readonly NodeLaw[] = [
   {
     breaks: (node, view, laws) =>
       Option.flatMap(
-        laws.grammar.barredBy.lookup({ parent: node.kind, version: node.version }),
+        indexesOf(laws.grammar).barredBy.lookup({ parent: node.kind, version: node.version }),
         ({ name, position }) => {
           const carries = Option.exists(
             positionOf(laws, node.version, node.kind, node.governs, name),
@@ -1803,7 +1827,7 @@ const nodeLaws: readonly NodeLaw[] = [
         !isForeignKind(node.kind) ||
           Option.isNone(governorOf(laws.grammar.attributes, node)) ||
           !(view.childrenOf.get(node.id) ?? []).some(({ kind }) => laws.elements.has(kind)),
-        () => ({ governs: node.governs }),
+        () => governsKeys(node.governs),
       ),
     law: "Foreign simple content",
     over: "nodes",
@@ -2058,16 +2082,22 @@ const nodeLaws: readonly NodeLaw[] = [
       unless(
         !elements.has(node.kind) ||
           isForeignKind(node.kind) ||
-          Option.isSome(
-            grammar.xsi.xsiType.lookup({
-              kind: node.kind,
-              type: node.governs,
-              version: node.version,
-            }),
-          ),
+          Option.match(node.governs, {
+            onNone: () =>
+              Option.isSome(
+                indexesOf(grammar).anonymousType.lookup({ kind: node.kind, version: node.version }),
+              ),
+            onSome: (type) =>
+              Option.isSome(
+                indexesOf(grammar).xsiType.lookup({ kind: node.kind, type, version: node.version }),
+              ),
+          }),
         () => ({
-          declared: grammar.xsi.declaredType(node.version, node.kind),
-          governs: node.governs,
+          ...Option.match(grammar.xsi.declaredType(node.version, node.kind), {
+            onNone: () => ({}),
+            onSome: (declared) => ({ declared }),
+          }),
+          ...governsKeys(node.governs),
           value: Option.getOrElse(valueOf(view, node.id, "xsi:type"), () => ""),
         }),
       ),
@@ -2078,7 +2108,7 @@ const nodeLaws: readonly NodeLaw[] = [
     breaks: (node, view, { grammar }) =>
       unless(
         !isForeignKind(node.kind) ||
-          node.governs !== noType ||
+          Option.isSome(node.governs) ||
           Option.isNone(
             grammar.content.strictlyHeld.lookup({
               child: node.kind,
@@ -2087,40 +2117,39 @@ const nodeLaws: readonly NodeLaw[] = [
             }),
           ) ||
           heldRoot(grammar, view, node),
-        () => ({ governs: node.governs }),
+        () => governsKeys(node.governs),
       ),
     law: "Strictly held",
     over: "members",
   },
   {
-    breaks: (node, view, { grammar }) => {
-      if (!isForeignKind(node.kind) || node.governs === noType) {
-        return Option.none();
-      }
+    breaks: (node, view, { grammar }) =>
+      (isForeignKind(node.kind) ? node.governs : Option.none<string>()).pipe(
+        Option.flatMap((governs) => {
+          const parent = view.byId.get(node.parent);
+          const against = parent === undefined ? Option.none() : namespaceOf(view, grammar, parent);
+          const type = Option.match(expandedNameOf(governs), {
+            onNone: () => "",
+            onSome: ({ namespace }) => namespace,
+          });
+          const vocabulary = (namespace: string) =>
+            grammar.kinds.elementName.rows.some((row) => row.namespace === namespace);
 
-      const parent = view.byId.get(node.parent);
-      const against = parent === undefined ? Option.none() : namespaceOf(view, grammar, parent);
-      const type = Option.match(expandedNameOf(node.governs), {
-        onNone: () => "",
-        onSome: ({ namespace }) => namespace,
-      });
-      const vocabulary = (namespace: string) =>
-        grammar.kinds.elementName.rows.some((row) => row.namespace === namespace);
-
-      return unless(
-        type === xsNamespace ||
-          Option.exists(
-            against,
-            (namespace) =>
-              !vocabulary(namespace) ||
-              typeAvailable(namespaceNameOf(namespace), namespaceNameOf(type)),
-          ),
-        () => ({
-          governs: node.governs,
-          parentNamespace: Option.getOrElse(against, () => ""),
+          return unless(
+            type === xsNamespace ||
+              Option.exists(
+                against,
+                (namespace) =>
+                  !vocabulary(namespace) ||
+                  typeAvailable(namespaceNameOf(namespace), namespaceNameOf(type)),
+              ),
+            () => ({
+              governs,
+              parentNamespace: Option.getOrElse(against, () => ""),
+            }),
+          );
         }),
-      );
-    },
+      ),
     law: "XsiType available",
     over: "members",
   },
@@ -2150,14 +2179,20 @@ const numberOf = (form: string): number => {
 };
 
 /**
- * An `xs:decimal`'s lexical form, collapsed: a sign, integer digits and fraction digits.
+ * `xs:decimal`'s lexical space, read on a collapsed form: a sign, then integer digits with an
+ * optional point and fraction digits, or a point and fraction digits, so a digit stands on one
+ * side of the point at least (XML Schema 1.1 Part 2 §3.3.3.1, the `decimalLexicalRep` production,
+ * the lexical space pantry's own value domain admits). `+`, `.`, `-.` and the empty text are no
+ * decimal, and have no value to order.
  *
- * @see {@link https://www.w3.org/TR/xmlschema-2/#decimal | XML Schema Part 2, 3.2.3 decimal}
+ * @see {@link https://www.w3.org/TR/xmlschema11-2/#decimal | XML Schema 1.1 Part 2, 3.3.3 decimal}
  */
-const decimalForm = /^(?<sign>[+-]?)(?<whole>[0-9]*)(?:\.(?<fraction>[0-9]*))?$/u;
+const decimalForm = /^(?<sign>[+-]?)(?=\.?[0-9])(?<whole>[0-9]*)(?:\.(?<fraction>[0-9]*))?$/u;
 
 /**
- * Order two `xs:decimal` lexical forms exactly, by their values.
+ * Order two `xs:decimal` lexical forms exactly, by the values XML Schema 1.1's decimalLexicalMap
+ * gives them (Part 2 §3.3.3.1 and §E.1): each form's digits, signed, over ten to the count of its
+ * fraction digits, of any digits.
  *
  * @param a - The first form.
  * @param b - The second form.
@@ -2368,7 +2403,7 @@ const declaredWhiteSpaceOf = (attribute: FoldedAttribute<Composed>): OracleWhite
  * @param laws - The grammar's tables.
  * @returns The reading: each attribute's value, or none.
  */
-const typedReadingOf =
+export const typedReadingOf =
   (laws: Laws): TypedReading =>
   (attribute) =>
     Option.flatMap(compiledOf(laws, attribute), (held) =>
@@ -2563,7 +2598,7 @@ const ownerCopied = (
 ): boolean =>
   owner !== undefined &&
   owner.kind === attribute.kind &&
-  owner.governs === attribute.governs &&
+  Equal.equals(owner.governs, attribute.governs) &&
   owner.version === attribute.version &&
   owner.document === attribute.document;
 
@@ -2675,7 +2710,7 @@ const attributeBreaches = (
         document: view.path,
         keys: {
           at: String(attribute.at),
-          governs: attribute.governs,
+          ...governsKeys(attribute.governs),
           kind: attribute.kind,
           name: attribute.name,
           node: at,
@@ -2797,12 +2832,12 @@ const charsOf = (view: View, node: FoldedNode<Composed>): string => {
 const manifestEntry = "imsmanifest.xml";
 
 /**
- * The type of the resource that lists a document, as its nodes and attributes copy it
- * (`Node.documentType`): `none` for the package's manifest, its one `imsmanifest.xml`, which is no
- * resource's document (reading 146), and for every other document the type `RootOfType` pairs
- * with its root's kind, which is the type a resource lists it under wherever `RootOfType` holds:
- * an external record file's root, a `lom:lom`, gives `resourcemetadata/xml`. A root no type pairs
- * gives the empty text, which is no type.
+ * A document's type, as its nodes and attributes copy it (`Node.documentType`): `manifest` for the
+ * package's manifest, its one `imsmanifest.xml`, which is no resource's document (readings 146 and
+ * 176), and for every other document the type of the resource that lists it, the type `RootOfType`
+ * pairs with its root's kind, which is the type a resource lists it under wherever `RootOfType`
+ * holds: an external record file's root, a `lom:lom`, gives `resourcemetadata/xml`. A root no type
+ * pairs gives the empty text, which is no type.
  *
  * @param view - The document.
  * @param laws - The grammar's tables.
@@ -2810,7 +2845,7 @@ const manifestEntry = "imsmanifest.xml";
  */
 const documentTypeOf = (view: View, laws: Laws): string => {
   if (view.path === manifestEntry) {
-    return "none";
+    return "manifest";
   }
 
   const roots = view.rows.nodes.filter(
@@ -2824,28 +2859,50 @@ const documentTypeOf = (view: View, laws: Laws): string => {
 };
 
 /**
+ * Read a node's governor, `Node.governor`: what its attributes and text are read under, the
+ * grammar's governor of its (version, kind, governing type) (`governorOf`), and its kind's own
+ * where the grammar gives none (`KindGovernor`): no named type governs it, or its declared type,
+ * a complex type a foreign element is not checked against, or a type its declared type does not
+ * derive.
+ *
+ * @param laws - The grammar's tables.
+ * @param node - The node's version, kind and governing type.
+ * @returns The governor's `Governor` handle.
+ */
+const nodeGovernorOf = (
+  laws: Laws,
+  node: Pick<FoldedNode<Composed>, "governs" | "kind" | "version">,
+): string =>
+  Option.match(governorOf(laws.grammar.attributes, node), {
+    onNone: () => node.kind,
+    onSome: (governor) => governor,
+  });
+
+/**
  * Read the fields of a node row a key copy's selection or check reads
  * (`#pantry/test/key-copies.ts` `nodeFields`), its parent's from the parent's row: a root's parent
- * is the document node, which governs no type and is its own parent's kind.
+ * is the document node, which is governed by its own kind and is its own parent's kind.
  *
  * @param view - The node's document.
  * @param node - The node.
  * @param documentType - The document's type ({@link documentTypeOf}).
+ * @param laws - The grammar's tables.
  * @returns Its fields.
  */
 const nodeFieldsOf = (
   view: View,
   node: FoldedNode<Composed>,
   documentType: string,
+  laws: Laws,
 ): DocumentRows["Node"] => {
   const parent = view.byId.get(node.parent);
 
   return {
     chars: charsOf(view, node),
     documentType,
-    governs: node.governs,
+    governor: nodeGovernorOf(laws, node),
     kind: node.kind,
-    parentGoverns: parent?.governs ?? noType,
+    parentGovernor: parent === undefined ? "document" : nodeGovernorOf(laws, parent),
     parentKind: node.parentKind,
     parentParentKind: parent?.parentKind ?? "document",
     start: node.start,
@@ -2920,7 +2977,7 @@ const keyTexts = (
   const nodeOfAttribute = new Map(view.rows.attributes.map(({ id, node }) => [id, node]));
   const documentType = documentTypeOf(view, laws);
   const nodes = view.rows.nodes.map((node) => ({
-    fields: nodeFieldsOf(view, node, documentType),
+    fields: nodeFieldsOf(view, node, documentType, laws),
     node: node.id,
   }));
   const fieldsOf = new Map(nodes.map(({ fields, node }) => [node, fields]));
@@ -2928,7 +2985,7 @@ const keyTexts = (
     attributes: view.rows.attributes.map((attribute) => ({
       fields: {
         documentType,
-        governs: attribute.governs,
+        governor: nodeGovernorOf(laws, attribute),
         kind: attribute.kind,
         lexical: attribute.lexical,
         name: attribute.name,
@@ -3213,7 +3270,7 @@ const wholeBreaches = (
         )
         ? [
             breach("TextDomain", {
-              governs: node.governs,
+              ...governsKeys(node.governs),
               kind: node.kind,
               node: pathOf(view, node.id),
               value: node.stringValue,
@@ -3245,7 +3302,7 @@ const wholeBreaches = (
             .filter((token) => !ids.has(token))
             .map((token) =>
               breach("Idref target", {
-                governs: node.governs,
+                ...governsKeys(node.governs),
                 kind: node.kind,
                 name: `the text of ${node.kind}`,
                 node: pathOf(view, node.id),
@@ -3449,14 +3506,14 @@ const xsDoubleForm =
 const doubleSpecials: ReadonlySet<string> = new Set(["INF", "-INF", "NaN"]);
 
 /**
- * Decide whether a map key, as written, is in `xs:double`'s lexical space: a special value, or a
+ * Decide whether a form, as written, is in `xs:double`'s lexical space: a special value, or a
  * decimal mantissa of any digits with an optional exponent of any digits.
  *
- * @param key - The key.
+ * @param form - The form: a map key, or a slider's bound collapsed.
  * @returns Whether it is a double's lexical form.
  * @see {@link https://www.w3.org/TR/xmlschema-2/#double | XML Schema Part 2, 3.2.5 double}
  */
-const isDoubleKey = (key: string): boolean => doubleSpecials.has(key) || xsDoubleForm.test(key);
+const isDoubleForm = (form: string): boolean => doubleSpecials.has(form) || xsDoubleForm.test(form);
 
 /**
  * Two runs of non-space characters with one whitespace character between them and none around: a
@@ -3534,7 +3591,7 @@ const mapKeyValueOf = (baseType: string, key: string): string => {
     return items;
   }
 
-  return baseType === "float" && isDoubleKey(key)
+  return baseType === "float" && isDoubleForm(key)
     ? `typed ${String(numberOf(key))}`
     : `lexical ${key}`;
 };
@@ -3647,7 +3704,7 @@ const declares = (overlay: Overlay, identifier: string, kinds: ReadonlySet<strin
  */
 const builtInAs = (overlay: Overlay, identifier: string, kinds: ReadonlySet<string>): boolean =>
   Option.exists(
-    overlay.laws.grammar.references.builtIn.lookup({
+    indexesOf(overlay.laws.grammar).builtIn.lookup({
       root: overlay.rootKind,
       variable: identifier,
     }),
@@ -3810,11 +3867,11 @@ const lomForbidden: ReadonlySet<string> = new Set(["exam", "self assessment"]);
 
 /**
  * The types of the documents a package's records are read from, as {@link documentTypeOf} types
- * them: the package's own manifest (`none`) and an external record file, whose root is a `lom:lom`
- * (`resourcemetadata/xml`, reading 81). A `cp:metadata` of any other document describes no part of
- * the package, so its `lom:*` elements are no record's (ruling `170356bd`).
+ * them: the package's own manifest (`manifest`) and an external record file, whose root is a
+ * `lom:lom` (`resourcemetadata/xml`, reading 81). A `cp:metadata` of any other document describes
+ * no part of the package, so its `lom:*` elements are no record's (ruling `170356bd`).
  */
-const recordTypes: ReadonlySet<string> = new Set(["none", "resourcemetadata/xml"]);
+const recordTypes: ReadonlySet<string> = new Set(["manifest", "resourcemetadata/xml"]);
 
 /**
  * The kinds of an item whose `label` is text for a reader and asks for no tool (spec reading 128):
@@ -3978,7 +4035,7 @@ const overlayLaws: readonly ((
             );
       }
 
-      const record = Option.isSome(grammar.recordBindingFit.lookup({ kind: node.kind }));
+      const record = Option.isSome(indexesOf(grammar).recordBindingFit.lookup({ kind: node.kind }));
       if (!record && !grammar.bindingFit.rows.some(({ kind }) => kind === node.kind)) {
         return [];
       }
@@ -3990,7 +4047,7 @@ const overlayLaws: readonly ((
       return Option.toArray(
         typeBreach(baseType, (held) =>
           Option.isSome(
-            grammar.bindingFit.lookup({
+            indexesOf(grammar).bindingFit.lookup({
               baseType: held,
               cardinality: cardinality.value,
               kind: node.kind,
@@ -4019,7 +4076,7 @@ const overlayLaws: readonly ((
       ? [{ keys: {}, law: "PCI module source" }]
       : [],
   (node, overlay) => {
-    const { choiceBound, choiceCount } = overlay.laws.grammar.references;
+    const { choiceBound, choiceCount } = indexesOf(overlay.laws.grammar);
 
     return Option.toArray(choiceBound.lookup({ kind: node.kind })).flatMap(
       ({ max, min, zero }): readonly Finding[] => {
@@ -4077,7 +4134,7 @@ const overlayLaws: readonly ((
           )
       : [],
   (node, overlay) =>
-    Option.toArray(overlay.laws.grammar.operatorArity.lookup({ kind: node.kind }))
+    Option.toArray(indexesOf(overlay.laws.grammar).operatorArity.lookup({ kind: node.kind }))
       .filter(({ max, min }) => node.elementChildren < min || node.elementChildren > max)
       .map((): Finding => ({ keys: { count: String(node.elementChildren) }, law: "Arity" })),
   (node, overlay) =>
@@ -4091,7 +4148,7 @@ const overlayLaws: readonly ((
               targets.size === 0 &&
               !overlay.declared.has(identifier) &&
               Option.isNone(
-                overlay.laws.grammar.references.builtIn.lookup({
+                indexesOf(overlay.laws.grammar).builtIn.lookup({
                   root: overlay.rootKind,
                   variable: identifier,
                 }),
@@ -4117,7 +4174,9 @@ const overlayLaws: readonly ((
       ...recordBreach(overlay, node, "MappableBaseType"),
       ...Option.toArray(
         typeBreach(baseTypeOf(overlay, node), (held) =>
-          Option.isSome(overlay.laws.grammar.mappableBaseType.lookup({ baseType: held })),
+          Option.isSome(
+            indexesOf(overlay.laws.grammar).mappableBaseType.lookup({ baseType: held }),
+          ),
         ),
       ).map((keys): Finding => ({ keys, law: "MappableBaseType" })),
     ];
@@ -4231,7 +4290,7 @@ const overlayLaws: readonly ((
     }
 
     const parts = (overlay.view.childrenOf.get(node.parent) ?? []).filter(({ kind }) =>
-      Option.isSome(overlay.laws.grammar.references.sectionPart.lookup({ kind })),
+      Option.isSome(indexesOf(overlay.laws.grammar).sectionPart.lookup({ kind })),
     ).length;
     const replaced = Option.contains(
       Option.flatMap(typedValueOf(overlay.view, node.id, "with-replacement"), booleanOf),
@@ -4250,15 +4309,20 @@ const overlayLaws: readonly ((
       return [];
     }
 
+    // Reading 9, the Schematron's 14Ba: "not(@upper-bound < @lower-bound)", each bound collapsed
+    // and read where it is in xs:double's lexical space (reading 71's edition), as the double it
+    // names (reading 144); a bound that is no xs:double has no value, and NaN orders against
+    // nothing.
     return Option.all([
       valueOf(overlay.view, node.id, "lower-bound"),
       valueOf(overlay.view, node.id, "upper-bound"),
     ]).pipe(
-      Option.filter(([lower, upper]) => numberOf(upper) < numberOf(lower)),
-      Option.map(([lower, upper]): Finding => ({
-        keys: { lower: collapsed(lower), upper: collapsed(upper) },
-        law: "Slider bounds",
-      })),
+      Option.map(([lower, upper]) => [collapsed(lower), collapsed(upper)] as const),
+      Option.filter(
+        ([lower, upper]) =>
+          isDoubleForm(lower) && isDoubleForm(upper) && numberOf(upper) < numberOf(lower),
+      ),
+      Option.map(([lower, upper]): Finding => ({ keys: { lower, upper }, law: "Slider bounds" })),
       Option.toArray,
     );
   },
@@ -4406,9 +4470,9 @@ const overlayLaws: readonly ((
       // `QTI_CONTEXT` as the context, which "Feedback reference" alone refuses, as the import's
       // rows do (the built-in-roots differential).
       const at = { root: "qti-assessment-item", variable: named.value };
-      const builtIn = overlay.laws.grammar.references.builtIn.lookup(at);
+      const builtIn = indexesOf(overlay.laws.grammar).builtIn.lookup(at);
       const builtInBase = Option.map(
-        overlay.laws.grammar.references.builtInBaseType.lookup(at),
+        indexesOf(overlay.laws.grammar).builtInBaseType.lookup(at),
         ({ baseType }) => baseType,
       );
 
@@ -4629,6 +4693,15 @@ const overlayBreaches = (
     ),
     ...assembledCatalogs,
   ]);
+  // Reading 177: a closed `data-ssml` holds one JSON object Data-SSML 1.0 admits, which the database
+  // judges over the rows the importer reads the value into ("Data SSML").
+  const ssmlValues = view.members.flatMap((node) =>
+    (view.attributesOf.get(node.id) ?? [])
+      .filter((attribute) => attribute.name === "data-ssml")
+      .flatMap((attribute) =>
+        Option.toArray(dataSsmlBreachOf(attribute.lexical)).map((path) => ({ node, path })),
+      ),
+  );
   const catalogRefs = view.members.flatMap((node) =>
     (view.attributesOf.get(node.id) ?? [])
       .filter(
@@ -4640,14 +4713,20 @@ const overlayBreaches = (
       .filter(({ token }) => !catalogIds.has(token)),
   );
   // Reading 92: "Each response variable declared may be bound to one and only one interaction",
-  // so in an item no two of the interactions Binding declared reads, every interaction whatever
-  // the types it binds (readings 75 and 172), name one response.
+  // so in an item no two of the bindings Binding declared reads, each interaction's
+  // `response-identifier` and `string-identifier` whatever the types it binds (readings 75 and
+  // 172), name one response. A string identifier binds "a second response variable" (§5.48.2,
+  // §5.162.3), so one that names its interaction's response binds it twice, as the schema's key
+  // over `BoundVariable` counts it (the old `string-identifier-distinct`).
   const bindings = overlay.isItem
     ? Map.groupBy(
         view.members.flatMap((node) =>
           Option.isSome(laws.grammar.kinds.interaction.lookup({ kind: node.kind }))
-            ? Option.toArray(typedValueOf(view, node.id, "response-identifier")).map(
-                (identifier) => ({ identifier, node }),
+            ? bindingNames.flatMap((attribute) =>
+                Option.toArray(typedValueOf(view, node.id, attribute)).map((identifier) => ({
+                  identifier,
+                  node,
+                })),
               )
             : [],
         ),
@@ -4680,7 +4759,7 @@ const overlayBreaches = (
 
     return overlay.isItem &&
       Option.isSome(
-        laws.grammar.references.builtIn.lookup({ root: overlay.rootKind, variable: identifier }),
+        indexesOf(laws.grammar).builtIn.lookup({ root: overlay.rootKind, variable: identifier }),
       )
       ? "built-in"
       : undefined;
@@ -4721,6 +4800,7 @@ const overlayBreaches = (
     ...catalogRefs.map(({ node, token }) =>
       at(node.id, { keys: { token }, law: "Catalog reference" }),
     ),
+    ...ssmlValues.map(({ node, path }) => at(node.id, { keys: { path }, law: "Data SSML" })),
     ...[...bindings].flatMap(([identifier, held]) =>
       held.slice(1).map(({ node }) =>
         at(node.id, {
@@ -5258,7 +5338,7 @@ const automataOf = (grammar: ComposedGrammar): Automata => {
     return held;
   }
 
-  const { rows } = grammar.content.follow;
+  const rows = followPairsOf(grammar.content);
   const automata: Automata = {
     ends: new Set(grammar.content.last.rows.map(({ model, position }) => `${model} ${position}`)),
     follows: new Map(
@@ -5800,9 +5880,11 @@ const inCatalog = (view: View, id: NodeId): boolean => {
  * (spec reading 117): its own, and those of every fragment its includes splice in; a fragment a
  * test places is a known under-refusal, which reading 117 lists.
  *
- * An `xml:lang` is read by its value, its form collapsed, and one that is empty or all whitespace
- * states no language (XML 1.0 §2.12); a LOM `language` is its text as written. The two compare as
- * tags, without regard to case (RFC 5646 §2.1.1).
+ * An `xml:lang` is read by its value, its form collapsed, and states a language only where that
+ * value is a language tag: an empty one or one of whitespace alone states none (XML 1.0 §2.12), and
+ * one that is no tag identifies none (RFC 5646 §2.1), so its value domain refuses it alone (spec
+ * reading 174); a LOM `language` is its text as written. The two compare as tags, without regard to
+ * case (RFC 5646 §2.1.1).
  *
  * @param documents - The documents the manifest lists that shredded.
  * @param manifest - The manifest's view.
@@ -5869,7 +5951,7 @@ const documentLangBreaches = (
       const value = caseFolded(collapsed(form));
       const missing = generals.filter((general) => !languagesOf(general).includes(value));
 
-      return value === "" || missing.length === 0
+      return !languageTagForm.test(value) || missing.length === 0
         ? []
         : [
             {
@@ -5936,9 +6018,9 @@ const packageBreaches = (
     Option.exists(resource.handle, (type) =>
       grammar.package.rootOfType.rows.some((row) => row.type === type),
     );
-  // The types each path is read under: the manifest's own, `none` (reading 146), then each type a
-  // resource names the path under.
-  const typesAt = new Map<string, ReadonlySet<string>>([[manifest.path, new Set(["none"])]]);
+  // The types each path is read under: the manifest's own, `manifest` (readings 146 and 176), then
+  // each type a resource names the path under.
+  const typesAt = new Map<string, ReadonlySet<string>>([[manifest.path, new Set(["manifest"])]]);
   for (const { path, resource } of documentsOf(resources, grammar)) {
     typesAt.set(path, new Set([...(typesAt.get(path) ?? []), resource.type]));
   }
@@ -6007,7 +6089,7 @@ const packageBreaches = (
       .flatMap((resource) => Option.toArray(resource.resolved))
       .filter(({ resolution }) => resolution.scope !== "entry")
       .map(({ path }) => breach("Document entry", { path })),
-    // A path two types name, the manifest's `none` among them, is one document, of the type its
+    // A path two types name, the manifest's `manifest` among them, is one document, of the type its
     // root bears out where one does (readings 93, 146 and 162), so another's href names no document
     // of its type: "Document entry" alone, and the document is judged once, where its sites place
     // it.
@@ -6712,9 +6794,8 @@ const inPlaceBreaches = (
  * Judge a package as the importer will read it, and every law over its rows.
  *
  * The manifest is read and its schema version decoded, then the manifest and each document it
- * lists are read and shredded in manifest order: the first refusal of the reader, the codec or the
- * importer's `data-ssml` check (documents only, never the manifest) is the judgment, since no row
- * of the package is written. Otherwise every document is folded, and
+ * lists are read and shredded in manifest order: the first refusal of the reader or the codec is
+ * the judgment, since no row of the package is written. Otherwise every document is folded, and
  * the judgment is every breach: the package laws first, as the package's own rows are written
  * first, then each document's in manifest order. A document whose fold meets a missing cell has no
  * rows, so its breaches are that refusal alone; a manifest that does not fold lists nothing, and
@@ -6783,16 +6864,6 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
 
         const xml = yield* readDocument(path, file.bytes);
         const tree = yield* shredDocument(path, xml, version, shredGrammar);
-        const breach = dataSsmlBreachIn(tree);
-        if (Option.isSome(breach)) {
-          return yield* Effect.fail<CodecRefusal>({
-            _tag: "CodecRefusal",
-            detail: `${path} at ${breach.value}: Data-SSML 1.0 does not admit the value`,
-            document: path,
-            rule: "attribute-lexical",
-          });
-        }
-
         const resources: Arr.NonEmptyReadonlyArray<ResourceOf> = [
           resource,
           ...listing
@@ -6881,7 +6952,7 @@ const countsShown = (min: number, max: number): string => {
 
 /**
  * The kinds that take a position of a parent's content model: those whose `Admission` row holds
- * it, and those `Symbol` places there.
+ * it, and those the family's shared model's symbol sets place there.
  *
  * @param grammar - The composed grammar.
  * @param version - The version.
@@ -6896,7 +6967,7 @@ const kindsAt = (
   position: string,
 ): readonly string[] => [
   ...new Set([
-    ...grammar.admission.rows
+    ...admittedChildrenOf(grammar.content.contentModelOf, grammar.content.admissionIn)
       .filter(
         (row) => row.version === version && row.parent === parent && row.position === position,
       )
@@ -6904,7 +6975,7 @@ const kindsAt = (
     ...Option.match(grammar.content.sharedModelOf.lookup({ parent, version }), {
       onNone: () => [],
       onSome: ({ model }) =>
-        grammar.content.symbol.rows
+        symbolRowsOf(grammar.content.symbolSetOf, grammar.content.symbolMember)
           .filter((row) => row.model === model && row.position === position)
           .map(({ kind }) => kind),
     }),
@@ -6946,8 +7017,10 @@ const domainExplained = (
           )}`;
         }
 
-        return domain.enumeration.length > 0
-          ? `${JSON.stringify(form)} is not among the ${String(domain.enumeration.length)} values of ${where}: ${domain.enumeration.join(", ")}`
+        const kept = enumerationKept(domain.definition, domain.pattern);
+
+        return kept.length > 0
+          ? `${JSON.stringify(form)} is not among the ${String(kept.length)} values of ${where}: ${kept.join(", ")}`
           : `${JSON.stringify(form)} is outside ${domain.handle}, whose pattern is ${domain.pattern}`;
       },
     },
@@ -6979,7 +7052,7 @@ const admittedNames = (keys: Keys, grammar: ComposedGrammar) =>
         grammar.kinds.attributeName,
         version,
         field(keys, "kind"),
-        field(keys, "governs"),
+        Option.fromNullishOr(keys["governs"]),
       ),
   });
 
@@ -7131,7 +7204,7 @@ const ownLaws = {
   },
   Arity: {
     explain: (keys, grammar) =>
-      Option.match(grammar.operatorArity.lookup({ kind: field(keys, "kind") }), {
+      Option.match(indexesOf(grammar).operatorArity.lookup({ kind: field(keys, "kind") }), {
         onNone: () => `${field(keys, "kind")} has no OperatorArity row`,
         onSome: ({ max, min }) =>
           `${field(keys, "kind")} holds ${field(keys, "count")} expressions; OperatorArity admits ${String(min)} to ${String(max)}`,
@@ -7212,6 +7285,10 @@ const ownLaws = {
     explain: (keys) =>
       `the custom interaction ${field(keys, "node")} stands in a 3.0.0 document, which holds none: portable custom interactions take their place`,
   },
+  "Data SSML": {
+    explain: (keys) =>
+      `the data-ssml value at ${field(keys, "path")} is one Data-SSML 1.0's JSON Schema does not admit`,
+  },
   "Declaration base type": {
     explain: (keys) =>
       `the ${field(keys, "kind")} at ${field(keys, "node")} is of cardinality ${JSON.stringify(field(keys, "cardinality"))} and base type ${JSON.stringify(field(keys, "baseType"))}, where a record declares no base type and every other variable declares one`,
@@ -7244,10 +7321,6 @@ const ownLaws = {
   "Double bound": {
     explain: (keys) =>
       `${field(keys, "lexical")} is a double whose value lies outside its domain's ${field(keys, "facet")} ${field(keys, "bound")}`,
-  },
-  "Double value": {
-    explain: () =>
-      "a bounded double's typed value is written where its lexical form is in xs:double's lexical space",
   },
   "E1 derived": {
     explain: (keys) =>
@@ -7502,7 +7575,7 @@ const ownLaws = {
   "N5 admitted": {
     explain: (keys, grammar) =>
       `${field(keys, "parentKind")} admits no ${field(keys, "kind")} in ${field(keys, "version")}; it admits ${inBraces(
-        grammar.admission.rows
+        admittedChildrenOf(grammar.content.contentModelOf, grammar.content.admissionIn)
           .filter(
             ({ parent, version }) =>
               parent === field(keys, "parentKind") && version === field(keys, "version"),
@@ -7529,9 +7602,9 @@ const ownLaws = {
       const kind = field(keys, "kind");
 
       return `${kind} sits in ${inBraces([...sits])}: Banned holds ${inBraces(
-        [...rowOf(grammar.ancestry.banned, kind)].filter((flag) => sits.has(flag)),
+        [...rowOf(indexesOf(grammar).banned, kind)].filter((flag) => sits.has(flag)),
       )} of it, and Needs lacks ${inBraces(
-        [...rowOf(grammar.ancestry.needs, kind)].filter((flag) => !sits.has(flag)),
+        [...rowOf(indexesOf(grammar).needs, kind)].filter((flag) => !sits.has(flag)),
       )}`;
     },
     node: true,
@@ -7543,7 +7616,7 @@ const ownLaws = {
           const [position = "", count = ""] = entry.split(":");
 
           return Option.match(
-            grammar.content.counted.lookup({
+            indexesOf(grammar).counted.lookup({
               parent: field(keys, "kind"),
               position,
               version: field(keys, "version"),
@@ -7580,7 +7653,10 @@ const ownLaws = {
   "N7 barred by": {
     explain: (keys, grammar) =>
       Option.match(
-        grammar.barredBy.lookup({ parent: field(keys, "kind"), version: field(keys, "version") }),
+        indexesOf(grammar).barredBy.lookup({
+          parent: field(keys, "kind"),
+          version: field(keys, "version"),
+        }),
         {
           onNone: () => `${field(keys, "kind")} bars no position`,
           onSome: ({ name, position }) =>
@@ -7825,7 +7901,7 @@ const ownLaws = {
         grammar,
         Option.flatMap(keyedVersion(keys, grammar), (version) =>
           textDomainOf(grammar.attributes, {
-            governs: field(keys, "governs"),
+            governs: Option.fromNullishOr(keys["governs"]),
             kind: field(keys, "kind"),
             version,
           }),
@@ -7885,7 +7961,7 @@ const ownLaws = {
   },
   "XsiType derived": {
     explain: (keys, grammar) =>
-      `${field(keys, "kind")} is governed by ${field(keys, "governs")}${field(keys, "value") === "" ? "" : `, which its xsi:type ${JSON.stringify(field(keys, "value"))} names`}, and no type validly derived from its declared ${field(keys, "declared")} is; XsiType admits ${inBraces(
+      `${field(keys, "kind")} is governed by ${keys["governs"] ?? "no named type"}${field(keys, "value") === "" ? "" : `, which its xsi:type ${JSON.stringify(field(keys, "value"))} names`}, and no type validly derived from its declared ${keys["declared"] ?? "anonymous type"} is; XsiType admits ${inBraces(
         grammar.xsi.xsiType.rows
           .filter(
             ({ kind, version }) =>
@@ -7926,7 +8002,7 @@ const ownLaws = {
         Option.map(
           Option.flatMap(keyedVersion(keys, grammar), (version) =>
             governedAdmission(grammar.attributes, {
-              governs: field(keys, "governs"),
+              governs: Option.fromNullishOr(keys["governs"]),
               kind: field(keys, "kind"),
               name: field(keys, "name"),
               version,

@@ -76,141 +76,61 @@ import {
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import type { Kind, Name } from "#pantry/grammar/compose.ts";
-import { booleanTruePattern, namingPattern } from "#pantry/grammar/domains.ts";
+import { booleanTruePattern } from "#pantry/grammar/domains.ts";
 import {
   AttributeName,
+  DocumentType,
   Flag,
-  grammar,
+  Governor,
+  IncludeMember,
   IncludeParent,
   IncludeParentKind,
-  IncludeRoot,
   includeParentKinds,
+  IncludeSetOf,
   NodeKind,
   ResourceType,
   SchemaVersion,
-  TypeName,
 } from "#pantry/grammar/install.ts";
-import { Attribute, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
-import { Entry, hrefPaths, NamedHref, Reference, UnreadTypePath } from "#pantry/qti/package.ts";
+import { Entry, hrefPaths, Reference } from "#pantry/qti/package.ts";
+import {
+  testKind,
+  itemKind,
+  sectionKind,
+  partKind,
+  itemRefKind,
+  sectionRefKind,
+  includeKind,
+  selectionKind,
+  orderingKind,
+  branchRuleKind,
+  mappingKind,
+  stimulusRefKind,
+  assembledRoots,
+  splicingParents,
+  namedKinds,
+  sectionParts,
+  exits,
+  flagCarriers,
+  itemResourceType,
+  linkResourceTypes,
+} from "#pantry/vocab/terms/tests.ts";
+import type { FlagName } from "#pantry/vocab/terms/tests.ts";
 
 /**
- * {@link booleanTruePattern} as a `Compute.matches` pattern.
+ * `xs:boolean`'s true forms (`booleanTruePattern` of `#pantry/grammar/domains.ts`), as the pattern
+ * `Compute.matches` reads, made once.
  */
-const booleanTrue = Compute.pattern(booleanTruePattern);
-
-/**
- * {@link namingPattern} as a `Compute.matches` pattern.
- */
-const naming = Compute.pattern(namingPattern);
-
-/**
- * The test's root kind, the root of an assembly whose names and branch rules resolve.
- */
-export const testKind = "qti-assessment-test" satisfies Kind;
-
-/**
- * The item's root kind, the root of an assembly whose instances place their bindings (spec reading
- * 117).
- */
-export const itemKind = "qti-assessment-item" satisfies Kind;
-
-/**
- * The section's kind: a section document's root, and every section a test or section holds.
- */
-export const sectionKind = "qti-assessment-section" satisfies Kind;
-
-/**
- * The test part's kind.
- */
-export const partKind = "qti-test-part" satisfies Kind;
-
-/**
- * The item ref's kind.
- */
-export const itemRefKind = "qti-assessment-item-ref" satisfies Kind;
-
-/**
- * The section ref's kind: a site, and a name.
- */
-export const sectionRefKind = "qti-assessment-section-ref" satisfies Kind;
-
-/**
- * XInclude's include: a site where a section holds it as a part (information model §2.12).
- */
-export const includeKind = "xi:include" satisfies Kind;
-
-/**
- * A section's selection.
- */
-export const selectionKind = "qti-selection" satisfies Kind;
-
-/**
- * A section's ordering.
- */
-export const orderingKind = "qti-ordering" satisfies Kind;
-
-/**
- * A branch rule.
- */
-export const branchRuleKind = "qti-branch-rule" satisfies Kind;
-
-/**
- * An item ref's variable mapping (information model §7.48).
- */
-export const mappingKind = "qti-variable-mapping" satisfies Kind;
-
-/**
- * An item's reference to a shared stimulus (information model §7.6).
- */
-export const stimulusRefKind = "qti-assessment-stimulus-ref" satisfies Kind;
+const booleanTrueForm = Compute.pattern(booleanTruePattern);
 
 /**
  * The item built-ins a variable mapping's target may not name (information model §2.2.2, §4.5.1:
  * "The identifiers of the built-in session variables are reserved").
  */
 export const sessionVariables = ["completionStatus", "numAttempts", "duration"] as const;
-
-/**
- * The root kinds whose documents are in an assembly whether or not they hold a site: a test, and a
- * section document, whose own chain of inclusions reading 85 refuses as the oracle does, over every
- * listed document. Each keeps its names, sections and branch rules (`TestDocument`); which
- * documents head an assembly is {@link splicingParents}'s.
- */
-export const assembledRoots = [testKind, sectionKind] as const satisfies readonly Kind[];
-
-/**
- * The include parents whose include splices its fragment in place, the one statement of which
- * documents head an assembly: a document heads its own unless an include under one of these places
- * it and may stand for its root (`IncludeRoot`, `Inclusion.splices`), since an included fragment is
- * judged in place, as its merged document holds it, and not alone (spec reading 117). An include
- * that may not stand for its target's root places no fragment there: "Include root" refuses it, and
- * the document it names is judged as its own. Every parent the information model gives an Include
- * is one but a section, whose includes follow a section document's rule (reading 117: reading 86's
- * rule that a section document a test places twice is written once "is the information model's for
- * section documents in a test's assembly ... and includes in a section follow it"). A section's
- * include stands for an item ref, a section or a section ref alone (`IncludeRoot`), and no other
- * parent's include stands for any of them.
- *
- * The schema's heads ({@link inclusionLaws}) and the import's (`#pantry/import/overlays/tests.ts`
- * `assembledRowsOf`) read this list and `IncludeRoot`, through `Inclusion.splices`, and nothing
- * else of them decides a head. The law oracle, the second implementation, states its own from the
- * grammar (`#pantry/test/oracle.ts` `splicingParentsOf` and `standsFor`), and
- * `splicing-parents.oracle.test.ts` holds the two lists equal.
- */
-export const splicingParents = includeParentKinds.filter((kind) => kind !== sectionKind);
-
-/**
- * The kinds whose identifiers are one namespace across an assembled test (reading 86).
- */
-export const namedKinds = [
-  partKind,
-  sectionKind,
-  sectionRefKind,
-  itemRefKind,
-] as const satisfies readonly Kind[];
 
 /**
  * The kinds an item ref, section or section ref branches to (reading 87): every name but a test
@@ -223,19 +143,6 @@ const sectionTargets = [
 ] as const satisfies readonly Kind[];
 
 /**
- * The kinds a section holds as its parts (`SectionPart`, information model §6.46): an item ref, a
- * section, a section ref, or an include standing in for one. Reading 79 counts each once.
- */
-export const sectionParts: readonly Kind[] = NodeKind.handles.filter((kind) =>
-  grammar.references.sectionPart.rows.some((row) => row.kind === kind),
-);
-
-/**
- * The reserved targets every branch rule may name (information model §5.23.1).
- */
-export const exits = ["EXIT_SECTION", "EXIT_TESTPART", "EXIT_TEST"] as const;
-
-/**
  * The attribute names this module copies as collapsed text into {@link TestToken}.
  */
 export const tokenNames = [
@@ -244,24 +151,6 @@ export const tokenNames = [
   "source-identifier",
   "target-identifier",
 ] as const satisfies readonly Name[];
-
-/**
- * The `xs:boolean` attributes this module copies into {@link TestFlag}, each with the kinds that
- * carry it here: a section's `keep-together` and `visible`, an item ref's and a section's
- * `required`, an ordering's `shuffle`, and a selection's `with-replacement`.
- */
-export const flagCarriers = [
-  ["keep-together", [sectionKind]],
-  ["required", [itemRefKind, sectionKind]],
-  ["shuffle", [orderingKind]],
-  ["visible", [sectionKind]],
-  ["with-replacement", [selectionKind]],
-] as const satisfies readonly (readonly [Name, readonly Kind[]])[];
-
-/**
- * The name of an attribute {@link TestFlag} holds.
- */
-export type FlagName = (typeof flagCarriers)[number][0];
 
 /**
  * The nil uuid: the start of an accumulated uuid copy, which every member's owner replaces, and the
@@ -395,15 +284,17 @@ export const Named = relation(
  * A section, keyed by its node: the owner of its parts ({@link sectionFamily}), with the facts of
  * its own attributes and children that the scope of its descendants reads.
  *
- * - **the host's:** its {@link nodeRef} tuple; `parentKind`; `visible` and `keepTogether`, its
- *   attributes' values (`keep-together` true where it writes none); `shuffle`, its ordering's
- *   `shuffle`, and `withReplacement`, its selection's `with-replacement`, each false without the
- *   child or the attribute; and its scope: `part`; `replaced` and `replacing`, whether a section
- *   above it, or it or one above it, selects with replacement; `parentMixes` and `mixes`, whether
- *   its parent's and its own children's order is drawn at delivery (a shuffle, or an invisible
- *   section not kept together whose parent's order is drawn, information model §5.98); and
- *   `parentLooseChain` and `looseChain`, as {@link Named} reads them, true above a document's
- *   root;
+ * - **the host's:** its {@link nodeRef} tuple; `parentKind`; `keepTogether`, its `keep-together`
+ *   (true where it writes none); `loose`, whether it is invisible and not kept together, so its
+ *   children are mixed into its parent's order (information model §5.98), invisible where its
+ *   `visible` flag, a row of its own, reads false: one that writes no `visible` is neither visible
+ *   nor invisible and has no flag, so it is never loose, and AL3 alone refuses it (reading 173);
+ *   `shuffle`, its ordering's `shuffle`, and `withReplacement`, its selection's `with-replacement`,
+ *   each false without the child or the attribute; and its scope: `part`; `replaced` and
+ *   `replacing`, whether a section above it, or it or one above it, selects with replacement;
+ *   `parentMixes` and `mixes`, whether its parent's and its own children's order is drawn at
+ *   delivery (a shuffle, or a loose section whose parent's order is drawn); and `parentLooseChain`
+ *   and `looseChain`, as {@link Named} reads them, true above a document's root;
  * - **drawn:** `members`, its parts' count;
  * - **accumulated:** `required`, the count of its parts whose `required` is true, the end of
  *   {@link requiredFold}.
@@ -414,6 +305,7 @@ export const Section = relation(
     document: uuid,
     keepTogether: pg.boolean,
     kind: closedId(NodeKind),
+    loose: pg.boolean,
     looseChain: pg.boolean,
     members: drawn(natural),
     mixes: pg.boolean,
@@ -430,7 +322,6 @@ export const Section = relation(
     shuffle: pg.boolean,
     start: natural,
     version: closedId(SchemaVersion),
-    visible: pg.boolean,
     withReplacement: pg.boolean,
   },
   ["node"],
@@ -513,14 +404,14 @@ export const SectionOrdering = relation(
  * gives an Include (spec reading 114), each the place where the document it names is merged into
  * its own (information model §7.5 and §2.12).
  *
- * - **the host's:** its node's context, the {@link nodeContext} tuple (`node`, `children`,
- *   `ancestry`, `document`, `documentType`, `governs`, `kind`, `nearest`, `nearestKind`,
- *   `parentKind`, `start`, `version`), which also holds its {@link nodeRef} fields but `parent`;
- *   `parent`; `external`, whether its href resolves outside the package, which its href's
- *   `Reference` row proves (an include's then is stored as written and never fetched, and a section
- *   ref's is refused under the stated limit "Remote section ref", reading 170); and the scope it is
- *   placed in, its parent's: `part`, `replaced` (its parent section's `replacing`), `parentMixes`
- *   and `parentLooseChain`.
+ * - **the host's:** its node's context, the {@link nodeContext} tuple (`node`, `children`, `start`,
+ *   `document`, `ancestry`, `documentType`, `governor`, `kind`, `nearest`, `nearestKind`,
+ *   `parentKind`, `version`), which also holds its {@link nodeRef} fields but `parent`; `parent`;
+ *   `external`, whether its href resolves outside the package, which its href's `Reference` row
+ *   proves (an include's then is stored as written and never fetched, and a section ref's is
+ *   refused under the stated limit "Remote section ref", reading 170); and the scope it is placed
+ *   in, its parent's: `part`, `replaced` (its parent section's `replacing`), `parentMixes` and
+ *   `parentLooseChain`.
  *
  * Its `part` is the test part it sits in: its parent section's under a section, its parent under a
  * test part, and its own document under any other parent (an item's body or processing, a
@@ -538,9 +429,9 @@ export const Site = relation(
     ancestry: bits(Flag),
     children: natural,
     document: uuid,
-    documentType: closedId(ResourceType),
+    documentType: closedId(DocumentType),
     external: pg.boolean,
-    governs: closedId(TypeName),
+    governor: closedId(Governor),
     kind: closedId(NodeKind),
     nearest: uuid,
     nearestKind: closedId(NodeKind),
@@ -940,32 +831,19 @@ export const StimulusRef = relation(
 );
 
 /**
- * The resource type of an item document.
- */
-export const itemResourceType =
-  "imsqti_item_xmlv3p0" satisfies (typeof ResourceType.handles)[number];
-
-/**
- * The resource types of an LTI link, the other target an item ref may name (the UP audit's B3,
- * R36; the implementation guide's §6.2.9, informative): the LTI types of the `ResourceType`
- * roster.
- */
-export const linkResourceTypes: readonly (typeof ResourceType.handles)[number][] =
-  ResourceType.handles.filter((type) => /^ims(?:basic)?ltia?_xmlv/u.test(type));
-
-/**
  * What an item ref names, keyed by the item ref's node (the UP audit's B2 and B3): its href's
  * `package` and `path` (its `ReferencePath`, `#pantry/qti/package.ts` `hrefPaths`), and `type`, the
- * type of the resource of the package whose href's path that is (`NamedHref`), which "Item ref
- * target" judges: the URI an item ref holds is "the URI used to refer to the item's file (e.g.,
- * elsewhere in the same content package)" (information model §5.6.5, `href`), so it names an item
- * of the package, or an LTI link (R36). It is a row only where a resource of the package names the
- * path with a type the importer reads, a counted member of its item ref's {@link ItemRefHref}, so
- * an item ref whose href names none has no target, which "Item ref target" refuses unless a
- * resource of an unread type names the path, and one that writes no href has none, which AL3 alone
- * refuses (spec reading 155). Where a resource of an unread type names the path and none of the
- * item type or an LTI type does, the item ref names nothing a law could judge, and it has no
- * target either. An item it names is an {@link ItemRefDocument} row of its own.
+ * type of the resource of the package whose href's path that is (`TypedHref`, a rule over that
+ * query in `#pantry/qti/queries.ts`), which "Item ref target" judges: the URI an item ref holds is
+ * "the URI used to refer to the item's file (e.g., elsewhere in the same content package)"
+ * (information model §5.6.5, `href`), so it names an item of the package, or an LTI link (R36). It
+ * is a row only where a resource of the package names the path with a type the importer reads, a
+ * counted member of its item ref's {@link ItemRefHref}, so an item ref whose href names none has no
+ * target, which "Item ref target" refuses unless a resource of an unread type names the path
+ * (`UnreadTypeHref`, a query in `#pantry/qti/queries.ts`), and one that writes no href has none,
+ * which AL3 alone refuses (spec reading 155). Where a resource of an unread type names the path
+ * and none of the item type or an LTI type does, the item ref names nothing a law could judge, and
+ * it has no target either. An item it names is an {@link ItemRefDocument} row of its own.
  *
  * In the corpus, feedbackTest's item ref `Example03-feedbackBlock-solution/...` names no file of
  * its package, which "Item ref target" refuses (`item-ref-target`, the verdict file's rule for it),
@@ -982,8 +860,8 @@ export const ItemRefTarget = relation(
  * `path`, as {@link ItemRefTarget}'s, and `targets`, drawn, its count of {@link ItemRefTarget}
  * rows: 1 where a resource of the package names the path with a type the importer reads, and 0
  * where none does. An item ref with no target is judged by no other statement of "Item ref
- * target", so its path must be one a resource of an unread type names
- * (`#pantry/qti/package.ts` `UnreadTypePath`, spec reading 67): the type of what it names is
+ * target", so its path must be one a resource of an unread type names (`UnreadTypeHref`, a rule
+ * over that query in `#pantry/qti/queries.ts`, spec reading 67): the type of what it names is
  * unread, so the law oracle names it no target to judge (its `itemRefTargetOf`). An unread type is
  * itself a refusal, AL1's value domain, so this narrows the law set, never a verdict. An item ref
  * that writes no href has none, which AL3 alone refuses (spec reading 155).
@@ -1255,15 +1133,22 @@ type InclusionRow = RowScalars<typeof Inclusion>;
 
 /**
  * State that an include may stand for its target's root (spec reading 114): the root is among the
- * kinds `IncludeRoot` gives the include's parent, `{root} ⊆ IncludeRoot.row(version, parent)`.
+ * kinds its parent's family's include set holds, `{root} ⊆ IncludeMember.row(IncludeSetOf.at("set",
+ * version, parent))`, and a family of no set holds none.
  *
  * @param i - The include's row.
  * @returns The predicate.
  */
 const standsFor = (i: InclusionRow) =>
-  i.eq(
-    Compute.subset(Compute.singleton(i.root), IncludeRoot.row(i.version, i.includeParent)),
-    true,
+  i.and(
+    IncludeSetOf.has(i.version, i.includeParent),
+    i.eq(
+      Compute.subset(
+        Compute.singleton(i.root),
+        IncludeMember.row(IncludeSetOf.at("set", i.version, i.includeParent)),
+      ),
+      true,
+    ),
   );
 
 /**
@@ -1293,7 +1178,11 @@ const attributesOf = (name: Name, kinds: readonly Kind[]) =>
  * domain refuses it alone (spec reading 152, decision 457 (2)).
  */
 const namingIdentifiers = select(Attribute, (a) =>
-  a.and(a.eq(a.name, "identifier"), a.in(a.kind, namedKinds), Compute.matches(a.lexical, naming)),
+  a.and(
+    a.eq(a.name, "identifier"),
+    a.in(a.kind, namedKinds),
+    Compute.matches(a.lexical, namingPattern),
+  ),
 );
 
 /**
@@ -1352,6 +1241,15 @@ const flagCopy = ([name, kinds]: (typeof flagCarriers)[number]) => {
 };
 
 /**
+ * The sections written invisible: a `visible` that reads false. A section's visibility "is
+ * determined solely by the value of its own visible attribute" (information model §4.2.6), so one
+ * that writes none is in neither this nor its complement (reading 173).
+ */
+const invisibleFlags = select(TestFlag, (f) =>
+  f.and(f.eq(f.name, "visible"), f.eq(f.value, false)),
+);
+
+/**
  * The flags that make an element required: its `required` written true.
  */
 const requiredFlags = select(TestFlag, (f) => f.and(f.eq(f.name, "required"), f.eq(f.value, true)));
@@ -1399,20 +1297,6 @@ const instanceRoots = select(Instance, (i) => i.eq(i.start, 0n));
  * The instances of a test's assembly, whose names and branch rules resolve.
  */
 const testInstances = select(Instance, (i) => i.eq(i.assemblyKind, testKind));
-
-/**
- * A `Section` row as a row check reads it.
- */
-type SectionRow = RowScalars<typeof Section>;
-
-/**
- * State that a section is loose: invisible and not kept together, so its children are mixed into
- * its parent's order (information model §5.98).
- *
- * @param s - The row.
- * @returns The predicate.
- */
-const loose = (s: SectionRow) => s.and(s.eq(s.visible, false), s.eq(s.keepTogether, false));
 
 /**
  * An `Instance` row as a row check reads it.
@@ -1592,8 +1476,9 @@ const shuffled = (b: ShuffleRow) =>
   );
 
 /**
- * The documents whose root is an item, the targets an item ref may name: a constant selection,
- * keyed by its node.
+ * The documents whose root is an item, the targets an item ref may name: the documents whose
+ * `rootKind`, a field beyond the target's terms, is fixed to an item, so `Document`'s key holds it
+ * (grizzle's fixed target, at `3cc8fbd`) and it needs no key of its own.
  */
 const itemDocuments = select(Document, (d) => d.eq(d.rootKind, itemKind));
 
@@ -1610,7 +1495,7 @@ export const itemRefTargetFamily = counted(on(ItemRefTarget, "node"), fin(ItemRe
 /**
  * The item refs whose href names no resource of a type the importer reads.
  */
-const untargetedItemRefs = select(ItemRefHref, (h) => h.eq(h.targets, 0n));
+export const untargetedItemRefs = select(ItemRefHref, (h) => h.eq(h.targets, 0n));
 
 /**
  * The token attributes {@link TestToken} copies, each attribute's key and its two copies.
@@ -1910,8 +1795,8 @@ export const testLawsByName = {
     ),
     check("E1_derived", TestFlag, (f) =>
       f.or(
-        f.and(f.eq(f.value, true), Compute.matches(f.lexical, booleanTrue)),
-        f.and(f.eq(f.value, false), f.not(Compute.matches(f.lexical, booleanTrue))),
+        f.and(f.eq(f.value, true), Compute.matches(f.lexical, booleanTrueForm)),
+        f.and(f.eq(f.value, false), f.not(Compute.matches(f.lexical, booleanTrueForm))),
       ),
     ),
     check("E1_derived", Named, (n) =>
@@ -1965,20 +1850,24 @@ export const testLawsByName = {
           ),
           s.and(s.eq(s.replacing, false), s.eq(s.replaced, false), s.eq(s.withReplacement, false)),
         ),
+        s.or(s.eq(s.loose, false), s.eq(s.keepTogether, false)),
         s.or(
           s.and(
             s.eq(s.mixes, true),
-            s.or(s.eq(s.shuffle, true), s.and(loose(s), s.eq(s.parentMixes, true))),
+            s.or(s.eq(s.shuffle, true), s.and(s.eq(s.loose, true), s.eq(s.parentMixes, true))),
           ),
           s.and(
             s.eq(s.mixes, false),
             s.eq(s.shuffle, false),
-            s.or(s.not(loose(s)), s.eq(s.parentMixes, false)),
+            s.or(s.eq(s.loose, false), s.eq(s.parentMixes, false)),
           ),
         ),
         s.or(
-          s.and(s.eq(s.looseChain, true), loose(s), s.eq(s.parentLooseChain, true)),
-          s.and(s.eq(s.looseChain, false), s.or(s.not(loose(s)), s.eq(s.parentLooseChain, false))),
+          s.and(s.eq(s.looseChain, true), s.eq(s.loose, true), s.eq(s.parentLooseChain, true)),
+          s.and(
+            s.eq(s.looseChain, false),
+            s.or(s.eq(s.loose, false), s.eq(s.parentLooseChain, false)),
+          ),
         ),
       ),
     ),
@@ -2129,12 +2018,7 @@ export const testLawsByName = {
       ),
     ),
   ],
-  "Include root": [
-    contained(
-      on(Inclusion, "version", "includeParent", "root"),
-      on(IncludeRoot, "version", "parent", "kind"),
-    ),
-  ],
+  "Include root": [check("Include_root", Inclusion, standsFor)],
   "Include target": [
     contained(on(includeSites, "node", "kind"), on(SitePath, "node", "kind")),
     contained(on(includePaths, "node"), on(SiteTarget, "node")),
@@ -2195,15 +2079,9 @@ export const testLawsByName = {
     contained(on(attributesOf("href", [itemRefKind]), "node"), on(ItemRefHref, "node")),
     contained(on(ItemRefHref, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
     itemRefTargetFamily,
-    contained(on(untargetedItemRefs, "package", "path"), on(UnreadTypePath, "package", "path")),
-    contained(
-      on(ItemRefTarget, "package", "path", "type"),
-      on(NamedHref, "package", "path", "type"),
-    ),
     check("Item_ref_target", ItemRefTarget, (t) =>
       t.in(t.type, [itemResourceType, ...linkResourceTypes]),
     ),
-    key(on(itemTargets, "node")),
     contained(
       on(itemTargets, "node", "package", "path"),
       on(ItemRefDocument, "node", "package", "path"),
@@ -2216,7 +2094,6 @@ export const testLawsByName = {
       on(ItemRefDocument, "document", "package", "path"),
       on(Document, "node", "package", "path"),
     ),
-    key(on(itemDocuments, "node")),
     contained(on(ItemRefDocument, "document"), on(itemDocuments, "node")),
   ],
   "Remote section ref": [
@@ -2230,9 +2107,7 @@ export const testLawsByName = {
     ),
   ],
   "Selection required": [
-    key(on(requiredFlags, "node")),
     contained(on(requiredMembers, "node"), on(requiredFlags, "node")),
-    key(on(requiredMembers, "node")),
     contained(on(requiredParts, "node"), on(requiredMembers, "node")),
     requiredFold,
     check("Selection_required", SectionSelection, (s) => s.le(Compute.base(s.required), s.select)),
@@ -2332,7 +2207,20 @@ export const testLawsByName = {
     ),
     mirrors(on(Section, "node"), on(nodesOf(sectionKind), "id")),
     contained(on(Section, "parent", "parentKind"), on(Node, "id", "kind")),
-    contained(on(Section, "node", "visible"), on(flagsOf("visible"), "node", "value")),
+    contained(
+      on(
+        select(Section, (s) => s.eq(s.loose, true)),
+        "node",
+      ),
+      on(invisibleFlags, "node"),
+    ),
+    contained(
+      on(invisibleFlags, "node"),
+      on(
+        select(Section, (s) => s.or(s.eq(s.loose, true), s.eq(s.keepTogether, true))),
+        "node",
+      ),
+    ),
     contained(on(flagsOf("keep-together"), "node", "value"), on(Section, "node", "keepTogether")),
     contained(
       on(
@@ -2425,15 +2313,15 @@ export const testLawsByName = {
         Site,
         "node",
         "children",
-        "ancestry",
+        "start",
         "document",
+        "ancestry",
         "documentType",
-        "governs",
+        "governor",
         "kind",
         "nearest",
         "nearestKind",
         "parentKind",
-        "start",
         "version",
       ),
       nodeContext,
@@ -2441,7 +2329,6 @@ export const testLawsByName = {
     contained(on(Site, "node", "parent"), on(Node, "id", "parent")),
     contained(on(SitePath, "node", "kind"), on(Site, "node", "kind")),
     contained(on(SitePath, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
-    key(on(externalHrefs, "node")),
     contained(on(externalSites, "node"), on(externalHrefs, "node")),
     contained(
       on(

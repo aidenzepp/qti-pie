@@ -12,7 +12,8 @@ const PackageJson = Schema.fromJsonString(
 );
 
 /**
- * The entry's runtime exports, spec section 2.1's values, sorted: a name added to the entry or
+ * The entry's runtime exports, spec section 2.1's values and the served author login's service
+ * (`ServedAuthorLogin`, decision 496's M2), sorted: a name added to the entry or
  * dropped from it fails the surface test, so each change to the surface is made on purpose.
  */
 const runtimeNames: readonly string[] = [
@@ -29,7 +30,9 @@ const runtimeNames: readonly string[] = [
   "Section",
   "SectionMember",
   "SectionSelection",
+  "ServedAuthorLogin",
   "TestDocument",
+  "TestFlag",
   "authorLogin",
   "authorRole",
   "documentScanOf",
@@ -56,8 +59,10 @@ interface ContractEntry {
 }
 
 /**
- * The published relations' contract, spec section 2.2: each relation's key and published fields,
- * and `BaseType`, a roster published with its handles and no fields.
+ * The published relations' contract, spec section 2.2 on the schema #55 brought: each relation's
+ * key and published fields, `Document`'s type field named `documentType` and `Section` without
+ * `visible`, which is its `TestFlag` row named `visible` (decision 503), and `BaseType`, a roster
+ * published with its handles and no fields.
  */
 const publishedContract = {
   BaseType: { kind: "roster" },
@@ -67,7 +72,7 @@ const publishedContract = {
     kind: "relation",
   },
   Document: {
-    fields: ["node", "package", "path", "resourceType", "rootKind"],
+    fields: ["node", "package", "path", "documentType", "rootKind"],
     key: ["node"],
     kind: "relation",
   },
@@ -87,7 +92,6 @@ const publishedContract = {
       "node",
       "document",
       "parent",
-      "visible",
       "keepTogether",
       "shuffle",
       "withReplacement",
@@ -112,6 +116,7 @@ const publishedContract = {
     key: ["node"],
     kind: "relation",
   },
+  TestFlag: { fields: ["node", "name", "value"], key: ["node", "name"], kind: "relation" },
 } satisfies Readonly<Record<string, ContractEntry>>;
 
 layer(NodeServices.layer, { excludeTestServices: true })("the package entry", (it) => {
