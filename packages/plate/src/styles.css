@@ -1093,6 +1093,130 @@
 /* end gap-match-interaction */
 
 /* begin graphic-gap-match-interaction (issue m3d-05) */
+
+/*
+ * The Graphic Gap Match Root: the Prompt on its own line, then the image and the word bank beside
+ * it, the bank wrapping under the image when the line is too narrow for both.
+ */
+:where([data-slot="graphic-gap-match-interaction"]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+:where([data-slot="graphic-gap-match-interaction-prompt"]) {
+  flex: 1 1 100%;
+}
+
+/*
+ * The Image part: the box the gaps are positioned in, shrink-wrapped to the author's image, so
+ * every Gap laid over it, at its full extent, spans exactly the image. No part carries an inline
+ * style (rule 723e580c), so nothing here positions by coordinates: each Outline is an svg over the
+ * whole box whose shape is drawn in the image's own coordinate space, and the choices placed in a
+ * gap sit in a foreignObject framed on the area, in that same space.
+ */
+:where([data-slot="graphic-gap-match-interaction-image"]) {
+  position: relative;
+  display: inline-block;
+  flex: 0 1 auto;
+  max-width: 100%;
+  line-height: 0;
+}
+
+/* The Gaps part and each Gap lie over the whole image and take no pointer event themselves. */
+:where([data-slot="graphic-gap-match-interaction-gaps"]),
+:where([data-slot="graphic-gap-match-interaction-gap"]) {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  line-height: normal;
+}
+
+/*
+ * The Outline: the svg fills its Gap, and the shape inside it paints by the properties it
+ * inherits from here. An empty gap is a dashed edge in the muted foreground, a 3:1 boundary
+ * against the page (WCAG 1.4.11), so it shows where it is.
+ */
+:where([data-slot="graphic-gap-match-interaction-outline"]) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  fill: color-mix(in oklab, var(--primary, oklch(0.205 0 0)) 8%, transparent);
+  stroke: var(--muted-foreground, oklch(0.556 0 0));
+  stroke-width: 2px;
+  stroke-dasharray: 6 4;
+}
+
+/* A Gap that holds a choice: a solid edge in the primary colour. */
+:where(
+  [data-slot="graphic-gap-match-interaction-gap"]:has(
+      [data-slot="graphic-gap-match-interaction-gap-choice"]
+    )
+    [data-slot="graphic-gap-match-interaction-outline"]
+) {
+  stroke: var(--primary, oklch(0.205 0 0));
+  stroke-dasharray: none;
+}
+
+/*
+ * The svg that frames a Gap's placed choices lies over the Outline, in the same coordinate
+ * space, and lets a label wider than its area show past the area's edge, so a placed choice is
+ * never clipped.
+ */
+:where([data-slot="graphic-gap-match-interaction-gap"] > svg:not([data-slot])) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/*
+ * A GapChoice: the choice's text centred on its baseline point inside the area, in the image's
+ * units so it scales with the image, painted over a halo in the card's colour so it reads on any
+ * part of the image (WCAG 1.4.11). Its size, 16 image units, suits the image sizes QTI items carry.
+ */
+:where([data-slot="graphic-gap-match-interaction-gap-choice"]) {
+  font-size: 16px;
+  font-weight: 600;
+  text-anchor: middle;
+  fill: var(--card-foreground, oklch(0.145 0 0));
+  paint-order: stroke fill;
+  stroke: var(--card, oklch(1 0 0));
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+/* The Choices: the word bank beside the image, a column of chips with no list marker. */
+:where([data-slot="graphic-gap-match-interaction-choices"]) {
+  display: flex;
+  flex: 1 1 10rem;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * A Choice: a chip on the card's surface, so a dark host theme reads. It is at least 24 by 24 CSS
+ * pixels whatever the font size, since the runtime makes it a button (WCAG 2.5.8).
+ */
+:where([data-slot="graphic-gap-match-interaction-choice"]) {
+  box-sizing: border-box;
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--input, oklch(0.922 0 0));
+  border-radius: calc(var(--radius, 0.625rem) * 0.8);
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
 /* end graphic-gap-match-interaction */
 
 /* begin hotspot-interaction (issue m3d-07) */
