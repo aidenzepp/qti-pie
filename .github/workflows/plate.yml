@@ -1,0 +1,35 @@
+# Per-PR checks for the cloud fan-out's area branches (renderer/*/main), run off
+# the laptop. It runs only on pull requests into those branches; main is
+# unchanged and has no workflow here.
+name: plate
+
+on:
+  pull_request:
+    branches: ["renderer/*/main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          lfs: true
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 12.16.1
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 26.13.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: bash packages/plate/scripts/cloud/fetch-caches.sh
+      - run: pnpm check
+      - run: pnpm --filter @qti-pie/plate test
