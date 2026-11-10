@@ -4,9 +4,9 @@
  * carrying one ID, the three alike or apart, the section placed once or twice and the fragment
  * included once or twice. The law oracle states "DocumentId key" and "Idref target" over each
  * assembly as Q5.13's instances place it (`#pantry/test/oracle.ts` `assembliesOf`), and the
- * import's rows are judged by the schema's own laws on the host (`#pantry/test/host-judge.ts`), and
- * the two verdicts must be one. A test rubric's IDREF may name its section document's ID, since the
- * test's assembly holds it, and a section document's may not name the test's, since its own
+ * import's rows are judged by the schema's own laws on the host (`#pantry/test/host-judge.ts`),
+ * and the two verdicts must be one. A test rubric's IDREF may name its section document's ID, since
+ * the test's assembly holds it, and a section document's may not name the test's, since its own
  * assembly does not.
  *
  * The section document is placed whole, an instance of its own, and the test writes its elements
@@ -23,16 +23,15 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Option } from "effect";
-import { ruleOfLaws } from "#pantry/import/refusal.ts";
+import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/test/qti.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
+import { schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -257,7 +256,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("the IDs of an assemble
                 const rule =
                   first === undefined
                     ? "accepted"
-                    : Option.getOrElse(ruleOfLaws([first, ...rest]), () => "unnamed");
+                    : Option.getOrElse(Arr.head(schemaRulesOf([first, ...rest])), () => "unnamed");
                 const rules = verdict.kind === "accepted" ? new Set(["accepted"]) : verdict.rules;
                 c.note(verdict.kind);
                 if (verdict.kind === "accepted" && drawn.sections === 2) {

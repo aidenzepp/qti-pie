@@ -23,16 +23,16 @@
  *
  * @see {@link https://github.com/postgres/postgres/blob/REL_19_STABLE/src/include/access/nbtree.h | PostgreSQL, nbtree.h BTMaxItemSize}
  */
-import { closedId, keyTextBytes as bytesBeside, natural, str, uuid } from "@bjornpagen/grizzle";
-import { Position } from "#pantry/grammar/install.ts";
-
-/**
- * Any text, line ends included: the language every byte-bounded text of this module cuts, and the
- * type of a text no law reads. Its pattern is a tautology, so grizzle installs a field of it as
- * plain text, with no domain and no pattern law (`physical/ddl/domains.ts` `structuralRegex` of
- * the vendored engine).
- */
-export const anyText = str.regex("^.*$", "su");
+import {
+  closedId,
+  keyTextBytes as bytesBeside,
+  lexicalForm,
+  natural,
+  pg,
+  str,
+  uuid,
+} from "@bjornpagen/grizzle";
+import { anyText, Position } from "#pantry/grammar/install.ts";
 
 /**
  * The widest key any slice puts a key text in, its other fields as grizzle types them: the tree's
@@ -42,9 +42,10 @@ export const anyText = str.regex("^.*$", "su");
  * tree lowering merges each fold's pair into the axis's one foreign key). It covers the narrower
  * keys too: `Idref`'s `(node, attribute, index)` (`#pantry/qti/attributes.ts`), a counted family's
  * `(group, text, hidden index)` such as `File`'s (`#pantry/qti/package.ts`), and a plain `(uuid,
- * text)`. One bound for all of them keeps a value one relation holds from being refused by
- * another. A slice that puts key text in a wider key widens this, and `limits.test.ts` fails until
- * it does.
+ * text)`. One bound for all of them keeps a value one relation holds from being refused by another.
+ * A slice that puts key text in a wider key widens this; until it does, grizzle's compile of `Qti`
+ * refuses the wider key as past PostgreSQL's index row limit, so every test that compiles the
+ * schema fails.
  */
 export const widestTextKey = [
   uuid,
@@ -134,3 +135,14 @@ const utf8 = new TextEncoder();
  * @returns Its bytes.
  */
 export const utf8Length = (text: string): number => utf8.encode(text).length;
+
+/**
+ * The lexical form of an integer `Compute.cast` reads exactly: `xs:integer`'s, within PostgreSQL's
+ * signed 64-bit range, a stated limit of the representation as the key-text bounds are. Spec
+ * reading 46 holds a `qti-equal-rounded` `figures` to that range, so every integer AL1's lexical
+ * half admits is in it, and a MathML alignment `selection` outside it counts as 0, which no child
+ * has. The schema's casts (`#pantry/qti/operators.ts`, `#pantry/qti/mathml-align.ts`) and the
+ * importer's reading of a selection (`#pantry/import/overlays/mathml-align.ts`) share this one
+ * statement.
+ */
+export const integerForm = lexicalForm(pg.bigint);

@@ -73,7 +73,6 @@ import {
   drawn,
   fin,
   key,
-  lexicalForm,
   natural,
   on,
   pg,
@@ -81,8 +80,8 @@ import {
   select,
   uuid,
 } from "@bjornpagen/grizzle";
-import type { RowScalars } from "@bjornpagen/grizzle";
-import { Option } from "effect";
+import type { RowScalars, Term } from "@bjornpagen/grizzle";
+
 import {
   BaseType,
   BaseTypeLexical,
@@ -94,8 +93,8 @@ import {
   NodeKind,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
-import { namingPattern, ncNamePattern } from "#pantry/grammar/domains.ts";
-import { Attribute, Space } from "#pantry/qti/attributes.ts";
+import { ncNamePattern } from "#pantry/grammar/domains.ts";
+import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import {
   BaseTypePattern,
   unjudgedBaseTypes,
@@ -103,15 +102,11 @@ import {
   ValueBaseOf,
 } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
+import { doublePattern } from "#pantry/qti/operators.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
-import { itemKind, testKind } from "#pantry/qti/tests.ts";
-import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
-import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
-/**
- * {@link namingPattern} as a `Compute.matches` pattern.
- */
-const naming = Compute.pattern(namingPattern);
+import { normalMinimumDefaults } from "#pantry/vocab/terms/declarations.ts";
+import { itemKind, testKind } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * A collapsed identifier that names something: an NCName (`ncNamePattern`), `IdentifierDType`'s
@@ -408,6 +403,11 @@ export const declarationRef = on(
  * row's own, copied from {@link DeclarationCardinality} only where `cardinalities` is 1, and one
  * over its base type reads {@link DeclarationBaseType} where `baseTypes` is 1. A declaration whose
  * identifier names nothing has no row here, and nothing resolves to it (spec readings 157 and 159).
+ *
+ * `cardinalities` is last, the order {@link DeclarationName}'s containment references the tuple in:
+ * its target fixes `cardinalities` to 1 beyond its terms, and grizzle references a fixed field
+ * after the terms (`#fixedTarget`, `laws/model/plan.ts:1394-1444` at `3cc8fbd`), so every reference
+ * here shares that one UNIQUE (docs/grizzle-findings.md, "A fixed target's UNIQUE").
  */
 export const declarationIdentifierRef = on(
   DeclarationIdentifier,
@@ -415,8 +415,8 @@ export const declarationIdentifierRef = on(
   "document",
   "identifier",
   "declarationKind",
-  "cardinalities",
   "baseTypes",
+  "cardinalities",
 );
 
 /**
@@ -632,24 +632,6 @@ export const RecordFieldName = relation(
 export const MasteryValue = relation("MasteryValue", { lexical: keyText, node: uuid }, ["node"]);
 
 /**
- * The `normal-minimum` an outcome declaration has, by its version, where the version's XSD states a
- * default (spec reading 149): QTI 3.0.1's `default="0.0"` (`imsqti_asiv3p0p1_v1p0.xsd` line 30137;
- * information model §4.5.8, "Default = "0.0"" and "It is set to 0 by default"). QTI 3.0 states none
- * (`imsqti_asiv3p0_v1p0.xsd` line 29989, and its §4.5.8), so a 3.0.0 declaration that writes no
- * `normal-minimum` has no normal minimum. Read from the inventory's leaf, the one statement of the
- * XSD's defaults.
- */
-export const normalMinimumDefaults: ReadonlyMap<Version, string> = new Map(
-  attributeDeclarations.flatMap(({ default: stated, kind, name, versions }) =>
-    kind === "qti-outcome-declaration" && name === "normal-minimum"
-      ? Option.toArray(stated).flatMap((value) =>
-          versions.map((version) => [version, value] as const),
-        )
-      : [],
-  ),
-);
-
-/**
  * An outcome declaration's normal minimum, keyed by its node, where it has one (spec reading 149):
  * `lexical`, its `normal-minimum` as written where `written`, and else its version's default
  * ({@link normalMinimumDefaults}), which `E1_derived` proves; `version`, its declaration's. A
@@ -760,7 +742,7 @@ const identifiers = select(Attribute, (a) =>
   a.and(
     a.eq(a.name, "identifier"),
     a.in(a.kind, declarationKinds),
-    Compute.matches(a.lexical, naming),
+    Compute.matches(a.lexical, namingPattern),
   ),
 );
 
@@ -849,7 +831,7 @@ const spelledFieldBaseTypes = select(Attribute, (a) =>
  * namingPattern}): the fields each of which has its {@link RecordFieldName}. Any other form is its
  * value domain's alone.
  */
-const namedFields = select(RecordField, (f) => Compute.matches(f.identifierLexical, naming));
+const namedFields = select(RecordField, (f) => Compute.matches(f.identifierLexical, namingPattern));
 
 /**
  * An outcome declaration's attribute that bounds or places its value on its normal scale.
@@ -1051,62 +1033,64 @@ const typedValues = select(Value, (v) => v.and(v.eq(v.baseTypes, 1n), v.eq(v.car
 const fieldValues = select(ValueBaseType, (b) => b.eq(b.cardinalities, 1n));
 
 /**
- * The lexical form of an `xs:double` that `Compute.cast` reads exactly: XML Schema's, cut to the
- * values a double precision holds (grizzle's `lexicalForm`), with no outer whitespace.
+ * A text term a check reads: a row's text field, or a `Compute` term over one.
  */
-const doubleForm = lexicalForm(pg["double precision"]);
+type Text = Term<string, unknown, unknown, "text">;
+
+/**
+ * State that one `xs:double` form is no greater than another, as `Slider_bounds` and
+ * `Mastery_range` order a pair (reading 9). A form in `xs:double`'s lexical space
+ * (`doublePattern` of `#pantry/qti/operators.ts`, XML Schema 1.0's, reading 71's edition) is the
+ * double grizzle's `Compute.parseDouble` maps it to, XML Schema 1.1's doubleLexicalMap (Part 2
+ * §3.3.5.2, reading 144), of any digits and any exponent. The rule says what it holds of every
+ * other pair in its own arms (grizzle's agent guide: never make an otherwise stand for a value): a
+ * pair with a form outside the lexical space holds, since a form that is no `xs:double` has no
+ * value and its value domain alone refuses it; and a pair with `NaN` holds, since `NaN` is ordered
+ * against nothing. Each parse's otherwise is never read, since an arm holds wherever its guard
+ * fails. A grizzle check is a predicate and a `Compute.when`'s branch a term
+ * (`scalar/compute/builders.ts:946` of grizzle-engine at the vendored commit), so the arms stand
+ * beside the comparison rather than in a guard's otherwise.
+ *
+ * @param low - The form that is no greater, as the law reads it.
+ * @param high - The form that is no less.
+ * @returns The predicate.
+ */
+export const doublesInOrder = (low: Text, high: Text) =>
+  Compute.or(
+    Compute.not(Compute.matches(low, doublePattern)),
+    Compute.not(Compute.matches(high, doublePattern)),
+    Compute.eq(low, "NaN"),
+    Compute.eq(high, "NaN"),
+    Compute.le(
+      Compute.when(Compute.matches(low, doublePattern), (form) => Compute.parseDouble(form), 0),
+      Compute.when(Compute.matches(high, doublePattern), (form) => Compute.parseDouble(form), 0),
+    ),
+  );
 
 /**
  * State `Mastery_range` over a mastery value written and a normal minimum, written or its version's
- * default (readings 9 and 149): the minimum is no greater than the mastery value, `NaN` ordered
- * against nothing, and a form outside {@link doubleForm} read as the bound that holds the order, so
- * it is not judged (a recorded limit).
+ * default (readings 9 and 149): the minimum is no greater than the mastery value, each form read
+ * collapsed, as `xs:double`'s whiteSpace `collapse` reads it (XML Schema Part 2 §4.3.6; reading 7:
+ * an attribute the XSD types as `xs:double` is read as the XSD reads it), and ordered by
+ * {@link doublesInOrder}. The rows copy the attributes as written (`Attribute.lexical`), so the
+ * check collapses each, and a guard over the collapse narrows it in the parse's branch (grizzle
+ * `c899acca`).
  *
  * @param r - The row.
  * @returns The predicate.
  */
 const floorCheck = (r: MasteryFloorRow) =>
-  r.or(
-    r.eq(r.normalMinimum, "NaN"),
-    r.eq(r.masteryValue, "NaN"),
-    r.le(
-      Compute.when(
-        Compute.matches(r.normalMinimum, doubleForm),
-        (low) => Compute.cast(low, pg["double precision"]),
-        Number.NEGATIVE_INFINITY,
-      ),
-      Compute.when(
-        Compute.matches(r.masteryValue, doubleForm),
-        (mastery) => Compute.cast(mastery, pg["double precision"]),
-        Number.POSITIVE_INFINITY,
-      ),
-    ),
-  );
+  doublesInOrder(Compute.collapse(r.normalMinimum), Compute.collapse(r.masteryValue));
 
 /**
- * State `Mastery_range` over a mastery value and a normal maximum both written, as
- * {@link floorCheck} states the other pair.
+ * State `Mastery_range` over a mastery value and a normal maximum both written, each read as
+ * {@link floorCheck} reads the other pair.
  *
  * @param r - The row.
  * @returns The predicate.
  */
 const ceilingCheck = (r: MasteryCeilingRow) =>
-  r.or(
-    r.eq(r.masteryValue, "NaN"),
-    r.eq(r.normalMaximum, "NaN"),
-    r.le(
-      Compute.when(
-        Compute.matches(r.masteryValue, doubleForm),
-        (mastery) => Compute.cast(mastery, pg["double precision"]),
-        Number.NEGATIVE_INFINITY,
-      ),
-      Compute.when(
-        Compute.matches(r.normalMaximum, doubleForm),
-        (high) => Compute.cast(high, pg["double precision"]),
-        Number.POSITIVE_INFINITY,
-      ),
-    ),
-  );
+  doublesInOrder(Compute.collapse(r.masteryValue), Compute.collapse(r.normalMaximum));
 
 /**
  * Every statement over the O2 overlays, each `check` named by its oracle law:

@@ -5,11 +5,14 @@ import {
   EncodingFailure,
   ExecutionFailure,
   OpenError,
+  ReadFailure,
+  ServerError,
+  Sqlstate,
   TokenError,
   TransportFailure,
 } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Config, ConfigProvider, Effect, Option, Result, Runtime } from "effect";
+import { Config, ConfigProvider, Effect, Option, Result } from "effect";
 import {
   describeFailure,
   kindExitCode,
@@ -19,12 +22,9 @@ import {
 } from "#pantry/cli/errors.ts";
 import type { ExportDefectTag, ImportDefectTag } from "#pantry/cli/errors.ts";
 import { refusalFieldsOf } from "#pantry/cli/refused.ts";
-import { failRefused, RefusedByLevel } from "#pantry/cli/verdict.ts";
-import { refusalOf } from "#pantry/api/verdict.ts";
 import { ClusterConfigError } from "#pantry/db/connection.ts";
-import { SnapshotLoadError } from "#pantry/db/snapshot.ts";
+import { ServedLoadError } from "#pantry/db/served.ts";
 import { PackageNotFound } from "#pantry/export/package.ts";
-import { aboveRefusalOf } from "#pantry/import/above.ts";
 import { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
 import { RootMissing, RowMissing, RowsOutsideImage } from "#pantry/model/assemble.ts";
 import { WitnessKind } from "#pantry/package/refusal-origin.ts";
@@ -59,8 +59,11 @@ describe("describeFailure, the local set-up", () => {
     assert.deepStrictEqual(identity(failure), config);
   });
 
-  it("a SnapshotLoadError exits 78 as config", () => {
-    const failure = new SnapshotLoadError({ path: "/snapshot.json", reason: "pointer file" });
+  it("a ServedLoadError exits 78 as config", () => {
+    const failure = new ServedLoadError({
+      path: "/served/author_app.json",
+      reason: "pointer file",
+    });
 
     assert.deepStrictEqual(identity(failure), config);
   });
@@ -79,7 +82,8 @@ describe("describeFailure, the local set-up", () => {
     }),
   );
 
-  it("a TransportFailure carrying a CredentialError exits 78 as config", () => {
+  it("a ReadFailure or a TransportFailure carrying a CredentialError exits 78 as config", () => {
+    assert.deepStrictEqual(identity(new ReadFailure({ reason: credential })), config);
     assert.deepStrictEqual(identity(new TransportFailure({ reason: credential })), config);
   });
 });
@@ -137,16 +141,14 @@ const exportDefects = {
 
 /**
  * One failure of every tag the import ends with on a defect of qti: grizzle's codec refusing a
- * built value, and the two the importer dies with, keyed by the import's tags as
- * {@link exportDefects} is by the export's. The two are matched by their tag alone, which
- * `errors.ts` checks against their classes by type, so they are written as their tags here: the
- * modules that define them load the composed grammar and the author login, which this file does
- * not need.
+ * built value, and the one the importer dies with, keyed by the import's tags as
+ * {@link exportDefects} is by the export's. The one is matched by its tag alone, which `errors.ts`
+ * checks against its class by type, so it is written as its tag here: the module that defines it
+ * loads the composed grammar, which this file does not need.
  */
 const importDefects = {
   EncodingFailure: new EncodingFailure({ place: { _tag: "Fact" }, reason: { _tag: "textNul" } }),
   OverlayConflict: { _tag: "OverlayConflict" },
-  UnownedLaws: { _tag: "UnownedLaws" },
 } as const satisfies { readonly [K in ImportDefectTag]: { readonly _tag: K } };
 
 /**
@@ -211,6 +213,25 @@ const uncompiled = CompileError.make({
     "BranchResolution.instanceEnd copies Instance's end along the owner axis of Instance.rules, a column its owner fills only after its members",
 });
 
+/**
+ * The server's refusal of a statement, a unique violation (SQLSTATE 23505), built with grizzle's
+ * own constructor: a reason of an `ExecutionFailure` that is no compile error.
+ */
+const serverRefusal = new ServerError({
+  column: undefined,
+  constraint: undefined,
+  dataType: undefined,
+  detail: undefined,
+  hint: undefined,
+  message: "duplicate key value violates unique constraint",
+  schema: undefined,
+  sqlstate: Option.getOrThrowWith(
+    Option.fromUndefinedOr(Sqlstate.parse("23505")),
+    () => new Error("Sqlstate.parse refused 23505, the unique violation's SQLSTATE."),
+  ),
+  table: undefined,
+});
+
 describe("describeFailure, a program grizzle refused to compile", () => {
   it("an ExecutionFailure or an OpenError carrying a CompileError exits 70 as internal, with a help that blames qti and keeps the database", () => {
     // Oracle: the failure's carrier and its reason's tag, read from its fields: grizzle refused
@@ -230,10 +251,7 @@ describe("describeFailure, a program grizzle refused to compile", () => {
       assert.isTrue(Option.isNone(namedFailureOf(failure)), failure._tag);
     }
 
-    assert.deepStrictEqual(
-      identity({ _tag: "ExecutionFailure", reason: { _tag: "ServerError" } }),
-      database,
-    );
+    assert.deepStrictEqual(identity(new ExecutionFailure({ reason: serverRefusal })), database);
     assert.deepStrictEqual(
       identity(new OpenError({ reason: new TokenError({ cause: new Error("refused") }) })),
       database,
@@ -245,9 +263,10 @@ describe("describeFailure, a program grizzle refused to compile", () => {
  * One law a database refusal names, as the refusal carries it: AL1's admission check.
  */
 const refusedLaw = {
-  identity: "check AL1_admission",
+  installed: "al_1_admission",
   name: "AL1 admission",
   rule: "attribute-admission",
+  text: "check AL1_admission",
 };
 
 describe("describeFailure, a refused import", () => {
@@ -261,8 +280,8 @@ describe("describeFailure, a refused import", () => {
       const { exitCode, help, kind } = describeFailure({
         _tag: "ImportRefused",
         detail: "x",
-        origin: { _tag: "Database", laws: [refusedLaw], sources: ["AL1"], witness },
-        rule: "attribute-admission",
+        origin: { _tag: "Database", kind: "every", laws: [refusedLaw], sources: ["AL1"], witness },
+        rules: ["attribute-admission"],
       });
       const named = witness === "key" || witness === "row";
 
@@ -274,52 +293,14 @@ describe("describeFailure, a refused import", () => {
     }
   });
 
-  it.effect(
-    "a refused verdict of a level above Qti fails as RefusedByLevel, with ImportRefused's kind and exit code",
-    () =>
-      // Oracle: decision 483 and pa1-22's brief: a level's refusal reaches the command line as the
-      // `above` case of the verdict (`refusalOf`), and fails as `RefusedByLevel` with its level,
-      // rule and detail, of kind `import-refused` and exit 1, never as a defect of qti. Bound: one
-      // refusal of one level's check; residual: the `qti` case, which keeps `ImportRefused` and is
-      // covered by the import command's own tests.
-      Effect.gen(function* refusedByLevel() {
-        const above = Option.getOrThrow(
-          aboveRefusalOf(
-            [
-              {
-                kind: "above",
-                law: { kind: "check", name: "CdnOrigin", relation: "CdnUrl" },
-                level: "Cdn",
-              },
-            ],
-            { kind: "unreported" },
-          ),
-        );
-        const failure = yield* Effect.flip(failRefused(refusalOf(above)));
-
-        assert.instanceOf(failure, RefusedByLevel);
-        assert.deepStrictEqual(
-          { detail: failure.detail, level: failure.level, rule: failure.rule },
-          { detail: above.detail, level: "Cdn", rule: "CdnOrigin" },
-        );
-
-        const { exitCode, help, kind } = describeFailure(failure);
-
-        assert.deepStrictEqual({ exitCode, kind }, { exitCode: 1, kind: "import-refused" });
-        assert.strictEqual(failure[Runtime.errorExitCode], kindExitCode["import-refused"]);
-        assert.strictEqual(help, failure.help);
-        assert.include(help, "Nothing was written.");
-        assert.isTrue(Option.isNone(namedFailureOf(failure)));
-      }),
-  );
-
-  it("a database origin without all of its laws, sources and witness is no refusal's", () => {
-    // Oracle: the origin's shape, one case that carries the three facts together or the reader's
-    // that carries none: an origin that lacks any of them, or holds no law or no source, is not a
-    // refusal the command line reads, and keeps the help of the import-refused kind. Bound: every
-    // subset of the three facts, exhausted, and each list empty; residual none.
-    const whole = { laws: [refusedLaw], sources: ["AL1"], witness: "key" };
-    const facts = ["laws", "sources", "witness"] as const;
+  it("a database origin without all of its decision, laws, sources and witness is no refusal's", () => {
+    // Oracle: the origin's shape, one case that carries the four facts together or the reader's
+    // that carries none: an origin that lacks any of them, or holds no law, is not a refusal the
+    // command line reads, and keeps the help of the import-refused kind; one with no source, where
+    // the law table holds none of its laws, is one. Bound: every subset of the four facts,
+    // exhausted, and each list empty; residual none.
+    const whole = { kind: "some", laws: [refusedLaw], sources: ["AL1"], witness: "key" };
+    const facts = ["kind", "laws", "sources", "witness"] as const;
     const subsets: (readonly (typeof facts)[number][])[] = [[]];
     for (const fact of facts) {
       subsets.push(...subsets.map((subset) => [...subset, fact]));
@@ -335,10 +316,11 @@ describe("describeFailure, a refused import", () => {
         _tag: "ImportRefused",
         detail: "x",
         origin: { _tag: "Database", ...origin },
-        rule: "attribute-admission",
+        rules: ["attribute-admission"],
       };
       const reads = Option.isSome(refusalFieldsOf(refused));
-      const carriesAll = facts.every((fact) => fact in origin && [origin[fact]].flat().length > 0);
+      const carriesAll =
+        facts.every((fact) => fact in origin) && [origin["laws"]].flat().length > 0;
 
       assert.strictEqual(reads, carriesAll, JSON.stringify(origin));
       assert.strictEqual(

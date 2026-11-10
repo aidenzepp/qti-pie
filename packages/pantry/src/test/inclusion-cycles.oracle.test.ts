@@ -21,7 +21,6 @@ import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, FileSystem, Formatter, Option, Predicate, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
-import { lawNameOf } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
@@ -29,12 +28,12 @@ import { Qti } from "#pantry/test/qti.ts";
 import { cyclePackageOf, cycles, includerCounts, tails } from "#pantry/test/inclusion-cycles.ts";
 import type { CycleCase } from "#pantry/test/inclusion-cycles.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
-import { hostRowsOf, judge as judgeRows } from "#pantry/test/host-judge.ts";
+import { datumText } from "#pantry/test/predicates.ts";
+import { hostRowsOf, judge as judgeRows, judgedLaws } from "#pantry/test/host-judge.ts";
 import { keyBreachesOf } from "#pantry/test/key-breaches.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
-import { datumText } from "#pantry/test/key-copies.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
+import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -119,7 +118,7 @@ const rowsOfCase = (files: readonly PackageFile[]) =>
           ({ fields, law, relation }) => `${law}: ${relation}(${fields.join(", ")})`,
         ),
         laws: broken.map(({ law }) => Formatter.format(law)),
-        rules: [...new Set(broken.flatMap(({ law }) => Option.toArray(lawNameOf(law))))],
+        rules: [...new Set(broken.flatMap(({ law }) => Option.toArray(schemaLawNameOf(law))))],
         unplaced: (rows.get("TestDocument") ?? []).flatMap(({ node }) => {
           const entry = paths.get(node);
 

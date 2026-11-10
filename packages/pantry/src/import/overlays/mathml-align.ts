@@ -57,7 +57,7 @@ import type {
   MathCell,
   MathDir,
 } from "#pantry/qti/mathml-align.ts";
-import { integerForm } from "#pantry/qti/operators.ts";
+import { integerForm } from "#pantry/qti/limits.ts";
 
 /**
  * One complete element of a cell as its cell's family nests it: without the `cell` the nesting

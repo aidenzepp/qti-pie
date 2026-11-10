@@ -1,7 +1,7 @@
 /**
  * Every law of the schema the host can judge, held over the rows the import writes for the
  * every-relation package: each containment and each half of a `mirrors`, each key and each check,
- * read from the statements grizzle keeps (`#pantry/test/judged-laws.ts` `judgedLaws`), over the
+ * read from the statements grizzle keeps (`#pantry/test/host-judge.ts` `judgedLaws`), over the
  * rows as the database holds them, every value grizzle fills that the statements give restored
  * (`#pantry/test/host-judge.ts`). The law oracle accepts the package, so no law may break.
  *
@@ -23,9 +23,8 @@ import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/test/qti.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import type { HostRow, HostRows } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**
@@ -52,50 +51,22 @@ const rootCopy =
   "a tree root's copy along its own axis is the field's start value, which grizzle keeps in the field's builder and exports no reader of";
 
 /**
- * Why a generated field's value is absent: the host restores a generated field by evaluating its
- * term, and this one holds a term the host's evaluator does not read.
- *
- * @param term - What the term holds.
- * @returns Why a law that reads the field is not judged.
- */
-const unreadGenerated = (term: string): string =>
-  `a field PostgreSQL generates by a term that holds ${term}, which the host's evaluator does not read`;
-
-/**
- * Why a typed map key's value is absent: PostgreSQL generates it from the map key's text by a
- * conditional, a pair key's by grizzle's `Compute.least` and `Compute.greatest`, or a float key's
- * by its `Compute.parseDouble` (`#pantry/qti/mapping.ts`).
- */
-const typedKeyValue = unreadGenerated(
-  "a conditional, a least and a greatest, or a parse of the map key's text",
-);
-
-/**
  * Every value the host does not restore that a law over the every-relation package's rows reads,
  * as `Relation.field` or `Relation: a <kind> term`, with why.
  */
 const unjudged = {
-  "AriaRange: a when term": unreadTerm("when"),
   "AssembledReference: a base term": unreadTerm("base"),
+  "ElementType: a cond term": unreadTerm("cond"),
   "Expression: a between term": unreadTerm("between"),
   "LeastCount: a base term": unreadTerm("base"),
-  "LeastCount: a when term": unreadTerm("when"),
-  "MapKeyFloat.value": typedKeyValue,
-  "MapKeyInteger.value": typedKeyValue,
-  "MapKeyPair.value": typedKeyValue,
-  "MapKeyPoint.value": typedKeyValue,
-  "MasteryCeiling: a when term": unreadTerm("when"),
-  "MasteryFloor: a when term": unreadTerm("when"),
   "MathAction: a base term": unreadTerm("base"),
-  "MathAction: a when term": unreadTerm("when"),
   "MathApply: a base term": unreadTerm("base"),
   "MathApply: a between term": unreadTerm("between"),
   "MostCount: a base term": unreadTerm("base"),
-  "MostCount: a when term": unreadTerm("when"),
   "Node.elements":
     "a tree root's running value of the element fold, the start value grizzle keeps in the field's builder",
   "Node.parentAncestry": rootCopy,
-  "Node.parentGoverns": rootCopy,
+  "Node.parentGovernor": rootCopy,
   "Node.parentKind": rootCopy,
   "Node.parentNearest": rootCopy,
   "Node.parentNearestKind": rootCopy,
@@ -104,14 +75,12 @@ const unjudged = {
   "OpenAttributeName: a literal term":
     "its predicate holds a literal of no datum's type, a Bits set over AttributeName",
   "OpenElementName: a literal term": "its predicate holds a literal of no datum's type",
+  "OpenElementType: a cond term": unreadTerm("cond"),
   "Quotation: a base term": unreadTerm("base"),
   "Reference: a base term": unreadTerm("base"),
-  "RoundingModeFigures: a when term": unreadTerm("when"),
-  "SectionSelection.select": unreadGenerated("a cast of `selectForm`"),
   "SectionSelection: a base term": unreadTerm("base"),
   "ShareFragment: a charLength function term":
     "its predicate calls Compute.charLength, a function the host's evaluator does not compute",
-  "Slider: a when term": unreadTerm("when"),
   "TextReference: a base term": unreadTerm("base"),
 } satisfies Readonly<Record<string, string>>;
 

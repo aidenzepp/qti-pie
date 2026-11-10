@@ -21,9 +21,9 @@
  * `#pantry/test/normal-minimum-default.oracle.test.ts`). A record's base type `none` is the one
  * sentinel left, which `declarationRef` copies (B12).
  *
- * The host does not read a `Compute.when` term (`#pantry/test/assembled-mirrors.test.ts`), so it
- * judges no `Mastery_range`; the pair rows that law reads are held here instead, and the database
- * tier judges the law (`#pantry/qti/declarations.db.test.ts`).
+ * The host reads a `Compute.when` term and `Compute.parseDouble` (`#pantry/test/predicates.ts`), so
+ * it judges `Mastery_range` as every other law, and the database tier judges it too
+ * (`#pantry/qti/declarations.db.test.ts`); the pair rows that law reads are held here besides.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -34,16 +34,15 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawNameOf, ruleOfLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/test/qti.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge as judgeHost } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/test/host-judge.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
+import { schemaLawNameOf, schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The oracle's tables over the installed grammar, which the importer reads.
@@ -491,32 +490,31 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   const { inputs } = yield* readProgram(yield* scopedPackage(entries));
                   assertRows(drawn, inputs, label);
 
-                  // The host judges every law but Mastery range, and its refusal is named by the
-                  // rule the catalog's precedence puts first, as the database's is. A declaration
-                  // whose base type spells nothing keeps its row and has no base type's alone, so
-                  // its value domain is the one law it breaks (spec reading 158).
+                  // The host judges every law, and its refusal is named by the rule the catalog's
+                  // precedence puts first, as the database's is. A declaration whose base type
+                  // spells nothing keeps its row and has no base type's alone, so its value domain
+                  // is the one law it breaks (spec reading 158).
                   const { broken } = judgeHost(hostRowsOf(inputs), hostLaws);
                   const brokenNames = broken.map(({ law }) =>
-                    Option.getOrElse(lawNameOf(law), () => Formatter.format(law)),
+                    Option.getOrElse(schemaLawNameOf(law), () => Formatter.format(law)),
                   );
                   const shown =
                     broken.map(({ law }) => Formatter.format(law)).join("; ") || "no law";
-                  const judgedExpected = [...expected].filter((law) => law !== "Mastery range");
                   assert.sameMembers(
                     [...new Set(brokenNames)],
-                    judgedExpected,
+                    [...expected],
                     `${label}: the import's rows break ${shown}`,
                   );
 
                   const brokenLaws = broken.map(({ law }) => law);
                   const rule = Arr.isReadonlyArrayNonEmpty(brokenLaws)
-                    ? ruleOfLaws(brokenLaws)
+                    ? Arr.head(schemaRulesOf(brokenLaws))
                     : Option.none();
                   const rules = [...expected].map((law) => ruleOf(law));
 
                   assert.isTrue(
                     Option.match(rule, {
-                      onNone: () => judgedExpected.length === 0,
+                      onNone: () => expected.size === 0,
                       onSome: (named) => rules.includes(named),
                     }),
                     `${label}: the import's refusal names ${Option.getOrElse(rule, () => "none")}, the specification ${rules.join(", ") || "none"}`,

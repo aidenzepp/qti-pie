@@ -13,8 +13,8 @@
  *
  * Both the import (`#pantry/import/package.ts`) and the dry run (`#pantry/import/preview.ts`) read
  * through {@link readProgram}, so a dry run reads exactly what an import writes. Nothing here
- * reaches the author login (`#pantry/qti/logins.ts` `authorLogin`), whose workload grizzle builds
- * on its first call.
+ * reaches the author login (`#pantry/qti/own-login.ts`), whose workload grizzle builds when that
+ * module is evaluated.
  */
 import type { Uuid } from "@bjornpagen/grizzle";
 import { Array as Arr, Effect, Option, Order } from "effect";
@@ -26,12 +26,9 @@ import { overlayRowsOf, unionsOf } from "#pantry/import/overlays/index.ts";
 import { namedDocuments, rowsOf as packageRowsOf } from "#pantry/import/overlays/package.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { packageNameOf, packageRecordOf } from "#pantry/import/record.ts";
-import { dataSsmlFaultIn } from "#pantry/vocab/data-ssml.ts";
-import { ImportRefused, ruleOfError } from "#pantry/import/refusal.ts";
-import { documentLayerNames } from "#pantry/import/roster.ts";
+import { documentLayer } from "#pantry/import/roster.ts";
 import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type {
-  DocumentLayerRows,
   ListedDocument,
   NodeMember,
   NodeRoot,
@@ -39,13 +36,14 @@ import type {
   PlacedDocument,
 } from "#pantry/import/write.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
-import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { PackageReadError, readPackage, sourceNameOf } from "#pantry/package/read.ts";
 import type { PackageFile, PackageSource } from "#pantry/package/read.ts";
-import { manifestPath } from "#pantry/qti/package.ts";
 import { cpNamespace } from "#pantry/vocab/namespaces.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
+import { ruleOfError } from "#pantry/import/rules.ts";
+import type { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * One document of the package as the import writes it: as listed, and under its ids.
@@ -105,33 +103,14 @@ export const declaredVersionOf = (manifest: XmlDocument): Option.Option<string> 
 };
 
 /**
- * Read and shred one document of the package, and judge its `data-ssml` values.
- *
- * A `data-ssml` is judged here, not by the database: the database holds it as text and does not
- * re-prove its form (spec reading R7-a), so a value Data-SSML 1.0 does not admit is refused under
- * `attribute-lexical`, the rule of a value its domain refuses.
+ * Read and shred one document of the package.
  *
  * @param file - Its entry.
  * @param version - The version the manifest declares.
- * @returns Its tree; the reader's, the codec's or the `data-ssml` refusal.
+ * @returns Its tree; the reader's or the codec's refusal.
  */
 const shredFile = (file: PackageFile, version: (typeof versions)[number]) =>
-  Effect.flatMap(
-    Effect.flatMap(readXml(file.bytes), (xml) => shred(xml, version, shredGrammarOf(grammar))),
-    (tree) => {
-      const fault = dataSsmlFaultIn(tree);
-
-      return fault === undefined
-        ? Effect.succeed(tree)
-        : Effect.fail(
-            new ImportRefused({
-              detail: `${file.path} at ${fault.path}: ${fault.detail}`,
-              origin: readerOrigin,
-              rule: "attribute-lexical",
-            }),
-          );
-    },
-  );
+  Effect.flatMap(readXml(file.bytes), (xml) => shred(xml, version, shredGrammarOf(grammar)));
 
 /**
  * Choose the type a path's document is read as, of the types its resources name it under (spec
@@ -184,14 +163,14 @@ const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(
   const named = namedDocuments(
     packageRowsOf(manifestTree, { idOf: provisionalIdOf, package: provisionalIdOf(0) }),
   );
-  // A path is one document, of one type (reading 93): the manifest's, `none`, read before any
+  // A path is one document, of one type (reading 93): the manifest's, `manifest`, read before any
   // resource names a path (reading 146), else the type its root bears out among those resources
   // name it under (reading 162). Another type's href, the manifest's path's included, then names
   // no document of its type, which "Document entry" refuses, and the document is read once and
   // judged where its sites place it.
   const pairs = [...named.values()];
   const documents = new Map<string, ListedDocument>([
-    [manifest.path, { path: manifest.path, resourceType: "none", tree: manifestTree }],
+    [manifest.path, { documentType: "manifest", path: manifest.path, tree: manifestTree }],
   ]);
   for (const [at, { path, type }] of pairs.entries()) {
     const file = byPath.get(path);
@@ -199,8 +178,8 @@ const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(
       const tree = yield* shredFile(file, version);
       const others = pairs.slice(at + 1).flatMap((pair) => (pair.path === path ? [pair.type] : []));
       documents.set(path, {
+        documentType: documentTypeOf([type, ...others], tree.root.kind),
         path,
-        resourceType: documentTypeOf([type, ...others], tree.root.kind),
         tree,
       });
     }
@@ -251,9 +230,7 @@ export const readProgram = Effect.fn("import.readProgram")(function* readProgram
   const placed = ids.documents;
   const overlays = yield* Effect.orDie(Effect.fromResult(overlayRowsOf(placed, mint)));
   const layers = placed.map(({ ids: held, listed }) => documentRowsOf(listed, held));
-  const layer = yield* Effect.orDie(
-    Effect.fromResult(unionsOf<DocumentLayerRows>(documentLayerNames, layers)),
-  );
+  const layer = yield* Effect.orDie(Effect.fromResult(unionsOf(documentLayer, layers)));
   const roots = new Map<string, NodeRoot>(
     placed.map(({ ids: held, listed }) => {
       const root = rootInsertOf(listed.tree, held);
@@ -341,11 +318,9 @@ export const rowCountsOf = (program: ImportProgram): ReadonlyMap<string, number>
   for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
     add("Node", 1);
     add("Namespace", node.namespaces.length);
-    add("TextDoubleValue", node.doubleValue.length);
     add("Attribute", node.attributes.length);
     for (const attribute of node.attributes) {
       add("AttributeEntity", attribute.entities.length);
-      add("DoubleValue", attribute.doubleValue.length);
       add("Idref", attribute.idrefs.length);
       add("OpenAttributeName", attribute.openName.length);
     }

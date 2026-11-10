@@ -1,5 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-
 /**
  * The package's own ZIP reader: `readZip` lists a `.zip` file's entries as paths and bytes, over
  * `node:zlib`, with no dependency (the phase-4 spec's 4.13, Q7).

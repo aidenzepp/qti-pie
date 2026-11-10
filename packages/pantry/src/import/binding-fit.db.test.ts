@@ -34,7 +34,7 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { bindingCase, bindingSites, bindingStates } from "#pantry/test/binding-cases.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
 
 /**
  * The every-relation package the cases edit.
@@ -49,7 +49,6 @@ const cases = bindingSites.flatMap((site) => bindingStates.map((state) => ({ sit
 describe.skipIf(!hasLease)("import/binding-fit.db.test.ts, on the lease", () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
-    timeout: authorLayerHookTimeoutMs,
   })("the fit laws' bindings, judged by PostgreSQL", (it) => {
     it.effect(
       "the database refuses every binding case under a rule the law oracle predicts, or accepts it where the oracle does",

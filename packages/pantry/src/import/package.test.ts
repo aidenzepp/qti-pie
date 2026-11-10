@@ -1,7 +1,8 @@
 /**
- * The importer's front door (`#pantry/import/package.ts`): its retry schedule and the read-back
- * that settles a `CommitUnknown` on the host, and on the lease its verdicts, its retries and
- * `CommitUnknown`'s resolution.
+ * The importer's front door (`#pantry/import/package.ts`): its retry schedule, as
+ * `RetrySchedule`'s default gives it, and the read-back that settles a `CommitUnknown` on the host,
+ * and on the lease its verdicts, its retries and `CommitUnknown`'s resolution, with the failures
+ * injected through `WrapApply`.
  *
  * A verdict on the lease is judged against the law oracle (`#pantry/test/oracle-verdict.ts`
  * `oracleVerdict`, a second implementation): a package the oracle accepts commits, and one it
@@ -11,20 +12,15 @@
 import {
   CommitUnknown,
   Db,
-  query,
+  Migrating,
   ReadFailure,
-  StaleSnapshot,
-  TransientFailure,
-  uuid,
-  v,
-} from "@bjornpagen/grizzle";
-import type {
-  ReadError,
   SerializationFailure,
   ServerError,
-  StaleReason,
-  Uuid,
+  Sqlstate,
+  StaleSnapshot,
+  TransientFailure,
 } from "@bjornpagen/grizzle";
+import type { ApplyError, ReadError, Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, it as plainIt, layer } from "@effect/vitest";
 import { Clock, Effect, Fiber, Layer, Option, Ref, Result, Schedule } from "effect";
@@ -34,47 +30,29 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import {
   CommitUnresolved,
   importPackage,
-  retrySchedule,
+  RetrySchedule,
   settleCommitUnknown,
+  WrapApply,
 } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
-import { Author, AuthorApp } from "#pantry/test/author.ts";
-import { Package } from "#pantry/qti/package.ts";
+
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 const fixtures = inject("fixtures");
 
 /**
- * A package stored by its id.
+ * The server's report of a serialization failure, SQLSTATE 40001, built with grizzle's own
+ * constructor from the ErrorResponse the server writes, as its wire builds it.
+ *
+ * @see https://github.com/bjornpagen/grizzle/blob/4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a/packages/grizzle/src/adapter/errors/failures.ts#L61-L94
  */
-const packageRows = query(Author).rule((r) => {
-  const { id } = v(Package, "package");
-
-  return r
-    .match(Package, { id })
-    .where(r.eq(id, r.param("id", uuid)))
-    .find({ id });
-});
-
-const serializationReason = {
-  _tag: "SerializationFailure",
-  message: "PostgreSQL found no serial order of this transaction and a concurrent one",
-};
-
-// SAFETY: Grizzle exports `SerializationFailure` as a type only (`adapter/public/errors.ts`;
-// findings row 21), so no public constructor builds one, and a constructor checks nothing its type
-// does not. The plain fields of the class at `adapter/errors/failures.ts` stand for it:
-// `TransientFailure` reads its reason only through `_tag` and `message`.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-const serializationReasonAsType = serializationReason as SerializationFailure;
-
-const serverReport = {
-  _tag: "ServerError",
+const serverReport = new ServerError({
   column: undefined,
   constraint: undefined,
   dataType: undefined,
@@ -82,30 +60,25 @@ const serverReport = {
   hint: undefined,
   message: "could not serialize access due to concurrent update",
   schema: undefined,
-  sqlstate: "40001",
+  sqlstate: Option.getOrThrowWith(
+    Option.fromUndefinedOr(Sqlstate.parse("40001")),
+    () => new Error("Sqlstate.parse refused 40001, the serialization failure's SQLSTATE."),
+  ),
   table: undefined,
-};
-
-// SAFETY: Grizzle exports `ServerError` as a type only (`adapter/public/errors.ts`; findings row
-// 21), and its `sqlstate` is a branded `Sqlstate` with no public parse (`engine/src/core/sqlstate.ts`).
-// The plain fields of the class at `adapter/errors/failures.ts` stand for it: the code under test
-// reads only `_tag`.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-const serverReportAsType = serverReport as ServerError;
-
-/**
- * The failure a serializable transaction meets: a `TransientFailure` built with `new` over a
- * `SerializationFailure` reason and a `ServerError` report, each asserted above from its plain
- * fields.
- */
-const serializationFailure = new TransientFailure({
-  error: serverReportAsType,
-  reason: serializationReasonAsType,
 });
 
 /**
- * What a run of `retrySchedule` against a failure that never clears did: the clock reading at each
- * attempt, in milliseconds after the first, and whether the retry gave up.
+ * The failure a serializable transaction meets: a `TransientFailure` over a `SerializationFailure`
+ * reason and the server's report, each built with grizzle's own constructor.
+ */
+const serializationFailure = new TransientFailure({
+  error: serverReport,
+  reason: new SerializationFailure(),
+});
+
+/**
+ * What a run of the default `RetrySchedule` against a failure that never clears did: the clock
+ * reading at each attempt, in milliseconds after the first, and whether the retry gave up.
  */
 interface RetryRun {
   readonly attemptAt: readonly number[];
@@ -113,8 +86,8 @@ interface RetryRun {
 }
 
 /**
- * Run `retrySchedule` against an effect that always fails, on the test clock, and advance the clock
- * well past the schedule's bound.
+ * Run the default `RetrySchedule`, read unprovided as the import reads it, against an effect that
+ * always fails, on the test clock, and advance the clock well past the schedule's bound.
  */
 const runRetrySchedule = Effect.gen(function* runRetrySchedule() {
   const attemptAt = yield* Ref.make<readonly number[]>([]);
@@ -126,7 +99,7 @@ const runRetrySchedule = Effect.gen(function* runRetrySchedule() {
 
     return yield* Effect.fail("transient");
   });
-  const fiber = yield* Effect.forkChild(Effect.result(Effect.retry(attempt, retrySchedule)));
+  const fiber = yield* Effect.forkChild(Effect.result(Effect.retry(attempt, yield* RetrySchedule)));
 
   yield* TestClock.adjust("120 seconds");
 
@@ -136,7 +109,7 @@ const runRetrySchedule = Effect.gen(function* runRetrySchedule() {
   return run;
 });
 
-describe("retrySchedule", () => {
+describe("RetrySchedule's default", () => {
   plainIt.effect("keeps retrying past the fifth retry while under its time bound", () =>
     // Oracle: the specification as a checker, the schedule's contract: bounded by elapsed time,
     // not by count.
@@ -205,7 +178,7 @@ describe("import/package.test.ts, the retry budget", () => {
     // Oracle: the specification as a checker, the schedule's time bound, under which three
     // transient failures are retried.
     Effect.gen(function* survives() {
-      assert.strictEqual(yield* attemptsUnder(retrySchedule, 3), 4);
+      assert.strictEqual(yield* attemptsUnder(yield* RetrySchedule, 3), 4);
     }),
   );
 
@@ -222,38 +195,20 @@ describe("import/package.test.ts, the retry budget", () => {
  */
 const readBackId: Uuid = "00000000-0000-4000-8000-000000000001";
 
-const migratingReason = {
-  _tag: "Migrating",
-  message: "a migration is running or stopped part-way",
-};
-
-// SAFETY: Grizzle exports `StaleReason` as a type only (`adapter/public/errors.ts`), so no public
-// constructor builds a `Migrating`. The plain fields of the class at `adapter/errors/failures.ts`
-// stand for it: `StaleSnapshot` reads its reason only through `message`.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-const migratingReasonAsType = migratingReason as StaleReason;
-
-/**
- * The snapshot a {@link StaleSnapshot} names.
- */
-type Fingerprint = ConstructorParameters<typeof StaleSnapshot>[0]["snapshot"];
-
-// SAFETY: `SchemaFingerprint` is a branded string with no public parse; `StaleSnapshot` only
-// prints it, so any string stands for one.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-const fingerprintAsType = "fingerprint-of-another-snapshot" as Fingerprint;
-
 /**
  * A failure of each kind grizzle's README gives a read ("Errors": `ReadFailure`, `TransientFailure`
- * or `StaleSnapshot`), each built from the plain fields asserted above.
+ * or `StaleSnapshot`), each built with grizzle's own constructor: a `StaleSnapshot` takes the
+ * snapshot's fingerprint as text and admits it itself.
+ *
+ * @see https://github.com/bjornpagen/grizzle/blob/4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a/packages/grizzle/src/adapter/errors/execution.ts#L335-L350
  */
 const readFailures: readonly ReadError[] = [
-  new ReadFailure({ reason: serverReportAsType }),
+  new ReadFailure({ reason: serverReport }),
   serializationFailure,
   new StaleSnapshot({
-    error: serverReportAsType,
-    reason: migratingReasonAsType,
-    snapshot: fingerprintAsType,
+    error: serverReport,
+    reason: new Migrating(),
+    snapshot: "fingerprint-of-another-snapshot",
   }),
 ];
 
@@ -379,10 +334,10 @@ describe.skipIf(!hasLease)(
         // Oracle: PostgreSQL, every law over `simple`, and the package read back by its id.
         Effect.gen(function* acceptsSimple() {
           const id = yield* importPackage(fixtures.simple);
-          const db = yield* Db.open(AuthorApp.roles.author, {});
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
 
           assert.match(id, uuidPattern);
-          assert.lengthOf(yield* (yield* db.execute(packageRows, { id })).collect, 1);
+          assert.isTrue(Option.isSome(yield* db.workload.packageOf.get({ id })), id);
         }),
       );
 
@@ -396,14 +351,15 @@ describe.skipIf(!hasLease)(
       }
 
       for (const [name, rules] of brokenBeyondOracle) {
-        it.effect(`refuses ${name} under ${rules.join(" or ")}`, () =>
+        it.effect(`refuses ${name} under rules that meet ${rules.join(", ")}`, () =>
           // Oracle: the specification as a checker, the rule Q5.08's law keeps (the retired guard's,
           // `value-single` and `value-lexical`, as the refusal table maps them).
           Effect.gen(function* refusedBeyondOracle() {
             const refused = yield* Effect.flip(importPackage(yield* materialize(name)));
 
             assert.isTrue(
-              refused instanceof ImportRefused && rules.includes(refused.rule),
+              refused instanceof ImportRefused &&
+                refused.rules.some((rule) => rules.includes(rule)),
               `${name}: ${refused.message}`,
             );
           }),
@@ -426,14 +382,15 @@ describe.skipIf(!hasLease)(
         // Oracle: the specification as a checker, the retry rule: a transient failure is retried.
         Effect.gen(function* retriesTransient() {
           const attempts = yield* Ref.make(0);
-          const id: Uuid = yield* importPackage(fixtures.simple, {
-            wrapApply: <A, E, R>(apply: Effect.Effect<A, E, R>) =>
+          const id: Uuid = yield* importPackage(fixtures.simple).pipe(
+            Effect.provideService(WrapApply, <A>(apply: Effect.Effect<A, ApplyError>) =>
               Effect.flatMap(
                 Ref.getAndUpdate(attempts, (n) => n + 1),
-                (n): Effect.Effect<A, E | TransientFailure, R> =>
+                (n): Effect.Effect<A, ApplyError> =>
                   n === 0 ? Effect.fail(serializationFailure) : apply,
               ),
-          });
+            ),
+          );
 
           assert.match(id, uuidPattern);
           assert.isAtLeast(yield* Ref.get(attempts), 2);
@@ -446,14 +403,15 @@ describe.skipIf(!hasLease)(
         Effect.gen(function* givesUp() {
           const attempts = yield* Ref.make(0);
           const result = yield* Effect.result(
-            importPackage(fixtures.simple, {
-              schedule: quickly,
-              wrapApply: () =>
+            importPackage(fixtures.simple).pipe(
+              Effect.provideService(RetrySchedule, quickly),
+              Effect.provideService(WrapApply, () =>
                 Effect.andThen(
                   Ref.update(attempts, (n) => n + 1),
                   Effect.fail(serializationFailure),
                 ),
-            }),
+              ),
+            ),
           );
 
           assert.strictEqual(
@@ -468,12 +426,14 @@ describe.skipIf(!hasLease)(
         // Oracle: the specification as a checker, `CommitUnknown`'s resolution: the apply ran and
         // committed, so the package is read back and the import answers its id.
         Effect.gen(function* readsBack() {
-          const id = yield* importPackage(fixtures.simple, {
-            wrapApply: (apply) => Effect.andThen(apply, Effect.fail(new CommitUnknown())),
-          });
-          const db = yield* Db.open(AuthorApp.roles.author, {});
+          const id = yield* importPackage(fixtures.simple).pipe(
+            Effect.provideService(WrapApply, (apply) =>
+              Effect.andThen(apply, Effect.fail(new CommitUnknown())),
+            ),
+          );
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
 
-          assert.lengthOf(yield* (yield* db.execute(packageRows, { id })).collect, 1);
+          assert.isTrue(Option.isSome(yield* db.workload.packageOf.get({ id })), id);
         }),
       );
 
@@ -482,7 +442,9 @@ describe.skipIf(!hasLease)(
         // read back, so the error is the answer.
         Effect.gen(function* notThere() {
           const result = yield* Effect.result(
-            importPackage(fixtures.simple, { wrapApply: () => Effect.fail(new CommitUnknown()) }),
+            importPackage(fixtures.simple).pipe(
+              Effect.provideService(WrapApply, () => Effect.fail(new CommitUnknown())),
+            ),
           );
 
           assert.isTrue(Result.isFailure(result) && result.failure._tag === "CommitUnknown");

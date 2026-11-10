@@ -11,7 +11,7 @@ import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option } from "effect";
 import { CnBase, CnForm, CnPart, CnParts, CnType } from "#pantry/grammar/install.ts";
-import { lawNameOf, lawNames, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
+import { lawNames, lawOfCheck } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import {
   baseSpellings,
@@ -23,7 +23,8 @@ import {
 } from "#pantry/qti/mathml-cn.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { identityOf } from "#pantry/test/key-copies.ts";
-import { Qti } from "#pantry/test/qti.ts";
+import { Qti, QtiBase } from "#pantry/test/qti.ts";
+import { schemaLawNameOf, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * How long building a schema over every relation of `Qti` may take: its statements are planned
@@ -69,7 +70,7 @@ describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
     assert.isAbove(cnLaws.length, 0);
     assert.strictEqual(new Set(cnLaws).size, cnLaws.length);
 
-    const built = schema("CnLayer", { ...Qti.relations }, [...nodeLaws, ...cnLaws]);
+    const built = schema("CnLayer", { ...QtiBase.relations }, [...nodeLaws, ...cnLaws]);
 
     assert.strictEqual(built.statements.length, nodeLaws.length + cnLaws.length);
     for (const statement of cnLaws) {
@@ -101,7 +102,7 @@ describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
   });
 
   it("reads the count containments as 'MathML cn form' and every other containment and the family as 'E1 derived', the form check being named by its own name", () => {
-    // Oracle: the statements are named by `lawNameOf`'s own table, as `refusal.test.ts` holds. A
+    // Oracle: the statements are named by `schemaLawNameOf`'s own table, as `refusal.test.ts` holds. A
     // part count and a part's place are judged by the oracle's cn form law, as an attribute's form.
     const own = ownLaws();
     assert.isAbove(own.length, 0);
@@ -109,13 +110,18 @@ describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
       "E1 derived",
       "MathML cn form",
     ]);
+    // The containments are a set: the law model lists them in an order of its own, which a grizzle
+    // repin moves.
     assert.deepStrictEqual(
-      own.filter(([, name]) => name === "MathML cn form").map(([law]) => identityOf(law)),
+      own
+        .filter(([, name]) => name === "MathML cn form")
+        .map(([law]) => identityOf(law))
+        .toSorted(),
       [
-        "contained MathCn(type, parts) in CnParts(type, parts)",
-        "contained CnPartText(type, part, form) in CnForm(type, part, form)",
         "contained CnCount(type, parts) in CnParts(type, parts)",
+        "contained CnPartText(type, part, form) in CnForm(type, part, form)",
         "contained CnSlot(type, part, form) in CnForm(type, part, form)",
+        "contained MathCn(type, parts) in CnParts(type, parts)",
       ],
     );
     assert.strictEqual(
@@ -124,7 +130,7 @@ describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
     );
 
     for (const [law, name] of own) {
-      assert.deepStrictEqual(lawNameOf(law), Option.some(name));
+      assert.deepStrictEqual(schemaLawNameOf(law), Option.some(name));
     }
   });
 });
@@ -136,7 +142,7 @@ describe("qti/mathml-cn.ts, spellings", () => {
       [...CnType.handles],
     );
     for (const [type, spelling] of typeSpellings) {
-      assert.strictEqual(spelling, `^[ \\t\\n\\r]*${type}[ \\t\\n\\r]*$`);
+      assert.strictEqual(spelling.source, `^[ \\t\\n\\r]*${type}[ \\t\\n\\r]*$`);
     }
   });
 
@@ -146,11 +152,11 @@ describe("qti/mathml-cn.ts, spellings", () => {
       [...CnBase.handles],
     );
     for (const [base, spelling] of baseSpellings) {
-      assert.strictEqual(spelling, `^[ \\t\\n\\r]*0*${base}[ \\t\\n\\r]*$`);
+      assert.strictEqual(spelling.source, `^[ \\t\\n\\r]*0*${base}[ \\t\\n\\r]*$`);
     }
 
     const sixteen = baseSpellings.find(([base]) => base === "16");
-    const pattern = new RegExp(sixteen?.[1] ?? "(?!)", "u");
+    const pattern = new RegExp(sixteen?.[1].source ?? "(?!)", "u");
 
     assert.isTrue(pattern.test(" 016\n"));
     assert.isFalse(pattern.test("160"));

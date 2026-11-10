@@ -5,11 +5,11 @@ import { Console, Duration, Effect, FileSystem, Layer, Option, Schema } from "ef
 import { describe } from "vitest";
 import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { ErrorObject, successEnvelope } from "#pantry/cli/output.ts";
+import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { exportPackage } from "#pantry/api/export.ts";
-import { importPackage } from "#pantry/api/import.ts";
 import { comparePackage } from "#pantry/export/compare.ts";
-import { writeEntries } from "#pantry/export/package.ts";
+import { exportPackage } from "#pantry/export/package.ts";
+import { importPackage } from "#pantry/import/package.ts";
 import { matchesCommitted, spawnCli } from "#pantry/test/cli.ts";
 import { examplesTarball, materializeCorpus } from "#pantry/test/fixtures.ts";
 import { hasLease, settings } from "#pantry/test/settings.ts";
@@ -70,7 +70,8 @@ const errorObjectOf = Schema.decodeUnknownOption(Schema.fromJsonString(ErrorObje
 const isUuid = Schema.is(Schema.String.check(Schema.isUUID()));
 
 /**
- * The packages the importer refused, with the rule each broke.
+ * The packages the importer refused, with the rules each was refused under, as the verdict file
+ * writes them.
  */
 const refusals: { readonly name: string; readonly rule: string }[] = [];
 
@@ -99,21 +100,18 @@ const errorObjectsOf = (stderr: string) =>
   stderr.split("\n").flatMap((line) => Option.toArray(errorObjectOf(line)));
 
 /**
- * The identities of a refusal's laws, as a sorted list: the laws are a set, so their order is no
- * part of what the two refusals must agree on.
+ * The texts of a refusal's laws, as a sorted list: the laws are a set, so their order is no part of
+ * what the two refusals must agree on.
  */
-const identities = (facts: readonly { readonly identity: string }[]): readonly string[] =>
-  facts.map(({ identity }) => identity).toSorted();
+const texts = (facts: readonly { readonly text: string }[]): readonly string[] =>
+  facts.map(({ text }) => text).toSorted();
 
 /**
- * Run one corpus package through pantry's public programs and through the CLI, and assert the CLI
- * lands it where the public import does.
+ * Run one corpus package through the importer and through the CLI, and assert the CLI lands it
+ * where the importer does.
  *
- * The direct path is an app's: the public `importPackage`'s verdict, then for an accepted package
- * the public `exportPackage`, whose entries `writeEntries` writes for the comparison. An import
- * failure that is not a verdict fails the case. The two runs are separate imports of one package,
- * so they agree on the rule and on the laws the database named, and the CLI's error object carries
- * both, read from the refused verdict's refusal.
+ * The two runs are separate imports of one package, so they agree on the rule and on the laws the
+ * database named, and the CLI's error object carries both, read from the refusal's fields.
  */
 const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
   readonly dir: string;
@@ -127,22 +125,22 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
   yield* fs.remove(cwd, { force: true, recursive: true });
   yield* fs.makeDirectory(cwd, { recursive: true });
 
-  const [importTime, direct] = yield* importPackage(entry.dir).pipe(Effect.timed);
+  const [importTime, direct] = yield* importPackage(entry.dir).pipe(Effect.result, Effect.timed);
 
   if (Duration.toMillis(importTime) > tally.slowestImport.millis) {
     tally.slowestImport = { millis: Duration.toMillis(importTime), name: entry.name };
   }
 
-  const refusal = direct.verdict === "refused" ? direct.refusal : undefined;
+  const refusal = direct._tag === "Failure" ? direct.failure : undefined;
 
-  if (refusal !== undefined && refusal.kind !== "qti") {
-    assert.fail(`${entry.name}: only the Qti level is installed, but ${refusal.level} refused`);
-  }
+  assert.isTrue(
+    refusal === undefined || refusal._tag === "ImportRefused",
+    `${entry.name}: the importer failed with something other than a refusal`,
+  );
 
   const report =
-    direct.verdict === "accepted"
-      ? yield* exportPackage(direct.packageId).pipe(
-          Effect.flatMap((entries) => writeEntries(entries, directTarget)),
+    direct._tag === "Success"
+      ? yield* exportPackage(direct.success, directTarget).pipe(
           Effect.andThen(comparePackage(entry.dir, directTarget)),
         )
       : [];
@@ -191,23 +189,29 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
       assert.strictEqual(errors[0]?.kind, "roundtrip-differs", `${entry.name}: the CLI's kind`);
     }
 
-    verdicts.push({ file: entry.member, rule: "", verdict: "accepted" });
+    verdicts.push({ file: entry.member, rules: [], verdict: "accepted" });
     tally.accepted += 1;
     tally.equalEntries += report.length - differing;
   } else {
-    const { rule } = refusal;
+    const rules = refusal._tag === "ImportRefused" ? refusal.rules : [];
 
     assert.strictEqual(cli.code, 1, `${entry.name}: refused directly, so the CLI exits 1`);
     assert.strictEqual(errors.length, 1, `${entry.name}: one ErrorObject line on stderr`);
     assert.strictEqual(errors[0]?.kind, "import-refused", `${entry.name}: the CLI's kind`);
-    assert.strictEqual(errors[0]?.rule, rule, `${entry.name}: the CLI names the importer's rule`);
+    assert.deepStrictEqual(
+      errors[0]?.rules,
+      rules,
+      `${entry.name}: the CLI names the importer's rules`,
+    );
 
-    const laws =
-      refusal.origin._tag === "Database" ? Option.some(refusal.origin.laws) : Option.none();
+    const laws = Option.map(
+      Option.flatMap(refusalFieldsOf(refusal), databaseRefusalOf),
+      (database) => database.laws,
+    );
 
     assert.deepStrictEqual(
-      identities(errors[0]?.laws ?? []),
-      identities(Option.getOrElse(laws, () => [])),
+      texts(errors[0]?.laws ?? []),
+      texts(Option.getOrElse(laws, () => [])),
       `${entry.name}: the CLI names the laws the database named`,
     );
     assert.strictEqual(
@@ -215,8 +219,8 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
       Option.isNone(laws),
       `${entry.name}: the CLI gives sources exactly when the database refused the package`,
     );
-    verdicts.push({ file: entry.member, rule, verdict: "refused" });
-    tally.refused.push({ name: entry.name, rule });
+    verdicts.push({ file: entry.member, rules, verdict: "refused" });
+    tally.refused.push({ name: entry.name, rule: rules.join("|") });
   }
 });
 

@@ -1,62 +1,74 @@
-import { DbLayer } from "@bjornpagen/grizzle";
-import type { PoolBounds } from "@bjornpagen/grizzle";
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
-import { Effect, FileSystem, Layer, Schema } from "effect";
-import { loginConnection } from "#pantry/db/connection.ts";
-import { SnapshotLoadError, SnapshotText, snapshotPath } from "#pantry/db/snapshot.ts";
-
-/**
- * The PostgreSQL role grizzle installs for the author login, `<schema>__<login>` (`qti` and
- * `author_app`), which names the password file scripts/db.sh writes for it.
- */
-const authorAppRole = "qti__author_app";
+import { DbLayer, roleNameOf, served } from "@bjornpagen/grizzle/runtime";
+import type { PoolBounds } from "@bjornpagen/grizzle/runtime";
+import { Effect, FileSystem, Layer, Option, Schema } from "effect";
+import { connectionServices, loginConnection } from "#pantry/db/connection.ts";
+import { installed, servedPathOf } from "#pantry/db/install.ts";
+import {
+  AuthorLogin,
+  ServedLoadError,
+  ServedText,
+  servedPath as committedServed,
+} from "#pantry/db/served.ts";
+import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
 
 /**
  * The author application's session pool: at most 10 sessions, 1 kept open once opened, and the
  * others closed 5,000 ms after their last use.
  *
- * Grizzle states no number of its own. These are the bounds grizzle 48256f8 fixed for every pool,
- * which every lease run of this package has passed under.
+ * Grizzle chooses no size and no timeout: `DbLayer.make` takes the caller's `PoolBounds`, and
+ * these are this package's choice. Pantry's calls on a `Db` run one after another: the import
+ * opens one `Db` and applies one ChangeSet, the export reads its documents' pages in order, and the
+ * database tests run one file at a time (`maxWorkers: 1`, vite.config.ts) and import one package at
+ * a time, so 10 is headroom above what pantry uses, not a measured need. The session kept open
+ * serves a process's next call, such as a test file's next import through the same layer, without
+ * a new connection attempt; any other closes 5,000 ms after its last use, so a process between
+ * calls holds one session of the server.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/48256f8d61484d18aea2023f2d6fb54d07d46abf/packages/engine/src/core/policy.ts
+ * @see https://github.com/bjornpagen/grizzle/blob/999facc69571db35dc9878d47f2d82ba95c41456/packages/grizzle/src/adapter/types/layer.ts#L80-L95
+ * @see https://github.com/bjornpagen/grizzle/blob/999facc69571db35dc9878d47f2d82ba95c41456/README.md#connecting
  */
 const authorAppPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
 
 /**
+ * The served file the author login opens: the committed one, or, where `GR8DES_QTI_INSTALL` names
+ * an install, the install's own (`#pantry/db/install.ts` `servedPathOf`), which the install's
+ * grizzle config generated with its migrations, so the file and the database it was migrated to are
+ * one installation's.
+ */
+const servedFilePath = Option.match(installed, {
+  onNone: () => committedServed,
+  onSome: servedPathOf,
+});
+
+/**
  * The author application's pool on the local cluster: the login's connection
- * (`#pantry/db/connection.ts`), its pool, and the committed migrations snapshot, read from disk.
+ * (`#pantry/db/connection.ts`), with the password of the role grizzle installs for the login, its
+ * pool, and its install's served workload, read from disk and served as the login's type
+ * (grizzle's `served`), with no schema module evaluated: the login's type is an `import type`.
  *
- * The login (`#pantry/qti/logins.ts` `authorLogin`, over `#pantry/qti/schema.ts` `qti`) is a
- * resource of this layer, loaded and built once the settings, the CA and the snapshot are read:
- * building it composes the schema and its workload, so a build that fails on its settings never
- * pays for either. Nothing this module imports statically may reach the login
- * (`src/cli/startup.test.ts`).
- *
- * The login's type is the dynamic import's, so the layer provides `DbLayer` for exactly the author
- * role: grizzle's `DbLayerService` is invariant in its role, and a layer built for `AnyLogin` would
- * serve no role a caller opens.
+ * It provides the login's `DbLayer`, for the author role, and {@link AuthorLogin}, the served login
+ * itself, whose `roles.author` every `Db.open` takes: grizzle opens a `Db` only on a role of the
+ * served login its layer was built over.
  *
  * Building the layer fails with Effect's `ConfigError` for a missing or malformed setting, with a
- * `ClusterConfigError` (`#pantry/db/connection.ts`) when the CA is unreadable, and with a
- * {@link SnapshotLoadError} when the snapshot is. A missing password file is not found here: it
- * fails each connection attempt with grizzle's `CredentialError`.
+ * `ClusterConfigError` (`#pantry/db/connection.ts`) when the CA is unreadable, with a
+ * {@link ServedLoadError} when the served file is, and with grizzle's `OpenError` at stage `config`
+ * for a file of another login. A missing password file is not found here: it fails each connection
+ * attempt with grizzle's `CredentialError`.
  */
 export const AuthorAppLayer = Layer.unwrap(
   Effect.gen(function* AuthorAppLayer() {
     const fs = yield* FileSystem.FileSystem;
-    const connection = yield* loginConnection(authorAppRole);
-    const snapshot = yield* fs.readFileString(snapshotPath).pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(SnapshotText)),
-      Effect.mapError((reason) => new SnapshotLoadError({ path: snapshotPath, reason })),
+    const connectionOf = yield* loginConnection;
+    const file = yield* fs.readFileString(servedFilePath).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(ServedText)),
+      Effect.mapError((reason) => new ServedLoadError({ path: servedFilePath, reason })),
     );
-    const { authorLogin } = yield* Effect.promise(() => import("#pantry/qti/logins.ts"));
-    const { qti } = yield* Effect.promise(() => import("#pantry/qti/schema.ts"));
+    const login = served<AuthorAppLogin>(file, "author_app");
 
-    return DbLayer.make({
-      ...connection,
-      login: authorLogin(qti()),
-      pool: authorAppPool,
-      snapshot,
-    });
+    return Layer.merge(
+      DbLayer.make({ ...connectionOf(roleNameOf(login)), login, pool: authorAppPool }),
+      Layer.succeed(AuthorLogin, login),
+    );
   }),
-).pipe(Layer.provide(NodeFileSystem.layer));
+).pipe(Layer.provide(connectionServices));

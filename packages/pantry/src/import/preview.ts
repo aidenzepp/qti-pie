@@ -5,13 +5,12 @@
  * The dry run is the import's own read ({@link readProgram} of `#pantry/import/program.ts`): the
  * read, the shred and the overlay builders. The database's laws do not run, so a package this
  * accepts can still be refused by an import, and the preview says so (`databaseChecked`). Nothing
- * here reaches the author login (`#pantry/qti/logins.ts` `authorLogin`), whose workload grizzle
- * builds on its first call, so a dry run never pays for it; `src/cli/startup.test.ts` holds this
+ * here reaches the author login (`#pantry/qti/own-login.ts`), whose workload grizzle builds when
+ * that module is evaluated, so a dry run never pays for it; `src/cli/startup.test.ts` holds this
  * module to that.
  */
 import { Effect } from "effect";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
-import type { PackageSource } from "#pantry/package/read.ts";
 
 /**
  * How much a package holds: the rows it would write and the relations they fall in, and that no
@@ -33,18 +32,18 @@ export interface Preview {
 }
 
 /**
- * Read the package at `source` as `importPackage` does and count what it would write, without
- * opening the database.
+ * Read the package at `dir` as `importPackage` does and count what it would write, without opening
+ * the database.
  *
- * @param source - The package directory, `.zip` file or zip archive's bytes.
+ * @param dir - The package directory or `.zip` file.
  * @returns The counts. Fails with `ImportRefused` naming the rule the reader, the container or the
  *   codec refused the package under, and with the platform's error when the package cannot be
  *   read.
  */
 export const previewPackage = Effect.fn("import.previewPackage")(function* previewPackage(
-  source: PackageSource,
+  dir: string,
 ) {
-  const counts = [...rowCountsOf(yield* readProgram(source)).values()];
+  const counts = [...rowCountsOf(yield* readProgram(dir)).values()];
   const preview: Preview = {
     databaseChecked: false,
     relations: counts.filter((count) => count > 0).length,

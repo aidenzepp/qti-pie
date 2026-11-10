@@ -19,11 +19,13 @@
  * - **{@link VariableRef}**, one row per variable reference a processing element makes, resolves it
  *   to a declaration of its document (`declarationIdentifierRef`, whatever the declaration's
  *   cardinality spells: spec reading 159), a built-in variable (the installed `BuiltInVariable`,
- *   A63), or nothing, which only a document that is no item may hold; a claim of no declaration is
- *   proved by {@link VariableLookup}, and a table it reads by {@link DeclarationTable} (M2). The
- *   type a setter or a lookup sets its variable to is a row of its own, {@link HeldType}, and so is
- *   the cardinality of each declaration a reference reads one of, where it has one
- *   ({@link VariableRefCardinality}, {@link TemplateDefaultCardinality},
+ *   A63), or nothing, which only a document that is no item may hold; a reference to a name its
+ *   document declares resolves to it (`DeclaredReference` of `#pantry/qti/queries.ts`). The table
+ *   it claims of its declaration is a row of its own, {@link VariableRefTable}, where it claims
+ *   one, proved by that table's own row, which hangs from the declaration (`Mapping`,
+ *   `AreaMapping`, `LookupTable`). The type a setter or a lookup sets its variable to is a query,
+ *   `HeldType`, and the cardinality of each declaration a reference reads one of, where it has one,
+ *   a row of its own ({@link VariableRefCardinality}, {@link TemplateDefaultCardinality},
  *   {@link ReadingCardinality}).
  * - **{@link ExpressionAttribute}** carries the attributes an expression's type follows from
  *   (`base-type`, `name`, `weight-identifier`), an unwritten one included, {@link Literal} a base
@@ -33,10 +35,11 @@
  *   section document splices ({@link TestReference}), is placed once per instance of every test
  *   that places its document ({@link PlacedReference}) and read once per test
  *   ({@link AssembledReference}), its name split at every dot ({@link ReferenceSegment}) and read
- *   in every reading ({@link Reading}), each reading's scope and variable looked up in the assembly
- *   ({@link NameLookup}), the declarations ({@link VariableLookup}) and the item ref's mappings
- *   ({@link MappingLookup}); exactly one reading resolves (M3). Beside them, a template default's
- *   and a variable mapping's declarations in the item their item ref names
+ *   in every reading ({@link Reading}), each reading's scope read from the assembly's names and its
+ *   variable from the declarations and the item ref's mappings, through the queries of
+ *   `#pantry/qti/queries.ts`, and the declaration a resolving reading's variable reads a row of its
+ *   own ({@link ReadingDeclaration}); exactly one reading resolves (M3). Beside them, a template
+ *   default's and a variable mapping's declarations in the item their item ref names
  *   ({@link TemplateDefaultTarget}, {@link MappingSourceDeclaration}), what a mapping's item ref
  *   names ({@link MappingItemRef}, {@link MappingItemRefType}), and a `section-identifier`'s name
  *   ({@link SectionIdentifier}).
@@ -107,7 +110,6 @@ import { Document } from "#pantry/qti/chardata.ts";
 import {
   DeclarationBaseType,
   DeclarationCardinality,
-  DeclarationIdentifier,
   declarationIdentifierRef,
 } from "#pantry/qti/declarations.ts";
 import {
@@ -115,9 +117,7 @@ import {
   conditionKindHandles,
   containerKinds,
   declaredKinds,
-  expressionKinds,
   firstKinds,
-  heldKinds,
   Language,
   LeadCardinality,
   lookupKindHandle,
@@ -126,25 +126,19 @@ import {
   oneCardinalityKinds,
   OperandBase,
   outcomeOnlyKinds,
-  processingReferences,
   ReadingForm,
   ReadingSource,
   ReferenceBase,
   ReferenceDeclaration,
-  referenceDeclarations,
   ReferencedTable,
   TableReader,
   ReferenceResolution,
   ReferenceRole,
   ResultBase,
   ResultCardinality,
-  rootLanguages,
   rootKinds,
   RpTemplate,
-  ruleKindHandles,
   secondKinds,
-  setKindHandles,
-  setterKinds,
   TailCardinality,
   ValueBase,
   ValueBaseBit,
@@ -154,39 +148,37 @@ import {
   ValueCardinality,
   ValueCardinalityBit,
   ValueCardinalityOf,
-  valueBaseOf,
-  valueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
+import { Instance, ItemRefDocument, ItemRefTarget, VariableMapping } from "#pantry/qti/tests.ts";
+import { optionallyTypedKinds, attributeTypedKinds } from "#pantry/vocab/terms/expressions.ts";
 import {
-  AssembledName,
-  Instance,
-  InstanceName,
-  ItemRefDocument,
-  ItemRefTarget,
+  expressionKinds,
+  processingReferences,
+  referenceDeclarations,
+  rootLanguages,
+  ruleKindHandles,
+  setterKinds,
+  valueBaseOf,
+  valueCardinalityOf,
+} from "#pantry/vocab/terms/expression-types.ts";
+import {
   itemKind,
   itemRefKind,
-  itemResourceType,
   linkResourceTypes,
-  Named,
   partKind,
   sectionKind,
   sectionRefKind,
   testKind,
-  VariableMapping,
-} from "#pantry/qti/tests.ts";
+} from "#pantry/vocab/terms/tests.ts";
 
 /**
- * {@link integerMathOperators} as a `Compute.matches` pattern.
+ * The math operators whose result is an integer (`integerMathOperators` of
+ * `#pantry/grammar/expression.ts`), as the pattern `Compute.matches` reads, made once.
  */
-const integerMath = Compute.pattern(integerMathOperators);
-
-/**
- * {@link spelledBasesPattern} as a `Compute.matches` pattern.
- */
-const spelledBases = Compute.pattern(spelledBasesPattern);
+const integerMathOperatorNames = Compute.pattern(integerMathOperators);
 
 /**
  * What a reference's lexical form holds around the name it spells: XML whitespace `S`, possibly
@@ -333,14 +325,14 @@ export const Processing = relation(
  * - **the host's:** `before`, `identifier` and `after`, the lexical form split around the name it
  *   spells, the whitespace around a bare name or the braces around a braced one; `parent`,
  *   `language`, `elementBase` and `elementCardinality`, its element's (`exprRef` for an expression,
- *   the language for a rule); `rootKind`, its document's root's; `resolution`; `baseType` and
- *   `cardinality`, the variable's type; and `table`, the table its element needs the declaration to
- *   hold.
+ *   the language for a rule); `rootKind`, its document's root's; `resolution`; and `baseType` and
+ *   `cardinality`, the variable's type.
  *
  * The declaration a declared reference names is a row of its own, {@link VariableRefDeclaration}
  * (lane NIL's NS1: a reference that names no declaration has no declaration row, never the nil
- * uuid), and so is the type of a setter's or a lookup's one expression, {@link HeldType}. A type
- * field its element leaves unread holds `unknown`.
+ * uuid), and so are the table its element needs that declaration to hold, {@link VariableRefTable},
+ * where it claims one, and the type of a setter's or a lookup's one expression, {@link HeldType}. A
+ * type field its element leaves unread holds `unknown`.
  */
 export const VariableRef = relation(
   "VariableRef",
@@ -361,7 +353,6 @@ export const VariableRef = relation(
     parent: uuid,
     resolution: closedId(ReferenceResolution),
     rootKind: closedId(NodeKind),
-    table: closedId(ReferencedTable),
   },
   ["node", "attribute"],
 );
@@ -392,7 +383,6 @@ export const VariableRefDeclaration = relation(
     kind: closedId(NodeKind),
     language: closedId(Language),
     node: uuid,
-    table: closedId(ReferencedTable),
   },
   ["node", "attribute"],
 );
@@ -420,36 +410,30 @@ export const VariableRefCardinality = relation(
 );
 
 /**
- * The type a setter or a lookup sets its variable to, keyed by its node: the `exprRef` tuple of its
- * first expression (`expression`, `node` its parent, `expressionKind`, `language`, `heldBase` and
- * `heldCardinality`), the one its content model allows (a second breaks N5's `Follow`), beside the
- * fields of its {@link VariableRef} that `Set_type` and `Lookup_type` compare with it (`kind`,
- * `baseType`, `cardinality` and `table`), each copied from the reference.
+ * The table a declared {@link VariableRef} claims of its declaration, keyed as the reference, where
+ * it claims one: a map response's `qti-mapping`, a map response point's `qti-area-mapping`, or a
+ * lookup's `qti-match-table` or `qti-interpolation-table` (information model §2.11.3.29,
+ * §2.11.3.30 and §2.5.1.4), the one its declaration holds, with the reference's `kind` and its
+ * declaration, each copied from its {@link VariableRefDeclaration}. Only a reference by
+ * `identifier` claims one, of a table its kind reads (`TableReader`), and the declaration holds it:
+ * the claim is a containment into the table's own row, keyed by the declaration.
  *
- * A row of its own (AGENTS.md's Schema intent: a value that may be missing is a row of its own
- * relation), written where the setter both names a variable and holds an expression. One whose
- * `identifier` names no variable, unwritten or no NCName (spec reading 152), has no reference, and
- * one that holds no expression holds no type, so neither has a row, and AL3, its value domain or
- * its content model refuses it alone. Every field is proved by a copy, but no law forces the row in
- * where both are: a containment's source is one relation's rows, never the join of two. The import
- * writes it there (`heldTypesOf`), and the genetic differential holds it to the oracle's `Set type`
- * and `Lookup type`.
+ * A reference that claims no table has no row (AGENTS.md's Schema intent: a value that may be
+ * missing is a row of its own relation, never a sentinel). A map response, a map response point or
+ * a lookup by `identifier` whose declaration holds no table it reads has none, so `Mapped_response`
+ * or `Lookup_type` refuses it, and a reference of any other kind, or to a built-in variable or to
+ * nothing, claims none.
  */
-export const HeldType = relation(
-  "HeldType",
+export const VariableRefTable = relation(
+  "VariableRefTable",
   {
-    baseType: closedId(ValueBase),
-    cardinality: closedId(ValueCardinality),
-    expression: uuid,
-    expressionKind: closedId(NodeKind),
-    heldBase: closedId(ValueBase),
-    heldCardinality: closedId(ValueCardinality),
+    attribute: closedId(AttributeName),
+    declaration: uuid,
     kind: closedId(NodeKind),
-    language: closedId(Language),
     node: uuid,
     table: closedId(ReferencedTable),
   },
-  ["node"],
+  ["node", "attribute"],
 );
 
 /**
@@ -497,41 +481,6 @@ export const PlacedVariableRefDeclaration = relation(
     instance: uuid,
     kind: closedId(NodeKind),
     node: uuid,
-  },
-  ["instance", "node", "attribute"],
-);
-
-/**
- * A declared {@link PlacedVariableRef}'s type in its item, keyed as the placed reference, where its
- * declaration has a cardinality and a base type: `kind` and `declaration`, its
- * {@link PlacedVariableRefDeclaration}'s; `parentKind`, its element's parent's kind, its `Node`'s;
- * and `baseType` and `cardinality`, the declaration's {@link DeclarationBaseType}'s and
- * {@link DeclarationCardinality}'s, as `PlacedBindingBaseType`'s are a placed binding's
- * (`#pantry/qti/interactions.ts`). A reference in an included rules fragment is typed in the
- * fragment's own document, where its name is undeclared, so its {@link VariableRef}'s type is
- * `unknown`; this row types it in the item (spec reading 117), and "Condition type" reads it. A
- * declaration's type is never silent: neither field holds `any`, `unknown` or an unknown
- * cardinality. The item's own document is an instance too, so an inline reference has a row as
- * well, and an inline condition is held twice, here and over its {@link Expression}, under the one
- * law.
- *
- * A row of its own (lane NIL's NS1, spec reading 159): a declaration whose cardinality spells
- * nothing, or a record, which has no base type, has none, and no law reads a type it does not
- * have. Every field is proved by a copy, but no law forces the row in, as {@link HeldType}'s doc
- * says of itself: the import writes it (`placedVariableRowsOf`), and the genetic differential holds
- * it to the oracle's "Condition type".
- */
-export const PlacedReferenceType = relation(
-  "PlacedReferenceType",
-  {
-    attribute: closedId(AttributeName),
-    baseType: closedId(BaseType),
-    cardinality: closedId(Cardinality),
-    declaration: uuid,
-    instance: uuid,
-    kind: closedId(NodeKind),
-    node: uuid,
-    parentKind: closedId(NodeKind),
   },
   ["instance", "node", "attribute"],
 );
@@ -630,53 +579,6 @@ export const ProcessingTemplate = relation(
 );
 
 /**
- * The tables a declaration holds, keyed by its node: the null object `none` in each slot it leaves
- * empty, so a reference that reads a mapping, an area mapping or a lookup table reads whether its
- * declaration holds one (M2, `representation-gaps.md` §1). A row exists for every declaration that
- * holds a table, forced by each table's containment, and for every declaration a map response or a
- * lookup names; a slot says a table only where one hangs from the declaration.
- *
- * - `mapping`: `qti-mapping` or `none`; `areaMapping`: `qti-area-mapping` or `none`, a response's two
- *   optional tables;
- * - `lookup`: `qti-match-table`, `qti-interpolation-table` or `none`, an outcome's one optional
- *   lookup table.
- */
-export const DeclarationTable = relation(
-  "DeclarationTable",
-  {
-    areaMapping: closedId(ReferencedTable),
-    declaration: uuid,
-    lookup: closedId(ReferencedTable),
-    mapping: closedId(ReferencedTable),
-  },
-  ["declaration"],
-);
-
-/**
- * Whether a document declares a name, keyed by the document and the name (M2): each name a
- * document declares is forced in, `declared`, whatever its declaration's cardinality spells (spec
- * reading 159), its row naming a declaration of that name with its kind and its counts of
- * cardinalities and base types, the one `Declaration key` allows; every other row is a probe of a
- * name the document does not declare, its declaration the document itself, its kind the null
- * object `qti-outcome-declaration`, and no cardinality and no base type. The key leaves no room for
- * an absent row where a declaration is, so a probe reads the truth: a reference's claim that it
- * names no declaration, a reading's variable, a mapping target.
- */
-export const VariableLookup = relation(
-  "VariableLookup",
-  {
-    baseTypes: natural,
-    cardinalities: natural,
-    declaration: uuid,
-    declarationKind: closedId(DeclarationKind),
-    declared: pg.boolean,
-    document: uuid,
-    name: keyText,
-  },
-  ["document", "name"],
-);
-
-/**
  * A test's template default, keyed by its `qti-template-default` node (the UP audit's A37 and A38;
  * spec reading 108): its item ref (`itemRef`, its parent) and its `template-identifier` as written
  * (`lexical`) and collapsed (`lead`, `template`, `trail`). It exists exactly where the attribute is
@@ -759,9 +661,9 @@ export const TemplateDefaultCardinality = relation(
  * (`VariableMapping`'s, each copied by a containment of its own, since one index holds at most one
  * key text, `#pantry/qti/limits.ts`), the declaration of the item `source` names, whatever its
  * cardinality spells (spec reading 159), with its kind and its counts of cardinalities and base
- * types, and `targetDeclared`, whether the item declares `target` too, read from
- * {@link VariableLookup}. Every mapping has one ("Variable mapping source"), whose declaration is
- * an outcome declaration (`Variable_mapping_source`).
+ * types. Every mapping has one ("Variable mapping source"), whose declaration is an outcome
+ * declaration (`Variable_mapping_source`); where the item declares `target` too, that is the
+ * source itself (`Variable_mapping_target`, over `DeclaredTarget` of `#pantry/qti/queries.ts`).
  */
 export const MappingSourceDeclaration = relation(
   "MappingSourceDeclaration",
@@ -775,7 +677,6 @@ export const MappingSourceDeclaration = relation(
     node: uuid,
     source: keyText,
     target: keyText,
-    targetDeclared: pg.boolean,
   },
   ["node"],
 );
@@ -817,46 +718,6 @@ export const MappingItemRefType = relation(
 export const mappingItemRefTypeFamily = counted(
   on(MappingItemRefType, "node"),
   fin(MappingItemRef, "types"),
-);
-
-/**
- * Whether an item ref maps a name, keyed by the item ref and the name (M2): each variable mapping
- * is forced in by its target, `mapped`, and every other row is a probe of a name the item ref maps
- * nothing to. The verdict is the row's one datum: a mapped name's variable, its source's
- * declaration, is {@link MappingSourceDeclaration}'s.
- */
-export const MappingLookup = relation(
-  "MappingLookup",
-  { itemRef: uuid, mapped: pg.boolean, name: keyText },
-  ["itemRef", "name"],
-);
-
-/**
- * Whether a test's assembly holds a name, keyed by the test and the name (M2,
- * `representation-gaps.md` §4.3's `NameLookup`): each written element of the assembly
- * (`AssembledName`) is forced in, `found`, with its node, its kind, its `placements`, one instance
- * that places it and whether a replacement can repeat it there (`InstanceName.replaced`), and, for
- * an item ref, the type of what it names (`resourceType`, an item or an LTI link) and the item
- * (`itemDocument`, its `ItemRefDocument`'s); every other row is a probe of a name the assembly
- * holds none of, its node, instance and item the test itself, its kind `document`, its type `none`
- * and its placements 0. The test itself stands as the item of every name that is no item ref of an
- * item, the null object RG4's design gives it (`representation-gaps.md` §4.3).
- */
-export const NameLookup = relation(
-  "NameLookup",
-  {
-    assembly: uuid,
-    found: pg.boolean,
-    instance: uuid,
-    itemDocument: uuid,
-    kind: closedId(NodeKind),
-    name: keyText,
-    node: uuid,
-    placements: natural,
-    replaced: pg.boolean,
-    resourceType: closedId(ResourceType),
-  },
-  ["assembly", "name"],
 );
 
 /**
@@ -1022,23 +883,71 @@ export const ReferenceSegment = relation.generated(
  * - **the text:** `scope`, `number` and `variable`, the name read as `variable` (unsplit), `scope.
  *   variable` (split), `scope.number.variable` (numbered) or `scope` (name), each piece copied from
  *   its {@link ReferenceSegment} and the whole equal to `identifier` (A59, G-concat);
- * - **the scope:** `found`, `named`, `namedKind`, `placements`, `replaced`, `resourceType` and
- *   `lookupDocument`, read from {@link NameLookup} at `(assembly, scope)`, the test itself for an
- *   unsplit reading;
- * - **the variable:** `declared`, read from {@link VariableLookup} in `lookupDocument` (the test's or
- *   the item's), `mapped`, from {@link MappingLookup} at the item ref, and `source`, which of the
- *   two or a built-in of the scope names it; `declaration`, `declarationKind`, `declCardinalities`
- *   and `declBaseTypes`, the declared or mapped variable's declaration, its kind and its counts of
- *   cardinalities and base types, whatever its cardinality spells (spec reading 159);
+ * - **the scope:** `found`, `named`, `namedKind`, `placements` and `replaced`: the written element of
+ *   the assembly whose identifier is `scope`, its node, kind and placements and whether a
+ *   replacement can repeat it in an instance that places it (`FoundName` of
+ *   `#pantry/qti/queries.ts`), and the test itself for an unsplit reading. A scope the assembly
+ *   holds no element of is not `found` (`HeldScope`), and holds the test, its kind `document`, no
+ *   placement and no replacement in the other four, the null objects RG4's design gives a probe
+ *   (`representation-gaps.md` §4.3), which no law reads of a scope not found;
+ * - **the variable:** `source`, what names it: `declared`, where the test's declarations, unsplit, or
+ *   the item's of an item ref, split or numbered, declare it (`DeclaredReading`); else `mapped`,
+ *   where the item ref maps it (`MappedReading`); else `builtIn`, a built-in of the scope; else
+ *   `link`, through a found item ref that names an LTI link, which holds no declarations and is
+ *   read unchecked (`LinkReading`, spec reading 110); else `none`;
  * - **the copy:** `identifier`, `kind`, `role`, its {@link AssembledReference}'s.
  *
  * A reading resolves when its variable is named and, numbered, its item ref can repeat and its
  * number is at least 1 (reading 88). Exactly one reading of a variable reference resolves (M3).
- * The cardinality of a resolving reading's declaration that `Reference_type` reads is a row of its
- * own, {@link ReadingCardinality}.
+ * The declaration a resolving reading's declared or mapped variable reads is a row of its own,
+ * {@link ReadingDeclaration}, and so is that declaration's cardinality where `Reference_type` reads
+ * it, {@link ReadingCardinality}. A reading of a built-in variable or of nothing names no
+ * declaration, so it has neither, and no code stands for the declaration it lacks.
  */
 export const Reading = relation(
   "Reading",
+  {
+    assembly: uuid,
+    attribute: closedId(AttributeName),
+    form: closedId(ReadingForm),
+    found: pg.boolean,
+    identifier: keyText,
+    kind: closedId(NodeKind),
+    named: uuid,
+    namedKind: closedId(NodeKind),
+    node: uuid,
+    number: keyText,
+    placements: natural,
+    replaced: pg.boolean,
+    role: closedId(ReferenceRole),
+    scope: keyText,
+    source: closedId(ReadingSource),
+    split: natural,
+    variable: keyText,
+  },
+  ["assembly", "node", "attribute", "form", "split"],
+);
+
+/**
+ * The declaration a resolving {@link Reading} reads, keyed as the reading, where its variable is
+ * declared or mapped (spec readings 48 and 88): `declaration`, `declarationKind`,
+ * `declCardinalities` and `declBaseTypes`, the declaration, its kind and its counts of
+ * cardinalities and base types, whatever its cardinality spells (spec reading 159), beside the
+ * reading's `kind`, `source`, `named` and `variable`, each copied from it. A declared variable's
+ * declaration is the one the document it reads declares of its name, the test's or its item ref's
+ * item's (`DeclaredReading` of `#pantry/qti/queries.ts`); a mapped variable's is its mapping's
+ * source's, its item ref's {@link MappingSourceDeclaration} at `(named, variable)`.
+ *
+ * A row of its own (AGENTS.md's Schema intent: a value that may be missing is a row of its own
+ * relation, never a sentinel). A reading of a built-in variable or of nothing names no
+ * declaration, and a reading that does not resolve names nothing (M3), so neither has a row, and
+ * no law over a declaration judges it: "Variable kind" judges a built-in reading by the kind the
+ * built-in stands as under its scope's root, and "Reference type" refuses one in place of a
+ * literal. A reading through a mapping whose source its item declares nothing under has none
+ * either, and "Variable mapping source" refuses it, beside the mapping.
+ */
+export const ReadingDeclaration = relation(
+  "ReadingDeclaration",
   {
     assembly: uuid,
     attribute: closedId(AttributeName),
@@ -1046,22 +955,10 @@ export const Reading = relation(
     declCardinalities: natural,
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
-    declared: pg.boolean,
     form: closedId(ReadingForm),
-    found: pg.boolean,
-    identifier: keyText,
     kind: closedId(NodeKind),
-    lookupDocument: uuid,
-    mapped: pg.boolean,
     named: uuid,
-    namedKind: closedId(NodeKind),
     node: uuid,
-    number: keyText,
-    placements: natural,
-    replaced: pg.boolean,
-    resourceType: closedId(ResourceType),
-    role: closedId(ReferenceRole),
-    scope: keyText,
     source: closedId(ReadingSource),
     split: natural,
     variable: keyText,
@@ -1073,7 +970,7 @@ export const Reading = relation(
  * A reading that stands for a literal beside its declaration's cardinality, keyed as its
  * {@link Reading}, where the reading resolves to a declared or mapped variable by an attribute
  * other than `identifier` and the variable's declaration has a cardinality (spec reading 159):
- * `declaration`, its reading's, and `declCardinality`, the declaration's
+ * `declaration`, its {@link ReadingDeclaration}'s, and `declCardinality`, the declaration's
  * {@link DeclarationCardinality}'s, which `Reference_type` holds to a single value (P24). A reading
  * whose declaration's cardinality is unwritten or spells nothing has none, so the law reads no
  * cardinality the declaration does not have, and AL3 or its value domain refuses it alone (spec
@@ -1099,20 +996,16 @@ export const ReadingCardinality = relation(
  */
 export const referenceRelations = {
   AssembledReference,
-  DeclarationTable,
-  HeldType,
   MappingItemRef,
   MappingItemRefType,
-  MappingLookup,
   MappingSourceDeclaration,
-  NameLookup,
   PlacedDocument,
   PlacedReference,
-  PlacedReferenceType,
   PlacedVariableRef,
   PlacedVariableRefDeclaration,
   Reading,
   ReadingCardinality,
+  ReadingDeclaration,
   ReferenceDocument,
   ReferenceSegment,
   SectionIdentifier,
@@ -1120,9 +1013,9 @@ export const referenceRelations = {
   TemplateDefaultCardinality,
   TemplateDefaultTarget,
   TestReference,
-  VariableLookup,
   VariableRefCardinality,
   VariableRefDeclaration,
+  VariableRefTable,
 };
 
 /**
@@ -1143,7 +1036,7 @@ type PlacedVariableRefRow = RowScalars<typeof PlacedVariableRef>;
 /**
  * The base types that say nothing: `any`, which passes every rule, and `unknown`.
  */
-const silentBases = ["any", "unknown"] as const;
+export const silentBases = ["any", "unknown"] as const;
 
 /**
  * The bare and braced spellings a reference's lexical form takes: the name with the whitespace a
@@ -1217,16 +1110,9 @@ const templateAttributes = select(Attribute, (a) =>
 );
 
 /**
- * The setters' and the lookup's references to their variable, whose fields a {@link HeldType}
- * copies.
- */
-const heldReferences = select(VariableRef, (v) =>
-  v.and(v.eq(v.attribute, "identifier"), v.in(v.kind, heldKinds)),
-);
-
-/**
- * State that an expression's base type is the one member of its operands' base-type bits, or `any`
- * for none: a container's or an index's.
+ * State that an expression's base type is the one member of its operands' base-type bits, `any` for
+ * none and `unknown` for several: a container's, and an Index's or a Random's, typed by its one
+ * operand and by all of them alike where it writes more, which `Arity` refuses.
  *
  * @param e - The row.
  * @returns The predicate.
@@ -1234,12 +1120,16 @@ const heldReferences = select(VariableRef, (v) =>
 const baseOfOperands = (e: ExpressionRow) =>
   e.or(
     e.and(e.eq(Compute.cardinality(e.operandBaseTypes), 0n), e.eq(e.baseType, "any")),
+    e.and(e.gt(Compute.cardinality(e.operandBaseTypes), 1n), e.eq(e.baseType, "unknown")),
     e.eq(ValueBaseBit.row(e.baseType), e.operandBaseTypes),
   );
 
 /**
- * State that an expression's base type is the one member of its later operands' base-type bits, or
- * `any` for none: Delete's, its second operand's.
+ * State that an expression's base type is the one member of its later operands' base-type bits,
+ * `any` for none and `unknown` for several, as a container's is of its operands': Delete's, typed
+ * by its second sub-expression (information model, Table 6.9.20: "The result is a new container
+ * derived from the second sub-expression ... If either sub-expression is NULL the result of the
+ * operator is NULL"), and by its later ones alike where it writes more, which `Arity` refuses.
  *
  * @param e - The row.
  * @returns The predicate.
@@ -1247,14 +1137,28 @@ const baseOfOperands = (e: ExpressionRow) =>
 const baseOfTail = (e: ExpressionRow) =>
   e.or(
     e.and(e.eq(Compute.cardinality(e.tailBaseTypes), 0n), e.eq(e.baseType, "any")),
+    e.and(e.gt(Compute.cardinality(e.tailBaseTypes), 1n), e.eq(e.baseType, "unknown")),
     e.eq(ValueBaseBit.row(e.baseType), e.tailBaseTypes),
+  );
+
+/**
+ * State that an expression's cardinality is the one member of its later operands' cardinality
+ * bits, `unknown` for none or several: Delete's, as {@link baseOfTail} is its base type.
+ *
+ * @param e - The row.
+ * @returns The predicate.
+ */
+const cardinalityOfTail = (e: ExpressionRow) =>
+  e.or(
+    e.and(e.ne(Compute.cardinality(e.tailCardinalities), 1n), e.eq(e.cardinality, "unknown")),
+    e.eq(ValueCardinalityBit.row(e.cardinality), e.tailCardinalities),
   );
 
 /**
  * State the result type each dependent typing derives: the numeric aggregates' from their operands'
  * base types, the containers' from their one base type, Index's and Random's from their operand's,
- * and Delete's from its second operand's. The fixed and declared typings and the attribute ones
- * are `ResultBase`'s, `VariableRef`'s and `ExpressionAttribute`'s.
+ * and Delete's from its later operands' one type. The fixed and declared typings and the attribute
+ * ones are `ResultBase`'s, `VariableRef`'s and `ExpressionAttribute`'s.
  *
  * @param e - The row.
  * @returns The predicate.
@@ -1278,22 +1182,8 @@ const resultDerived = (e: ExpressionRow) =>
         e.eq(e.baseType, "float"),
       ),
     ),
-    e.or(
-      e.not(e.in(e.kind, containerKinds)),
-      e.and(e.gt(Compute.cardinality(e.operandBaseTypes), 1n), e.eq(e.baseType, "unknown")),
-      e.and(e.le(Compute.cardinality(e.operandBaseTypes), 1n), baseOfOperands(e)),
-    ),
-    e.or(e.not(e.in(e.kind, firstKinds)), baseOfOperands(e)),
-    e.or(
-      e.not(e.in(e.kind, secondKinds)),
-      e.and(
-        baseOfTail(e),
-        e.or(
-          e.and(e.eq(Compute.cardinality(e.tailCardinalities), 0n), e.eq(e.cardinality, "unknown")),
-          e.eq(ValueCardinalityBit.row(e.cardinality), e.tailCardinalities),
-        ),
-      ),
-    ),
+    e.or(e.not(e.in(e.kind, [...containerKinds, ...firstKinds])), baseOfOperands(e)),
+    e.or(e.not(e.in(e.kind, secondKinds)), e.and(baseOfTail(e), cardinalityOfTail(e))),
   );
 
 /**
@@ -1413,64 +1303,27 @@ const typedVariableRefs = select(VariableRefDeclaration, (d) => d.eq(d.declBaseT
 const referenceBases = [...new Set(ReferenceBase.rows.map(({ base }) => base))];
 
 /**
- * State where a reference may claim a table of its declaration: none, or one where it names a
- * declared variable by its `identifier`. Which table its kind reads is {@link TableReader}'s, the
- * containment of {@link claimedTables}; each claimed table is a containment into its overlay, and
- * a missing one is `Mapped_response`'s or `Lookup_type`'s refusal.
- *
- * @param v - The row.
- * @returns The predicate.
+ * The kinds that map a response through a table of its declaration: a map response, through its
+ * mapping, and a map response point, through its area mapping (§2.11.3.29, §2.11.3.30).
  */
-const tableClaimed = (v: VariableRefRow) =>
-  v.or(
-    v.eq(v.table, "none"),
-    v.and(v.eq(v.attribute, "identifier"), v.eq(v.resolution, "declared")),
-  );
+const mappedKinds = ["qti-map-response", "qti-map-response-point"] as const;
 
 /**
- * The references that claim a table, each a pair of its kind and the table, which
- * {@link TableReader} holds.
- */
-const claimedTables = select(VariableRef, (v) => v.ne(v.table, "none"));
-
-/**
- * The references that read their declaration's table of one slot: a map response's mapping, a map
- * response point's area mapping and a lookup's lookup table, where the reference names a declared
- * variable by its `identifier`. Each reads the slot of its declaration's {@link DeclarationTable}.
+ * The table claims of one table: a map response's mapping, a map response point's area mapping, and
+ * a lookup's match or interpolation table. Each claim is a containment into the table's own row,
+ * keyed by its declaration: a declaration that holds no such table has none, so no reference claims
+ * it, and a map response, a map response point or a lookup that claims no table is refused by
+ * `Mapped_response` or `Lookup_type`.
  *
- * @param kind - The referring kind.
+ * @param table - The table claimed.
  * @returns The selection.
  */
-const tableReaders = (kind: (typeof NodeKind.handles)[number]) =>
-  select(VariableRefDeclaration, (d) => d.and(d.eq(d.kind, kind), d.eq(d.attribute, "identifier")));
+const tableClaims = (table: (typeof ReferencedTable.handles)[number]) =>
+  select(VariableRefTable, (t) => t.eq(t.table, table));
 
 /**
- * The declarations whose table slot holds one table: each a containment into that table's overlay
- * and back, by its declaration.
- */
-const mappedDeclarations = select(DeclarationTable, (d) => d.eq(d.mapping, "qti-mapping"));
-
-/**
- * The declarations that hold an area mapping.
- */
-const areaMappedDeclarations = select(DeclarationTable, (d) =>
-  d.eq(d.areaMapping, "qti-area-mapping"),
-);
-
-/**
- * The declarations that hold a match table.
- */
-const matchedDeclarations = select(DeclarationTable, (d) => d.eq(d.lookup, "qti-match-table"));
-
-/**
- * The declarations that hold an interpolation table.
- */
-const interpolatedDeclarations = select(DeclarationTable, (d) =>
-  d.eq(d.lookup, "qti-interpolation-table"),
-);
-
-/**
- * The lookup tables that are match tables, each keyed by its declaration as its slot is.
+ * The lookup tables that are match tables, each keyed by its declaration, which a lookup that
+ * claims one reads.
  */
 const matchTables = select(LookupTable, (t) => t.eq(t.kind, "qti-match-table"));
 
@@ -1524,23 +1377,6 @@ const unknownUnwrittenBases = select(ExpressionAttribute, (x) =>
 const floatUnwrittenBases = select(ExpressionAttribute, (x) =>
   x.and(x.eq(x.attribute, "base-type"), x.eq(x.written, false), x.eq(x.baseType, "float")),
 );
-
-/**
- * The kinds whose type an attribute of their own gives.
- */
-const attributeTypedKinds = ["qti-base-value", "qti-math-operator", "qti-test-variables"] as const;
-
-/**
- * The attribute-typed kinds whose typing attribute an element may omit, so that its absence types
- * the element: a test variables' `base-type` (`TestVariablesDType`, `use="optional"`), whose
- * absence matches every integer and float variable and types it `unknown`, or float where it is
- * weighted (spec reading 167). A base value's `base-type` and a math
- * operator's `name` are required (`BaseValueDType` and `MathOperatorDType`, `use="required"`), so
- * an element that omits one is AL3's alone, and holds no typing row.
- */
-export const optionallyTypedKinds = [
-  "qti-test-variables",
-] as const satisfies readonly (typeof attributeTypedKinds)[number][];
 
 /**
  * The expressions `ResultBase` judges: every one but an attribute-typed expression of an `unknown`
@@ -1620,16 +1456,6 @@ const placesAllowedBuiltIn = (v: PlacedVariableRefRow) =>
   );
 
 /**
- * The names a document declares.
- */
-const declaredNames = select(VariableLookup, (l) => l.eq(l.declared, true));
-
-/**
- * The names a document is probed for and does not declare.
- */
-const absentNames = select(VariableLookup, (l) => l.eq(l.declared, false));
-
-/**
  * The published templates, each with the pattern its `template` URI matches.
  */
 const publishedTemplates = rpTemplates.flatMap((template) =>
@@ -1691,34 +1517,6 @@ const itemScoped = (r: ReadingRow) =>
   r.and(r.in(r.form, ["split", "numbered"]), r.eq(r.found, true), r.eq(r.namedKind, itemRefKind));
 
 /**
- * State that a reading's scope is a found item ref that names an item of the package, not an LTI
- * link, so the item's declarations are read.
- *
- * @param r - The row.
- * @returns The predicate.
- */
-const itemHeld = (r: ReadingRow) => r.and(itemScoped(r), r.eq(r.resourceType, itemResourceType));
-
-/**
- * State that a reading's scope is a found item ref that names an LTI link, which has no
- * declarations and no template variables to resolve a name against (spec reading 110): a name
- * read through it is accepted unchecked, a recorded limit.
- *
- * @param r - The row.
- * @returns The predicate.
- */
-const linkHeld = (r: ReadingRow) => r.and(itemScoped(r), r.in(r.resourceType, linkResourceTypes));
-
-/**
- * State that a reading reads its variable in a document's declarations: the test's own, unsplit,
- * or an item ref's item.
- *
- * @param r - The row.
- * @returns The predicate.
- */
-const readsDeclarations = (r: ReadingRow) => r.or(r.eq(r.form, "unsplit"), itemHeld(r));
-
-/**
  * State that a reading's variable is a built-in its scope holds: the test's, unsplit; the item's,
  * through an item ref; a part's or a section's `duration`, split at a found part, section or
  * section ref.
@@ -1739,52 +1537,11 @@ const builtInOfScope = (r: ReadingRow) =>
   );
 
 /**
- * The built-ins of one root, each with the declaration kind it stands as there.
- *
- * @param root - The root's kind.
- * @returns The built-ins.
- */
-const builtInKindsOf = (root: string) =>
-  builtIns
-    .filter((row) => row.root === root)
-    .map(({ declaration, variable }) => [variable, declaration] as const);
-
-/**
- * State that a built-in reading's declaration kind is the one its built-in stands as under its
- * scope's root (the installed `BuiltInVariable`): a test's, unsplit; an item's, through an item
- * ref; a section's, for a part's, a section's or a section ref's `duration`.
- *
- * @param r - The row.
- * @returns The predicate.
- */
-const builtInKindOfScope = (r: ReadingRow) =>
-  r.or(
-    ...builtInKindsOf(testKind).map(([variable, declaration]) =>
-      r.and(
-        r.eq(r.form, "unsplit"),
-        r.eq(r.variable, variable),
-        r.eq(r.declarationKind, declaration),
-      ),
-    ),
-    ...builtInKindsOf(itemKind).map(([variable, declaration]) =>
-      r.and(itemScoped(r), r.eq(r.variable, variable), r.eq(r.declarationKind, declaration)),
-    ),
-    ...builtInKindsOf(sectionKind).map(([variable, declaration]) =>
-      r.and(
-        r.eq(r.form, "split"),
-        r.in(r.namedKind, durationScopes),
-        r.eq(r.variable, variable),
-        r.eq(r.declarationKind, declaration),
-      ),
-    ),
-  );
-
-/**
  * State that a reading resolves (spec reading 48): its variable is named, declared, mapped or built
- * in, or read through an LTI item ref unchecked ({@link linkHeld}), and, numbered, its item ref can
- * repeat under a selection with replacement and its number is at least 1 (reading 88). A name
- * reading, a `section-identifier`'s, is no variable's, and a setter's prefixed reading resolves
- * nothing: a setter sets its own document's variable (reading 112).
+ * in, or read through an LTI item ref unchecked (source `link`, spec reading 110), and, numbered,
+ * its item ref can repeat under a selection with replacement and its number is at least 1 (reading
+ * 88). A name reading, a `section-identifier`'s, is no variable's, and a setter's prefixed reading
+ * resolves nothing: a setter sets its own document's variable (reading 112).
  *
  * @param r - The row.
  * @returns The predicate.
@@ -1792,7 +1549,7 @@ const builtInKindOfScope = (r: ReadingRow) =>
 const resolves = (r: ReadingRow) =>
   r.and(
     r.ne(r.form, "name"),
-    r.or(r.ne(r.source, "none"), linkHeld(r)),
+    r.ne(r.source, "none"),
     r.or(r.eq(r.form, "unsplit"), r.not(r.in(r.kind, setterKinds))),
     r.or(
       r.ne(r.form, "numbered"),
@@ -1824,27 +1581,26 @@ const heldMappings = select(MappingItemRefType, (m) => m.not(m.in(m.type, linkRe
 const resolvingReadings = select(Reading, resolves);
 
 /**
- * A test's prefixed readings of one table reader's `identifier` that resolve to a response variable
- * (decisions 429 and 431, spec reading 166): a split or numbered reading of a `qti-map-response`'s
- * or a `qti-map-response-point`'s `identifier` whose variable stands as a response, declared in an
- * item or built in. Each reads its declaration's table, the mapping or the area mapping "which must
- * have been declared" (information model §7.22 and §7.23), so each is a containment into
- * {@link mappedDeclarations} or {@link areaMappedDeclarations}, which a built-in, having no
- * declaration, never meets. A reading that names anything but a response is `Variable kind`'s
- * alone, and one through an LTI link resolves unchecked (reading 110), its source `none`.
+ * A test's prefixed readings of one table reader's `identifier` that resolve to a declared response
+ * variable (decisions 429 and 431, spec reading 166): a split or numbered reading of a
+ * `qti-map-response`'s or a `qti-map-response-point`'s `identifier` whose variable's declaration
+ * ({@link ReadingDeclaration}) is a response declaration. Each reads its declaration's table, the
+ * mapping or the area mapping "which must have been declared" (information model §7.22 and §7.23),
+ * so each is a containment into that table's own row (`Mapping`, `AreaMapping`) by its declaration.
+ * A built-in response has no declaration, so no row here: {@link mapsNoBuiltInResponse} refuses its
+ * reading. A reading that names anything but a response is `Variable kind`'s alone, and one
+ * through an LTI link resolves unchecked (reading 110), its source `none`, with no declaration.
  *
  * @param kind - The reader's kind.
  * @returns The selection.
  */
 const prefixedTableReaders = (kind: "qti-map-response" | "qti-map-response-point") =>
-  select(Reading, (r) =>
-    r.and(
-      r.eq(r.kind, kind),
-      r.eq(r.attribute, "identifier"),
-      r.in(r.form, ["split", "numbered"]),
-      resolves(r),
-      r.ne(r.source, "none"),
-      r.eq(r.declarationKind, "qti-response-declaration"),
+  select(ReadingDeclaration, (d) =>
+    d.and(
+      d.eq(d.kind, kind),
+      d.eq(d.attribute, "identifier"),
+      d.in(d.form, ["split", "numbered"]),
+      d.eq(d.declarationKind, "qti-response-declaration"),
     ),
   );
 
@@ -1853,13 +1609,13 @@ const prefixedTableReaders = (kind: "qti-map-response" | "qti-map-response-point
  * its item's declarations: the {@link PlacedVariableRefDeclaration} of a `qti-map-response`'s or a
  * `qti-map-response-point`'s `identifier`, under every instance of the item's assembly. The placed
  * twin of {@link prefixedTableReaders}: a reference in an included response rules fragment names
- * nothing in the fragment's own document, so its only declaration is its item's, where "the
- * content of the fragment must satisfy the requirements of the specification in the context of the
- * item in which it is being included" (spec reading 117). Each reads its declaration's mapping or
- * area mapping (reading 166), so each is a containment into {@link mappedDeclarations} or
- * {@link areaMappedDeclarations}. It keeps every declaration kind: one that names an outcome finds
- * no mapping and breaks the law, as the in-place check refuses it. The item's own document is an
- * instance too, so an inline map response is held twice, here and by the in-place check over
+ * nothing in the fragment's own document, so its only declaration is its item's, where "the content
+ * of the fragment must satisfy the requirements of the specification in the context of the item in
+ * which it is being included" (spec reading 117). Each reads its declaration's mapping or area
+ * mapping (reading 166), so each is a containment into that table's own row (`Mapping`,
+ * `AreaMapping`) by its declaration. It keeps every declaration kind: one that names an outcome
+ * finds no mapping and breaks the law, as the in-place check refuses it. The item's own document is
+ * an instance too, so an inline map response is held twice, here and by the in-place check over
  * {@link VariableRefDeclaration}, under the one law.
  *
  * @param kind - The reader's kind.
@@ -1880,17 +1636,65 @@ const builtInResponses = builtIns.filter(
 );
 
 /**
- * The resolving readings that stand for a literal, by an attribute other than `identifier`, of a
- * declared or mapped variable whose declaration has a cardinality: each has its
- * {@link ReadingCardinality}, which `Reference_type` reads (spec reading 159).
+ * The scope under each root whose built-in variables a reading reads, as {@link builtInOfScope}
+ * states it: a test's, unsplit; an item's, through an item ref; a section's, for a part's, a
+ * section's or a section ref's `duration`, split at it.
  */
-const standInReadings = select(Reading, (r) =>
-  r.and(
+const builtInScopes = [
+  [testKind, (r: ReadingRow) => r.eq(r.form, "unsplit")],
+  [itemKind, itemScoped],
+  [sectionKind, (r: ReadingRow) => r.and(r.eq(r.form, "split"), r.in(r.namedKind, durationScopes))],
+] as const;
+
+/**
+ * State that a test's resolving prefixed reading of a `qti-map-response`'s or a
+ * `qti-map-response-point`'s `identifier` reads no built-in response of its scope's root, whose
+ * mapping or area mapping is never declared (decision 431, spec reading 166; information model
+ * §7.22 and §7.23). A built-in reading names no declaration, so it has no
+ * {@link ReadingDeclaration} that {@link prefixedTableReaders} could hold to a table: its built-in
+ * is told by its scope's root and its variable, as {@link builtInScopes} reads them.
+ *
+ * @param r - The row.
+ * @returns The predicate.
+ */
+const mapsNoBuiltInResponse = (r: ReadingRow) =>
+  r.or(
     r.ne(r.attribute, "identifier"),
-    resolves(r),
-    r.in(r.source, ["declared", "mapped"]),
-    r.eq(r.declCardinalities, 1n),
-  ),
+    r.not(r.in(r.kind, ["qti-map-response", "qti-map-response-point"])),
+    r.not(r.in(r.form, ["split", "numbered"])),
+    r.ne(r.source, "builtIn"),
+    r.not(resolves(r)),
+    r.not(
+      r.or(
+        ...builtInScopes.flatMap(([root, inScope]) =>
+          builtInResponses
+            .filter((builtIn) => builtIn.root === root)
+            .map(({ variable }) => r.and(inScope(r), r.eq(r.variable, variable))),
+        ),
+      ),
+    ),
+  );
+
+/**
+ * The resolving readings of a declared variable, each with its {@link ReadingDeclaration}.
+ */
+const declaredReadings = select(Reading, (r) => r.and(resolves(r), r.eq(r.source, "declared")));
+
+/**
+ * The resolving readings of a mapped variable, each with its {@link ReadingDeclaration} where its
+ * mapping's source is declared, so one through a mapping whose source its item declares nothing
+ * under is refused under the mapping's law; but for a reading through an LTI item ref, whose
+ * mapping has no source declaration and is accepted unchecked (source `link`, spec reading 110).
+ */
+const mappedReadings = select(Reading, (r) => r.and(resolves(r), r.eq(r.source, "mapped")));
+
+/**
+ * The resolving readings' declarations that stand for a literal, by an attribute other than
+ * `identifier`, whose declaration has a cardinality: each has its {@link ReadingCardinality},
+ * which `Reference_type` reads (spec reading 159).
+ */
+const standInDeclarations = select(ReadingDeclaration, (d) =>
+  d.and(d.ne(d.attribute, "identifier"), d.eq(d.declCardinalities, 1n)),
 );
 
 /**
@@ -1916,37 +1720,28 @@ const mapsNoBuiltIn = (v: VariableRefRow | PlacedVariableRefRow) =>
   );
 
 /**
- * The resolving readings of a reference by `identifier`: each names one of the declaration kinds
- * its element reads or sets.
+ * State that a resolving reading by `identifier` of a built-in variable names one its element may:
+ * one whose kind's `ReferenceDeclaration` admits the declaration kind the built-in stands as under
+ * its scope's root (the installed `BuiltInVariable`, reading 29), as {@link namesAllowedBuiltIn}
+ * states it of a document's own reference. A built-in reading names no declaration, so it has no
+ * {@link ReadingDeclaration} to read a kind from.
+ *
+ * @param r - The row.
+ * @returns The predicate.
  */
-const namedReadings = select(Reading, (r) => r.and(resolves(r), r.eq(r.attribute, "identifier")));
-
-/**
- * The readings that probe the assembly's names: every one but an unsplit reading.
- */
-const scopedReadings = select(Reading, (r) => r.ne(r.form, "unsplit"));
-
-/**
- * The readings whose variable is a declaration of the test or of an item.
- */
-const declarationReaders = select(Reading, readsDeclarations);
-
-/**
- * The readings through an item ref, which read its mappings.
- */
-const mappingReaders = select(Reading, itemScoped);
-
-/**
- * The readings whose variable is declared, with that declaration's codes.
- */
-const declaredReadings = select(Reading, (r) => r.eq(r.source, "declared"));
-
-/**
- * The readings whose variable is mapped, with the source declaration's codes, but for a reading
- * through an LTI item ref, whose mapping has no source declaration and is accepted unchecked
- * ({@link linkHeld}, spec reading 110).
- */
-const mappedReadings = select(Reading, (r) => r.and(r.eq(r.source, "mapped"), r.not(linkHeld(r))));
+const readsAllowedBuiltIn = (r: ReadingRow) =>
+  r.or(
+    r.ne(r.attribute, "identifier"),
+    r.ne(r.source, "builtIn"),
+    r.not(resolves(r)),
+    ...builtInScopes.flatMap(([root, inScope]) =>
+      builtInReferrers
+        .filter((referrer) => referrer.root === root)
+        .map(({ kinds, variable }) =>
+          r.and(inScope(r), r.eq(r.variable, variable), r.in(r.kind, kinds)),
+        ),
+    ),
+  );
 
 /**
  * The split and numbered readings, each at the segment its dot ends.
@@ -1962,34 +1757,6 @@ const numberedReadings = select(Reading, (r) => r.eq(r.form, "numbered"));
  * The segments after a dot that are all digits, which a numbered reading may split at.
  */
 const digitSegments = select(ReferenceSegment, (s) => s.eq(s.digit, true));
-
-/**
- * The names an assembly holds, forced in from `AssembledName`.
- */
-const foundNames = select(NameLookup, (n) => n.eq(n.found, true));
-
-/**
- * The item refs an assembly holds that name a resource of the package, with its type. One whose
- * lookup names `none`, NameLookup's null object for "no resource" (`representation-gaps.md` §4.3),
- * has no target to copy: it writes no href, which AL3 alone refuses (spec reading 155), or its
- * href names no resource of a type the importer reads, which "Item ref target" refuses over its
- * href unless a resource of an unread type names its path (`#pantry/qti/tests.ts` `ItemRefHref`).
- */
-const targetedItemRefs = select(NameLookup, (n) =>
-  n.and(n.eq(n.found, true), n.eq(n.kind, itemRefKind), n.ne(n.resourceType, "none")),
-);
-
-/**
- * The item refs an assembly holds that name an item, with the item.
- */
-const heldItemRefs = select(NameLookup, (n) =>
-  n.and(n.eq(n.found, true), n.eq(n.kind, itemRefKind), n.eq(n.resourceType, itemResourceType)),
-);
-
-/**
- * The names an item ref maps.
- */
-const mappedNames = select(MappingLookup, (m) => m.eq(m.mapped, true));
 
 /**
  * The `section-identifier` attributes, `SectionIdentifier`'s source.
@@ -2073,14 +1840,11 @@ export const readingFamily = counted(
 
 /**
  * The statements over a test's references (spec readings 4, 5, 48 and 88; `representation-gaps.md`
- * §4; the UP audit's A47, A50, A53, A55, A56, A58 to A61, A65 and A66), the lookups they read (M2)
- * and the declarations a test's item refs name (A34, A37, A38), each `check` named by its oracle
- * law:
+ * §4; the UP audit's A47, A50, A53, A55, A56, A58 to A61, A65 and A66) and the declarations a
+ * test's item refs name (A34, A37, A38), each `check` named by its oracle law. What a reading reads
+ * of the assembly's names, the declarations and the mappings is read through the queries of
+ * `#pantry/qti/queries.ts`, each by the rules over it there:
  *
- * - **the lookups:** `VariableLookup`, `NameLookup` and `MappingLookup`, each with its facts forced
- *   in and its found rows justified, every named declaration's name whatever its cardinality spells
- *   (spec reading 159); `VariableLookup`'s and `NameLookup`'s absent rows' null objects
- *   (`E1_derived`); `MappingLookup` holds its verdict alone;
  * - **an item ref's declarations,** each a row of its own that every template default and every
  *   mapping must have, so a name its item declares nothing under is refused by that law alone: a
  *   template default's {@link TemplateDefaultTarget}, a template declaration
@@ -2110,86 +1874,6 @@ export const referenceLawsByName = {
     key(on(sectionIdentifierAttributes, "node")),
   ],
   "E1 derived": [
-    // VariableLookup: every declared name forced in, whatever its declaration's cardinality spells
-    // (spec reading 159), each found one justified, the absent null objects. The force-in reads a
-    // declaration's name, never its node: the lookup is keyed by the document and the name, so a
-    // force-in of each declaration's node would state Declaration key again, and a second
-    // declaration of a name would break both. Declaration key alone says a name's declaration is
-    // one, and the justification makes a found row that one, with its kind and counts.
-    contained(
-      on(DeclarationIdentifier, "document", "identifier"),
-      on(declaredNames, "document", "name"),
-    ),
-    contained(
-      on(
-        declaredNames,
-        "declaration",
-        "document",
-        "name",
-        "declarationKind",
-        "cardinalities",
-        "baseTypes",
-      ),
-      declarationIdentifierRef,
-    ),
-    key(on(absentNames, "document", "name")),
-    check("E1_derived", VariableLookup, (l) =>
-      l.or(
-        l.and(l.eq(l.declared, true), l.ne(l.declaration, l.document)),
-        l.and(
-          l.eq(l.declared, false),
-          l.eq(l.declaration, l.document),
-          l.eq(l.declarationKind, "qti-outcome-declaration"),
-          l.eq(l.baseTypes, 0n),
-          l.eq(l.cardinalities, 0n),
-        ),
-      ),
-    ),
-    // NameLookup: every written element of an assembly forced in, each found one justified.
-    contained(
-      on(AssembledName, "assembly", "identifier", "node", "placements"),
-      on(NameLookup, "assembly", "name", "node", "placements"),
-    ),
-    contained(
-      on(foundNames, "assembly", "name", "node", "placements"),
-      on(AssembledName, "assembly", "identifier", "node", "placements"),
-    ),
-    contained(on(foundNames, "node", "kind"), on(Named, "node", "kind")),
-    contained(
-      on(foundNames, "instance", "node", "assembly", "replaced"),
-      on(InstanceName, "instance", "node", "assembly", "replaced"),
-    ),
-    check("E1_derived", NameLookup, (n) =>
-      n.or(
-        n.and(
-          n.eq(n.found, true),
-          n.gt(n.placements, 0n),
-          n.or(
-            n.and(n.eq(n.kind, itemRefKind), n.eq(n.resourceType, itemResourceType)),
-            n.and(
-              n.eq(n.kind, itemRefKind),
-              n.ne(n.resourceType, itemResourceType),
-              n.eq(n.itemDocument, n.assembly),
-            ),
-            n.and(
-              n.ne(n.kind, itemRefKind),
-              n.eq(n.resourceType, "none"),
-              n.eq(n.itemDocument, n.assembly),
-            ),
-          ),
-        ),
-        n.and(
-          n.eq(n.found, false),
-          n.eq(n.placements, 0n),
-          n.eq(n.node, n.assembly),
-          n.eq(n.kind, "document"),
-          n.eq(n.instance, n.assembly),
-          n.eq(n.replaced, false),
-          n.eq(n.itemDocument, n.assembly),
-          n.eq(n.resourceType, "none"),
-        ),
-      ),
-    ),
     // TemplateDefault: its template-identifier, written exactly where its element writes one (AL3
     // requires it), and its item ref; its target's copy of both, and its expression's type.
     contained(on(templateIdentifiers, "node", "lexical"), on(TemplateDefault, "node", "lexical")),
@@ -2227,8 +1911,7 @@ export const referenceLawsByName = {
       on(TemplateDefaultCardinality, "declaration", "declCardinality"),
       on(DeclarationCardinality, "node", "cardinality"),
     ),
-    // MappingSourceDeclaration's copy of its mapping and its target's lookup; MappingLookup's
-    // mapped rows, each mapping's target forced in and each a mapping's (A34, A35).
+    // MappingSourceDeclaration's copy of its mapping (A34, A35).
     contained(
       on(MappingSourceDeclaration, "node", "itemRef", "source"),
       on(VariableMapping, "node", "parent", "source"),
@@ -2237,13 +1920,6 @@ export const referenceLawsByName = {
       on(MappingSourceDeclaration, "node", "target"),
       on(VariableMapping, "node", "target"),
     ),
-    contained(
-      on(MappingSourceDeclaration, "itemDocument", "target", "targetDeclared"),
-      on(VariableLookup, "document", "name", "declared"),
-    ),
-    key(on(mappedNames, "itemRef", "name")),
-    contained(on(VariableMapping, "parent", "target"), on(mappedNames, "itemRef", "name")),
-    contained(on(mappedNames, "itemRef", "name"), on(VariableMapping, "parent", "target")),
     contained(
       on(sectionIdentifierAttributes, "node", "name", "kind", "lexical"),
       on(SectionIdentifier, "node", "attribute", "kind", "lexical"),
@@ -2403,7 +2079,8 @@ export const referenceLawsByName = {
         ),
       ),
     ),
-    // Reading: its copy, its pieces, its probes, its source and its laws.
+    // Reading: its copy, its pieces, its source and its laws; its scope and the declaration or the
+    // mapping its source names are rules over the queries of `#pantry/qti/queries.ts`.
     contained(
       on(Reading, "assembly", "node", "attribute", "identifier", "kind", "role"),
       on(AssembledReference, "assembly", "node", "attribute", "identifier", "kind", "role"),
@@ -2416,44 +2093,45 @@ export const referenceLawsByName = {
       on(numberedReadings, "assembly", "node", "attribute", "split", "number"),
       on(ReferenceSegment, "assembly", "node", "attribute", "at", "piece"),
     ),
+    // ReadingDeclaration: a resolving declared reading's declaration, forced in, a resolving
+    // reading's fields copied, and its mapping's source's declaration (a mapped reading's force-in
+    // is "Variable mapping source"'s); a declared one's is the declaration the document it reads
+    // declares of its name, a rule over `DeclaredReading`.
+    contained(
+      on(declaredReadings, "assembly", "node", "attribute", "form", "split"),
+      on(ReadingDeclaration, "assembly", "node", "attribute", "form", "split"),
+    ),
     contained(
       on(
-        scopedReadings,
+        ReadingDeclaration,
         "assembly",
-        "scope",
-        "found",
-        "named",
-        "namedKind",
-        "placements",
-        "replaced",
-        "resourceType",
-        "lookupDocument",
-      ),
-      on(
-        NameLookup,
-        "assembly",
-        "name",
-        "found",
         "node",
+        "attribute",
+        "form",
+        "split",
         "kind",
-        "placements",
-        "replaced",
-        "resourceType",
-        "itemDocument",
+        "source",
+        "named",
+        "variable",
+      ),
+      on(
+        resolvingReadings,
+        "assembly",
+        "node",
+        "attribute",
+        "form",
+        "split",
+        "kind",
+        "source",
+        "named",
+        "variable",
       ),
     ),
-    contained(
-      on(declarationReaders, "lookupDocument", "variable", "declared"),
-      on(VariableLookup, "document", "name", "declared"),
-    ),
-    contained(
-      on(mappingReaders, "named", "variable", "mapped"),
-      on(MappingLookup, "itemRef", "name", "mapped"),
-    ),
+    check("E1_derived", ReadingDeclaration, (d) => d.in(d.source, ["declared", "mapped"])),
     contained(
       on(
-        declaredReadings,
-        "lookupDocument",
+        select(ReadingDeclaration, (d) => d.eq(d.source, "mapped")),
+        "named",
         "variable",
         "declaration",
         "declarationKind",
@@ -2461,13 +2139,13 @@ export const referenceLawsByName = {
         "declBaseTypes",
       ),
       on(
-        VariableLookup,
-        "document",
-        "name",
+        MappingSourceDeclaration,
+        "itemRef",
+        "target",
         "declaration",
         "declarationKind",
-        "cardinalities",
-        "baseTypes",
+        "declCardinalities",
+        "declBaseTypes",
       ),
     ),
     check("E1_derived", Reading, (r) =>
@@ -2485,8 +2163,6 @@ export const referenceLawsByName = {
             r.eq(r.namedKind, testKind),
             r.eq(r.placements, 1n),
             r.eq(r.replaced, false),
-            r.eq(r.resourceType, "none"),
-            r.eq(r.lookupDocument, r.assembly),
           ),
           r.and(
             r.eq(r.form, "name"),
@@ -2517,47 +2193,36 @@ export const referenceLawsByName = {
             ),
           ),
         ),
-        r.or(readsDeclarations(r), r.eq(r.declared, false)),
-        r.or(itemScoped(r), r.eq(r.mapped, false)),
+        // A scope the assembly holds no element of: the test, as a document, placed nowhere.
         r.or(
-          r.and(r.eq(r.declared, true), r.eq(r.source, "declared")),
-          r.and(r.eq(r.declared, false), r.eq(r.mapped, true), r.eq(r.source, "mapped")),
+          r.eq(r.found, true),
           r.and(
-            r.eq(r.declared, false),
-            r.eq(r.mapped, false),
-            builtInOfScope(r),
-            r.eq(r.source, "builtIn"),
-          ),
-          r.and(
-            r.eq(r.declared, false),
-            r.eq(r.mapped, false),
-            r.not(builtInOfScope(r)),
-            r.eq(r.source, "none"),
+            r.eq(r.named, r.assembly),
+            r.eq(r.namedKind, "document"),
+            r.eq(r.placements, 0n),
+            r.eq(r.replaced, false),
           ),
         ),
+        // A declared or mapped variable is the queries' to prove (`DeclaredReading`,
+        // `MappedReading`), which also hold a declared or mapped one to that source; any other is a
+        // built-in exactly where its scope holds one.
         r.or(
           r.in(r.source, ["declared", "mapped"]),
-          r.and(
-            r.eq(r.declaration, r.lookupDocument),
-            r.eq(r.declBaseTypes, 0n),
-            r.eq(r.declCardinalities, 0n),
-            r.or(
-              r.and(r.eq(r.source, "none"), r.eq(r.declarationKind, "qti-outcome-declaration")),
-              r.and(r.eq(r.source, "builtIn"), builtInKindOfScope(r)),
-            ),
-          ),
+          r.and(r.eq(r.source, "builtIn"), builtInOfScope(r)),
+          r.and(r.eq(r.source, "link"), r.not(builtInOfScope(r))),
+          r.and(r.eq(r.source, "none"), r.not(builtInOfScope(r))),
         ),
       ),
     ),
     // ReadingCardinality: a reading that stands for a literal, its declaration's cardinality where
-    // it has one (spec reading 159), copied from its reading and its declaration.
+    // it has one (spec reading 159), copied from its reading's declaration and the declaration.
     contained(
-      on(standInReadings, "assembly", "node", "attribute", "form", "split"),
+      on(standInDeclarations, "assembly", "node", "attribute", "form", "split"),
       on(ReadingCardinality, "assembly", "node", "attribute", "form", "split"),
     ),
     contained(
       on(ReadingCardinality, "assembly", "node", "attribute", "form", "split", "declaration"),
-      on(Reading, "assembly", "node", "attribute", "form", "split", "declaration"),
+      on(ReadingDeclaration, "assembly", "node", "attribute", "form", "split", "declaration"),
     ),
     contained(
       on(ReadingCardinality, "declaration", "declCardinality"),
@@ -2565,11 +2230,6 @@ export const referenceLawsByName = {
     ),
   ],
   "Item ref target": [
-    // A found item ref's target and item are its `ItemRefTarget`'s and `ItemRefDocument`'s, each a
-    // row only where the package holds one, so an item ref of the item type whose file the package
-    // lacks is refused here under the law that refuses the item ref itself.
-    contained(on(targetedItemRefs, "node", "resourceType"), on(ItemRefTarget, "node", "type")),
-    contained(on(heldItemRefs, "node", "itemDocument"), on(ItemRefDocument, "node", "document")),
     // MappingItemRef: each mapping's item ref (reading 110), and MappingItemRefType what that names,
     // a row only where the item ref has a target, its type copied from it. One whose item ref has
     // no target has no type row (decision 428): AL3 refuses an unwritten href and "Item ref target"
@@ -2603,17 +2263,18 @@ export const referenceLawsByName = {
     check("Prefixed_reference", Reading, (r) => r.or(r.not(resolves(r)), r.eq(r.placements, 1n))),
   ],
   "Reference type": [
-    // A reading through an LTI item ref has no declaration to type it by, and is accepted
-    // unchecked ({@link linkHeld}, spec reading 110), as it resolves and as `mappedReadings` drops it.
+    // A literal's stand-in names a single outcome or template variable of its base (P24): a
+    // built-in variable is none, and a declared or mapped one's declaration is its
+    // ReadingDeclaration's. A reading through an LTI item ref has no declaration to type it by,
+    // and is accepted unchecked (source `link`, spec reading 110): it resolves, names no
+    // ReadingDeclaration, and is no built-in.
     check("Reference_type", Reading, (r) =>
-      r.or(
-        r.eq(r.attribute, "identifier"),
-        r.not(resolves(r)),
-        linkHeld(r),
-        r.and(
-          r.in(r.source, ["declared", "mapped"]),
-          r.in(r.declarationKind, ["qti-outcome-declaration", "qti-template-declaration"]),
-        ),
+      r.or(r.eq(r.attribute, "identifier"), r.not(resolves(r)), r.ne(r.source, "builtIn")),
+    ),
+    check("Reference_type", ReadingDeclaration, (d) =>
+      d.or(
+        d.eq(d.attribute, "identifier"),
+        d.in(d.declarationKind, ["qti-outcome-declaration", "qti-template-declaration"]),
       ),
     ),
     check("Reference_type", ReadingCardinality, (r) =>
@@ -2622,17 +2283,15 @@ export const referenceLawsByName = {
     ...referenceBases.map((base) =>
       contained(
         on(
-          select(Reading, (r) =>
-            r.and(
-              r.ne(r.attribute, "identifier"),
-              resolves(r),
-              r.in(r.source, ["declared", "mapped"]),
-              r.eq(r.declBaseTypes, 1n),
-              r.or(
+          select(ReadingDeclaration, (d) =>
+            d.and(
+              d.ne(d.attribute, "identifier"),
+              d.eq(d.declBaseTypes, 1n),
+              d.or(
                 ...ReferenceBase.rows
                   .filter((row) => row.base === base)
                   .map(({ attribute, kind }) =>
-                    r.and(r.eq(r.kind, kind), r.eq(r.attribute, attribute)),
+                    d.and(d.eq(d.kind, kind), d.eq(d.attribute, attribute)),
                   ),
               ),
             ),
@@ -2671,8 +2330,8 @@ export const referenceLawsByName = {
         "itemDocument",
         "template",
         "declarationKind",
-        "declCardinalities",
         "declBaseTypes",
+        "declCardinalities",
       ),
       declarationIdentifierRef,
     ),
@@ -2724,9 +2383,15 @@ export const referenceLawsByName = {
       on(resolvingReadings, "assembly", "node", "attribute", "kind"),
     ),
     contained(
-      on(namedReadings, "kind", "attribute", "declarationKind"),
+      on(
+        select(ReadingDeclaration, (d) => d.eq(d.attribute, "identifier")),
+        "kind",
+        "attribute",
+        "declarationKind",
+      ),
       on(ReferenceDeclaration, "kind", "attribute", "declaration"),
     ),
+    check("Variable_kind", Reading, readsAllowedBuiltIn),
   ],
   "Variable mapping source": [
     // Every mapping has its source's declaration, but one under an LTI item ref (reading 110): one
@@ -2744,44 +2409,24 @@ export const referenceLawsByName = {
         "itemDocument",
         "source",
         "declarationKind",
-        "declCardinalities",
         "declBaseTypes",
+        "declCardinalities",
       ),
       declarationIdentifierRef,
     ),
     check("Variable_mapping_source", MappingSourceDeclaration, (m) =>
       m.eq(m.declarationKind, "qti-outcome-declaration"),
     ),
-    // A mapped reading's declaration is its mapping's source's, so a reading through a mapping
-    // whose source its item declares nothing under is refused under the mapping's law; one through
-    // an LTI item ref is accepted unchecked (reading 110).
+    // A resolving mapped reading's declaration is its mapping's source's, a row of its own, so a
+    // reading through a mapping whose source its item declares nothing under has none, and is
+    // refused under the mapping's law; one through an LTI item ref is accepted unchecked (reading
+    // 110).
     contained(
-      on(
-        mappedReadings,
-        "named",
-        "variable",
-        "declaration",
-        "declarationKind",
-        "declCardinalities",
-        "declBaseTypes",
-      ),
-      on(
-        MappingSourceDeclaration,
-        "itemRef",
-        "target",
-        "declaration",
-        "declarationKind",
-        "declCardinalities",
-        "declBaseTypes",
-      ),
+      on(mappedReadings, "assembly", "node", "attribute", "form", "split", "named"),
+      on(ReadingDeclaration, "assembly", "node", "attribute", "form", "split", "named"),
     ),
   ],
-  "Variable mapping target": [
-    key(on(MappingSourceDeclaration, "itemRef", "target")),
-    check("Variable_mapping_target", MappingSourceDeclaration, (m) =>
-      m.or(m.eq(m.targetDeclared, false), m.eq(m.target, m.source)),
-    ),
-  ],
+  "Variable mapping target": [key(on(MappingSourceDeclaration, "itemRef", "target"))],
 } as const;
 
 /**
@@ -2810,18 +2455,6 @@ export const expressionLawsByName = {
           e.in(e.baseType, ["boolean", ...silentBases]),
           e.in(e.cardinality, ["single", "unknown"]),
         ),
-      ),
-    ),
-
-    // The placed twin, per placement (spec reading 117): a variable, correct or default reference
-    // that is a whole condition is typed as its item's declaration, never silent, since the row
-    // exists only where the declaration has a base type and a cardinality. A composite condition
-    // over a fragment's references stays reading 117's stated limit.
-    check("Condition_type", PlacedReferenceType, (r) =>
-      r.or(
-        r.not(r.in(r.kind, declaredKinds)),
-        r.not(r.in(r.parentKind, conditionKindHandles)),
-        r.and(r.eq(r.baseType, "boolean"), r.eq(r.cardinality, "single")),
       ),
     ),
   ],
@@ -2989,73 +2622,30 @@ export const expressionLawsByName = {
       on(Processing, "node", "language"),
     ),
     contained(on(VariableRef, "document", "rootKind"), on(Document, "node", "rootKind")),
-    // HeldType: a setter's or a lookup's reference, and its one expression, each copied.
-    key(on(heldReferences, "node")),
-    contained(
-      on(HeldType, "node", "kind", "baseType", "cardinality", "table"),
-      on(heldReferences, "node", "kind", "baseType", "cardinality", "table"),
-    ),
-    contained(
-      on(
-        HeldType,
-        "expression",
-        "node",
-        "expressionKind",
-        "language",
-        "heldBase",
-        "heldCardinality",
-      ),
-      exprRef,
-    ),
-    contained(
-      on(
-        select(VariableRef, (v) => v.ne(v.resolution, "declared")),
-        "document",
-        "identifier",
-      ),
-      on(absentNames, "document", "name"),
-    ),
-    // DeclarationTable: each declaration's tables, both ways, and each table a reference reads.
+    // A declaration's tables, each a row of its own keyed by the declaration, at most one of each
+    // slot, and each table a reference claims (VariableRefTable), a declared reference's by its
+    // identifier, of a table its kind reads, its declaration's: a slot the declaration leaves empty
+    // has no row, so no reference claims it, and a reference that claims none has no claim row.
     key(on(Mapping, "declaration")),
     key(on(AreaMapping, "declaration")),
     key(on(LookupTable, "declaration")),
-    key(on(mappedDeclarations, "declaration")),
-    key(on(areaMappedDeclarations, "declaration")),
-    key(on(matchedDeclarations, "declaration")),
-    key(on(interpolatedDeclarations, "declaration")),
-    contained(on(Mapping, "declaration"), on(mappedDeclarations, "declaration")),
-    contained(on(mappedDeclarations, "declaration"), on(Mapping, "declaration")),
-    contained(on(AreaMapping, "declaration"), on(areaMappedDeclarations, "declaration")),
-    contained(on(areaMappedDeclarations, "declaration"), on(AreaMapping, "declaration")),
-    contained(on(matchTables, "declaration"), on(matchedDeclarations, "declaration")),
-    contained(on(matchedDeclarations, "declaration"), on(matchTables, "declaration")),
-    contained(on(interpolationTables, "declaration"), on(interpolatedDeclarations, "declaration")),
-    contained(on(interpolatedDeclarations, "declaration"), on(interpolationTables, "declaration")),
-    check("E1_derived", DeclarationTable, (d) =>
-      d.and(
-        d.in(d.mapping, ["none", "qti-mapping"]),
-        d.in(d.areaMapping, ["none", "qti-area-mapping"]),
-        d.in(d.lookup, ["none", "qti-match-table", "qti-interpolation-table"]),
-      ),
-    ),
     contained(
-      on(tableReaders("qti-map-response"), "declaration", "table"),
-      on(DeclarationTable, "declaration", "mapping"),
+      on(VariableRefTable, "node", "attribute", "declaration", "kind"),
+      on(VariableRefDeclaration, "node", "attribute", "declaration", "kind"),
     ),
+    check("E1_derived", VariableRefTable, (t) => t.eq(t.attribute, "identifier")),
+    contained(on(VariableRefTable, "kind", "table"), on(TableReader, "kind", "table")),
+    contained(on(tableClaims("qti-mapping"), "declaration"), on(Mapping, "declaration")),
+    contained(on(tableClaims("qti-area-mapping"), "declaration"), on(AreaMapping, "declaration")),
+    contained(on(tableClaims("qti-match-table"), "declaration"), on(matchTables, "declaration")),
     contained(
-      on(tableReaders("qti-map-response-point"), "declaration", "table"),
-      on(DeclarationTable, "declaration", "areaMapping"),
+      on(tableClaims("qti-interpolation-table"), "declaration"),
+      on(interpolationTables, "declaration"),
     ),
-    contained(
-      on(tableReaders(lookupKindHandle), "declaration", "table"),
-      on(DeclarationTable, "declaration", "lookup"),
-    ),
-    contained(on(claimedTables, "kind", "table"), on(TableReader, "kind", "table")),
     check("E1_derived", VariableRef, (v) =>
       v.and(
         spells(v),
         resolvedType(v),
-        tableClaimed(v),
         v.or(
           v.ne(v.attribute, "identifier"),
           v.not(v.in(v.kind, declaredKinds)),
@@ -3083,7 +2673,6 @@ export const expressionLawsByName = {
         "identifier",
         "kind",
         "language",
-        "table",
       ),
       on(
         VariableRef,
@@ -3095,7 +2684,6 @@ export const expressionLawsByName = {
         "identifier",
         "kind",
         "language",
-        "table",
       ),
     ),
     check("E1_derived", VariableRefDeclaration, (d) =>
@@ -3143,14 +2731,6 @@ export const expressionLawsByName = {
       on(VariableRef, "node", "attribute", "document", "identifier", "kind"),
     ),
     contained(on(PlacedVariableRef, "assembly", "rootKind"), on(Document, "node", "rootKind")),
-    contained(
-      on(
-        select(PlacedVariableRef, (v) => v.ne(v.resolution, "declared")),
-        "assembly",
-        "identifier",
-      ),
-      on(absentNames, "document", "name"),
-    ),
     check("E1_derived", PlacedVariableRef, (v) =>
       v.or(
         v.eq(v.resolution, "declared"),
@@ -3192,20 +2772,6 @@ export const expressionLawsByName = {
       ),
       on(PlacedVariableRef, "instance", "node", "attribute", "assembly", "identifier", "kind"),
     ),
-    // PlacedReferenceType: a declared placed reference's type in its item, each field a copy.
-    contained(
-      on(PlacedReferenceType, "instance", "node", "attribute", "kind", "declaration"),
-      on(PlacedVariableRefDeclaration, "instance", "node", "attribute", "kind", "declaration"),
-    ),
-    contained(on(PlacedReferenceType, "node", "parentKind"), on(Node, "id", "parentKind")),
-    contained(
-      on(PlacedReferenceType, "declaration", "baseType"),
-      on(DeclarationBaseType, "node", "baseType"),
-    ),
-    contained(
-      on(PlacedReferenceType, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
-    ),
     // ExpressionAttribute and Literal: the attributes and text an expression's type follows from.
     key(on(typingAttributes, "node", "name")),
     contained(
@@ -3232,8 +2798,6 @@ export const expressionLawsByName = {
     // A test variables' weight, written or not (decision 434): every test variables has its row,
     // and an unwritten `base-type` is `unknown` only where the weight is unwritten, float only
     // where it is written. `E1_derived` below admits no other type for an unwritten one.
-    key(on(weightAttributes, "node")),
-    key(on(writtenWeights, "node")),
     contained(
       on(
         select(Expression, (e) => e.eq(e.kind, "qti-test-variables")),
@@ -3258,13 +2822,19 @@ export const expressionLawsByName = {
             x.and(
               x.eq(x.attribute, "base-type"),
               x.eq(x.baseType, "unknown"),
-              x.not(Compute.matches(x.lexical, spelledBases)),
+              x.not(Compute.matches(x.lexical, spelledBasesPattern)),
             ),
             x.and(
               x.eq(x.attribute, "name"),
               x.or(
-                x.and(Compute.matches(x.lexical, integerMath), x.eq(x.baseType, "integer")),
-                x.and(x.not(Compute.matches(x.lexical, integerMath)), x.eq(x.baseType, "float")),
+                x.and(
+                  Compute.matches(x.lexical, integerMathOperatorNames),
+                  x.eq(x.baseType, "integer"),
+                ),
+                x.and(
+                  x.not(Compute.matches(x.lexical, integerMathOperatorNames)),
+                  x.eq(x.baseType, "float"),
+                ),
               ),
             ),
             x.eq(x.attribute, "weight-identifier"),
@@ -3320,65 +2890,66 @@ export const expressionLawsByName = {
     ),
   ],
   "Lookup type": [
-    check("Lookup_type", VariableRef, (v) =>
-      v.or(
-        v.ne(v.attribute, "identifier"),
-        v.ne(v.kind, lookupKindHandle),
-        v.ne(v.resolution, "declared"),
-        v.in(v.table, ["qti-match-table", "qti-interpolation-table"]),
-      ),
-    ),
-    check("Lookup_type", HeldType, (h) =>
-      h.or(
-        h.ne(h.kind, lookupKindHandle),
-        h.and(
-          h.in(h.heldCardinality, ["single", "unknown"]),
-          h.in(h.heldBase, ["duration", "float", "integer", ...silentBases]),
-          h.or(h.ne(h.table, "qti-match-table"), h.in(h.heldBase, ["integer", ...silentBases])),
+    // A declared lookup claims its declaration's lookup table, a match or an interpolation table
+    // (§2.5.1.4), and one whose declaration holds none has no claim to make.
+    contained(
+      on(
+        select(VariableRefDeclaration, (d) =>
+          d.and(d.eq(d.attribute, "identifier"), d.eq(d.kind, lookupKindHandle)),
         ),
+        "node",
+        "attribute",
       ),
+      on(VariableRefTable, "node", "attribute"),
     ),
   ],
   "Mapped response": [
-    // A test's prefixed map response or map response point of a response reads that response's
-    // mapping or area mapping (reading 166).
+    // A test's prefixed map response or map response point of a declared response reads that
+    // response's mapping or area mapping, and one of a built-in response, which declares no table,
+    // is refused (reading 166).
     contained(
       on(prefixedTableReaders("qti-map-response"), "declaration"),
-      on(mappedDeclarations, "declaration"),
+      on(Mapping, "declaration"),
     ),
     contained(
       on(prefixedTableReaders("qti-map-response-point"), "declaration"),
-      on(areaMappedDeclarations, "declaration"),
+      on(AreaMapping, "declaration"),
     ),
+    check("Mapped_response", Reading, mapsNoBuiltInResponse),
     // A placed one, an included rules fragment's or the item's own, reads the mapping or area
     // mapping of the declaration it names among its item's (readings 117 and 166).
     contained(
       on(placedTableReaders("qti-map-response"), "declaration"),
-      on(mappedDeclarations, "declaration"),
+      on(Mapping, "declaration"),
     ),
     contained(
       on(placedTableReaders("qti-map-response-point"), "declaration"),
-      on(areaMappedDeclarations, "declaration"),
+      on(AreaMapping, "declaration"),
     ),
     // An unprefixed one never names a built-in response, which declares no table (reading 166).
     check("Mapped_response", VariableRef, mapsNoBuiltIn),
     check("Mapped_response", PlacedVariableRef, mapsNoBuiltIn),
+    // A declared map response claims its response's mapping, and a map response point its area
+    // mapping of points (§2.11.3.29, §2.11.3.30): its kind reads that table alone (TableReader).
     check("Mapped_response", VariableRefDeclaration, (d) =>
       d.or(
         d.ne(d.attribute, "identifier"),
-        d.not(d.in(d.kind, ["qti-map-response", "qti-map-response-point"])),
+        d.not(d.in(d.kind, mappedKinds)),
         d.and(
           d.eq(d.declarationKind, "qti-response-declaration"),
-          d.or(
-            d.and(d.eq(d.kind, "qti-map-response"), d.eq(d.table, "qti-mapping")),
-            d.and(
-              d.eq(d.kind, "qti-map-response-point"),
-              d.eq(d.table, "qti-area-mapping"),
-              d.in(d.baseType, ["point", ...silentBases]),
-            ),
-          ),
+          d.or(d.ne(d.kind, "qti-map-response-point"), d.in(d.baseType, ["point", ...silentBases])),
         ),
       ),
+    ),
+    contained(
+      on(
+        select(VariableRefDeclaration, (d) =>
+          d.and(d.eq(d.attribute, "identifier"), d.in(d.kind, mappedKinds)),
+        ),
+        "node",
+        "attribute",
+      ),
+      on(VariableRefTable, "node", "attribute"),
     ),
   ],
   "One base": [
@@ -3432,25 +3003,6 @@ export const expressionLawsByName = {
       ),
     ),
   ],
-  "Set type": [
-    check("Set_type", HeldType, (h) =>
-      h.or(
-        h.not(h.in(h.kind, setKindHandles)),
-        h.and(
-          h.or(
-            h.eq(h.heldBase, h.baseType),
-            h.in(h.heldBase, silentBases),
-            h.in(h.baseType, silentBases),
-          ),
-          h.or(
-            h.eq(h.heldCardinality, h.cardinality),
-            h.eq(h.heldCardinality, "unknown"),
-            h.eq(h.cardinality, "unknown"),
-          ),
-        ),
-      ),
-    ),
-  ],
   "Template reads": [
     check("Template_reads", VariableRef, (v) =>
       v.or(
@@ -3476,8 +3028,8 @@ export const expressionLawsByName = {
         "document",
         "identifier",
         "declarationKind",
-        "declCardinalities",
         "declBaseTypes",
+        "declCardinalities",
       ),
       declarationIdentifierRef,
     ),
@@ -3501,8 +3053,8 @@ export const expressionLawsByName = {
         "assembly",
         "identifier",
         "declarationKind",
-        "declCardinalities",
         "declBaseTypes",
+        "declCardinalities",
       ),
       declarationIdentifierRef,
     ),

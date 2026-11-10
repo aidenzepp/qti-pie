@@ -8,14 +8,20 @@
     "#migrations/*": "./migrations/*"
   },
   "exports": {
-    ".": "./src/index.ts"
+    "./db/connection.ts": "./src/db/connection.ts",
+    "./db/install.ts": "./src/db/install.ts",
+    "./export/pages.ts": "./src/export/pages.ts",
+    "./export/render.ts": "./src/export/render.ts",
+    "./export/scan.ts": "./src/export/scan.ts",
+    "./qti/logins.ts": "./src/qti/logins.ts",
+    "./qti/roles.ts": "./src/qti/roles.ts",
+    "./qti/schema.ts": "./src/qti/schema.ts"
   },
   "scripts": {
     "db": "scripts/db.sh",
     "fetch-xsds": "node src/vocab/derive/fetch-xsds.ts",
     "fetch-specs": "node src/test/spec-cache/fetch.ts",
     "grizzle": "grizzle",
-    "rosters": "node src/db/rosters.ts && vp fmt src/db/rosters.json",
     "test": "mkdir -p work/.vp-tmp && TMPDIR=\"$PWD/work/.vp-tmp\" NODE_OPTIONS=\"$NODE_OPTIONS --disable-proto=delete --disable-sigusr1\" vp test run"
   },
   "dependencies": {
