@@ -21,6 +21,8 @@ import type { LawNamesFile, RefusalLaw } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { bucketOf, schemaLawIdsOf, schemaLawNameOf } from "#pantry/test/law-namer.ts";
 
+// GRIZZLE-PENDING: Q3. lawKeyOf would key a law's id by its law; until then the id is found by
+// `sameLaw` within the law's bucket.
 /**
  * The laws of `lawIdsOf(Qti)`, each with its id, grouped by bucket (`#pantry/test/law-namer.ts`
  * `bucketOf`) for the search {@link lawIdOf} makes. Built at its first read, which compiles Qti's

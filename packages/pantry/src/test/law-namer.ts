@@ -604,6 +604,9 @@ const nameOfStatement: ReadonlyMap<Statement, LawName> = new Map(
   ),
 );
 
+// GRIZZLE-PENDING: Q5. Each compile of Qti's law model takes seconds (`lawsByStatement`: 5.9 to
+// 9.6 s on grizzle eb56d58, 2026-11-10, at a load average of 34 to 44), so its lookup is kept per
+// schema.
 /**
  * Each statement of a schema beside its laws, as grizzle's `lawsByStatement` names them: each law
  * one `lawsOf` lists, in `lawsOf`'s order, a mirrors' two containments and an alternatives law's
@@ -674,15 +677,15 @@ const byKey = {
  * law's own fields find its row, and only a statement's law is matched whole.
  *
  * Only a statement's law reads the statements' laws, whose first read compiles the schema's law
- * model: naming any other law compiles nothing. The namer is memoized by the schema, and each name
- * by the law value (Effect's `Function.memoize`): a law read again, as a refusal's laws are when
- * the same outcome is explained and its facts and rules are read, is named once. A level above the
- * schema states none of the schema's laws (grizzle `999facc6`'s `above`), so it is named by none.
+ * model: naming any other law compiles nothing. Naming a law is a lookup in its bucket of the
+ * statements' laws, which {@link statementNamesOf} builds once per schema, so a law read again is
+ * named again, as cheaply. A level above the schema states none of the schema's laws (grizzle
+ * `999facc6`'s `above`), so it is named by none.
  *
  * @param schema - The schema, `Qti`.
  * @returns The namer: a law's name, or none for a law no row of the tables states.
  */
-export const namerOf = Fn.memoize((schema: typeof Qti) => {
+const namerOf = (schema: typeof Qti) => {
   const stated = (law: Law): Option.Option<LawName> =>
     pipe(
       Option.fromUndefinedOr(statementNamesOf(schema).get(bucketOf(law))),
@@ -690,7 +693,7 @@ export const namerOf = Fn.memoize((schema: typeof Qti) => {
       Option.map(([, name]) => name),
     );
 
-  return Fn.memoize((law: Law): Option.Option<LawName> =>
+  return (law: Law): Option.Option<LawName> =>
     Match.value(law).pipe(
       Match.discriminatorsExhaustive("kind")({
         above: stated,
@@ -707,9 +710,8 @@ export const namerOf = Fn.memoize((schema: typeof Qti) => {
         primaryKey: ({ relation }) => Option.fromUndefinedOr(byKey.primaryKey.get(relation)),
         tree: stated,
       }),
-    ),
-  );
-});
+    );
+};
 
 /**
  * Every law a schema states with its id, as grizzle's `lawIdsOf` lists them: each law `lawsOf`
