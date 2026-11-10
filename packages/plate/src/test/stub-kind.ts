@@ -34,8 +34,8 @@
  *
  * @module
  */
-import type { ModuleKind } from "#plate/interactions/contract.ts";
-import { Array as Arr } from "effect";
+import type { ModuleInteraction, ModuleKind } from "#plate/interactions/contract.ts";
+import type { ModelOf } from "#plate/model/interactions.ts";
 import { containerKinds, modules } from "#plate/model/interactions.ts";
 
 /**
@@ -85,17 +85,57 @@ export const stubDeclarations = {
 };
 
 /**
- * The first kind of {@link stubOrder} that is a bare stub: its module in the table of modules has
- * `implemented: false` and declares no container, none when every kind of the order is implemented
- * or declares one.
+ * A kind of {@link stubOrder}.
  */
-const bareStub = stubOrder.find((kind) => !modules[kind].implemented && !containerKinds.has(kind));
+type OrderKind = (typeof stubOrder)[number];
+
+/**
+ * The kinds of {@link stubOrder} whose model node is the contract's bare node,
+ * `ModuleInteraction<K>`: the type of a stub, which declares `InteractionModule<K,
+ * ModuleInteraction<K>, never>`. A module that lands declares its own model node with the fields
+ * its render reads, so `ModelOf<K>` grows past the bare node and the kind leaves this union, and
+ * the literal `{ kind: stubKind, … }` a test builds as the bare node of the stub kind keeps
+ * fitting `ModelOf<typeof stubKind>` on a branch where a kind of the order has landed.
+ */
+type BareKind = {
+  readonly [K in OrderKind]: ModuleInteraction<K> extends ModelOf<K> ? K : never;
+}[OrderKind];
+
+/**
+ * The last kind of {@link stubOrder}, read from its type so the order's end is written once.
+ *
+ * @template T The order.
+ */
+type LastOf<T extends readonly unknown[]> = T extends readonly [...unknown[], infer L] ? L : never;
+
+/**
+ * Tell whether a kind of the order is a bare stub: its module in the table of modules has
+ * `implemented: false` and declares no container. A stub module's model node is the bare node, so
+ * the kind is a {@link BareKind}: the table's values and its types say the same of a stub.
+ *
+ * @param kind A kind of the order.
+ * @returns Whether its module is a bare stub.
+ */
+const isBareStub = (kind: OrderKind): kind is BareKind =>
+  !modules[kind].implemented && !containerKinds.has(kind);
+
+/**
+ * The first kind of {@link stubOrder} that is a bare stub ({@link isBareStub}), none when every
+ * kind of the order is implemented or declares a container.
+ */
+const bareStub = stubOrder.find(isBareStub);
+
+/**
+ * The last kind of {@link stubOrder}, which {@link stubKind} falls back to. `satisfies` pins the
+ * literal to the order's end, so moving the order's last kind fails here until this follows.
+ */
+const lastOfOrder = "graphic-gap-match" satisfies LastOf<typeof stubOrder>;
 
 /**
  * The stub kind: the first bare stub of {@link stubOrder}, or the last kind of the order when it
  * holds none, which {@link hasStub} reports.
  */
-export const stubKind = bareStub ?? Arr.lastNonEmpty(stubOrder);
+export const stubKind = bareStub ?? lastOfOrder;
 
 /**
  * Whether the order holds a bare stub: false once every kind of {@link stubOrder} is implemented or
@@ -111,13 +151,21 @@ export const hasStub = bareStub !== undefined;
 export const stubElement = modules[stubKind].element;
 
 /**
+ * The row of {@link stubDeclarations} of any kind of the order. The two values read from the stub
+ * kind's row below are typed over every row, as `stubKind` was the whole order before its type
+ * followed the table: a reader that keys a record by them (`correctOf` in
+ * `src/styles.markup.test.ts`) covers every row of the order, whichever kind is the stub kind.
+ */
+type Declaration = (typeof stubDeclarations)[OrderKind];
+
+/**
  * The base type an interaction of {@link stubKind} binds under QTI 3.0, read from its row of
  * {@link stubDeclarations}.
  */
-export const stubBaseType = stubDeclarations[stubKind].baseType;
+export const stubBaseType: Declaration["baseType"] = stubDeclarations[stubKind].baseType;
 
 /**
  * The cardinality a fixture declares for {@link stubKind}, read from its row of
  * {@link stubDeclarations}.
  */
-export const stubCardinality = stubDeclarations[stubKind].cardinality;
+export const stubCardinality: Declaration["cardinality"] = stubDeclarations[stubKind].cardinality;
