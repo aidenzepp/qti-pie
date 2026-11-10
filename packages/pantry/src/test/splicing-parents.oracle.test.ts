@@ -8,8 +8,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
-import { splicingParents } from "#pantry/qti/tests.ts";
 import { splicingParentsOf } from "#pantry/test/oracle.ts";
+import { splicingParents } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * The composed grammar the oracle reads its include parents from.

@@ -2,8 +2,9 @@
 /**
  * The identity builder's free tests: over every document of four small shapes, `rowsOf` gives each
  * overlay one row per element it describes, as the document's own construction says, and each
- * projection each value once; and over a manifest and an item, `languageRowsOf` gives R26's
- * witnesses, whose counts hold the law exactly when the specification does.
+ * projection each value once; and over a manifest and an item, the rows R26 reads, over which the
+ * database's rule over a query (`DescribedLang ⊆ ResourceLomLanguageSet`, `#pantry/qti/queries.ts`)
+ * holds exactly when the specification does.
  *
  * The documents are built by construction, never filtered: each case's model records what it wrote
  * (every `xml:lang`, ID and `label`, every identity-typed text, every LOM language and its
@@ -17,9 +18,10 @@ import { array, boolean, element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
-import { GoverningOf } from "#pantry/grammar/install.ts";
-import { languageRowsOf, rowsOf } from "#pantry/import/overlays/identity.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { patternFlags } from "#pantry/grammar/domains.ts";
+import { AnonymousType, GoverningOf } from "#pantry/grammar/install.ts";
+import { rowsOf } from "#pantry/import/overlays/identity.ts";
+import { governorOf, ownContext } from "#pantry/import/fold.ts";
 import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
@@ -30,7 +32,9 @@ import type {
   XdmClosedElement,
   XdmDocument,
 } from "#pantry/model/xdm.ts";
+import { statedLanguagePattern } from "#pantry/qti/identity.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
+import { generatedFields } from "#pantry/test/host-judge.ts";
 
 /**
  * The version every case is written in, but the content box's, which draws its own.
@@ -93,16 +97,21 @@ type CaseKind =
   | "ssml:speak";
 
 /**
- * Read the type a kind's element is governed by under its own declaration, `GoverningOf`'s row
- * whose governor is the kind itself.
+ * Read the type a kind's element is governed by under its own declaration: none for a kind whose
+ * type is anonymous (`AnonymousType`), as every MathML kind's is, else `GoverningOf`'s row whose
+ * governor is the kind itself.
  *
  * @param kind - The kind.
- * @returns Its declared type's `TypeName` handle.
+ * @returns Its declared type's `TypeName` handle, if it names one.
  */
-const declaredType = (kind: CaseKind): string =>
-  GoverningOf.rows.find(
-    (row) => row.kind === kind && row.governor === kind && row.version === version,
-  )?.governs ?? assert.fail(`GoverningOf holds ${kind} under its own governor`);
+const declaredType = (kind: CaseKind): Option.Option<string> =>
+  AnonymousType.rows.some((row) => row.kind === kind && row.version === version)
+    ? Option.none()
+    : Option.some(
+        GoverningOf.rows.find(
+          (row) => row.kind === kind && row.governor === kind && row.version === version,
+        )?.governs ?? assert.fail(`GoverningOf holds ${kind} under its own governor`),
+      );
 
 /**
  * Write a closed attribute.
@@ -145,7 +154,7 @@ const elementOf = (
   kind: CaseKind,
   attributes: readonly XdmAttribute<Composed>[],
   children: readonly XdmChild<Composed>[],
-  governs: string = declaredType(kind),
+  governs: Option.Option<string> = declaredType(kind),
 ): XdmClosedElement<Composed> => ({
   _tag: "element",
   attributes,
@@ -187,7 +196,6 @@ const ids = {
   context: ownContext(idOf(0)),
   documentType: "imsqti_item_xmlv3p0",
   idOf,
-  targetAt: () => Option.none(),
 } as const satisfies IdentityIds;
 
 /**
@@ -460,13 +468,7 @@ describe(
                     )
                     .toSorted(),
                 );
-                assert.deepStrictEqual(
-                  [...rows.DocumentGenerals.values()].map(({ document }) => document),
-                  [documentNode],
-                );
                 assert.strictEqual(rows.IdentityText.size, 0);
-                assert.strictEqual(rows.GeneralNamed.size, 0);
-                assert.strictEqual(rows.GeneralObject.size, 0);
                 assert.deepStrictEqual(
                   asSet(
                     [...rows.LabelUse.values()].map(
@@ -776,7 +778,7 @@ describe(
                           "qti-description",
                           [],
                           [{ _tag: "text", value: text.text }],
-                          type,
+                          Option.some(type),
                         ),
                       ),
                     ),
@@ -841,7 +843,7 @@ describe(
                         row.document,
                         row.owner,
                         row.kind,
-                        row.governs,
+                        row.governor,
                         row.lexical,
                         row.idrefs.map(({ after, before, token }) => [before, token, after]),
                       ]),
@@ -854,7 +856,7 @@ describe(
                         documentNode,
                         owner,
                         "qti-description",
-                        choice.type,
+                        governorOf(version, "qti-description", Option.some(choice.type)),
                         choice.text.text,
                         choice.type === "xs:IDREF"
                           ? choice.text.idrefs.map(({ after, before, token }) => [
@@ -967,6 +969,23 @@ const lists = (langs: readonly string[], form: string): boolean =>
   langs.map(folded).includes(folded(collapsed(form)));
 
 /**
+ * A form that states a language, as the database's R26 selects it (`statedLanguagePattern`): a
+ * language tag once its outer whitespace is set apart.
+ */
+const statedForm = new RegExp(statedLanguagePattern.source, patternFlags);
+
+/**
+ * `DocumentLang`'s generated `value` as the schema states it, read off the relation's description
+ * and evaluated over a row (`#pantry/test/host-judge.ts` `generatedFields`), so the box compares
+ * each form by the database's own derivation, and holds that derivation to this file's reading of
+ * a tag's value ({@link collapsed}, {@link folded}).
+ */
+const valueOf = Option.getOrThrowWith(
+  Option.fromUndefinedOr(generatedFields.get("DocumentLang")?.get("value")),
+  () => new Error("Qti generates no DocumentLang.value, the form's compared value."),
+);
+
+/**
  * A situation the R26 box must reach: each way the law holds or breaks.
  */
 type LangSituation =
@@ -979,7 +998,7 @@ type LangSituation =
 
 describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, () => {
   it.effect(
-    "gives each resource's general category its named type, each naming one its document, and a witness for each stated xml:lang form it lists, so the witnesses of every stated form count its document's categories exactly when R26 holds",
+    "gives the item's forms and each category's languages, over which each stated form's value, as the schema derives it, is listed by every category of a naming record exactly when R26 holds",
     (ctx) =>
       // Oracle: the specification as a checker, QTI 3.0 Metadata §2.7.1.3 ("There must be one
       // value for each of the languages referred to by the language attributes on the associated
@@ -1061,25 +1080,19 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
                   ),
                 ],
               );
-              const itemDocument = itemIdOf(0);
               const manifestRows = rowsOf(documentOf(manifest), {
                 assembled: false,
                 context: ownContext(idOf(0)),
-                documentType: "none",
+                documentType: "manifest",
                 idOf,
-                targetAt: (path) =>
-                  path === itemPath ? Option.some({ node: itemDocument }) : Option.none(),
               });
               const itemRows = rowsOf(documentOf(item), {
                 assembled: false,
                 context: ownContext(itemIdOf(0)),
                 documentType: "imsqti_item_xmlv3p0",
                 idOf: itemIdOf,
-                targetAt: () => Option.none(),
               });
-              const witnesses = languageRowsOf([manifestRows, itemRows]).GeneralLang;
 
-              const record = idOf(5);
               const generals: { readonly langs: readonly string[]; readonly node: string }[] = [];
               let next = 6;
               for (const langs of drawn.generals) {
@@ -1088,17 +1101,15 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
               }
 
               // A record names the item only where its resource is an item's and its href names
-              // the item, the one document the package holds: an href to no document names none.
-              const named =
+              // the item, the one document the package lists: an href to no document names none.
+              const names =
                 drawn.type === "imsqti_item_xmlv3p0" &&
-                Option.exists(drawn.href, (href) => href === itemPath)
-                  ? drawn.type
-                  : "none";
+                Option.exists(drawn.href, (href) => href === itemPath);
               const forms = [
                 ...new Set([...Option.toArray(drawn.rootLang), ...Option.toArray(drawn.divLang)]),
               ];
               const stated = forms.filter((form) => collapsed(form) !== "");
-              const naming = named === "none" ? [] : generals;
+              const naming = names ? generals : [];
               const holds = stated.every((form) => naming.every(({ langs }) => lists(langs, form)));
 
               if (stated.length > 0 && naming.length > 0) {
@@ -1109,7 +1120,7 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
                 c.note("no general category");
               }
 
-              if (named === "none") {
+              if (!names) {
                 c.note("no naming resource");
               }
 
@@ -1121,51 +1132,54 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
                 c.note("empty xml:lang");
               }
 
+              // The rows R26 reads: the item's forms, each once, and each category's languages,
+              // case-folded, each once.
               assert.deepStrictEqual(
-                asSet(
-                  [...manifestRows.GeneralNamed.values()].map(
-                    (row) => `${row.general} ${row.record} ${row.named}`,
-                  ),
-                ),
-                generals.map(({ node }) => `${node} ${record} ${named}`).toSorted(),
+                asSet([...itemRows.DocumentLang.values()].map(({ lang }) => lang)),
+                forms.toSorted(),
               );
               assert.deepStrictEqual(
                 asSet(
-                  [...manifestRows.GeneralObject.values()].map(
-                    (row) => `${row.general} ${row.record} ${row.document}`,
+                  [...manifestRows.ResourceLomLanguageSet.values()].map(({ general, lang }) =>
+                    JSON.stringify([general, lang]),
                   ),
                 ),
-                naming.map(({ node }) => `${node} ${record} ${itemDocument}`).toSorted(),
-              );
-              assert.deepStrictEqual(
-                asSet(
-                  [...witnesses.values()].map((row) =>
-                    JSON.stringify([row.general, row.document, row.lang, row.value]),
+                [
+                  ...new Set(
+                    generals.flatMap(({ langs, node }) =>
+                      langs.map((lang) => JSON.stringify([node, folded(lang)])),
+                    ),
                   ),
-                ),
-                naming
-                  .flatMap(({ langs, node }) =>
-                    stated
-                      .filter((form) => lists(langs, form))
-                      .map((form) =>
-                        JSON.stringify([node, itemDocument, form, folded(collapsed(form))]),
-                      ),
-                  )
-                  .toSorted(),
+                ].toSorted(),
               );
 
-              // The law as the database counts it: each stated form's witnesses against the
-              // categories that describe the item.
-              const categories = [...manifestRows.GeneralObject.values()].filter(
-                ({ document }) => document === itemDocument,
-              ).length;
-              assert.strictEqual(
-                stated.every(
-                  (form) =>
-                    [...witnesses.values()].filter(
-                      ({ document, lang }) => document === itemDocument && lang === form,
-                    ).length === categories,
+              // Each form's compared value, as the database generates it, is its value collapsed
+              // and case-folded.
+              const values = new Map(
+                [...itemRows.DocumentLang.values()].map(({ document, lang }) => [
+                  lang,
+                  valueOf({ document, lang }),
+                ]),
+              );
+              for (const [lang, value] of values) {
+                assert.strictEqual(value, folded(collapsed(lang)), `the value of ${lang}`);
+              }
+
+              // The law as the database states it, over those rows: each form that states a
+              // language (`statedLanguagePattern`), by its compared value, under each category of
+              // a record that names the item, is one of that category's languages.
+              const listed = new Set(
+                [...manifestRows.ResourceLomLanguageSet.values()].map(({ general, lang }) =>
+                  JSON.stringify([general, lang]),
                 ),
+              );
+              const described = [...itemRows.DocumentLang.values()]
+                .filter(({ lang }) => statedForm.test(lang))
+                .flatMap(({ lang }) =>
+                  naming.map(({ node }) => JSON.stringify([node, values.get(lang)])),
+                );
+              assert.strictEqual(
+                described.every((pair) => listed.has(pair)),
                 holds,
                 JSON.stringify(drawn),
               );

@@ -63,8 +63,9 @@ const SCAN = new RegExp(
 );
 
 /**
- * The undeclared entity names the body references, in order of first use, and the code points the
- * body already holds in the sentinel range, whether written out or named by a character reference.
+ * The undeclared entity names the body references, in order of first use, each with where its first
+ * reference stands in the body, and the code points the body already holds in the sentinel range,
+ * whether written out or named by a character reference.
  */
 interface Scanned {
   /**
@@ -72,7 +73,7 @@ interface Scanned {
    * breaks the production.
    */
   readonly colon: Option.Option<{ readonly offset: number; readonly violation: string }>;
-  readonly names: readonly string[];
+  readonly names: ReadonlyMap<string, number>;
   readonly used: ReadonlySet<number>;
 }
 
@@ -81,7 +82,7 @@ interface Scanned {
  * neither predefined nor declared.
  */
 const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Scanned => {
-  const names = new Set<string>();
+  const names = new Map<string, number>();
   const used = sentinelsWritten(body);
   let colon: Scanned["colon"] = Option.none();
   for (const match of body.matchAll(SCAN)) {
@@ -92,13 +93,15 @@ const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Sc
     }
 
     if (name !== undefined && !PREDEFINED.has(name) && !declared.has(name)) {
-      names.add(name);
+      if (!names.has(name)) {
+        names.set(name, match.index);
+      }
     } else if (hex !== undefined || decimal !== undefined) {
       used.add(hex === undefined ? Number(decimal) : Number.parseInt(hex, 16));
     }
   }
 
-  return { colon, names: [...names], used };
+  return { colon, names, used };
 };
 
 /**
@@ -110,7 +113,8 @@ const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Sc
  * treatment decides, as it decided each attribute default's references: a refused reference is a
  * well-formedness error, refused naming the entity. A kept one may be declared in the external
  * subset, which is never read: the name gets a private use character that occurs nowhere in the
- * body, and the parser appends it as plain text.
+ * body, and the parser appends it as plain text. Either refusal stands at the name's first
+ * reference, in `substituted`.
  *
  * @param substituted - The document text with its declared entities substituted.
  * @param prolog - The prolog, for its declared entities and its treatment of undeclared ones.
@@ -138,18 +142,22 @@ const assignSentinels = (
         );
       }
 
-      const [firstName] = scanned.names;
-      if (firstName === undefined) {
+      const at = (offset: number) =>
+        Option.some(positionOf(substituted, prolog.bodyStart + offset));
+      const [first] = scanned.names;
+      if (first === undefined) {
         return Effect.succeed(new Map<string, string>());
       }
 
       if (prolog.undeclared._tag === "refused") {
-        return Effect.fail(undeclaredEntity(firstName, prolog.undeclared.why));
+        const [name, offset] = first;
+
+        return Effect.fail(undeclaredEntity(name, prolog.undeclared.why, at(offset)));
       }
 
       const sentinels = new Map<string, string>();
       let point = SENTINEL_FIRST;
-      for (const name of scanned.names) {
+      for (const [name, offset] of scanned.names) {
         while (point <= SENTINEL_LAST && scanned.used.has(point)) {
           point += 1;
         }
@@ -159,6 +167,7 @@ const assignSentinels = (
             undeclaredEntity(
               name,
               "the document leaves no private use character free to stand for it",
+              at(offset),
             ),
           );
         }
@@ -198,8 +207,12 @@ const toElement = (open: OpenElement): Element => ({
 });
 
 /**
- * The most elements a document may hold open at once unless its reader says otherwise: `xmllint`'s
- * default depth limit.
+ * The most elements a document may hold open at once unless its reader says otherwise: 256, the
+ * stated limit "Element depth" of spec reading 1's list. Neither XML 1.0 nor QTI bounds an
+ * element's depth (production [39] of section 3 and [43] of section 3.1), no official package
+ * comes near it, and the bound keeps the recursive walks over a tree, crust's and plate's, within
+ * their stacks. libxml2 2.9.13's `xmllint` bounds depth near it too: it reads 257 open elements
+ * and refuses 258 ("Excessive depth in document").
  */
 export const defaultElementDepth = 256;
 
@@ -273,6 +286,7 @@ const parse = (
         if (open.length >= elementDepth) {
           throw new ReaderRefusal({
             detail: `The document nests elements more than ${elementDepth} deep: element <${tag.name}> at line ${parser.line}, column ${parser.column} opens past the reader's limit. Flatten the structure so at most ${elementDepth} elements are open at once.`,
+            position: Option.some({ column: parser.column, line: parser.line }),
             rule: "element-depth",
           });
         }
@@ -432,14 +446,14 @@ const attributeValueOf = (
  * attribute, {@link collapsed} for any other type.
  *
  * @param pieces - The value's pieces.
- * @param entry - The attribute's declaration, when the ATTLIST table has one.
+ * @param entry - The attribute's declaration, none where the ATTLIST table has none.
  * @returns The normalized pieces.
  */
 const normalizedAs = (
   pieces: readonly ValuePiece[],
-  entry: AttlistEntry | undefined,
+  entry: Option.Option<AttlistEntry>,
 ): readonly ValuePiece[] =>
-  entry === undefined || entry.type === "CDATA" ? pieces : collapsed(pieces);
+  Option.exists(entry, ({ type }) => type !== "CDATA") ? collapsed(pieces) : pieces;
 
 /**
  * An element's attributes in the finished tree: each written one with its stand-ins restored as
@@ -451,35 +465,42 @@ const normalizedAs = (
  * the stand-ins are restored, and no character of its text is read as a reference.
  *
  * @param element - The element as `saxes` built it, its names unresolved.
- * @param table - The ATTLIST table of the element's name, if any.
+ * @param table - The ATTLIST table of the element's name, none where the prolog declares none.
  * @param names - The entity name each stand-in character stands for.
  * @returns The attributes, their names unresolved until {@link resolved} resolves them with the
  *   element's.
  */
 const attributesOf = (
   element: Element,
-  table: ReadonlyMap<string, AttlistEntry> | undefined,
+  table: Option.Option<ReadonlyMap<string, AttlistEntry>>,
   names: ReadonlyMap<string, string>,
 ): readonly Attribute[] => {
   const written = element.attributes.map((attribute): Attribute => ({
     ...attribute,
     ...attributeValueOf(
-      normalizedAs(piecesOf(attribute.value, names), table?.get(attribute.qname)),
+      normalizedAs(
+        piecesOf(attribute.value, names),
+        table.pipe(
+          Option.flatMap((entries) => Option.fromUndefinedOr(entries.get(attribute.qname))),
+        ),
+      ),
     ),
   }));
   const present = new Set(element.attributes.map((attribute) => attribute.qname));
-  const defaulted = [...(table ?? [])].flatMap(([declared, entry]): readonly Attribute[] =>
-    !present.has(declared) && Option.isSome(entry.default)
-      ? [
-          {
-            local: declared,
-            namespace: "",
-            prefix: "",
-            qname: declared,
-            ...attributeValueOf(normalizedAs(entry.default.value, entry)),
-          },
-        ]
-      : [],
+  const defaulted = Option.toArray(table).flatMap((entries) =>
+    [...entries].flatMap(([declared, entry]): readonly Attribute[] =>
+      !present.has(declared) && Option.isSome(entry.default)
+        ? [
+            {
+              local: declared,
+              namespace: "",
+              prefix: "",
+              qname: declared,
+              ...attributeValueOf(normalizedAs(entry.default.value, Option.some(entry))),
+            },
+          ]
+        : [],
+    ),
   );
 
   return [...written, ...defaulted];
@@ -571,7 +592,11 @@ const assemble = (
         resolved(
           {
             ...element,
-            attributes: attributesOf(element, prolog.attlists.get(element.qname), names),
+            attributes: attributesOf(
+              element,
+              Option.fromUndefinedOr(prolog.attlists.get(element.qname)),
+              names,
+            ),
           },
           scope,
           namespaces,

@@ -5,7 +5,7 @@
  * decodes with the platform's strict UTF-8 decoder, the oracle runs §5.2.4's five rules over text
  * below a sentinel root and decodes with a UTF-8 decoder of its own.
  *
- * The search is brutal in the operator's sense: generated hrefs, bases and documents under a swarm
+ * The search is brutal in Bjorn's sense: generated hrefs, bases and documents under a swarm
  * that turns each kind of segment on or off per case, the adversarial cases drawn by name, the
  * small scope exhausted, and planted bugs, each a plausible slip of an importer, that the search
  * must tell apart from the importer.
@@ -24,6 +24,7 @@ import { Duration, Effect, Formatter } from "effect";
 import { baseIn, documentBase, hrefValueOf, resolveIn } from "#pantry/import/overlays/package.ts";
 import type { HrefResolution, WhiteSpace } from "#pantry/import/overlays/package.ts";
 import { oracleValueOf, resolve } from "#pantry/test/resolution.ts";
+import type { OracleResolution } from "#pantry/test/resolution.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -65,7 +66,7 @@ const importerOf = (input: HrefCase): HrefResolution => {
  * @param input - The case.
  * @returns Its resolution.
  */
-const oracleOf = (input: HrefCase): HrefResolution =>
+const oracleOf = (input: HrefCase): OracleResolution =>
   resolve({
     bases: input.bases,
     document: input.document,

@@ -61,21 +61,26 @@ describe.skipIf(!hasLease)("cli.roundtrip.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "import of metaData is refused by the database, naming its rule, each law and its sources",
+        "import of metaData is refused by the database, naming its rules, each law and its sources",
         () =>
           // Oracle: the verdict file's rule family for metaData (`lom-`, O6's metadata laws), which
-          // the database states, so the refusal carries laws and sources.
+          // the database states, so the refusal carries laws and sources, and each of its rules is
+          // a rule of one of its laws.
           Effect.gen(function* importRefused() {
             const { exit, stderr } = yield* captureCli(["--json", "import", fixtures.metaData]);
             const error = Schema.decodeUnknownSync(Schema.fromJsonString(ErrorObject))(stderr);
+            const rules = error.rules ?? [];
 
             assert.isTrue(Exit.isFailure(exit));
             assert.strictEqual(error.kind, "import-refused");
-            assert.match(error.rule ?? "", /^lom-/u);
+            assert.isTrue(
+              rules.some((rule) => rule.startsWith("lom-")),
+              `a lom- rule among ${rules.join(", ")}`,
+            );
             assert.isAbove(error.laws?.length ?? 0, 0, stderr);
             assert.isTrue(
-              (error.laws ?? []).some((law) => law.rule === error.rule),
-              `one of the laws keeps the rule ${error.rule ?? ""}: ${stderr}`,
+              rules.every((rule) => (error.laws ?? []).some((law) => law.rule === rule)),
+              `each rule ${rules.join(", ")} is one of the laws': ${stderr}`,
             );
             assert.isAbove(error.sources?.length ?? 0, 0, stderr);
           }),

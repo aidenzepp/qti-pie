@@ -1,3 +1,4 @@
+import { Array as Arr } from "effect";
 import { tour } from "#crust/tour.ts";
 import type { Leaf } from "#crust/tour.ts";
 import type { Attribute, Element, Misc, XmlDocument } from "#crust/tree.ts";
@@ -176,16 +177,17 @@ const outermost: Scope = new Map([["xml", "http://www.w3.org/XML/1998/namespace"
  * separate end tag.
  *
  * The element is rendered by its {@link tour}, so a tree of any depth or width renders without
- * recursion. Each open pushes the scope the element makes and each close pops it, so every element
- * renders its namespace axis against the scope its parent makes: the innermost open element's, or,
- * for the root, which opens with no element open, the {@link outermost} scope.
+ * recursion. The scopes start from the {@link outermost} one, each open pushes the scope the element
+ * makes and each close pops it, so every element renders its namespace axis against the scope on
+ * top, its parent's, or the outermost for the root. The tour closes each element it opens, so the
+ * outermost scope is never popped.
  *
  * @param root - The element to render.
  * @returns The element's canonical form.
  */
 const renderElement = (root: Element): string => {
   const rendered: string[] = [];
-  const opened: Scope[] = [];
+  const opened: Arr.NonEmptyArray<Scope> = [outermost];
   for (const step of tour(root)) {
     if (step.kind === "leaf") {
       rendered.push(renderLeaf(step.node));
@@ -193,7 +195,7 @@ const renderElement = (root: Element): string => {
       opened.pop();
       rendered.push(`</${step.element.qname}>`);
     } else {
-      const parent = opened.at(-1) ?? outermost;
+      const parent = Arr.lastNonEmpty(opened);
       const scope = scopeOf(step.element, parent);
       opened.push(scope);
       rendered.push(

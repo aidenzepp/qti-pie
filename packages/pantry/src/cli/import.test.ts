@@ -75,9 +75,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import --dry-run", (it
           Predicate.hasProperty(failure, "_tag") ? failure._tag : undefined,
           "ImportRefused",
         );
-        assert.strictEqual(
-          Predicate.hasProperty(failure, "rule") ? failure.rule : undefined,
-          "not-qti3",
+        assert.deepStrictEqual(
+          Predicate.hasProperty(failure, "rules") ? failure.rules : undefined,
+          ["not-qti3"],
         );
         assert.isTrue(
           stderr.startsWith(
@@ -92,7 +92,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import --dry-run", (it
   );
 
   it.effect(
-    "--json prints the codec's refusal as one error object, its rule and no law",
+    "--json prints the codec's refusal as one error object, its one rule and no law",
     () =>
       Effect.gen(function* refusedJson() {
         yield* makeScratch(env);
@@ -107,8 +107,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import --dry-run", (it
         assert.strictEqual(stderr.split("\n").length, 1);
         assert.isTrue(matchesCommitted("error")(stderr), stderr);
         assert.strictEqual(error.kind, "import-refused");
-        assert.strictEqual(error.rule, "not-qti3");
+        assert.deepStrictEqual(error.rules, ["not-qti3"]);
         assert.strictEqual(error.command, "import");
+        assert.notProperty(error, "refused_kind");
         assert.notProperty(error, "laws");
         assert.notProperty(error, "sources");
       }),

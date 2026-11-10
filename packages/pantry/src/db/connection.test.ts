@@ -5,7 +5,16 @@
  */
 import net from "node:net";
 import { fileURLToPath } from "node:url";
-import type { DbConnection } from "@bjornpagen/grizzle";
+import {
+  login,
+  relation,
+  role as worldRole,
+  roleNameOf,
+  schema,
+  uuid,
+  wholeEntriesOf,
+} from "@bjornpagen/grizzle";
+import type { AnyLogin, DbConnection } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -23,7 +32,13 @@ import {
   Result,
 } from "effect";
 import pg from "pg";
-import { ClusterConfigError, loginConnection, migrationConnection } from "#pantry/db/connection.ts";
+import {
+  ClusterConfigError,
+  loginConnection,
+  migrationConnection,
+  PasswordCommandFailed,
+  PasswordCommandSilent,
+} from "#pantry/db/connection.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -39,9 +54,51 @@ const testTimeoutMs = 60_000;
 const work = fileURLToPath(new URL("../../work/", import.meta.url));
 
 /**
- * The login whose password file the login connection reads.
+ * The one relation of a scratch installation, which its root holds and every role reads.
  */
-const login = "qti__author_app";
+const Probe = relation("Probe", { id: uuid }, ["id"]);
+
+/**
+ * A scratch installation's root.
+ */
+const ProbeRoot = schema("ConnectionProbe", { Probe }, []);
+
+/**
+ * A level over the scratch root, with nothing of its own.
+ */
+const ProbeLevel = schema.extend(ProbeRoot, "ConnectionLevel", {}, []);
+
+/**
+ * The scratch installation's login over its root, the one whose connection the settings' cases
+ * build.
+ */
+const rootLogin = login(ProbeRoot, "app", [
+  worldRole(ProbeRoot, "reader", wholeEntriesOf(ProbeRoot)),
+]);
+
+/**
+ * Two logins of one name, by the level each is over: the scratch root's, and one over the level
+ * above it. grizzle names a login's PostgreSQL role by the level it is over (README, "Levels"), so
+ * the two roles differ, and the level's spells nothing of the root's name.
+ *
+ * @see https://github.com/bjornpagen/grizzle/blob/4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a/README.md#levels
+ */
+const loginsByLevel: Readonly<Record<"level" | "root", AnyLogin>> = {
+  level: login(ProbeLevel, "app", [worldRole(ProbeLevel, "reader", wholeEntriesOf(ProbeRoot))]),
+  root: rootLogin,
+};
+
+/**
+ * The root login's installed role, which names the password file its connection reads.
+ */
+const loginRole = roleNameOf(rootLogin);
+
+/**
+ * The root login's connection, built from the settings a case provides.
+ */
+const rootConnection = loginConnection.pipe(
+  Effect.map((connectionOf) => connectionOf(roleNameOf(rootLogin))),
+);
 
 /**
  * The migration identity's password, as `scripts/db.sh migrate` exports it.
@@ -174,6 +231,7 @@ type Reached = "built" | "malformed" | "no CA";
  * database name the script keeps, and the folders `GRIZZLE_PG_STATE` and `GR8DES_PG_SECRETS` name.
  */
 interface Scratch {
+  readonly caFile: string;
   readonly home: string;
   readonly secrets: string;
   readonly stateWith: string;
@@ -189,6 +247,11 @@ const homeCa = "the CA under HOME";
  * The CA text in the state folder `GRIZZLE_PG_STATE` names.
  */
 const stateCa = "the CA in GRIZZLE_PG_STATE";
+
+/**
+ * The CA text in the file `GR8DES_PG_CA` names.
+ */
+const namedCa = "the CA GR8DES_PG_CA names";
 
 /**
  * The password in the folder `GR8DES_PG_SECRETS` names, written with the surrounding whitespace the
@@ -213,6 +276,7 @@ const scratchFolders = Effect.gen(function* scratchFolders() {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.makeTempDirectoryScoped({ directory: work, prefix: "db-connection-" });
   const scratch: Scratch = {
+    caFile: `${root}/server-ca.pem`,
     home: `${root}/home`,
     secrets: `${root}/secrets`,
     stateWith: `${root}/state-with`,
@@ -224,8 +288,9 @@ const scratchFolders = Effect.gen(function* scratchFolders() {
   yield* fs.makeDirectory(`${scratch.stateWith}/tls`, { recursive: true });
   yield* fs.writeFileString(`${scratch.stateWith}/tls/ca.crt`, stateCa);
   yield* fs.makeDirectory(scratch.stateWithout, { recursive: true });
+  yield* fs.writeFileString(scratch.caFile, namedCa);
   yield* fs.makeDirectory(scratch.secrets, { recursive: true });
-  yield* fs.writeFileString(`${scratch.secrets}/${login}.password`, `  ${secretsPassword}  \n`);
+  yield* fs.writeFileString(`${scratch.secrets}/${loginRole}.password`, `  ${secretsPassword}  \n`);
 
   for (const database of databases) {
     if (Option.isSome(database.value)) {
@@ -233,7 +298,7 @@ const scratchFolders = Effect.gen(function* scratchFolders() {
 
       yield* fs.makeDirectory(folder, { recursive: true });
       yield* fs.writeFileString(
-        `${folder}/${login}.password`,
+        `${folder}/${loginRole}.password`,
         `${homePassword(database.value.value)}\n`,
       );
     }
@@ -246,9 +311,11 @@ const scratchFolders = Effect.gen(function* scratchFolders() {
  * The variables a case's environment holds: `HOME` always, and each other where the case sets it.
  */
 interface Environment {
+  GR8DES_PG_CA?: string;
   GR8DES_PG_DATABASE?: string;
   GR8DES_PG_HOST?: string;
   GR8DES_PG_MIGRATION_PASSWORD?: string;
+  GR8DES_PG_MIGRATION_ROLE?: string;
   GR8DES_PG_PORT?: string;
   GR8DES_PG_SECRETS?: string;
   GRIZZLE_PG_STATE?: string;
@@ -295,6 +362,47 @@ const environmentOf = (settings: Settings, scratch: Scratch): Environment => {
 };
 
 /**
+ * The password commands a case names, by what each does: print a role's password with whitespace
+ * around it, exit 3, print only whitespace, or print one from a path that holds a space and a
+ * semicolon, which a shell would split; and two settings that name no executable.
+ */
+const commandScripts = [
+  { file: "failing.sh", text: "#!/bin/sh\nprintf 'partial'\nexit 3\n", variant: "failing" },
+  {
+    file: "printing.sh",
+    text: "#!/bin/sh\nprintf '  password of %s  \\n' \"$1\"\n",
+    variant: "printing",
+  },
+  { file: "silent.sh", text: "#!/bin/sh\nprintf '   \\n'\n", variant: "silent" },
+  {
+    file: "pass word; echo shell.sh",
+    text: "#!/bin/sh\nprintf 'spaced password of %s' \"$1\"\n",
+    variant: "spaced",
+  },
+] as const;
+
+/**
+ * Each variant of `GR8DES_PG_PASSWORD_COMMAND`: unset or empty, which leave the local passwords,
+ * one of {@link commandScripts}, a path no file is at, and shell text, which names no executable.
+ */
+const commandVariants = [
+  "unset",
+  "empty",
+  "printing",
+  "failing",
+  "silent",
+  "spaced",
+  "missing",
+  "shell text",
+] as const;
+
+/**
+ * What a password command case reaches: a local password, a command's password, or each way a
+ * command fails.
+ */
+type CommandReached = "command" | "exited" | "local" | "not run" | "silent";
+
+/**
  * The password a connection authenticates with, as grizzle reads it for one attempt.
  *
  * @param password - The connection's password.
@@ -337,7 +445,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                   ConfigProvider.fromUnknown(environmentOf(settings, scratch)),
                 );
                 const built = yield* Effect.all({
-                  login: loginConnection(login),
+                  login: rootConnection,
                   migration: migrationConnection,
                 }).pipe(Effect.result, Effect.provide(provider));
                 const malformed = [
@@ -470,7 +578,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                 }
 
                 const provider = ConfigProvider.layer(ConfigProvider.fromUnknown(environment));
-                const loginSide = yield* loginConnection(login).pipe(Effect.provide(provider));
+                const loginSide = yield* rootConnection.pipe(Effect.provide(provider));
                 const migrationSide = yield* migrationConnection.pipe(Effect.provide(provider));
                 const loginPassword = yield* passwordText(loginSide.password).pipe(
                   Effect.result,
@@ -505,6 +613,298 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                   assert.strictEqual(failure?._tag, "CredentialError");
                   assert.include(String(failure?.cause), "GR8DES_PG_MIGRATION_PASSWORD");
                 }
+              }),
+          ),
+        );
+      }),
+  );
+
+  it.effect(
+    "verify against the file GR8DES_PG_CA names and migrate as GR8DES_PG_MIGRATION_ROLE, each the local cluster's where unset or empty, and name an unreadable CA file by its setting: every CA and role variant, exhausted",
+    (ctx) =>
+      Effect.gen(function* serverSettings() {
+        const scratch = yield* scratchFolders;
+        const cas = [
+          unset<Option.Option<string>>(Option.none()),
+          kept("empty", "", Option.none<string>()),
+          kept("a file", scratch.caFile, Option.some(namedCa)),
+          refused<Option.Option<string>>("a missing file", `${scratch.caFile}.missing`),
+        ] as const;
+        const roles = [
+          unset("grizzle_dev"),
+          kept("empty", "", "grizzle_dev"),
+          kept("another role", "qti_migrator", "qti_migrator"),
+        ] as const;
+
+        return yield* searched(
+          ctx,
+          exhaust(
+            {
+              box: "every combination of 4 CA and 3 migration role variants",
+              caseHang: Duration.seconds(10),
+              coverage: requiredInSpace<"built" | "named" | "unreadable">([
+                "built",
+                "named",
+                "unreadable",
+              ]),
+              generator: (source) => ({
+                ca: source.draw(element(cas)),
+                role: source.draw(element(roles)),
+              }),
+              limit: 12,
+              literal: Formatter.format,
+              oracle: { kind: "specification", name: "scripts/db.sh's GR8DES_PG_* block" },
+              suite: "db/connection/server",
+            },
+            ({ ca, role }, c) =>
+              Effect.gen(function* oneCase() {
+                const environment: Environment = {
+                  GR8DES_PG_MIGRATION_PASSWORD: migrationPassword,
+                  HOME: scratch.home,
+                };
+
+                if (Option.isSome(ca.text)) {
+                  environment.GR8DES_PG_CA = ca.text.value;
+                }
+
+                if (Option.isSome(role.text)) {
+                  environment.GR8DES_PG_MIGRATION_ROLE = role.text.value;
+                }
+
+                const built = yield* Effect.all({
+                  login: rootConnection,
+                  migration: migrationConnection,
+                }).pipe(
+                  Effect.result,
+                  Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(environment))),
+                );
+
+                if (Option.isNone(ca.value)) {
+                  c.note("unreadable");
+
+                  const failure = Result.isFailure(built) ? built.failure : undefined;
+
+                  assert.instanceOf(failure, ClusterConfigError);
+                  assert.deepStrictEqual(
+                    failure instanceof ClusterConfigError
+                      ? { path: failure.path, setting: failure.setting }
+                      : undefined,
+                    { path: `${scratch.caFile}.missing`, setting: "GR8DES_PG_CA" },
+                  );
+                  assert.include(failure.message, "GR8DES_PG_CA");
+
+                  return;
+                }
+
+                c.note("built");
+                if (Option.isSome(ca.value.value)) {
+                  c.note("named");
+                }
+
+                assert.isTrue(Result.isSuccess(built));
+
+                if (Result.isFailure(built)) {
+                  return;
+                }
+
+                for (const connection of [built.success.login, built.success.migration]) {
+                  assert.strictEqual(
+                    connection.transport.ca,
+                    Option.getOrElse(ca.value.value, () => homeCa),
+                  );
+                }
+
+                assert.strictEqual(built.success.migration.role, Option.getOrThrow(role.value));
+                assert.notProperty(built.success.login, "role");
+              }),
+          ),
+        );
+      }),
+  );
+  it.effect(
+    "runs GR8DES_PG_PASSWORD_COMMAND, never a shell, with the role as its one argument at each connection attempt of either connection, its output trimmed the password, in place of both local passwords, and fails the attempt with CredentialError when it exits otherwise than 0, prints no password or names no executable: every variant, exhausted",
+    (ctx) =>
+      Effect.gen(function* passwordCommands() {
+        const fs = yield* FileSystem.FileSystem;
+        const scratch = yield* scratchFolders;
+        for (const { file, text } of commandScripts) {
+          yield* fs.writeFileString(`${scratch.secrets}/${file}`, text);
+          yield* fs.chmod(`${scratch.secrets}/${file}`, 0o755);
+        }
+
+        return yield* searched(
+          ctx,
+          exhaust(
+            {
+              box: "every variant of the password command, for the migration identity and for the login",
+              caseHang: Duration.seconds(10),
+              coverage: requiredInSpace<CommandReached>([
+                "command",
+                "exited",
+                "local",
+                "not run",
+                "silent",
+              ]),
+              generator: (source) => ({
+                side: source.draw(element(["migration", "login"] as const)),
+                variant: source.draw(element(commandVariants)),
+              }),
+              limit: commandVariants.length * 2,
+              literal: Formatter.format,
+              oracle: {
+                kind: "specification",
+                name: "GR8DES_PG_PASSWORD_COMMAND as scripts/db.sh and the edullm sign-in run it",
+              },
+              suite: "db/connection/password-command",
+            },
+            ({ side, variant }, c) =>
+              Effect.gen(function* oneCase() {
+                const environment: Environment & { GR8DES_PG_PASSWORD_COMMAND?: string } = {
+                  GR8DES_PG_MIGRATION_PASSWORD: migrationPassword,
+                  GR8DES_PG_SECRETS: scratch.secrets,
+                  HOME: scratch.home,
+                };
+                const role = side === "migration" ? "grizzle_dev" : loginRole;
+                if (variant === "empty") {
+                  environment.GR8DES_PG_PASSWORD_COMMAND = "";
+                }
+
+                if (variant === "missing") {
+                  environment.GR8DES_PG_PASSWORD_COMMAND = `${scratch.secrets}/no-such-command`;
+                }
+
+                if (variant === "shell text") {
+                  environment.GR8DES_PG_PASSWORD_COMMAND = `echo ${role}`;
+                }
+
+                const script = commandScripts.find((named) => named.variant === variant);
+                if (script !== undefined) {
+                  environment.GR8DES_PG_PASSWORD_COMMAND = `${scratch.secrets}/${script.file}`;
+                }
+
+                const provider = ConfigProvider.layer(ConfigProvider.fromUnknown(environment));
+                const password =
+                  side === "migration"
+                    ? (yield* migrationConnection.pipe(Effect.provide(provider))).password
+                    : (yield* rootConnection.pipe(Effect.provide(provider))).password;
+                const read = yield* passwordText(password).pipe(
+                  Effect.result,
+                  Effect.provide(provider),
+                );
+
+                if (variant === "unset" || variant === "empty") {
+                  c.note("local");
+                  assert.deepStrictEqual(
+                    read,
+                    Result.succeed(side === "migration" ? migrationPassword : secretsPassword),
+                  );
+
+                  return;
+                }
+
+                if (variant === "printing" || variant === "spaced") {
+                  c.note("command");
+                  assert.deepStrictEqual(
+                    read,
+                    Result.succeed(
+                      variant === "printing" ? `password of ${role}` : `spaced password of ${role}`,
+                    ),
+                  );
+
+                  return;
+                }
+
+                const failure = Result.isFailure(read) ? read.failure : undefined;
+
+                assert.strictEqual(failure?._tag, "CredentialError", variant);
+
+                const cause: unknown = failure?.cause;
+                if (variant === "failing") {
+                  c.note("exited");
+                  assert.instanceOf(cause, PasswordCommandFailed);
+                  assert.deepStrictEqual(
+                    cause instanceof PasswordCommandFailed
+                      ? { exitCode: cause.exitCode, role: cause.role }
+                      : undefined,
+                    { exitCode: 3, role },
+                  );
+
+                  return;
+                }
+
+                if (variant === "silent") {
+                  c.note("silent");
+                  assert.instanceOf(cause, PasswordCommandSilent);
+
+                  return;
+                }
+
+                c.note("not run");
+                assert.notInstanceOf(cause, PasswordCommandFailed);
+                assert.notInstanceOf(cause, PasswordCommandSilent);
+              }),
+          ),
+        );
+      }),
+  );
+
+  it.effect(
+    "reads a login's password, from its file or from the password command, for the role grizzle installs for the login: a login over the root and one of the same name over a level, each by file and by command, exhausted",
+    (ctx) =>
+      Effect.gen(function* passwordsByRole() {
+        const fs = yield* FileSystem.FileSystem;
+        const scratch = yield* scratchFolders;
+        const [, printing] = commandScripts;
+
+        yield* fs.writeFileString(`${scratch.secrets}/${printing.file}`, printing.text);
+        yield* fs.chmod(`${scratch.secrets}/${printing.file}`, 0o755);
+        for (const each of Object.values(loginsByLevel)) {
+          const role = roleNameOf(each);
+
+          yield* fs.writeFileString(`${scratch.secrets}/${role}.password`, `password of ${role}\n`);
+        }
+
+        return yield* searched(
+          ctx,
+          exhaust(
+            {
+              box: "a login over the root and one of the same name over a level, each by its password file and by the password command",
+              caseHang: Duration.seconds(10),
+              coverage: requiredInSpace<"command" | "file">(["command", "file"]),
+              generator: (source) => ({
+                at: source.draw(element(["root", "level"] as const)),
+                from: source.draw(element(["file", "command"] as const)),
+              }),
+              limit: 4,
+              literal: Formatter.format,
+              oracle: {
+                kind: "specification",
+                name: "grizzle's roleNameOf, the role scripts/db.sh migrate gives each login its password for",
+              },
+              suite: "db/connection/login-roles",
+            },
+            ({ at, from }, c) =>
+              Effect.gen(function* oneCase() {
+                const each = loginsByLevel[at];
+                const role = roleNameOf(each);
+                const environment: Environment & { GR8DES_PG_PASSWORD_COMMAND?: string } = {
+                  GR8DES_PG_SECRETS: scratch.secrets,
+                  HOME: scratch.home,
+                };
+                if (from === "command") {
+                  environment.GR8DES_PG_PASSWORD_COMMAND = `${scratch.secrets}/${printing.file}`;
+                }
+
+                c.note(from);
+
+                const provider = ConfigProvider.layer(ConfigProvider.fromUnknown(environment));
+                const connectionOf = yield* loginConnection.pipe(Effect.provide(provider));
+                const read = yield* passwordText(connectionOf(roleNameOf(each)).password).pipe(
+                  Effect.result,
+                  Effect.provide(provider),
+                );
+
+                assert.deepStrictEqual(read, Result.succeed(`password of ${role}`), role);
               }),
           ),
         );
