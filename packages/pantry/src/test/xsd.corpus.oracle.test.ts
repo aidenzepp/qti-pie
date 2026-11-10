@@ -17,11 +17,13 @@
  * at the reader's, the codec's or a fold's first refusal, so what `xmllint` says beyond it is
  * counted as masked rather than as a difference.
  *
- * Gated on `GR8DES_CORPUS=1` and on the XSD cache. It writes, under a folder of the run's own,
- * `work/xsd-corpus-*` (`#pantry/test/scratch.ts`), removed after the file's last test: `files/`
- * (the documents), `agreement.tsv` (one row per document and version) and `differences.tsv` (one
- * row per difference, with the record that classifies it). Each folder this file writes is the
- * run's own, so two runs at once never remove each other's documents under xmllint.
+ * Gated on `GR8DES_CORPUS=1` and on the XSD cache, the controls included: the file runs at merge
+ * time, and only its classifiers' unit cases run by default. It writes, under a folder of the run's
+ * own, `work/xsd-corpus-*` (`#pantry/test/scratch.ts`), removed after the file's last test:
+ * `files/` (the documents), `agreement.tsv` (one row per document and version) and
+ * `differences.tsv` (one row per difference, with the record that classifies it). Each folder this
+ * file writes is the run's own, so two runs at once never remove each other's documents under
+ * xmllint.
  */
 import path from "node:path";
 import { assert, describe, it as unit, layer } from "@effect/vitest";
@@ -571,7 +573,8 @@ const controlled = Effect.fn("test.controlled")(function* controlled(
   );
 });
 
-describe.skipIf(!xsdCached)(
+// Runs at merge time, under GR8DES_CORPUS=1, beside the corpus comparison its records classify.
+describe.skipIf(!settings.corpusRequested || !xsdCached)(
   "xsd.corpus.oracle.test.ts, the libxml2 classes and reading 6 on their controls, and xmllint on a retyped element",
   () => {
     layer(XsdOracleLayer, { excludeTestServices: true })("the control", (it) => {
