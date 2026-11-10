@@ -36,6 +36,7 @@ interface ShippedPartsOf {
   "extended-text-interaction": "control" | "prompt" | "root";
   "inline-choice-interaction": "control" | "label" | "option" | "placeholder" | "root";
   item: "live" | "message" | "messages" | "notice" | "root" | "status" | "statusHeading";
+  "test-content": "root";
   "test-navigation":
     | "end"
     | "item"
@@ -86,8 +87,9 @@ type StubPartsOf = { readonly [M in StubModule as M["owner"]]: keyof M["parts"] 
 type PartsOf = ShippedPartsOf & StubPartsOf;
 
 /**
- * The owner of a group of parts: the item chrome, one of the interactions plate renders, or the
- * test chrome's navigation, `test-navigation`.
+ * The owner of a group of parts: the item chrome, one of the interactions plate renders, the test
+ * chrome's navigation, `test-navigation`, or the content a test shows beside its items,
+ * `test-content`.
  *
  * It is also the first key of {@link PartOverrides}.
  */
@@ -881,6 +883,15 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     part: "time",
     tagClass: "flow-container",
   },
+  {
+    defaults: {},
+    element: "div",
+    interaction: "test-content",
+    listOwner: false,
+    merged: ["id"],
+    part: "root",
+    tagClass: "flow-container",
+  },
 ];
 
 /**
@@ -911,11 +922,11 @@ export class PartTableDefect extends Data.TaggedError("PartTableDefect")<{
  * an interaction module's `partRow` (`#plate/interactions/contract.ts`), so no code spells one by
  * hand.
  *
- * @param interaction The component: an interaction, `item` for the host chrome, or
- *   `test-navigation` for the test chrome.
+ * @param interaction The component: an interaction, `item` for the host chrome,
+ *   `test-navigation` for the test chrome, or `test-content` for the content a test shows.
  * @param part The part.
  * @returns The marker: `choice-interaction`, `choice-interaction-indicator`, `item-status-heading`,
- *   `test-navigation-item-button`.
+ *   `test-navigation-item-button`, `test-content`.
  */
 export const slotFor = (interaction: InteractionKey, part: PartKey): string =>
   part === "root"
@@ -923,8 +934,9 @@ export const slotFor = (interaction: InteractionKey, part: PartKey): string =>
     : `${interaction}-${part.replaceAll(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`;
 
 /**
- * The part table, one row per part of the item chrome, each interaction plate renders here and the
- * test chrome's navigation, in {@link rows}' order, each with its derived marker.
+ * The part table, one row per part of the item chrome, each interaction plate renders here, the
+ * test chrome's navigation and the content a test shows, in {@link rows}' order, each with its
+ * derived marker.
  *
  * An interaction module's rows live in its module, not here: a module gives each part's
  * `PartSpec` in its `parts`, and its render places the part through `partRow`

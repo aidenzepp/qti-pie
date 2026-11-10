@@ -715,6 +715,7 @@ const weightedSelectors = (sheet: Sheet): readonly string[] =>
 const prewiredSlots: ReadonlySet<string> = new Set([
   "choice-interaction-mask",
   "choice-interaction-mask-toggle",
+  "test-content",
   "test-navigation-time",
 ]);
 

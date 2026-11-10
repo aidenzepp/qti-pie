@@ -1176,6 +1176,7 @@ describe("current", () => {
         );
 
         assert.deepStrictEqual(shown, {
+          content: [],
           items: guideRefs.map(([ref], index) => ({
             numAttempts: 0,
             permits: { review: true, solution: false },
@@ -3779,6 +3780,43 @@ describe("a package whose item ref's template default reads a field of an item's
           [mismatch.identifier, mismatch.actual, mismatch.expected],
           ["T", "float single", "integer single"],
         );
+      }),
+  );
+});
+
+describe("the test-feature modules' content", () => {
+  it.effect(
+    "[W0-BF] every stub presents nothing: content is empty on every view and the summary",
+    () =>
+      Effect.gen(function* stubsPresentNothing() {
+        const choices = ["A", "B"];
+        const delivery = yield* builtDelivery("stubs", [
+          ["first", itemXml("first", { choices, defaultValue: false, shuffle: false })],
+          ["second", itemXml("second", { choices, defaultValue: false, shuffle: false })],
+        ]);
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration);
+        const closed: TestSession = {
+          ...session,
+          parts: session.parts.map((part) => ({ ...part, status: "ended" })),
+          status: "closed",
+        };
+        const views = Result.getOrElse(
+          itemViews(delivery.test, session, configuration, [1, 2]),
+          (failure) => assert.fail(failure.message),
+        );
+        const summary = Result.getOrElse(current(delivery.test, closed, configuration), (failure) =>
+          assert.fail(failure.message),
+        );
+
+        assert.deepStrictEqual(
+          views.map((view) => view.content),
+          [[], []],
+        );
+        assert.deepStrictEqual(currentItem(delivery, session, configuration).content, []);
+        assert.deepStrictEqual(viewAt(delivery, session, configuration, 2).content, []);
+        assert.strictEqual(summary.kind, "summary");
+        assert.deepStrictEqual(summary.content, []);
       }),
   );
 });
