@@ -14,20 +14,23 @@
  *   `q-punctuation` where a quotation mark stands beside or inside it, main's `quoted-q` among
  *   them, and accepted where an apostrophe or nothing does.
  */
-import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { Fact, Law } from "@bjornpagen/grizzle";
+import { Db } from "@bjornpagen/grizzle";
+import type { Fact, Law, RefusedLaw } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
-import { Quotation, quotationMarks } from "#pantry/qti/quotation.ts";
+
+import type { Quotation } from "#pantry/qti/quotation.ts";
+import { quotationMarks } from "#pantry/qti/quotation.ts";
 import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
 import type { TextEdit } from "#pantry/test/fixtures.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
+import { importFacts } from "#pantry/test/import-facts.ts";
 
 /**
  * A uuid no stored row holds: the document, parent and nearest interaction every stray row names.
@@ -51,9 +54,11 @@ const strayNode = (at: number): `${string}-${string}-${string}-${string}-${strin
  * @returns Whether it holds one.
  */
 const rejectedBy = (
-  outcome: { readonly kind: string; readonly refused?: { readonly laws: readonly Law[] } },
+  outcome: { readonly kind: string; readonly refused?: { readonly laws: readonly RefusedLaw[] } },
   picks: (law: Law) => boolean,
-): boolean => outcome.kind === "invariant-rejected" && (outcome.refused?.laws ?? []).some(picks);
+): boolean =>
+  outcome.kind === "invariant-rejected" &&
+  (outcome.refused?.laws ?? []).some(({ law }) => picks(law));
 
 /**
  * Pick the check of one relation by its name.
@@ -141,7 +146,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the quotation law, judged by PostgreSQL", (it) => {
       it.effect(
         "refuses a quotation mark at each of a q's four ends by Quotation_punctuation, and an apostrophe by none",
@@ -151,11 +155,11 @@ describe.skipIf(!hasLease)(
           // Bound: every quotation mark at every end, one row each, and the right single quote
           // and the apostrophe at every end.
           Effect.gen(function* marks() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
             for (const [end, at] of ends) {
               for (const mark of quotationMarks) {
-                const outcome = yield* db.apply(
-                  ChangeSet.empty(Author).insert(Quotation, [strayRow(0, at(mark))]),
+                const outcome = yield* db.workload.importWrite.apply(
+                  importFacts({ Quotation: [strayRow(0, at(mark))] }),
                   {},
                 );
 
@@ -166,8 +170,8 @@ describe.skipIf(!hasLease)(
               }
 
               for (const apostrophe of ["’", "'"]) {
-                const outcome = yield* db.apply(
-                  ChangeSet.empty(Author).insert(Quotation, [strayRow(0, at(apostrophe))]),
+                const outcome = yield* db.workload.importWrite.apply(
+                  importFacts({ Quotation: [strayRow(0, at(apostrophe))] }),
                   {},
                 );
 
@@ -187,7 +191,7 @@ describe.skipIf(!hasLease)(
           // firstAt = 0, and the end of a neighbour that does not exist is empty.
           // Bound: each derived field once, wrong.
           Effect.gen(function* derived() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
             for (const fields of [
               { nextAt: 3n },
               { firstAt: 1n },
@@ -195,8 +199,8 @@ describe.skipIf(!hasLease)(
               { at: 2n, nextAt: 3n, siblings: 3n },
               { children: 0n },
             ] as const) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(Quotation, [strayRow(1, fields)]),
+              const outcome = yield* db.workload.importWrite.apply(
+                importFacts({ Quotation: [strayRow(1, fields)] }),
                 {},
               );
 

@@ -18,7 +18,7 @@ import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { writePackage } from "#pantry/test/gen/every-relation.ts";
 import { bare, includingOf, inlineOf, matched } from "#pantry/test/placed-types.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * One case: what it is, the package, and whether the database refuses it under "Condition type"'s
@@ -58,7 +58,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("a condition in a response rules fragment", (it) => {
       for (const { entries, name, refused } of cases) {
         it.effect(`${refused ? "refuses" : "accepts"} ${name}`, () =>

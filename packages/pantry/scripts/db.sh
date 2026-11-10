@@ -2,7 +2,8 @@
 # The QTI package's local database on grizzle's development cluster (grizzle's scripts/pg: pnpm pg:build, pg:init).
 #
 #   scripts/db.sh create    create the database from grizzle_template, owned by the migration identity
-#   scripts/db.sh migrate   grizzle migrate, then give each of this package's logins its local password
+#   scripts/db.sh migrate   grizzle migrate, grant the import's role TEMPORARY on the database, then give each of
+#                           this package's logins its local password
 #   scripts/db.sh reset     drop, then create and migrate again
 #   scripts/db.sh drop      drop the database, the PostgreSQL roles the config installs and the password directory
 #   scripts/db.sh check-clear  list the config's roles left on the cluster and gr8des_qti databases other than this
@@ -73,10 +74,11 @@ as_owner() {
 		"host=$GR8DES_PG_HOST port=$GR8DES_PG_PORT dbname=$db user=$owner sslmode=verify-full sslrootcert=$ca" "$@"
 }
 
-# Prints the PostgreSQL role of each login the config installs, one per line, and with "all" each role a login reaches
-# as well: the names grizzle's roleNameOf gives them, read from the config's own logins, as `grizzle migrate` reads
-# them. Loading the config reads the cluster's CA and connects nowhere.
-# Usage: installed_roles logins|all
+# Prints the PostgreSQL role of each login the config installs, one per line, with "all" each role a login reaches as
+# well, and with "author" only each login's author role, the role the import writes as: the names grizzle's roleNameOf
+# gives them, read from the config's own logins, as `grizzle migrate` reads them. Loading the config reads the
+# cluster's CA and connects nowhere.
+# Usage: installed_roles logins|all|author
 installed_roles() {
 	node --input-type=module -e '
 		import { pathToFileURL } from "node:url";
@@ -84,6 +86,12 @@ installed_roles() {
 		const [file, which] = process.argv.slice(1);
 		const { default: config } = await import(pathToFileURL(file).href);
 		for (const login of config.logins) {
+			if (which === "author") {
+				if (login.roles.author !== undefined) {
+					console.log(roleNameOf(login.roles.author.role));
+				}
+				continue;
+			}
 			console.log(roleNameOf(login));
 			if (which === "all") {
 				for (const { role } of Object.values(login.roles)) {
@@ -103,17 +111,31 @@ create() {
 	echo "$GR8DES_PG_DATABASE: created"
 }
 
+# Grants the import's role TEMPORARY on the database. The import writes a package's nested rows past one Bind message
+# through a temporary table of its write's own, which needs the privilege (grizzle's README, Privileges; without it the
+# write is TemporaryRefused). PostgreSQL grants it to PUBLIC and grizzle never revokes it, so this grant holds where a
+# database's owner has revoked PUBLIC's.
+grant_temporary() {
+	local role
+	for role in $(installed_roles author); do
+		as_owner postgres -c "GRANT TEMPORARY ON DATABASE $GR8DES_PG_DATABASE TO $role"
+		echo "$role: TEMPORARY on $GR8DES_PG_DATABASE"
+	done
+}
+
 # grizzle reads no environment variable for where to connect: the config's connection (src/db/connection.ts) reads
 # the settings exported above and the migration identity's password, which only this command is given, or runs
 # GR8DES_PG_PASSWORD_COMMAND for it, which also gives every login its password, so no login gets a local one.
 migrate() {
 	if [[ -n "${GR8DES_PG_PASSWORD_COMMAND:-}" ]]; then
 		pnpm exec grizzle migrate "$config"
+		grant_temporary
 		return
 	fi
 	local password
 	password="$(owner_password)"
 	GR8DES_PG_MIGRATION_PASSWORD="$password" pnpm exec grizzle migrate "$config"
+	grant_temporary
 	mkdir -p "$GR8DES_PG_SECRETS"
 	chmod 700 "$GR8DES_PG_SECRETS"
 	local logins login file

@@ -9,12 +9,12 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option, Schema } from "effect";
-import { lawNameOf, lawNames, lawOfCheck } from "#pantry/import/refusal.ts";
+import { lawNames, lawOfCheck } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { shareLaws, shareRelations } from "#pantry/qti/mathml-share.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { Qti, QtiBase } from "#pantry/qti/own.ts";
-import { statedLaws } from "#pantry/test/law-namer.ts";
+import { schemaLawNameOf, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * How long building a schema over every relation of `Qti` may take: its statements are planned
@@ -253,7 +253,7 @@ describe("qti/mathml-share.ts, declared", { timeout: buildTimeout }, () => {
   });
 
   it("reads every containment and key of the module as 'E1 derived', but the share's resolution as 'Idref target'", () => {
-    // Oracle: the statements are named by `lawNameOf`'s own table, as `refusal.test.ts` holds; a
+    // Oracle: the statements are named by `schemaLawNameOf`'s own table, as `refusal.test.ts` holds; a
     // share whose id names nothing breaks its resolution beside "Idref target"'s own statement,
     // so the resolution is stated under that law and the share is refused by it alone.
     const own = ownLaws();
@@ -270,7 +270,7 @@ describe("qti/mathml-share.ts, declared", { timeout: buildTimeout }, () => {
     }
 
     for (const [law, name] of own) {
-      assert.deepStrictEqual(lawNameOf(law), Option.some(name));
+      assert.deepStrictEqual(schemaLawNameOf(law), Option.some(name));
     }
   });
 });

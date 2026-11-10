@@ -21,7 +21,7 @@ import { importPackage } from "#pantry/import/package.ts";
 import { authorRole, judgedCase, loginSession } from "#pantry/test/direct-sql.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { restoredNames } from "#pantry/test/fixtures.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import type { Rule } from "#pantry/import/rules.ts";
 
 /**
@@ -69,7 +69,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the restored-check fixtures through the importer", (it) => {
       for (const [name, rule] of refused) {
         it.effect(`refuses ${name} naming ${rule}`, () =>

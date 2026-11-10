@@ -20,7 +20,6 @@ import { Array as Arr, Effect, Formatter, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { typedHrefsOf } from "#pantry/import/overlays/package.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { rulesOf } from "#pantry/import/refusal.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materializeSpec, specOf } from "#pantry/test/fixtures.ts";
@@ -28,6 +27,7 @@ import type { Edit } from "#pantry/test/fixtures.ts";
 import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 import { resourceTypeCases } from "#pantry/test/resource-type-cases.ts";
+import { schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The composed grammar every case is judged by.
@@ -161,7 +161,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             );
             assert.strictEqual(
               Arr.isReadonlyArrayNonEmpty(host.brokenLaws)
-                ? Option.getOrUndefined(Arr.head(rulesOf(host.brokenLaws)))
+                ? Option.getOrUndefined(Arr.head(schemaRulesOf(host.brokenLaws)))
                 : undefined,
               verdict.verdict === "accepted" || byQuery ? undefined : verdict.rule,
               "the import's rows, judged on the host, refused under the same rule, or by nothing where the law they break is a rule over a query, the database's alone",

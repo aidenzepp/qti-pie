@@ -28,7 +28,7 @@ import {
 } from "#pantry/test/gen/sites.ts";
 import type { SiteBox } from "#pantry/test/gen/sites.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
@@ -74,7 +74,6 @@ const importJudged = (box: SiteBox) =>
 describe.skipIf(!hasLease)("test/gen/sites.ts, on the lease", { timeout: 3_600_000 }, () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
-    timeout: authorLayerHookTimeoutMs,
   })("each package of the site box imported and judged by PostgreSQL", (it) => {
     it.effect(
       "gives every package of the site box the law oracle's verdict, and an include that places nothing include-target or the fragment's outside rule",

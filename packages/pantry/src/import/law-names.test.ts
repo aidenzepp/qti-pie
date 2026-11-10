@@ -8,10 +8,10 @@
 import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option } from "effect";
-import { checkNameOf, lawNameOf, lawNames } from "#pantry/import/refusal.ts";
+import { checkNameOf, lawNames } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/own.ts";
-import { namedLaws, statementLawsOf } from "#pantry/test/law-namer.ts";
+import { namedLaws, schemaLawNameOf, statementLawsOf } from "#pantry/test/law-namer.ts";
 
 describe("the laws each module names where it states them", () => {
   it("names each group by a law of the table, holds each check in its own law's group, groups every statement of Qti once, and names each law by its statement's group", () => {
@@ -44,7 +44,7 @@ describe("the laws each module names where it states them", () => {
       assert.lengthOf(names, 1, `the statement of ${Formatter.format(laws)}: its groups`);
       for (const law of laws) {
         assert.deepStrictEqual(
-          lawNameOf(law),
+          schemaLawNameOf(law),
           Option.fromUndefinedOr(names[0]),
           Formatter.format(law),
         );

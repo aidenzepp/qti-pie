@@ -9,8 +9,8 @@
  *
  * And the laws it judges (`judgedLaws` of `#pantry/test/host-judge.ts`), and each containment a
  * test reads from one relation (`containmentsOf`), are named as the refusal names an outcome's
- * (`lawNameOf` of `#pantry/import/refusal.ts`, by grizzle's `sameLaw`), so a test that names the
- * laws a package's rows break names each by its law, never by its shape. A law whose sides'
+ * (`schemaLawNameOf` of `#pantry/import/refusal.ts`, by grizzle's `sameLaw`), so a test that names
+ * the laws a package's rows break names each by its law, never by its shape. A law whose sides'
  * selections were left out was no law `sameLaw` knows, so every containment and key over a
  * selection went unnamed (6caa20ef).
  *
@@ -46,7 +46,6 @@ import {
 import type { Law } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option, Result, Schema } from "effect";
-import { lawNameOf } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { evaluatedLaws } from "#pantry/test/gen/genetic/host-laws.ts";
 import { judge, judgedLaws, modelledRelations } from "#pantry/test/host-judge.ts";
@@ -54,7 +53,7 @@ import type { HostRow } from "#pantry/test/host-judge.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
 import { copiesOf } from "#pantry/test/key-copies.ts";
 import { isJudged, readsDerived, SideSchema, StatementSchema } from "#pantry/test/predicates.ts";
-import { statedLaws } from "#pantry/test/law-namer.ts";
+import { schemaLawNameOf, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, of this file's tests that compile Qti's law model: a hang guard,
@@ -168,7 +167,7 @@ describe("the host judge's model of a schema", () => {
       // Oracle: the refusal's own naming, grizzle's sameLaw against the laws lawsOf states. Bound:
       // every law of Qti the host judges.
       const unnamed = judgedLaws(Qti).flatMap(({ law }) =>
-        Option.isNone(lawNameOf(law)) ? [Formatter.format(law)] : [],
+        Option.isNone(schemaLawNameOf(law)) ? [Formatter.format(law)] : [],
       );
 
       assert.deepStrictEqual(unnamed, [], "laws the refusal names none of");
@@ -183,7 +182,7 @@ describe("the host judge's model of a schema", () => {
       // each of its relations.
       const unnamed = Object.keys(Qti.relations).flatMap((from) =>
         containmentsOf(Qti, from).flatMap(({ law }) =>
-          Option.isNone(lawNameOf(law)) ? [Formatter.format(law)] : [],
+          Option.isNone(schemaLawNameOf(law)) ? [Formatter.format(law)] : [],
         ),
       );
 

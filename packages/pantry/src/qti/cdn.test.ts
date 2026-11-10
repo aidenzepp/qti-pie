@@ -35,6 +35,7 @@ import type { Datum } from "#pantry/test/predicates.ts";
 import { judgedOf } from "#pantry/test/host-judge.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { addressLists, fetchedAttributes, fetchedTexts } from "#pantry/vocab/fetched.ts";
+import { refusedOf } from "#pantry/test/law-names.ts";
 
 /**
  * Take a list a case draws from as a nonempty one, the form `element` draws from.
@@ -799,7 +800,7 @@ describe("qti/cdn.ts, the laws a policy states", () => {
               relation: statement.relation.name,
             };
             const refusal = refusalOf(
-              { kind: "every", laws: [refused] },
+              { kind: "every", laws: [refusedOf(refused)] },
               { kind: "unreported" },
               grammar,
             );

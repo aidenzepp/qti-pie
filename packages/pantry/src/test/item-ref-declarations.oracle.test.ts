@@ -38,7 +38,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { grammar, ResourceTypeLexical } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawOfCheck, ruleOfLaw } from "#pantry/import/refusal.ts";
+import { lawOfCheck } from "#pantry/import/refusal.ts";
 import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
@@ -70,7 +70,7 @@ import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { itemResourceType, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
-import { statedLaws } from "#pantry/test/law-namer.ts";
+import { schemaRuleOfLaw, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -1143,7 +1143,7 @@ const judged = (input: ItemRefPackage, c: Case<Situation>) =>
 
 describe("an item ref's declarations: the schema's restatement", { timeout: testTimeoutMs }, () => {
   plainIt("names each restated law as refusal.ts names the schema's statement of it", () => {
-    // Oracle: `refusal.ts`'s naming of the laws the schema states (`ruleOfLaw`), against the rule
+    // Oracle: `refusal.ts`'s naming of the laws the schema states (`schemaRuleOfLaw`), against the rule
     // each host law's name keeps (`ruleOf`). A check is named by its name; any other restated
     // statement is each law of `statedLaws` it reads as. Bound: every law the host restates.
     for (const [restated, name] of hostLaws) {
@@ -1151,7 +1151,9 @@ describe("an item ref's declarations: the schema's restatement", { timeout: test
       const rules =
         restated.kind === "check"
           ? [Option.map(lawOfCheck(restated.name), (law) => lawTable[law].rule)]
-          : statedLaws().flatMap(([law]) => (restates(law, restated) ? [ruleOfLaw(law)] : []));
+          : statedLaws().flatMap(([law]) =>
+              restates(law, restated) ? [schemaRuleOfLaw(law)] : [],
+            );
 
       assert.isNotEmpty(rules, `${Formatter.format(restated)}: no law the schema states`);
       for (const rule of rules) {

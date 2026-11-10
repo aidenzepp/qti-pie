@@ -58,6 +58,9 @@ import {
   namedBy,
 } from "#pantry/import/refusal.ts";
 import type { LawName, LawOf } from "#pantry/import/refusal.ts";
+import { ruleOrder } from "#pantry/import/rules.ts";
+import type { Rule } from "#pantry/import/rules.ts";
+import { lawTable } from "#pantry/vocab/laws.ts";
 
 /**
  * Name every stored relation of a module's relations by one law: a module whose rows one law holds
@@ -664,3 +667,23 @@ export const installedNameOf = (schema: typeof Qti, law: LawOf<"check">): Option
  * @returns Its name, or none for a law no row of the tables states.
  */
 export const schemaLawNameOf = (law: Law): Option.Option<LawName> => namerOf(Qti)(law);
+
+/**
+ * Read the rule the law table gives a law, by the schema's own naming ({@link schemaLawNameOf}).
+ *
+ * @param law - A law as the schema states it.
+ * @returns Its rule, or none for a law no row of the table states.
+ */
+export const schemaRuleOfLaw = (law: Law): Option.Option<Rule> =>
+  Option.map(schemaLawNameOf(law), (name) => lawTable[name].rule);
+
+/**
+ * Read the rules a set of laws is refused under, by the schema's own naming: each law's rule once,
+ * listed in the importer's order (`#pantry/import/rules.ts` `ruleOrder`), as the importer reads a
+ * refusal's (`#pantry/import/refusal.ts` `rulesOf`).
+ *
+ * @param laws - The laws, as the schema states them.
+ * @returns The rules, none when no law of the set is in the table.
+ */
+export const schemaRulesOf = (laws: readonly Law[]): readonly Rule[] =>
+  Arr.sort(Arr.dedupe(laws.flatMap((law) => Option.toArray(schemaRuleOfLaw(law)))), ruleOrder);

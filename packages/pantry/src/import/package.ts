@@ -3,11 +3,13 @@
  * refusal (plan W5, Q5.15; the W5 amendment's A, C19 and C22).
  *
  * The package is read, shredded and built into its rows once (`readProgram` of
- * `#pantry/import/program.ts`), and written as one ChangeSet step over the author role
- * (`changeSetOf` of `#pantry/import/write.ts`), applied once by `db.apply` and compiled for that
- * call. The apply is one transaction, so the database holds the whole package or nothing of it:
- * there is no split and no completion marker, and a family past one statement's transport bounds
- * is chunked by grizzle into consecutive statements of that transaction (fin.md §4.5a).
+ * `#pantry/import/program.ts`), and written by the author login's `importWrite` member, the one
+ * ChangeSet step over the author role (`changeSetOf` of `#pantry/import/write.ts`) that `grizzle
+ * generate` compiled into the login's served file, applied once to the package's facts
+ * (`packageFactsOf`). The apply is one transaction, so the database holds the whole package or
+ * nothing of it: there is no split and no completion marker, and a family past one statement's
+ * transport bounds is chunked by grizzle into consecutive statements of that transaction (fin.md
+ * §4.5a).
  */
 import {
   CommitUnknown,
@@ -15,16 +17,17 @@ import {
   ReadFailure,
   StaleSnapshot,
   TransientFailure,
-} from "@bjornpagen/grizzle";
-import type { ApplyError, DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
+} from "@bjornpagen/grizzle/runtime";
+import type { Uuid } from "@bjornpagen/grizzle";
+import type { ApplyError, DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
 import { Clock, Context, Duration, Effect, Option, Random, Ref, Schedule, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { refusalOf } from "#pantry/import/refusal.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
-import { AuthorApp } from "#pantry/qti/own-login.ts";
-import type { Author } from "#pantry/qti/own-login.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
+import { packageFactsOf } from "#pantry/import/write.ts";
+import type { AuthorRole } from "#pantry/qti/roles.ts";
 import type { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
@@ -38,9 +41,9 @@ const retryBound = Duration.seconds(30);
 const retryDelayCap = Duration.seconds(1);
 
 /**
- * The schedule the import retries `Db.open` and `db.apply` on after a transient refusal. Its
- * default is the production schedule, so a caller provides nothing; a test provides another
- * through `Effect.provideService`, to give up sooner than the bound allows.
+ * The schedule the import retries `Db.open` and the `importWrite` apply on after a transient
+ * refusal. Its default is the production schedule, so a caller provides nothing; a test provides
+ * another through `Effect.provideService`, to give up sooner than the bound allows.
  *
  * The default is bounded by elapsed time and not by count. A serialization failure never depends
  * on the call's inputs, and under contention PostgreSQL expects many attempts, so a count says
@@ -184,13 +187,13 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
 /**
  * Import the package at `dir`.
  *
- * Reads the package once, shreds the documents its manifest names, mints every id afresh and
- * builds every row, then applies them as one ChangeSet through the author role. `Db.open` and
- * `db.apply` are retried on a transient refusal and on nothing else. When the commit's outcome is
- * unknown the package row is read back by its id ({@link settleCommitUnknown}): present, the import
- * was accepted; absent, the error is the answer; a read-back that fails is `CommitUnresolved`. The
- * same package imported twice is two packages, each with its own ids. The retries run on
- * {@link RetrySchedule}, and each attempt of the apply through {@link WrapApply}.
+ * Reads the package once, shreds the documents its manifest names, mints every id afresh and builds
+ * every row, then applies them as one ChangeSet through the author role. `Db.open` and the
+ * `importWrite` apply are retried on a transient refusal and on nothing else. When the commit's
+ * outcome is unknown the package row is read back by its id ({@link settleCommitUnknown}): present,
+ * the import was accepted; absent, the error is the answer; a read-back that fails is
+ * `CommitUnresolved`. The same package imported twice is two packages, each with its own ids. The
+ * retries run on {@link RetrySchedule}, and each attempt of the apply through {@link WrapApply}.
  *
  * @param dir - The package directory or `.zip` file.
  * @returns The id of the committed package. Fails with `ImportRefused` naming the rules the package
@@ -204,15 +207,20 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
 ): Effect.fn.Return<
   Uuid,
   ImportRefused | PlatformError.PlatformError | ApplyError | OpenError | CommitUnresolved,
-  FileSystem.FileSystem | DbLayer<typeof Author>
+  AuthorLogin | FileSystem.FileSystem | DbLayer<AuthorRole>
 > {
   const schedule = yield* RetrySchedule;
   const wrap = yield* WrapApply;
+  const login = yield* AuthorLogin;
   const program = yield* readProgram(dir);
   const { packageId } = program;
-  const changes = changeSetOf(AuthorApp.roles.author.role, program.inputs);
-  const db = yield* retried("Db.open", Db.open(AuthorApp.roles.author, {}), schedule);
-  const [elapsed, outcome] = yield* retried("db.apply", wrap(db.apply(changes, {})), schedule).pipe(
+  const facts = packageFactsOf(program.inputs);
+  const db = yield* retried("Db.open", Db.open(login.roles.author, {}), schedule);
+  const [elapsed, outcome] = yield* retried(
+    "importWrite",
+    wrap(db.workload.importWrite.apply({ insert: facts }, {})),
+    schedule,
+  ).pipe(
     Effect.catchTag("CommitUnknown", (commit) =>
       settleCommitUnknown(commit, packageId, db.workload.packageOf.get({ id: packageId })),
     ),

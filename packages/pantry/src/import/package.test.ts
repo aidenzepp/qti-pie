@@ -13,15 +13,12 @@ import {
   CommitUnknown,
   Db,
   Migrating,
-  query,
   ReadFailure,
   SerializationFailure,
   ServerError,
   Sqlstate,
   StaleSnapshot,
   TransientFailure,
-  uuid,
-  v,
 } from "@bjornpagen/grizzle";
 import type { ApplyError, ReadError, Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -37,29 +34,17 @@ import {
   settleCommitUnknown,
   WrapApply,
 } from "#pantry/import/package.ts";
-import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
-import { Package } from "#pantry/qti/package.ts";
+
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 const fixtures = inject("fixtures");
-
-/**
- * A package stored by its id.
- */
-const packageRows = query(Author).rule((r) => {
-  const { id } = v(Package, "package");
-
-  return r
-    .match(Package, { id })
-    .where(r.eq(id, r.param("id", uuid)))
-    .find({ id });
-});
 
 /**
  * The server's report of a serialization failure, SQLSTATE 40001, built with grizzle's own
@@ -349,10 +334,10 @@ describe.skipIf(!hasLease)(
         // Oracle: PostgreSQL, every law over `simple`, and the package read back by its id.
         Effect.gen(function* acceptsSimple() {
           const id = yield* importPackage(fixtures.simple);
-          const db = yield* Db.open(AuthorApp.roles.author, {});
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
 
           assert.match(id, uuidPattern);
-          assert.lengthOf(yield* (yield* db.execute(packageRows, { id })).collect, 1);
+          assert.isTrue(Option.isSome(yield* db.workload.packageOf.get({ id })), id);
         }),
       );
 
@@ -446,9 +431,9 @@ describe.skipIf(!hasLease)(
               Effect.andThen(apply, Effect.fail(new CommitUnknown())),
             ),
           );
-          const db = yield* Db.open(AuthorApp.roles.author, {});
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
 
-          assert.lengthOf(yield* (yield* db.execute(packageRows, { id })).collect, 1);
+          assert.isTrue(Option.isSome(yield* db.workload.packageOf.get({ id })), id);
         }),
       );
 

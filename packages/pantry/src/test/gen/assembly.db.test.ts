@@ -34,7 +34,7 @@ import {
 } from "#pantry/test/gen/assembly.ts";
 import type { Assembly, RuleFault } from "#pantry/test/gen/assembly.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
@@ -84,7 +84,6 @@ const importJudged = (assembly: Assembly) =>
 describe.skipIf(!hasLease)("test/gen/assembly.ts, on the lease", { timeout: 3_600_000 }, () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
-    timeout: authorLayerHookTimeoutMs,
   })("each generated package imported and judged by PostgreSQL", (it) => {
     it.effect(
       "every package of the small box is accepted or refused as reading 87's model says",

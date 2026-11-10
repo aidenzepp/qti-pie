@@ -47,11 +47,8 @@ import {
   contractNames,
   explain,
   generatedNames,
-  lawNameOf,
   owedRules,
   refusalOf,
-  ruleOfLaw,
-  rulesOf,
 } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -74,10 +71,14 @@ import {
   keyNames,
   patternNameIn,
   patternTypeOf,
+  schemaLawNameOf,
   schemaLawsOf,
+  schemaRuleOfLaw,
+  schemaRulesOf,
   statedLaws,
   textLaws,
 } from "#pantry/test/law-namer.ts";
+import { refusedOf } from "#pantry/test/law-names.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -495,7 +496,9 @@ const tierOf = (rule: Rule): number => {
  * @returns Their rules, one per law the table owns, repeats and order kept.
  */
 const lawRules = (laws: readonly Law[]): readonly (typeof precedence)[number][] =>
-  laws.flatMap((law) => Option.toArray(Option.map(lawNameOf(law), (name) => lawTable[name].rule)));
+  laws.flatMap((law) =>
+    Option.toArray(Option.map(schemaLawNameOf(law), (name) => lawTable[name].rule)),
+  );
 
 /**
  * Write rules as one text, so two listings compare by a string's equality.
@@ -514,13 +517,13 @@ const listed = (named: readonly string[]): string => named.join(" ");
  * @param laws - The laws, in any order, with any repeats.
  */
 const assertRules = (laws: Arr.NonEmptyReadonlyArray<Law>): void => {
-  const rules = rulesOf(laws);
+  const rules = schemaRulesOf(laws);
   const expected = Arr.dedupe(lawRules(laws)).toSorted(
     (a, b) => precedence.indexOf(a) - precedence.indexOf(b),
   );
-  const reversed = rulesOf(Arr.reverse(laws));
+  const reversed = schemaRulesOf(Arr.reverse(laws));
   // A repeat is a drawn law again, the same value, so the set keeps each value once.
-  const once = rulesOf(Arr.dedupeWith(laws, (a, b) => a === b));
+  const once = schemaRulesOf(Arr.dedupeWith(laws, (a, b) => a === b));
   const [first] = rules;
   if (
     first !== undefined &&
@@ -758,7 +761,11 @@ describe("the merged axes and the laws no row states", () => {
     // Oracle: the outcome itself, read back field by field: its decision, the law's display text
     // with no name or rule, no source, the witness's kind, and no rule.
     const law: Law = { from: sideOf("Nowhere", "x"), kind: "contained", to: sideOf("Node", "id") };
-    const refused = refusalOf({ kind: "every", laws: [law] }, { kind: "unreported" }, grammar);
+    const refused = refusalOf(
+      { kind: "every", laws: [refusedOf(law)] },
+      { kind: "unreported" },
+      grammar,
+    );
 
     assert.deepStrictEqual(refused.rules, []);
     assert.deepStrictEqual(refused.origin, {
@@ -774,7 +781,7 @@ describe("the merged axes and the laws no row states", () => {
       ),
       refused.message,
     );
-    assert.isTrue(Option.isNone(ruleOfLaw(law)));
+    assert.isTrue(Option.isNone(schemaRuleOfLaw(law)));
   });
 
   it(
@@ -796,7 +803,7 @@ describe("the merged axes and the laws no row states", () => {
         relation: "Attribute",
       } as const;
       const refused = refusalOf(
-        { kind: "every", laws: [stated, cdn] },
+        { kind: "every", laws: [refusedOf(stated), refusedOf(cdn)] },
         { kind: "unreported" },
         grammar,
       );
@@ -1252,7 +1259,7 @@ describe("the rules of the laws one native object carries, in the precedence's o
   it("lists each planned axis's rules with the one the spec's order names first", () => {
     for (const { label, laws, rule } of plannedAxes) {
       assert.isAbove(laws.length, 0, label);
-      assert.deepStrictEqual(Arr.head(rulesOf(laws)), Option.some(rule), label);
+      assert.deepStrictEqual(Arr.head(schemaRulesOf(laws)), Option.some(rule), label);
     }
   });
 
@@ -1495,7 +1502,7 @@ describe("the explanation of a content-order refusal", () => {
 
                   const at = `${state.version} ${state.parent} ${state.state}`;
                   const explained = explain(
-                    [first, ...rest],
+                    [refusedOf(first), ...rest.map(refusedOf)],
                     { kind: "row", relation: "Node", values },
                     grammar,
                   );
@@ -1521,7 +1528,7 @@ describe("the explanation of a content-order refusal", () => {
                   }
 
                   assert.isTrue(
-                    sources.has(lawTable[Option.getOrThrow(lawNameOf(first))].source),
+                    sources.has(lawTable[Option.getOrThrow(schemaLawNameOf(first))].source),
                     at,
                   );
                 }
@@ -1676,7 +1683,7 @@ describe("the pattern laws, one per field", () => {
       );
       assert.isFalse(sameLaw(chars, namespace));
       assert.deepStrictEqual(
-        [lawNameOf(chars), lawNameOf(namespace)],
+        [schemaLawNameOf(chars), schemaLawNameOf(namespace)],
         [Option.some("XML production"), Option.some("Key text bound")],
       );
     },
@@ -1693,7 +1700,7 @@ describe("the census of the composed Qti schema", () => {
       Effect.gen(function* census() {
         const laws = schemaLawsOf(Qti);
         const unowned = laws
-          .filter((law) => Option.isNone(lawNameOf(law)))
+          .filter((law) => Option.isNone(schemaLawNameOf(law)))
           .map((law) => Formatter.format(law));
 
         assert.deepStrictEqual(unowned, [], "laws Qti states that no row of the table owns");
@@ -1792,7 +1799,7 @@ describe("the census of the composed Qti schema", () => {
 
         assert.isNotEmpty(laws, `${shown}: no containment Qti states`);
         for (const law of laws) {
-          assert.deepStrictEqual(ruleOfLaw(law), Option.some(rule), shown);
+          assert.deepStrictEqual(schemaRuleOfLaw(law), Option.some(rule), shown);
         }
       }
     },
@@ -1813,6 +1820,6 @@ describe("the census of the composed Qti schema", () => {
     );
 
     assert.deepStrictEqual(raised, [{ field: "value", kind: "generated", relation: "Planted" }]);
-    assert.deepStrictEqual(raised.map(lawNameOf), [Option.none()]);
+    assert.deepStrictEqual(raised.map(schemaLawNameOf), [Option.none()]);
   });
 });

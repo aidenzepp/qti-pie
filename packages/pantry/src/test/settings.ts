@@ -40,26 +40,28 @@ export const hasLease = Option.isSome(settings.leaseDatabase);
  * The longest lease test on trunk a1d5af1 is the export round trip, at 24,095 ms
  * (gt-w3, 2026-11-04: 21,385, 22,160 and 24,095 ms in three runs of the lease
  * files, load 6.5 to 132). The value is twice that, rounded up to the next 1,000,
- * the rule `authorLayerHookTimeoutMs` uses. Raise it only on a new measurement
+ * the rule `probeLayerHookTimeoutMs` uses. Raise it only on a new measurement
  * recorded here, never to make a run pass. A lease suite that only reads keeps
  * vitest's default.
  */
 export const leaseTestTimeoutMs = 49_000;
 
 /**
- * The timeout, in milliseconds, for the `layer` hook that builds `AuthorAppLayer`.
+ * The timeout, in milliseconds, for the `layer` hook that builds a probe of the author login
+ * (`#pantry/test/served-members.ts` `servedProbe`). grizzle's `compileServed` compiles the login's
+ * workloads with the probe's members in process, the compile `grizzle generate` runs, so the hook
+ * is CPU-bound and slows with the machine's load. `AuthorAppLayer` itself compiles nothing: it
+ * loads the committed served file, and its hook runs under the database project's `hookTimeout`.
  *
- * The hook reads and decodes the migrations snapshot and builds grizzle's `DbLayer`, which compiles
- * every program of the login's workloads and opens its pool, so it is CPU-bound and slows with the
- * machine's load. Measured 2026-11-07 at `4e82dde5`, the snapshot at 21,856,162 bytes, on the lease
- * with the other lanes running: a cold build, the first in its process as each lease file's hook
- * is, took 32.1 s at a load average of 31 to 36 (0.6 s of it the snapshot), and 31.3, 25.0, 14.5
- * and 12.7 s at a load average of 28 to 33. The 20 s this held before, twice a build at a load of 4
- * to 6 on 2026-11-02, timed out `qti/interactions.db.test.ts`'s hook in the database run of
- * `88946fff` and again run alone. The value is twice the slowest, rounded up to the next 1,000.
- * Raise it only on a new measurement recorded here, never to make a run pass.
+ * The nearest measurement is of `AuthorAppLayer` when its `DbLayer` compiled every program of the
+ * login's workloads, the compile a probe's layer runs now. Measured 2026-11-07 at `4e82dde5`, the
+ * snapshot at 21,856,162 bytes, on the lease with the other lanes running: a cold build, the first
+ * in its process as each lease file's hook is, took 32.1 s at a load average of 31 to 36, and 31.3,
+ * 25.0, 14.5 and 12.7 s at a load average of 28 to 33. The value is twice the slowest, rounded up
+ * to the next 1,000. A measurement of the probe's own hook is owed after the repin. Raise it only
+ * on a new measurement recorded here, never to make a run pass.
  */
-export const authorLayerHookTimeoutMs = 65_000;
+export const probeLayerHookTimeoutMs = 65_000;
 
 /**
  * The timeout, in milliseconds, for one test that spawns the CLI as a child process.

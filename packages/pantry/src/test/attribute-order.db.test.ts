@@ -40,7 +40,7 @@ import {
 } from "#pantry/test/gen/attribute-order.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
@@ -142,7 +142,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("spec reading 137, attribute order, in the database", (it) => {
       it.effect(
         "gives every generated package the verdict and the rule it gives it read in order, and exports an accepted one in the order written, whatever order each element's attributes and declarations are written in",

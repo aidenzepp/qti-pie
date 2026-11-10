@@ -4,12 +4,15 @@
  * every program of every login, and reads what it prints. A statement grizzle refuses ("does not
  * compile") fails here, in the free suite, instead of waiting for a regenerate or a leased run.
  *
- * Its bound is the one schema, every login and every program. Drift between the schema and
- * `snapshot.json` ("an ungenerated change", "is not the one snapshot.json records") is not a
- * compile failure and passes: `src/qti/logins.test.ts` owns that state.
+ * Its bound is the one schema, every login and every program. Drift between the schema and the
+ * committed migrations ("an ungenerated change", "is not the one snapshot.json records", a served
+ * file generate did not write) is no compile failure and passes: the integration checks' own
+ * `grizzle check` refuses it (AGENTS.md, Workflow, Integration).
  *
- * It spawns `grizzle check` because grizzle exports no compile function to this package: the
- * engine's compiler is no declared dependency of pantry, and the CLI is the supported way in.
+ * It spawns `grizzle check` because the check is the whole compile: `compileSchema` over the schema
+ * and every login's served compile, which `grizzle generate` commits. `@bjornpagen/grizzle/compile`
+ * exports only one login's served compile under a given snapshot (`compileServed`, a test's probe,
+ * `#pantry/test/served-members.ts`), which checks no schema.
  */
 import { spawn } from "node:child_process";
 import path from "node:path";

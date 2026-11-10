@@ -18,7 +18,6 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Array as Arr, ConfigProvider, Effect, FileSystem, Option } from "effect";
-import { lawNameOf, rulesOf } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -28,6 +27,7 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { edit, item, itemResource, manifestOf, test } from "#pantry/test/probe.ts";
+import { schemaLawNameOf, schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 /**
  * Every law the host judges, read once.
@@ -207,7 +207,10 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   const host =
                     first === undefined
                       ? "accepted"
-                      : Option.getOrElse(Arr.head(rulesOf([first, ...rest])), () => "unnamed");
+                      : Option.getOrElse(
+                          Arr.head(schemaRulesOf([first, ...rest])),
+                          () => "unnamed",
+                        );
                   const oracle = verdict.kind === "accepted" ? ["accepted"] : [...verdict.rules];
 
                   return { host, name: drawn.name, oracle };
@@ -221,7 +224,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             cases.map(({ host, name, rule }) => ({ host, name, oracle: [rule] })),
           );
           assert.isFalse(
-            laws.some(({ law }) => Option.getOrUndefined(lawNameOf(law)) === "Set type"),
+            laws.some(({ law }) => Option.getOrUndefined(schemaLawNameOf(law)) === "Set type"),
             "the host judges Set type: expect its P20 on the host",
           );
         }),

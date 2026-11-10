@@ -1,8 +1,8 @@
 /**
  * The import's rows judged on the host: the laws `Qti` states that a package's rows can be held to
  * before any of them is written, evaluated over the rows `readProgram` builds, each named by its
- * law as a refusal names it (`#pantry/import/refusal.ts` `lawNameOf`), each statement's laws as
- * grizzle's `lawsByStatement` gives them.
+ * law as a refusal names it (`#pantry/import/refusal.ts` `schemaLawNameOf`), each statement's laws
+ * as grizzle's `lawsByStatement` gives them.
  *
  * Four kinds of statement are evaluated, from the statements grizzle keeps for them, never from a
  * list written here:
@@ -40,7 +40,7 @@
 import { Array as Arr, Formatter, Option, Predicate, Schema } from "effect";
 import { sameLaw } from "@bjornpagen/grizzle";
 import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";
-import { lawNameOf, lawOfCheck } from "#pantry/import/refusal.ts";
+import { lawOfCheck } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
@@ -60,7 +60,7 @@ import {
   unreadIn,
 } from "#pantry/test/predicates.ts";
 import type { Row as HeldRow, StoredSide, Term } from "#pantry/test/predicates.ts";
-import { statedLaws, statementLawsOf } from "#pantry/test/law-namer.ts";
+import { schemaLawNameOf, statedLaws, statementLawsOf } from "#pantry/test/law-namer.ts";
 
 /**
  * One field's value as a row holds it: a text, a number, a natural, a flag or a set of handles.
@@ -401,7 +401,7 @@ const namedLaws: readonly (readonly [Law, LawName])[] = [
     laws.flatMap((law) =>
       law.kind === "check"
         ? []
-        : Option.toArray(Option.map(lawNameOf(law), (name) => [law, name] as const)),
+        : Option.toArray(Option.map(schemaLawNameOf(law), (name) => [law, name] as const)),
     ),
   ),
   ...writtenLaws,

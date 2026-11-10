@@ -24,7 +24,7 @@
  *   grammar's rows; for a content-order law it names the positions `Follow` allows next, each with
  *   its XSD particle. There is no catalog of messages.
  */
-import { sameLaw } from "@bjornpagen/grizzle";
+
 import type { Law, Refused, Witness } from "@bjornpagen/grizzle";
 import { Array as Arr, Formatter, Match, Option, Order, pipe, Predicate, Schema } from "effect";
 import type { Types } from "effect";
@@ -39,7 +39,6 @@ import type { Source } from "#pantry/vocab/inventory/types.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { ruleOrder, ImportRefused } from "#pantry/import/rules.ts";
 import type { Rule } from "#pantry/import/rules.ts";
-import snapshotFile from "#migrations/qti/snapshot.json" with { type: "json" };
 import lawNamesFile from "#pantry/vocab/law-names.json" with { type: "json" };
 
 /**
@@ -208,19 +207,44 @@ export const contractNames: readonly (readonly [string, LawName])[] = namedBy(
 );
 
 /**
- * What the dictionary tells of one installed law: its name in {@link lawTable} where the table
- * names it, and, for a check, the name PostgreSQL holds it under (grizzle's `constraintNamesOf`).
+ * The object that refused a law, as the importer reads it: an installed constraint or domain, by
+ * the name PostgreSQL holds it under, or a write statement or a column's NOT NULL, which name no
+ * check. grizzle's `RefusingObject` is one, its name a branded text.
  */
-const LawEntry = Schema.Struct({
-  installed: Schema.optional(Schema.String),
-  name: Schema.optional(Schema.String),
-});
+export type RefusingBy =
+  | { readonly kind: "constraint" | "domain"; readonly name: string }
+  | { readonly kind: "notNull" | "statement" };
+
+/**
+ * One law of a refusal, as the importer names it: the law as the schema states it, its LawId, the
+ * key of the snapshot's theory.laws, and the object that refused it. grizzle's `RefusedLaw` is
+ * one, its LawId and installed name branded texts; a test plants one with texts of its own.
+ */
+export interface RefusalLaw {
+  readonly by: RefusingBy;
+  readonly id: string;
+  readonly law: Law;
+}
+
+/**
+ * A refusal of laws, as the importer reads one: how grizzle decided them, and the laws, at least
+ * one (grizzle's `Refused`).
+ */
+export interface RefusalOf {
+  readonly kind: Refused["kind"];
+  readonly laws: Arr.NonEmptyReadonlyArray<RefusalLaw>;
+}
+
+/**
+ * What the dictionary tells of one installed law: its name in {@link lawTable}.
+ */
+const LawEntry = Schema.Struct({ name: Schema.String });
 
 /**
  * The law-name dictionary's form, `#pantry/vocab/law-names.json`: each installed law the importer
- * names, keyed by its LawId, the name the migrations snapshot records the law under and a served
- * outcome carries it by; and each pattern law's name, keyed by `Relation.field`, the law's own
- * fields, since the snapshot records a field's pattern under its text domain and not as a law.
+ * names, keyed by its LawId, the key a refused law carries (grizzle's `RefusedLaw.id`, the key of
+ * the snapshot's theory.laws); and each pattern law's name, keyed by `Relation.field`, the law's
+ * own fields.
  *
  * `src/test/law-names.ts` generates it from the schema's own naming (`src/test/law-namer.ts`) and
  * the committed snapshot, and `law-names.committed.test.ts` holds the committed file to it and
@@ -238,96 +262,6 @@ export const LawNamesFileSchema = Schema.Struct({
 export type LawNamesFile = typeof LawNamesFileSchema.Type;
 
 /**
- * The part of a migrations snapshot that gives each installed law its LawId: each level's laws,
- * each described in grizzle's canonical JSON form beside its LawId.
- */
-export const SnapshotLaws = Schema.Struct({
-  levels: Schema.Array(
-    Schema.Struct({
-      laws: Schema.Array(Schema.Struct({ described: Schema.Json, law: Schema.String })),
-    }),
-  ),
-});
-
-/**
- * A value of grizzle's canonical JSON form read back: JSON, but for a bigint where the form holds
- * `~n:<integer>`.
- */
-type Revived =
-  | null
-  | bigint
-  | boolean
-  | number
-  | string
-  | readonly Revived[]
-  | { readonly [key: string]: Revived };
-
-/**
- * Read a value of grizzle's canonical JSON form back as the value it stands for: a string
- * `~n:<integer>` is that bigint, a string that starts `~~` is the string with one `~` fewer, and
- * every array and record is read member by member. The snapshot describes each law in this form
- * (grizzle's `core/canonical.ts`: "bigint, carried as the tagged string "~n:<integer>""; "A plain
- * string beginning with "~" is escaped by doubling the "~"").
- *
- * @param value - A value of the JSON form.
- * @returns The value it stands for.
- * @see https://github.com/bjornpagen/grizzle/blob/450d0984/packages/engine/src/core/canonical.ts
- */
-const fromCanonicalJson = (value: Schema.Json): Revived => {
-  if (Predicate.isString(value)) {
-    if (/^~n:-?(?:0|[1-9][0-9]*)$/u.test(value)) {
-      return BigInt(value.slice(3));
-    }
-
-    return value.startsWith("~~") ? value.slice(1) : value;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(fromCanonicalJson);
-  }
-
-  return value === null || Predicate.isNumber(value) || Predicate.isBoolean(value)
-    ? value
-    : Object.fromEntries(
-        Object.entries(value).map(([key, member]) => [key, fromCanonicalJson(member)]),
-      );
-};
-
-/**
- * Test whether a value read from the snapshot is a law: a record with a `kind`. The test is no
- * proof of the law's whole shape; `law-names.committed.test.ts` proves it of every law the
- * dictionary names, each `sameLaw` to a law grizzle's `lawsOf(Qti)` states.
- *
- * @param value - A revived law of the snapshot.
- * @returns Whether it is a law.
- */
-const isLaw = (value: Revived): value is Revived & Law =>
-  Predicate.hasProperty(value, "kind") && Predicate.isString(value.kind);
-
-/**
- * One installed law as the snapshot describes it: the law, and its LawId.
- */
-export interface DescribedLaw {
-  readonly id: string;
-  readonly law: Law;
-}
-
-/**
- * Read the installed laws a migrations snapshot describes, each with its LawId.
- *
- * @param snapshot - The snapshot's laws ({@link SnapshotLaws}).
- * @returns Its laws, level by level, in the snapshot's order.
- */
-export const describedLawsOf = (snapshot: typeof SnapshotLaws.Type): readonly DescribedLaw[] =>
-  snapshot.levels.flatMap(({ laws }) =>
-    laws.flatMap(({ described, law: id }) => {
-      const law = fromCanonicalJson(described);
-
-      return isLaw(law) ? [{ id, law }] : [];
-    }),
-  );
-
-/**
  * Read a name of {@link lawTable}.
  *
  * @param name - A name as the dictionary writes it.
@@ -337,61 +271,38 @@ const lawNamed = (name: string): Option.Option<LawName> =>
   Option.fromUndefinedOr(lawNames.find((known) => known === name));
 
 /**
- * What a law-name dictionary tells of a law: its name, and a check's installed name.
+ * The namer of a law-name dictionary.
  */
 export interface LawNamer {
   /**
-   * Read the name PostgreSQL holds a check under.
+   * Name a law an outcome refused.
    *
-   * @param law - A check law of an outcome.
-   * @returns Its installed name, or none for a check the dictionary does not hold.
-   */
-  readonly installedOf: (law: LawOf<"check">) => Option.Option<string>;
-  /**
-   * Name a law an outcome names.
-   *
-   * @param law - The law.
+   * @param refused - The refused law: the law, its LawId and the object that refused it.
    * @returns Its name, or none for a law no row of the dictionary or of the tables states.
    */
-  readonly nameOf: (law: Law) => Option.Option<LawName>;
+  readonly nameOf: (refused: RefusalLaw) => Option.Option<LawName>;
 }
 
 /**
- * Build the namer of a law-name dictionary over the laws a snapshot describes. A law is named by
- * its own fields where they name it: a check by its name ({@link lawOfCheck}), a contract and a
- * generated field by their tables ({@link contractNames}, {@link generatedNames}), and a pattern
- * by its relation and field, the dictionary's `patterns`. Every other law is named by the entry of
- * its LawId, the id of the described law grizzle's `sameLaw` holds it to be, found among the
- * described laws of its bucket ({@link bucketOf}); a check's installed name is its entry's too.
- * Nothing reads the schema. A served outcome carries each law's LawId itself, which ends the
- * search.
+ * Build the namer of a law-name dictionary. A refused law is named by its own fields where they
+ * name it: a check by its name ({@link lawOfCheck}), a contract and a generated field by their
+ * tables ({@link contractNames}, {@link generatedNames}), and a pattern by its relation and field,
+ * the dictionary's `patterns`. Every other law is named by the dictionary's entry of its LawId,
+ * which the outcome carries. Nothing reads the schema.
  *
  * @param file - The dictionary.
- * @param described - The installed laws, each with its LawId ({@link describedLawsOf}).
  * @returns Its namer.
  */
-export const namerFrom = (file: LawNamesFile, described: readonly DescribedLaw[]): LawNamer => {
-  const buckets: Readonly<Record<string, readonly DescribedLaw[]>> = Arr.groupBy(
-    described,
-    ({ law }) => bucketOf(law),
-  );
+export const namerFrom = (file: LawNamesFile): LawNamer => {
   const byContract = new Map(contractNames);
   const byGenerated = new Map(generatedNames);
-  const entryOf = (law: Law) =>
-    Option.flatMap(
-      Arr.findFirst(buckets[bucketOf(law)] ?? [], (held) => sameLaw(held.law, law)),
-      ({ id }) => Option.fromUndefinedOr(file.laws[id]),
-    );
-  const stated = (law: Law): Option.Option<LawName> =>
-    Option.flatMap(entryOf(law), ({ name }) =>
-      Option.flatMap(Option.fromUndefinedOr(name), lawNamed),
-    );
 
   return {
-    installedOf: (law) =>
-      Option.flatMap(entryOf(law), ({ installed }) => Option.fromUndefinedOr(installed)),
-    nameOf: (law) =>
-      Match.value(law).pipe(
+    nameOf: ({ id, law }) => {
+      const stated = (): Option.Option<LawName> =>
+        Option.flatMap(Option.fromUndefinedOr(file.laws[id]), ({ name }) => lawNamed(name));
+
+      return Match.value(law).pipe(
         Match.discriminatorsExhaustive("kind")({
           above: stated,
           check: ({ name }) => lawOfCheck(name),
@@ -408,31 +319,41 @@ export const namerFrom = (file: LawNamesFile, described: readonly DescribedLaw[]
           primaryKey: stated,
           tree: stated,
         }),
-      ),
+      );
+    },
   };
 };
 
 /**
- * The installed laws this package's committed snapshot describes, each with its LawId.
+ * The namer of the committed dictionary, `#pantry/vocab/law-names.json`, built once, when this
+ * module loads. The file is trusted as its import types it: the typecheck holds its shape to
+ * {@link LawNamesFile}, and `law-names.committed.test.ts` holds it to the one the schema and the
+ * committed snapshot generate, so loading it decodes nothing, and a dictionary of a stale shape
+ * still loads for its generator to replace.
  */
-export const committedLaws = describedLawsOf(Schema.decodeUnknownSync(SnapshotLaws)(snapshotFile));
+const committedNamer = namerFrom(lawNamesFile);
 
 /**
- * The namer of the committed dictionary, `#pantry/vocab/law-names.json`, over the committed
- * snapshot's laws, built once, when this module loads.
- */
-const committedNamer = namerFrom(
-  Schema.decodeUnknownSync(LawNamesFileSchema)(lawNamesFile),
-  committedLaws,
-);
-
-/**
- * Name the law an outcome over `Qti` names, by the committed dictionary ({@link namerFrom}).
+ * Name a law an outcome over `Qti` refused, by the committed dictionary ({@link namerFrom}).
  *
- * @param law - A law as an `invariant-rejected` outcome names it.
+ * @param refused - A law of an `invariant-rejected` outcome.
  * @returns Its name, or none for a law no row of the dictionary or of the tables states.
  */
-export const lawNameOf = (law: Law): Option.Option<LawName> => committedNamer.nameOf(law);
+export const lawNameOf = (refused: RefusalLaw): Option.Option<LawName> =>
+  committedNamer.nameOf(refused);
+
+/**
+ * Read the name PostgreSQL holds a refused check under: the constraint or domain check that refused
+ * it, as the outcome names it (grizzle's `RefusedLaw.by`). A check a statement or a trigger refused
+ * has none, and nor has any other kind of law.
+ *
+ * @param refused - A law of an `invariant-rejected` outcome.
+ * @returns The check's installed name, or none.
+ */
+export const installedNameOf = ({ by, law }: RefusalLaw): Option.Option<string> =>
+  law.kind === "check" && (by.kind === "constraint" || by.kind === "domain")
+    ? Option.some(by.name)
+    : Option.none();
 
 /**
  * The rule the law table gives a law: its name's row's ({@link lawNameOf}).
@@ -440,8 +361,8 @@ export const lawNameOf = (law: Law): Option.Option<LawName> => committedNamer.na
  * @param law - A law as an `invariant-rejected` outcome names it.
  * @returns Its rule, or none for a law no row of the table states.
  */
-export const ruleOfLaw = (law: Law): Option.Option<Rule> =>
-  Option.map(lawNameOf(law), (name) => lawTable[name].rule);
+export const ruleOfLaw = (refused: RefusalLaw): Option.Option<Rule> =>
+  Option.map(lawNameOf(refused), (name) => lawTable[name].rule);
 
 /**
  * The rules a refusal that names `laws` is refused under: the rule of each law the table states,
@@ -456,7 +377,7 @@ export const ruleOfLaw = (law: Law): Option.Option<Rule> =>
  * @param laws - The `laws` of an `invariant-rejected` outcome.
  * @returns The rules, none when no law of the set is in the table.
  */
-export const rulesOf = (laws: readonly Law[]): readonly Rule[] =>
+export const rulesOf = (laws: readonly RefusalLaw[]): readonly Rule[] =>
   Arr.sort(Arr.dedupe(laws.flatMap((law) => Option.toArray(ruleOfLaw(law)))), ruleOrder);
 
 /**
@@ -756,11 +677,11 @@ const witnessText = (witness: RefusalWitness): string => {
  * @returns The explanation.
  */
 export const explain = (
-  laws: Arr.NonEmptyReadonlyArray<Law>,
+  laws: Arr.NonEmptyReadonlyArray<RefusalLaw>,
   witness: RefusalWitness,
   constants: RefusalConstants,
 ): Explanation => {
-  const named = laws.map((law) => ({ law, name: lawNameOf(law) }));
+  const named = laws.map((refused) => ({ law: refused.law, name: lawNameOf(refused) }));
   const broken = Arr.head(
     named.flatMap(({ name }) =>
       Option.toArray(name.pipe(Option.flatMap((law) => brokenStateOf(law, witness)))),
@@ -804,20 +725,19 @@ export const explain = (
 
 /**
  * One law of a refusal as the refusal carries it: its display text, the installed name of a check
- * the committed dictionary holds ({@link namerFrom}), and the name and rule the law table gives
- * it.
+ * the outcome names ({@link installedNameOf}), and the name and rule the law table gives it.
  *
  * @param law - A law of an `invariant-rejected` outcome.
  * @returns Its facts.
  */
-const lawFactOf = (law: Law): typeof RefusedLaw.Type => {
-  const fact: Types.Mutable<typeof RefusedLaw.Type> = { text: Formatter.format(law) };
-  const installed = law.kind === "check" ? committedNamer.installedOf(law) : Option.none();
+const lawFactOf = (refused: RefusalLaw): typeof RefusedLaw.Type => {
+  const fact: Types.Mutable<typeof RefusedLaw.Type> = { text: Formatter.format(refused.law) };
+  const installed = installedNameOf(refused);
   if (Option.isSome(installed)) {
     fact.installed = installed.value;
   }
 
-  const name = lawNameOf(law);
+  const name = lawNameOf(refused);
   if (Option.isSome(name)) {
     fact.name = name.value;
     fact.rule = lawTable[name.value].rule;
@@ -841,7 +761,7 @@ const lawFactOf = (law: Law): typeof RefusedLaw.Type => {
  * @returns The refusal.
  */
 export const refusalOf = (
-  refused: Refused,
+  refused: RefusalOf,
   witness: RefusalWitness,
   constants: RefusalConstants,
 ): ImportRefused => {

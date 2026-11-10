@@ -45,7 +45,7 @@ import {
 } from "#pantry/test/fixtures.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { asi, item, manifestOf } from "#pantry/test/probe.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
@@ -325,7 +325,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the catalog laws, judged by PostgreSQL through the importer", (it) => {
       for (const { files, laws, name, rule } of refusals) {
         it.effect(`refuses ${name} under ${rule}, as the law oracle predicts`, () =>
@@ -386,7 +385,6 @@ describe.skipIf(!hasLease)(
 
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the phase-9 fixtures, round-tripped and refused through the importer", (it) => {
       for (const name of [...catalogNames, ...companionNames]) {
         it.effect(`${name}: imports, exports and compares equal with its source`, () =>

@@ -23,24 +23,15 @@
  * 154), a pair mapping keyed `A B` and `B A`, a point mapping keyed `1 2` and `01 +2`, an integer
  * mapping keyed `abc`, and an integer outcome's match table entry targeting `x`.
  */
-import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { Fact, Law } from "@bjornpagen/grizzle";
+import { Db } from "@bjornpagen/grizzle";
+import type { Fact, Law, RefusedLaw } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { lawNameOf } from "#pantry/import/refusal.ts";
-import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
-import {
-  AreaMappingCardinality,
-  LookupTableCardinality,
-  LookupValueType,
-  MapKey,
-  MapKeyItems,
-  MapKeyType,
-  MappingBaseType,
-  MappingCardinality,
-} from "#pantry/qti/mapping.ts";
+
+import type { MapKey, MappingCardinality } from "#pantry/qti/mapping.ts";
+import { MapKeyItems, MapKeyType } from "#pantry/qti/mapping.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import {
   assertVerdict,
@@ -52,7 +43,10 @@ import {
   tableOf,
 } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
+import { importFacts } from "#pantry/test/import-facts.ts";
+import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
 
 /**
  * A uuid no stored row holds: the declaration, mapping and document every stray row names.
@@ -76,9 +70,11 @@ const strayNode = (at: number): `${string}-${string}-${string}-${string}-${strin
  * @returns Whether it holds one.
  */
 const rejectedBy = (
-  outcome: { readonly kind: string; readonly refused?: { readonly laws: readonly Law[] } },
+  outcome: { readonly kind: string; readonly refused?: { readonly laws: readonly RefusedLaw[] } },
   picks: (law: Law) => boolean,
-): boolean => outcome.kind === "invariant-rejected" && (outcome.refused?.laws ?? []).some(picks);
+): boolean =>
+  outcome.kind === "invariant-rejected" &&
+  (outcome.refused?.laws ?? []).some(({ law }) => picks(law));
 
 /**
  * Pick the key law over one relation's own fields, in order.
@@ -130,11 +126,14 @@ const patternOf =
  * @returns The law's name in the refusal table.
  */
 const refusedNameOf = (
-  outcome: { readonly kind: string; readonly refused?: { readonly laws: readonly Law[] } },
+  outcome: { readonly kind: string; readonly refused?: { readonly laws: readonly RefusedLaw[] } },
   picks: (law: Law) => boolean,
 ) =>
   outcome.kind === "invariant-rejected"
-    ? Option.flatMap(Option.fromUndefinedOr(outcome.refused?.laws.find(picks)), lawNameOf)
+    ? Option.flatMap(
+        Option.fromUndefinedOr(outcome.refused?.laws.find(({ law }) => picks(law))),
+        ({ law }) => schemaLawNameOf(law),
+      )
     : Option.none();
 
 /**
@@ -296,376 +295,371 @@ const twoItemFacts = (baseType: string, at: number, key: string) => {
 const at = (n: number) => ({ mapping: strayNode(90), node: strayNode(n) });
 
 describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
-  layer(AuthorAppLayer, { timeout: authorLayerHookTimeoutMs })(
-    "the mapping overlays' laws, judged by PostgreSQL",
-    (it) => {
-      it.effect(
-        "refuses a mapping of a base type MappableBaseType does not hold, by its containment into MappableBaseType, and a record's mapping by its cardinality",
-        () =>
-          // Oracle: PostgreSQL, the containment of MappingBaseType.baseType into MappableBaseType,
-          // a CHECK on MappingBaseType's table, and the MappableBaseType CHECK on
-          // MappingCardinality's, the mapping beside its declaration's cardinality (reading 78: a
-          // mapping is of no record, §2.11.1.5; spec reading 158).
-          // Bound: every BaseType handle MappableBaseType leaves out, file and duration, and a
-          // record's mapping, which has no base type.
-          Effect.gen(function* unmappable() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const baseType of ["file", "duration"] as const) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(MappingBaseType, [
-                  { baseType, declaration: stray, node: strayNode(0) },
-                ]),
-                {},
-              );
-
-              assert.isTrue(
-                rejectedBy(outcome, containedIn("MappingBaseType", "MappableBaseType")),
-                baseType,
-              );
-            }
-
-            const record = yield* db.apply(
-              ChangeSet.empty(Author).insert(MappingCardinality, [besideCardinality("record")]),
-              {},
-            );
-            assert.isTrue(
-              rejectedBy(record, checkNamed("MappingCardinality", "MappableBaseType")),
-              "record",
-            );
-          }),
-      );
-
-      it.effect(
-        "refuses two map entries of one mapping with one key, identical entries included, by the key on (mapping, key)",
-        () =>
-          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKey, "mapping", "key")), or the host's
-          // key check before it; the two rows differ only by their node, as two identical
-          // qti-map-entry elements do.
-          // Bound: two entries, each spelling once identical and once a lone repeat among three.
-          Effect.gen(function* lexicalRepeat() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const rows of [
-              [mapKeyRow(0, "York"), mapKeyRow(1, "York")],
-              [mapKeyRow(0, "A"), mapKeyRow(1, "B"), mapKeyRow(2, "A")],
-            ]) {
-              const outcome = yield* db.apply(ChangeSet.empty(Author).insert(MapKey, rows), {});
-
-              assert.isTrue(rejectedBy(outcome, keyOver("MapKey", ["mapping", "key"])));
-            }
-          }),
-      );
-
-      it.effect(
-        "refuses two integer keys of one mapping that name one integer, by the key over the query MapKeyInteger, and keeps two that name two integers",
-        () =>
-          // Oracle: PostgreSQL, the key over the query `MapKeyInteger` (`src/qti/queries.ts`;
-          // README, "Rules over queries"): a deferred constraint trigger on `MapKeyType`, the table
-          // the query reads, set immediate alone, which raises 23505 under the rule's name where
-          // two entries of one mapping hold one value, the integer PostgreSQL parses each key's
-          // text to (`Compute.parseDecimal`, XML Schema's lexical mapping, Part 2 §3.3.13); the
-          // controls name two integers; and a key the query's `integerKeyPattern` does not select
-          // is no integer, so `Typed_attribute_value` refuses its `MapKeyType` row (readings 7 and
-          // 45: a map key of an integer mapping is an integer's lexical form), 23514.
-          // Bound: 1 and 01, -0 and +0, and +7 and 007; -1 and 1, 10 and 1, and -0 and -10; and 1
-          // and 1.0.
-          Effect.gen(function* integerKeys() {
-            const client = yield* loginSession;
-            const rule = yield* typedKeyRule(
-              client,
-              MapKeyType.name,
-              `${Qti.relations.MapKeyInteger.name}(mapping, value)`,
-            );
-            for (const { keys, verdict } of [
-              { keys: ["1", "01"], verdict: "repeat" },
-              { keys: ["-0", "+0"], verdict: "repeat" },
-              { keys: ["+7", "007"], verdict: "repeat" },
-              { keys: ["-1", "1"], verdict: "distinct" },
-              { keys: ["10", "1"], verdict: "distinct" },
-              { keys: ["-0", "-10"], verdict: "distinct" },
-              { keys: ["1", "1.0"], verdict: "untyped" },
-            ] as const) {
-              assertTypedKey(
-                yield* judged(
-                  client,
-                  statedInserts(keys.map((key, n) => typedKeyFact("integer", n, key))),
-                  [rule],
-                ),
-                rule,
-                verdict,
-                keys.join(" "),
-              );
-            }
-          }).pipe(Effect.scoped),
-        { timeout: leaseTestTimeoutMs },
-      );
-
-      it.effect(
-        "refuses two float keys of one mapping that name one double, by the key over the query MapKeyFloat, and keeps two that name two doubles",
-        () =>
-          // Oracle: PostgreSQL, the key over the query `MapKeyFloat` (`src/qti/queries.ts`; README,
-          // "Rules over queries"): a deferred constraint trigger on `MapKeyType`, set immediate
-          // alone, which raises 23505 under the rule's name where two entries of one mapping hold
-          // one value, the double grizzle's `Compute.parseDouble` reads each key's text as, XML
-          // Schema 1.1's doubleLexicalMap (readings 144 and 154), and `float8` equality, -0 equal to
-          // 0 and NaN to NaN; the controls name two doubles; and `+INF`, XML Schema 1.1's, which
-          // the query's `doublePattern` does not select, is no float key of XML Schema 1.0's
-          // lexical space (readings 71 and 154), so `Typed_attribute_value` refuses its
-          // `MapKeyType` row, 23514.
-          // Bound: 1 and 1.0, 1 and 10e-1, 0 and -0, 0.1 and .10, and past grizzle's former
-          // bounded form: two overflows, an overflow and INF, an underflow and 0, a 17-digit key
-          // and the 18-digit one that rounds with it, a tie to even, a 15-digit mantissa at 293
-          // and the 1e+307 it spells, and two NaNs; against 1 and 2, 0.1 and 0.100000000000001
-          // (apart in the fifteenth digit), 1 and the double one ulp above it, the greatest finite
-          // double and INF, the least subnormal and 0, and INF and -INF; and INF and +INF.
-          Effect.gen(function* floatKeys() {
-            const client = yield* loginSession;
-            const rule = yield* typedKeyRule(
-              client,
-              MapKeyType.name,
-              `${Qti.relations.MapKeyFloat.name}(mapping, value)`,
-            );
-            for (const { keys, verdict } of [
-              { keys: ["1", "1.0"], verdict: "repeat" },
-              { keys: ["1", "10e-1"], verdict: "repeat" },
-              { keys: ["0", "-0"], verdict: "repeat" },
-              { keys: ["0.1", ".10"], verdict: "repeat" },
-              { keys: ["1e400", "2e400"], verdict: "repeat" },
-              { keys: ["INF", "1e400"], verdict: "repeat" },
-              { keys: ["0", "1e-400"], verdict: "repeat" },
-              { keys: ["1.2345678901234567", "1.23456789012345671"], verdict: "repeat" },
-              { keys: ["9007199254740993", "9007199254740992"], verdict: "repeat" },
-              { keys: ["100000000000000e293", "1e+307"], verdict: "repeat" },
-              { keys: ["NaN", "NaN"], verdict: "repeat" },
-              { keys: ["1", "2"], verdict: "distinct" },
-              { keys: ["0.1", "0.100000000000001"], verdict: "distinct" },
-              { keys: ["1", "1.0000000000000002"], verdict: "distinct" },
-              { keys: ["1.7976931348623157e308", "1e309"], verdict: "distinct" },
-              { keys: ["4.9e-324", "0"], verdict: "distinct" },
-              { keys: ["INF", "-INF"], verdict: "distinct" },
-              { keys: ["INF", "+INF"], verdict: "untyped" },
-            ] as const) {
-              assertTypedKey(
-                yield* judged(
-                  client,
-                  statedInserts(keys.map((key, n) => typedKeyFact("float", n, key))),
-                  [rule],
-                ),
-                rule,
-                verdict,
-                keys.join(" "),
-              );
-            }
-          }).pipe(Effect.scoped),
-        { timeout: leaseTestTimeoutMs },
-      );
-
-      it.effect(
-        "refuses an area mapping of a record, which has no base type, by AreaMapping_base_type",
-        () =>
-          // Oracle: PostgreSQL, the AreaMapping_base_type CHECK on AreaMappingCardinality, the
-          // area mapping beside its declaration's cardinality, judged as the row is inserted
-          // (information model §5.5: "a mapping from a source set of point values"; a record has
-          // no base type, so it is judged by its cardinality alone; spec reading 158). A typed
-          // declaration's base type is judged by the containment into `DeclarationBaseType`'s
-          // point rows, which the host tier holds (`test/record-declarations.oracle.test.ts`).
-          // Bound: a record's area mapping.
-          Effect.gen(function* areaBaseType() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const record = yield* db.apply(
-              ChangeSet.empty(Author).insert(AreaMappingCardinality, [besideCardinality("record")]),
+  layer(AuthorAppLayer)("the mapping overlays' laws, judged by PostgreSQL", (it) => {
+    it.effect(
+      "refuses a mapping of a base type MappableBaseType does not hold, by its containment into MappableBaseType, and a record's mapping by its cardinality",
+      () =>
+        // Oracle: PostgreSQL, the containment of MappingBaseType.baseType into MappableBaseType,
+        // a CHECK on MappingBaseType's table, and the MappableBaseType CHECK on
+        // MappingCardinality's, the mapping beside its declaration's cardinality (reading 78: a
+        // mapping is of no record, §2.11.1.5; spec reading 158).
+        // Bound: every BaseType handle MappableBaseType leaves out, file and duration, and a
+        // record's mapping, which has no base type.
+        Effect.gen(function* unmappable() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          for (const baseType of ["file", "duration"] as const) {
+            const outcome = yield* db.workload.importWrite.apply(
+              importFacts({
+                MappingBaseType: [{ baseType, declaration: stray, node: strayNode(0) }],
+              }),
               {},
             );
 
             assert.isTrue(
-              rejectedBy(record, checkNamed("AreaMappingCardinality", "AreaMapping_base_type")),
-              "record",
+              rejectedBy(outcome, containedIn("MappingBaseType", "MappableBaseType")),
+              baseType,
             );
-          }),
-      );
+          }
 
-      it.effect(
-        "refuses a match or interpolation table of an outcome that is not single, by Lookup_table_cardinality",
-        () =>
-          // Oracle: PostgreSQL, the Lookup_table_cardinality CHECK on LookupTableCardinality, a
-          // table beside its outcome's cardinality, judged as the row is inserted (information
-          // model §4.5.13; spec reading 158). A match and an interpolation table are one shape, so
-          // one row stands for both.
-          // Bound: a table under a multiple, an ordered and a record outcome.
-          Effect.gen(function* lookupCardinality() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const cardinality of ["multiple", "ordered", "record"] as const) {
-              const table = yield* db.apply(
-                ChangeSet.empty(Author).insert(LookupTableCardinality, [
-                  besideCardinality(cardinality),
-                ]),
-                {},
-              );
+          const record = yield* db.workload.importWrite.apply(
+            importFacts({ MappingCardinality: [besideCardinality("record")] }),
+            {},
+          );
+          assert.isTrue(
+            rejectedBy(record, checkNamed("MappingCardinality", "MappableBaseType")),
+            "record",
+          );
+        }),
+    );
 
-              assert.isTrue(
-                rejectedBy(table, checkNamed("LookupTableCardinality", "Lookup_table_cardinality")),
-                cardinality,
-              );
-            }
-          }),
-      );
+    it.effect(
+      "refuses two map entries of one mapping with one key, identical entries included, by the key on (mapping, key)",
+      () =>
+        // Oracle: PostgreSQL, the UNIQUE of key(on(MapKey, "mapping", "key")), or the host's
+        // key check before it; the two rows differ only by their node, as two identical
+        // qti-map-entry elements do.
+        // Bound: two entries, each spelling once identical and once a lone repeat among three.
+        Effect.gen(function* lexicalRepeat() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          for (const rows of [
+            [mapKeyRow(0, "York"), mapKeyRow(1, "York")],
+            [mapKeyRow(0, "A"), mapKeyRow(1, "B"), mapKeyRow(2, "A")],
+          ]) {
+            const outcome = yield* db.workload.importWrite.apply(importFacts({ MapKey: rows }), {});
 
-      it.effect(
-        "refuses a map key or a lookup value that is no lexical form of its base type, written exactly, by Typed_attribute_value",
-        () =>
-          // Oracle: PostgreSQL, the Typed_attribute_value CHECK on MapKeyType and LookupValueType,
-          // judged as the row is inserted: BaseTypePattern's row of the base type, and no
-          // whitespace around a value of any base type but string (readings 7, 8 and 34).
-          // Bound: a text of no integer, a padded integer, a boolean written 1, a point of one
-          // integer and a float with a comma, as map keys; a target of no integer, a padded one and
-          // an identifier that starts with a digit, as lookup values.
-          Effect.gen(function* typedAttributes() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const [baseType, key] of [
-              ["integer", "abc"],
-              ["integer", " 1"],
-              ["boolean", "1"],
-              ["point", "1"],
-              ["float", "1,5"],
-            ] as const) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(MapKeyType, [
-                  { baseType, key, mapping: stray, node: strayNode(0) },
-                ]),
-                {},
-              );
+            assert.isTrue(rejectedBy(outcome, keyOver("MapKey", ["mapping", "key"])));
+          }
+        }),
+    );
 
-              assert.isTrue(
-                rejectedBy(outcome, checkNamed("MapKeyType", "Typed_attribute_value")),
-                `${baseType} ${key}`,
-              );
-            }
+    it.effect(
+      "refuses two integer keys of one mapping that name one integer, by the key over the query MapKeyInteger, and keeps two that name two integers",
+      () =>
+        // Oracle: PostgreSQL, the key over the query `MapKeyInteger` (`src/qti/queries.ts`;
+        // README, "Rules over queries"): a deferred constraint trigger on `MapKeyType`, the table
+        // the query reads, set immediate alone, which raises 23505 under the rule's name where
+        // two entries of one mapping hold one value, the integer PostgreSQL parses each key's
+        // text to (`Compute.parseDecimal`, XML Schema's lexical mapping, Part 2 §3.3.13); the
+        // controls name two integers; and a key the query's `integerKeyPattern` does not select
+        // is no integer, so `Typed_attribute_value` refuses its `MapKeyType` row (readings 7 and
+        // 45: a map key of an integer mapping is an integer's lexical form), 23514.
+        // Bound: 1 and 01, -0 and +0, and +7 and 007; -1 and 1, 10 and 1, and -0 and -10; and 1
+        // and 1.0.
+        Effect.gen(function* integerKeys() {
+          const client = yield* loginSession;
+          const rule = yield* typedKeyRule(
+            client,
+            MapKeyType.name,
+            `${Qti.relations.MapKeyInteger.name}(mapping, value)`,
+          );
+          for (const { keys, verdict } of [
+            { keys: ["1", "01"], verdict: "repeat" },
+            { keys: ["-0", "+0"], verdict: "repeat" },
+            { keys: ["+7", "007"], verdict: "repeat" },
+            { keys: ["-1", "1"], verdict: "distinct" },
+            { keys: ["10", "1"], verdict: "distinct" },
+            { keys: ["-0", "-10"], verdict: "distinct" },
+            { keys: ["1", "1.0"], verdict: "untyped" },
+          ] as const) {
+            assertTypedKey(
+              yield* judged(
+                client,
+                statedInserts(keys.map((key, n) => typedKeyFact("integer", n, key))),
+                [rule],
+              ),
+              rule,
+              verdict,
+              keys.join(" "),
+            );
+          }
+        }).pipe(Effect.scoped),
+      { timeout: leaseTestTimeoutMs },
+    );
 
-            for (const [baseType, value] of [
-              ["integer", "x"],
-              ["integer", " 7"],
-              ["identifier", "1a"],
-            ] as const) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(LookupValueType, [
-                  { baseType, declaration: stray, node: strayNode(0), value },
-                ]),
-                {},
-              );
+    it.effect(
+      "refuses two float keys of one mapping that name one double, by the key over the query MapKeyFloat, and keeps two that name two doubles",
+      () =>
+        // Oracle: PostgreSQL, the key over the query `MapKeyFloat` (`src/qti/queries.ts`; README,
+        // "Rules over queries"): a deferred constraint trigger on `MapKeyType`, set immediate
+        // alone, which raises 23505 under the rule's name where two entries of one mapping hold
+        // one value, the double grizzle's `Compute.parseDouble` reads each key's text as, XML
+        // Schema 1.1's doubleLexicalMap (readings 144 and 154), and `float8` equality, -0 equal to
+        // 0 and NaN to NaN; the controls name two doubles; and `+INF`, XML Schema 1.1's, which
+        // the query's `doublePattern` does not select, is no float key of XML Schema 1.0's
+        // lexical space (readings 71 and 154), so `Typed_attribute_value` refuses its
+        // `MapKeyType` row, 23514.
+        // Bound: 1 and 1.0, 1 and 10e-1, 0 and -0, 0.1 and .10, and past grizzle's former
+        // bounded form: two overflows, an overflow and INF, an underflow and 0, a 17-digit key
+        // and the 18-digit one that rounds with it, a tie to even, a 15-digit mantissa at 293
+        // and the 1e+307 it spells, and two NaNs; against 1 and 2, 0.1 and 0.100000000000001
+        // (apart in the fifteenth digit), 1 and the double one ulp above it, the greatest finite
+        // double and INF, the least subnormal and 0, and INF and -INF; and INF and +INF.
+        Effect.gen(function* floatKeys() {
+          const client = yield* loginSession;
+          const rule = yield* typedKeyRule(
+            client,
+            MapKeyType.name,
+            `${Qti.relations.MapKeyFloat.name}(mapping, value)`,
+          );
+          for (const { keys, verdict } of [
+            { keys: ["1", "1.0"], verdict: "repeat" },
+            { keys: ["1", "10e-1"], verdict: "repeat" },
+            { keys: ["0", "-0"], verdict: "repeat" },
+            { keys: ["0.1", ".10"], verdict: "repeat" },
+            { keys: ["1e400", "2e400"], verdict: "repeat" },
+            { keys: ["INF", "1e400"], verdict: "repeat" },
+            { keys: ["0", "1e-400"], verdict: "repeat" },
+            { keys: ["1.2345678901234567", "1.23456789012345671"], verdict: "repeat" },
+            { keys: ["9007199254740993", "9007199254740992"], verdict: "repeat" },
+            { keys: ["100000000000000e293", "1e+307"], verdict: "repeat" },
+            { keys: ["NaN", "NaN"], verdict: "repeat" },
+            { keys: ["1", "2"], verdict: "distinct" },
+            { keys: ["0.1", "0.100000000000001"], verdict: "distinct" },
+            { keys: ["1", "1.0000000000000002"], verdict: "distinct" },
+            { keys: ["1.7976931348623157e308", "1e309"], verdict: "distinct" },
+            { keys: ["4.9e-324", "0"], verdict: "distinct" },
+            { keys: ["INF", "-INF"], verdict: "distinct" },
+            { keys: ["INF", "+INF"], verdict: "untyped" },
+          ] as const) {
+            assertTypedKey(
+              yield* judged(
+                client,
+                statedInserts(keys.map((key, n) => typedKeyFact("float", n, key))),
+                [rule],
+              ),
+              rule,
+              verdict,
+              keys.join(" "),
+            );
+          }
+        }).pipe(Effect.scoped),
+      { timeout: leaseTestTimeoutMs },
+    );
 
-              assert.isTrue(
-                rejectedBy(outcome, checkNamed("LookupValueType", "Typed_attribute_value")),
-                `${baseType} ${value}`,
-              );
-            }
-          }),
-      );
+    it.effect(
+      "refuses an area mapping of a record, which has no base type, by AreaMapping_base_type",
+      () =>
+        // Oracle: PostgreSQL, the AreaMapping_base_type CHECK on AreaMappingCardinality, the
+        // area mapping beside its declaration's cardinality, judged as the row is inserted
+        // (information model §5.5: "a mapping from a source set of point values"; a record has
+        // no base type, so it is judged by its cardinality alone; spec reading 158). A typed
+        // declaration's base type is judged by the containment into `DeclarationBaseType`'s
+        // point rows, which the host tier holds (`test/record-declarations.oracle.test.ts`).
+        // Bound: a record's area mapping.
+        Effect.gen(function* areaBaseType() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const record = yield* db.workload.importWrite.apply(
+            importFacts({ AreaMappingCardinality: [besideCardinality("record")] }),
+            {},
+          );
 
-      it.effect(
-        "refuses a two-item key's split that does not spell its key by E1_derived, and a run holding whitespace by Run's pattern law",
-        () =>
-          // Oracle: PostgreSQL, the E1_derived CHECK on MapKeyItems (the split spells the key),
-          // judged as the row is inserted, and the text domain of `Run` as the statement casts
-          // each run, named by its row of `textLaws`; the control is the split that spells its key.
-          // Bound: a second run that is not the key's, a run holding the space between, and the
-          // lawful split of `A B`.
-          Effect.gen(function* splits() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const unspelled = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyItems, [
-                { ...at(0), first: "A", gap: " ", key: "A B", second: "C" },
-              ]),
+          assert.isTrue(
+            rejectedBy(record, checkNamed("AreaMappingCardinality", "AreaMapping_base_type")),
+            "record",
+          );
+        }),
+    );
+
+    it.effect(
+      "refuses a match or interpolation table of an outcome that is not single, by Lookup_table_cardinality",
+      () =>
+        // Oracle: PostgreSQL, the Lookup_table_cardinality CHECK on LookupTableCardinality, a
+        // table beside its outcome's cardinality, judged as the row is inserted (information
+        // model §4.5.13; spec reading 158). A match and an interpolation table are one shape, so
+        // one row stands for both.
+        // Bound: a table under a multiple, an ordered and a record outcome.
+        Effect.gen(function* lookupCardinality() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          for (const cardinality of ["multiple", "ordered", "record"] as const) {
+            const table = yield* db.workload.importWrite.apply(
+              importFacts({ LookupTableCardinality: [besideCardinality(cardinality)] }),
               {},
             );
-            const spaced = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyItems, [
-                { ...at(0), first: "A B", gap: " ", key: "A B C", second: "C" },
-              ]),
-              {},
+
+            assert.isTrue(
+              rejectedBy(table, checkNamed("LookupTableCardinality", "Lookup_table_cardinality")),
+              cardinality,
             );
-            const lawful = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyItems, [
-                { ...at(0), first: "A", gap: " ", key: "A B", second: "B" },
-              ]),
+          }
+        }),
+    );
+
+    it.effect(
+      "refuses a map key or a lookup value that is no lexical form of its base type, written exactly, by Typed_attribute_value",
+      () =>
+        // Oracle: PostgreSQL, the Typed_attribute_value CHECK on MapKeyType and LookupValueType,
+        // judged as the row is inserted: BaseTypePattern's row of the base type, and no
+        // whitespace around a value of any base type but string (readings 7, 8 and 34).
+        // Bound: a text of no integer, a padded integer, a boolean written 1, a point of one
+        // integer and a float with a comma, as map keys; a target of no integer, a padded one and
+        // an identifier that starts with a digit, as lookup values.
+        Effect.gen(function* typedAttributes() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          for (const [baseType, key] of [
+            ["integer", "abc"],
+            ["integer", " 1"],
+            ["boolean", "1"],
+            ["point", "1"],
+            ["float", "1,5"],
+          ] as const) {
+            const outcome = yield* db.workload.importWrite.apply(
+              importFacts({
+                MapKeyType: [{ baseType, key, mapping: stray, node: strayNode(0) }],
+              }),
               {},
             );
 
-            assert.isTrue(rejectedBy(unspelled, checkNamed("MapKeyItems", "E1_derived")));
-            assert.deepStrictEqual(
-              refusedNameOf(spaced, patternOf("MapKeyItems", "first")),
-              Option.some("E1 derived"),
+            assert.isTrue(
+              rejectedBy(outcome, checkNamed("MapKeyType", "Typed_attribute_value")),
+              `${baseType} ${key}`,
             );
-            assert.isFalse(rejectedBy(lawful, checkNamed("MapKeyItems", "E1_derived")));
-            assert.isFalse(rejectedBy(lawful, patternOf("MapKeyItems", "first")));
-          }),
-      );
+          }
 
-      it.effect(
-        "refuses two point, pair or directed pair keys of one mapping that name one value, by the key over each one's query, and keeps two that name two values",
-        () =>
-          // Oracle: PostgreSQL, the key over each two-item query (`src/qti/queries.ts`
-          // `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`): a deferred constraint trigger
-          // on `MapKeyItems` and `MapKeyType`, the tables the query reads, set immediate alone,
-          // which raises 23505 under the rule's name where two entries of one mapping hold one
-          // value (information model §8.13: a pair undirected, a point and a directed pair
-          // ordered, a point's integers each `Compute.parseDecimal`'s).
-          // Each item is an identifier, so `Typed_attribute_value` keeps every `MapKeyType` row
-          // and the key alone decides (reading 7: a pair's items are identifiers, whose names are
-          // XML 1.0 Second Edition's, as XSD's `\i` and `\c` read them, so no character past
-          // U+FFFF and no private-use U+E000 is one; é and U+4E00 are, a BaseChar and an
-          // Ideographic).
-          // Bound: points 1 2 and 01 +2, and 1 2 and 1, a tab, 2; pairs A B and B A, and é U+4E00
-          // and its reverse; directed pairs A B and A, a tab, B; against points -1 2 and
-          // 1 2, and 1 2 and 2 1, pairs A B and A C, and directed pairs A B and B A.
-          Effect.gen(function* twoItemKeys() {
-            const client = yield* loginSession;
-            const rules = {
-              directedPair: yield* typedKeyRule(
+          for (const [baseType, value] of [
+            ["integer", "x"],
+            ["integer", " 7"],
+            ["identifier", "1a"],
+          ] as const) {
+            const outcome = yield* db.workload.importWrite.apply(
+              importFacts({
+                LookupValueType: [{ baseType, declaration: stray, node: strayNode(0), value }],
+              }),
+              {},
+            );
+
+            assert.isTrue(
+              rejectedBy(outcome, checkNamed("LookupValueType", "Typed_attribute_value")),
+              `${baseType} ${value}`,
+            );
+          }
+        }),
+    );
+
+    it.effect(
+      "refuses a two-item key's split that does not spell its key by E1_derived, and a run holding whitespace by Run's pattern law",
+      () =>
+        // Oracle: PostgreSQL, the E1_derived CHECK on MapKeyItems (the split spells the key),
+        // judged as the row is inserted, and the text domain of `Run` as the statement casts
+        // each run, named by its row of `textLaws`; the control is the split that spells its key.
+        // Bound: a second run that is not the key's, a run holding the space between, and the
+        // lawful split of `A B`.
+        Effect.gen(function* splits() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const unspelled = yield* db.workload.importWrite.apply(
+            importFacts({
+              MapKeyItems: [{ ...at(0), first: "A", gap: " ", key: "A B", second: "C" }],
+            }),
+            {},
+          );
+          const spaced = yield* db.workload.importWrite.apply(
+            importFacts({
+              MapKeyItems: [{ ...at(0), first: "A B", gap: " ", key: "A B C", second: "C" }],
+            }),
+            {},
+          );
+          const lawful = yield* db.workload.importWrite.apply(
+            importFacts({
+              MapKeyItems: [{ ...at(0), first: "A", gap: " ", key: "A B", second: "B" }],
+            }),
+            {},
+          );
+
+          assert.isTrue(rejectedBy(unspelled, checkNamed("MapKeyItems", "E1_derived")));
+          assert.deepStrictEqual(
+            refusedNameOf(spaced, patternOf("MapKeyItems", "first")),
+            Option.some("E1 derived"),
+          );
+          assert.isFalse(rejectedBy(lawful, checkNamed("MapKeyItems", "E1_derived")));
+          assert.isFalse(rejectedBy(lawful, patternOf("MapKeyItems", "first")));
+        }),
+    );
+
+    it.effect(
+      "refuses two point, pair or directed pair keys of one mapping that name one value, by the key over each one's query, and keeps two that name two values",
+      () =>
+        // Oracle: PostgreSQL, the key over each two-item query (`src/qti/queries.ts`
+        // `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`): a deferred constraint trigger
+        // on `MapKeyItems` and `MapKeyType`, the tables the query reads, set immediate alone,
+        // which raises 23505 under the rule's name where two entries of one mapping hold one
+        // value (information model §8.13: a pair undirected, a point and a directed pair
+        // ordered, a point's integers each `Compute.parseDecimal`'s).
+        // Each item is an identifier, so `Typed_attribute_value` keeps every `MapKeyType` row
+        // and the key alone decides (reading 7: a pair's items are identifiers, whose names are
+        // XML 1.0 Second Edition's, as XSD's `\i` and `\c` read them, so no character past
+        // U+FFFF and no private-use U+E000 is one; é and U+4E00 are, a BaseChar and an
+        // Ideographic).
+        // Bound: points 1 2 and 01 +2, and 1 2 and 1, a tab, 2; pairs A B and B A, and é U+4E00
+        // and its reverse; directed pairs A B and A, a tab, B; against points -1 2 and
+        // 1 2, and 1 2 and 2 1, pairs A B and A C, and directed pairs A B and B A.
+        Effect.gen(function* twoItemKeys() {
+          const client = yield* loginSession;
+          const rules = {
+            directedPair: yield* typedKeyRule(
+              client,
+              MapKeyItems.name,
+              `${Qti.relations.MapKeyDirectedPair.name}(mapping, value)`,
+            ),
+            pair: yield* typedKeyRule(
+              client,
+              MapKeyItems.name,
+              `${Qti.relations.MapKeyPair.name}(mapping, value)`,
+            ),
+            point: yield* typedKeyRule(
+              client,
+              MapKeyItems.name,
+              `${Qti.relations.MapKeyPoint.name}(mapping, x, y)`,
+            ),
+          };
+          for (const { baseType, keys, refused } of [
+            { baseType: "point", keys: ["1 2", "01 +2"], refused: true },
+            { baseType: "point", keys: ["1 2", "1\t2"], refused: true },
+            { baseType: "pair", keys: ["A B", "B A"], refused: true },
+            {
+              baseType: "pair",
+              keys: ["\u{E9} \u{4E00}", "\u{4E00} \u{E9}"],
+              refused: true,
+            },
+            { baseType: "directedPair", keys: ["A B", "A\tB"], refused: true },
+            { baseType: "point", keys: ["-1 2", "1 2"], refused: false },
+            { baseType: "point", keys: ["1 2", "2 1"], refused: false },
+            { baseType: "pair", keys: ["A B", "A C"], refused: false },
+            { baseType: "directedPair", keys: ["A B", "B A"], refused: false },
+          ] as const) {
+            const rule = rules[baseType];
+            assertVerdict(
+              yield* judged(
                 client,
-                MapKeyItems.name,
-                `${Qti.relations.MapKeyDirectedPair.name}(mapping, value)`,
+                statedInserts(keys.flatMap((key, n) => twoItemFacts(baseType, n, key))),
+                [rule],
               ),
-              pair: yield* typedKeyRule(
-                client,
-                MapKeyItems.name,
-                `${Qti.relations.MapKeyPair.name}(mapping, value)`,
-              ),
-              point: yield* typedKeyRule(
-                client,
-                MapKeyItems.name,
-                `${Qti.relations.MapKeyPoint.name}(mapping, x, y)`,
-              ),
-            };
-            for (const { baseType, keys, refused } of [
-              { baseType: "point", keys: ["1 2", "01 +2"], refused: true },
-              { baseType: "point", keys: ["1 2", "1\t2"], refused: true },
-              { baseType: "pair", keys: ["A B", "B A"], refused: true },
-              {
-                baseType: "pair",
-                keys: ["\u{E9} \u{4E00}", "\u{4E00} \u{E9}"],
-                refused: true,
-              },
-              { baseType: "directedPair", keys: ["A B", "A\tB"], refused: true },
-              { baseType: "point", keys: ["-1 2", "1 2"], refused: false },
-              { baseType: "point", keys: ["1 2", "2 1"], refused: false },
-              { baseType: "pair", keys: ["A B", "A C"], refused: false },
-              { baseType: "directedPair", keys: ["A B", "B A"], refused: false },
-            ] as const) {
-              const rule = rules[baseType];
-              assertVerdict(
-                yield* judged(
-                  client,
-                  statedInserts(keys.flatMap((key, n) => twoItemFacts(baseType, n, key))),
-                  [rule],
-                ),
-                rule,
-                refused,
-                `${baseType}: ${keys.join(" | ")}`,
-                "23505",
-              );
-            }
-          }).pipe(Effect.scoped),
-        { timeout: leaseTestTimeoutMs },
-      );
-    },
-  );
+              rule,
+              refused,
+              `${baseType}: ${keys.join(" | ")}`,
+              "23505",
+            );
+          }
+        }).pipe(Effect.scoped),
+      { timeout: leaseTestTimeoutMs },
+    );
+  });
 });

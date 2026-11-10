@@ -17,6 +17,7 @@ import { exportQueriesOf } from "#pantry/export/scan.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import { authorRoleOf } from "#pantry/qti/roles.ts";
+import type { AuthorRole } from "#pantry/qti/roles.ts";
 import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
@@ -31,6 +32,30 @@ const noInputsOf = (qti: QtiSchema): PackageInputs =>
     Struct.pick(qti.relations, insertableNamesOf(qti)),
     Rec.map(() => new Map<string, never>()),
   );
+
+/**
+ * Build the author application's two workloads over an author role ({@link authorAppOf}): the
+ * export's reads with `packageOf`, and the import's write program. A database test compiles them
+ * with members of its own beside them over a role of its own (`#pantry/test/served-members.ts`),
+ * since grizzle puts a role in one login only.
+ *
+ * @param qti - The `Qti` schema.
+ * @param author - The author role over it (`#pantry/qti/roles.ts` `authorRoleOf`).
+ * @returns The workloads, in the login's order.
+ */
+export const authorWorkloadsOf = (qti: QtiSchema, author: AuthorRole) => {
+  const { documentScan, documentsOf, entriesOf } = exportQueriesOf(qti);
+
+  return [
+    workload(author, {
+      documentScan: paged(documentScan),
+      documentsOf,
+      entriesOf,
+      packageOf: qti.relations.Package,
+    }),
+    workload(author, { importWrite: changeSetOf(author, noInputsOf(qti)) }),
+  ] as const;
+};
 
 /**
  * Build the author application's login over a `Qti` schema, over its author role
@@ -63,17 +88,12 @@ const noInputsOf = (qti: QtiSchema): PackageInputs =>
  */
 export const authorAppOf = (qti: QtiSchema) => {
   const author = authorRoleOf(qti);
-  const { documentScan, documentsOf, entriesOf } = exportQueriesOf(qti);
 
-  return login(qti, "author_app", [author], {
-    workload: [
-      workload(author, {
-        documentScan: paged(documentScan),
-        documentsOf,
-        entriesOf,
-        packageOf: qti.relations.Package,
-      }),
-      workload(author, { importWrite: changeSetOf(author, noInputsOf(qti)) }),
-    ],
-  });
+  return login(qti, "author_app", [author], { workload: authorWorkloadsOf(qti, author) });
 };
+
+/**
+ * The author application's login, whatever `Qti` it is built over: the type the runtime serves the
+ * login's committed workload as (`#pantry/db/served.ts`), read by `import type` alone.
+ */
+export type AuthorAppLogin = ReturnType<typeof authorAppOf>;

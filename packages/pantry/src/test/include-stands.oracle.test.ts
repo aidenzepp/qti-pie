@@ -27,7 +27,6 @@ import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
-import { lawNameOf } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -35,6 +34,7 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { judge as judgeOracle, lawsOf } from "#pantry/test/oracle.ts";
+import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The include parents of the box: an item's body, where a paragraph may stand and a rule may not,
@@ -273,7 +273,7 @@ const packageOf = (drawn: StandCase): PackageEntries => {
  * @returns Their names.
  */
 const named = (laws: readonly { readonly law: Law }[]): ReadonlySet<string> =>
-  new Set(laws.flatMap(({ law }) => Option.toArray(lawNameOf(law))));
+  new Set(laws.flatMap(({ law }) => Option.toArray(schemaLawNameOf(law))));
 
 /**
  * The timeout, in milliseconds, that this file's test states: a hang guard, never a budget.

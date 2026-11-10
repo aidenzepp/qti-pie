@@ -37,10 +37,11 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { AuthorApp } from "#pantry/qti/own-login.ts";
+
 import { authorRole, loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
 
 /**
  * The bytes of each bulk entry: 64 MiB, one `bytes` value within grizzle's `bytesMaxLength`, so the
@@ -105,7 +106,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("a package whose record is past one Bind message", (it) => {
       it.effect(
         "imports in one transaction as grizzle's chunked appends, and its export compares all equal",
@@ -135,7 +135,7 @@ describe.skipIf(!hasLease)(
 
             const source = yield* scopedPackage(entries);
             const [importElapsed, id] = yield* Effect.timed(importPackage(source));
-            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
             const client = yield* authorSession;
             const record = yield* recordTransactions(client, id);
 

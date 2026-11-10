@@ -22,13 +22,15 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { piecesOf } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
+
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/qti/own.ts";
-import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
+
 import { materialize } from "#pantry/test/fixtures.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
+import { packageFactsOf } from "#pantry/import/write.ts";
 
 /**
  * `SectionSelection.selectForm`'s pattern law, as grizzle's `lawsOf` lists it and its installation
@@ -89,7 +91,6 @@ const withSelect = (inputs: PackageInputs, lexical: string): PackageInputs => {
 describe.skipIf(!hasLease)("import/overlays/select-forms.db.test.ts, on the lease", () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
-    timeout: authorLayerHookTimeoutMs,
   })("a select that names no integer, judged by PostgreSQL", (it) => {
     for (const form of forms) {
       it.effect(
@@ -110,16 +111,18 @@ describe.skipIf(!hasLease)("import/overlays/select-forms.db.test.ts, on the leas
               "the package holds a selection",
             );
 
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const outcome = yield* db.apply(
-              changeSetOf(Author, withSelect(program.inputs, form)),
+            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+            const outcome = yield* db.workload.importWrite.apply(
+              { insert: packageFactsOf(withSelect(program.inputs, form)) },
               {},
             );
 
             assert.isTrue(
               outcome.kind === "invariant-rejected" &&
-                outcome.refused.laws.length === 1 &&
-                outcome.refused.laws.every((refused) => sameLaw(refused, selectFormLaw)),
+                outcome.refused.laws.map(({ law }) => law).length === 1 &&
+                outcome.refused.laws
+                  .map(({ law }) => law)
+                  .every((refused) => sameLaw(refused, selectFormLaw)),
               Formatter.format(outcome),
             );
           }).pipe(Effect.scoped),
@@ -143,15 +146,18 @@ describe.skipIf(!hasLease)("import/overlays/select-forms.db.test.ts, on the leas
             "the builder writes the selection whose select is 2.5",
           );
 
-          const db = yield* Db.open(AuthorApp.roles.author, {});
-          const outcome = yield* db.apply(changeSetOf(Author, program.inputs), {});
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const outcome = yield* db.workload.importWrite.apply(
+            { insert: packageFactsOf(program.inputs) },
+            {},
+          );
 
           assert.isTrue(
             outcome.kind === "invariant-rejected" &&
-              outcome.refused.laws.length > 0 &&
-              outcome.refused.laws.every(
-                (refused) => sameLaw(refused, selectFormLaw) || isValueDomain(refused),
-              ),
+              outcome.refused.laws.map(({ law }) => law).length > 0 &&
+              outcome.refused.laws
+                .map(({ law }) => law)
+                .every((refused) => sameLaw(refused, selectFormLaw) || isValueDomain(refused)),
             Formatter.format(outcome),
           );
         }),

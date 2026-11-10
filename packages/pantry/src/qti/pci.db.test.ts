@@ -28,7 +28,7 @@ import { materialize, pciNames, pciNegativeNames, pciVerdicts } from "#pantry/te
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { importAgreesWithOracle, oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { base, contextPci, edit, item, itemResource, manifestOf } from "#pantry/test/probe.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
@@ -170,7 +170,6 @@ const lawCases = [
 describe.skipIf(!hasLease)("pci.db.test.ts, on the lease", { timeout: leaseTestTimeoutMs }, () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
-    timeout: authorLayerHookTimeoutMs,
   })("the PCI laws and fixtures through the importer", (it) => {
     for (const { name, refused, rule, twins } of lawCases) {
       it.effect(`refuses ${name} under ${rule}, and accepts its twins`, () =>

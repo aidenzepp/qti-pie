@@ -3,11 +3,12 @@
  * snapshot is the committed one, or a single-CDN install, the folder `GR8DES_QTI_INSTALL` names.
  *
  * A single-CDN install's folder holds `policy.json`, its policy, and `migrations/`, the migrations
- * a grizzle config outside this package generated for it, `migrations/qti/snapshot.json` among
- * them. The setting tells this package's runtime and command line two things and nothing else: the
- * policy the `Qti` schema is built with (`#pantry/qti/own.ts`), and the snapshot
- * `AuthorAppLayer` opens (`#pantry/db/layer.ts`). Its migrations are never this package's to
- * generate or apply: grizzle.config.ts installs the default `Qti` whatever the setting says.
+ * a grizzle config outside this package generated for it, the author login's served file
+ * `migrations/qti/served/author_app.json` among them. The setting tells this package's runtime and
+ * command line two things and nothing else: the policy the `Qti` schema is built with
+ * (`#pantry/qti/own.ts`), and the served file `AuthorAppLayer` opens (`#pantry/db/layer.ts`). Its
+ * migrations are never this package's to generate or apply: grizzle.config.ts installs the default
+ * `Qti` whatever the setting says.
  */
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
@@ -115,7 +116,7 @@ export const readInstall = Effect.gen(function* readInstall() {
 /**
  * The install this process opens, read once, when this module loads, through the process's own
  * settings: `#pantry/qti/own.ts` builds `Qti` with its policy, and `AuthorAppLayer` opens its
- * snapshot, so the two never disagree. A policy file it refuses fails the load, naming the file.
+ * served file, so the two never disagree. A policy file it refuses fails the load, naming the file.
  */
 export const installed: Option.Option<QtiInstall> = await Effect.runPromise(
   readInstall.pipe(Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
@@ -129,11 +130,12 @@ export const installedPolicy: Option.Option<CdnPolicy> = installed.pipe(
 );
 
 /**
- * Name the snapshot an install's `Qti` was generated into: `migrations/qti/snapshot.json` in its
- * folder, as the grizzle config that installs it writes it for the schema `Qti`.
+ * Name the served file an install's grizzle config generated for the author login:
+ * `migrations/qti/served/author_app.json` in its folder, as that config writes it for the schema
+ * `Qti`.
  *
  * @param install - The install.
- * @returns The snapshot's path.
+ * @returns The served file's path.
  */
-export const snapshotPathOf = (install: QtiInstall): string =>
-  `${install.folder}/migrations/qti/snapshot.json`;
+export const servedPathOf = (install: QtiInstall): string =>
+  `${install.folder}/migrations/qti/served/author_app.json`;

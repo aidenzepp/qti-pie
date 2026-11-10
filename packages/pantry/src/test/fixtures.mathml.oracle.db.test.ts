@@ -19,7 +19,7 @@ import {
 } from "#pantry/test/fixtures.mathml.ts";
 import { judge, ruleOf } from "#pantry/test/oracle.ts";
 import { grammar, laws } from "#pantry/test/probe.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 describe.skipIf(!hasLease)(
@@ -28,7 +28,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the MathML fixtures through the importer", (it) => {
       for (const { name, rule } of mathmlNegatives) {
         it.effect(`refuses ${name} under ${rule}`, () =>

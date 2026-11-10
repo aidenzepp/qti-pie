@@ -1,13 +1,15 @@
-import { DbLayer } from "@bjornpagen/grizzle";
-import type { PoolBounds } from "@bjornpagen/grizzle";
+import { DbLayer, roleNameOf, served } from "@bjornpagen/grizzle/runtime";
+import type { PoolBounds } from "@bjornpagen/grizzle/runtime";
 import { Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { connectionServices, loginConnection } from "#pantry/db/connection.ts";
-import { installed, snapshotPathOf } from "#pantry/db/install.ts";
+import { installed, servedPathOf } from "#pantry/db/install.ts";
 import {
-  SnapshotLoadError,
-  SnapshotText,
-  snapshotPath as committedSnapshot,
-} from "#pantry/db/snapshot.ts";
+  AuthorLogin,
+  ServedLoadError,
+  ServedText,
+  servedPath as committedServed,
+} from "#pantry/db/served.ts";
+import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
 
 /**
  * The author application's session pool: at most 10 sessions, 1 kept open once opened, and the
@@ -28,49 +30,45 @@ import {
 const authorAppPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
 
 /**
- * The snapshot the author login opens: the committed one, or, where `GR8DES_QTI_INSTALL` names an
- * install, the install's (`#pantry/db/install.ts`), whose `Qti` this process builds with the same
- * policy, so the two are one schema's.
+ * The served file the author login opens: the committed one, or, where `GR8DES_QTI_INSTALL` names
+ * an install, the install's own (`#pantry/db/install.ts` `servedPathOf`), which the install's
+ * grizzle config generated with its migrations, so the file and the database it was migrated to are
+ * one installation's.
  */
-const snapshotPath = Option.match(installed, {
-  onNone: () => committedSnapshot,
-  onSome: snapshotPathOf,
+const servedFilePath = Option.match(installed, {
+  onNone: () => committedServed,
+  onSome: servedPathOf,
 });
 
 /**
  * The author application's pool on the local cluster: the login's connection
  * (`#pantry/db/connection.ts`), with the password of the role grizzle installs for the login, its
- * pool, and its install's migrations snapshot, read from disk.
+ * pool, and its install's served workload, read from disk and served as the login's type
+ * (grizzle's `served`), with no schema module evaluated: the login's type is an `import type`.
  *
- * The login (`#pantry/qti/own-login.ts`) is a resource of this layer, loaded once the settings, the
- * CA and the snapshot are read, and only then given to the connection: grizzle builds its workload
- * when that module is evaluated, so a build that fails on its settings never pays for the
- * workload. Nothing this module imports statically may reach the login (`src/cli/startup.test.ts`).
- *
- * The login's type is the dynamic import's, so the layer provides `DbLayer` for exactly the author
- * role: grizzle's `DbLayerService` is invariant in its role, and a layer built for `AnyLogin` would
- * serve no role a caller opens.
+ * It provides the login's `DbLayer`, for the author role, and {@link AuthorLogin}, the served login
+ * itself, whose `roles.author` every `Db.open` takes: grizzle opens a `Db` only on a role of the
+ * served login its layer was built over.
  *
  * Building the layer fails with Effect's `ConfigError` for a missing or malformed setting, with a
- * `ClusterConfigError` (`#pantry/db/connection.ts`) when the CA is unreadable, and with a
- * {@link SnapshotLoadError} when the snapshot is. A missing password file is not found here: it
- * fails each connection attempt with grizzle's `CredentialError`.
+ * `ClusterConfigError` (`#pantry/db/connection.ts`) when the CA is unreadable, with a
+ * {@link ServedLoadError} when the served file is, and with grizzle's `OpenError` at stage `config`
+ * for a file of another login. A missing password file is not found here: it fails each connection
+ * attempt with grizzle's `CredentialError`.
  */
 export const AuthorAppLayer = Layer.unwrap(
   Effect.gen(function* AuthorAppLayer() {
     const fs = yield* FileSystem.FileSystem;
     const connectionOf = yield* loginConnection;
-    const snapshot = yield* fs.readFileString(snapshotPath).pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(SnapshotText)),
-      Effect.mapError((reason) => new SnapshotLoadError({ path: snapshotPath, reason })),
+    const file = yield* fs.readFileString(servedFilePath).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(ServedText)),
+      Effect.mapError((reason) => new ServedLoadError({ path: servedFilePath, reason })),
     );
-    const { AuthorApp } = yield* Effect.promise(() => import("#pantry/qti/own-login.ts"));
+    const login = served<AuthorAppLogin>(file, "author_app");
 
-    return DbLayer.make({
-      ...connectionOf(AuthorApp),
-      login: AuthorApp,
-      pool: authorAppPool,
-      snapshot,
-    });
+    return Layer.merge(
+      DbLayer.make({ ...connectionOf(roleNameOf(login)), login, pool: authorAppPool }),
+      Layer.succeed(AuthorLogin, login),
+    );
   }),
 ).pipe(Layer.provide(connectionServices));

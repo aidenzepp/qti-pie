@@ -313,13 +313,13 @@ export const namedFailureOf = (failure: unknown): Option.Option<NamedTag> =>
 
 /**
  * The tags of the failures that mean the local set-up is missing or unreadable: the layer's two
- * (`db/connection.ts` and `db/layer.ts`) and Effect's `ConfigError`, which a missing or malformed
+ * (`db/connection.ts` and `db/served.ts`) and Effect's `ConfigError`, which a missing or malformed
  * setting raises. They are matched by tag so this module imports neither the layer nor the engine.
  */
 const configTags: ReadonlySet<string> = new Set([
   "ClusterConfigError",
   "ConfigError",
-  "SnapshotLoadError",
+  "ServedLoadError",
 ]);
 
 /**

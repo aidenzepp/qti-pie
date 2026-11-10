@@ -16,55 +16,53 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { NodeKind } from "#pantry/grammar/install.ts";
-import { AuthorApp } from "#pantry/qti/own-login.ts";
+
 import { authorRole, authorViews, loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
 
 describe.skipIf(!hasLease)("qti/schema.db.test.ts, on the lease", () => {
-  layer(AuthorAppLayer, { timeout: authorLayerHookTimeoutMs })(
-    "the installed Qti, read as the author login",
-    (it) => {
-      it.effect("opens the author role through the login's layer", () =>
-        Effect.gen(function* opensTheAuthorRole() {
-          const db = yield* Db.open(AuthorApp.roles.author, {});
+  layer(AuthorAppLayer)("the installed Qti, read as the author login", (it) => {
+    it.effect("opens the author role through the login's layer", () =>
+      Effect.gen(function* opensTheAuthorRole() {
+        const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
 
-          assert.isDefined(db);
+        assert.isDefined(db);
+      }),
+    );
+
+    it.effect(
+      "shows kind_name beside kind in the role's view of Node, each row naming its code's handle",
+      () =>
+        Effect.gen(function* decodesKind() {
+          const client = yield* loginSession;
+
+          yield* rowsOf(client, `SET ROLE ${authorRole}`);
+
+          const columns = yield* rowsOf<{
+            readonly column_name: string;
+            readonly ordinal_position: number;
+          }>(
+            client,
+            "SELECT column_name, ordinal_position FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'node' ORDER BY ordinal_position",
+            [authorViews],
+          );
+          const ordinal = (name: string) =>
+            columns.find((column) => column.column_name === name)?.ordinal_position;
+          const kind = ordinal("kind");
+
+          assert.isDefined(kind);
+          assert.strictEqual(ordinal("kind_name"), (kind ?? 0) + 1);
+
+          const rows = yield* rowsOf<{ readonly kind: number; readonly kind_name: string }>(
+            client,
+            `SELECT kind::integer AS kind, kind_name FROM ${authorViews}.node`,
+          );
+
+          for (const row of rows) {
+            assert.strictEqual(row.kind_name, NodeKind.handles[row.kind]);
+          }
         }),
-      );
-
-      it.effect(
-        "shows kind_name beside kind in the role's view of Node, each row naming its code's handle",
-        () =>
-          Effect.gen(function* decodesKind() {
-            const client = yield* loginSession;
-
-            yield* rowsOf(client, `SET ROLE ${authorRole}`);
-
-            const columns = yield* rowsOf<{
-              readonly column_name: string;
-              readonly ordinal_position: number;
-            }>(
-              client,
-              "SELECT column_name, ordinal_position FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'node' ORDER BY ordinal_position",
-              [authorViews],
-            );
-            const ordinal = (name: string) =>
-              columns.find((column) => column.column_name === name)?.ordinal_position;
-            const kind = ordinal("kind");
-
-            assert.isDefined(kind);
-            assert.strictEqual(ordinal("kind_name"), (kind ?? 0) + 1);
-
-            const rows = yield* rowsOf<{ readonly kind: number; readonly kind_name: string }>(
-              client,
-              `SELECT kind::integer AS kind, kind_name FROM ${authorViews}.node`,
-            );
-
-            for (const row of rows) {
-              assert.strictEqual(row.kind_name, NodeKind.handles[row.kind]);
-            }
-          }),
-      );
-    },
-  );
+    );
+  });
 });

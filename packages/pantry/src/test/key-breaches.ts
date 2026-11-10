@@ -1,7 +1,7 @@
 /**
  * The keys a package's rows break, judged on the host before any row is written: every key `Qti`
  * states over a relation the import writes as flat rows, evaluated over the rows `readProgram`
- * builds, each named by its law (`#pantry/import/refusal.ts` `lawNameOf`).
+ * builds, each named by its law (`#pantry/import/refusal.ts` `schemaLawNameOf`).
  *
  * PostgreSQL checks a key as the statement writes the row, before any deferred law, so a key the
  * rows break is the law a refusal names whatever else breaks. A law oracle that predicts a
@@ -14,10 +14,10 @@
  * read here, and {@link evaluatedKeys} names the keys that are.
  */
 import { Option, Schema } from "effect";
-import { lawNameOf } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/qti/own.ts";
+import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
 
 /**
  * A key law over plain fields: its name, its relation, its fields, in order, and the rows it keys:
@@ -125,7 +125,7 @@ const termOf = (field: string) => ({ field, kind: "field" as const });
 
 /**
  * Every key the schema states over a relation itself or over a selection that holds one field to
- * one value, with the name of its law as an outcome names it (`lawNameOf`).
+ * one value, with the name of its law as an outcome names it (`schemaLawNameOf`).
  */
 export const keyLaws: readonly KeyLaw[] = Qti.statements.flatMap((statement) =>
   Option.match(keyOf(statement), {
@@ -134,7 +134,7 @@ export const keyLaws: readonly KeyLaw[] = Qti.statements.flatMap((statement) =>
       const [first, ...rest] = terms;
 
       return Option.match(
-        lawNameOf({
+        schemaLawNameOf({
           kind: "key",
           side: {
             relation,

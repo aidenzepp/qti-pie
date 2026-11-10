@@ -8,7 +8,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Array as Arr, Effect, Option } from "effect";
-import { rulesOf } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -16,6 +15,7 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { base, edit, item } from "#pantry/test/probe.ts";
+import { schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 const laws = judgedLaws(Qti);
 
@@ -106,7 +106,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a formula's direction"
               host:
                 first === undefined
                   ? "accepted"
-                  : Option.getOrElse(Arr.head(rulesOf([first, ...rest])), () => "unnamed"),
+                  : Option.getOrElse(Arr.head(schemaRulesOf([first, ...rest])), () => "unnamed"),
               oracle: oracle.kind === "accepted" ? new Set(["accepted"]) : oracle.rules,
             };
           }),

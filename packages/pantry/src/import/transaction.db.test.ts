@@ -16,7 +16,7 @@
  *
  * @see {@link https://www.postgresql.org/docs/19/ddl-system-columns.html | PostgreSQL 19, §5.6 System Columns}
  */
-import { CommitUnknown, Db, writableNamesOf } from "@bjornpagen/grizzle";
+import { CommitUnknown, writableNamesOf } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -30,10 +30,9 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage, WrapApply } from "#pantry/import/package.ts";
-import { readProgram } from "#pantry/import/program.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
+
 import { Qti } from "#pantry/qti/own.ts";
-import { AuthorApp } from "#pantry/qti/own-login.ts";
+
 import {
   everyRelationPackage,
   scopedPackage,
@@ -46,7 +45,7 @@ import {
   qtiSchema,
   rowsOf as sessionRows,
 } from "#pantry/test/direct-sql.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
 
 /**
  * `Package`'s table, by grizzle's conversion of a relation's name (`grizzle names`).
@@ -316,44 +315,7 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("one transaction per package, over the every-relation package", (it) => {
-      it.effect("compiles the every-relation package's ChangeSet", (ctx) =>
-        // Oracle: PostgreSQL's installation through grizzle's compiler: `db.compile` over the
-        // package's one ChangeSet (`changeSetOf` of its program) succeeds against the snapshot
-        // the database holds.
-        // Bound: every count the generator draws, 8 cases.
-        searched(
-          ctx,
-          exhaust(
-            {
-              box: memberBox,
-              caseHang: Duration.minutes(5),
-              coverage: noCoverage,
-              generator: memberCounts,
-              limit: 8,
-              literal: JSON.stringify,
-              oracle: { kind: "postgresql", name: "db.compile against the installed snapshot" },
-              suite: "pantry/import/transaction-compiles",
-            },
-            (members) =>
-              Effect.gen(function* compiles() {
-                const dir = yield* scopedPackage(everyRelationPackage(members));
-                const program = yield* readProgram(dir);
-                const db = yield* Db.open(AuthorApp.roles.author, {});
-                const [elapsed] = yield* Effect.timed(
-                  db.compile(changeSetOf(AuthorApp.roles.author.role, program.inputs)),
-                );
-
-                yield* Effect.log("every-relation compile", {
-                  compileMillis: Duration.toMillis(elapsed),
-                  members: JSON.stringify(members),
-                });
-              }).pipe(Effect.scoped),
-          ),
-        ),
-      );
-
       it.effect(
         "imports the every-relation package in one transaction that writes every stored relation of Qti",
         (ctx) =>

@@ -32,13 +32,13 @@ import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, FileSystem, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawNameOf } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { writePackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
+import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
 
 /**
  * A `webcontent` resource of a case: its identifier, the file it lists, and whether it writes that
@@ -219,7 +219,7 @@ const packageOf = (of: OptionalCase): PackageEntries => {
  */
 const describeLaw = (law: Law): string =>
   `${law.kind === "contained" ? `${law.from.relation} ⊆ ${law.to.relation}` : law.kind}, ${Option.match(
-    lawNameOf(law),
+    schemaLawNameOf(law),
     { onNone: () => "named by no law", onSome: (name) => `"${name}"` },
   )}`;
 

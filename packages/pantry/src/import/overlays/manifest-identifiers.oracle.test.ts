@@ -34,7 +34,6 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { rulesOf } from "#pantry/import/refusal.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -42,6 +41,7 @@ import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 import { item } from "#pantry/test/probe.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
+import { schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The composed grammar every case is judged by.
@@ -355,7 +355,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                 if (Arr.isReadonlyArrayNonEmpty(host.brokenLaws)) {
                   assert.strictEqual(
-                    Option.getOrUndefined(Arr.head(rulesOf(host.brokenLaws))),
+                    Option.getOrUndefined(Arr.head(schemaRulesOf(host.brokenLaws))),
                     verdict.verdict === "accepted" ? undefined : verdict.rule,
                     `${manifest}: the import's rows, judged on the host, refused under the oracle's rule`,
                   );

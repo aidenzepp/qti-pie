@@ -5,13 +5,9 @@
  * src/db/layer.ts).
  */
 import net from "node:net";
-import { CredentialError, roleNameOf } from "@bjornpagen/grizzle";
-import type {
-  AnyLogin,
-  DbConnection,
-  MigrationConnectionConfig,
-  Transport,
-} from "@bjornpagen/grizzle";
+import type { MigrationConnectionConfig } from "@bjornpagen/grizzle";
+import { CredentialError } from "@bjornpagen/grizzle/runtime";
+import type { DbConnection, Transport } from "@bjornpagen/grizzle/runtime";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
@@ -316,9 +312,9 @@ export const migrationConnection = clusterConnection.pipe(
  * login (`roleNameOf`), the one `scripts/db.sh migrate` sets the password on and names the file
  * after.
  *
- * The login is given only once the settings are read, so a caller that loads its login after them
- * (src/db/layer.ts) never loads it for a build that fails on them. `roleNameOf` throws for a value
- * grizzle's `login` did not build, a defect of the caller.
+ * The caller names the login by its role, `roleNameOf(login)`: the served login's
+ * (`@bjornpagen/grizzle/runtime`, read from its served file) for the runtime's layer, or an
+ * authoring login's for a test, so this module reads no login of grizzle's.
  *
  * A missing password, a password file absent or a command that fails, is not found here: it fails
  * each connection attempt with grizzle's `CredentialError`.
@@ -332,21 +328,17 @@ export const loginConnection = Effect.gen(function* loginConnection() {
   const fs = yield* FileSystem.FileSystem;
   const { commandPassword, connection, secrets } = yield* clusterConnection;
 
-  return (login: AnyLogin): DbConnection => {
-    const role = roleNameOf(login);
-
-    return {
-      ...connection,
-      password: Option.match(commandPassword, {
-        onNone: () =>
-          fs.readFileString(`${secrets}/${role}.password`).pipe(
-            Effect.map((text) => Redacted.make(text.trim())),
-            Effect.mapError((cause) => new CredentialError({ cause })),
-          ),
-        onSome: (passwordOf) => passwordOf(role),
-      }),
-    };
-  };
+  return (role: string): DbConnection => ({
+    ...connection,
+    password: Option.match(commandPassword, {
+      onNone: () =>
+        fs.readFileString(`${secrets}/${role}.password`).pipe(
+          Effect.map((text) => Redacted.make(text.trim())),
+          Effect.mapError((cause) => new CredentialError({ cause })),
+        ),
+      onSome: (passwordOf) => passwordOf(role),
+    }),
+  });
 }).pipe(Effect.withSpan("db.loginConnection"));
 
 /**

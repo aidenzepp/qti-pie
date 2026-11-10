@@ -21,8 +21,17 @@ const ownQti = qtiSchema(Option.none());
  * cluster's state folder; only `migrate` and `drift` read the password, at each connection attempt,
  * running `GR8DES_PG_PASSWORD_COMMAND` where it is set.
  */
+/**
+ * The migration identity's connection, built once from the cluster's settings and CA when this
+ * module loads. grizzle calls `connection` only for `migrate` and `drift`; the CA is still read at
+ * load, since grizzle takes the connection synchronously and the CA's read is an Effect.
+ */
+const connection = await Effect.runPromise(
+  migrationConnection.pipe(Effect.provide(connectionServices)),
+);
+
 export default defineConfig({
-  connection: await Effect.runPromise(migrationConnection.pipe(Effect.provide(connectionServices))),
+  connection: () => connection,
   logins: [authorAppOf(ownQti)],
   migrations: "migrations",
   schemas: [ownQti],

@@ -29,7 +29,7 @@
  * (`verdicts.tsv`), every `guards` fixture but `padded-processing.xml` with AL3, N7's `Last` or
  * N5's `Follow`, and every `valid` fixture is accepted.
  */
-import { ChangeSet, Db } from "@bjornpagen/grizzle";
+import { Db } from "@bjornpagen/grizzle";
 import type { Addition, ApplyOutcome, Fact, Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -39,31 +39,32 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import { expressionTypings } from "#pantry/grammar/expression.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { ruleOfLaw } from "#pantry/import/refusal.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
+
 import { Flag, OperatorArity } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { DeclarationIdentifier } from "#pantry/qti/declarations.ts";
+import type {
+  ExpressionAttribute,
+  LiteralTyped,
+  Operand,
+  ProcessingTemplate,
+  TemplateDefaultCardinality,
+  TemplateDefaultTarget,
+} from "#pantry/qti/expressions.ts";
 import {
   AssembledReference,
   Expression,
-  ExpressionAttribute,
-  LiteralTyped,
   MappingSourceDeclaration,
-  Operand,
-  ProcessingTemplate,
   Reading,
   ReadingCardinality,
   ReadingDeclaration,
   ReferenceDocument,
-  TemplateDefaultCardinality,
-  TemplateDefaultTarget,
   TestReference,
   VariableRef,
   VariableRefDeclaration,
   VariableRefTable,
 } from "#pantry/qti/expressions.ts";
-import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
+
 import { Qti } from "#pantry/qti/own.ts";
 import {
   assertVerdict,
@@ -81,8 +82,12 @@ import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { itemRefPackageEntries } from "#pantry/test/gen/item-ref-declarations.ts";
 import type { ItemRefPackage, ItemTarget } from "#pantry/test/gen/item-ref-declarations.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
+import { importFacts } from "#pantry/test/import-facts.ts";
+import { packageFactsOf } from "#pantry/import/write.ts";
+import { schemaRuleOfLaw } from "#pantry/test/law-namer.ts";
 
 /**
  * The queries `DeclaredTarget` and `HeldType` as `Qti` holds them (`#pantry/qti/queries.ts`).
@@ -299,11 +304,12 @@ const referenceChange = (
 ) => {
   const rows = referenceRowsOf(reference, declaration, undefined, table);
 
-  return ChangeSet.empty(Author)
-    .insert(Document, [documentOf(reference)])
-    .insert(VariableRef, [reference])
-    .insert(VariableRefDeclaration, rows.declarations)
-    .insert(VariableRefTable, rows.tables);
+  return importFacts({
+    Document: [documentOf(reference)],
+    VariableRef: [reference],
+    VariableRefDeclaration: rows.declarations,
+    VariableRefTable: rows.tables,
+  });
 };
 
 /**
@@ -420,9 +426,9 @@ const typeOver = (
  */
 const names = (outcome: ApplyOutcome<unknown>, relation: string, name: string): boolean =>
   outcome.kind === "invariant-rejected" &&
-  outcome.refused.laws.some(
-    (law) => law.kind === "check" && law.relation === relation && law.name === name,
-  );
+  outcome.refused.laws
+    .map(({ law }) => law)
+    .some((law) => law.kind === "check" && law.relation === relation && law.name === name);
 
 /**
  * A reading of a test's reference: the unsplit reading of `OUT`, a declared outcome of the test,
@@ -575,856 +581,855 @@ const readingFacts = (
  */
 const namesVariableKind = (outcome: ApplyOutcome<unknown>): boolean =>
   outcome.kind === "invariant-rejected" &&
-  outcome.refused.laws.some(
-    (law: Law) =>
-      (law.kind === "contained" &&
-        law.from.relation === "VariableRefDeclaration" &&
-        law.to.relation === "ReferenceDeclaration") ||
-      (law.kind === "check" && law.relation === "VariableRef" && law.name === "Variable_kind"),
-  );
+  outcome.refused.laws
+    .map(({ law }) => law)
+    .some(
+      (law: Law) =>
+        (law.kind === "contained" &&
+          law.from.relation === "VariableRefDeclaration" &&
+          law.to.relation === "ReferenceDeclaration") ||
+        (law.kind === "check" && law.relation === "VariableRef" && law.name === "Variable_kind"),
+    );
 
 describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
-  layer(AuthorAppLayer, { timeout: authorLayerHookTimeoutMs })(
-    "the expression and processing laws, judged by PostgreSQL",
-    (it) => {
-      it.effect(
-        "refuses an expression of each kind at min − 1 and max + 1 operands by Arity, and keeps it at min and max",
-        () =>
-          // Oracle: PostgreSQL, the `Arity` CHECK, against `OperatorArity` (the ASI XSD's counts).
-          // Bound: every kind, at min − 1 where min > 0, min, max (min + 3 for an unbounded kind)
-          // and max + 1 where bounded; each operand of no known type, which every other row law
-          // keeps.
-          Effect.gen(function* arity() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const [index, { kind, max, min }] of OperatorArity.rows.entries()) {
-              const top = max === int8Max ? min + 3n : max;
-              const counts = [
-                ...(min > 0n ? [min - 1n] : []),
-                min,
-                top,
-                ...(max === int8Max ? [] : [max + 1n]),
-              ];
-              for (const count of counts) {
-                const node = nodeOf(index);
-                const operands = Array.from({ length: Number(count) }, (_, at) =>
-                  operandRow(node, at + 1, { node: nodeOf(2000 + at) }),
-                );
-                const outcome = yield* db.apply(
-                  ChangeSet.empty(Author)
-                    .insert(Expression, [
-                      expressionRow({ kind, node, ...typeOver(kind, Number(count)) }),
-                    ])
-                    .insert(Operand, operands),
-                  {},
-                );
+  layer(AuthorAppLayer)("the expression and processing laws, judged by PostgreSQL", (it) => {
+    it.effect(
+      "refuses an expression of each kind at min − 1 and max + 1 operands by Arity, and keeps it at min and max",
+      () =>
+        // Oracle: PostgreSQL, the `Arity` CHECK, against `OperatorArity` (the ASI XSD's counts).
+        // Bound: every kind, at min − 1 where min > 0, min, max (min + 3 for an unbounded kind)
+        // and max + 1 where bounded; each operand of no known type, which every other row law
+        // keeps.
+        Effect.gen(function* arity() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          for (const [index, { kind, max, min }] of OperatorArity.rows.entries()) {
+            const top = max === int8Max ? min + 3n : max;
+            const counts = [
+              ...(min > 0n ? [min - 1n] : []),
+              min,
+              top,
+              ...(max === int8Max ? [] : [max + 1n]),
+            ];
+            for (const count of counts) {
+              const node = nodeOf(index);
+              const operands = Array.from({ length: Number(count) }, (_, at) =>
+                operandRow(node, at + 1, { node: nodeOf(2000 + at) }),
+              );
+              const outcome = yield* db.workload.importWrite.apply(
+                importFacts({
+                  Expression: [expressionRow({ kind, node, ...typeOver(kind, Number(count)) })],
+                  Operand: operands,
+                }),
+                {},
+              );
 
-                assert.strictEqual(
-                  names(outcome, "Expression", "Arity"),
-                  count < min || count > max,
-                  `${kind} with ${String(count)} operands`,
-                );
-              }
+              assert.strictEqual(
+                names(outcome, "Expression", "Arity"),
+                count < min || count > max,
+                `${kind} with ${String(count)} operands`,
+              );
             }
-          }),
-      );
-
-      it.effect("refuses each expression row law's breach by its law, and keeps its control", () =>
-        // Oracle: PostgreSQL, each CHECK of `Expression`, against the old checker's rules (P23,
-        // P21, P25) and the result typing `E1_derived` derives.
-        // Bound: one breach of each law, beside the same rows with the breach repaired.
-        Effect.gen(function* expressionLaws() {
-          const db = yield* Db.open(AuthorApp.roles.author, {});
-          const operator = nodeOf(1);
-          const cases = [
-            {
-              broken: [
-                expressionRow({
-                  baseType: "boolean",
-                  cardinality: "single",
-                  kind: "qti-and",
-                  node: operator,
-                }),
-              ],
-              law: "Operand_fit",
-              operands: [operandRow(operator, 1, { baseType: "string", cardinality: "single" })],
-              repaired: [operandRow(operator, 1, { baseType: "boolean", cardinality: "single" })],
-            },
-            {
-              broken: [
-                expressionRow({ cardinality: "multiple", kind: "qti-multiple", node: operator }),
-              ],
-              law: "One_base",
-              operands: [
-                operandRow(operator, 1, { baseType: "integer", cardinality: "single" }),
-                operandRow(operator, 2, { baseType: "string", cardinality: "single" }),
-              ],
-              repaired: [
-                operandRow(operator, 1, { baseType: "integer", cardinality: "single" }),
-                operandRow(operator, 2, { baseType: "unknown", cardinality: "single" }),
-              ],
-            },
-            {
-              broken: [
-                expressionRow({
-                  baseType: "float",
-                  cardinality: "single",
-                  kind: "qti-sum",
-                  node: operator,
-                }),
-              ],
-              law: "E1_derived",
-              operands: [operandRow(operator, 1, { baseType: "integer", cardinality: "single" })],
-              repaired: [operandRow(operator, 1, { baseType: "float", cardinality: "single" })],
-            },
-          ] as const;
-          for (const { broken, law, operands, repaired } of cases) {
-            const refused = yield* db.apply(
-              ChangeSet.empty(Author).insert(Expression, broken).insert(Operand, operands),
-              {},
-            );
-            const kept = yield* db.apply(
-              ChangeSet.empty(Author).insert(Expression, broken).insert(Operand, repaired),
-              {},
-            );
-
-            assert.isTrue(names(refused, "Expression", law), law);
-            assert.isFalse(names(kept, "Expression", law), law);
-          }
-
-          const leaves = [
-            {
-              broken: expressionRow({
-                baseType: "integer",
-                cardinality: "single",
-                kind: "qti-number-correct",
-                language: "response",
-                node: operator,
-              }),
-              law: "Outcome_only",
-              repaired: { language: "outcome" },
-            },
-            {
-              broken: expressionRow({
-                baseType: "integer",
-                cardinality: "single",
-                kind: "qti-random-integer",
-                language: "response",
-                node: operator,
-                parentKind: "qti-response-if",
-              }),
-              law: "Condition_type",
-              repaired: { parentKind: "qti-set-outcome-value" },
-            },
-          ] as const;
-          for (const { broken, law, repaired } of leaves) {
-            const refused = yield* db.apply(
-              ChangeSet.empty(Author).insert(Expression, [broken]),
-              {},
-            );
-            const kept = yield* db.apply(
-              ChangeSet.empty(Author).insert(Expression, [{ ...broken, ...repaired }]),
-              {},
-            );
-
-            assert.isTrue(names(refused, "Expression", law), law);
-            assert.isFalse(names(kept, "Expression", law), law);
           }
         }),
-      );
+    );
 
-      it.effect("refuses each reference row law's breach by its law, and keeps its control", () =>
-        // Oracle: PostgreSQL, each CHECK of `VariableRef` and its rows, against the old checker's
-        // rules (P8, P24, P26, P27); each rule over `HeldType`'s query (P20, P22), a deferred
-        // constraint trigger, which `db.apply` would judge at COMMIT behind the stray rows'
-        // foreign keys, so the direct writer sets it immediate, 23514 and the check's name; and
-        // each claim a lookup (P22, §2.5.1.4) or a map response (P27, §2.11.3.29) must make of its
-        // declaration's table, a containment into `VariableRefTable`: a deferred foreign key, or
-        // for a lookup's held type a rule over `HeldType`, which the direct writer sets immediate,
-        // 23503 and its name, found by grizzle's comment on it.
-        // Bound: one breach of each law, beside the same rows with the breach repaired.
-        Effect.gen(function* referenceLaws() {
-          const db = yield* Db.open(AuthorApp.roles.author, {});
-          const client = yield* loginSession;
-          const declared = { resolution: "declared" } as const;
-          const lookup = referenceRow({
-            ...declared,
-            baseType: "integer",
-            cardinality: "single",
-            kind: "qti-lookup-outcome-value",
-          });
-          const mapResponse = referenceRow({
-            ...declared,
-            baseType: "integer",
-            cardinality: "single",
-            kind: "qti-map-response",
-          });
-          const checks: readonly {
-            readonly broken: Addition<typeof VariableRef>;
-            readonly declaration?: Partial<Addition<typeof VariableRefDeclaration>>;
-            readonly law: string;
-            readonly on: "VariableRef" | "VariableRefDeclaration";
-            readonly repaired: Partial<Addition<typeof VariableRef>>;
-            readonly repairedDeclaration?: Partial<Addition<typeof VariableRefDeclaration>>;
-            readonly table?: Addition<typeof VariableRefTable>["table"];
-          }[] = [
-            {
-              broken: referenceRow({ rootKind: "qti-assessment-item" }),
-              law: "Variable_declared",
-              on: "VariableRef",
-              repaired: { rootKind: "qti-response-processing" },
-            },
-            {
-              broken: referenceRow({
-                ...declared,
-                attribute: "figures",
+    it.effect("refuses each expression row law's breach by its law, and keeps its control", () =>
+      // Oracle: PostgreSQL, each CHECK of `Expression`, against the old checker's rules (P23,
+      // P21, P25) and the result typing `E1_derived` derives.
+      // Bound: one breach of each law, beside the same rows with the breach repaired.
+      Effect.gen(function* expressionLaws() {
+        const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+        const operator = nodeOf(1);
+        const cases = [
+          {
+            broken: [
+              expressionRow({
+                baseType: "boolean",
+                cardinality: "single",
+                kind: "qti-and",
+                node: operator,
+              }),
+            ],
+            law: "Operand_fit",
+            operands: [operandRow(operator, 1, { baseType: "string", cardinality: "single" })],
+            repaired: [operandRow(operator, 1, { baseType: "boolean", cardinality: "single" })],
+          },
+          {
+            broken: [
+              expressionRow({ cardinality: "multiple", kind: "qti-multiple", node: operator }),
+            ],
+            law: "One_base",
+            operands: [
+              operandRow(operator, 1, { baseType: "integer", cardinality: "single" }),
+              operandRow(operator, 2, { baseType: "string", cardinality: "single" }),
+            ],
+            repaired: [
+              operandRow(operator, 1, { baseType: "integer", cardinality: "single" }),
+              operandRow(operator, 2, { baseType: "unknown", cardinality: "single" }),
+            ],
+          },
+          {
+            broken: [
+              expressionRow({
                 baseType: "float",
                 cardinality: "single",
-                kind: "qti-equal-rounded",
+                kind: "qti-sum",
+                node: operator,
               }),
-              declaration: {},
-              law: "Reference_type",
-              on: "VariableRefDeclaration",
-              repaired: { baseType: "integer" },
-              repairedDeclaration: {},
-            },
-            {
-              broken: referenceRow({
-                ...declared,
-                baseType: "integer",
-                cardinality: "single",
-                elementBase: "integer",
-                elementCardinality: "single",
-                language: "template",
-              }),
-              declaration: { declarationKind: "qti-response-declaration" },
-              law: "Template_reads",
-              on: "VariableRefDeclaration",
-              repaired: {},
-              repairedDeclaration: { declarationKind: "qti-template-declaration" },
-            },
-            {
-              broken: mapResponse,
-              declaration: { declarationKind: "qti-outcome-declaration" },
-              law: "Mapped_response",
-              on: "VariableRefDeclaration",
-              repaired: {},
-              repairedDeclaration: { declarationKind: "qti-response-declaration" },
-              table: "qti-mapping",
-            },
-          ];
-          for (const {
-            broken,
-            declaration,
-            law,
-            on,
-            repaired,
-            repairedDeclaration,
-            table,
-          } of checks) {
-            const refused = yield* db.apply(referenceChange(broken, declaration, table), {});
-            const kept = yield* db.apply(
-              referenceChange(
-                { ...broken, ...repaired },
-                declaration === undefined ? undefined : { ...declaration, ...repairedDeclaration },
-                table,
-              ),
-              {},
-            );
+            ],
+            law: "E1_derived",
+            operands: [operandRow(operator, 1, { baseType: "integer", cardinality: "single" })],
+            repaired: [operandRow(operator, 1, { baseType: "float", cardinality: "single" })],
+          },
+        ] as const;
+        for (const { broken, law, operands, repaired } of cases) {
+          const refused = yield* db.workload.importWrite.apply(
+            importFacts({ Expression: broken, Operand: operands }),
+            {},
+          );
+          const kept = yield* db.workload.importWrite.apply(
+            importFacts({ Expression: broken, Operand: repaired }),
+            {},
+          );
 
-            assert.isTrue(names(refused, on, law), law);
-            assert.isFalse(names(kept, on, law), law);
-          }
+          assert.isTrue(names(refused, "Expression", law), law);
+          assert.isFalse(names(kept, "Expression", law), law);
+        }
 
-          // Each check over a setter's or a lookup's held type: its reference, declared, and the
-          // expression it holds, of a type the law refuses, then of one it keeps.
-          const heldChecks: readonly {
-            readonly broken: Addition<typeof VariableRef>;
-            readonly held: HeldExpression;
-            readonly law: string;
-            readonly repaired: HeldExpression;
-            readonly table?: Addition<typeof VariableRefTable>["table"];
-          }[] = [
-            {
-              broken: referenceRow({
-                ...declared,
-                baseType: "integer",
-                cardinality: "single",
-                kind: "qti-set-outcome-value",
-              }),
-              held: { baseType: "float", cardinality: "single" },
-              law: "Set_type",
-              repaired: { baseType: "integer", cardinality: "single" },
-            },
-            {
-              broken: lookup,
-              held: { baseType: "string", cardinality: "single" },
-              law: "Lookup_type",
-              repaired: { baseType: "float", cardinality: "single" },
-              table: "qti-interpolation-table",
-            },
-          ];
-          for (const { broken, held, law, repaired, table } of heldChecks) {
-            const constraint = checkConstraintOf(Qti, HeldType.name, law);
-            assertVerdict(
-              yield* judged(client, statedInserts(referenceFacts(broken, {}, held, table)), [
-                constraint,
-              ]),
+        const leaves = [
+          {
+            broken: expressionRow({
+              baseType: "integer",
+              cardinality: "single",
+              kind: "qti-number-correct",
+              language: "response",
+              node: operator,
+            }),
+            law: "Outcome_only",
+            repaired: { language: "outcome" },
+          },
+          {
+            broken: expressionRow({
+              baseType: "integer",
+              cardinality: "single",
+              kind: "qti-random-integer",
+              language: "response",
+              node: operator,
+              parentKind: "qti-response-if",
+            }),
+            law: "Condition_type",
+            repaired: { parentKind: "qti-set-outcome-value" },
+          },
+        ] as const;
+        for (const { broken, law, repaired } of leaves) {
+          const refused = yield* db.workload.importWrite.apply(
+            importFacts({ Expression: [broken] }),
+            {},
+          );
+          const kept = yield* db.workload.importWrite.apply(
+            importFacts({ Expression: [{ ...broken, ...repaired }] }),
+            {},
+          );
+
+          assert.isTrue(names(refused, "Expression", law), law);
+          assert.isFalse(names(kept, "Expression", law), law);
+        }
+      }),
+    );
+
+    it.effect("refuses each reference row law's breach by its law, and keeps its control", () =>
+      // Oracle: PostgreSQL, each CHECK of `VariableRef` and its rows, against the old checker's
+      // rules (P8, P24, P26, P27); each rule over `HeldType`'s query (P20, P22), a deferred
+      // constraint trigger, which `db.apply` would judge at COMMIT behind the stray rows'
+      // foreign keys, so the direct writer sets it immediate, 23514 and the check's name; and
+      // each claim a lookup (P22, §2.5.1.4) or a map response (P27, §2.11.3.29) must make of its
+      // declaration's table, a containment into `VariableRefTable`: a deferred foreign key, or
+      // for a lookup's held type a rule over `HeldType`, which the direct writer sets immediate,
+      // 23503 and its name, found by grizzle's comment on it.
+      // Bound: one breach of each law, beside the same rows with the breach repaired.
+      Effect.gen(function* referenceLaws() {
+        const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+        const client = yield* loginSession;
+        const declared = { resolution: "declared" } as const;
+        const lookup = referenceRow({
+          ...declared,
+          baseType: "integer",
+          cardinality: "single",
+          kind: "qti-lookup-outcome-value",
+        });
+        const mapResponse = referenceRow({
+          ...declared,
+          baseType: "integer",
+          cardinality: "single",
+          kind: "qti-map-response",
+        });
+        const checks: readonly {
+          readonly broken: Addition<typeof VariableRef>;
+          readonly declaration?: Partial<Addition<typeof VariableRefDeclaration>>;
+          readonly law: string;
+          readonly on: "VariableRef" | "VariableRefDeclaration";
+          readonly repaired: Partial<Addition<typeof VariableRef>>;
+          readonly repairedDeclaration?: Partial<Addition<typeof VariableRefDeclaration>>;
+          readonly table?: Addition<typeof VariableRefTable>["table"];
+        }[] = [
+          {
+            broken: referenceRow({ rootKind: "qti-assessment-item" }),
+            law: "Variable_declared",
+            on: "VariableRef",
+            repaired: { rootKind: "qti-response-processing" },
+          },
+          {
+            broken: referenceRow({
+              ...declared,
+              attribute: "figures",
+              baseType: "float",
+              cardinality: "single",
+              kind: "qti-equal-rounded",
+            }),
+            declaration: {},
+            law: "Reference_type",
+            on: "VariableRefDeclaration",
+            repaired: { baseType: "integer" },
+            repairedDeclaration: {},
+          },
+          {
+            broken: referenceRow({
+              ...declared,
+              baseType: "integer",
+              cardinality: "single",
+              elementBase: "integer",
+              elementCardinality: "single",
+              language: "template",
+            }),
+            declaration: { declarationKind: "qti-response-declaration" },
+            law: "Template_reads",
+            on: "VariableRefDeclaration",
+            repaired: {},
+            repairedDeclaration: { declarationKind: "qti-template-declaration" },
+          },
+          {
+            broken: mapResponse,
+            declaration: { declarationKind: "qti-outcome-declaration" },
+            law: "Mapped_response",
+            on: "VariableRefDeclaration",
+            repaired: {},
+            repairedDeclaration: { declarationKind: "qti-response-declaration" },
+            table: "qti-mapping",
+          },
+        ];
+        for (const {
+          broken,
+          declaration,
+          law,
+          on,
+          repaired,
+          repairedDeclaration,
+          table,
+        } of checks) {
+          const refused = yield* db.workload.importWrite.apply(
+            referenceChange(broken, declaration, table),
+            {},
+          );
+          const kept = yield* db.workload.importWrite.apply(
+            referenceChange(
+              { ...broken, ...repaired },
+              declaration === undefined ? undefined : { ...declaration, ...repairedDeclaration },
+              table,
+            ),
+            {},
+          );
+
+          assert.isTrue(names(refused, on, law), law);
+          assert.isFalse(names(kept, on, law), law);
+        }
+
+        // Each check over a setter's or a lookup's held type: its reference, declared, and the
+        // expression it holds, of a type the law refuses, then of one it keeps.
+        const heldChecks: readonly {
+          readonly broken: Addition<typeof VariableRef>;
+          readonly held: HeldExpression;
+          readonly law: string;
+          readonly repaired: HeldExpression;
+          readonly table?: Addition<typeof VariableRefTable>["table"];
+        }[] = [
+          {
+            broken: referenceRow({
+              ...declared,
+              baseType: "integer",
+              cardinality: "single",
+              kind: "qti-set-outcome-value",
+            }),
+            held: { baseType: "float", cardinality: "single" },
+            law: "Set_type",
+            repaired: { baseType: "integer", cardinality: "single" },
+          },
+          {
+            broken: lookup,
+            held: { baseType: "string", cardinality: "single" },
+            law: "Lookup_type",
+            repaired: { baseType: "float", cardinality: "single" },
+            table: "qti-interpolation-table",
+          },
+        ];
+        for (const { broken, held, law, repaired, table } of heldChecks) {
+          const constraint = checkConstraintOf(Qti, HeldType.name, law);
+          assertVerdict(
+            yield* judged(client, statedInserts(referenceFacts(broken, {}, held, table)), [
               constraint,
-              true,
-              `${law}, broken`,
-            );
-            assertVerdict(
-              yield* judged(client, statedInserts(referenceFacts(broken, {}, repaired, table)), [
-                constraint,
-              ]),
-              constraint,
-              false,
-              `${law}, repaired`,
-            );
-          }
-
-          // Each claim's breach writes no claim, or a claim of the other table, and its repair
-          // the claim its law requires; the rows the containment reads from are the same.
-          const claims: readonly {
-            readonly broken: Addition<typeof VariableRef>;
-            readonly constraint: Effect.Effect<string, unknown>;
-            readonly declaration: Partial<Addition<typeof VariableRefDeclaration>>;
-            readonly held?: HeldExpression;
-            readonly law: string;
-            readonly repairedTable: Addition<typeof VariableRefTable>["table"];
-            readonly table?: Addition<typeof VariableRefTable>["table"];
-          }[] = [
-            {
-              broken: lookup,
-              constraint: ruleDescribed(
-                client,
-                tableOf(VariableRef.name),
-                `trigger of rule ${HeldType.name}(node)% in ${VariableRefTable.name}(node)%`,
-              ),
-              declaration: {},
-              held: { baseType: "float", cardinality: "single" },
-              law: "Lookup type, a float's interpolation table",
-              repairedTable: "qti-interpolation-table",
-              table: "qti-match-table",
-            },
-            {
-              broken: lookup,
-              constraint: constraintDescribed(
-                client,
-                tableOf(VariableRefDeclaration.name),
-                `foreign key ${VariableRefDeclaration.name}(%"${lookup.kind}"%) to ${VariableRefTable.name}(%`,
-              ),
-              declaration: {},
-              law: "Lookup type, a declared lookup's table",
-              repairedTable: "qti-interpolation-table",
-            },
-            {
-              broken: mapResponse,
-              constraint: constraintDescribed(
-                client,
-                tableOf(VariableRefDeclaration.name),
-                `foreign key ${VariableRefDeclaration.name}(%"${mapResponse.kind}"%) to ${VariableRefTable.name}(%`,
-              ),
-              declaration: { declarationKind: "qti-response-declaration" },
-              law: "Mapped response, a declared map response's mapping",
-              repairedTable: "qti-mapping",
-            },
-          ];
-          for (const {
-            broken,
+            ]),
             constraint,
-            declaration,
-            held,
-            law,
-            repairedTable,
-            table,
-          } of claims) {
-            const claim = yield* constraint;
-            assertVerdict(
-              yield* judged(
-                client,
-                statedInserts(referenceFacts(broken, declaration, held, table)),
-                [claim],
-              ),
-              claim,
-              true,
-              `${law}, broken`,
-              "23503",
-            );
-            assertVerdict(
-              yield* judged(
-                client,
-                statedInserts(referenceFacts(broken, declaration, held, repairedTable)),
-                [claim],
-              ),
-              claim,
-              false,
-              `${law}, repaired`,
-            );
-          }
-        }).pipe(Effect.scoped),
-      );
+            true,
+            `${law}, broken`,
+          );
+          assertVerdict(
+            yield* judged(client, statedInserts(referenceFacts(broken, {}, repaired, table)), [
+              constraint,
+            ]),
+            constraint,
+            false,
+            `${law}, repaired`,
+          );
+        }
 
-      it.effect(
-        "refuses a weighted integer, a base value no lexical form of its base type, and a template whose code its form does not spell",
-        () =>
-          // Oracle: PostgreSQL, `Weighted_base` (P29), `Literal_lexical` (`BaseTypePattern`) and
-          // `E1_derived` over `ProcessingTemplate` (template-derivation).
-          // Bound: one breach of each, beside its repair.
-          Effect.gen(function* attributeLaws() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const node = nodeOf(1);
-            const weighted: Addition<typeof ExpressionAttribute> = {
-              attribute: "weight-identifier",
-              baseType: "integer",
-              cardinality: "multiple",
-              kind: "qti-test-variables",
-              language: "outcome",
-              lexical: "W",
-              node,
-              parent: strayNode,
-              written: true,
-            };
-            const literal: Addition<typeof LiteralTyped> = {
-              baseType: "integer",
-              node,
-              text: "abc",
-              typeCode: "integer",
-            };
-            const template: Addition<typeof ProcessingTemplate> = {
-              node,
-              template: "match_correct",
-              uri: "urn:example:template",
-            };
-            const outcomes = {
-              keptLiteral: yield* db.apply(
-                ChangeSet.empty(Author).insert(LiteralTyped, [{ ...literal, text: " 42 " }]),
-                {},
-              ),
-              keptTemplate: yield* db.apply(
-                ChangeSet.empty(Author).insert(ProcessingTemplate, [
+        // Each claim's breach writes no claim, or a claim of the other table, and its repair
+        // the claim its law requires; the rows the containment reads from are the same.
+        const claims: readonly {
+          readonly broken: Addition<typeof VariableRef>;
+          readonly constraint: Effect.Effect<string, unknown>;
+          readonly declaration: Partial<Addition<typeof VariableRefDeclaration>>;
+          readonly held?: HeldExpression;
+          readonly law: string;
+          readonly repairedTable: Addition<typeof VariableRefTable>["table"];
+          readonly table?: Addition<typeof VariableRefTable>["table"];
+        }[] = [
+          {
+            broken: lookup,
+            constraint: ruleDescribed(
+              client,
+              tableOf(VariableRef.name),
+              `trigger of rule ${HeldType.name}(node)% in ${VariableRefTable.name}(node)%`,
+            ),
+            declaration: {},
+            held: { baseType: "float", cardinality: "single" },
+            law: "Lookup type, a float's interpolation table",
+            repairedTable: "qti-interpolation-table",
+            table: "qti-match-table",
+          },
+          {
+            broken: lookup,
+            constraint: constraintDescribed(
+              client,
+              tableOf(VariableRefDeclaration.name),
+              `foreign key ${VariableRefDeclaration.name}(%"${lookup.kind}"%) to ${VariableRefTable.name}(%`,
+            ),
+            declaration: {},
+            law: "Lookup type, a declared lookup's table",
+            repairedTable: "qti-interpolation-table",
+          },
+          {
+            broken: mapResponse,
+            constraint: constraintDescribed(
+              client,
+              tableOf(VariableRefDeclaration.name),
+              `foreign key ${VariableRefDeclaration.name}(%"${mapResponse.kind}"%) to ${VariableRefTable.name}(%`,
+            ),
+            declaration: { declarationKind: "qti-response-declaration" },
+            law: "Mapped response, a declared map response's mapping",
+            repairedTable: "qti-mapping",
+          },
+        ];
+        for (const { broken, constraint, declaration, held, law, repairedTable, table } of claims) {
+          const claim = yield* constraint;
+          assertVerdict(
+            yield* judged(client, statedInserts(referenceFacts(broken, declaration, held, table)), [
+              claim,
+            ]),
+            claim,
+            true,
+            `${law}, broken`,
+            "23503",
+          );
+          assertVerdict(
+            yield* judged(
+              client,
+              statedInserts(referenceFacts(broken, declaration, held, repairedTable)),
+              [claim],
+            ),
+            claim,
+            false,
+            `${law}, repaired`,
+          );
+        }
+      }).pipe(Effect.scoped),
+    );
+
+    it.effect(
+      "refuses a weighted integer, a base value no lexical form of its base type, and a template whose code its form does not spell",
+      () =>
+        // Oracle: PostgreSQL, `Weighted_base` (P29), `Literal_lexical` (`BaseTypePattern`) and
+        // `E1_derived` over `ProcessingTemplate` (template-derivation).
+        // Bound: one breach of each, beside its repair.
+        Effect.gen(function* attributeLaws() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const node = nodeOf(1);
+          const weighted: Addition<typeof ExpressionAttribute> = {
+            attribute: "weight-identifier",
+            baseType: "integer",
+            cardinality: "multiple",
+            kind: "qti-test-variables",
+            language: "outcome",
+            lexical: "W",
+            node,
+            parent: strayNode,
+            written: true,
+          };
+          const literal: Addition<typeof LiteralTyped> = {
+            baseType: "integer",
+            node,
+            text: "abc",
+            typeCode: "integer",
+          };
+          const template: Addition<typeof ProcessingTemplate> = {
+            node,
+            template: "match_correct",
+            uri: "urn:example:template",
+          };
+          const outcomes = {
+            keptLiteral: yield* db.workload.importWrite.apply(
+              importFacts({ LiteralTyped: [{ ...literal, text: " 42 " }] }),
+              {},
+            ),
+            keptTemplate: yield* db.workload.importWrite.apply(
+              importFacts({
+                ProcessingTemplate: [
                   {
                     ...template,
                     uri: "https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml",
                   },
-                ]),
-                {},
-              ),
-              keptWeighted: yield* db.apply(
-                ChangeSet.empty(Author).insert(ExpressionAttribute, [
-                  { ...weighted, baseType: "float" },
-                ]),
-                {},
-              ),
-              literal: yield* db.apply(ChangeSet.empty(Author).insert(LiteralTyped, [literal]), {}),
-              template: yield* db.apply(
-                ChangeSet.empty(Author).insert(ProcessingTemplate, [template]),
-                {},
-              ),
-              weighted: yield* db.apply(
-                ChangeSet.empty(Author).insert(ExpressionAttribute, [weighted]),
-                {},
-              ),
-            };
+                ],
+              }),
+              {},
+            ),
+            keptWeighted: yield* db.workload.importWrite.apply(
+              importFacts({ ExpressionAttribute: [{ ...weighted, baseType: "float" }] }),
+              {},
+            ),
+            literal: yield* db.workload.importWrite.apply(
+              importFacts({ LiteralTyped: [literal] }),
+              {},
+            ),
+            template: yield* db.workload.importWrite.apply(
+              importFacts({ ProcessingTemplate: [template] }),
+              {},
+            ),
+            weighted: yield* db.workload.importWrite.apply(
+              importFacts({ ExpressionAttribute: [weighted] }),
+              {},
+            ),
+          };
 
-            assert.isTrue(names(outcomes.weighted, "ExpressionAttribute", "Weighted_base"));
-            assert.isFalse(names(outcomes.keptWeighted, "ExpressionAttribute", "Weighted_base"));
-            assert.isTrue(names(outcomes.literal, "LiteralTyped", "Literal_lexical"));
-            assert.isFalse(names(outcomes.keptLiteral, "LiteralTyped", "Literal_lexical"));
-            assert.isTrue(names(outcomes.template, "ProcessingTemplate", "E1_derived"));
-            assert.isFalse(names(outcomes.keptTemplate, "ProcessingTemplate", "E1_derived"));
-          }),
-      );
+          assert.isTrue(names(outcomes.weighted, "ExpressionAttribute", "Weighted_base"));
+          assert.isFalse(names(outcomes.keptWeighted, "ExpressionAttribute", "Weighted_base"));
+          assert.isTrue(names(outcomes.literal, "LiteralTyped", "Literal_lexical"));
+          assert.isFalse(names(outcomes.keptLiteral, "LiteralTyped", "Literal_lexical"));
+          assert.isTrue(names(outcomes.template, "ProcessingTemplate", "E1_derived"));
+          assert.isFalse(names(outcomes.keptTemplate, "ProcessingTemplate", "E1_derived"));
+        }),
+    );
 
-      it.effect(
-        "refuses each reading law's breach by its law, and keeps its control",
-        () =>
-          // Oracle: PostgreSQL, each CHECK of `Reading`, against spec readings 48 and 88, P24
-          // (A66) and §7.27.1's `section-identifier` (A61), here a `qti-number-correct`'s, which
-          // reads a section.
-          // Bound: one breach of each law, beside the same row with the breach repaired, each
-          // with its reference's owners.
-          Effect.gen(function* readingLaws() {
-            const client = yield* loginSession;
-            const undeclared = { source: "none" } as const;
-            const standIn = readingRow({ attribute: "max", kind: "qti-random-integer" });
-            const cardinalityOf = (
-              declCardinality: Addition<typeof ReadingCardinality>["declCardinality"],
-            ): readonly Stated[] => [
-              {
-                fact: {
-                  assembly: standIn.assembly,
-                  attribute: standIn.attribute,
-                  declCardinality,
-                  declaration: readDeclaration.declaration,
-                  form: standIn.form,
-                  node: standIn.node,
-                  split: standIn.split,
-                },
-                relation: ReadingCardinality,
+    it.effect(
+      "refuses each reading law's breach by its law, and keeps its control",
+      () =>
+        // Oracle: PostgreSQL, each CHECK of `Reading`, against spec readings 48 and 88, P24
+        // (A66) and §7.27.1's `section-identifier` (A61), here a `qti-number-correct`'s, which
+        // reads a section.
+        // Bound: one breach of each law, beside the same row with the breach repaired, each
+        // with its reference's owners.
+        Effect.gen(function* readingLaws() {
+          const client = yield* loginSession;
+          const undeclared = { source: "none" } as const;
+          const standIn = readingRow({ attribute: "max", kind: "qti-random-integer" });
+          const cardinalityOf = (
+            declCardinality: Addition<typeof ReadingCardinality>["declCardinality"],
+          ): readonly Stated[] => [
+            {
+              fact: {
+                assembly: standIn.assembly,
+                attribute: standIn.attribute,
+                declCardinality,
+                declaration: readDeclaration.declaration,
+                form: standIn.form,
+                node: standIn.node,
+                split: standIn.split,
               },
-            ];
-            // The check judges a stand-in reading's declaration's cardinality, a row of its own
-            // where the declaration has one (spec reading 159); its base type, where its
-            // declaration has one, is the containment into `DeclarationBaseType`'s, a key the host
-            // tier holds.
-            assertVerdict(
-              yield* judged(
-                client,
-                statedInserts([...readingFacts([standIn]), ...cardinalityOf("multiple")]),
-              ),
-              checkConstraintOf(Qti, ReadingCardinality.name, "Reference_type"),
-              true,
-              "Reference_type, broken",
-            );
-            assertVerdict(
-              yield* judged(
-                client,
-                statedInserts([...readingFacts([standIn]), ...cardinalityOf("single")]),
-              ),
-              checkConstraintOf(Qti, ReadingCardinality.name, "Reference_type"),
-              false,
-              "Reference_type, repaired",
-            );
-
-            const cases = [
-              {
-                broken: readingRow({ ...throughItem, placements: 2n }),
-                check: "Prefixed_reference",
-                repaired: { placements: 1n },
-              },
-              {
-                broken: readingRow({ ...undeclared, identifier: "X", variable: "X" }),
-                check: "Variable_declared",
-                repaired: { identifier: "a.X", variable: "a.X" },
-              },
-              {
-                broken: readingRow({
-                  ...undeclared,
-                  attribute: "section-identifier",
-                  form: "name",
-                  found: false,
-                  identifier: "S",
-                  kind: "qti-number-correct",
-                  namedKind: "document",
-                  placements: 0n,
-                  role: "section",
-                  scope: "S",
-                  variable: "",
-                }),
-                check: "Section_identifier_target",
-                repaired: {
-                  found: true,
-                  named: nodeOf(61),
-                  namedKind: "qti-assessment-section",
-                  placements: 1n,
-                },
-              },
-            ] as const;
-            for (const { broken, check, repaired } of cases) {
-              const constraint = checkConstraintOf(Qti, Reading.name, check);
-              assertVerdict(
-                yield* judged(client, statedInserts(readingFacts([broken]))),
-                constraint,
-                true,
-                `${check}, broken`,
-              );
-              assertVerdict(
-                yield* judged(client, statedInserts(readingFacts([{ ...broken, ...repaired }]))),
-                constraint,
-                false,
-                `${check}, repaired`,
-              );
-            }
-          }).pipe(Effect.scoped),
-        { timeout: leaseTestTimeoutMs },
-      );
-
-      it.effect(
-        "refuses a reference by identifier that names a variable of a kind its element does not read or set, and keeps one that does",
-        () =>
-          // Oracle: PostgreSQL, the containment into `ReferenceDeclaration` (spec reading 111),
-          // against the information model's definitions of each element's `identifier`: a set
-          // outcome value sets an outcome (§6.32.3), a correct names a response (§7.10.1), a
-          // variable any item variable (§7.47.1), and `numAttempts` stands as a response.
-          // Bound: three references, each beside its kept twin.
-          Effect.gen(function* variableKind() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const declared = { resolution: "declared", rootKind: "qti-assessment-item" } as const;
-            const cases: readonly {
-              readonly broken: Addition<typeof VariableRef>;
-              readonly declaration?: Partial<Addition<typeof VariableRefDeclaration>>;
-              readonly kept: Partial<Addition<typeof VariableRef>>;
-              readonly keptDeclaration?: Partial<Addition<typeof VariableRefDeclaration>>;
-            }[] = [
-              {
-                broken: referenceRow({ ...declared, kind: "qti-set-outcome-value" }),
-                declaration: { declarationKind: "qti-response-declaration" },
-                kept: {},
-                keptDeclaration: { declarationKind: "qti-outcome-declaration" },
-              },
-              {
-                broken: referenceRow({ ...declared, kind: "qti-correct" }),
-                declaration: { declarationKind: "qti-outcome-declaration" },
-                kept: {},
-                keptDeclaration: { declarationKind: "qti-response-declaration" },
-              },
-              {
-                broken: referenceRow({
-                  baseType: "integer",
-                  cardinality: "single",
-                  identifier: "numAttempts",
-                  kind: "qti-set-outcome-value",
-                  lexical: "numAttempts",
-                  resolution: "builtIn",
-                  rootKind: "qti-assessment-item",
-                }),
-                kept: { kind: "qti-variable" },
-              },
-            ];
-            for (const { broken, declaration, kept, keptDeclaration } of cases) {
-              const refused = yield* db.apply(referenceChange(broken, declaration), {});
-              const held = yield* db.apply(
-                referenceChange(
-                  { ...broken, ...kept },
-                  declaration === undefined ? undefined : { ...declaration, ...keptDeclaration },
-                ),
-                {},
-              );
-
-              assert.isTrue(namesVariableKind(refused), broken.kind);
-              assert.isFalse(namesVariableKind(held), broken.kind);
-            }
-          }),
-      );
-
-      it.effect(
-        "refuses a reference two readings resolve by the key over its resolving readings, and keeps one",
-        () =>
-          // Oracle: PostgreSQL, the key over `select(Reading, resolves)` by reference (M3's at
-          // most one), against spec reading 48's own case: `a.b.SCORE` read as item ref `a.b`'s
-          // `SCORE` and as item ref `a`'s `b.SCORE`, both declared. The key is the catalog's one
-          // UNIQUE over `Reading`'s selected (assembly, node, attribute), found by grizzle's
-          // comment on it. Bound: the two readings resolving, beside the same two with the
-          // second's variable undeclared, at slots 0 and 1 of the name's three readings.
-          Effect.gen(function* twoReadings() {
-            const client = yield* loginSession;
-            const keys = yield* rowsOf<{ readonly name: string }>(
+              relation: ReadingCardinality,
+            },
+          ];
+          // The check judges a stand-in reading's declaration's cardinality, a row of its own
+          // where the declaration has one (spec reading 159); its base type, where its
+          // declaration has one, is the containment into `DeclarationBaseType`'s, a key the host
+          // tier holds.
+          assertVerdict(
+            yield* judged(
               client,
-              `SELECT c.conname AS name FROM pg_catalog.pg_constraint c
+              statedInserts([...readingFacts([standIn]), ...cardinalityOf("multiple")]),
+            ),
+            checkConstraintOf(Qti, ReadingCardinality.name, "Reference_type"),
+            true,
+            "Reference_type, broken",
+          );
+          assertVerdict(
+            yield* judged(
+              client,
+              statedInserts([...readingFacts([standIn]), ...cardinalityOf("single")]),
+            ),
+            checkConstraintOf(Qti, ReadingCardinality.name, "Reference_type"),
+            false,
+            "Reference_type, repaired",
+          );
+
+          const cases = [
+            {
+              broken: readingRow({ ...throughItem, placements: 2n }),
+              check: "Prefixed_reference",
+              repaired: { placements: 1n },
+            },
+            {
+              broken: readingRow({ ...undeclared, identifier: "X", variable: "X" }),
+              check: "Variable_declared",
+              repaired: { identifier: "a.X", variable: "a.X" },
+            },
+            {
+              broken: readingRow({
+                ...undeclared,
+                attribute: "section-identifier",
+                form: "name",
+                found: false,
+                identifier: "S",
+                kind: "qti-number-correct",
+                namedKind: "document",
+                placements: 0n,
+                role: "section",
+                scope: "S",
+                variable: "",
+              }),
+              check: "Section_identifier_target",
+              repaired: {
+                found: true,
+                named: nodeOf(61),
+                namedKind: "qti-assessment-section",
+                placements: 1n,
+              },
+            },
+          ] as const;
+          for (const { broken, check, repaired } of cases) {
+            const constraint = checkConstraintOf(Qti, Reading.name, check);
+            assertVerdict(
+              yield* judged(client, statedInserts(readingFacts([broken]))),
+              constraint,
+              true,
+              `${check}, broken`,
+            );
+            assertVerdict(
+              yield* judged(client, statedInserts(readingFacts([{ ...broken, ...repaired }]))),
+              constraint,
+              false,
+              `${check}, repaired`,
+            );
+          }
+        }).pipe(Effect.scoped),
+      { timeout: leaseTestTimeoutMs },
+    );
+
+    it.effect(
+      "refuses a reference by identifier that names a variable of a kind its element does not read or set, and keeps one that does",
+      () =>
+        // Oracle: PostgreSQL, the containment into `ReferenceDeclaration` (spec reading 111),
+        // against the information model's definitions of each element's `identifier`: a set
+        // outcome value sets an outcome (§6.32.3), a correct names a response (§7.10.1), a
+        // variable any item variable (§7.47.1), and `numAttempts` stands as a response.
+        // Bound: three references, each beside its kept twin.
+        Effect.gen(function* variableKind() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const declared = { resolution: "declared", rootKind: "qti-assessment-item" } as const;
+          const cases: readonly {
+            readonly broken: Addition<typeof VariableRef>;
+            readonly declaration?: Partial<Addition<typeof VariableRefDeclaration>>;
+            readonly kept: Partial<Addition<typeof VariableRef>>;
+            readonly keptDeclaration?: Partial<Addition<typeof VariableRefDeclaration>>;
+          }[] = [
+            {
+              broken: referenceRow({ ...declared, kind: "qti-set-outcome-value" }),
+              declaration: { declarationKind: "qti-response-declaration" },
+              kept: {},
+              keptDeclaration: { declarationKind: "qti-outcome-declaration" },
+            },
+            {
+              broken: referenceRow({ ...declared, kind: "qti-correct" }),
+              declaration: { declarationKind: "qti-outcome-declaration" },
+              kept: {},
+              keptDeclaration: { declarationKind: "qti-response-declaration" },
+            },
+            {
+              broken: referenceRow({
+                baseType: "integer",
+                cardinality: "single",
+                identifier: "numAttempts",
+                kind: "qti-set-outcome-value",
+                lexical: "numAttempts",
+                resolution: "builtIn",
+                rootKind: "qti-assessment-item",
+              }),
+              kept: { kind: "qti-variable" },
+            },
+          ];
+          for (const { broken, declaration, kept, keptDeclaration } of cases) {
+            const refused = yield* db.workload.importWrite.apply(
+              referenceChange(broken, declaration),
+              {},
+            );
+            const held = yield* db.workload.importWrite.apply(
+              referenceChange(
+                { ...broken, ...kept },
+                declaration === undefined ? undefined : { ...declaration, ...keptDeclaration },
+              ),
+              {},
+            );
+
+            assert.isTrue(namesVariableKind(refused), broken.kind);
+            assert.isFalse(namesVariableKind(held), broken.kind);
+          }
+        }),
+    );
+
+    it.effect(
+      "refuses a reference two readings resolve by the key over its resolving readings, and keeps one",
+      () =>
+        // Oracle: PostgreSQL, the key over `select(Reading, resolves)` by reference (M3's at
+        // most one), against spec reading 48's own case: `a.b.SCORE` read as item ref `a.b`'s
+        // `SCORE` and as item ref `a`'s `b.SCORE`, both declared. The key is the catalog's one
+        // UNIQUE over `Reading`'s selected (assembly, node, attribute), found by grizzle's
+        // comment on it. Bound: the two readings resolving, beside the same two with the
+        // second's variable undeclared, at slots 0 and 1 of the name's three readings.
+        Effect.gen(function* twoReadings() {
+          const client = yield* loginSession;
+          const keys = yield* rowsOf<{ readonly name: string }>(
+            client,
+            `SELECT c.conname AS name FROM pg_catalog.pg_constraint c
                 WHERE c.conrelid = '${qtiSchema}.reading'::regclass AND c.contype = 'u'
                   AND pg_catalog.cardinality(c.conkey) = 3
                   AND pg_catalog.obj_description(c.oid, 'pg_constraint') LIKE 'key Reading(assembly where %'`,
-            );
-            assert.lengthOf(keys, 1, "one key over Reading's selected (assembly, node, attribute)");
+          );
+          assert.lengthOf(keys, 1, "one key over Reading's selected (assembly, node, attribute)");
 
-            const key = keys[0]?.name ?? "";
-            const first = readingRow({
-              ...throughItem,
-              identifier: "a.b.SCORE",
-              scope: "a.b",
-              split: 2n,
-            });
-            const second = readingRow({
-              ...throughItem,
-              identifier: "a.b.SCORE",
-              named: nodeOf(62),
-              split: 1n,
-              variable: "b.SCORE",
-            });
+          const key = keys[0]?.name ?? "";
+          const first = readingRow({
+            ...throughItem,
+            identifier: "a.b.SCORE",
+            scope: "a.b",
+            split: 2n,
+          });
+          const second = readingRow({
+            ...throughItem,
+            identifier: "a.b.SCORE",
+            named: nodeOf(62),
+            split: 1n,
+            variable: "b.SCORE",
+          });
 
-            assertVerdict(
-              yield* judged(client, statedInserts(readingFacts([first, second]))),
-              key,
-              true,
-              "two resolving readings",
-              "23505",
+          assertVerdict(
+            yield* judged(client, statedInserts(readingFacts([first, second]))),
+            key,
+            true,
+            "two resolving readings",
+            "23505",
+          );
+          assertVerdict(
+            yield* judged(
+              client,
+              statedInserts(readingFacts([first, { ...second, source: "none" }])),
+            ),
+            key,
+            false,
+            "one resolving reading",
+          );
+        }).pipe(Effect.scoped),
+      { timeout: leaseTestTimeoutMs },
+    );
+
+    it.effect(
+      "refuses a template default or a mapping its item's declarations do not admit, and keeps its control",
+      () =>
+        // Oracle: PostgreSQL, `Template_default_target` and `Template_default_type` (A37, A38,
+        // spec reading 108) and `Variable_mapping_source` (A34), each a CHECK on the
+        // declaration's own row (`TemplateDefaultTarget`, `MappingSourceDeclaration`),
+        // `Template_default_type`'s on its cardinality's (`TemplateDefaultCardinality`, a row of
+        // its own where the declaration has one, spec reading 159), since the declaration's base
+        // type, where it has one, is `DeclarationBaseType`'s, which a containment reads; and
+        // `Variable_mapping_target` (reading 97), a rule over `DeclaredTarget`'s query, a
+        // deferred constraint trigger the direct writer sets immediate. Bound: one breach of each,
+        // breaking that law alone, since PostgreSQL names the first CHECK a row breaks by name,
+        // beside its repair, which keeps all four.
+        Effect.gen(function* itemRefLaws() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const client = yield* loginSession;
+          const templateDefault: Addition<typeof TemplateDefaultTarget> = {
+            declBaseTypes: 1n,
+            declCardinalities: 1n,
+            declaration: nodeOf(80),
+            declarationKind: "qti-template-declaration",
+            heldBase: "integer",
+            heldCardinality: "single",
+            itemDocument: nodeOf(70),
+            itemRef: nodeOf(60),
+            node: nodeOf(1),
+            template: "T",
+          };
+          const mapping: Addition<typeof MappingSourceDeclaration> = {
+            declBaseTypes: 1n,
+            declCardinalities: 1n,
+            declaration: nodeOf(81),
+            declarationKind: "qti-outcome-declaration",
+            itemDocument: nodeOf(70),
+            itemRef: nodeOf(60),
+            node: nodeOf(2),
+            source: "SCORE",
+            target: "X",
+          };
+          const templateCases: readonly {
+            readonly broken: Addition<typeof TemplateDefaultTarget>;
+            readonly law: string;
+            readonly repaired: Addition<typeof TemplateDefaultTarget>;
+          }[] = [
+            {
+              broken: { ...templateDefault, declarationKind: "qti-outcome-declaration" },
+              law: "Template_default_target",
+              repaired: templateDefault,
+            },
+          ];
+          for (const { broken, law, repaired } of templateCases) {
+            const refused = yield* db.workload.importWrite.apply(
+              importFacts({ TemplateDefaultTarget: [broken] }),
+              {},
             );
+            const kept = yield* db.workload.importWrite.apply(
+              importFacts({ TemplateDefaultTarget: [repaired] }),
+              {},
+            );
+
+            assert.isTrue(names(refused, "TemplateDefaultTarget", law), law);
+            assert.isFalse(names(kept, "TemplateDefaultTarget", law), law);
+          }
+
+          const templateCardinality: Addition<typeof TemplateDefaultCardinality> = {
+            declCardinality: "single",
+            declaration: templateDefault.declaration,
+            heldCardinality: "multiple",
+            node: templateDefault.node,
+          };
+          const refusedType = yield* db.workload.importWrite.apply(
+            importFacts({ TemplateDefaultCardinality: [templateCardinality] }),
+            {},
+          );
+          const keptType = yield* db.workload.importWrite.apply(
+            importFacts({
+              TemplateDefaultCardinality: [{ ...templateCardinality, heldCardinality: "single" }],
+            }),
+            {},
+          );
+
+          assert.isTrue(
+            names(refusedType, "TemplateDefaultCardinality", "Template_default_type"),
+            "Template_default_type",
+          );
+          assert.isFalse(
+            names(keptType, "TemplateDefaultCardinality", "Template_default_type"),
+            "Template_default_type",
+          );
+
+          const refusedSource = yield* db.workload.importWrite.apply(
+            importFacts({
+              MappingSourceDeclaration: [
+                { ...mapping, declarationKind: "qti-response-declaration" },
+              ],
+            }),
+            {},
+          );
+          const keptSource = yield* db.workload.importWrite.apply(
+            importFacts({ MappingSourceDeclaration: [mapping] }),
+            {},
+          );
+
+          assert.isTrue(
+            names(refusedSource, "MappingSourceDeclaration", "Variable_mapping_source"),
+            "Variable_mapping_source",
+          );
+          assert.isFalse(
+            names(keptSource, "MappingSourceDeclaration", "Variable_mapping_source"),
+            "Variable_mapping_source",
+          );
+
+          // The mapping's item declares its target `X`, another variable than its source: the
+          // declaration `DeclaredTarget`'s query joins it to; its repair maps the source to
+          // itself, or the item declares no `X`.
+          const targetDeclaration: Fact<typeof DeclarationIdentifier> = {
+            baseTypes: 1n,
+            cardinalities: 1n,
+            declarationKind: "qti-outcome-declaration",
+            document: mapping.itemDocument,
+            identifier: mapping.target,
+            identifierLead: "",
+            identifierLexical: mapping.target,
+            identifierTrail: "",
+            node: nodeOf(82),
+            parentKind: "qti-assessment-item",
+          };
+          const target = checkConstraintOf(Qti, DeclaredTarget.name, "Variable_mapping_target");
+          const targetCases: readonly {
+            readonly declared: boolean;
+            readonly label: string;
+            readonly refused: boolean;
+            readonly row: Addition<typeof MappingSourceDeclaration>;
+          }[] = [
+            { declared: true, label: "broken", refused: true, row: mapping },
+            {
+              declared: true,
+              label: "repaired, its own source",
+              refused: false,
+              row: { ...mapping, target: mapping.source },
+            },
+            { declared: false, label: "repaired, undeclared", refused: false, row: mapping },
+          ];
+          for (const { declared, label, refused, row } of targetCases) {
             assertVerdict(
               yield* judged(
                 client,
-                statedInserts(readingFacts([first, { ...second, source: "none" }])),
-              ),
-              key,
-              false,
-              "one resolving reading",
-            );
-          }).pipe(Effect.scoped),
-        { timeout: leaseTestTimeoutMs },
-      );
-
-      it.effect(
-        "refuses a template default or a mapping its item's declarations do not admit, and keeps its control",
-        () =>
-          // Oracle: PostgreSQL, `Template_default_target` and `Template_default_type` (A37, A38,
-          // spec reading 108) and `Variable_mapping_source` (A34), each a CHECK on the
-          // declaration's own row (`TemplateDefaultTarget`, `MappingSourceDeclaration`),
-          // `Template_default_type`'s on its cardinality's (`TemplateDefaultCardinality`, a row of
-          // its own where the declaration has one, spec reading 159), since the declaration's base
-          // type, where it has one, is `DeclarationBaseType`'s, which a containment reads; and
-          // `Variable_mapping_target` (reading 97), a rule over `DeclaredTarget`'s query, a
-          // deferred constraint trigger the direct writer sets immediate. Bound: one breach of each,
-          // breaking that law alone, since PostgreSQL names the first CHECK a row breaks by name,
-          // beside its repair, which keeps all four.
-          Effect.gen(function* itemRefLaws() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const client = yield* loginSession;
-            const templateDefault: Addition<typeof TemplateDefaultTarget> = {
-              declBaseTypes: 1n,
-              declCardinalities: 1n,
-              declaration: nodeOf(80),
-              declarationKind: "qti-template-declaration",
-              heldBase: "integer",
-              heldCardinality: "single",
-              itemDocument: nodeOf(70),
-              itemRef: nodeOf(60),
-              node: nodeOf(1),
-              template: "T",
-            };
-            const mapping: Addition<typeof MappingSourceDeclaration> = {
-              declBaseTypes: 1n,
-              declCardinalities: 1n,
-              declaration: nodeOf(81),
-              declarationKind: "qti-outcome-declaration",
-              itemDocument: nodeOf(70),
-              itemRef: nodeOf(60),
-              node: nodeOf(2),
-              source: "SCORE",
-              target: "X",
-            };
-            const templateCases: readonly {
-              readonly broken: Addition<typeof TemplateDefaultTarget>;
-              readonly law: string;
-              readonly repaired: Addition<typeof TemplateDefaultTarget>;
-            }[] = [
-              {
-                broken: { ...templateDefault, declarationKind: "qti-outcome-declaration" },
-                law: "Template_default_target",
-                repaired: templateDefault,
-              },
-            ];
-            for (const { broken, law, repaired } of templateCases) {
-              const refused = yield* db.apply(
-                ChangeSet.empty(Author).insert(TemplateDefaultTarget, [broken]),
-                {},
-              );
-              const kept = yield* db.apply(
-                ChangeSet.empty(Author).insert(TemplateDefaultTarget, [repaired]),
-                {},
-              );
-
-              assert.isTrue(names(refused, "TemplateDefaultTarget", law), law);
-              assert.isFalse(names(kept, "TemplateDefaultTarget", law), law);
-            }
-
-            const templateCardinality: Addition<typeof TemplateDefaultCardinality> = {
-              declCardinality: "single",
-              declaration: templateDefault.declaration,
-              heldCardinality: "multiple",
-              node: templateDefault.node,
-            };
-            const refusedType = yield* db.apply(
-              ChangeSet.empty(Author).insert(TemplateDefaultCardinality, [templateCardinality]),
-              {},
-            );
-            const keptType = yield* db.apply(
-              ChangeSet.empty(Author).insert(TemplateDefaultCardinality, [
-                { ...templateCardinality, heldCardinality: "single" },
-              ]),
-              {},
-            );
-
-            assert.isTrue(
-              names(refusedType, "TemplateDefaultCardinality", "Template_default_type"),
-              "Template_default_type",
-            );
-            assert.isFalse(
-              names(keptType, "TemplateDefaultCardinality", "Template_default_type"),
-              "Template_default_type",
-            );
-
-            const refusedSource = yield* db.apply(
-              ChangeSet.empty(Author).insert(MappingSourceDeclaration, [
-                { ...mapping, declarationKind: "qti-response-declaration" },
-              ]),
-              {},
-            );
-            const keptSource = yield* db.apply(
-              ChangeSet.empty(Author).insert(MappingSourceDeclaration, [mapping]),
-              {},
-            );
-
-            assert.isTrue(
-              names(refusedSource, "MappingSourceDeclaration", "Variable_mapping_source"),
-              "Variable_mapping_source",
-            );
-            assert.isFalse(
-              names(keptSource, "MappingSourceDeclaration", "Variable_mapping_source"),
-              "Variable_mapping_source",
-            );
-
-            // The mapping's item declares its target `X`, another variable than its source: the
-            // declaration `DeclaredTarget`'s query joins it to; its repair maps the source to
-            // itself, or the item declares no `X`.
-            const targetDeclaration: Fact<typeof DeclarationIdentifier> = {
-              baseTypes: 1n,
-              cardinalities: 1n,
-              declarationKind: "qti-outcome-declaration",
-              document: mapping.itemDocument,
-              identifier: mapping.target,
-              identifierLead: "",
-              identifierLexical: mapping.target,
-              identifierTrail: "",
-              node: nodeOf(82),
-              parentKind: "qti-assessment-item",
-            };
-            const target = checkConstraintOf(Qti, DeclaredTarget.name, "Variable_mapping_target");
-            const targetCases: readonly {
-              readonly declared: boolean;
-              readonly label: string;
-              readonly refused: boolean;
-              readonly row: Addition<typeof MappingSourceDeclaration>;
-            }[] = [
-              { declared: true, label: "broken", refused: true, row: mapping },
-              {
-                declared: true,
-                label: "repaired, its own source",
-                refused: false,
-                row: { ...mapping, target: mapping.source },
-              },
-              { declared: false, label: "repaired, undeclared", refused: false, row: mapping },
-            ];
-            for (const { declared, label, refused, row } of targetCases) {
-              assertVerdict(
-                yield* judged(
-                  client,
-                  statedInserts([
-                    { fact: row, relation: MappingSourceDeclaration },
-                    ...(declared
-                      ? [
-                          {
-                            fact: {
-                              ...targetDeclaration,
-                              identifier: row.target,
-                              identifierLexical: row.target,
-                            },
-                            relation: DeclarationIdentifier,
+                statedInserts([
+                  { fact: row, relation: MappingSourceDeclaration },
+                  ...(declared
+                    ? [
+                        {
+                          fact: {
+                            ...targetDeclaration,
+                            identifier: row.target,
+                            identifierLexical: row.target,
                           },
-                        ]
-                      : []),
-                  ]),
-                  [target],
-                ),
-                target,
-                refused,
-                `Variable_mapping_target, ${label}`,
-              );
-            }
-          }).pipe(Effect.scoped),
-        { timeout: leaseTestTimeoutMs },
-      );
-    },
-  );
+                          relation: DeclarationIdentifier,
+                        },
+                      ]
+                    : []),
+                ]),
+                [target],
+              ),
+              target,
+              refused,
+              `Variable_mapping_target, ${label}`,
+            );
+          }
+        }).pipe(Effect.scoped),
+      { timeout: leaseTestTimeoutMs },
+    );
+  });
 });
 
 /**
@@ -1517,7 +1522,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("each package imported in one apply, judged by PostgreSQL", (it) => {
       it.effect(
         "refuses each package with one cause under that cause's rule alone, and accepts the control",
@@ -1529,11 +1533,14 @@ describe.skipIf(!hasLease)(
           // the wrong kind, its type, and its target, and a template default under an LTI link; a
           // mapping under an LTI link is accepted unchecked (reading 110).
           Effect.gen(function* itemRefPackages() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
             for (const [name, input, rule] of itemRefCases) {
               const dir = yield* scopedPackage(itemRefPackageEntries(input));
               const program = yield* readProgram(dir);
-              const outcome = yield* db.apply(changeSetOf(Author, program.inputs), {});
+              const outcome = yield* db.workload.importWrite.apply(
+                { insert: packageFactsOf(program.inputs) },
+                {},
+              );
 
               if (rule === undefined) {
                 assert.strictEqual(
@@ -1546,9 +1553,11 @@ describe.skipIf(!hasLease)(
                   outcome.kind === "invariant-rejected"
                     ? [
                         ...new Set(
-                          outcome.refused.laws.map((law): string | undefined =>
-                            Option.getOrUndefined(ruleOfLaw(law)),
-                          ),
+                          outcome.refused.laws
+                            .map(({ law }) => law)
+                            .map((law): string | undefined =>
+                              Option.getOrUndefined(schemaRuleOfLaw(law)),
+                            ),
                         ),
                       ]
                     : [outcome.kind],
@@ -1572,17 +1581,20 @@ describe.skipIf(!hasLease)(
           // or unlisted file breaks, and under no law of a sentinel's. Bound: one bare item ref for
           // each target, the LTI link the control.
           Effect.gen(function* itemRefTargets() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
             for (const [target, rules] of itemRefTargetCases) {
               const input: ItemRefPackage = { defaults: [], mappings: [], target };
               const dir = yield* scopedPackage(itemRefPackageEntries(input));
               const program = yield* readProgram(dir);
-              const outcome = yield* db.apply(changeSetOf(Author, program.inputs), {});
+              const outcome = yield* db.workload.importWrite.apply(
+                { insert: packageFactsOf(program.inputs) },
+                {},
+              );
               const refused =
                 outcome.kind === "invariant-rejected"
-                  ? outcome.refused.laws.map((law): string | undefined =>
-                      Option.getOrUndefined(ruleOfLaw(law)),
-                    )
+                  ? outcome.refused.laws
+                      .map(({ law }) => law)
+                      .map((law): string | undefined => Option.getOrUndefined(schemaRuleOfLaw(law)))
                   : [outcome.kind];
 
               if (rules.length === 0) {

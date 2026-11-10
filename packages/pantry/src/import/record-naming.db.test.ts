@@ -33,7 +33,7 @@ import { writePackage } from "#pantry/test/gen/every-relation.ts";
 import { encodedHrefMistitled, upstreamPackages } from "#pantry/test/record-naming.ts";
 import type { UpstreamClass } from "#pantry/test/record-naming.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * What the database's refusal of a package names: every rule of `named`, and no rule of `never`.
@@ -122,7 +122,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the document a resource's LOM record names", (it) => {
       for (const { entries, name, named, never } of cases) {
         it.effect(`refuses ${name}`, () =>

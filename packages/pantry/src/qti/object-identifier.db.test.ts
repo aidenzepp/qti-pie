@@ -12,36 +12,62 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Db, query, uuid, v } from "@bjornpagen/grizzle";
+import { Db, query, uuid, v, login, workload } from "@bjornpagen/grizzle";
 import { Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+
 import { importPackage } from "#pantry/import/package.ts";
 import { keyTextBytes } from "#pantry/qti/limits.ts";
 import { ObjectIdentifier } from "#pantry/qti/metadata.ts";
-import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
+
 import { TestDocument } from "#pantry/qti/tests.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { probeLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { testKind } from "#pantry/vocab/terms/tests.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
-/**
- * The test documents of a package whose root writes an identifier, by the package and that
- * identifier collapsed: the read a program addressing a test by the two runs.
- */
-const testByIdentifier = query(Author).rule((r) => {
-  const { node: document } = v(TestDocument, "test");
+import { Qti } from "#pantry/qti/own.ts";
+import { authorRoleOf } from "#pantry/qti/roles.ts";
+import { authorWorkloadsOf } from "#pantry/qti/logins.ts";
+import { servedProbe } from "#pantry/test/served-members.ts";
 
-  return r
-    .match(TestDocument, { node: document, package: r.param("package", uuid), rootKind: testKind })
-    .match(ObjectIdentifier, {
-      document,
-      identifier: r.param("identifier", ObjectIdentifier.fields.identifier),
-    })
-    .find({ document });
-});
+/**
+ * The author role of this file's probe login: grizzle puts a role in one login only, so the probe
+ * holds a role of its own, named as the installed one.
+ */
+const probeAuthor = authorRoleOf(Qti);
+
+/**
+ * The author login with this file's read of a test by its package and identifier beside its own
+ * members, over an author role of its own (`#pantry/test/served-members.ts` `servedProbe`):
+ * `ProbeLogin` opens the role that reads it, and `probeLayer` serves every test of the file,
+ * `AuthorLogin` included.
+ */
+const { layer: probeLayer, ProbeLogin } = servedProbe(
+  login(Qti, "author_app", [probeAuthor], {
+    workload: [
+      ...authorWorkloadsOf(Qti, probeAuthor),
+      workload(probeAuthor, {
+        testByIdentifier: query(probeAuthor).rule((r) => {
+          const { node: document } = v(TestDocument, "test");
+
+          return r
+            .match(TestDocument, {
+              node: document,
+              package: r.param("package", uuid),
+              rootKind: testKind,
+            })
+            .match(ObjectIdentifier, {
+              document,
+              identifier: r.param("identifier", ObjectIdentifier.fields.identifier),
+            })
+            .find({ document });
+        }),
+      }),
+    ],
+  }),
+);
 
 /**
  * An identifier of `bytes` UTF-8 bytes, an NCName of ASCII letters.
@@ -119,9 +145,9 @@ describe.skipIf(!hasLease)(
   "qti/object-identifier.db.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+    layer(Layer.mergeAll(probeLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
+      timeout: probeLayerHookTimeoutMs,
     })("a test keyed by its package and its root's identifier", (it) => {
       it.effect(
         "accepts a test whose identifier is keyTextBytes bytes, and reads it back by its package and identifier",
@@ -133,8 +159,8 @@ describe.skipIf(!hasLease)(
             Effect.gen(function* keyedAtTheBound() {
               const identifier = identifierOf(keyTextBytes);
               const pkg = yield* importPackage(yield* scopedPackage(testPackageOf(identifier)));
-              const db = yield* Db.open(AuthorApp.roles.author, {});
-              const rows = yield* (yield* db.execute(testByIdentifier, {
+              const db = yield* Db.open((yield* ProbeLogin).roles.author, {});
+              const rows = yield* (yield* db.workload.testByIdentifier.execute({
                 identifier,
                 package: pkg,
               })).collect;

@@ -21,7 +21,7 @@ import { importPackage } from "#pantry/import/package.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { captureCli, matchesCommitted } from "#pantry/test/cli.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The corpus packages the verdict file accepts (`verdicts/qti-examples-0a92fbb.tsv`), each with the
@@ -76,7 +76,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the accepted packages through the command line", (it) => {
       for (const { name, source } of accepted) {
         it.effect(

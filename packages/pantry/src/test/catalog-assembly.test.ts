@@ -15,7 +15,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Array as Arr, Effect, Formatter, Option } from "effect";
-import { rulesOf } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -24,6 +23,7 @@ import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { asi, manifestOf } from "#pantry/test/probe.ts";
+import { schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 /**
  * Every law the host judges, read once.
@@ -298,7 +298,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 const rule =
                   first === undefined
                     ? "accepted"
-                    : Option.getOrElse(Arr.head(rulesOf([first, ...rest])), () => "unnamed");
+                    : Option.getOrElse(Arr.head(schemaRulesOf([first, ...rest])), () => "unnamed");
                 const rules = verdict.kind === "accepted" ? new Set(["accepted"]) : verdict.rules;
                 const shown = `${name}: the import's rows give ${rule} (${broken.map(({ law }) => Formatter.format(law)).join("; ") || "no law"}), the oracle ${Formatter.format([...rules])}`;
                 assert.isTrue(rules.has(rule), shown);

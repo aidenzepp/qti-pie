@@ -23,7 +23,7 @@ import {
 import type { ExportDefectTag, ImportDefectTag } from "#pantry/cli/errors.ts";
 import { refusalFieldsOf } from "#pantry/cli/refused.ts";
 import { ClusterConfigError } from "#pantry/db/connection.ts";
-import { SnapshotLoadError } from "#pantry/db/snapshot.ts";
+import { ServedLoadError } from "#pantry/db/served.ts";
 import { PackageNotFound } from "#pantry/export/package.ts";
 import { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
 import { RootMissing, RowMissing, RowsOutsideImage } from "#pantry/model/assemble.ts";
@@ -59,8 +59,11 @@ describe("describeFailure, the local set-up", () => {
     assert.deepStrictEqual(identity(failure), config);
   });
 
-  it("a SnapshotLoadError exits 78 as config", () => {
-    const failure = new SnapshotLoadError({ path: "/snapshot.json", reason: "pointer file" });
+  it("a ServedLoadError exits 78 as config", () => {
+    const failure = new ServedLoadError({
+      path: "/served/author_app.json",
+      reason: "pointer file",
+    });
 
     assert.deepStrictEqual(identity(failure), config);
   });

@@ -16,7 +16,7 @@ import { importPackage } from "#pantry/import/package.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
@@ -48,7 +48,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("a usage statistic's lastUpdated, refused under one rule", (it) => {
       for (const [lexical, day] of dates) {
         it.effect(`${day ? "accepts" : "refuses"} lastUpdated ${lexical}`, () =>

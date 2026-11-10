@@ -65,7 +65,7 @@ import {
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
@@ -227,7 +227,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("lom-identifier and lom-title, judged by PostgreSQL's rules over queries", (laws) => {
       laws.effect(
         "refuses metaData's record by lom-identifier exactly where its entry names another item, and by lom-title exactly where its title string titles another",

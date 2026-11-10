@@ -1,11 +1,12 @@
 /**
- * Generated packages' write programs compiled as `DbLayer.make` compiles a workload program (R87):
- * the packages of the assembly generator's small box and a swarm's sample beyond it
+ * Generated packages' write programs compiled as `grizzle generate` compiles a workload program
+ * into a login's served file (R87, through `@bjornpagen/grizzle/compile`'s `compileServed`): the
+ * packages of the assembly generator's small box and a swarm's sample beyond it
  * (`#pantry/test/gen/assembly.ts`), each imported to its rows and its ChangeSet built by
- * `changeSetOf`, then the ChangeSet of every distinct list of inserts among them compiled in one
- * layer of the author login. Compiling a ChangeSet runs grizzle's write filler over every family of
- * the schema, so a field the filler cannot fill fails on the first generated package compiled,
- * named with its literal.
+ * `changeSetOf`, then the ChangeSet of every distinct list of inserts among them compiled into one
+ * served file of the author login. Compiling a ChangeSet runs grizzle's write filler over every
+ * family of the schema, so a field the filler cannot fill fails on the first generated package
+ * compiled, named with its literal.
  *
  * Why the distinct insert lists and not every package: grizzle compiles a ChangeSet from its
  * Description, which names each insert and none of its rows (grizzle's README, "Writes"), so what
@@ -20,12 +21,13 @@
  *
  * The list is a complete key: a ChangeSet's compiled program depends only on its Description and
  * the schema, never on the rows bound at run time, so two packages with one list have one program.
- * The layer needs the committed snapshot to be the schema's, as every `DbLayer` does,
- * and the import's write program is also declared in the author login's workload
- * (`#pantry/qti/own-login.ts` `importWork`). The probe login holds an author role of its own
+ * The compile reads the committed snapshot, as `grizzle generate` does, and the import's write
+ * program is also declared in the author login's workload (`#pantry/qti/own-login.ts`
+ * `importWork`). The probe login holds an author role of its own
  * ({@link probeAuthor}), since grizzle puts a role in one login only.
  */
-import { DbLayer, login, OpenError, workload } from "@bjornpagen/grizzle";
+import { login, workload } from "@bjornpagen/grizzle";
+import { compileServed } from "@bjornpagen/grizzle/compile";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
@@ -33,10 +35,8 @@ import { noCoverage } from "@grizzle/testing/features";
 import { agree, exact, set, structuralHash } from "@grizzle/testing/oracle";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Cause, Duration, Effect, Exit, FileSystem, Layer, Redacted, Result, Schema } from "effect";
-import net from "node:net";
+import { Cause, Duration, Effect, Exit, FileSystem, Result, Schema } from "effect";
 import { fileURLToPath } from "node:url";
-import pg from "pg";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
@@ -184,7 +184,8 @@ const keep = (assembly: Assembly) =>
   }).pipe(Effect.scoped);
 
 /**
- * The committed migrations snapshot, as the layer reads it (`#pantry/db/layer.ts`).
+ * The committed migrations snapshot, read from disk: the JSON value grizzle's `compileServed`
+ * compiles a login under, the snapshot the committed served file was generated beside.
  */
 const snapshotOf = Effect.gen(function* snapshotOf() {
   const fs = yield* FileSystem.FileSystem;
@@ -202,12 +203,11 @@ const snapshotOf = Effect.gen(function* snapshotOf() {
 });
 
 /**
- * Build a layer of the author login whose workload holds the {@link distinct} kept programs, each
- * under the name `case<n>` of its index and nothing else, and release it at once: `DbLayer.make`
- * compiles every program under the snapshot it is given, compares nothing with it (grizzle
- * `cda0ac8b`), and opens no session.
+ * Compile the author login's served file with a workload of the {@link distinct} kept programs,
+ * each under the name `case<n>` of its index and nothing else (`compileServed`, the one compile
+ * `grizzle generate` runs for a login), under the committed snapshot, opening no session.
  *
- * @returns The exit of building the layer.
+ * @returns The exit of the compile.
  */
 const compileKept = Effect.gen(function* compileKept() {
   const snapshot = yield* snapshotOf;
@@ -219,25 +219,8 @@ const compileKept = Effect.gen(function* compileKept() {
       ),
     ],
   });
-  const built = DbLayer.make({
-    connectTimeoutMs: 1000,
-    database: "unused",
-    driver: pg,
-    login: probe,
-    password: Effect.succeed(Redacted.make("unused")),
-    pool: { idleTimeoutMs: 1000, max: 1, min: 0 },
-    snapshot,
-    transport: {
-      ca: "an unused CA: this layer is built and released without connecting\n",
-      host: "localhost",
-      kind: "sslRequest",
-      open: () => new net.Socket(),
-      port: 1,
-      servername: "localhost",
-    },
-  });
 
-  return yield* Effect.exit(Effect.scoped(Layer.build(built)));
+  return yield* Effect.exit(compileServed(probe, snapshot, probe.workload));
 });
 
 /**
@@ -299,16 +282,14 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts, 
   it.effect(
     "compiles the write program of every distinct list of inserts among the generated packages as the layer compiles a workload program",
     () =>
-      // Oracle: grizzle itself, `DbLayer.make`'s startup compilation: a program that does not
-      // compile is `OpenError` carrying its `CompileError`, at `programs.case<n>`, and a layer
-      // whose programs all compile builds, since it compares nothing with the snapshot (grizzle
-      // `cda0ac8b`).
+      // Oracle: grizzle itself, the served file's compile: a program that does not compile is a
+      // `ServedRefusal` naming it at `programs.case<n>`, and a workload whose programs all compile
+      // serves.
       // Bound: every distinct list of inserts among the 368 packages the test above drew.
       Effect.gen(function* compiles() {
         assert.isAbove(programs.length, 0, "no package was drawn");
 
         const exit = yield* compileKept;
-        const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
         const text = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "";
         const marker = text.indexOf("programs.case");
         const at =
@@ -319,7 +300,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts, 
 
         assert.isTrue(
           Exit.isSuccess(exit),
-          `${failure instanceof OpenError ? "" : "not an OpenError: "}${text}${drawnCase === "" ? "" : `\nthe generated case: ${drawnCase}`}`,
+          `${text}${drawnCase === "" ? "" : `\nthe generated case: ${drawnCase}`}`,
         );
       }),
     { timeout: testTimeoutMs },

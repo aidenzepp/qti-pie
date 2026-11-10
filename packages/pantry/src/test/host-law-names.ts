@@ -5,7 +5,7 @@
  */
 import type { Law } from "@bjornpagen/grizzle";
 import { Option } from "effect";
-import { lawNameOf } from "#pantry/import/refusal.ts";
+import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
 
 /**
  * Name the laws a host judgment lists, each once, in the order the judgment lists them. A law the
@@ -15,4 +15,4 @@ import { lawNameOf } from "#pantry/import/refusal.ts";
  * @returns Their catalog names.
  */
 export const lawNamesOf = (laws: readonly { readonly law: Law }[]): ReadonlySet<string> =>
-  new Set(laws.flatMap(({ law }) => Option.toArray(lawNameOf(law))));
+  new Set(laws.flatMap(({ law }) => Option.toArray(schemaLawNameOf(law))));

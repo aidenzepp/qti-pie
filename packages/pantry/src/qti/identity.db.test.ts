@@ -68,7 +68,7 @@ import type { Stated } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { writePackage } from "#pantry/test/gen/every-relation.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
@@ -957,7 +957,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("document-lang, judged by PostgreSQL's rule over a query", (r26) => {
       r26.effect(
         "refuses a package whose item states a language its record's category does not list, by document-lang, and accepts one listed in another case, an unstated form and an item no record names",

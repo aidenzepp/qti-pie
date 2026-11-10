@@ -21,7 +21,7 @@ import { importPackage } from "#pantry/import/package.ts";
 import { previewPackage } from "#pantry/import/preview.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 import { materializeSpec } from "#pantry/test/fixtures.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * `simple`'s item with its first paragraph's `data-ssml` set to a value, materialized once under
@@ -79,7 +79,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the data-ssml law, judged by PostgreSQL through the importer", (it) => {
       for (const { name, value, what } of refused) {
         it.effect(

@@ -59,7 +59,7 @@ const passwordText = (password: DbConnection["password"]) =>
  * with its scope: a direct SQL writer.
  */
 export const loginSession = Effect.gen(function* loginSession() {
-  const connection = (yield* loginConnection)(AuthorApp);
+  const connection = (yield* loginConnection)(authorAppRole);
   const password = yield* passwordText(connection.password);
   const client = new Client({
     database: connection.database,

@@ -33,12 +33,14 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import type { Report } from "#pantry/export/compare.ts";
 import { compareWithRecord, exportEntries, exportPackage } from "#pantry/export/package.ts";
-import { AuthorApp, documentScan, documentsOf } from "#pantry/qti/own-login.ts";
+
 import { importPackage } from "#pantry/import/package.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
+import { explainMember } from "@bjornpagen/grizzle/compile";
 
 /**
  * The directory every export is made under: the package's gitignored `work/`.
@@ -159,10 +161,11 @@ const TestLayer = Layer.effect(
 ).pipe(Layer.provideMerge(Layer.mergeAll(AuthorAppLayer, NodeServices.layer)));
 
 /**
- * The timeout, in milliseconds, of the hook that builds {@link TestLayer}: the author layer's own
- * budget, and a lease write's for the imports it runs.
+ * The timeout, in milliseconds, of the hook that builds {@link TestLayer}: the author layer's load,
+ * which compiles nothing, and the imports it runs, each a lease write, given twice a lease test's
+ * budget. A measurement of the hook on the lease is owed after the repin.
  */
-const importHookTimeoutMs = authorLayerHookTimeoutMs + leaseTestTimeoutMs;
+const importHookTimeoutMs = 2 * leaseTestTimeoutMs;
 
 /**
  * Import a fixture of `simple`'s shape and export it.
@@ -263,7 +266,7 @@ describe.skipIf(!hasLease)(
             // key's order; `db.explain`'s plans carry each node's type, not its index.
             // Bound: every document of the accepted packages.
             Effect.gen(function* planAudit() {
-              const db = yield* Db.open(AuthorApp.roles.author, {});
+              const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
               const client = yield* loginSession;
               const key = yield* rowsOf<{ readonly name: string }>(
                 client,
@@ -298,11 +301,17 @@ describe.skipIf(!hasLease)(
               }
 
               for (const { id, name } of yield* Imported) {
-                const documents = yield* (yield* db.execute(documentsOf, { package: id })).collect;
+                const documents = yield* (yield* db.workload.documentsOf.execute({ package: id }))
+                  .collect;
 
                 assert.isAbove(documents.length, 0, name);
                 for (const { node, path: entry } of documents) {
-                  const plans = yield* db.explain(documentScan, { document: node });
+                  const plans = yield* explainMember(
+                    (yield* AuthorLogin).roles.author,
+                    "documentScan",
+                    { kind: "params", params: { document: node } },
+                    {},
+                  );
                   const [scan] = plans;
                   const where = `${name} ${entry}`;
 
@@ -314,8 +323,9 @@ describe.skipIf(!hasLease)(
                     assert.isTrue(readsByIndex(types), `${where}: ${types.join(" > ")}`);
                   }
 
-                  const starts = (yield* (yield* db.execute(documentScan, { document: node }))
-                    .collect).map(({ start }) => start);
+                  const starts = (yield* (yield* db.workload.documentScan.execute({
+                    document: node,
+                  })).collect).map(({ start }) => start);
                   assert.isTrue(
                     starts.every((start, at) => at === 0 || (starts[at - 1] ?? start) < start),
                     `${where}: the scan's rows in start order`,

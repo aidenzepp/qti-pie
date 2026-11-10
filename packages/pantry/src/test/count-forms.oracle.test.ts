@@ -20,13 +20,13 @@ import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, pipe } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { rulesOf } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
+import { schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The forms of the box, each with the value §3.3.20 gives it, none for a form outside
@@ -206,7 +206,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a count's value", (it)
                 const rule =
                   first === undefined
                     ? Option.none()
-                    : Option.orElse(Arr.head(rulesOf([first, ...rest])), () =>
+                    : Option.orElse(Arr.head(schemaRulesOf([first, ...rest])), () =>
                         Option.some("unnamed"),
                       );
                 assert.deepStrictEqual(

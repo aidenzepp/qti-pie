@@ -1,9 +1,12 @@
 /**
- * The programs pantry runs on a database, held to its author login's workload: every call on a `Db`
- * outside its `workload` handles is listed here, and the list only shrinks. grizzle's served layer
- * keeps only `workload` on a `Db`, deleting its ad-hoc `apply`, `compile`, `execute`, `explain`,
- * `get`, `page` and `refresh` (the served-workload plan, ~/.cache/gr8des/integration), so a call
- * that is no member of the workload has nothing to run on once the layer serves the committed one.
+ * The programs pantry runs on a database, held to its author login's workload: no production module
+ * calls a `Db` outside its `workload` handles. A served `Db` runs the programs `grizzle generate`
+ * compiled into the login's served file alone, and refuses every other operation before any SQL,
+ * yet its type still declares `apply`, `compile`, `execute`, `explain`, `get`, `page` and
+ * `refresh`, so a call of one typechecks and fails only when it runs. This search refuses it until
+ * grizzle's type does.
+ *
+ * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/grizzle/src/adapter/db/served.ts#L133-L160
  */
 import { globSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -15,19 +18,9 @@ import { assert, describe, it } from "@effect/vitest";
 const sourceRoot = path.resolve(import.meta.dirname, "..");
 
 /**
- * A `Db`'s operations outside its workload, each one grizzle's served layer deletes.
+ * A `Db`'s operations outside its workload, each one a served `Db` refuses.
  */
 const adHocOperations = ["apply", "compile", "execute", "explain", "get", "page", "refresh"];
-
-/**
- * The calls on a `Db` outside its workload today, each `module: name.operation`. The list only
- * shrinks: a module that starts one fails the test, and so does an entry whose call is gone, until
- * the entry goes too.
- *
- * - `import/package.ts` applies the package's ChangeSet, `changeSetOf`'s with the package's rows,
- *   which the served re-pin replaces with the `importWrite` member's `apply` of the same rows.
- */
-const pendingCalls: readonly string[] = ["import/package.ts: db.apply"];
 
 /**
  * Blank out a module's comments, keeping its strings whole, so a call a comment names counts for
@@ -81,7 +74,7 @@ const productionModules = (): readonly string[] =>
     .toSorted();
 
 describe("pantry's programs on a database", () => {
-  it("are members of the author login's workload but where the list says otherwise", () => {
+  it("are members of the author login's workload, every one", () => {
     // Oracle: the source of every production module, read for the names `Db.open` binds and the
     // operations called on them. Bound: every module outside the tests and the test support.
     const found = productionModules().flatMap((file) =>
@@ -92,8 +85,8 @@ describe("pantry's programs on a database", () => {
 
     assert.deepStrictEqual(
       found,
-      pendingCalls,
-      "A production module calls a Db outside its workload, which grizzle's served layer deletes: declare the program as a member of the author login's workload (src/qti/logins.ts) and call it through db.workload. An entry whose call is gone is deleted.",
+      [],
+      "A production module calls a Db outside its workload, which a served Db refuses when the call runs: declare the program as a member of the author login's workload (src/qti/logins.ts), run grizzle generate, and call it through db.workload.",
     );
   });
 

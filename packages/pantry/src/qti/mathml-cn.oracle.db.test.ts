@@ -22,7 +22,7 @@ import { materializeSpec } from "#pantry/test/fixtures.ts";
 import type { FixtureSpec } from "#pantry/test/fixtures.ts";
 import { mathmlSpecOf } from "#pantry/test/fixtures.mathml.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
@@ -109,7 +109,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the cn law, judged by PostgreSQL", (it) => {
       for (const { block, name, spec } of refusals) {
         it.effect(`refuses ${name} under ${law}, as the law oracle predicts`, () =>

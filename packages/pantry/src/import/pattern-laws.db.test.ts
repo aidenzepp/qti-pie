@@ -18,16 +18,17 @@ import { Array as Arr, Effect, Formatter, Layer, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawNameOf } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
+
 import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/qti/own.ts";
-import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
+
 import { loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
-import { schemaLawsOf } from "#pantry/test/law-namer.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
+import { packageFactsOf } from "#pantry/import/write.ts";
 
 /**
  * Break a name: a leading digit, which no NCName's first character is (Namespaces in XML 1.0,
@@ -97,7 +98,6 @@ const cases: readonly {
 describe.skipIf(!hasLease)("import/pattern-laws.db.test.ts, on the lease", () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
-    timeout: authorLayerHookTimeoutMs,
   })("two fields of one text domain, judged by PostgreSQL", (it) => {
     it.effect("types OpenElementName.local and AttributeEntity.name by one text domain", () =>
       // Oracle: PostgreSQL's catalogue, the type each column casts its values to. Bound: the two
@@ -140,17 +140,20 @@ describe.skipIf(!hasLease)("import/pattern-laws.db.test.ts, on the lease", () =>
               everyRelationPackage({ choices: 2, hotspots: 1, hottexts: 1 }),
             );
             const program = yield* readProgram(dir);
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const outcome = yield* db.apply(changeSetOf(Author, edit(program.inputs)), {});
+            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+            const outcome = yield* db.workload.importWrite.apply(
+              { insert: packageFactsOf(edit(program.inputs)) },
+              {},
+            );
 
             assert.strictEqual(outcome.kind, "invariant-rejected", Formatter.format(outcome));
             assert.isTrue(
               outcome.kind === "invariant-rejected" &&
                 outcome.refused.laws.length === 1 &&
-                outcome.refused.laws.every((refused) => sameLaw(refused, law)),
+                outcome.refused.laws.every((refused) => sameLaw(refused.law, law)),
               Formatter.format(outcome),
             );
-            assert.deepStrictEqual(lawNameOf(law), Option.some(name));
+            assert.deepStrictEqual(schemaLawNameOf(law), Option.some(name));
           }).pipe(Effect.scoped),
         leaseTestTimeoutMs,
       );

@@ -24,7 +24,6 @@ import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
-import { rulesOf } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -32,6 +31,7 @@ import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-rela
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
+import { schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -256,7 +256,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("the IDs of an assemble
                 const rule =
                   first === undefined
                     ? "accepted"
-                    : Option.getOrElse(Arr.head(rulesOf([first, ...rest])), () => "unnamed");
+                    : Option.getOrElse(Arr.head(schemaRulesOf([first, ...rest])), () => "unnamed");
                 const rules = verdict.kind === "accepted" ? new Set(["accepted"]) : verdict.rules;
                 c.note(verdict.kind);
                 if (verdict.kind === "accepted" && drawn.sections === 2) {

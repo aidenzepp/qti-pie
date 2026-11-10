@@ -14,23 +14,23 @@
  * admits. A corruption no written type admits (a gap in a family's slots, a wrong count, a junk
  * accumulator) cannot be written through the API at all; those are the slices' direct-SQL cases.
  *
- * Each case also logs how long `db.compile` takes over its ChangeSet (the W5 amendment's C19), the
- * compile time per package the network seat reports.
+ * Each case also logs how long its apply takes: the author login's `importWrite` member, compiled
+ * once by `grizzle generate` into the login's served file, applied to the package's facts.
  */
-import { CommitUnknown, Db, query, uuid, v } from "@bjornpagen/grizzle";
+import { CommitUnknown, Db, login, query, v, workload } from "@bjornpagen/grizzle";
 import type { ApplyOutcome, Law, Plan } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Duration, Effect, Formatter, Layer, Option, Result } from "effect";
 import { describe, inject } from "vitest";
 import { composed } from "#pantry/grammar/compose.ts";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+
 import { importPackage, WrapApply } from "#pantry/import/package.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
+
 import type { NodeMember, NodeRoot, PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
+
 import { Package } from "#pantry/qti/package.ts";
 import { materialize, materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
@@ -38,8 +38,15 @@ import { materializeProcessing, processingFixtureNames } from "#pantry/test/proc
 import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
 import { resourceTypeCases } from "#pantry/test/resource-type-cases.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { probeLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
+import { packageFactsOf } from "#pantry/import/write.ts";
+import { Qti } from "#pantry/qti/own.ts";
+import { authorRoleOf } from "#pantry/qti/roles.ts";
+import { authorWorkloadsOf } from "#pantry/qti/logins.ts";
+import { servedProbe } from "#pantry/test/served-members.ts";
+import { explainMember } from "@bjornpagen/grizzle/compile";
 
 const fixtures = inject("fixtures");
 
@@ -163,35 +170,40 @@ const rejectedBy = (
   picks: readonly ((law: Law) => boolean)[],
 ): boolean =>
   outcome.kind === "invariant-rejected" &&
-  outcome.refused.laws.some((law) => picks.some((pick) => pick(law)));
+  outcome.refused.laws.map(({ law }) => law).some((law) => picks.some((pick) => pick(law)));
 
 /**
- * The number of packages stored, through a query that counts each by its key.
+ * The author role of this file's probe login: grizzle puts a role in one login only, so the probe
+ * holds a role of its own, named as the installed one.
  */
-const packagesCounted = query(Author).rule((r) => {
-  const { id } = v(Package, "package");
-
-  return r.match(Package, { id }).find({ total: r.count() });
-});
+const probeAuthor = authorRoleOf(Qti);
 
 /**
- * A package stored by its id.
+ * The author login with this file's count of the packages stored beside its own members, over an
+ * author role of its own (`#pantry/test/served-members.ts` `servedProbe`): `ProbeLogin` opens the
+ * role that reads it, and `probeLayer` serves every test of the file, `AuthorLogin` included.
  */
-const packageById = query(Author).rule((r) => {
-  const { id } = v(Package, "package");
+const { layer: probeLayer, ProbeLogin } = servedProbe(
+  login(Qti, "author_app", [probeAuthor], {
+    workload: [
+      ...authorWorkloadsOf(Qti, probeAuthor),
+      workload(probeAuthor, {
+        packagesCounted: query(probeAuthor).rule((r) => {
+          const { id } = v(Package, "package");
 
-  return r
-    .match(Package, { id })
-    .where(r.eq(id, r.param("id", uuid)))
-    .find({ id });
-});
+          return r.match(Package, { id }).find({ total: r.count() });
+        }),
+      }),
+    ],
+  }),
+);
 
 /**
  * Count the packages stored.
  */
 const storedPackages = Effect.gen(function* storedPackages() {
-  const db = yield* Db.open(AuthorApp.roles.author, {});
-  const rows = yield* (yield* db.execute(packagesCounted, {})).collect;
+  const db = yield* Db.open((yield* ProbeLogin).roles.author, {});
+  const rows = yield* (yield* db.workload.packagesCounted.execute({})).collect;
 
   return rows[0]?.total ?? 0n;
 });
@@ -210,16 +222,13 @@ const applyEdited = (
 ) =>
   Effect.gen(function* appliesEdited() {
     const program = yield* readProgram(dir);
-    const changes = changeSetOf(Author, edit(program.inputs));
-    const db = yield* Db.open(AuthorApp.roles.author, {});
-    const [compiled] = yield* Effect.scoped(Effect.timed(db.compile(changes)));
-    const [applied, outcome] = yield* Effect.timed(db.apply(changes, {}));
+    const facts = packageFactsOf(edit(program.inputs));
+    const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+    const [applied, outcome] = yield* Effect.timed(
+      db.workload.importWrite.apply({ insert: facts }, {}),
+    );
 
-    yield* Effect.log("import compile and apply", {
-      applyMillis: Duration.toMillis(applied),
-      compileMillis: Duration.toMillis(compiled),
-      dir,
-    });
+    yield* Effect.log("import apply", { applyMillis: Duration.toMillis(applied), dir });
 
     return { outcome, packageId: program.packageId };
   });
@@ -382,9 +391,9 @@ describe.skipIf(!hasLease)(
   "import/program.oracle.db.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+    layer(Layer.mergeAll(probeLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
+      timeout: probeLayerHookTimeoutMs,
     })("one ChangeSet per package, judged by PostgreSQL", (it) => {
       it.effect(
         "accepts simple, sharedMedia and svg whole, each in one apply, logging the compile time",
@@ -393,14 +402,13 @@ describe.skipIf(!hasLease)(
           // (Q5.03's "accepted through grizzle", for the whole package), and the package read
           // back by its id.
           Effect.gen(function* acceptsCorpus() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
             for (const [name, dir] of Object.entries(yield* acceptedPackages)) {
               const { outcome, packageId } = yield* applyEdited(dir);
 
               assert.strictEqual(outcome.kind, "accepted", name);
-              assert.lengthOf(
-                yield* (yield* db.execute(packageById, { id: packageId })).collect,
-                1,
+              assert.isTrue(
+                Option.isSome(yield* db.workload.packageOf.get({ id: packageId })),
                 name,
               );
             }
@@ -439,13 +447,19 @@ describe.skipIf(!hasLease)(
       );
 
       it.effect("plans no recursion for any accepted package's ChangeSet", () =>
-        // Oracle: PostgreSQL's own planner. No statement of an accepted package's ChangeSet plans
-        // a recursive union or a work-table scan (`db.explain`, estimate only).
+        // Oracle: PostgreSQL's own planner. No statement of the import's write program applied to an
+        // accepted package's facts plans a recursive union or a work-table scan (`explainMember`,
+        // estimate only).
         Effect.gen(function* planAudit() {
-          const db = yield* Db.open(AuthorApp.roles.author, {});
+          const authorLogin = yield* AuthorLogin;
           for (const dir of Object.values(yield* acceptedPackages)) {
             const program = yield* readProgram(dir);
-            const plans = yield* db.explain(changeSetOf(Author, program.inputs), {});
+            const plans = yield* explainMember(
+              authorLogin.roles.author,
+              "importWrite",
+              { facts: { insert: packageFactsOf(program.inputs) }, kind: "facts", params: {} },
+              {},
+            );
             const nodes = plans.flatMap(planNodes);
 
             assert.isAbove(plans.length, 0, dir);
@@ -1191,9 +1205,9 @@ describe.skipIf(!hasLease)(
               Effect.andThen(apply, Effect.fail(new CommitUnknown())),
             ),
           );
-          const db = yield* Db.open(AuthorApp.roles.author, {});
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
 
-          assert.lengthOf(yield* (yield* db.execute(packageById, { id })).collect, 1);
+          assert.isTrue(Option.isSome(yield* db.workload.packageOf.get({ id })), id);
         }),
       );
     });

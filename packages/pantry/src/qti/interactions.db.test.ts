@@ -27,51 +27,41 @@
  * binding resolved against a real declaration, the read attributes' mirror of `Attribute`, and a
  * section document's references resolved under each test that places it.
  */
-import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { Addition, Fact, Law } from "@bjornpagen/grizzle";
+import { Db } from "@bjornpagen/grizzle";
+import type { Addition, Fact, Law, RefusedLaw } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { Declaration, DeclarationIdentifier } from "#pantry/qti/declarations.ts";
-import { Document } from "#pantry/qti/chardata.ts";
-import {
+import type { Declaration, DeclarationIdentifier } from "#pantry/qti/declarations.ts";
+import type { Document } from "#pantry/qti/chardata.ts";
+import type {
   AriaRange,
-  BindingBaseType,
-  BindingCardinality,
-  BindingDeclaration,
-  boundKinds,
-  BoundVariable,
   Choice,
-  ChoiceVariableName,
-  CountBound,
-  CountRange,
   FeedbackRef,
   FeedbackRefCardinality,
   FeedbackRefDeclaration,
-  Hotspot,
   Hottext,
-  InteractionAttribute,
-  LeastCount,
-  MostCount,
-  ReferringDocument,
-  SectionFeedbackName,
-  SectionFeedbackRef,
-  SectionFeedbackRefCardinality,
-  SectionFeedbackRefDeclaration,
-  SectionScope,
-  SectionTemplateName,
-  SectionTemplateRef,
-  SectionTemplateRefCardinality,
-  SectionTemplateRefDeclaration,
-  Slider,
-  PrintedVariableRef,
   TemplateRef,
   TemplateRefCardinality,
   TemplateRefDeclaration,
 } from "#pantry/qti/interactions.ts";
+import {
+  BindingCardinality,
+  BindingDeclaration,
+  boundKinds,
+  BoundVariable,
+  ChoiceVariableName,
+  CountBound,
+  CountRange,
+  Hotspot,
+  LeastCount,
+  MostCount,
+  Slider,
+  PrintedVariableRef,
+} from "#pantry/qti/interactions.ts";
 import { Qti } from "#pantry/qti/own.ts";
-import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
+
 import {
   assertVerdict,
   foreignKeysBetween,
@@ -81,8 +71,10 @@ import {
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
+import { AuthorLogin } from "#pantry/db/served.ts";
+import { importFacts } from "#pantry/test/import-facts.ts";
 
 /**
  * A uuid no stored row holds: the document and the declaration every stray row names.
@@ -106,9 +98,11 @@ const strayNode = (at: number): `${string}-${string}-${string}-${string}-${strin
  * @returns Whether it holds one.
  */
 const rejectedBy = (
-  outcome: { readonly kind: string; readonly refused?: { readonly laws: readonly Law[] } },
+  outcome: { readonly kind: string; readonly refused?: { readonly laws: readonly RefusedLaw[] } },
   picks: (law: Law) => boolean,
-): boolean => outcome.kind === "invariant-rejected" && (outcome.refused?.laws ?? []).some(picks);
+): boolean =>
+  outcome.kind === "invariant-rejected" &&
+  (outcome.refused?.laws ?? []).some(({ law }) => picks(law));
 
 /**
  * Pick the check of one relation by its name.
@@ -552,1070 +546,1075 @@ const choiceName = (
 });
 
 describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
-  layer(AuthorAppLayer, { timeout: authorLayerHookTimeoutMs })(
-    "the interaction overlays' laws, judged by PostgreSQL",
-    (it) => {
-      it.effect(
-        "refuses a binding of a type its interaction does not fit, by BindingFit, RecordBindingFit and a string binding's base type",
-        () =>
-          // Oracle: PostgreSQL, the containments of a typed binding's base type row and a record's
-          // binding into the closed `BindingFit` and `RecordBindingFit` (CHECKs on their tables),
-          // and the `BindingFit` checks on a string binding (§5.48.2, §5.162.3): its base type
-          // where its variable has one, and its cardinality, a record's having none.
-          // Bound: a choice interaction bound to a single string, and to a record; a text entry's
-          // string binding to an integer, and to a record.
-          Effect.gen(function* bindingFit() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const typedCases = [
-              {
-                label: "a choice bound to a single string",
-                picks: containedIn("BindingBaseType", "BindingFit"),
-                row: {
-                  attribute: "response-identifier",
-                  baseType: "string",
-                  cardinality: "single",
-                  declaration: stray,
-                  kind: "qti-choice-interaction",
-                  node: strayNode(0),
-                },
+  layer(AuthorAppLayer)("the interaction overlays' laws, judged by PostgreSQL", (it) => {
+    it.effect(
+      "refuses a binding of a type its interaction does not fit, by BindingFit, RecordBindingFit and a string binding's base type",
+      () =>
+        // Oracle: PostgreSQL, the containments of a typed binding's base type row and a record's
+        // binding into the closed `BindingFit` and `RecordBindingFit` (CHECKs on their tables),
+        // and the `BindingFit` checks on a string binding (§5.48.2, §5.162.3): its base type
+        // where its variable has one, and its cardinality, a record's having none.
+        // Bound: a choice interaction bound to a single string, and to a record; a text entry's
+        // string binding to an integer, and to a record.
+        Effect.gen(function* bindingFit() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const typedCases = [
+            {
+              label: "a choice bound to a single string",
+              picks: containedIn("BindingBaseType", "BindingFit"),
+              row: {
+                attribute: "response-identifier",
+                baseType: "string",
+                cardinality: "single",
+                declaration: stray,
+                kind: "qti-choice-interaction",
+                node: strayNode(0),
               },
-              {
-                label: "a string binding to an integer",
-                picks: checkNamed("BindingBaseType", "BindingFit"),
-                row: {
-                  attribute: "string-identifier",
-                  baseType: "integer",
-                  cardinality: "single",
-                  declaration: stray,
-                  kind: "qti-text-entry-interaction",
-                  node: strayNode(0),
-                },
+            },
+            {
+              label: "a string binding to an integer",
+              picks: checkNamed("BindingBaseType", "BindingFit"),
+              row: {
+                attribute: "string-identifier",
+                baseType: "integer",
+                cardinality: "single",
+                declaration: stray,
+                kind: "qti-text-entry-interaction",
+                node: strayNode(0),
               },
-            ] as const;
-            for (const { label, picks, row } of typedCases) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(BindingBaseType, [row]),
-                {},
-              );
+            },
+          ] as const;
+          for (const { label, picks, row } of typedCases) {
+            const outcome = yield* db.workload.importWrite.apply(
+              importFacts({ BindingBaseType: [row] }),
+              {},
+            );
 
-              assert.isTrue(rejectedBy(outcome, picks), label);
-            }
+            assert.isTrue(rejectedBy(outcome, picks), label);
+          }
 
-            const recordCases = [
-              {
-                label: "a choice bound to a record",
-                picks: containedIn("BindingCardinality", "RecordBindingFit"),
-                row: cardinalityRow(0, { baseTypes: 0n, cardinality: "record" }),
-              },
-              {
-                label: "a string binding to a record",
-                picks: checkNamed("BindingCardinality", "BindingFit"),
-                row: cardinalityRow(0, {
-                  attribute: "string-identifier",
-                  baseTypes: 0n,
-                  cardinality: "record",
-                  kind: "qti-text-entry-interaction",
-                }),
-              },
-            ];
-            for (const { label, picks, row } of recordCases) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(BindingCardinality, [row]),
-                {},
-              );
+          const recordCases = [
+            {
+              label: "a choice bound to a record",
+              picks: containedIn("BindingCardinality", "RecordBindingFit"),
+              row: cardinalityRow(0, { baseTypes: 0n, cardinality: "record" }),
+            },
+            {
+              label: "a string binding to a record",
+              picks: checkNamed("BindingCardinality", "BindingFit"),
+              row: cardinalityRow(0, {
+                attribute: "string-identifier",
+                baseTypes: 0n,
+                cardinality: "record",
+                kind: "qti-text-entry-interaction",
+              }),
+            },
+          ];
+          for (const { label, picks, row } of recordCases) {
+            const outcome = yield* db.workload.importWrite.apply(
+              importFacts({ BindingCardinality: [row] }),
+              {},
+            );
 
-              assert.isTrue(rejectedBy(outcome, picks), label);
-            }
-          }),
-      );
+            assert.isTrue(rejectedBy(outcome, picks), label);
+          }
+        }),
+    );
 
-      it.effect(
-        "refuses a binding with no declaration row, and a declaration row that names no declaration, by Binding declared",
-        () =>
-          // Oracle: PostgreSQL, the foreign keys of "Binding declared" (reading 75; lane NIL's
-          // audit, B1: a missing value is a row of its own relation, never a sentinel): every
-          // binding has its BindingDeclaration, and each BindingDeclaration names a named
-          // declaration, its DeclarationIdentifier, whatever its cardinality (reading 159).
-          // 23503 on those keys alone.
-          // Bound: a binding alone, refused; a binding with its declaration row, accepted by the
-          // first key; and the old host's nil sentinel, the lawful declaration row with its
-          // declaration the nil uuid alone, refused by the second (a row of another base type would
-          // break BindingFit's row CHECK at the insert, ahead of the deferred key).
-          Effect.gen(function* bindingDeclaredRows() {
-            const client = yield* loginSession;
-            const existence = yield* foreignKeysBetween(
+    it.effect(
+      "refuses a binding with no declaration row, and a declaration row that names no declaration, by Binding declared",
+      () =>
+        // Oracle: PostgreSQL, the foreign keys of "Binding declared" (reading 75; lane NIL's
+        // audit, B1: a missing value is a row of its own relation, never a sentinel): every
+        // binding has its BindingDeclaration, and each BindingDeclaration names a named
+        // declaration, its DeclarationIdentifier, whatever its cardinality (reading 159).
+        // 23503 on those keys alone.
+        // Bound: a binding alone, refused; a binding with its declaration row, accepted by the
+        // first key; and the old host's nil sentinel, the lawful declaration row with its
+        // declaration the nil uuid alone, refused by the second (a row of another base type would
+        // break BindingFit's row CHECK at the insert, ahead of the deferred key).
+        Effect.gen(function* bindingDeclaredRows() {
+          const client = yield* loginSession;
+          const existence = yield* foreignKeysBetween(
+            client,
+            "bound_variable",
+            "binding_declaration",
+          );
+          const named = yield* foreignKeysBetween(
+            client,
+            "binding_declaration",
+            "declaration_identifier",
+          );
+          assert.isNotEmpty(existence);
+          assert.isNotEmpty(named);
+
+          const bound = { fact: boundRow(0), relation: BoundVariable };
+          const alone = Option.getOrUndefined(
+            yield* judged(client, statedInserts([bound]), existence),
+          );
+          assert.strictEqual(alone?.code, "23503", "a binding with no declaration row");
+          assert.include(existence, alone?.constraint);
+
+          const declared = Option.getOrUndefined(
+            yield* judged(
               client,
-              "bound_variable",
-              "binding_declaration",
-            );
-            const named = yield* foreignKeysBetween(
+              statedInserts([bound, { fact: declarationRow(0), relation: BindingDeclaration }]),
+              existence,
+            ),
+          );
+          assert.isUndefined(declared, "a binding beside its declaration row");
+
+          const sentinel = Option.getOrUndefined(
+            yield* judged(
               client,
-              "binding_declaration",
-              "declaration_identifier",
-            );
-            assert.isNotEmpty(existence);
-            assert.isNotEmpty(named);
+              statedInserts([
+                bound,
+                {
+                  fact: declarationRow(0, { declaration: nilUuid }),
+                  relation: BindingDeclaration,
+                },
+              ]),
+              named,
+            ),
+          );
+          assert.strictEqual(sentinel?.code, "23503", "a declaration row of the nil uuid");
+          assert.include(named, sentinel?.constraint);
+        }).pipe(Effect.scoped),
+    );
 
-            const bound = { fact: boundRow(0), relation: BoundVariable };
-            const alone = Option.getOrUndefined(
-              yield* judged(client, statedInserts([bound]), existence),
-            );
-            assert.strictEqual(alone?.code, "23503", "a binding with no declaration row");
-            assert.include(existence, alone?.constraint);
+    it.effect(
+      "refuses a binding to a variable that is no response declaration, by Binding declared",
+      () =>
+        // Oracle: PostgreSQL, the `Binding_declared` check (reading 75): an interaction binds a
+        // response variable.
+        // Bound: a declaration row of an outcome declaration.
+        Effect.gen(function* bindingDeclared() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const outcome = yield* db.workload.importWrite.apply(
+            importFacts({
+              BindingDeclaration: [
+                declarationRow(0, { declarationKind: "qti-outcome-declaration" }),
+              ],
+            }),
+            {},
+          );
 
-            const declared = Option.getOrUndefined(
+          assert.isTrue(rejectedBy(outcome, checkNamed("BindingDeclaration", "Binding_declared")));
+        }),
+    );
+
+    it.effect(
+      "refuses two bindings of one response variable, two interactions' or one interaction's response and string identifiers, by the key on (document, identifier)",
+      () =>
+        // Oracle: PostgreSQL's UNIQUE, or the host's key check before it, of
+        // key(on(BoundVariable, "document", "identifier")): reading 92, "Each response variable
+        // declared may be bound to one and only one interaction", and the string identifier's
+        // "second response variable" (§5.162.3), the old `string-identifier-distinct`.
+        // Bound: two interactions naming one variable; one text entry naming it twice.
+        Effect.gen(function* bindingUnique() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          for (const rows of [
+            [boundRow(0), boundRow(1)],
+            [
+              boundRow(0, { kind: "qti-text-entry-interaction" }),
+              boundRow(0, {
+                attribute: "string-identifier",
+                kind: "qti-text-entry-interaction",
+              }),
+            ],
+          ]) {
+            const outcome = yield* db.workload.importWrite.apply(
+              importFacts({ BoundVariable: rows }),
+              {},
+            );
+
+            assert.isTrue(
+              rejectedBy(outcome, keyOver("BoundVariable", ["document", "identifier"])),
+            );
+          }
+        }),
+    );
+
+    it.effect(
+      "refuses counts past their bounds and a count row its lexical form does not give, by Choice bounds and E1 derived, each on the row of the count it reads",
+      () =>
+        // Oracle: PostgreSQL, the `Choice_bounds` checks (readings 18 and 76) on LeastCount,
+        // MostCount and CountRange, and `E1_derived`'s G-parse agreement of a count's integer
+        // with its form, which must be a count's (lane NIL's audit, B8).
+        // Bound: an order interaction's most one past its choices, its least past its choices, its
+        // least past a most of 0 (no exemption, reading 18); a choice interaction's least past its
+        // most; a least whose integer disagrees with its form, a form no integer reads, a most
+        // written as no count (GEN-A's "1abc"), and an unwritten least with no default.
+        Effect.gen(function* choiceBounds() {
+          const client = yield* loginSession;
+          const cases: readonly [string, Stated, string][] = [
+            [
+              "a most past the choices",
+              { fact: mostOf({ most: "4", mostValue: 4n }), relation: MostCount },
+              "Choice_bounds",
+            ],
+            [
+              "a least past the choices",
+              { fact: leastOf({ choices: 1n }), relation: LeastCount },
+              "Choice_bounds",
+            ],
+            [
+              "a counted least past a most of 0",
+              { fact: rangeOf({ mostValue: 0n }), relation: CountRange },
+              "Choice_bounds",
+            ],
+            [
+              "an unbounded least past its most",
+              {
+                fact: rangeOf({ kind: "qti-choice-interaction", mostValue: 1n }),
+                relation: CountRange,
+              },
+              "Choice_bounds",
+            ],
+            [
+              "a least whose integer is not its form's",
+              { fact: leastOf({ least: "02", leastValue: 3n }), relation: LeastCount },
+              "E1_derived",
+            ],
+            [
+              "a least no integer reads",
+              { fact: leastOf({ least: "two", leastValue: 2n }), relation: LeastCount },
+              "E1_derived",
+            ],
+            [
+              "a most written as no count",
+              { fact: mostOf({ most: "1abc", mostValue: 1n }), relation: MostCount },
+              "E1_derived",
+            ],
+            [
+              "an unwritten least whose kind has no default",
+              {
+                fact: leastOf({ least: "0", leastValue: 0n, minWritten: false }),
+                relation: LeastCount,
+              },
+              "E1_derived",
+            ],
+          ];
+          for (const [label, stated, check] of cases) {
+            assertVerdict(
               yield* judged(
                 client,
-                statedInserts([bound, { fact: declarationRow(0), relation: BindingDeclaration }]),
-                existence,
+                statedInserts([{ fact: boundOf(), relation: CountBound }, stated]),
+              ),
+              checkConstraintOf(Qti, stated.relation.name, check),
+              true,
+              label,
+            );
+          }
+        }).pipe(Effect.scoped),
+    );
+
+    it.effect(
+      "accepts an order interaction's most equal to its choices, and a choice interaction's most of 0 below its least, by every law of the rows themselves",
+      () =>
+        // Oracle: PostgreSQL, the rows' domains and CHECKs with every foreign key deferred and
+        // none set immediate: the edge maxChoices = choices (reading 18), and reading 76's 0.
+        // Bound: the two edges.
+        Effect.gen(function* choiceEdges() {
+          const client = yield* loginSession;
+          const choice = { kind: "qti-choice-interaction" as const };
+          for (const rows of [
+            [
+              { fact: leastOf(), relation: LeastCount },
+              { fact: mostOf(), relation: MostCount },
+              { fact: rangeOf(), relation: CountRange },
+            ],
+            [
+              { fact: leastOf({ ...choice, choices: 0n }), relation: LeastCount },
+              {
+                fact: mostOf({ ...choice, choices: 0n, most: "0", mostValue: 0n }),
+                relation: MostCount,
+              },
+              { fact: rangeOf({ ...choice, mostValue: 0n }), relation: CountRange },
+            ],
+          ] satisfies readonly (readonly Stated[])[]) {
+            const refused = Option.getOrUndefined(
+              yield* judged(
+                client,
+                statedInserts([{ fact: boundOf(), relation: CountBound }, ...rows]),
+                [],
               ),
             );
-            assert.isUndefined(declared, "a binding beside its declaration row");
 
-            const sentinel = Option.getOrUndefined(
+            assert.isUndefined(refused, refused?.message);
+          }
+        }).pipe(Effect.scoped),
+    );
+
+    it.effect(
+      "refuses a gap match bound to a single response over two or more gaps, and accepts one gap, or several bound multiple, by Binding cardinality",
+      () =>
+        // Oracle: PostgreSQL, the `Binding_cardinality` check on `BindingCardinality` with every
+        // foreign key and family proof deferred and none set immediate (reading 169: a gap
+        // match's response is single only where it has at most one gap, §5.57), 23514 on the
+        // check refused.
+        // Bound: a gap match bound single with 2 gaps and most 1, refused; with 1 gap, and with
+        // 2 gaps bound multiple, accepted; a choice interaction bound single with 2 gaps (a
+        // count its kind does not read), accepted.
+        Effect.gen(function* gapCardinality() {
+          const client = yield* loginSession;
+
+          for (const [label, fields, refusedBy] of [
+            [
+              "two gaps bound single",
+              { cardinality: "single", gaps: 2n, kind: "qti-gap-match-interaction", mosts: 1n },
+              "binding_cardinality",
+            ],
+            [
+              "one gap bound single",
+              { cardinality: "single", gaps: 1n, kind: "qti-gap-match-interaction", mosts: 1n },
+              undefined,
+            ],
+            [
+              "two gaps bound multiple",
+              { cardinality: "multiple", gaps: 2n, kind: "qti-gap-match-interaction", mosts: 1n },
+              undefined,
+            ],
+            [
+              "two gaps of another kind bound single",
+              { cardinality: "single", gaps: 2n, kind: "qti-choice-interaction", mosts: 1n },
+              undefined,
+            ],
+          ] as const) {
+            const refused = Option.getOrUndefined(
+              yield* judged(
+                client,
+                statedInserts([{ fact: cardinalityRow(0, fields), relation: BindingCardinality }]),
+                [],
+              ),
+            );
+
+            if (refusedBy === undefined) {
+              assert.isUndefined(refused, `${label}: ${refused?.message ?? ""}`);
+            } else {
+              assert.strictEqual(
+                refused?.code,
+                "23514",
+                `${label}: ${refused?.message ?? "accepted"}`,
+              );
+              assert.strictEqual(refused?.constraint, refusedBy, label);
+            }
+          }
+        }).pipe(Effect.scoped),
+    );
+
+    it.effect(
+      "refuses a single response bound to an interaction whose most is not 1, and accepts a most of 1 and an interaction whose most has no value, by the containment into MostCount",
+      () =>
+        // Oracle: PostgreSQL, the foreign key of "Binding cardinality" (reading 92): a single
+        // response's interaction whose most has a value (`mosts` = 1) is in select(MostCount,
+        // mostValue = 1). 23503 on that key. An interaction whose most has none, written as no
+        // count, has `mosts` = 0, and its value domain is its law (the law oracle's
+        // `countAttribute`).
+        // Bound: a choice interaction's most of 2 and of 0, refused, of 1, accepted, and none,
+        // accepted.
+        Effect.gen(function* bindingCardinality() {
+          const client = yield* loginSession;
+          const keys = yield* foreignKeysBetween(client, "binding_cardinality", "most_count");
+          assert.isNotEmpty(keys);
+
+          for (const [most, refusedExpected] of [
+            [2n, true],
+            [0n, true],
+            [1n, false],
+            [undefined, false],
+          ] as const) {
+            const counted =
+              most === undefined
+                ? []
+                : [
+                    {
+                      fact: mostOf({
+                        choices: 0n,
+                        kind: "qti-choice-interaction",
+                        minWritten: false,
+                        most: String(most),
+                        mostValue: most,
+                      }),
+                      relation: MostCount,
+                    },
+                  ];
+            const refused = Option.getOrUndefined(
               yield* judged(
                 client,
                 statedInserts([
-                  bound,
                   {
-                    fact: declarationRow(0, { declaration: nilUuid }),
-                    relation: BindingDeclaration,
+                    fact: cardinalityRow(0, { mosts: most === undefined ? 0n : 1n }),
+                    relation: BindingCardinality,
                   },
+                  ...counted,
                 ]),
-                named,
+                keys,
               ),
             );
-            assert.strictEqual(sentinel?.code, "23503", "a declaration row of the nil uuid");
-            assert.include(named, sentinel?.constraint);
-          }).pipe(Effect.scoped),
-      );
 
-      it.effect(
-        "refuses a binding to a variable that is no response declaration, by Binding declared",
-        () =>
-          // Oracle: PostgreSQL, the `Binding_declared` check (reading 75): an interaction binds a
-          // response variable.
-          // Bound: a declaration row of an outcome declaration.
-          Effect.gen(function* bindingDeclared() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const outcome = yield* db.apply(
-              ChangeSet.empty(Author).insert(BindingDeclaration, [
-                declarationRow(0, { declarationKind: "qti-outcome-declaration" }),
-              ]),
-              {},
-            );
-
-            assert.isTrue(
-              rejectedBy(outcome, checkNamed("BindingDeclaration", "Binding_declared")),
-            );
-          }),
-      );
-
-      it.effect(
-        "refuses two bindings of one response variable, two interactions' or one interaction's response and string identifiers, by the key on (document, identifier)",
-        () =>
-          // Oracle: PostgreSQL's UNIQUE, or the host's key check before it, of
-          // key(on(BoundVariable, "document", "identifier")): reading 92, "Each response variable
-          // declared may be bound to one and only one interaction", and the string identifier's
-          // "second response variable" (§5.162.3), the old `string-identifier-distinct`.
-          // Bound: two interactions naming one variable; one text entry naming it twice.
-          Effect.gen(function* bindingUnique() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const rows of [
-              [boundRow(0), boundRow(1)],
-              [
-                boundRow(0, { kind: "qti-text-entry-interaction" }),
-                boundRow(0, {
-                  attribute: "string-identifier",
-                  kind: "qti-text-entry-interaction",
-                }),
-              ],
-            ]) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(BoundVariable, rows),
-                {},
-              );
-
-              assert.isTrue(
-                rejectedBy(outcome, keyOver("BoundVariable", ["document", "identifier"])),
-              );
+            assert.strictEqual(refused?.code, refusedExpected ? "23503" : undefined, String(most));
+            if (refusedExpected) {
+              assert.include(keys, refused?.constraint);
             }
-          }),
-      );
+          }
+        }).pipe(Effect.scoped),
+    );
 
-      it.effect(
-        "refuses counts past their bounds and a count row its lexical form does not give, by Choice bounds and E1 derived, each on the row of the count it reads",
-        () =>
-          // Oracle: PostgreSQL, the `Choice_bounds` checks (readings 18 and 76) on LeastCount,
-          // MostCount and CountRange, and `E1_derived`'s G-parse agreement of a count's integer
-          // with its form, which must be a count's (lane NIL's audit, B8).
-          // Bound: an order interaction's most one past its choices, its least past its choices, its
-          // least past a most of 0 (no exemption, reading 18); a choice interaction's least past its
-          // most; a least whose integer disagrees with its form, a form no integer reads, a most
-          // written as no count (GEN-A's "1abc"), and an unwritten least with no default.
-          Effect.gen(function* choiceBounds() {
-            const client = yield* loginSession;
-            const cases: readonly [string, Stated, string][] = [
-              [
-                "a most past the choices",
-                { fact: mostOf({ most: "4", mostValue: 4n }), relation: MostCount },
-                "Choice_bounds",
-              ],
-              [
-                "a least past the choices",
-                { fact: leastOf({ choices: 1n }), relation: LeastCount },
-                "Choice_bounds",
-              ],
-              [
-                "a counted least past a most of 0",
-                { fact: rangeOf({ mostValue: 0n }), relation: CountRange },
-                "Choice_bounds",
-              ],
-              [
-                "an unbounded least past its most",
-                {
-                  fact: rangeOf({ kind: "qti-choice-interaction", mostValue: 1n }),
-                  relation: CountRange,
-                },
-                "Choice_bounds",
-              ],
-              [
-                "a least whose integer is not its form's",
-                { fact: leastOf({ least: "02", leastValue: 3n }), relation: LeastCount },
-                "E1_derived",
-              ],
-              [
-                "a least no integer reads",
-                { fact: leastOf({ least: "two", leastValue: 2n }), relation: LeastCount },
-                "E1_derived",
-              ],
-              [
-                "a most written as no count",
-                { fact: mostOf({ most: "1abc", mostValue: 1n }), relation: MostCount },
-                "E1_derived",
-              ],
-              [
-                "an unwritten least whose kind has no default",
-                {
-                  fact: leastOf({ least: "0", leastValue: 0n, minWritten: false }),
-                  relation: LeastCount,
-                },
-                "E1_derived",
-              ],
-            ];
-            for (const [label, stated, check] of cases) {
-              assertVerdict(
-                yield* judged(
-                  client,
-                  statedInserts([{ fact: boundOf(), relation: CountBound }, stated]),
-                ),
-                checkConstraintOf(Qti, stated.relation.name, check),
-                true,
-                label,
-              );
-            }
-          }).pipe(Effect.scoped),
-      );
-
-      it.effect(
-        "accepts an order interaction's most equal to its choices, and a choice interaction's most of 0 below its least, by every law of the rows themselves",
-        () =>
-          // Oracle: PostgreSQL, the rows' domains and CHECKs with every foreign key deferred and
-          // none set immediate: the edge maxChoices = choices (reading 18), and reading 76's 0.
-          // Bound: the two edges.
-          Effect.gen(function* choiceEdges() {
-            const client = yield* loginSession;
-            const choice = { kind: "qti-choice-interaction" as const };
-            for (const rows of [
-              [
-                { fact: leastOf(), relation: LeastCount },
-                { fact: mostOf(), relation: MostCount },
-                { fact: rangeOf(), relation: CountRange },
-              ],
-              [
-                { fact: leastOf({ ...choice, choices: 0n }), relation: LeastCount },
-                {
-                  fact: mostOf({ ...choice, choices: 0n, most: "0", mostValue: 0n }),
-                  relation: MostCount,
-                },
-                { fact: rangeOf({ ...choice, mostValue: 0n }), relation: CountRange },
-              ],
-            ] satisfies readonly (readonly Stated[])[]) {
-              const refused = Option.getOrUndefined(
-                yield* judged(
-                  client,
-                  statedInserts([{ fact: boundOf(), relation: CountBound }, ...rows]),
-                  [],
-                ),
-              );
-
-              assert.isUndefined(refused, refused?.message);
-            }
-          }).pipe(Effect.scoped),
-      );
-
-      it.effect(
-        "refuses a gap match bound to a single response over two or more gaps, and accepts one gap, or several bound multiple, by Binding cardinality",
-        () =>
-          // Oracle: PostgreSQL, the `Binding_cardinality` check on `BindingCardinality` with every
-          // foreign key and family proof deferred and none set immediate (reading 169: a gap
-          // match's response is single only where it has at most one gap, §5.57), 23514 on the
-          // check refused.
-          // Bound: a gap match bound single with 2 gaps and most 1, refused; with 1 gap, and with
-          // 2 gaps bound multiple, accepted; a choice interaction bound single with 2 gaps (a
-          // count its kind does not read), accepted.
-          Effect.gen(function* gapCardinality() {
-            const client = yield* loginSession;
-
-            for (const [label, fields, refusedBy] of [
-              [
-                "two gaps bound single",
-                { cardinality: "single", gaps: 2n, kind: "qti-gap-match-interaction", mosts: 1n },
-                "binding_cardinality",
-              ],
-              [
-                "one gap bound single",
-                { cardinality: "single", gaps: 1n, kind: "qti-gap-match-interaction", mosts: 1n },
-                undefined,
-              ],
-              [
-                "two gaps bound multiple",
-                { cardinality: "multiple", gaps: 2n, kind: "qti-gap-match-interaction", mosts: 1n },
-                undefined,
-              ],
-              [
-                "two gaps of another kind bound single",
-                { cardinality: "single", gaps: 2n, kind: "qti-choice-interaction", mosts: 1n },
-                undefined,
-              ],
-            ] as const) {
-              const refused = Option.getOrUndefined(
-                yield* judged(
-                  client,
-                  statedInserts([
-                    { fact: cardinalityRow(0, fields), relation: BindingCardinality },
-                  ]),
-                  [],
-                ),
-              );
-
-              if (refusedBy === undefined) {
-                assert.isUndefined(refused, `${label}: ${refused?.message ?? ""}`);
-              } else {
-                assert.strictEqual(
-                  refused?.code,
-                  "23514",
-                  `${label}: ${refused?.message ?? "accepted"}`,
-                );
-                assert.strictEqual(refused?.constraint, refusedBy, label);
-              }
-            }
-          }).pipe(Effect.scoped),
-      );
-
-      it.effect(
-        "refuses a single response bound to an interaction whose most is not 1, and accepts a most of 1 and an interaction whose most has no value, by the containment into MostCount",
-        () =>
-          // Oracle: PostgreSQL, the foreign key of "Binding cardinality" (reading 92): a single
-          // response's interaction whose most has a value (`mosts` = 1) is in select(MostCount,
-          // mostValue = 1). 23503 on that key. An interaction whose most has none, written as no
-          // count, has `mosts` = 0, and its value domain is its law (the law oracle's
-          // `countAttribute`).
-          // Bound: a choice interaction's most of 2 and of 0, refused, of 1, accepted, and none,
-          // accepted.
-          Effect.gen(function* bindingCardinality() {
-            const client = yield* loginSession;
-            const keys = yield* foreignKeysBetween(client, "binding_cardinality", "most_count");
-            assert.isNotEmpty(keys);
-
-            for (const [most, refusedExpected] of [
-              [2n, true],
-              [0n, true],
-              [1n, false],
-              [undefined, false],
-            ] as const) {
-              const counted =
-                most === undefined
-                  ? []
-                  : [
-                      {
-                        fact: mostOf({
-                          choices: 0n,
-                          kind: "qti-choice-interaction",
-                          minWritten: false,
-                          most: String(most),
-                          mostValue: most,
-                        }),
-                        relation: MostCount,
-                      },
-                    ];
-              const refused = Option.getOrUndefined(
-                yield* judged(
-                  client,
-                  statedInserts([
-                    {
-                      fact: cardinalityRow(0, { mosts: most === undefined ? 0n : 1n }),
-                      relation: BindingCardinality,
-                    },
-                    ...counted,
-                  ]),
-                  keys,
-                ),
-              );
-
-              assert.strictEqual(
-                refused?.code,
-                refusedExpected ? "23503" : undefined,
-                String(most),
-              );
-              if (refusedExpected) {
-                assert.include(keys, refused?.constraint);
-              }
-            }
-          }).pipe(Effect.scoped),
-      );
-
-      it.effect(
-        "refuses an extended text interaction bound to a container without max-strings, by the containment into CountBound",
-        () =>
-          // Oracle: PostgreSQL, the foreign key of `max-strings-required` (reading 19): a multiple
-          // or ordered binding's extended text is in select(CountBound, maxWritten = true).
-          // Bound: a multiple binding with max-strings unwritten, refused, and written, accepted.
-          Effect.gen(function* maxStrings() {
-            const client = yield* loginSession;
-            const keys = yield* foreignKeysBetween(client, "binding_cardinality", "count_bound");
-            for (const written of [false, true]) {
-              const mosts = written ? 1n : 0n;
-              const refused = Option.getOrUndefined(
-                yield* judged(
-                  client,
-                  statedInserts([
-                    {
-                      fact: cardinalityRow(0, {
-                        cardinality: "multiple",
-                        kind: "qti-extended-text-interaction",
-                        mosts,
-                      }),
-                      relation: BindingCardinality,
-                    },
-                    {
-                      fact: boundOf({
-                        choices: 0n,
-                        kind: "qti-extended-text-interaction",
-                        leasts: 1n,
-                        maxName: "max-strings",
-                        maxWritten: written,
-                        minName: "min-strings",
-                        minWritten: false,
-                        mosts,
-                      }),
-                      relation: CountBound,
-                    },
-                  ]),
-                  keys,
-                ),
-              );
-
-              assert.strictEqual(refused?.code, written ? undefined : "23503", String(written));
-            }
-          }).pipe(Effect.scoped),
-      );
-
-      it.effect(
-        "refuses a default hotspot before its parent's last element and a graphic gap match's default hotspot, by the default hotspot checks",
-        () =>
-          // Oracle: PostgreSQL, the `default_hotspot_last_slot` and
-          // `Graphic_gap_match_default_hotspot` checks (reading 80).
-          // Bound: a hotspot interaction's default hotspot at element 1 of 2; a graphic gap match's
-          // associable hotspot of shape default.
-          Effect.gen(function* defaultHotspot() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const cases = [
-              { name: "default_hotspot_last_slot", row: hotspotOf({ elements: 1n }) },
-              {
-                name: "Graphic_gap_match_default_hotspot",
-                row: hotspotOf({
-                  kind: "qti-associable-hotspot",
-                  parentKind: "qti-graphic-gap-match-interaction",
-                }),
-              },
-            ];
-            for (const { name, row } of cases) {
-              const outcome = yield* db.apply(ChangeSet.empty(Author).insert(Hotspot, [row]), {});
-
-              assert.isTrue(rejectedBy(outcome, checkNamed("Hotspot", name)), name);
-            }
-          }),
-      );
-
-      it.effect(
-        "accepts a default hotspot as its parent's last element, and another shape anywhere, by every law of the row itself",
-        () =>
-          // Oracle: PostgreSQL, the row's domains and CHECKs with every foreign key deferred.
-          // Bound: the last default hotspot of 2, and a rect hotspot at element 1 of 2.
-          Effect.gen(function* lastHotspot() {
-            const client = yield* loginSession;
-            for (const row of [hotspotOf(), hotspotOf({ area: "rect", elements: 1n })]) {
-              const refused = Option.getOrUndefined(
-                yield* judged(client, statedInserts([{ fact: row, relation: Hotspot }]), []),
-              );
-
-              assert.isUndefined(refused, refused?.message);
-            }
-          }).pipe(Effect.scoped),
-      );
-
-      it.effect(
-        "refuses an upper bound below the lower and an aria-valuemax below aria-valuemin, by Slider bounds and Aria value range",
-        () =>
-          // Oracle: PostgreSQL, the `Slider_bounds` check (reading 9, the Schematron's 14Ba), each
-          // bound read by grizzle's `Compute.parseDouble` (XML Schema 1.1's doubleLexicalMap,
-          // reading 144) of any digits and any exponent, and the `Aria_value_range` check
-          // (§5.2.31), each value read by grizzle's `Compute.parseDecimal` (XML Schema 1.1's
-          // decimalLexicalMap) of any digits.
-          // Bound: 5 above 3, 1e1 above 9.5, and past grizzle's former bounded form of double
-          // precision (15 significant digits, an exponent of at most 293): a 17-digit lower bound
-          // above 1, 1e294 above 1e293, 1e400 (+INF) above the greatest finite double, and 1e-300
-          // above -1e-400 (-0); and aria 2 above 1.5, and past the former bounded form of numeric
-          // (256 integer and 255 fraction digits): 2 above 1 at 257 integer digits, and two values
-          // one unit apart in their 300th fraction digit.
-          Effect.gen(function* ranges() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const row of [
-              { lower: "5", node: strayNode(0), upper: "3" },
-              { lower: "1e1", node: strayNode(0), upper: "9.5" },
-              { lower: "10000000000000001", node: strayNode(0), upper: "1" },
-              { lower: "1e294", node: strayNode(0), upper: "1e293" },
-              { lower: "1e400", node: strayNode(0), upper: "1.7976931348623157e308" },
-              { lower: "1e-300", node: strayNode(0), upper: "-1e-400" },
-            ] satisfies Fact<typeof Slider>[]) {
-              const outcome = yield* db.apply(ChangeSet.empty(Author).insert(Slider, [row]), {});
-
-              assert.isTrue(rejectedBy(outcome, checkNamed("Slider", "Slider_bounds")), row.lower);
-            }
-
-            for (const row of [
-              { max: "1.5", min: "2", node: strayNode(0) },
-              { max: `1${"0".repeat(256)}`, min: `2${"0".repeat(256)}`, node: strayNode(0) },
-              { max: `0.${"3".repeat(299)}3`, min: `0.${"3".repeat(299)}4`, node: strayNode(0) },
-            ] satisfies Fact<typeof AriaRange>[]) {
-              const outcome = yield* db.apply(ChangeSet.empty(Author).insert(AriaRange, [row]), {});
-
-              assert.isTrue(
-                rejectedBy(outcome, checkNamed("AriaRange", "Aria_value_range")),
-                `${row.min} ${row.max}`,
-              );
-            }
-          }),
-      );
-
-      it.effect(
-        "accepts slider bounds whose doubles are in order past grizzle's former bounded form, and a bound that is no xs:double, by every law of the row itself",
-        () =>
-          // Oracle: PostgreSQL, the row's domains and CHECKs with every foreign key deferred:
-          // `Slider_bounds` reads each bound as the double XML Schema 1.1's doubleLexicalMap maps
-          // it to (reading 144), so two spellings of one double are in order, and a bound that is
-          // no xs:double, which its value domain alone refuses, is not judged.
-          // Bound: 1e400 against INF (both +INF), a 17-digit 1.0000000000000001 against 1 (one
-          // double), 1e-400 against -0 (two zeros), 1e293 below 1e294, and +INF and abc against
-          // -1, outside XML Schema 1.0's lexical space (reading 71's edition).
-          Effect.gen(function* orderedBounds() {
-            const client = yield* loginSession;
-            for (const row of [
-              { lower: "1e400", node: strayNode(0), upper: "INF" },
-              { lower: "1.0000000000000001", node: strayNode(0), upper: "1" },
-              { lower: "1e-400", node: strayNode(0), upper: "-0" },
-              { lower: "1e293", node: strayNode(0), upper: "1e294" },
-              { lower: "+INF", node: strayNode(0), upper: "-1" },
-              { lower: "abc", node: strayNode(0), upper: "-1" },
-            ] satisfies Fact<typeof Slider>[]) {
-              const refused = Option.getOrUndefined(
-                yield* judged(client, statedInserts([{ fact: row, relation: Slider }]), []),
-              );
-
-              assert.isUndefined(refused, `${row.lower} ${row.upper}: ${refused?.message ?? ""}`);
-            }
-          }).pipe(Effect.scoped),
-      );
-
-      it.effect(
-        "refuses a feedback outcome of another type, in an item's or a section's placement, and a reference to a built-in its law does not allow, by Feedback outcome type and Feedback reference",
-        () =>
-          // Oracle: PostgreSQL, the `Feedback_outcome_type` check over the cardinality rows (reading
-          // 77; spec reading 159: a row of the reference's own where its outcome has a cardinality)
-          // and the `Feedback_reference` check that a built-in's name is one `ContentReference`
-          // lets the reference name.
-          // Bound: an ordered outcome, of an item's feedback and of a section's feedback placed under
-          // a test (port audit A45); a feedback naming the response built-in numAttempts. The placed
-          // feedback stands on the section document's `ReferringDocument` and its
-          // `SectionFeedbackName`, since its placement's counts are its document's and its
-          // reference is its document's, both keys PostgreSQL judges at the INSERT.
-          Effect.gen(function* references() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const typed = yield* db.apply(
-              ChangeSet.empty(Author)
-                .insert(FeedbackRef, [feedbackOf()])
-                .insert(FeedbackRefDeclaration, [feedbackDeclarationOf()])
-                .insert(FeedbackRefCardinality, [feedbackCardinalityOf("ordered")]),
-              {},
-            );
-            assert.isTrue(
-              rejectedBy(typed, checkNamed("FeedbackRefCardinality", "Feedback_outcome_type")),
-            );
-
-            const builtIn = yield* db.apply(
-              ChangeSet.empty(Author).insert(FeedbackRef, [
-                feedbackOf({ identifier: "numAttempts" }),
-              ]),
-              {},
-            );
-            assert.isTrue(rejectedBy(builtIn, checkNamed("FeedbackRef", "Feedback_reference")));
-
-            const { attribute, document, identifier, kind, node } = feedbackOf();
-            const placement = { assembly: stray, instance: strayNode(1) } as const;
-            const placed = yield* db.apply(
-              ChangeSet.empty(Author)
-                .insert(ReferringDocument, [{ document }])
-                .insert(SectionFeedbackName, [{ attribute, document, identifier, kind, node }])
-                .insert(SectionScope, [
+    it.effect(
+      "refuses an extended text interaction bound to a container without max-strings, by the containment into CountBound",
+      () =>
+        // Oracle: PostgreSQL, the foreign key of `max-strings-required` (reading 19): a multiple
+        // or ordered binding's extended text is in select(CountBound, maxWritten = true).
+        // Bound: a multiple binding with max-strings unwritten, refused, and written, accepted.
+        Effect.gen(function* maxStrings() {
+          const client = yield* loginSession;
+          const keys = yield* foreignKeysBetween(client, "binding_cardinality", "count_bound");
+          for (const written of [false, true]) {
+            const mosts = written ? 1n : 0n;
+            const refused = Option.getOrUndefined(
+              yield* judged(
+                client,
+                statedInserts([
                   {
-                    assembly: stray,
-                    assemblyKind: "qti-assessment-item",
-                    document,
-                    instance: strayNode(1),
+                    fact: cardinalityRow(0, {
+                      cardinality: "multiple",
+                      kind: "qti-extended-text-interaction",
+                      mosts,
+                    }),
+                    relation: BindingCardinality,
                   },
-                ])
-                .insert(SectionFeedbackRef, [{ ...feedbackOf(), ...placement }])
-                .insert(SectionFeedbackRefDeclaration, [
-                  { ...feedbackDeclarationOf(), ...placement },
-                ])
-                .insert(SectionFeedbackRefCardinality, [
-                  { ...feedbackCardinalityOf("ordered"), instance: placement.instance },
+                  {
+                    fact: boundOf({
+                      choices: 0n,
+                      kind: "qti-extended-text-interaction",
+                      leasts: 1n,
+                      maxName: "max-strings",
+                      maxWritten: written,
+                      minName: "min-strings",
+                      minWritten: false,
+                      mosts,
+                    }),
+                    relation: CountBound,
+                  },
                 ]),
-              {},
-            );
-            assert.isTrue(
-              rejectedBy(
-                placed,
-                checkNamed("SectionFeedbackRefCardinality", "Feedback_outcome_type"),
+                keys,
               ),
             );
-          }),
-      );
 
-      it.effect(
-        "refuses a choice's or template element's template variable of another type, in an item's or a section's placement, and accepts a portable custom interaction's, by Template variable type",
-        () =>
-          // Oracle: PostgreSQL, the `Template_variable_type` check over the cardinality rows
-          // (reading R15-l; spec reading 159, decision 432: a row of the reference's own where its
-          // template has a cardinality), on each of the two relations that hold a template
-          // reference's cardinality: it judges a record by its cardinality, and a base type is
-          // judged by the containment into the identifier-typed DeclarationBaseType rows (reading
-          // 153), which a stray row cannot reach, as "Feedback outcome type" is.
-          // Bound: a record template named by a choice, refused; an identifier template of
-          // multiple cardinality named by a choice, and a record template named by a PCI's
-          // qti-template-variable, accepted by this check; the placed section reference of a
-          // record template, refused.
-          Effect.gen(function* templateType() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const wrong = yield* db.apply(
-              ChangeSet.empty(Author)
-                .insert(TemplateRef, [templateOf()])
-                .insert(TemplateRefDeclaration, [templateDeclarationOf({ baseTypes: 0n })])
-                .insert(TemplateRefCardinality, [templateCardinalityOf("record")]),
+            assert.strictEqual(refused?.code, written ? undefined : "23503", String(written));
+          }
+        }).pipe(Effect.scoped),
+    );
+
+    it.effect(
+      "refuses a default hotspot before its parent's last element and a graphic gap match's default hotspot, by the default hotspot checks",
+      () =>
+        // Oracle: PostgreSQL, the `default_hotspot_last_slot` and
+        // `Graphic_gap_match_default_hotspot` checks (reading 80).
+        // Bound: a hotspot interaction's default hotspot at element 1 of 2; a graphic gap match's
+        // associable hotspot of shape default.
+        Effect.gen(function* defaultHotspot() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const cases = [
+            { name: "default_hotspot_last_slot", row: hotspotOf({ elements: 1n }) },
+            {
+              name: "Graphic_gap_match_default_hotspot",
+              row: hotspotOf({
+                kind: "qti-associable-hotspot",
+                parentKind: "qti-graphic-gap-match-interaction",
+              }),
+            },
+          ];
+          for (const { name, row } of cases) {
+            const outcome = yield* db.workload.importWrite.apply(
+              importFacts({ Hotspot: [row] }),
               {},
             );
+
+            assert.isTrue(rejectedBy(outcome, checkNamed("Hotspot", name)), name);
+          }
+        }),
+    );
+
+    it.effect(
+      "accepts a default hotspot as its parent's last element, and another shape anywhere, by every law of the row itself",
+      () =>
+        // Oracle: PostgreSQL, the row's domains and CHECKs with every foreign key deferred.
+        // Bound: the last default hotspot of 2, and a rect hotspot at element 1 of 2.
+        Effect.gen(function* lastHotspot() {
+          const client = yield* loginSession;
+          for (const row of [hotspotOf(), hotspotOf({ area: "rect", elements: 1n })]) {
+            const refused = Option.getOrUndefined(
+              yield* judged(client, statedInserts([{ fact: row, relation: Hotspot }]), []),
+            );
+
+            assert.isUndefined(refused, refused?.message);
+          }
+        }).pipe(Effect.scoped),
+    );
+
+    it.effect(
+      "refuses an upper bound below the lower and an aria-valuemax below aria-valuemin, by Slider bounds and Aria value range",
+      () =>
+        // Oracle: PostgreSQL, the `Slider_bounds` check (reading 9, the Schematron's 14Ba), each
+        // bound read by grizzle's `Compute.parseDouble` (XML Schema 1.1's doubleLexicalMap,
+        // reading 144) of any digits and any exponent, and the `Aria_value_range` check
+        // (§5.2.31), each value read by grizzle's `Compute.parseDecimal` (XML Schema 1.1's
+        // decimalLexicalMap) of any digits.
+        // Bound: 5 above 3, 1e1 above 9.5, and past grizzle's former bounded form of double
+        // precision (15 significant digits, an exponent of at most 293): a 17-digit lower bound
+        // above 1, 1e294 above 1e293, 1e400 (+INF) above the greatest finite double, and 1e-300
+        // above -1e-400 (-0); and aria 2 above 1.5, and past the former bounded form of numeric
+        // (256 integer and 255 fraction digits): 2 above 1 at 257 integer digits, and two values
+        // one unit apart in their 300th fraction digit.
+        Effect.gen(function* ranges() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          for (const row of [
+            { lower: "5", node: strayNode(0), upper: "3" },
+            { lower: "1e1", node: strayNode(0), upper: "9.5" },
+            { lower: "10000000000000001", node: strayNode(0), upper: "1" },
+            { lower: "1e294", node: strayNode(0), upper: "1e293" },
+            { lower: "1e400", node: strayNode(0), upper: "1.7976931348623157e308" },
+            { lower: "1e-300", node: strayNode(0), upper: "-1e-400" },
+          ] satisfies Fact<typeof Slider>[]) {
+            const outcome = yield* db.workload.importWrite.apply(
+              importFacts({ Slider: [row] }),
+              {},
+            );
+
+            assert.isTrue(rejectedBy(outcome, checkNamed("Slider", "Slider_bounds")), row.lower);
+          }
+
+          for (const row of [
+            { max: "1.5", min: "2", node: strayNode(0) },
+            { max: `1${"0".repeat(256)}`, min: `2${"0".repeat(256)}`, node: strayNode(0) },
+            { max: `0.${"3".repeat(299)}3`, min: `0.${"3".repeat(299)}4`, node: strayNode(0) },
+          ] satisfies Fact<typeof AriaRange>[]) {
+            const outcome = yield* db.workload.importWrite.apply(
+              importFacts({ AriaRange: [row] }),
+              {},
+            );
+
             assert.isTrue(
-              rejectedBy(wrong, checkNamed("TemplateRefCardinality", "Template_variable_type")),
+              rejectedBy(outcome, checkNamed("AriaRange", "Aria_value_range")),
+              `${row.min} ${row.max}`,
+            );
+          }
+        }),
+    );
+
+    it.effect(
+      "accepts slider bounds whose doubles are in order past grizzle's former bounded form, and a bound that is no xs:double, by every law of the row itself",
+      () =>
+        // Oracle: PostgreSQL, the row's domains and CHECKs with every foreign key deferred:
+        // `Slider_bounds` reads each bound as the double XML Schema 1.1's doubleLexicalMap maps
+        // it to (reading 144), so two spellings of one double are in order, and a bound that is
+        // no xs:double, which its value domain alone refuses, is not judged.
+        // Bound: 1e400 against INF (both +INF), a 17-digit 1.0000000000000001 against 1 (one
+        // double), 1e-400 against -0 (two zeros), 1e293 below 1e294, and +INF and abc against
+        // -1, outside XML Schema 1.0's lexical space (reading 71's edition).
+        Effect.gen(function* orderedBounds() {
+          const client = yield* loginSession;
+          for (const row of [
+            { lower: "1e400", node: strayNode(0), upper: "INF" },
+            { lower: "1.0000000000000001", node: strayNode(0), upper: "1" },
+            { lower: "1e-400", node: strayNode(0), upper: "-0" },
+            { lower: "1e293", node: strayNode(0), upper: "1e294" },
+            { lower: "+INF", node: strayNode(0), upper: "-1" },
+            { lower: "abc", node: strayNode(0), upper: "-1" },
+          ] satisfies Fact<typeof Slider>[]) {
+            const refused = Option.getOrUndefined(
+              yield* judged(client, statedInserts([{ fact: row, relation: Slider }]), []),
             );
 
-            for (const { baseTypes, cardinality, kind } of [
-              { baseTypes: 1n, cardinality: "multiple", kind: "qti-simple-choice" },
-              { baseTypes: 0n, cardinality: "record", kind: "qti-template-variable" },
-            ] as const) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author)
-                  .insert(TemplateRef, [templateOf({ kind })])
-                  .insert(TemplateRefDeclaration, [templateDeclarationOf({ baseTypes, kind })])
-                  .insert(TemplateRefCardinality, [templateCardinalityOf(cardinality, kind)]),
-                {},
-              );
-              assert.isFalse(
-                rejectedBy(outcome, checkNamed("TemplateRefCardinality", "Template_variable_type")),
-                `${kind} ${baseTypes} ${cardinality}`,
-              );
-            }
+            assert.isUndefined(refused, `${row.lower} ${row.upper}: ${refused?.message ?? ""}`);
+          }
+        }).pipe(Effect.scoped),
+    );
 
-            const { attribute, document, identifier, kind, node } = templateOf();
-            const placement = { assembly: stray, instance: strayNode(1) } as const;
-            const placed = yield* db.apply(
-              ChangeSet.empty(Author)
-                .insert(ReferringDocument, [{ document }])
-                .insert(SectionTemplateName, [{ attribute, document, identifier, kind, node }])
-                .insert(SectionScope, [
-                  {
-                    assembly: stray,
-                    assemblyKind: "qti-assessment-item",
-                    document,
-                    instance: strayNode(1),
-                  },
-                ])
-                .insert(SectionTemplateRef, [{ ...templateOf(), ...placement }])
-                .insert(SectionTemplateRefDeclaration, [
-                  { ...templateDeclarationOf({ baseTypes: 0n }), ...placement },
-                ])
-                .insert(SectionTemplateRefCardinality, [
-                  { ...templateCardinalityOf("record"), instance: placement.instance },
-                ]),
-              {},
-            );
-            assert.isTrue(
-              rejectedBy(
-                placed,
-                checkNamed("SectionTemplateRefCardinality", "Template_variable_type"),
-              ),
-            );
-          }),
-      );
+    it.effect(
+      "refuses a feedback outcome of another type, in an item's or a section's placement, and a reference to a built-in its law does not allow, by Feedback outcome type and Feedback reference",
+      () =>
+        // Oracle: PostgreSQL, the `Feedback_outcome_type` check over the cardinality rows (reading
+        // 77; spec reading 159: a row of the reference's own where its outcome has a cardinality)
+        // and the `Feedback_reference` check that a built-in's name is one `ContentReference`
+        // lets the reference name.
+        // Bound: an ordered outcome, of an item's feedback and of a section's feedback placed under
+        // a test (port audit A45); a feedback naming the response built-in numAttempts. The placed
+        // feedback stands on the section document's `ReferringDocument` and its
+        // `SectionFeedbackName`, since its placement's counts are its document's and its
+        // reference is its document's, both keys PostgreSQL judges at the INSERT.
+        Effect.gen(function* references() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const typed = yield* db.workload.importWrite.apply(
+            importFacts({
+              FeedbackRef: [feedbackOf()],
+              FeedbackRefCardinality: [feedbackCardinalityOf("ordered")],
+              FeedbackRefDeclaration: [feedbackDeclarationOf()],
+            }),
+            {},
+          );
+          assert.isTrue(
+            rejectedBy(typed, checkNamed("FeedbackRefCardinality", "Feedback_outcome_type")),
+          );
 
-      it.effect(
-        "refuses a reference to an undeclared name, and accepts one to the built-in completionStatus, by the containment into its declaration row",
-        () =>
-          // Oracle: PostgreSQL, the foreign key of a printed variable's `index` reference into its
-          // declaration row, selected out for a built-in's name (lane NIL's NS2: a reference that
-          // names no declaration has no declaration row, never the nil uuid). 23503 on that key.
-          // Bound: an undeclared name, refused; completionStatus with no declaration row,
-          // accepted.
-          Effect.gen(function* varRef() {
-            const client = yield* loginSession;
-            const keys = yield* foreignKeysBetween(
-              client,
-              "printed_variable_ref",
-              "printed_variable_ref_declaration",
-            );
-            assert.isNotEmpty(keys);
+          const builtIn = yield* db.workload.importWrite.apply(
+            importFacts({ FeedbackRef: [feedbackOf({ identifier: "numAttempts" })] }),
+            {},
+          );
+          assert.isTrue(rejectedBy(builtIn, checkNamed("FeedbackRef", "Feedback_reference")));
 
-            const undeclared = Option.getOrUndefined(
-              yield* judged(client, statedInserts([indexReference("UNDECLARED")]), keys),
-            );
-            assert.strictEqual(undeclared?.code, "23503");
-            assert.include(keys, undeclared?.constraint);
+          const { attribute, document, identifier, kind, node } = feedbackOf();
+          const placement = { assembly: stray, instance: strayNode(1) } as const;
+          const placed = yield* db.workload.importWrite.apply(
+            importFacts({
+              ReferringDocument: [{ document }],
+              SectionFeedbackName: [{ attribute, document, identifier, kind, node }],
+              SectionFeedbackRef: [{ ...feedbackOf(), ...placement }],
+              SectionFeedbackRefCardinality: [
+                { ...feedbackCardinalityOf("ordered"), instance: placement.instance },
+              ],
+              SectionFeedbackRefDeclaration: [{ ...feedbackDeclarationOf(), ...placement }],
+              SectionScope: [
+                {
+                  assembly: stray,
+                  assemblyKind: "qti-assessment-item",
+                  document,
+                  instance: strayNode(1),
+                },
+              ],
+            }),
+            {},
+          );
+          assert.isTrue(
+            rejectedBy(
+              placed,
+              checkNamed("SectionFeedbackRefCardinality", "Feedback_outcome_type"),
+            ),
+          );
+        }),
+    );
 
-            const builtIn = Option.getOrUndefined(
-              yield* judged(client, statedInserts([indexReference("completionStatus")]), keys),
-            );
-            assert.isUndefined(builtIn, builtIn?.message);
-          }).pipe(Effect.scoped),
-      );
+    it.effect(
+      "refuses a choice's or template element's template variable of another type, in an item's or a section's placement, and accepts a portable custom interaction's, by Template variable type",
+      () =>
+        // Oracle: PostgreSQL, the `Template_variable_type` check over the cardinality rows
+        // (reading R15-l; spec reading 159, decision 432: a row of the reference's own where its
+        // template has a cardinality), on each of the two relations that hold a template
+        // reference's cardinality: it judges a record by its cardinality, and a base type is
+        // judged by the containment into the identifier-typed DeclarationBaseType rows (reading
+        // 153), which a stray row cannot reach, as "Feedback outcome type" is.
+        // Bound: a record template named by a choice, refused; an identifier template of
+        // multiple cardinality named by a choice, and a record template named by a PCI's
+        // qti-template-variable, accepted by this check; the placed section reference of a
+        // record template, refused.
+        Effect.gen(function* templateType() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const wrong = yield* db.workload.importWrite.apply(
+            importFacts({
+              TemplateRef: [templateOf()],
+              TemplateRefCardinality: [templateCardinalityOf("record")],
+              TemplateRefDeclaration: [templateDeclarationOf({ baseTypes: 0n })],
+            }),
+            {},
+          );
+          assert.isTrue(
+            rejectedBy(wrong, checkNamed("TemplateRefCardinality", "Template_variable_type")),
+          );
 
-      it.effect(
-        "refuses two choices of one kind in one document with one identifier, of one interaction or of two, and two hottexts of one document, and lets a gap and a gap text share one, by their keys",
-        () =>
-          // Oracle: PostgreSQL's UNIQUE, or the host's key check before it, of
-          // key(on(Choice, "document", "kind", "identifier")) and key(on(Hottext, "document",
-          // "identifier")): the choice classes' "This identifier must not be used by any other
-          // choice or item variable" (§5.132.1, §5.65.1), each class of its own kind, the document
-          // its scope (reading 104).
-          // Across classes the nine share one space (reading 104 as amended); that half is the
-          // `Choice_identifier_key` check on `ChoiceVariableName`, held by the name-rows test below.
-          // Bound: two simple choices named A of one interaction, and of two; two hottexts named H,
-          // one in a hottext interaction and one outside any; a gap and a gap text named A of one
-          // interaction, which these per-class keys let be (the rows are stray, so the deferred
-          // foreign keys refuse them at commit, and the keys are not among the laws).
-          Effect.gen(function* choiceKeys() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const second of [
-              choiceOf(1, "A"),
-              { ...choiceOf(1, "A"), nearest: strayNode(98) },
-            ]) {
-              const pair = [choiceOf(0, "A"), second];
-              const choices = yield* db.apply(
-                ChangeSet.empty(Author)
-                  .insert(Document, [strayDocument])
-                  .insert(ChoiceVariableName, [nameOf("A")])
-                  .insert(Choice, pair),
-                {},
-              );
-              assert.isTrue(
-                rejectedBy(choices, keyOver("Choice", ["document", "kind", "identifier"])),
-                second.nearest,
-              );
-            }
-
-            const hottexts = yield* db.apply(
-              ChangeSet.empty(Author)
-                .insert(Document, [strayDocument])
-                .insert(ChoiceVariableName, [nameOf("H")])
-                .insert(Hottext, [
-                  hottextOf(0),
-                  hottextOf(1, { nearest: stray, nearestKind: "document" }),
-                ]),
-              {},
-            );
-            assert.isTrue(rejectedBy(hottexts, keyOver("Hottext", ["document", "identifier"])));
-
-            const gaps = [choiceOf(0, "A", "qti-gap"), choiceOf(1, "A", "qti-gap-text")];
-            const classes = yield* db.apply(
-              ChangeSet.empty(Author)
-                .insert(Document, [strayDocument])
-                .insert(ChoiceVariableName, [nameOf("A")])
-                .insert(Choice, gaps),
+          for (const { baseTypes, cardinality, kind } of [
+            { baseTypes: 1n, cardinality: "multiple", kind: "qti-simple-choice" },
+            { baseTypes: 0n, cardinality: "record", kind: "qti-template-variable" },
+          ] as const) {
+            const outcome = yield* db.workload.importWrite.apply(
+              importFacts({
+                TemplateRef: [templateOf({ kind })],
+                TemplateRefCardinality: [templateCardinalityOf(cardinality, kind)],
+                TemplateRefDeclaration: [templateDeclarationOf({ baseTypes, kind })],
+              }),
               {},
             );
             assert.isFalse(
-              rejectedBy(classes, keyOver("Choice", ["document", "kind", "identifier"])),
+              rejectedBy(outcome, checkNamed("TemplateRefCardinality", "Template_variable_type")),
+              `${kind} ${baseTypes} ${cardinality}`,
             );
-          }),
-      );
+          }
 
-      it.effect(
-        "refuses a choice or a hottext named as a declaration of its document, or in an item as a built-in variable, by Choice not variable",
-        () =>
-          // Oracle: PostgreSQL, the `Choice_not_variable` check on `ChoiceVariableName` (reading 104:
-          // "This identifier must not be used by any other choice or item variable"), over the
-          // counts its three families draw from the rows the ChangeSet writes, a declaration's by its
-          // `DeclarationIdentifier`, whatever its cardinality spells (spec reading 159).
-          // Bound: a simple choice and an outcome declaration named A with no cardinality; a hottext
-          // and that declaration; a simple choice named numAttempts in an item.
-          Effect.gen(function* choiceNotVariable() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const declared = {
-              declarationKind: "qti-outcome-declaration",
-              document: stray,
-              kind: "qti-outcome-declaration",
-              nearest: stray,
-              node: strayNode(50),
-              parent: stray,
-              parentKind: "qti-assessment-item",
-              start: 2n,
-              version: "3.0.1",
-            } satisfies Addition<typeof Declaration>;
-            const name = {
-              baseTypes: 0n,
-              cardinalities: 0n,
-              declarationKind: "qti-outcome-declaration",
-              document: stray,
-              identifier: "A",
-              identifierLead: "",
-              identifierLexical: "A",
-              identifierTrail: "",
-              node: strayNode(50),
-              parentKind: "qti-assessment-item",
-            } satisfies Addition<typeof DeclarationIdentifier>;
+          const { attribute, document, identifier, kind, node } = templateOf();
+          const placement = { assembly: stray, instance: strayNode(1) } as const;
+          const placed = yield* db.workload.importWrite.apply(
+            importFacts({
+              ReferringDocument: [{ document }],
+              SectionScope: [
+                {
+                  assembly: stray,
+                  assemblyKind: "qti-assessment-item",
+                  document,
+                  instance: strayNode(1),
+                },
+              ],
+              SectionTemplateName: [{ attribute, document, identifier, kind, node }],
+              SectionTemplateRef: [{ ...templateOf(), ...placement }],
+              SectionTemplateRefCardinality: [
+                { ...templateCardinalityOf("record"), instance: placement.instance },
+              ],
+              SectionTemplateRefDeclaration: [
+                { ...templateDeclarationOf({ baseTypes: 0n }), ...placement },
+              ],
+            }),
+            {},
+          );
+          assert.isTrue(
+            rejectedBy(
+              placed,
+              checkNamed("SectionTemplateRefCardinality", "Template_variable_type"),
+            ),
+          );
+        }),
+    );
 
-            const choice = yield* db.apply(
-              ChangeSet.empty(Author)
-                .insert(Document, [strayDocument])
-                .insert(ChoiceVariableName, [nameOf("A")])
-                .insert(Choice, [choiceOf(0, "A")])
-                .insert(Declaration, [declared])
-                .insert(DeclarationIdentifier, [name]),
+    it.effect(
+      "refuses a reference to an undeclared name, and accepts one to the built-in completionStatus, by the containment into its declaration row",
+      () =>
+        // Oracle: PostgreSQL, the foreign key of a printed variable's `index` reference into its
+        // declaration row, selected out for a built-in's name (lane NIL's NS2: a reference that
+        // names no declaration has no declaration row, never the nil uuid). 23503 on that key.
+        // Bound: an undeclared name, refused; completionStatus with no declaration row,
+        // accepted.
+        Effect.gen(function* varRef() {
+          const client = yield* loginSession;
+          const keys = yield* foreignKeysBetween(
+            client,
+            "printed_variable_ref",
+            "printed_variable_ref_declaration",
+          );
+          assert.isNotEmpty(keys);
+
+          const undeclared = Option.getOrUndefined(
+            yield* judged(client, statedInserts([indexReference("UNDECLARED")]), keys),
+          );
+          assert.strictEqual(undeclared?.code, "23503");
+          assert.include(keys, undeclared?.constraint);
+
+          const builtIn = Option.getOrUndefined(
+            yield* judged(client, statedInserts([indexReference("completionStatus")]), keys),
+          );
+          assert.isUndefined(builtIn, builtIn?.message);
+        }).pipe(Effect.scoped),
+    );
+
+    it.effect(
+      "refuses two choices of one kind in one document with one identifier, of one interaction or of two, and two hottexts of one document, and lets a gap and a gap text share one, by their keys",
+      () =>
+        // Oracle: PostgreSQL's UNIQUE, or the host's key check before it, of
+        // key(on(Choice, "document", "kind", "identifier")) and key(on(Hottext, "document",
+        // "identifier")): the choice classes' "This identifier must not be used by any other
+        // choice or item variable" (§5.132.1, §5.65.1), each class of its own kind, the document
+        // its scope (reading 104).
+        // Across classes the nine share one space (reading 104 as amended); that half is the
+        // `Choice_identifier_key` check on `ChoiceVariableName`, held by the name-rows test below.
+        // Bound: two simple choices named A of one interaction, and of two; two hottexts named H,
+        // one in a hottext interaction and one outside any; a gap and a gap text named A of one
+        // interaction, which these per-class keys let be (the rows are stray, so the deferred
+        // foreign keys refuse them at commit, and the keys are not among the laws).
+        Effect.gen(function* choiceKeys() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          for (const second of [
+            choiceOf(1, "A"),
+            { ...choiceOf(1, "A"), nearest: strayNode(98) },
+          ]) {
+            const pair = [choiceOf(0, "A"), second];
+            const choices = yield* db.workload.importWrite.apply(
+              importFacts({
+                Choice: pair,
+                ChoiceVariableName: [nameOf("A")],
+                Document: [strayDocument],
+              }),
               {},
             );
             assert.isTrue(
-              rejectedBy(choice, checkNamed("ChoiceVariableName", "Choice_not_variable")),
-              "choice",
+              rejectedBy(choices, keyOver("Choice", ["document", "kind", "identifier"])),
+              second.nearest,
             );
+          }
 
-            const hottext = yield* db.apply(
-              ChangeSet.empty(Author)
-                .insert(Document, [strayDocument])
-                .insert(ChoiceVariableName, [nameOf("A")])
-                .insert(Hottext, [hottextOf(0, { identifier: "A" })])
-                .insert(Declaration, [declared])
-                .insert(DeclarationIdentifier, [name]),
-              {},
-            );
-            assert.isTrue(
-              rejectedBy(hottext, checkNamed("ChoiceVariableName", "Choice_not_variable")),
-              "hottext",
-            );
+          const hottexts = yield* db.workload.importWrite.apply(
+            importFacts({
+              ChoiceVariableName: [nameOf("H")],
+              Document: [strayDocument],
+              Hottext: [hottextOf(0), hottextOf(1, { nearest: stray, nearestKind: "document" })],
+            }),
+            {},
+          );
+          assert.isTrue(rejectedBy(hottexts, keyOver("Hottext", ["document", "identifier"])));
 
-            const builtIn = yield* db.apply(
-              ChangeSet.empty(Author)
-                .insert(Document, [strayDocument])
-                .insert(ChoiceVariableName, [nameOf("numAttempts")])
-                .insert(Choice, [choiceOf(0, "numAttempts")]),
-              {},
-            );
-            assert.isTrue(
-              rejectedBy(builtIn, checkNamed("ChoiceVariableName", "Choice_not_variable")),
-              "numAttempts",
-            );
-          }),
-      );
+          const gaps = [choiceOf(0, "A", "qti-gap"), choiceOf(1, "A", "qti-gap-text")];
+          const classes = yield* db.workload.importWrite.apply(
+            importFacts({
+              Choice: gaps,
+              ChoiceVariableName: [nameOf("A")],
+              Document: [strayDocument],
+            }),
+            {},
+          );
+          assert.isFalse(
+            rejectedBy(classes, keyOver("Choice", ["document", "kind", "identifier"])),
+          );
+        }),
+    );
 
-      it.effect(
-        "accepts a name of one choice, of a declaration alone and a stimulus choice named as a built-in, and refuses a name of two choices, a choice and a hottext, two hottexts, in the document or placed, a name counted by both and one counted by none, by the row's own checks",
-        () =>
-          // Oracle: PostgreSQL, `ChoiceVariableName`'s CHECKs with every foreign key and family
-          // proof deferred and none set immediate: `Choice_not_variable` (reading 104) and
-          // `Choice_identifier_key` (reading 104 as amended: the nine classes share one space, so
-          // at most one choice or hottext bears a name in the document and one over its assembly)
-          // and `E1_derived` (some count above 0), 23514 on the check refused.
-          // Bound: one choice; one declaration; a stimulus's choice named numAttempts, accepted;
-          // two choices, a choice and a hottext, two hottexts, each in the document and placed, a
-          // hottext and a declaration of one name, and a name of no choice, hottext or declaration,
-          // refused; one placed choice, accepted.
-          Effect.gen(function* nameRows() {
-            const client = yield* loginSession;
+    it.effect(
+      "refuses a choice or a hottext named as a declaration of its document, or in an item as a built-in variable, by Choice not variable",
+      () =>
+        // Oracle: PostgreSQL, the `Choice_not_variable` check on `ChoiceVariableName` (reading 104:
+        // "This identifier must not be used by any other choice or item variable"), over the
+        // counts its three families draw from the rows the ChangeSet writes, a declaration's by its
+        // `DeclarationIdentifier`, whatever its cardinality spells (spec reading 159).
+        // Bound: a simple choice and an outcome declaration named A with no cardinality; a hottext
+        // and that declaration; a simple choice named numAttempts in an item.
+        Effect.gen(function* choiceNotVariable() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const declared = {
+            declarationKind: "qti-outcome-declaration",
+            document: stray,
+            kind: "qti-outcome-declaration",
+            nearest: stray,
+            node: strayNode(50),
+            parent: stray,
+            parentKind: "qti-assessment-item",
+            start: 2n,
+            version: "3.0.1",
+          } satisfies Addition<typeof Declaration>;
+          const name = {
+            baseTypes: 0n,
+            cardinalities: 0n,
+            declarationKind: "qti-outcome-declaration",
+            document: stray,
+            identifier: "A",
+            identifierLead: "",
+            identifierLexical: "A",
+            identifierTrail: "",
+            node: strayNode(50),
+            parentKind: "qti-assessment-item",
+          } satisfies Addition<typeof DeclarationIdentifier>;
 
-            for (const [label, row, refusedBy] of [
-              [
-                "one choice",
-                choiceName("A", "qti-assessment-item", {
-                  choices: 1n,
-                  declarations: 0n,
-                  hottexts: 0n,
-                }),
-                undefined,
-              ],
-              [
-                "one placed choice",
-                choiceName("A", "qti-assessment-item", {
-                  choices: 0n,
-                  declarations: 0n,
-                  hottexts: 0n,
-                  placedChoices: 1n,
-                }),
-                undefined,
-              ],
-              [
-                "two choices",
-                choiceName("A", "qti-assessment-item", {
-                  choices: 2n,
-                  declarations: 0n,
-                  hottexts: 0n,
-                }),
-                "Choice_identifier_key",
-              ],
-              [
-                "a choice and a hottext",
-                choiceName("A", "qti-assessment-item", {
-                  choices: 1n,
-                  declarations: 0n,
-                  hottexts: 1n,
-                }),
-                "Choice_identifier_key",
-              ],
-              [
-                "two hottexts",
-                choiceName("A", "qti-assessment-item", {
-                  choices: 0n,
-                  declarations: 0n,
-                  hottexts: 2n,
-                }),
-                "Choice_identifier_key",
-              ],
-              [
-                "two placed choices",
-                choiceName("A", "qti-assessment-item", {
-                  choices: 0n,
-                  declarations: 0n,
-                  hottexts: 0n,
-                  placedChoices: 2n,
-                }),
-                "Choice_identifier_key",
-              ],
-              [
-                "a placed choice and a placed hottext",
-                choiceName("A", "qti-assessment-item", {
-                  choices: 0n,
-                  declarations: 0n,
-                  hottexts: 0n,
-                  placedChoices: 1n,
-                  placedHottexts: 1n,
-                }),
-                "Choice_identifier_key",
-              ],
-              [
-                "two placed hottexts",
-                choiceName("A", "qti-assessment-item", {
-                  choices: 0n,
-                  declarations: 0n,
-                  hottexts: 0n,
-                  placedHottexts: 2n,
-                }),
-                "Choice_identifier_key",
-              ],
-              [
-                "a declaration alone",
-                choiceName("A", "qti-assessment-item", {
-                  choices: 0n,
-                  declarations: 1n,
-                  hottexts: 0n,
-                }),
-                undefined,
-              ],
-              [
-                "a stimulus choice named numAttempts",
-                choiceName("numAttempts", "qti-assessment-stimulus", {
-                  choices: 1n,
-                  declarations: 0n,
-                  hottexts: 0n,
-                }),
-                undefined,
-              ],
-              [
-                "a hottext and a declaration",
-                choiceName("A", "qti-assessment-item", {
-                  choices: 0n,
-                  declarations: 1n,
-                  hottexts: 1n,
-                }),
-                "Choice_not_variable",
-              ],
-              [
-                "no use",
-                choiceName("A", "qti-assessment-item", {
-                  choices: 0n,
-                  declarations: 0n,
-                  hottexts: 0n,
-                }),
-                "E1_derived",
-              ],
-            ] as const) {
-              const refused = Option.getOrUndefined(
-                yield* judged(client, statedInserts([row]), []),
+          const choice = yield* db.workload.importWrite.apply(
+            importFacts({
+              Choice: [choiceOf(0, "A")],
+              ChoiceVariableName: [nameOf("A")],
+              Declaration: [declared],
+              DeclarationIdentifier: [name],
+              Document: [strayDocument],
+            }),
+            {},
+          );
+          assert.isTrue(
+            rejectedBy(choice, checkNamed("ChoiceVariableName", "Choice_not_variable")),
+            "choice",
+          );
+
+          const hottext = yield* db.workload.importWrite.apply(
+            importFacts({
+              ChoiceVariableName: [nameOf("A")],
+              Declaration: [declared],
+              DeclarationIdentifier: [name],
+              Document: [strayDocument],
+              Hottext: [hottextOf(0, { identifier: "A" })],
+            }),
+            {},
+          );
+          assert.isTrue(
+            rejectedBy(hottext, checkNamed("ChoiceVariableName", "Choice_not_variable")),
+            "hottext",
+          );
+
+          const builtIn = yield* db.workload.importWrite.apply(
+            importFacts({
+              Choice: [choiceOf(0, "numAttempts")],
+              ChoiceVariableName: [nameOf("numAttempts")],
+              Document: [strayDocument],
+            }),
+            {},
+          );
+          assert.isTrue(
+            rejectedBy(builtIn, checkNamed("ChoiceVariableName", "Choice_not_variable")),
+            "numAttempts",
+          );
+        }),
+    );
+
+    it.effect(
+      "accepts a name of one choice, of a declaration alone and a stimulus choice named as a built-in, and refuses a name of two choices, a choice and a hottext, two hottexts, in the document or placed, a name counted by both and one counted by none, by the row's own checks",
+      () =>
+        // Oracle: PostgreSQL, `ChoiceVariableName`'s CHECKs with every foreign key and family
+        // proof deferred and none set immediate: `Choice_not_variable` (reading 104) and
+        // `Choice_identifier_key` (reading 104 as amended: the nine classes share one space, so
+        // at most one choice or hottext bears a name in the document and one over its assembly)
+        // and `E1_derived` (some count above 0), 23514 on the check refused.
+        // Bound: one choice; one declaration; a stimulus's choice named numAttempts, accepted;
+        // two choices, a choice and a hottext, two hottexts, each in the document and placed, a
+        // hottext and a declaration of one name, and a name of no choice, hottext or declaration,
+        // refused; one placed choice, accepted.
+        Effect.gen(function* nameRows() {
+          const client = yield* loginSession;
+
+          for (const [label, row, refusedBy] of [
+            [
+              "one choice",
+              choiceName("A", "qti-assessment-item", {
+                choices: 1n,
+                declarations: 0n,
+                hottexts: 0n,
+              }),
+              undefined,
+            ],
+            [
+              "one placed choice",
+              choiceName("A", "qti-assessment-item", {
+                choices: 0n,
+                declarations: 0n,
+                hottexts: 0n,
+                placedChoices: 1n,
+              }),
+              undefined,
+            ],
+            [
+              "two choices",
+              choiceName("A", "qti-assessment-item", {
+                choices: 2n,
+                declarations: 0n,
+                hottexts: 0n,
+              }),
+              "Choice_identifier_key",
+            ],
+            [
+              "a choice and a hottext",
+              choiceName("A", "qti-assessment-item", {
+                choices: 1n,
+                declarations: 0n,
+                hottexts: 1n,
+              }),
+              "Choice_identifier_key",
+            ],
+            [
+              "two hottexts",
+              choiceName("A", "qti-assessment-item", {
+                choices: 0n,
+                declarations: 0n,
+                hottexts: 2n,
+              }),
+              "Choice_identifier_key",
+            ],
+            [
+              "two placed choices",
+              choiceName("A", "qti-assessment-item", {
+                choices: 0n,
+                declarations: 0n,
+                hottexts: 0n,
+                placedChoices: 2n,
+              }),
+              "Choice_identifier_key",
+            ],
+            [
+              "a placed choice and a placed hottext",
+              choiceName("A", "qti-assessment-item", {
+                choices: 0n,
+                declarations: 0n,
+                hottexts: 0n,
+                placedChoices: 1n,
+                placedHottexts: 1n,
+              }),
+              "Choice_identifier_key",
+            ],
+            [
+              "two placed hottexts",
+              choiceName("A", "qti-assessment-item", {
+                choices: 0n,
+                declarations: 0n,
+                hottexts: 0n,
+                placedHottexts: 2n,
+              }),
+              "Choice_identifier_key",
+            ],
+            [
+              "a declaration alone",
+              choiceName("A", "qti-assessment-item", {
+                choices: 0n,
+                declarations: 1n,
+                hottexts: 0n,
+              }),
+              undefined,
+            ],
+            [
+              "a stimulus choice named numAttempts",
+              choiceName("numAttempts", "qti-assessment-stimulus", {
+                choices: 1n,
+                declarations: 0n,
+                hottexts: 0n,
+              }),
+              undefined,
+            ],
+            [
+              "a hottext and a declaration",
+              choiceName("A", "qti-assessment-item", {
+                choices: 0n,
+                declarations: 1n,
+                hottexts: 1n,
+              }),
+              "Choice_not_variable",
+            ],
+            [
+              "no use",
+              choiceName("A", "qti-assessment-item", {
+                choices: 0n,
+                declarations: 0n,
+                hottexts: 0n,
+              }),
+              "E1_derived",
+            ],
+          ] as const) {
+            const refused = Option.getOrUndefined(yield* judged(client, statedInserts([row]), []));
+
+            if (refusedBy === undefined) {
+              assert.isUndefined(refused, `${label}: ${refused?.message ?? ""}`);
+            } else {
+              assert.strictEqual(
+                refused?.code,
+                "23514",
+                `${label}: ${refused?.message ?? "accepted"}`,
               );
-
-              if (refusedBy === undefined) {
-                assert.isUndefined(refused, `${label}: ${refused?.message ?? ""}`);
-              } else {
-                assert.strictEqual(
-                  refused?.code,
-                  "23514",
-                  `${label}: ${refused?.message ?? "accepted"}`,
-                );
-                assert.strictEqual(
-                  refused?.constraint,
-                  checkConstraintOf(Qti, row.relation.name, refusedBy),
-                  label,
-                );
-              }
+              assert.strictEqual(
+                refused?.constraint,
+                checkConstraintOf(Qti, row.relation.name, refusedBy),
+                label,
+              );
             }
-          }).pipe(Effect.scoped),
-      );
+          }
+        }).pipe(Effect.scoped),
+    );
 
-      it.effect(
-        "refuses a hottext whose nearest kind is not its nearest node's, and a read attribute whose value keeps outer whitespace, by E1 derived",
-        () =>
-          // Oracle: PostgreSQL, the `E1_derived` checks: a hottext's nearest is the document node
-          // exactly when its nearest kind is `document`; a value is its lexical form collapsed.
-          // Bound: a hottext of a hottext interaction whose nearest is its document; a value " R".
-          Effect.gen(function* derived() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const hottext = yield* db.apply(
-              ChangeSet.empty(Author)
-                .insert(Document, [strayDocument])
-                .insert(ChoiceVariableName, [nameOf("H")])
-                .insert(Hottext, [hottextOf(0, { nearest: stray })]),
-              {},
-            );
-            assert.isTrue(rejectedBy(hottext, checkNamed("Hottext", "E1_derived")));
+    it.effect(
+      "refuses a hottext whose nearest kind is not its nearest node's, and a read attribute whose value keeps outer whitespace, by E1 derived",
+      () =>
+        // Oracle: PostgreSQL, the `E1_derived` checks: a hottext's nearest is the document node
+        // exactly when its nearest kind is `document`; a value is its lexical form collapsed.
+        // Bound: a hottext of a hottext interaction whose nearest is its document; a value " R".
+        Effect.gen(function* derived() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const hottext = yield* db.workload.importWrite.apply(
+            importFacts({
+              ChoiceVariableName: [nameOf("H")],
+              Document: [strayDocument],
+              Hottext: [hottextOf(0, { nearest: stray })],
+            }),
+            {},
+          );
+          assert.isTrue(rejectedBy(hottext, checkNamed("Hottext", "E1_derived")));
 
-            const read = yield* db.apply(
-              ChangeSet.empty(Author).insert(InteractionAttribute, [
+          const read = yield* db.workload.importWrite.apply(
+            importFacts({
+              InteractionAttribute: [
                 {
                   document: stray,
                   kind: "qti-choice-interaction",
@@ -1625,12 +1624,12 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   rootKind: "qti-assessment-item",
                   value: " R",
                 },
-              ]),
-              {},
-            );
-            assert.isTrue(rejectedBy(read, checkNamed("InteractionAttribute", "E1_derived")));
-          }),
-      );
-    },
-  );
+              ],
+            }),
+            {},
+          );
+          assert.isTrue(rejectedBy(read, checkNamed("InteractionAttribute", "E1_derived")));
+        }),
+    );
+  });
 });

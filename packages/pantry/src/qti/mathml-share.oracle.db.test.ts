@@ -31,7 +31,7 @@ import type { FixtureSpec } from "#pantry/test/fixtures.ts";
 import { materializeMathml, mathmlNegatives, mathmlSpecOf } from "#pantry/test/fixtures.mathml.ts";
 import type { MathmlFixtureName } from "#pantry/test/fixtures.mathml.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import type { Rule } from "#pantry/import/rules.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
@@ -183,7 +183,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the share laws, judged by PostgreSQL", (it) => {
       for (const { alone, dir, law, name, rule } of refusals) {
         it.effect(`refuses ${name} under ${law}, as the law oracle predicts`, () =>

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { constraintNamesOf } from "@bjornpagen/grizzle";
-import type { Law } from "@bjornpagen/grizzle";
+import type { AnySchema, Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Formatter, Function as Fn, Schema } from "effect";
@@ -16,7 +16,7 @@ import {
 } from "#pantry/cli/output.ts";
 import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
-import type { RefusalWitness } from "#pantry/import/refusal.ts";
+import type { RefusalLaw, RefusalWitness } from "#pantry/import/refusal.ts";
 import { readerOrigin, RefusedKind, WitnessKind } from "#pantry/package/refusal-origin.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
@@ -221,17 +221,22 @@ const constraintNamesOnce = Fn.memoize(constraintNamesOf);
 
 /**
  * The timeout, in milliseconds, of this file's tests that read a check's installed name: a hang
- * guard, never a budget. A test compiles `Qti`'s law model at most once, for the oracle
- * ({@link constraintNamesOnce}), and only where no test before it in the run has: the refusal reads
- * a check's installed name from the committed law-name dictionary (`#pantry/vocab/law-names.json`)
- * and compiles nothing. It was measured when the refusal compiled the model as well, so the
- * slowest was two compiles and the import, and grizzle puts one compile of a large schema at 15 to
- * 45 s (`e3975d35`). 18.1 s was its slowest such test on 2026-11-08, at a load no run recorded.
- * Measured 2026-11-09: 20.2 s at a load average of 62 to 76, its slowest such test ("under --json
- * prints one error object with the rules, each law and its sources"), the file alone at nice 19 on
- * one worker; it holds over three times two of grizzle's slowest compiles.
+ * guard, never a budget. A test compiles `Qti`'s law model at most once, for the oracle ({@link
+ * constraintNamesOnce}), and only where no test before it in the run has: the refusal it plants
+ * carries the installed name grizzle's outcome would, that same lookup's, and the importer reads it
+ * off the refusing object and compiles nothing. It was measured when the refusal compiled the model
+ * as well, so the slowest was two compiles and the import, and grizzle puts one compile of a large
+ * schema at 15 to 45 s (`e3975d35`). 18.1 s was its slowest such test on 2026-11-08, at a load no
+ * run recorded. Measured 2026-11-09: 20.2 s at a load average of 62 to 76, its slowest such test
+ * ("under --json prints one error object with the rules, each law and its sources"), the file alone
+ * at nice 19 on one worker; it holds over three times two of grizzle's slowest compiles.
  */
 const lawModelTestTimeoutMs = 300_000;
+
+/**
+ * A check law, as grizzle names one.
+ */
+type CheckLaw = Extract<Law, { readonly kind: "check" }>;
 
 /**
  * A law the table does not hold: a check of no law, which `Qti` does not state, so it has no
@@ -240,12 +245,37 @@ const lawModelTestTimeoutMs = 300_000;
 const unownedLaw = { kind: "check", name: "not_a_law", relation: "Node" } as const satisfies Law;
 
 /**
+ * A check as a refusal by a write statement carries it, which names no installed object. A check
+ * needs no LawId: the importer names it by its own name.
+ *
+ * @param law - The check.
+ * @returns The refused law.
+ */
+const refusedByStatement = (law: CheckLaw): RefusalLaw => ({
+  by: { kind: "statement" },
+  id: "",
+  law,
+});
+
+/**
+ * A check a schema states as PostgreSQL's refusal of it carries it: refused by its table's
+ * constraint, under the name the schema installs it as ({@link constraintNamesOnce}).
+ *
+ * @param schema - The schema that states the check.
+ * @param law - The check.
+ * @returns The refused law.
+ */
+const refusedByConstraint = (schema: AnySchema, law: CheckLaw): RefusalLaw => ({
+  by: { kind: "constraint", name: constraintNamesOnce(schema)(law) },
+  id: "",
+  law,
+});
+
+/**
  * The one law of the table this file's refusals name, with a law the table does not hold beside it:
  * AL1's admission check, and {@link unownedLaw}.
  */
-const refusedLaws = (
-  checkName: string,
-): readonly [Extract<Law, { readonly kind: "check" }>, typeof unownedLaw] => [
+const refusedLaws = (checkName: string): readonly [CheckLaw, typeof unownedLaw] => [
   { kind: "check", name: checkName, relation: "Attribute" },
   unownedLaw,
 ];
@@ -266,10 +296,11 @@ const refusing = Command.make(
       () => import("#pantry/import/refusal.ts"),
     );
     const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
+    const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
     const [first, second] = refusedLaws(checkNameOf("AL1 admission"));
 
     return yield* refusalOf(
-      { kind: "some", laws: [first, second] },
+      { kind: "some", laws: [refusedByConstraint(Qti, first), refusedByStatement(second)] },
       { kind: "unreported" },
       grammar,
     );
@@ -390,7 +421,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
         for (const name of lawNames) {
           const law = { kind: "check", name: checkNameOf(name), relation: "Unstated" } as const;
           const refusal = refusalOf(
-            { kind: "every", laws: [law] },
+            { kind: "every", laws: [refusedByStatement(law)] },
             { kind: "unreported" },
             grammar,
           );
@@ -500,7 +531,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
               help: helpByOrigin[witness],
               printed: [source],
               refusal: refusalOf(
-                kind === "some" ? { kind, laws: [law, unownedLaw] } : { kind, laws: [law] },
+                kind === "some"
+                  ? { kind, laws: [refusedByConstraint(Qti, law), refusedByStatement(unownedLaw)] }
+                  : { kind, laws: [refusedByConstraint(Qti, law)] },
                 witnessesByKind[witness],
                 grammar,
               ),

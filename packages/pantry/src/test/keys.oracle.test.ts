@@ -27,7 +27,6 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Predicate, Schema } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
-import { ruleOfLaw } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { keyText, keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
@@ -38,7 +37,7 @@ import type { Datum } from "#pantry/test/predicates.ts";
 import { generatedFields, judgedSideOf } from "#pantry/test/host-judge.ts";
 import { identityOf, keyCopies, keyTextFields } from "#pantry/test/key-copies.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
-import { statedLaws } from "#pantry/test/law-namer.ts";
+import { schemaRuleOfLaw, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -836,7 +835,7 @@ const databaseRules = (refused: ReadonlySet<string>): ReadonlySet<string> =>
 
       return statedLaws().flatMap(([law]) =>
         law.kind === "contained" && law.to.relation === relation
-          ? Option.toArray(ruleOfLaw(law))
+          ? Option.toArray(schemaRuleOfLaw(law))
           : [],
       );
     }),

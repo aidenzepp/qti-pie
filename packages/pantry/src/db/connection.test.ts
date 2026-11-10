@@ -96,7 +96,9 @@ const loginRole = roleNameOf(rootLogin);
 /**
  * The root login's connection, built from the settings a case provides.
  */
-const rootConnection = loginConnection.pipe(Effect.map((connectionOf) => connectionOf(rootLogin)));
+const rootConnection = loginConnection.pipe(
+  Effect.map((connectionOf) => connectionOf(roleNameOf(rootLogin))),
+);
 
 /**
  * The migration identity's password, as `scripts/db.sh migrate` exports it.
@@ -897,7 +899,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
 
                 const provider = ConfigProvider.layer(ConfigProvider.fromUnknown(environment));
                 const connectionOf = yield* loginConnection.pipe(Effect.provide(provider));
-                const read = yield* passwordText(connectionOf(each).password).pipe(
+                const read = yield* passwordText(connectionOf(roleNameOf(each)).password).pipe(
                   Effect.result,
                   Effect.provide(provider),
                 );

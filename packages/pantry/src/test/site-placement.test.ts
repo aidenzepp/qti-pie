@@ -26,7 +26,6 @@ import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import type { Addition } from "@bjornpagen/grizzle";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
-import { rulesOf } from "#pantry/import/refusal.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
@@ -38,6 +37,7 @@ import type { Datum } from "#pantry/test/predicates.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { checkOf } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
+import { schemaRulesOf } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -382,7 +382,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
           const program = yield* readProgram(dir);
           const { broken } = judge(hostRowsOf(program.inputs), laws);
           const [first, ...rest] = broken.map(({ law }) => law);
-          const rule = first === undefined ? Option.none() : Arr.head(rulesOf([first, ...rest]));
+          const rule =
+            first === undefined ? Option.none() : Arr.head(schemaRulesOf([first, ...rest]));
 
           assert.deepStrictEqual(
             verdict.kind === "refused" ? [...verdict.rules] : [],

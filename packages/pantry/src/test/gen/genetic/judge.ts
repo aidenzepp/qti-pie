@@ -62,6 +62,7 @@ import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { boundBroken, judge, ruleOf } from "#pantry/test/oracle.ts";
 import type { Breach, LawName, Judgment as OracleJudgment, Laws } from "#pantry/test/oracle.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
+import { refusedOf } from "#pantry/test/law-names.ts";
 
 /**
  * One way the import and the oracle disagree on a package:
@@ -1018,11 +1019,20 @@ const loneRefusal = (
   }
 
   const rule = ruleOf(lone);
-  const laws = [
-    { kind: "check", name: lone.replaceAll(" ", "_"), relation: "Node" } satisfies Law,
-    ...host.brokenLaws,
-  ] as const;
-  const refused = refusalOf({ kind: "every", laws }, unreported, grammar);
+  const planted = {
+    kind: "check",
+    name: lone.replaceAll(" ", "_"),
+    relation: "Node",
+  } satisfies Law;
+  const laws = [planted, ...host.brokenLaws] as const;
+  const refused = refusalOf(
+    {
+      kind: "every",
+      laws: [refusedOf(planted), ...host.brokenLaws.map((law) => refusedOf(law))],
+    },
+    unreported,
+    grammar,
+  );
   const importRule = Option.getOrElse(Arr.head(refused.rules), () => "none");
 
   return importRule === rule && witnessOf(refused) === unreported.kind
