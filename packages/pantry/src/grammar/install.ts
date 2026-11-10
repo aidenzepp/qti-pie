@@ -637,34 +637,6 @@ export const SymbolMember = closed.relation(
 );
 
 /**
- * Index a generator's rows by (version, parent), refusing a family with two of them: the law over
- * the rows names one position per family (N7).
- *
- * @param name - The relation the rows are stated as, for the defect's message.
- * @param rows - The generator's rows.
- * @returns Each family's row, by `<version> <parent>`.
- * @throws {Error} When two rows name one family, which no vocabulary states today.
- */
-const onePerFamily = <R extends { readonly parent: string; readonly version: string }>(
-  name: string,
-  rows: readonly R[],
-): ReadonlyMap<string, R> => {
-  const held = new Map<string, R>();
-  for (const row of rows) {
-    const family = `${row.version} ${row.parent}`;
-    if (held.has(family)) {
-      throw new Error(
-        `${name} reads one position per (version, parent), and the grammar states two under ${row.parent} in ${row.version}. State the law per position, or merge the positions into one.`,
-      );
-    }
-
-    held.set(family, row);
-  }
-
-  return held;
-};
-
-/**
  * Whether a `Counted` row bounds its position to at most one child: a reading's cap (spec reading
  * 130), which {@link Capped} states, where every other row is a count {@link CountedOf} states.
  *
@@ -673,19 +645,6 @@ const onePerFamily = <R extends { readonly parent: string; readonly version: str
  */
 const atMostOnce = (row: { readonly max: number; readonly min: number }): boolean =>
   row.min === 0 && row.max === 1;
-
-/**
- * Today's `Counted` rows but the caps, one per family: {@link onePerFamily}.
- */
-const countedByFamily = onePerFamily(
-  "CountedOf",
-  grammar.content.counted.rows.filter((row) => !atMostOnce(row)),
-);
-
-/**
- * Today's `ChildBarredBy` rows, one per family: {@link onePerFamily}.
- */
-const barredByFamily = onePerFamily("BarredOf", grammar.barredBy.rows);
 
 /**
  * Convert a count bound to a natural, an unbounded maximum being `int8Max`, the bound that bounds
@@ -731,7 +690,9 @@ const barringSlot = (barring: {
  * `CountedOf`: (version, parent) → (position, min, max), the one position of a family whose count
  * is a law beside its automaton, with its bounds (C25: `qti-simple-match-set` under
  * `qti-match-interaction`). A family whose count is no such law has no row, and N7 Counted holds of
- * it through `CountedOf.has` (README, "Closed relations").
+ * it through `CountedOf.has` (README, "Closed relations"). Its rows are the `Counted` rows but the
+ * caps ({@link Capped}), one per family: a family with two would state two rows at one key, which
+ * grizzle refuses when it declares the relation.
  */
 export const CountedOf = closed.relation(
   "CountedOf",
@@ -743,13 +704,15 @@ export const CountedOf = closed.relation(
     version: closedId(SchemaVersion),
   },
   ["version", "parent"],
-  [...countedByFamily.values()].map(({ max, min, parent, position, version }) => ({
-    max: naturalOf(max),
-    min: naturalOf(min),
-    parent: memberOf(grammar.kinds.nodeKind, parent),
-    position,
-    version,
-  })),
+  grammar.content.counted.rows
+    .filter((row) => !atMostOnce(row))
+    .map(({ max, min, parent, position, version }) => ({
+      max: naturalOf(max),
+      min: naturalOf(min),
+      parent: memberOf(grammar.kinds.nodeKind, parent),
+      position,
+      version,
+    })),
 );
 
 /**
@@ -799,7 +762,7 @@ export const BarredOf = closed.relation(
     version: closedId(SchemaVersion),
   },
   ["version", "parent"],
-  [...barredByFamily.values()].map(({ name, parent, position, version }) => ({
+  grammar.barredBy.rows.map(({ name, parent, position, version }) => ({
     parent: memberOf(grammar.kinds.nodeKind, parent),
     position,
     slot: barringSlot({ name, parent, version }),
@@ -914,63 +877,38 @@ const governorAt: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * State `GoverningOf`'s rows, on every (version, kind, governs) a law admits an element's named
- * governing type at:
+ * A `GoverningOf` row: the triple's governor in the attribute grammar, else the kind itself, which
+ * governs a triple the grammar gives no governor.
  *
- * - Each `XsiType` row, governed by the grammar's governor of the triple, else by the kind itself;
- * - Each foreign kind under every type, by its simple governor where the grammar holds one, else by
- *   the kind.
- *
- * A node no named type governs reads no row: its governor is its kind's own ({@link KindGovernor}).
- *
- * @returns The rows, each (version, kind, governs) once.
- * @throws {Error} When the two sources give one triple two governors, which none does today.
+ * @param version - The version.
+ * @param kind - The element's kind.
+ * @param governs - The named type that governs it.
+ * @returns The row.
  */
-const governingRows = () => {
-  const rows = new Map<
-    string,
-    {
-      readonly governor: string;
-      readonly governs: string;
-      readonly kind: Kind;
-      readonly version: Version;
-    }
-  >();
-  const add = (version: Version, kind: Kind, governs: string) => {
-    const at = `${version} ${kind} ${governs}`;
-    const row = {
-      // A triple the attribute grammar gives no governor is governed by its kind.
-      governor: Option.match(Option.fromNullishOr(governorAt.get(at)), {
-        onNone: (): string => kind,
-        onSome: (governor) => governor,
-      }),
-      governs,
-      kind,
-      version,
-    };
-    const held = rows.get(at);
-    if (held !== undefined && held.governor !== row.governor) {
-      throw new Error(
-        `GoverningOf states two governors of ${kind} under ${governs} in ${version}: ${held.governor} and ${row.governor}. Give the triple one governor in the attribute grammar.`,
-      );
-    }
+const governing = (version: Version, kind: Kind, governs: string) => ({
+  governor: governorAt.get(`${version} ${kind} ${governs}`) ?? kind,
+  governs,
+  kind,
+  version,
+});
 
-    rows.set(at, row);
-  };
-  for (const { kind, type, version } of grammar.xsi.xsiType.rows) {
-    add(version, memberOf(grammar.kinds.nodeKind, kind), type);
-  }
-
-  for (const version of grammar.kinds.versions.handles) {
-    for (const kind of openElementClasses) {
-      for (const type of grammar.xsi.typeName.handles) {
-        add(version, kind, type);
-      }
-    }
-  }
-
-  return [...rows.values()];
-};
+/**
+ * `GoverningOf`'s rows, on every (version, kind, governs) a law admits an element's named governing
+ * type at: each `XsiType` row, and each foreign kind under every type. The two are disjoint, since
+ * a foreign kind has no content model and so no `XsiType` row, and each is a set by its key, so
+ * every triple has one row. A node no named type governs reads no row: its governor is its kind's
+ * own ({@link KindGovernor}).
+ */
+const governingRows = [
+  ...grammar.xsi.xsiType.rows.map(({ kind, type, version }) =>
+    governing(version, memberOf(grammar.kinds.nodeKind, kind), type),
+  ),
+  ...grammar.kinds.versions.handles.flatMap((version) =>
+    openElementClasses.flatMap((kind) =>
+      grammar.xsi.typeName.handles.map((type) => governing(version, kind, type)),
+    ),
+  ),
+];
 
 /**
  * `GoverningOf`: (version, kind, governs) → governor, what an element of the kind under the named
@@ -988,7 +926,7 @@ export const GoverningOf = closed.relation(
     version: closedId(SchemaVersion),
   },
   ["version", "kind", "governs"],
-  governingRows(),
+  governingRows,
 );
 
 /**
