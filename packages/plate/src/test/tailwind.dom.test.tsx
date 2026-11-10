@@ -17,6 +17,11 @@
  * Tailwind finds the class names it compiles by scanning the project's files, so the literal class
  * strings below (`p-4`, `mt-2` and `p-0`) are what the compiled sheet holds.
  *
+ * The last row pins a limit, not a goal: Tailwind puts its utilities in `@layer utilities` and
+ * plate's sheet is unlayered, and an unlayered declaration beats a layered one whatever its
+ * specificity, so a plate rule wins over a utility on the same property. The cascade-layer policy
+ * is an open ruling (issue #284).
+ *
  * It runs only inside the engine's page, under Vitest's browser mode in the in-page project of
  * `vite.browser.config.ts` (`test:browser`), and never in Node. Every case sits under a `describe`
  * named by the engine (`server.browser`), as in `src/test/page.dom.test.ts`, and every title
@@ -180,14 +185,15 @@ describe(server.browser, () => {
   );
 
   it.effect(
-    "[W0-TAILWIND] plate's rules weigh nothing, so a utility wins over a plate rule by specificity",
+    "[W0-TAILWIND] a plate rule wins over a utility while the sheet is unlayered (#284)",
     () =>
-      Effect.gen(function* utilityWins() {
+      Effect.gen(function* plateWinsUnlayered() {
         yield* sheet;
 
         const item = yield* element("div", { class: "p-0", "data-slot": "item" });
 
-        assert.strictEqual(computed(item, "padding"), "0px");
+        // This assertion flips to "0px" once the sheet or the import is layered (#284).
+        assert.strictEqual(computed(item, "padding"), "3px");
       }),
   );
 });
