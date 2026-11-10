@@ -30,7 +30,7 @@ import {
 } from "#plate/model/expression.ts";
 import type { FamilyRules, FloatOrRef, IntegerOrRef, KindRule } from "#plate/model/expression.ts";
 import type { FamilyReaders, ReaderSpec } from "#plate/model/expressions/read.ts";
-import { isModelled, parseElementText } from "#plate/model/values.ts";
+import { parseElementText } from "#plate/model/values.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
 
 /**
@@ -279,8 +279,8 @@ const nullReader: ReaderSpec<"null"> = {
 
 /**
  * The reader spec of `qti-base-value`: its `base-type` and its text, typed as that base type, a
- * duration as its seconds. `file`, the base type the value model does not hold, is the mark
- * `base-type="file"` at its path, and builds nothing.
+ * duration as its seconds and a `file` as the name its text is, with no bytes (`parseLexical` in
+ * `#plate/model/values.ts`). The value model holds every base type, so none is a mark here.
  *
  * Its read fails with `value-type` for text outside the base type's lexical space, at the
  * element's path. A document the validator refuses first can also fail it with
@@ -298,10 +298,6 @@ const baseValueReader: ReaderSpec<"base-value"> = {
             element: element.local,
           }),
         );
-      }
-
-      if (!isModelled(baseType.value)) {
-        return yield* context.unread(element, `base-type="${baseType.value}"`);
       }
 
       const single = yield* typed(
