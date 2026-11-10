@@ -98,6 +98,8 @@ export {
   useTimer,
 } from "#plate/react/test-provider.tsx";
 
+export { createTestServer } from "#plate/react/test-server.tsx";
+
 export { TextEntry } from "#plate/react/text-entry.tsx";
 
 export { Upload } from "#plate/react/upload.tsx";
