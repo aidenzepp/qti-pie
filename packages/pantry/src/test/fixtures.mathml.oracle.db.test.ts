@@ -11,7 +11,6 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { compareWithRecord } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import {
   materializeMathml,
@@ -20,7 +19,8 @@ import {
 } from "#pantry/test/fixtures.mathml.ts";
 import { judge, ruleOf } from "#pantry/test/oracle.ts";
 import { grammar, laws } from "#pantry/test/probe.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 describe.skipIf(!hasLease)(
   "fixtures.mathml.db.test.ts, on the lease",
@@ -28,7 +28,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the MathML fixtures through the importer", (it) => {
       for (const { name, rule } of mathmlNegatives) {
         it.effect(`refuses ${name} under ${rule}`, () =>
@@ -48,7 +47,7 @@ describe.skipIf(!hasLease)(
 
             assert.instanceOf(failure, ImportRefused);
 
-            const given = failure instanceof ImportRefused ? failure.rule : undefined;
+            const given = failure instanceof ImportRefused ? failure.rules[0] : undefined;
 
             if (rules.size > 1) {
               assert.isTrue(

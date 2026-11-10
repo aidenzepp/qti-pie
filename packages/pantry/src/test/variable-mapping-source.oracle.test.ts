@@ -72,10 +72,19 @@ const o3Of = (attributes: string): PackageEntries =>
   ]);
 
 /**
- * Gr-6's fixed package: an item ref that names an item, whose one declaration is the template `T`,
- * holding one mapping that writes its target alone.
+ * Gr-6's fixed entry, the fixed class `oracle-only-law: Variable mapping source`.
  */
-const gr6 = knownEntries(fixed["oracle-only-law: Variable mapping source"]);
+const gr6Entry = fixed.find(
+  ({ signature }) =>
+    signature.kind === "oracle-only-law" && signature.law === "Variable mapping source",
+);
+
+/**
+ * Gr-6's fixed package: an item ref that names an item, whose one declaration is the template `T`,
+ * holding one mapping that writes its target alone; none where the fixed table holds no such
+ * entry, which the test refuses.
+ */
+const gr6: PackageEntries = gr6Entry === undefined ? new Map() : knownEntries(gr6Entry);
 
 /**
  * Gr-6's fixed package with its mapping's attributes replaced by those given.
