@@ -459,12 +459,25 @@ export const recordsClassOf = (
 };
 
 /**
- * Whether a disagreement is of a class one of `signatures` records, under any stated limit or
- * under none: its plain signature is recorded. A fixed entry's cause shows again under a limit too.
+ * Drop a signature's stated limit.
  *
- * @param signatures - The plain classes recorded.
+ * @param signature - The signature.
+ * @returns The signature of its class without the limit it falls under.
+ */
+const withoutLimit = (signature: Signature): Signature => {
+  const { limit: _limit, ...plain } = signature;
+
+  return plain;
+};
+
+/**
+ * Whether a disagreement is of a class one of `signatures` records, under any stated limit or
+ * under none: the plain signatures of both are one class. A fixed entry's cause shows again under a
+ * limit too, and an entry keyed by a limit records its plain class all the same.
+ *
+ * @param signatures - The classes recorded, each with or without a stated limit.
  * @param disagreement - The disagreement.
- * @returns Whether its plain class is among them.
+ * @returns Whether its plain class is among their plain classes.
  */
 export const recordsPlainClassOf = (
   signatures: readonly Signature[],
@@ -472,7 +485,7 @@ export const recordsPlainClassOf = (
 ): boolean => {
   const signature = plainSignatureOf(disagreement);
 
-  return signatures.some((recorded) => sameSignature(recorded, signature));
+  return signatures.some((recorded) => sameSignature(withoutLimit(recorded), signature));
 };
 
 /**

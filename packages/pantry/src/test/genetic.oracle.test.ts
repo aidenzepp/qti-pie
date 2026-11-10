@@ -63,7 +63,7 @@ import {
   shownDisagreement,
   shownSignature,
 } from "#pantry/test/gen/genetic/judge.ts";
-import type { Feature, Signature } from "#pantry/test/gen/genetic/judge.ts";
+import type { Disagreement, Feature, Signature } from "#pantry/test/gen/genetic/judge.ts";
 import { fixed, known, knownEntries } from "#pantry/test/gen/genetic/known.ts";
 import { plantedCases } from "#pantry/test/gen/genetic/planted.ts";
 import {
@@ -120,6 +120,104 @@ const knownList = [
   ...known.map((entry) => ({ entry, shows: true })),
   ...fixed.map((entry) => ({ entry, shows: false })),
 ];
+
+/**
+ * Whether a disagreement shows an entry's class as the replay below reads it: a known entry's as it
+ * is keyed, stated limit included, and a fixed entry's under its plain signature, so under any
+ * stated limit or none, whether or not the entry is keyed by one.
+ *
+ * @param signature - The entry's signature.
+ * @param shows - Whether the entry is a known one, which must show its class, and not a fixed one.
+ * @param disagreement - The disagreement.
+ * @returns Whether the disagreement is of the entry's class.
+ */
+const showsClass = (signature: Signature, shows: boolean, disagreement: Disagreement): boolean =>
+  shows
+    ? recordsClassOf([signature], disagreement)
+    : recordsPlainClassOf([signature], disagreement);
+
+/**
+ * The disagreement of a signature's class: one whose signature {@link signatureOf} reads as it,
+ * with the stated limit it carries, and whose other fields are empty.
+ *
+ * @param signature - The signature.
+ * @returns A disagreement of its class.
+ */
+const disagreementOf = (signature: Signature): Disagreement => {
+  const limited = signature.limit === undefined ? {} : { limit: signature.limit };
+  switch (signature.kind) {
+    case "import-died":
+    case "oracle-died": {
+      return { detail: signature.detail, kind: signature.kind, ...limited };
+    }
+    case "dangling-uuid": {
+      return {
+        field: signature.field,
+        kind: signature.kind,
+        relation: signature.relation,
+        value: "",
+        ...limited,
+      };
+    }
+    case "codec-rule": {
+      return {
+        importRule: signature.importRule,
+        kind: signature.kind,
+        oracleRule: signature.oracleRule,
+        ...limited,
+      };
+    }
+    case "codec-import-only": {
+      return {
+        importRule: signature.importRule,
+        kind: signature.kind,
+        oracleRules: "",
+        ...limited,
+      };
+    }
+    case "codec-oracle-only": {
+      return { kind: signature.kind, oracleRule: signature.oracleRule, ...limited };
+    }
+    case "import-only-law": {
+      return {
+        broken: signature.law,
+        kind: signature.kind,
+        law: signature.law.kind,
+        rule: "",
+        witness: "",
+        ...limited,
+      };
+    }
+    case "oracle-only-law": {
+      return { keys: "", kind: signature.kind, law: signature.law, rule: "", ...limited };
+    }
+    case "noise-moved": {
+      return {
+        after: "",
+        before: "",
+        kind: signature.kind,
+        noise: signature.noise,
+        salt: 0,
+        side: signature.side,
+        ...limited,
+      };
+    }
+    case "lone-refusal": {
+      return {
+        importRule: signature.importRule,
+        kind: signature.kind,
+        law: signature.law,
+        laws: signature.law,
+        rule: "",
+        witness: signature.witness,
+        ...limited,
+      };
+    }
+    default: {
+      return signature satisfies never;
+    }
+  }
+};
 
 /**
  * A manifest whose one resource holds `child`, which the import's rows bound only where the
@@ -374,9 +472,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     // plain signature or under any stated limit.
                     assert.strictEqual(
                       disagreements.some((disagreement) =>
-                        shows
-                          ? recordsClassOf([entry.signature], disagreement)
-                          : recordsPlainClassOf([entry.signature], disagreement),
+                        showsClass(entry.signature, shows, disagreement),
                       ),
                       shows,
                       shows
@@ -437,6 +533,58 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           }).pipe(Effect.scoped),
         ),
       testTimeoutMs,
+    );
+
+    it.effect(
+      "replays a fixed entry by its plain class, whatever stated limit its key carries",
+      () =>
+        // Oracle: the replay's two readings of a signature, `recordsClassOf` as keyed and
+        // `recordsPlainClassOf` by plain class. Bound: a fixed signature keyed by a limit, against
+        // its class under that limit, under another and under none, and against another law.
+        Effect.sync(() => {
+          const plain: Signature = { kind: "oracle-only-law", law: "Key text bound" };
+          const keyed: Signature = { ...plain, limit: "an inclusion cycle" };
+
+          assert.isTrue(showsClass(keyed, false, disagreementOf(keyed)), "under its own limit");
+          assert.isTrue(
+            showsClass(keyed, false, disagreementOf({ ...plain, limit: "a forbidden ancestor" })),
+            "under another limit",
+          );
+          assert.isTrue(showsClass(keyed, false, disagreementOf(plain)), "under no limit");
+          assert.isFalse(
+            showsClass(
+              keyed,
+              false,
+              disagreementOf({
+                kind: "oracle-only-law",
+                law: "Section identifier target",
+                limit: "an inclusion cycle",
+              }),
+            ),
+            "another law under its limit",
+          );
+          assert.isFalse(
+            showsClass(keyed, true, disagreementOf(plain)),
+            "a known entry is keyed by its limit",
+          );
+        }),
+    );
+
+    it.effect("replays each known and fixed entry's own class as a class it records", () =>
+      // Oracle: the replay's reading of a signature against the disagreement of that signature
+      // (`disagreementOf`), which an entry must recognize, or its replay can never fail. Bound:
+      // every known and fixed entry.
+      Effect.sync(() => {
+        assert.deepStrictEqual(
+          knownList.flatMap(({ entry, shows }) =>
+            showsClass(entry.signature, shows, disagreementOf(entry.signature))
+              ? []
+              : [shownSignature(entry.signature)],
+          ),
+          [],
+          "the replay does not recognize these entries' own class, so a known entry is always stale and a fixed one guards nothing",
+        );
+      }),
     );
 
     it.effect("keys no signature in both the known and the fixed table", () =>
