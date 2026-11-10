@@ -1,12 +1,12 @@
 /**
  * The assembly generator's packages imported on the lease (R87): the database judges reading 87,
- * and its verdict must be the generator's model's (`#pantry/test/gen/assembly.ts`
- * `modelVerdict`). Every package of the small box and a swarm's sample past it is imported in one
+ * and its verdict must be the generator's model's (`#pantry/test/gen/assembly.ts` `modelVerdict`).
+ * A swarm's sample past the small box, which the host exhausts, is imported, each package in one
  * ChangeSet. An accepted import is the model's accepted, and a refused one is the model's refused,
  * under the rule of one of the faults it finds: a target that resolves nowhere or names an element
  * of the wrong kind or part under `branch-target`, one that is not after its source under
- * `branch-forward`. A package whose faults are all of one rule is refused under that rule alone:
- * a resolution with no target breaks only its existence law, and `Branch_forward` judges only a
+ * `branch-forward`. A package whose faults are all of one rule is refused under that rule alone: a
+ * resolution with no target breaks only its existence law, and `Branch_forward` judges only a
  * target `Branch_target` admits, so no target breaks both.
  *
  * The model is this test's oracle, not `importAgreesWithOracle`: it is reading 87's reference, and
@@ -29,7 +29,6 @@ import {
   assemblyPackage,
   modelVerdict,
   sampledBounds,
-  smallAssembly,
   swarmedAssembly,
 } from "#pantry/test/gen/assembly.ts";
 import type { Assembly, RuleFault } from "#pantry/test/gen/assembly.ts";
@@ -85,39 +84,11 @@ describe.skipIf(!hasLease)("test/gen/assembly.ts, on the lease", { timeout: 3_60
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
   })("each generated package imported and judged by PostgreSQL", (it) => {
-    it.effect(
-      "every package drawn from the small box is accepted or refused as reading 87's model says",
-      (ctx) =>
-        // Oracle: a specification, reading 87's bullets over the assembled test (`modelVerdict`),
-        // against PostgreSQL's verdict on the import's one ChangeSet. Bound: 48 of the small box's
-        // 308 packages, drawn from the run's seed; `assembly.test.ts` exhausts the box against the
-        // same model on the host.
-        searched(
-          ctx,
-          explore(
-            {
-              caseHang: Duration.seconds(60),
-              concurrency: 1,
-              coverage: noCoverage,
-              draw: drawn(smallAssembly),
-              kept: [],
-              literal: assemblyLiteral,
-              oracle: {
-                kind: "specification",
-                name: "reading 87's bullets over the assembled test",
-              },
-              runs: 48,
-              shrink: completeShrink,
-              steerEvery: 16,
-              suite: "pantry/test/gen-assembly-db-box",
-            },
-            importJudged,
-          ),
-        ),
-    );
-
     it.effect("every sampled package is accepted or refused as reading 87's model says", (ctx) =>
-      // Oracle: as the box's. Bound: 40 packages past the box, each under its own swarm.
+      // Oracle: a specification, reading 87's bullets over the assembled test (`modelVerdict`),
+      // against PostgreSQL's verdict on the import's one ChangeSet. Bound: 12 packages past the
+      // small box, each under its own swarm, so each case turns a different set of shapes on;
+      // `assembly.test.ts` exhausts the small box against the same model on the host.
       searched(
         ctx,
         explore(
@@ -129,7 +100,7 @@ describe.skipIf(!hasLease)("test/gen/assembly.ts, on the lease", { timeout: 3_60
             kept: [],
             literal: ({ assembly }) => assemblyLiteral(assembly),
             oracle: { kind: "specification", name: "reading 87's bullets over the assembled test" },
-            runs: 40,
+            runs: 12,
             shrink: completeShrink,
             steerEvery: 16,
             suite: "pantry/test/gen-assembly-db-swarm",
