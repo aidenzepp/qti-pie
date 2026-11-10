@@ -260,6 +260,15 @@ describe.skipIf(!hasLease)(
                   : [];
               const said = outcome._tag === "Failure" ? outcome.failure.message : "accepted";
 
+              if (identifier || title) {
+                assert.isTrue(
+                  outcome._tag === "Failure" && outcome.failure instanceof ImportRefused,
+                  `${label}: expected an ImportRefused, got ${said}`,
+                );
+              } else {
+                assert.strictEqual(outcome._tag, "Success", `${label}: ${said}`);
+              }
+
               assert.strictEqual(rules.includes("lom-identifier"), identifier, `${label}: ${said}`);
               assert.strictEqual(rules.includes("lom-title"), title, `${label}: ${said}`);
             }
