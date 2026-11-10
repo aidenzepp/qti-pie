@@ -712,7 +712,8 @@ const dependencyTargetsOf = (
 ): ReadonlyMap<string, Addition<typeof DependencyTarget>> => {
   const firsts = new Map<string, NodeId>();
   const owns = new Set<string>();
-  for (const { identifier, node } of resourceIds) {
+  for (const { lexical, node } of resourceIds) {
+    const identifier = collapse(lexical);
     if (!firsts.has(identifier)) {
       firsts.set(identifier, node);
     }
@@ -721,13 +722,15 @@ const dependencyTargetsOf = (
   }
 
   return new Map(
-    [...dependencies].flatMap(({ node, package: pkg, ref, resource }) =>
-      Option.toArray(
+    [...dependencies].flatMap(({ lexical, node, package: pkg, resource }) => {
+      const ref = collapse(lexical);
+
+      return Option.toArray(
         owns.has(headingKey([resource, ref]))
           ? Option.some(resource)
           : Option.fromUndefinedOr(firsts.get(ref)),
-      ).map((target) => [node, { node, package: pkg, ref, resource, target }] as const),
-    ),
+      ).map((target) => [node, { node, package: pkg, ref, resource, target }] as const);
+    }),
   );
 };
 
@@ -790,10 +793,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
   for (const node of rows.nodes) {
     if (node.kind === "cp:manifest") {
       for (const lexical of Option.toArray(valueOf(node, "identifier"))) {
-        const identifier = collapse(lexical);
         manifests.set(node.id, {
           ...tupleOf(node),
-          identifier,
           lexical,
           package: ids.package,
           parent: node.parent,
@@ -804,8 +805,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
     if (node.kind === "cp:resource") {
       resources.set(node.id, { ...tupleOf(node), package: ids.package, parent: node.parent });
       for (const lexical of Option.toArray(valueOf(node, "identifier"))) {
-        const identifier = collapse(lexical);
-        resourceIds.set(node.id, { identifier, lexical, node: node.id, package: ids.package });
+        resourceIds.set(node.id, { lexical, node: node.id, package: ids.package });
       }
 
       for (const typeLexical of Option.toArray(valueOf(node, "type"))) {
@@ -860,7 +860,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
         ...tupleOf(node),
         lexical,
         package: ids.package,
-        ref: collapse(lexical),
         resource: node.parent,
       });
     }

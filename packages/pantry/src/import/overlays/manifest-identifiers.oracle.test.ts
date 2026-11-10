@@ -32,6 +32,7 @@ import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
+import { collapse } from "#pantry/grammar/domains.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
@@ -367,7 +368,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 ];
                 assert.strictEqual(inputs.ManifestId.size, input.manifest ? 1 : 0, manifest);
                 assert.sameMembers(
-                  [...inputs.ResourceId.values()].map(({ identifier }) => identifier),
+                  [...inputs.ResourceId.values()].map(({ lexical }) => collapse(lexical)),
                   resources.flatMap((identifier) => Option.toArray(identifier)),
                   `${manifest}: a ResourceId a written identifier`,
                 );

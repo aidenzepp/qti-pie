@@ -66,6 +66,7 @@ import {
   drawn,
   fin,
   fold,
+  generated,
   key,
   mirrors,
   Monoid,
@@ -129,7 +130,7 @@ const directedKinds = ["m:mrow", "m:mstyle"] as const;
  * Its fields are declared in key order, which the lint's `sort-keys` holds and which is column
  * order.
  */
-export const MathAction = relation(
+export const MathAction = relation.generated(
   "MathAction",
   {
     elementChildren: natural,
@@ -137,10 +138,12 @@ export const MathAction = relation(
     node: uuid,
     selection: natural,
     selectionLexical: keyText,
-    selectionText: keyText,
     selectionWritten: pg.boolean,
   },
   ["node"],
+  (m) => ({
+    selectionText: generated(keyText, Compute.cast(Compute.collapse(m.selectionLexical), keyText)),
+  }),
 );
 
 /**
@@ -373,7 +376,6 @@ export const alignLaws = [
   contained(on(writtenSelections, "node"), on(selectionAttributes, "node")),
   check("E1_derived", MathAction, (m) =>
     m.and(
-      m.eq(m.selectionText, Compute.collapse(m.selectionLexical)),
       m.or(
         m.and(m.eq(m.selectionWritten, false), m.eq(m.selectionLexical, ""), m.eq(m.selection, 1n)),
         m.and(

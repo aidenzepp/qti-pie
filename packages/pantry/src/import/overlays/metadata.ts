@@ -14,7 +14,6 @@
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
-import { collapse } from "#pantry/grammar/domains.ts";
 import type { DocumentType } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
@@ -194,16 +193,6 @@ export const piecesOf = (text: string): Pieces => {
 
   return { lead, token: rest.slice(0, rest.length - trail.length), trail };
 };
-
-/**
- * Read a text in `xs:normalizedString`'s value space, as `Compute.replaceWhitespace` does: each
- * tab, line feed and carriage return a space.
- *
- * @param text - The text.
- * @returns The text with every such character replaced.
- * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, whiteSpace}
- */
-export const replaceWhitespace = (text: string): string => text.replaceAll(/[\t\n\r]/gu, " ");
 
 /**
  * Fold a text's ASCII capitals to small letters, as `Compute.lowerAscii` does, every other
@@ -449,9 +438,7 @@ const stringRowsOf = (tree: Tree): StringRows => {
       strings.flatMap((node) => {
         const language = tree.valueOf(node, "language");
 
-        return language === undefined
-          ? []
-          : [[node.id, { language, languageTag: lowerAscii(language), node: node.id }] as const];
+        return language === undefined ? [] : [[node.id, { language, node: node.id }] as const];
       }),
     ),
     strings: new Map(
@@ -482,9 +469,7 @@ const titleStringRowsOf = (
 
       const text = tree.stringValueOf(node.id);
 
-      return [
-        [node.id, { ...tree.tupleOf(node), text, textValue: replaceWhitespace(text) }] as const,
-      ];
+      return [[node.id, { ...tree.tupleOf(node), text }] as const];
     }),
   );
 
@@ -525,15 +510,6 @@ const termRowsOf = (tree: Tree, kind: "lom:source" | "lom:value"): ReadonlyMap<s
 
   return rows;
 };
-
-/**
- * Read an `xml:lang` as `lom-title` compares it: its value collapsed (an `xs:language`) and
- * case-folded (`Compute.lowerAscii`).
- *
- * @param lang - The attribute's lexical form.
- * @returns The compared language.
- */
-const langTagOf = (lang: string): string => lowerAscii(collapse(lang));
 
 /**
  * A document's root rows, each by its node's id: an item's or test's {@link AssessmentObject}, and
@@ -578,18 +554,14 @@ const objectRowsOf = (tree: Tree, document: NodeId): RootRows => {
       roots.flatMap((node) => {
         const lang = tree.valueOf(node, "xml:lang");
 
-        return lang === undefined
-          ? []
-          : [[node.id, { lang, langTag: langTagOf(lang), node: node.id }] as const];
+        return lang === undefined ? [] : [[node.id, { lang, node: node.id }] as const];
       }),
     ),
     ObjectTitle: new Map(
       roots.flatMap((node) => {
         const title = tree.valueOf(node, "title");
 
-        return title === undefined
-          ? []
-          : [[node.id, { document, node: node.id, title, titleValue: replaceWhitespace(title) }]];
+        return title === undefined ? [] : [[node.id, { document, node: node.id, title }]];
       }),
     ),
   };

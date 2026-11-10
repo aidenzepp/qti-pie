@@ -371,10 +371,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                       ),
                       LomStringLanguage: new Map([
                         ...inputs.LomStringLanguage,
-                        [
-                          lomString.node,
-                          { language: "en", languageTag: "en", node: lomString.node },
-                        ],
+                        [lomString.node, { language: "en", node: lomString.node }],
                       ]),
                     };
                     const broken = newlyBroken(planted, inputs, minted);

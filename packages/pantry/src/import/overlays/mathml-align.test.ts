@@ -482,7 +482,6 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
       node: idOf(2),
       selection: 2n,
       selectionLexical: "2",
-      selectionText: "2",
       selectionWritten: true,
     });
     assert.deepStrictEqual(keysOf(chosenRows.MathAlignScope), []);
@@ -497,7 +496,6 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
       node: idOf(2),
       selection: 1n,
       selectionLexical: "",
-      selectionText: "",
       selectionWritten: false,
     });
   });
@@ -505,7 +503,6 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
   it("reads a selection by its collapsed form: spaces drop, a non-integer is 0", () => {
     // Nodes: 0 document, 1 math, 2 maction, 3 mi.
     assert.strictEqual(readSelection(" 3 ")?.selection, 3n);
-    assert.strictEqual(readSelection(" 3 ")?.selectionText, "3");
     assert.strictEqual(readSelection(" 3 ")?.selectionLexical, " 3 ");
     assert.strictEqual(readSelection("x")?.selection, 0n);
     assert.strictEqual(readSelection("1.5")?.selection, 0n);

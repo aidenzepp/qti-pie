@@ -802,7 +802,7 @@ const dependencyRefsOf = (dependencies: readonly string[]) =>
       }),
       ids,
     ).Dependency.values(),
-  ].map(({ lexical, ref }) => ({ lexical, ref }));
+  ].map(({ lexical }) => ({ lexical }));
 
 describe("import/overlays/package.ts", () => {
   it.effect("writes each overlay's rows as the walk of the manifest's tree names them", (ctx) =>
@@ -911,11 +911,11 @@ describe("import/overlays/package.ts", () => {
     // written (decision 457 (3): an `xs:IDREF` is a whiteSpace `collapse` type).
     assert.deepStrictEqual(dependencyRefsOf(["1x"]), [], "a digit first");
     assert.deepStrictEqual(dependencyRefsOf(["x𝔸"]), [], "a character no NCName holds");
-    assert.deepStrictEqual(dependencyRefsOf(["r1"]), [{ lexical: "r1", ref: "r1" }], "an NCName");
+    assert.deepStrictEqual(dependencyRefsOf(["r1"]), [{ lexical: "r1" }], "an NCName");
     assert.deepStrictEqual(
       dependencyRefsOf([" r1"]),
-      [{ lexical: " r1", ref: "r1" }],
-      "an NCName once collapsed, its ref collapsed and its lexical form as written",
+      [{ lexical: " r1" }],
+      "an NCName once collapsed, its lexical form as written (the database derives its ref)",
     );
   });
 });

@@ -298,12 +298,16 @@ export const LomString = relation(
 
 /**
  * A `lom:string`'s `language`, keyed by the string's node: its lexical form as written, and
- * `languageTag`, that form case-folded (`Compute.lowerAscii`), as `lom-title` compares it.
+ * `languageTag`, that form case-folded (`Compute.lowerAscii`), as `lom-title` compares it, which
+ * the database derives within the form's own byte bound.
  */
-export const LomStringLanguage = relation(
+export const LomStringLanguage = relation.generated(
   "LomStringLanguage",
-  { language: keyText, languageTag: keyText, node: uuid },
+  { language: keyText, node: uuid },
   ["node"],
+  (s) => ({
+    languageTag: generated(keyText, Compute.cast(Compute.lowerAscii(s.language), keyText)),
+  }),
 );
 
 /**
@@ -318,10 +322,10 @@ export const lomStringLanguages = counted(
  * A string of a LOM title, keyed by its `lom:string` node: its {@link nodeRef} tuple (its parent the
  * title), its string value `text`, `Node.stringValue` folded by `copiedTitleText`
  * (`#pantry/qti/node.ts`), and `textValue`, the text in `xs:normalizedString`'s value space
- * (`Compute.replaceWhitespace`), as `lom-title` compares it. Its language is its
- * {@link LomString}'s, which `lom-title` joins by the node.
+ * (`Compute.replaceWhitespace`), as `lom-title` compares it, which the database derives. Its
+ * language is its {@link LomString}'s, which `lom-title` joins by the node.
  */
-export const LomTitleString = relation(
+export const LomTitleString = relation.generated(
   "LomTitleString",
   {
     document: uuid,
@@ -331,10 +335,12 @@ export const LomTitleString = relation(
     parent: uuid,
     start: natural,
     text: keyText,
-    textValue: keyText,
     version: closedId(SchemaVersion),
   },
   ["node"],
+  (s) => ({
+    textValue: generated(keyText, Compute.cast(Compute.replaceWhitespace(s.text), keyText)),
+  }),
 );
 
 /**
@@ -380,26 +386,37 @@ export const ObjectIdentifier = relation(
 
 /**
  * An assessment object's `title`, keyed by its root: its document, the title as written, and
- * `titleValue`, its value as an `xs:normalizedString` (`Compute.replaceWhitespace`). A root that
- * writes no `title` has no row, and AL3 refuses it.
+ * `titleValue`, its value as an `xs:normalizedString` (`Compute.replaceWhitespace`), which the
+ * database derives. A root that writes no `title` has no row, and AL3 refuses it.
  */
-export const ObjectTitle = relation(
+export const ObjectTitle = relation.generated(
   "ObjectTitle",
-  { document: uuid, node: uuid, title: keyText, titleValue: keyText },
+  { document: uuid, node: uuid, title: keyText },
   ["node"],
+  (o) => ({
+    titleValue: generated(keyText, Compute.cast(Compute.replaceWhitespace(o.title), keyText)),
+  }),
 );
 
 /**
  * An assessment object's `xml:lang`, keyed by its root: its lexical form as written, and `langTag`,
  * its value collapsed (an `xs:language`) and case-folded (`Compute.lowerAscii`), as `lom-title`
- * compares it, which reads it as a language where it is a tag ({@link languageTagPattern}). A root
- * has a row exactly where it writes the attribute: copied from it here, and back into every
- * `xml:lang` (`#pantry/qti/identity.ts`), whose key over `node` the way back reads, since this
- * selection states none of its own.
+ * compares it, which reads it as a language where it is a tag ({@link languageTagPattern}), and
+ * which the database derives. A root has a row exactly where it writes the attribute: copied from
+ * it here, and back into every `xml:lang` (`#pantry/qti/identity.ts`), whose key over `node` the
+ * way back reads, since this selection states none of its own.
  */
-export const ObjectLang = relation("ObjectLang", { lang: keyText, langTag: keyText, node: uuid }, [
-  "node",
-]);
+export const ObjectLang = relation.generated(
+  "ObjectLang",
+  { lang: keyText, node: uuid },
+  ["node"],
+  (o) => ({
+    langTag: generated(
+      keyText,
+      Compute.cast(Compute.lowerAscii(Compute.collapse(o.lang)), keyText),
+    ),
+  }),
+);
 
 /**
  * The text type of a usage statistic's day, `lexical(date)`: the language `DateDType` states,
@@ -818,9 +835,6 @@ export const metadataLawsByName = {
       on(LomStringLanguage, "node", "language"),
     ),
     contained(on(LomStringLanguage, "node"), on(stringLanguageAttributes, "node")),
-    check("E1_derived", LomStringLanguage, (s) =>
-      s.eq(s.languageTag, Compute.lowerAscii(s.language)),
-    ),
     contained(
       on(
         select(LomString, (s) => s.eq(s.languages, 1n)),
@@ -838,9 +852,7 @@ export const metadataLawsByName = {
     ),
     contained(on(titleStringNodes, "id", "stringValue"), on(LomTitleString, "node", "text")),
     contained(on(LomTitleString, "parent"), on(LomTitle, "node")),
-    check("E1_derived", LomTitleString, (s) =>
-      s.and(s.eq(s.kind, "lom:string"), s.eq(s.textValue, Compute.replaceWhitespace(s.text))),
-    ),
+    check("E1_derived", LomTitleString, (s) => s.eq(s.kind, "lom:string")),
     contained(
       on(AssessmentObject, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
@@ -863,12 +875,8 @@ export const metadataLawsByName = {
     contained(on(ObjectTitle, "node"), on(objectTitles, "node")),
     contained(on(ObjectTitle, "node", "document"), on(AssessmentObject, "node", "document")),
     key(on(ObjectTitle, "document")),
-    check("E1_derived", ObjectTitle, (o) => o.eq(o.titleValue, Compute.replaceWhitespace(o.title))),
     contained(on(objectLangAttributes, "node", "lexical"), on(ObjectLang, "node", "lang")),
     contained(on(ObjectLang, "node"), on(AssessmentObject, "node")),
-    check("E1_derived", ObjectLang, (o) =>
-      o.eq(o.langTag, Compute.lowerAscii(Compute.collapse(o.lang))),
-    ),
     contained(
       on(resourceTypeValues, "id", "parent", "stringValue"),
       on(LomResourceType, "term", "node", "text"),

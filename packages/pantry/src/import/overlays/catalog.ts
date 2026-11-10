@@ -192,9 +192,9 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
       version: node.version,
     };
     if (isSupport) {
-      supports.set(id, { ...tuple, catalog: node.parent, support: value });
+      supports.set(id, { ...tuple, catalog: node.parent });
     } else {
-      defaults.set(id, { ...tuple, card: node.parent, value });
+      defaults.set(id, { ...tuple, card: node.parent });
     }
   }
 

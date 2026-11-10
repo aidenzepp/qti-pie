@@ -146,16 +146,15 @@ export const entryFamily = ordered(on(Entry, "package", "at"), fin(Package, "ent
 /**
  * The manifest's identifier, keyed by the `cp:manifest` node, where the manifest writes one: its
  * {@link nodeRef} tuple, its package, its `identifier` as written (`lexical`, C18's copy) and that
- * form collapsed (`identifier`), its value, which the query `ManifestIdSpace`
- * (`#pantry/qti/queries.ts`) holds beside the resources' identifiers. An `xs:ID` is a whiteSpace
- * `collapse` type, so `" M"` and `M` are one identifier (decision 457 (3); IMS Content Packaging
- * 1.2, §6.11.4, leaves the value to the binding).
+ * form collapsed (`identifier`), its value, which the database derives, which the query
+ * `ManifestIdSpace` (`#pantry/qti/queries.ts`) holds beside the resources' identifiers. An `xs:ID`
+ * is a whiteSpace `collapse` type, so `" M"` and `M` are one identifier (decision 457 (3); IMS
+ * Content Packaging 1.2, §6.11.4, leaves the value to the binding).
  */
-export const ManifestId = relation(
+export const ManifestId = relation.generated(
   "ManifestId",
   {
     document: uuid,
-    identifier: keyText,
     kind: closedId(NodeKind),
     lexical: keyText,
     nearest: uuid,
@@ -166,6 +165,7 @@ export const ManifestId = relation(
     version: closedId(SchemaVersion),
   },
   ["node"],
+  (m) => ({ identifier: generated(keyText, Compute.cast(Compute.collapse(m.lexical), keyText)) }),
 );
 
 /**
@@ -191,15 +191,16 @@ export const Resource = relation(
 /**
  * A resource's identifier, keyed by the `cp:resource` node, where the resource writes one: its
  * package, its `identifier` as written (`lexical`, C18's copy) and that form collapsed
- * (`identifier`), its value, which the package's resources hold once each ("DocumentId key") and a
- * dependency's collapsed `identifierref` names ("Dependency target"). An `xs:ID` is a whiteSpace
- * `collapse` type, so `" r1 "` and `r1` are one identifier (decision 457 (3); IMS Content
- * Packaging 1.2, §6.11.4).
+ * (`identifier`), which the database derives, its value, which the package's resources hold once
+ * each ("DocumentId key") and a dependency's collapsed `identifierref` names ("Dependency target").
+ * An `xs:ID` is a whiteSpace `collapse` type, so `" r1 "` and `r1` are one identifier (decision 457
+ * (3); IMS Content Packaging 1.2, §6.11.4).
  */
-export const ResourceId = relation(
+export const ResourceId = relation.generated(
   "ResourceId",
-  { identifier: keyText, lexical: keyText, node: uuid, package: uuid },
+  { lexical: keyText, node: uuid, package: uuid },
   ["node"],
+  (r) => ({ identifier: generated(keyText, Compute.cast(Compute.collapse(r.lexical), keyText)) }),
 );
 
 /**
@@ -388,7 +389,7 @@ export const ResourceFile = relation(
  * other, absent or no NCName, names no resource, and AL3 or its value domain refuses it alone
  * (spec reading 152, decision 457 (2)).
  */
-export const Dependency = relation(
+export const Dependency = relation.generated(
   "Dependency",
   {
     document: uuid,
@@ -397,12 +398,12 @@ export const Dependency = relation(
     nearest: uuid,
     node: uuid,
     package: uuid,
-    ref: keyText,
     resource: uuid,
     start: natural,
     version: closedId(SchemaVersion),
   },
   ["node"],
+  (d) => ({ ref: generated(keyText, Compute.cast(Compute.collapse(d.lexical), keyText)) }),
 );
 
 /**
@@ -789,9 +790,6 @@ export const packageLawsByName = {
       ),
       on(ResourceDocument, "node"),
     ),
-    check("E1_derived", ManifestId, (m) => m.eq(m.identifier, Compute.collapse(m.lexical))),
-    check("E1_derived", ResourceId, (r) => r.eq(r.identifier, Compute.collapse(r.lexical))),
-    check("E1_derived", Dependency, (d) => d.eq(d.ref, Compute.collapse(d.lexical))),
     check("E1_derived", ResourceTyped, (r) =>
       r.eq(ResourceTypeLexical.at("lexical", r.type), r.typeLexical),
     ),

@@ -854,10 +854,7 @@ describe("qti/metadata.ts, the rows an overlay row stands on", { timeout: testTi
             ...inputs.LomTitleString,
             [strayString, { ...titleString, node: strayString, parent: stray }],
           ]),
-          ObjectLang: new Map([
-            ...inputs.ObjectLang,
-            [stray, { lang: "en", langTag: "en", node: stray }],
-          ]),
+          ObjectLang: new Map([...inputs.ObjectLang, [stray, { lang: "en", node: stray }]]),
         };
         const imported = brokenBy(inputs);
         const breaks = brokenBy(planted);

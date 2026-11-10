@@ -52,6 +52,7 @@ import {
   counted,
   drawn,
   fin,
+  generated,
   key,
   natural,
   on,
@@ -78,9 +79,10 @@ import { TestDocument } from "#pantry/qti/tests.ts";
 
 /**
  * A `qti-card`'s `support`, keyed by the card's node: its {@link nodeRef} tuple, with `catalog` its
- * parent, the `support` as written (`lexical`, C18's copy) and that form collapsed (`support`).
+ * parent, the `support` as written (`lexical`, C18's copy) and that form collapsed (`support`),
+ * which the database derives.
  */
-export const CardSupport = relation(
+export const CardSupport = relation.generated(
   "CardSupport",
   {
     catalog: uuid,
@@ -90,18 +92,18 @@ export const CardSupport = relation(
     nearest: uuid,
     node: uuid,
     start: natural,
-    support: keyText,
     version: closedId(SchemaVersion),
   },
   ["node"],
+  (c) => ({ support: generated(keyText, Compute.cast(Compute.collapse(c.lexical), keyText)) }),
 );
 
 /**
  * A `qti-card-entry` that designates itself the default of its card, keyed by the entry's node: its
  * {@link nodeRef} tuple, with `card` its parent, the `default` as written (`lexical`, C18's copy)
- * and that form collapsed (`value`), `true` or `1`.
+ * and that form collapsed (`value`), which the database derives, `true` or `1`.
  */
-export const DefaultEntry = relation(
+export const DefaultEntry = relation.generated(
   "DefaultEntry",
   {
     card: uuid,
@@ -111,15 +113,17 @@ export const DefaultEntry = relation(
     nearest: uuid,
     node: uuid,
     start: natural,
-    value: keyText,
     version: closedId(SchemaVersion),
   },
   ["node"],
+  (e) => ({ value: generated(keyText, Compute.cast(Compute.collapse(e.lexical), keyText)) }),
 );
 
 /**
  * One `data-catalog-idref`, keyed by its element's node: its document, the attribute as written
- * (`lexical`, C18's copy) and that form collapsed (`token`), the id of the catalog it names.
+ * (`lexical`, C18's copy) and that form collapsed (`token`), the id of the catalog it names. The
+ * importer writes `token`, which "E1 derived" proves, since a family's group is fields its member's
+ * writer writes (grizzle refuses a generated one), and {@link catalogTargetFamily} groups by it.
  */
 export const CatalogRef = relation(
   "CatalogRef",
@@ -332,12 +336,8 @@ export const catalogLawsByName = {
     contained(on(CardSupport, "node"), on(supportAttributes, "node")),
     contained(on(designatingDefaults, "node", "lexical"), on(DefaultEntry, "node", "lexical")),
     contained(on(DefaultEntry, "node"), on(designatingDefaults, "node")),
-    check("E1_derived", CardSupport, (c) => c.eq(c.support, Compute.collapse(c.lexical))),
     check("E1_derived", DefaultEntry, (e) =>
-      e.and(
-        e.eq(e.value, Compute.collapse(e.lexical)),
-        e.or(e.eq(e.value, booleanTrue[0]), e.eq(e.value, booleanTrue[1])),
-      ),
+      e.or(e.eq(e.value, booleanTrue[0]), e.eq(e.value, booleanTrue[1])),
     ),
     contained(
       on(referenceAttributes, "node", "document", "lexical"),

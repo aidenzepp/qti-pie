@@ -289,7 +289,6 @@ const actionOf = (reading: Reading, node: NodeRow<Composed>): Addition<typeof Ma
     node: node.id,
     selection: selectionOf(lexical),
     selectionLexical: lexical ?? "",
-    selectionText: collapse(lexical ?? ""),
     selectionWritten: lexical !== undefined,
   };
 };

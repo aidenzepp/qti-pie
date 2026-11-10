@@ -12,6 +12,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
+import { collapse } from "#pantry/grammar/domains.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { placedCatalogRowsOf, rowsOf } from "#pantry/import/overlays/catalog.ts";
 import type { CatalogRows } from "#pantry/import/overlays/catalog.ts";
@@ -88,14 +89,14 @@ const named = (tree: XdmDocument<Composed>, rows: CatalogRows) => {
   return {
     defaults: [...rows.DefaultEntry.values()]
       .map(
-        ({ card, lexical, node, value }) =>
-          `${nameOf(node)} > ${nameOf(card)}: ${JSON.stringify(lexical)} = ${value}`,
+        ({ card, lexical, node }) =>
+          `${nameOf(node)} > ${nameOf(card)}: ${JSON.stringify(lexical)} = ${collapse(lexical)}`,
       )
       .toSorted(),
     supports: [...rows.CardSupport.values()]
       .map(
-        ({ catalog, lexical, node, support }) =>
-          `${nameOf(node)} > ${nameOf(catalog)}: ${JSON.stringify(lexical)} = ${support}`,
+        ({ catalog, lexical, node }) =>
+          `${nameOf(node)} > ${nameOf(catalog)}: ${JSON.stringify(lexical)} = ${collapse(lexical)}`,
       )
       .toSorted(),
   };
@@ -159,7 +160,6 @@ describe("import/overlays/catalog.ts, rowsOf", () => {
           nearest: flat.document.node,
           node: card?.id,
           start: card?.start,
-          support: "spoken",
           version: "3.0.1",
         });
         assert.deepStrictEqual(own.DefaultEntry.get(entry?.id ?? ""), {
@@ -170,7 +170,6 @@ describe("import/overlays/catalog.ts, rowsOf", () => {
           nearest: flat.document.node,
           node: entry?.id,
           start: entry?.start,
-          value: "true",
           version: "3.0.1",
         });
         assert.strictEqual(placed.CardSupport.get(card?.id ?? "")?.nearest, idOf(9999));

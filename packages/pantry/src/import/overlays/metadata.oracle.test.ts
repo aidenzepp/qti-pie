@@ -354,6 +354,37 @@ const identifierRefusals = (built: Built): ReadonlySet<string> => {
 };
 
 /**
+ * Collapse a text as XML Schema's `collapse` whitespace class does.
+ *
+ * @param text - The text.
+ * @returns Its collapsed value.
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, whiteSpace}
+ */
+const collapse = (text: string): string =>
+  text
+    .replaceAll(/[\t\n\r]/gu, " ")
+    .replaceAll(/ +/gu, " ")
+    .replace(/^ /u, "")
+    .replace(/ $/u, "");
+
+/**
+ * Normalize a text as XML Schema's `replace` whitespace class does, `xs:normalizedString`'s.
+ *
+ * @param text - The text.
+ * @returns Its value: each tab, line feed and carriage return a space.
+ */
+const normalize = (text: string): string => text.replaceAll(/[\t\n\r]/gu, " ");
+
+/**
+ * Read a language tag without regard to case (RFC 5646 §2.1.1): its ASCII capitals as small
+ * letters, a tag's subtags being ASCII (§2.1).
+ *
+ * @param tag - The tag.
+ * @returns The folded tag.
+ */
+const asciiFolded = (tag: string): string => tag.replaceAll(/[A-Z]/gu, (c) => c.toLowerCase());
+
+/**
  * Decide whether a title string is in its document's language, as `MatchedTitle`'s two rules read
  * it: the root writes no `xml:lang`; or it writes one, and the string has its `LomString`,
  * and the root's form states no language, the string has none, or the two are one tag.
@@ -366,11 +397,13 @@ const identifierRefusals = (built: Built): ReadonlySet<string> => {
 const inLanguage = (built: Built, root: NodeId, string: Addition<typeof LomTitleString>): boolean =>
   Option.match(Option.fromUndefinedOr(built.langs.get(root)), {
     onNone: () => true,
-    onSome: ({ langTag }) =>
+    onSome: ({ lang }) =>
       Option.exists(
         Option.fromUndefinedOr(built.manifest.LomString.get(string.node)),
         ({ languageTag }) =>
-          !languageTagForm.test(langTag) || languageTag === noLanguage || languageTag === langTag,
+          !languageTagForm.test(asciiFolded(collapse(lang))) ||
+          languageTag === noLanguage ||
+          languageTag === asciiFolded(collapse(lang)),
       ),
   });
 
@@ -394,8 +427,8 @@ const titleRefusals = (built: Built): ReadonlySet<string> =>
           Option.contains(stringRecordOf(built, string), record) &&
           Option.exists(
             title,
-            ({ node: root, titleValue }) =>
-              titleValue === string.textValue && inLanguage(built, root, string),
+            ({ node: root, title: text }) =>
+              normalize(text) === normalize(string.text) && inLanguage(built, root, string),
           ),
       );
 
@@ -703,63 +736,21 @@ const filesOf = (sketch: PackageSketch): readonly PackageFile[] => {
 };
 
 /**
- * Collapse a text as XML Schema's `collapse` whitespace class does.
- *
- * @param text - The text.
- * @returns Its collapsed value.
- * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, whiteSpace}
- */
-const collapse = (text: string): string =>
-  text
-    .replaceAll(/[\t\n\r]/gu, " ")
-    .replaceAll(/ +/gu, " ")
-    .replace(/^ /u, "")
-    .replace(/ $/u, "");
-
-/**
- * Normalize a text as XML Schema's `replace` whitespace class does, `xs:normalizedString`'s.
- *
- * @param text - The text.
- * @returns Its value: each tab, line feed and carriage return a space.
- */
-const normalize = (text: string): string => text.replaceAll(/[\t\n\r]/gu, " ");
-
-/**
- * Read a language tag without regard to case (RFC 5646 §2.1.1): its ASCII capitals as small
- * letters, a tag's subtags being ASCII (§2.1).
- *
- * @param tag - The tag.
- * @returns The folded tag.
- */
-const asciiFolded = (tag: string): string => tag.replaceAll(/[A-Z]/gu, (c) => c.toLowerCase());
-
-/**
- * Judge `E1_derived`'s compared forms over a package's rows as PostgreSQL will: each object's
- * title's `titleValue` is its title with its whitespace replaced; each `xml:lang`'s `langTag` is
- * its form collapsed and case-folded; and each title string's `textValue` is its text so read and
- * its `LomString`'s `languageTag` its `language` case-folded, or `noLanguage` where it writes
- * none.
+ * Judge the importer's one compared form left over a package's rows as PostgreSQL will: each title
+ * string's `LomString` `languageTag` is its `language` case-folded, or `noLanguage` where it writes
+ * none. The other compared forms, a title's `titleValue`, an `xml:lang`'s `langTag`, a title
+ * string's `textValue` and a language's `languageTag`, are generated fields the database derives.
  *
  * @param built - The package's rows.
  * @returns The rows whose compared forms differ, by id.
  */
-const comparedFormBreaches = (built: Built): readonly string[] => [
-  ...[...built.titles.values()].flatMap((title) =>
-    title.titleValue === normalize(title.title) ? [] : [title.node],
-  ),
-  ...[...built.langs.values()].flatMap((lang) =>
-    lang.langTag === asciiFolded(collapse(lang.lang)) ? [] : [lang.node],
-  ),
-  ...[...built.manifest.LomTitleString.values()].flatMap((string) => {
+const comparedFormBreaches = (built: Built): readonly string[] =>
+  [...built.manifest.LomTitleString.values()].flatMap((string) => {
     const language = built.manifest.LomStringLanguage.get(string.node);
     const tag = language === undefined ? noLanguage : asciiFolded(language.language);
 
-    return string.textValue === normalize(string.text) &&
-      built.manifest.LomString.get(string.node)?.languageTag === tag
-      ? []
-      : [string.node];
-  }),
-];
+    return built.manifest.LomString.get(string.node)?.languageTag === tag ? [] : [string.node];
+  });
 
 /**
  * The records of a sketch that name a document: those of an item or test resource with an `href`,
