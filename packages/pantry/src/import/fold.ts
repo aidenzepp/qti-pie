@@ -291,6 +291,8 @@ export const foldAt = (folds: Folds, node: NodeId): Folded => {
  * @throws {Error} When a node comes before its parent, which `flatten`'s document order rules out:
  *   a defect of the caller, never of the document.
  */
+// GRIZZLE-PENDING: Q11, Q13: folds stepped by a closed relation, and a generated term over an
+// accumulated field, let the database draw state, ancestry and nearest, and this host fold goes.
 export const foldOf = (nodes: readonly NodeRow<Composed>[], context: DocumentContext): Folds => {
   const folded = new Map<NodeId, { readonly held: Held; readonly under: Under }>();
 

@@ -209,6 +209,7 @@ export interface ReferencePieces {
  * @param href - The href, as written.
  * @returns Its pieces.
  */
+// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
 export const hrefPiecesOf = (href: string): HrefPieces => {
   const at = href.search(/[?#]/u);
 
@@ -224,6 +225,7 @@ export const hrefPiecesOf = (href: string): HrefPieces => {
  * @param lexical - The attribute's lexical form.
  * @returns `lead ‖ target ‖ params ‖ trail`, the lexical form.
  */
+// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
 export const referencePiecesOf = (lexical: string): ReferencePieces => {
   // Both patterns match at some index of any text, the second at its end at the latest, so
   // neither search gives -1.
@@ -842,6 +844,7 @@ export const rowsOf = (view: DocumentView, ids: ManifestIds): PackageRows => {
       });
     }
 
+    // GRIZZLE-PENDING: Q18, Q19: Dependency becomes a query over its source, and this gate goes.
     for (const lexical of node.kind === "cp:dependency"
       ? Option.toArray(
           Option.filter(valueOf(node, "identifierref"), (value) => isNcName(collapse(value))),

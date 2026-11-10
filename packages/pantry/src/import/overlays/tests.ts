@@ -207,6 +207,7 @@ const trailingSpace = (text: string): number => {
  * @throws {Error} When a piece cut at a run of whitespace is not whitespace alone: a defect of the
  *   split, never of the document.
  */
+// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
 export const piecesOf = (lexical: string): Pieces => {
   const lead = lexical.slice(0, leadingSpace(lexical));
   const rest = lexical.slice(lead.length);
@@ -674,6 +675,7 @@ const namedOf = (
     view.rows.nodes
       .filter(({ kind }) => among(namedKinds, kind))
       .flatMap((node) =>
+        // GRIZZLE-PENDING: Q18, Q19: Named becomes a query over its source, and this gate goes.
         Option.toArray(Option.filter(token(node, "identifier"), isNcName)).map((identifier) => {
           const above = aboveOf(view, scopes, node);
           const isPart = node.kind === partKind;

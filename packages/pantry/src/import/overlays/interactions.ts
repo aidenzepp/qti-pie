@@ -319,6 +319,7 @@ const valueOf = (
  * @param name - The attribute's name.
  * @returns The name, or none where the element does not carry the attribute or it names nothing.
  */
+// GRIZZLE-PENDING: Q18, Q19: BindingName becomes a query over its source, and this gate goes.
 const nameOf = (
   context: Pick<Context, "attributes">,
   node: NodeId,
@@ -1101,6 +1102,7 @@ const referencesOf = (
           (row) =>
             reference.attributes.some((name) => name === row.name) &&
             reference.kinds.some((kind) => kind === row.kind) &&
+            // GRIZZLE-PENDING: Q18, Q19: A content reference becomes a query over its source, and this gate goes.
             isNcName(row.value),
         )
         .map((row) => ({
@@ -1180,6 +1182,7 @@ const sectionNamesOf = (
   new Map(
     referringRoots.every((root) => root !== context.rootKind)
       ? [...read.values()].flatMap((row) =>
+          // GRIZZLE-PENDING: Q18, Q19: A section's reference becomes a query over its source, and this gate goes.
           isNcName(row.value) &&
           classes.some(
             (reference) =>

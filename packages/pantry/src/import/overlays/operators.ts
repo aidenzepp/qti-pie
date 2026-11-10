@@ -96,6 +96,7 @@ const spacingOf = (text: string): Spacing =>
  * @param lexical - The attribute's lexical form.
  * @returns Its pieces, in order; none for a value of whitespace alone, an empty list.
  */
+// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
 export const tolerancePiecesOf = (lexical: string): readonly ToleranceTokenInsert[] => {
   const runs = [...lexical.matchAll(/[^\t\n\r ]+/gu)];
   const pieces: ToleranceTokenInsert[] = [];

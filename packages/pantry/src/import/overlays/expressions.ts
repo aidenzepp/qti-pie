@@ -880,6 +880,7 @@ const documentOf = (view: DocumentView): Document => {
  * @param attribute - The attribute.
  * @returns The affixes and the name, or none.
  */
+// GRIZZLE-PENDING: Q18, Q19: VariableRef becomes a query over its source, and this gate goes.
 const spelledBy = (
   node: NodeRow<Composed>,
   attribute: AttributeRow<Composed>,

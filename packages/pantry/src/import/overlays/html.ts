@@ -78,6 +78,7 @@ const tokenRun = /(?<before>[\t\n\r ]*)(?<token>[^\t\n\r ]+)/gu;
  *   after the last run is no whitespace, which the pattern rules out: a defect of this splitter,
  *   never of the document.
  */
+// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
 export const headerPiecesOf = (lexical: string): readonly HeaderTokenInsert[] => {
   const runs = [...lexical.matchAll(tokenRun)];
   const tail = runs.reduce((end, run) => end + run[0].length, 0);
@@ -213,6 +214,7 @@ export const rowsOf = (view: DocumentView): HtmlRows => {
 
     const id = cell.kind === "th" ? valueOf(cell, "id") : undefined;
     const value = id?.replace(/^[\t\n\r ]+/u, "").replace(/[\t\n\r ]+$/u, "");
+    // GRIZZLE-PENDING: Q18, Q19: TableHeader becomes a query over its source, and this gate goes.
     if (value !== undefined && isNcName(value)) {
       headerIds.set(cell.id, {
         document,

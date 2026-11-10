@@ -132,7 +132,7 @@ const isGap = (text: string | undefined): text is GapText =>
 /**
  * Split a two-item key around the one whitespace character between its items: the one split the
  * host makes of a map key, since no grizzle `Compute` term splits a text (no substring, split or
- * pattern group at the vendored commit; reported to grizzle, and waiting on its text-split term).
+ * pattern group at the vendored commit; grizzle's Q7).
  * Every value read from the items is the database's (`#pantry/qti/queries.ts` `MapKeyPoint`,
  * `MapKeyPair` and `MapKeyDirectedPair`), and `E1_derived` proves the split spells the key.
  *
@@ -140,6 +140,7 @@ const isGap = (text: string | undefined): text is GapText =>
  * @returns Its first run, the whitespace and its second run, or none for a key that is not two
  *   runs around one whitespace character, the keys `twoItemPattern` leaves out.
  */
+// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
 export const itemsOf = (
   key: string,
 ): { readonly first: string; readonly gap: GapText; readonly second: string } | undefined => {

@@ -186,7 +186,7 @@ export const lawNameOf = (refused: RefusalLaw): Option.Option<LawName> =>
  *
  * @param refused - A law of an `invariant-rejected` outcome.
  * @returns The refusing object's installed name, or none.
- * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/engine/src/types/changeset/changeset.ts#L1196-L1211
+ * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/packages/engine/src/types/changeset/changeset.ts#L1200-L1215
  */
 export const installedNameOf = ({ by }: RefusalLaw): Option.Option<string> =>
   by.kind === "constraint" || by.kind === "domain" ? Option.some(by.name) : Option.none();

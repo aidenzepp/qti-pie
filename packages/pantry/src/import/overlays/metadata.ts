@@ -175,6 +175,7 @@ const trailOf = (text: string): Space => {
  * @returns Its pieces, which concatenate to it.
  * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
  */
+// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
 export const piecesOf = (text: string): Pieces => {
   const lead = leadOf(text);
   const rest = text.slice(lead.length);

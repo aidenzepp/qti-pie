@@ -152,6 +152,7 @@ export const rowsOf = (view: DocumentView, ids: CatalogIds): CatalogRows => {
     const value = collapse(lexical);
     if (name === referenceName) {
       if (holdsReference(node, lexical)) {
+        // GRIZZLE-PENDING: Q20: `token` is generated from `lexical` once a family may group by it.
         references.set(id, { document, lexical, node: id, token: value });
         targets.set(headingKey([document, value]), { assembled, document, id: value });
       }
@@ -162,6 +163,7 @@ export const rowsOf = (view: DocumentView, ids: CatalogIds): CatalogRows => {
     // A catalog's `id` that is no NCName is no ID: it names no catalog, as it has no `DocumentId`
     // (spec reading 156), and its value domain refuses it alone.
     if (node.kind === "qti-catalog" && name === "id") {
+      // GRIZZLE-PENDING: Q18, Q19: CatalogId becomes a query over its source, and this gate goes.
       if (isNcName(value)) {
         catalogIds.set(id, { document, id: value, node: id, owner: id });
       }

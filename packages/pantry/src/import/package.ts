@@ -231,8 +231,8 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   if (outcome.kind === "invariant-rejected") {
     // The refusal is what the outcome says, read from it alone (`refusalOf`): how grizzle decided
     // its laws (`refused.kind`), every law it names with the set of their rules, and grizzle's
-    // witness (grizzle-engine `src/types/changeset/changeset.ts:1140-1194`, `Witness`, `Refused`
-    // and `RefusedLaw`, at `1685e15c`). `every` names the laws grizzle judged broken; `first` the
+    // witness (grizzle-engine `src/types/changeset/changeset.ts:1140-1198`, `Witness`, `Refused`
+    // and `RefusedLaw`, at `eb56d58`). `every` names the laws grizzle judged broken; `first` the
     // laws of the CHECK PostgreSQL tried first, which the row may not be alone in breaking; `some`
     // the laws one PostgreSQL object discharges, at least one of them broken and nothing deciding
     // which. The import judges no law and reads no row of its own to decide more than grizzle did,

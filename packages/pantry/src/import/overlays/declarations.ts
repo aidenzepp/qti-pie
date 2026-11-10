@@ -169,6 +169,7 @@ const spaceRunOf = (lexical: string, from: number, to: number): Space => {
  * @param lexical - The lexical form, as written.
  * @returns The pieces, which concatenate to it.
  */
+// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
 export const piecesOf = (lexical: string): Pieces => {
   let start = 0;
   while (start < lexical.length && isSpaceCharacter(lexical.charAt(start))) {

@@ -449,6 +449,7 @@ const spaceOf = (text: string): SpaceText => {
  * @param lexical - The attribute's lexical form.
  * @returns Its pieces, in order; none for a form with no token, which the attribute's laws refuse.
  */
+// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
 export const idrefPiecesOf = (lexical: string): readonly IdrefInsert[] => {
   const tokens: { readonly before: string; readonly token: string }[] = [];
   let before = "";
@@ -964,5 +965,6 @@ export const packageFactsOf = (inputs: PackageInputs) => Struct.map(rowsOfSet)(i
  *   it, it is the `importWrite` program that `grizzle generate` compiles into the login's served
  *   file.
  */
+// GRIZZLE-PENDING: Q2: the rowless builder declares `importWrite` with no rows, and `inputs` goes.
 export const changeSetOf = (author: AuthorRole, inputs: PackageInputs) =>
   ChangeSet.empty(author).insertAll(packageFactsOf(inputs));

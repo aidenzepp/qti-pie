@@ -50,7 +50,7 @@ const fixtures = inject("fixtures");
  * The server's report of a serialization failure, SQLSTATE 40001, built with grizzle's own
  * constructor from the ErrorResponse the server writes, as its wire builds it.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/grizzle/src/adapter/errors/failures.ts#L60-L93
+ * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/packages/grizzle/src/adapter/errors/failures.ts#L60-L93
  */
 const serverReport = new ServerError({
   column: undefined,
@@ -200,7 +200,7 @@ const readBackId: Uuid = "00000000-0000-4000-8000-000000000001";
  * or `StaleSnapshot`), each built with grizzle's own constructor: a `StaleSnapshot` takes the
  * snapshot's fingerprint as text and admits it itself.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/grizzle/src/adapter/errors/execution.ts#L260-L274
+ * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/packages/grizzle/src/adapter/errors/execution.ts#L260-L274
  */
 const readFailures: readonly ReadError[] = [
   new ReadFailure({ reason: serverReport }),

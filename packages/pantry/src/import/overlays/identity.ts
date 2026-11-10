@@ -489,6 +489,7 @@ const lomRowsOf = (
   for (const node of tree.rows.nodes) {
     if (node.kind === "lom:language" && tree.nodeAt(node.parent).kind === "lom:general") {
       const text = tree.stringValueOf(node.id);
+      // GRIZZLE-PENDING: Q20: `tag` is generated from `lang` once a family may group by it.
       const tag = lowerAscii(text);
       lomLanguages.set(node.id, { general: node.parent, lang: text, node: node.id, tag });
       lomSets.set(headingKey([node.parent, tag]), { general: node.parent, lang: tag });
@@ -578,6 +579,7 @@ const ssmlRowsOf = (
         continue;
       }
 
+      // GRIZZLE-PENDING: Q20: `value` is generated from `lexical` once a family may group by it.
       const value = collapse(lexical);
       attributes.set(headingKey([element.id, name]), {
         fragment,
