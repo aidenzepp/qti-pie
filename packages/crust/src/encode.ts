@@ -1,7 +1,7 @@
 /* oxlint-disable unicorn/prefer-code-point -- The writers need UTF-16 code units, not code points: `codePointAt` joins a surrogate pair into one value, which one unit-wise write cannot carry. */
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import type { EncoderClass } from "#crust/charset.ts";
-import { classify } from "#crust/charset.ts";
+import { classify, threshold } from "#crust/charset.ts";
 import { EncodeError } from "#crust/errors.ts";
 import type { XmlDocument } from "#crust/tree.ts";
 import { writeXml } from "#crust/write.ts";
@@ -39,8 +39,9 @@ const utf16Bytes = (text: string, littleEndian: boolean): Uint8Array => {
 };
 
 /**
- * The one writer of each encoder class, so a class added to `EncoderClass` is a type error here
- * until it has one.
+ * The bytes of each encoder class that has an encoder, from the text {@link writeXml} wrote under
+ * the class's {@link threshold}, so a class added to `EncoderClass` is a type error here until it
+ * has one.
  *
  * The three UTF-16 classes are the three UTF-16 encoding schemes, each written as it begins
  * (Unicode 16.0 section 3.10, D96 to D98): `utf16` leads with U+FEFF as its byte order mark, which
@@ -50,17 +51,16 @@ const utf16Bytes = (text: string, littleEndian: boolean): Uint8Array => {
  *
  * @see {@link https://www.rfc-editor.org/rfc/rfc2781#section-3.3 | RFC 2781, section 3.3}
  */
-const encoders: Record<EncoderClass, (doc: XmlDocument) => Effect.Effect<Uint8Array, EncodeError>> =
-  {
-    ascii: (doc) => Effect.map(writeXml(doc, { threshold: 0x7f }), singleBytes),
-    "decode-only": () =>
-      Effect.fail(new EncodeError({ codePoint: 0, threshold: 0, where: "label" })),
-    latin1: (doc) => Effect.map(writeXml(doc, { threshold: 0xff }), singleBytes),
-    utf16: (doc) => Effect.map(writeXml(doc), (text) => utf16Bytes(`\uFEFF${text}`, true)),
-    utf16be: (doc) => Effect.map(writeXml(doc), (text) => utf16Bytes(text, false)),
-    utf16le: (doc) => Effect.map(writeXml(doc), (text) => utf16Bytes(text, true)),
-    utf8: (doc) => Effect.map(writeXml(doc), (text) => new TextEncoder().encode(text)),
-  };
+const bytesOf: Readonly<
+  Record<Exclude<EncoderClass, "decode-only">, (text: string) => Uint8Array>
+> = {
+  ascii: singleBytes,
+  latin1: singleBytes,
+  utf16: (text) => utf16Bytes(`\uFEFF${text}`, true),
+  utf16be: (text) => utf16Bytes(text, false),
+  utf16le: (text) => utf16Bytes(text, true),
+  utf8: (text) => new TextEncoder().encode(text),
+};
 
 /**
  * Encode a document in the label it is given, and never decide a fallback.
@@ -80,5 +80,16 @@ const encoders: Record<EncoderClass, (doc: XmlDocument) => Effect.Effect<Uint8Ar
  *   a wrong import decision must surface; otherwise the first construct, in document order, that
  *   holds a code point the label cannot carry and no reference can write.
  */
-export const encode = (doc: XmlDocument, label: string): Effect.Effect<Uint8Array, EncodeError> =>
-  encoders[classify(label).class](doc);
+export const encode = (doc: XmlDocument, label: string): Effect.Effect<Uint8Array, EncodeError> => {
+  const { class: encoderClass } = classify(label);
+  if (encoderClass === "decode-only") {
+    return Effect.fail(new EncodeError({ codePoint: 0, threshold: 0, where: "label" }));
+  }
+
+  const written = Option.match(threshold(encoderClass), {
+    onNone: () => writeXml(doc),
+    onSome: (limit) => writeXml(doc, { threshold: limit }),
+  });
+
+  return written.pipe(Effect.map(bytesOf[encoderClass]));
+};

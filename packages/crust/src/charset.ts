@@ -1,5 +1,6 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The XML 1.0 section 4.3.3 label spellings (`UTF-8`, `US-ASCII`) and the closed encoder-class names (`utf8`) are this module's data, not identifiers passed to a Node encoding API. */
-import { Option } from "effect";
+import { Array as Arr, Option } from "effect";
+import { EncodeError } from "#crust/errors.ts";
 import { preorder } from "#crust/tour.ts";
 import type { Child, XmlDocument } from "#crust/tree.ts";
 
@@ -144,93 +145,111 @@ export const codePointOf = (character: string): number => {
 };
 
 /**
- * Test whether `text` holds a code point above `limit`.
+ * Find the first code point of `value` above `limit`, as the failure of the construct `where`
+ * that holds it.
  *
- * @param limit - The highest code point the label's encoder writes as a single byte.
- * @param text - The text to inspect, a lone surrogate counting as one code point.
- * @returns `true` when some code point of `text` exceeds `limit`.
+ * @param value - The construct's text, a lone surrogate counting as one code point.
+ * @param where - The construct, for the failure.
+ * @param limit - The highest code point the encoder carries as itself.
+ * @returns The failure; `None` when no code point of `value` exceeds `limit`.
  */
-const holdsAbove = (limit: number, text: string): boolean => {
-  for (const character of text) {
-    if (codePointOf(character) > limit) {
-      return true;
-    }
-  }
+const unwritableText = (
+  value: string,
+  where: EncodeError["where"],
+  limit: number,
+): Option.Option<EncodeError> =>
+  Arr.findFirst(value, (character) => {
+    const codePoint = codePointOf(character);
 
-  return false;
-};
+    return codePoint > limit
+      ? Option.some(new EncodeError({ codePoint, threshold: limit, where }))
+      : Option.none();
+  });
 
 /**
- * Test whether a node's own constructs hold, in a place a character reference cannot reach, a code
- * point above `limit`: comment text, a processing instruction's target or data, an element's name
- * or an attribute's name, or an entity reference's name (a child node, or one inside an
- * attribute's value). An entity reference is written back verbatim as `&name;` and a name cannot be
- * written as a character reference. A node's children are their own nodes.
+ * Find the first construct of `node` itself, its children aside, that holds a code point above
+ * `limit` where no character reference can write one: a comment's text, a processing
+ * instruction's target then data, an entity reference's name, or an element's name, then each
+ * attribute's name and the names of its recorded references, in stored order. A text run and the
+ * text of an attribute value carry any code point as a reference, so neither is read.
  *
- * @param limit - The highest code point the label's encoder writes as a single byte.
- * @param node - The node to inspect; text runs are skipped, and an attribute's value is not read
- *   beyond the names of its entity references.
- * @returns `true` when anything the node itself holds that is inspected exceeds `limit`.
+ * @param node - The node to search.
+ * @param limit - The highest code point the encoder carries as itself.
+ * @returns The failure for the first such construct; `None` when there is none.
  */
-const ownHoldsAbove = (limit: number, node: Child): boolean => {
-  if (node.kind === "element") {
-    return (
-      holdsAbove(limit, node.qname) ||
-      node.attributes.some(
-        (attribute) =>
-          holdsAbove(limit, attribute.qname) ||
-          attribute.references.some((reference) => holdsAbove(limit, reference.name)),
-      )
-    );
+const unwritableOwn = (node: Child, limit: number): Option.Option<EncodeError> => {
+  if (node.kind === "text") {
+    return Option.none();
   }
 
   if (node.kind === "comment") {
-    return holdsAbove(limit, node.text);
+    return unwritableText(node.text, "comment", limit);
   }
 
   if (node.kind === "pi") {
-    return holdsAbove(limit, node.target) || holdsAbove(limit, node.data);
+    return Option.orElse(unwritableText(node.target, "pi", limit), () =>
+      unwritableText(node.data, "pi", limit),
+    );
   }
 
   if (node.kind === "entityRef") {
-    return holdsAbove(limit, node.name);
+    return unwritableText(node.name, "name", limit);
   }
 
-  return false;
+  return Option.orElse(unwritableText(node.qname, "name", limit), () =>
+    Arr.findFirst(node.attributes, (attribute) =>
+      Option.orElse(unwritableText(attribute.qname, "name", limit), () =>
+        Arr.findFirst(attribute.references, (reference) =>
+          unwritableText(reference.name, "name", limit),
+        ),
+      ),
+    ),
+  );
 };
+
+/**
+ * Find the first construct of a document, in writing order, that holds a code point above
+ * `limit` where no character reference can write one: the doctype text, which is source text
+ * kept verbatim, then each node of the prolog, the root and the epilog by its {@link preorder}, so
+ * a tree of any depth is searched without recursion, and the search stops at the first failure.
+ *
+ * This is the one rule of what an encoder's label cannot carry: the writer refuses a document by
+ * it, and {@link exportCharset} picks a label it finds nothing for.
+ *
+ * @param doc - The document to search.
+ * @param limit - The highest code point the encoder carries as itself.
+ * @returns The `EncodeError` naming the first such construct; `None` when the document is writable.
+ */
+export const unwritableIn = (doc: XmlDocument, limit: number): Option.Option<EncodeError> =>
+  Option.orElse(
+    doc.doctype.pipe(Option.flatMap((doctype) => unwritableText(doctype, "doctype", limit))),
+    () =>
+      Arr.findFirst([...doc.prolog, doc.root, ...doc.epilog], (node) =>
+        Arr.findFirst(preorder(node), (visited) => unwritableOwn(visited, limit)),
+      ),
+  );
 
 /**
  * Decide the label an exported document is encoded in, from the label it was read under.
  *
- * The decision is made once, at import, so the encoder never falls back silently: a character it
- * cannot reference in the label it is given is an `EncodeError`. A character above the threshold of
- * `latin1` or `ascii` can be written as a numeric character reference in a text run or an attribute
- * value, but nowhere else, so only comment text, processing-instruction targets and data, element
- * and attribute names, and entity-reference names are inspected. An entity reference is written
- * back as `&name;`, so its name is as unwritable as a comment. The document is visited by its
- * {@link preorder}, so a tree of any depth is inspected without recursion.
+ * The decision is made once, at import, so the encoder never falls back silently: the label is kept
+ * only when its encoder writes the whole document, which {@link unwritableIn} decides for a
+ * single-byte label, so `encode` under the label this returns never fails.
  *
  * @param label - The label the document was read under, as read.
- * @param doc - The document whose prolog, root subtree and epilog are inspected.
- * @returns `label` when its class is `utf8` or one of UTF-16's, or is `latin1` or `ascii` and nothing
- *   inspected exceeds the class's threshold; `"UTF-8"` for a `decode-only` label and for a `latin1`
- *   or `ascii` document holding such a character.
+ * @param doc - The document.
+ * @returns `label` when its class is `utf8` or one of UTF-16's, or is `latin1` or `ascii` and
+ *   {@link unwritableIn} finds nothing; `"UTF-8"` for a `decode-only` label and for a `latin1` or
+ *   `ascii` document it finds a construct in.
  */
 export const exportCharset = (label: string, doc: XmlDocument): string => {
   const { class: encoderClass } = classify(label);
-  const limit = threshold(encoderClass);
-
   if (encoderClass === "decode-only") {
     return "UTF-8";
   }
 
-  if (Option.isNone(limit)) {
-    return label;
-  }
-
-  const holdsAboveLimit = [...doc.prolog, doc.root, ...doc.epilog].some((node) =>
-    preorder(node).some((visited) => ownHoldsAbove(limit.value, visited)),
-  );
-
-  return holdsAboveLimit ? "UTF-8" : label;
+  return Option.match(threshold(encoderClass), {
+    onNone: () => label,
+    onSome: (limit) => (Option.isSome(unwritableIn(doc, limit)) ? "UTF-8" : label),
+  });
 };

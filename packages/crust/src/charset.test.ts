@@ -1,7 +1,8 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The tests spell the XML label (`UTF-8`, `US-ASCII`) and encoder-class (`utf8`) data this module's table is keyed by. */
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Exit, Option } from "effect";
 import { classify, exportCharset, threshold } from "#crust/charset.ts";
+import { encode } from "#crust/encode.ts";
 import type { Attribute, Child, Element, Misc, XmlDocument } from "#crust/tree.ts";
 
 /**
@@ -161,6 +162,13 @@ describe("exportCharset", () => {
   it.effect("finds a character above the threshold in every place a reference cannot reach", () =>
     Effect.sync(() => {
       const offenders: readonly (readonly [string, XmlDocument])[] = [
+        [
+          "doctype",
+          {
+            ...document("ISO-8859-1", element("a")),
+            doctype: Option.some(`<!DOCTYPE a [<!-- ${euro} -->]>`),
+          },
+        ],
         ["prolog comment", document("ISO-8859-1", element("a"), { prolog: [comment(euro)] })],
         ["epilog comment", document("ISO-8859-1", element("a"), { epilog: [comment(euro)] })],
         [
@@ -204,6 +212,7 @@ describe("exportCharset", () => {
 
       for (const [where, doc] of offenders) {
         assert.strictEqual(exportCharset("ISO-8859-1", doc), "UTF-8", where);
+        assert.isTrue(Exit.isFailure(Effect.runSyncExit(encode(doc, "ISO-8859-1"))), where);
       }
     }),
   );

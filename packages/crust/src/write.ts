@@ -1,7 +1,7 @@
-import { Array as Arr, Effect, Option } from "effect";
-import { codePointOf } from "#crust/charset.ts";
-import { EncodeError } from "#crust/errors.ts";
-import { preorder, tour } from "#crust/tour.ts";
+import { Effect, Option } from "effect";
+import { codePointOf, unwritableIn } from "#crust/charset.ts";
+import type { EncodeError } from "#crust/errors.ts";
+import { tour } from "#crust/tour.ts";
 import type { Step } from "#crust/tour.ts";
 import type { Attribute, Child, Element, XmlDocument, XmlDeclaration } from "#crust/tree.ts";
 
@@ -244,94 +244,6 @@ const renderDeclaration = (declaration: XmlDeclaration): string => {
 };
 
 /**
- * The first code point of `value` above `threshold`, or none when there is none.
- */
-const firstAbove = (value: string, threshold: number): Option.Option<number> =>
-  Option.map(
-    Arr.findFirst(value, (character) => isAbove(character, threshold)),
-    codePointOf,
-  );
-
-/**
- * An `EncodeError` for the first code point of `value` above `threshold`, or none.
- */
-const unwritable = (
-  value: string,
-  where: EncodeError["where"],
-  threshold: number,
-): Option.Option<EncodeError> =>
-  Option.map(
-    firstAbove(value, threshold),
-    (codePoint) => new EncodeError({ codePoint, threshold, where }),
-  );
-
-/**
- * The first construct of `node` itself, its children aside, that cannot carry a character
- * reference and holds a code point above `threshold`: an element's name, then each attribute's
- * name and recorded reference names in stored order.
- *
- * @param node - The node to search.
- * @param threshold - The highest code point the encoder carries as itself.
- * @returns The failure for the first such construct, or none when there is none.
- */
-const findInOwn = (node: Child, threshold: number): Option.Option<EncodeError> => {
-  if (node.kind === "text") {
-    return Option.none();
-  }
-
-  if (node.kind === "comment") {
-    return unwritable(node.text, "comment", threshold);
-  }
-
-  if (node.kind === "pi") {
-    return Option.orElse(unwritable(node.target, "pi", threshold), () =>
-      unwritable(node.data, "pi", threshold),
-    );
-  }
-
-  if (node.kind === "entityRef") {
-    return unwritable(node.name, "name", threshold);
-  }
-
-  return Option.orElse(unwritable(node.qname, "name", threshold), () =>
-    Arr.findFirst(node.attributes, (attribute) =>
-      Option.orElse(unwritable(attribute.qname, "name", threshold), () =>
-        Arr.findFirst(attribute.references, (reference) =>
-          unwritable(reference.name, "name", threshold),
-        ),
-      ),
-    ),
-  );
-};
-
-/**
- * The first construct under `node`, itself included, that cannot carry a character reference and
- * holds a code point above `threshold`, in document order.
- *
- * The node is visited by its {@link preorder}, so a tree of any depth or width is searched without
- * recursion, and the search stops at the first failure.
- *
- * @param node - The node to search.
- * @param threshold - The highest code point the encoder carries as itself.
- * @returns The failure for the first such construct, or none when there is none.
- */
-const findInNode = (node: Child, threshold: number): Option.Option<EncodeError> =>
-  Arr.findFirst(preorder(node), (visited) => findInOwn(visited, threshold));
-
-/**
- * The first unwritable construct in the doctype, the prolog, the root and the epilog, in writing
- * order.
- */
-const findUnwritable = (doc: XmlDocument, threshold: number): Option.Option<EncodeError> =>
-  Option.orElse(
-    doc.doctype.pipe(Option.flatMap((doctype) => unwritable(doctype, "doctype", threshold))),
-    () =>
-      Arr.findFirst([...doc.prolog, doc.root, ...doc.epilog], (node) =>
-        findInNode(node, threshold),
-      ),
-  );
-
-/**
  * Serialize a document: the declaration as stored, the doctype text as stored, the prolog, the root
  * and the epilog, each prolog item followed by a newline and each epilog item preceded by one.
  *
@@ -351,7 +263,7 @@ export const writeXml = (
   options?: WriteOptions,
 ): Effect.Effect<string, EncodeError> => {
   const threshold = options?.threshold ?? Number.POSITIVE_INFINITY;
-  const failure = findUnwritable(doc, threshold);
+  const failure = options === undefined ? Option.none() : unwritableIn(doc, options.threshold);
 
   if (Option.isSome(failure)) {
     return Effect.fail(failure.value);
