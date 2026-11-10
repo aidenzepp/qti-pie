@@ -467,31 +467,6 @@ export const known: readonly Known[] = [
   {
     files: [
       [
-        "imsmanifest.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="00000000-0000-0000-0000-000000000000"/><resource identifier="00000000-0000-0000-0000-000000000000"/></resources></manifest>',
-      ],
-    ],
-    fix: "a stated limit (spec reading 1): two cp:resource identifiers outside their domain that share a value are keyed by the import under DocumentId key (ResourceId), while the law oracle reads each as no id; value domain refuses it on both sides; lifted by keying only identifiers inside their domain (decision 457 (2)'s pattern)",
-    owner: "decision 463",
-    signature: {
-      kind: "import-only-law",
-      law: {
-        kind: "key",
-        side: {
-          relation: "ResourceId",
-          selection: { conjuncts: [] },
-          terms: [
-            { field: "package", kind: "field" },
-            { field: "identifier", kind: "field" },
-          ],
-        },
-      },
-    },
-  },
-  {
-    files: [
-      [
         "choice.xml",
         "xml",
         '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier=""/>',
@@ -776,26 +751,6 @@ export const known: readonly Known[] = [
         },
       },
       limit: "a forbidden ancestor",
-    },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>',
-      ],
-      [
-        "items/item.xml",
-        "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><m:math xmlns:m="http://www.w3.org/1998/Math/MathML"><m:mtable><m:mtr><m:mtd><m:maction selection="PT-1S"><m:mi/></m:maction></m:mtd></m:mtr></m:mtable></m:math></p></qti-item-body></qti-assessment-item>',
-      ],
-    ],
-    fix: "a stated limit (spec reading 1): an m:maction selection outside its domain, such as PT-1S, is read by the import as 0, which breaks MathML maction selection, while the law oracle skips a selection that is no integer (family A); value domain refuses it on both sides; lifted by writing no derived row for a value outside its domain",
-    owner: "decision 463",
-    signature: {
-      kind: "import-only-law",
-      law: { kind: "check", name: "MathML_maction_selection", relation: "MathAction" },
     },
   },
   {
@@ -1549,6 +1504,51 @@ export const known: readonly Known[] = [
  * fixed it, the fix, and the package that showed it, which must never show it again.
  */
 export const fixed: readonly Known[] = [
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>',
+      ],
+      [
+        "items/item.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><m:math xmlns:m="http://www.w3.org/1998/Math/MathML"><m:mtable><m:mtr><m:mtd><m:maction selection="PT-1S"><m:mi/></m:maction></m:mtd></m:mtr></m:mtable></m:math></p></qti-item-body></qti-assessment-item>',
+      ],
+    ],
+    fix: "no longer shown on the host since the schema sweep generates MathAction's selection in PostgreSQL (S2-9, `relation.generated`, #pantry/qti/mathml-align.ts): the host computes no generated field, so MathML maction selection is unknown there (#pantry/test/gen/genetic/host-laws.ts) and the database alone judges it; value domain refuses it on both sides",
+    owner: "decision 463",
+    signature: {
+      kind: "import-only-law",
+      law: { kind: "check", name: "MathML_maction_selection", relation: "MathAction" },
+    },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="00000000-0000-0000-0000-000000000000"/><resource identifier="00000000-0000-0000-0000-000000000000"/></resources></manifest>',
+      ],
+    ],
+    fix: "no longer shown on the host since the schema sweep generates ResourceId.identifier from its lexical form in PostgreSQL (S2-6, `relation.generated`, #pantry/qti/package.ts): the host computes no generated field, so DocumentId key over ResourceId is unknown there (#pantry/test/gen/genetic/host-laws.ts) and the database alone judges it; value domain refuses it on both sides",
+    owner: "decision 463",
+    signature: {
+      kind: "import-only-law",
+      law: {
+        kind: "key",
+        side: {
+          relation: "ResourceId",
+          selection: { conjuncts: [] },
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "identifier", kind: "field" },
+          ],
+        },
+      },
+    },
+  },
   {
     files: [
       [

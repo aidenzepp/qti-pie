@@ -256,7 +256,6 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     if (kind === "cp:manifest" && identifier !== undefined && identifierLexical !== undefined) {
       expected.ManifestId.set(id, {
         ...tuple,
-        identifier,
         lexical: identifierLexical,
         package: pkg,
         parent: parent.id,
@@ -276,7 +275,6 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
       if (identifier !== undefined && identifierLexical !== undefined) {
         named.push({ identifier, node: id });
         expected.ResourceId.set(id, {
-          identifier,
           lexical: identifierLexical,
           node: id,
           package: pkg,
@@ -310,7 +308,6 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
         ...tuple,
         lexical: refLexical,
         package: pkg,
-        ref,
         resource: parent.id,
       });
       dependencies.push({ node: id, ref, resource: parent.id });

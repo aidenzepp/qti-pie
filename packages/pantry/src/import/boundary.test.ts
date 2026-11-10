@@ -231,7 +231,6 @@ const crossings: ByStep = [
       "import/overlays/mathml-share.ts: #pantry/qti/mathml-share.ts",
       "import/overlays/mathml-share.ts: #pantry/qti/tests.ts",
       "import/overlays/metadata.ts: #pantry/grammar/attributes.ts",
-      "import/overlays/metadata.ts: #pantry/grammar/domains.ts",
       "import/overlays/metadata.ts: #pantry/qti/metadata.ts",
       "import/overlays/operators.ts: #pantry/qti/operators.ts",
       "import/overlays/package.ts: #pantry/grammar/domains.ts",

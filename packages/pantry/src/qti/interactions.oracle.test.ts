@@ -130,8 +130,6 @@ describe("qti/interactions.ts, declared", () => {
       "Binding declared",
       "BindingFit",
       "Choice bounds",
-      "Choice identifier key",
-      "Choice not variable",
       "Context variable reference",
       "Custom interaction version",
       "E1 derived",

@@ -256,6 +256,8 @@ describe("the oracle's key-text list", () => {
     // `AssembledLang`'s generated `value`, which grizzle casts into `keyText` where it computes
     // it (`Compute.cast`, identity.ts), and `RequiredSsmlProperty.name` is a constant of its query,
     // one of `ph`, `interpret-as` and `alias`, the values grizzle's heading types it by.
+    // A fourth, `ItemRefTarget.path`, is the derived target's (queries.ts): the path of the
+    // `ItemRefHref` row it matches, bounded as that row's `keyText` field is where it is written.
     // Bound: every law the schema states that is no check.
     assert.deepStrictEqual(
       [
@@ -269,6 +271,7 @@ describe("the oracle's key-text list", () => {
         "DescribedAssembledLang.value → ResourceLomLanguageSet.lang",
         "DescribedLang.value → ResourceLomLanguageSet.lang",
         "Entry.path → FileHref.path",
+        "ItemRefTarget.path → ItemRefDocument.path",
         "RequiredSsmlProperty.name → DataSsmlProperty.name",
       ],
     );

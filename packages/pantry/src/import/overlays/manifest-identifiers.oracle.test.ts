@@ -225,9 +225,10 @@ const writtenManifestOf = (resources: string, identifier = "M"): string =>
   `<?xml version="1.0" encoding="UTF-8"?><manifest xmlns="${cpNamespace}" identifier="${identifier}"><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata><organizations/><resources>${resources}</resources></manifest>`;
 
 /**
- * One explicit case of a padded identifier or identifierref: its package, the laws both sides must
- * break (`present`) and must not (`absent`), and whether it is valid, a package the oracle accepts
- * and whose rows break no law on the host (reading 1).
+ * One explicit case of a padded identifier or identifierref: its package, the laws the oracle must
+ * break (`present`), which the host breaks too where it judges them, and the laws neither side may
+ * break (`absent`), and whether it is valid, a package the oracle accepts and whose rows break no
+ * law on the host (reading 1).
  */
 interface PaddedCase {
   readonly absent: readonly string[];
@@ -383,14 +384,19 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         Effect.gen(function* paddedCase() {
           const { host, oracleLaws, verdict } = yield* judgedBothWays(padded.files);
           const hostLaws = [...host.broken.keys()];
+          // The host judges no rule over a query, which PostgreSQL alone evaluates: "Manifest id
+          // space" is one, over the query ManifestIdSpace (#pantry/qti/queries.ts). So the host is
+          // held to the oracle's laws it judges, each one it finds broken or held.
+          const judged: ReadonlySet<string> = new Set([...host.broken.keys(), ...host.held]);
+          const judgedOracleLaws = [...oracleLaws].filter((law) => judged.has(law));
 
           assert.sameMembers(
             hostLaws,
-            [...oracleLaws],
-            "the host breaks exactly the oracle's laws",
+            judgedOracleLaws,
+            "the host breaks exactly the oracle's laws it judges",
           );
           for (const law of padded.present) {
-            assert.include(hostLaws, law, `the host breaks ${law}`);
+            assert.isTrue(oracleLaws.has(law), `the oracle finds ${law} broken`);
           }
 
           for (const law of padded.absent) {

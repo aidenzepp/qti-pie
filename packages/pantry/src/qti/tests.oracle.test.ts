@@ -79,8 +79,6 @@ describe("qti/tests.ts, declared", () => {
       "File exists",
       "Fragment context",
       "Include root",
-      "Inclusion cycle",
-      "Item ref target",
       "Remote section ref",
       "Selection bound",
       "Selection required",
