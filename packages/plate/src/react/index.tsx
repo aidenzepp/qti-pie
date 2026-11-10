@@ -77,6 +77,8 @@ export { Slider } from "#plate/react/slider.tsx";
 export { Status } from "#plate/react/status.tsx";
 
 export {
+  fetchTransport,
+  NoTestProvider,
   NotImplemented,
   TestProvider,
   useCurrentItem,
