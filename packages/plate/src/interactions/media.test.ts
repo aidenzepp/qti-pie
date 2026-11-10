@@ -537,7 +537,7 @@ describe("Media", () => {
         assert.lengthOf(refused, 1);
         assert.strictEqual(refused[0]?.response, response);
         assert.match(textsOf(refused).join("\n"), /at least once/u);
-        assert.lengthOf(yield* checked(accepted, undefined, true), 1);
+        assert.deepStrictEqual(yield* checked(accepted, undefined, true), []);
         assert.deepStrictEqual(yield* checked(accepted, countValue(1n), true), []);
         assert.deepStrictEqual(yield* checked(accepted, countValue(2n), true), []);
 
@@ -560,31 +560,130 @@ describe("Media", () => {
   );
 
   it.effect(
-    "[Q-14] checkResponses: more plays than max-plays is refused in tier (a), and 0 is no limit",
+    "[Q-14] checkResponses: more plays than max-plays is refused only under validateResponses, and 0 is no limit",
     () =>
       Effect.gen(function* refusesManyPlays() {
         const accepted = yield* acceptedFixture("media.xml");
 
-        for (const validateResponses of [false, true]) {
-          const refused = yield* checked(accepted, countValue(3n), validateResponses);
+        assert.deepStrictEqual(yield* checked(accepted, countValue(3n)), []);
 
-          assert.lengthOf(refused, 1, String(validateResponses));
-          assert.match(textsOf(refused).join("\n"), /at most 2 times/u);
-        }
+        const refused = yield* checked(accepted, countValue(3n), true);
+
+        assert.lengthOf(refused, 1);
+        assert.match(textsOf(refused).join("\n"), /at most 2 times/u);
 
         const once = yield* accept(
           "media-once.xml",
           edited(yield* fixtureText("media.xml"), 'max-plays="2"', 'max-plays="1"'),
         );
-        const twice = yield* checked(once, countValue(2n));
+        const twice = yield* checked(once, countValue(2n), true);
 
         assert.lengthOf(twice, 1);
         assert.match(textsOf(twice).join("\n"), /only once/u);
-        assert.deepStrictEqual(yield* checked(once, countValue(1n)), []);
+        assert.deepStrictEqual(yield* checked(once, countValue(2n)), []);
+        assert.deepStrictEqual(yield* checked(once, countValue(1n), true), []);
 
         const video = yield* acceptedFixture("media-video.xml");
 
-        assert.deepStrictEqual(yield* checked(video, countValue(500n)), []);
+        assert.deepStrictEqual(yield* checked(video, countValue(500n), true), []);
+      }),
+  );
+
+  it.effect(
+    "[Q-14] checkResponses: a NULL count is accepted under either setting, whatever min-plays",
+    () =>
+      Effect.gen(function* acceptsNull() {
+        const nothing: Value = { baseType: "integer", cardinality: "single", values: [] };
+        const thrice = yield* accept(
+          "media-thrice.xml",
+          edited(yield* fixtureText("media.xml"), 'min-plays="1" max-plays="2"', 'min-plays="3"'),
+        );
+
+        for (const accepted of [yield* acceptedFixture("media.xml"), thrice]) {
+          for (const validateResponses of [false, true]) {
+            assert.deepStrictEqual(
+              yield* checked(accepted, undefined, validateResponses),
+              [],
+              `absent, ${String(validateResponses)}`,
+            );
+            assert.deepStrictEqual(
+              yield* checked(accepted, nothing, validateResponses),
+              [],
+              `empty, ${String(validateResponses)}`,
+            );
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-14] checkResponses: a negative count is refused as malformed under either setting",
+    () =>
+      Effect.gen(function* refusesNegative() {
+        const configuration = yield* configure({});
+        const binding = { baseType: "integer", cardinality: "single", name } as const;
+        const decoded = Result.getOrThrow(decode([[name, "-1"]], binding));
+
+        assert.deepStrictEqual(decoded, countValue(-1n));
+
+        for (const file of fixtures) {
+          const accepted = yield* acceptedFixture(file);
+          const noNumber = Result.match(decode([[name, "twice"]], binding), {
+            onFailure: (error): Malformed => error,
+            onSuccess: () => assert.fail("the post decoded"),
+          });
+          const malformed = checkResponses(accepted, { [response]: noNumber }, configuration);
+
+          assert.lengthOf(malformed, 1, file);
+
+          for (const validateResponses of [false, true]) {
+            for (const value of [countValue(-1n), decoded]) {
+              const refused = yield* checked(accepted, value, validateResponses);
+
+              assert.lengthOf(refused, 1, `${file}, ${String(validateResponses)}`);
+              assert.strictEqual(refused[0]?.response, response);
+              assert.deepStrictEqual(textsOf(refused), textsOf(malformed), file);
+            }
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-14] checkResponses: a count past max-plays is recorded without validateResponses and refused with it",
+    () =>
+      Effect.gen(function* recordsPastTheMost() {
+        const accepted = yield* acceptedFixture("media.xml");
+
+        assert.deepStrictEqual(yield* checked(accepted, countValue(3n)), []);
+
+        const refused = yield* checked(accepted, countValue(3n), true);
+
+        assert.lengthOf(refused, 1);
+        assert.strictEqual(refused[0]?.response, response);
+        assert.match(textsOf(refused).join("\n"), /at most 2 times/u);
+      }),
+  );
+
+  it.effect(
+    "[Q-14] checkResponses: a count within both limits passes under either setting, and 0 is no limit",
+    () =>
+      Effect.gen(function* passesWithinLimits() {
+        const accepted = yield* acceptedFixture("media.xml");
+
+        for (const validateResponses of [false, true]) {
+          for (const plays of [1n, 2n]) {
+            assert.deepStrictEqual(
+              yield* checked(accepted, countValue(plays), validateResponses),
+              [],
+              `${String(plays)}, ${String(validateResponses)}`,
+            );
+          }
+        }
+
+        const video = yield* acceptedFixture("media-video.xml");
+
+        assert.deepStrictEqual(yield* checked(video, countValue(500n), true), []);
       }),
   );
 

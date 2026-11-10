@@ -574,5 +574,153 @@ describe(server.browser, () => {
       upgraded.teardown();
       container.remove();
     });
+
+    it.effect("[Q-14] a first play begun after a seek counts one", () =>
+      Effect.gen(function* countsSeekedFirstPlay() {
+        const container = mount(yield* renderedFixture("media.xml"));
+        const root = rootOf(container);
+        const { media, pauses } = watch(container);
+        const upgraded = upgrade(container);
+
+        setState(media, { currentTime: 5 });
+        fire(media, "play");
+
+        assert.deepStrictEqual(hiddenIn(root), ["1"]);
+        assert.strictEqual(pauses(), 0);
+
+        upgraded.teardown();
+        container.remove();
+      }),
+    );
+
+    it.effect(
+      "[Q-14] after the media ended, a play begun from a seeked position counts one more",
+      () =>
+        Effect.gen(function* countsSeekedPlayAfterEnd() {
+          const container = mount(yield* renderedFixture("media.xml"));
+          const root = rootOf(container);
+          const { media, pauses } = watch(container);
+          const upgraded = upgrade(container);
+
+          setState(media, { currentTime: 0 });
+          fire(media, "play");
+          assert.deepStrictEqual(hiddenIn(root), ["1"]);
+
+          fire(media, "ended");
+          setState(media, { currentTime: 4 });
+          fire(media, "play");
+
+          assert.deepStrictEqual(hiddenIn(root), ["2"]);
+          assert.strictEqual(pauses(), 0);
+
+          upgraded.teardown();
+          container.remove();
+        }),
+    );
+
+    it.effect(
+      "[Q-14] past max-plays, a play begun after a seek is stopped and the limit announced",
+      () =>
+        Effect.gen(function* stopsSeekedPlayPastTheLimit() {
+          const container = mount(yield* renderedFixture("media.xml"));
+          const root = rootOf(container);
+          const { media, pauses, starts } = watch(container);
+          const upgraded = upgrade(container);
+
+          setState(media, { currentTime: 0 });
+          fire(media, "play");
+          fire(media, "ended");
+          fire(media, "play");
+          fire(media, "ended");
+          assert.deepStrictEqual(hiddenIn(root), ["2"]);
+
+          setState(media, { currentTime: 0.5 });
+          fire(media, "play");
+          yield* Effect.promise(frames);
+
+          assert.strictEqual(pauses(), 1);
+          assert.match(liveText(container), /limit of 2 plays/u);
+          assert.deepStrictEqual(hiddenIn(root), ["2"]);
+          assert.strictEqual(starts(), 0);
+
+          upgraded.teardown();
+          container.remove();
+        }),
+    );
+
+    it.effect(
+      "[Q-14] a pause then a play of the same playback is a resume from any position, the start included",
+      () =>
+        Effect.gen(function* resumesFromAnyPosition() {
+          const container = mount(yield* renderedFixture("media.xml"));
+          const root = rootOf(container);
+          const { media, pauses } = watch(container);
+          const upgraded = upgrade(container);
+
+          setState(media, { currentTime: 0 });
+          fire(media, "play");
+          assert.deepStrictEqual(hiddenIn(root), ["1"]);
+
+          fire(media, "pause");
+          setState(media, { currentTime: 0 });
+          fire(media, "play");
+
+          assert.deepStrictEqual(hiddenIn(root), ["1"]);
+          assert.strictEqual(pauses(), 0);
+
+          fire(media, "pause");
+          setState(media, { currentTime: 6 });
+          fire(media, "play");
+          fire(media, "pause");
+          setState(media, { currentTime: 0.2 });
+          fire(media, "play");
+
+          assert.deepStrictEqual(hiddenIn(root), ["1"]);
+          assert.strictEqual(pauses(), 0);
+
+          upgraded.teardown();
+          container.remove();
+        }),
+    );
+
+    it.effect("[Q-14] a play the limit paused can never be resumed past the limit", () =>
+      Effect.gen(function* neverResumesPastTheLimit() {
+        const container = mount(yield* renderedFixture("media.xml"));
+        const root = rootOf(container);
+        const { media, pauses } = watch(container);
+        const upgraded = upgrade(container);
+
+        setState(media, { currentTime: 0 });
+        fire(media, "play");
+        fire(media, "ended");
+        fire(media, "play");
+        fire(media, "ended");
+        setState(media, { currentTime: 0.5 });
+        fire(media, "play");
+        yield* Effect.promise(frames);
+
+        assert.strictEqual(pauses(), 1);
+        assert.match(liveText(container), /limit of 2 plays/u);
+
+        fire(media, "play");
+        assert.strictEqual(liveText(container), "");
+        yield* Effect.promise(frames);
+
+        assert.strictEqual(pauses(), 2);
+        assert.match(liveText(container), /limit of 2 plays/u);
+        assert.deepStrictEqual(hiddenIn(root), ["2"]);
+
+        fire(media, "pause");
+        setState(media, { currentTime: 3 });
+        fire(media, "play");
+        yield* Effect.promise(frames);
+
+        assert.strictEqual(pauses(), 3);
+        assert.deepStrictEqual(hiddenIn(root), ["2"]);
+
+        upgraded.teardown();
+        container.remove();
+      }),
+    );
   });
 });
