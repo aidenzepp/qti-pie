@@ -43,7 +43,7 @@ import type { Flag as FlagHandle } from "#pantry/grammar/ancestry.ts";
 import { attributeCounts } from "#pantry/grammar/attributes.ts";
 import type { AttributeCount } from "#pantry/grammar/attributes.ts";
 import type { Roster as GeneratedRoster } from "#pantry/grammar/closed.ts";
-import { int8Max, rowsAt } from "#pantry/grammar/closed.ts";
+import { int8Max, roster, rowsAt } from "#pantry/grammar/closed.ts";
 import { composed, recordCardinality } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind } from "#pantry/grammar/compose.ts";
 import {
@@ -97,46 +97,38 @@ const nonEmpty = <H extends string>(name: string, handles: readonly H[]): readon
  * the roster proves. A value outside the roster is a fault of the generated rows, which the
  * composition's tests find (`faultOf`, `compose.test.ts`) and grizzle's `closedRows` refuses too.
  *
- * @param roster - The generated roster the value's field ranges over.
+ * @param held - The generated roster the value's field ranges over.
  * @param value - The value a generated row holds.
  * @returns The value as the roster's handle.
  * @throws {Error} When the roster lacks it: a defect of the generator that stated the row.
  */
-const memberOf = <H extends string>(roster: GeneratedRoster<H>, value: string): H => {
-  if (roster.has(value)) {
+const memberOf = <H extends string>(held: GeneratedRoster<H>, value: string): H => {
+  if (held.has(value)) {
     return value;
   }
 
   throw new Error(
-    `A generated row names ${value}, which the ${roster.name} roster does not hold. The generator's closed relation should have refused the row; correct the generator.`,
+    `A generated row names ${value}, which the ${held.name} roster does not hold. The generator's closed relation should have refused the row; correct the generator.`,
   );
 };
 
 /**
- * Narrow generators' values to the handles of a roster this module declares, through one keyed
- * lookup of the roster's handles, built once.
+ * Narrow generators' values to the handles of a roster this module declares, by {@link memberOf}
+ * over the same handles as a generated roster, built once.
  *
  * @param name - The roster's name, for the defect's message.
  * @param handles - The roster's handles.
- * @returns The lookup: a value a generated row holds, as the roster's handle.
- * @throws {Error} From the lookup, when the roster lacks the value, which no generator's row does.
+ * @returns The narrowing: a value a generated row holds, as the roster's handle.
+ * @throws {Error} From the narrowing, when the roster lacks the value, which no generator's row
+ *   does.
  */
 const handleLookup = <H extends string>(
   name: string,
   handles: readonly H[],
 ): ((value: string) => H) => {
-  const byValue = new Map<string, H>(handles.map((handle) => [handle, handle]));
+  const declared = roster(name, handles);
 
-  return (value) => {
-    const found = byValue.get(value);
-    if (found !== undefined) {
-      return found;
-    }
-
-    throw new Error(
-      `A generated row names ${value}, which the ${name} roster this module declares does not hold. Add the handle to the roster, or correct the generator.`,
-    );
-  };
+  return (value) => memberOf(declared, value);
 };
 
 /**
@@ -1453,9 +1445,15 @@ export const CnPart = closed(
 );
 
 /**
- * The `CnBase` roster: the radixes of a `cn`'s digits, the numerals 2 to 36 ({@link cnPatternOf}).
+ * The radixes of a `cn`'s digits, 2 to 36 ({@link cnPatternOf}).
  */
-export const CnBase = closed("CnBase", nonEmpty("CnBase", Arr.range(2, 36).map(String)));
+const cnBases = Arr.range(2, 36);
+
+/**
+ * The `CnBase` roster: the radixes of a `cn`'s digits, each spelled as its numeral
+ * ({@link cnBases}).
+ */
+export const CnBase = closed("CnBase", nonEmpty("CnBase", cnBases.map(String)));
 
 /**
  * `MathArity`: Content MathML operator kind → (min, max), the fewest and the most arguments its
@@ -1544,7 +1542,7 @@ export const CnPattern = closed.relation(
   { base: closedId(CnBase), form: closedId(CnPartForm), pattern: anyText },
   ["form", "base"],
   CnPartForm.handles.flatMap((form) =>
-    Arr.range(2, 36).flatMap((base) =>
+    cnBases.flatMap((base) =>
       Option.toArray(cnPatternOf(form, base)).map((pattern) => ({
         base: String(base),
         form,
