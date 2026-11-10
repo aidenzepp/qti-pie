@@ -758,7 +758,7 @@ describe("readPnp", () => {
       const byPerson = yield* read(documents.ubaeRecords, { personSourcedId: "ubae" });
 
       assert.deepStrictEqual(
-        byPerson.text.pipe(Option.map((text) => text.fontNames)),
+        byPerson.display.text.pipe(Option.map((text) => text.fontNames)),
         Option.some(["ubae"]),
       );
       assert.isFalse(byPerson.catalog.has("tactile"));
@@ -809,7 +809,7 @@ describe("readPnp", () => {
           Option.some(new Set(["skip-chemistry-equations", "skip-math-equations"])),
         );
         assert.deepStrictEqual(
-          pnp.text.pipe(Option.map((text) => text.fontNames)),
+          pnp.display.text.pipe(Option.map((text) => text.fontNames)),
           Option.some(["ubae", "skip-chemical-equations"]),
         );
 
@@ -915,7 +915,7 @@ describe("readPnp", () => {
         }),
       );
       assert.deepStrictEqual(
-        pnp.text,
+        pnp.display.text,
         Option.some({
           colorTheme: Option.none(),
           fontNames: [],
@@ -934,7 +934,7 @@ describe("readPnp", () => {
       assert.isFalse(pnp.breaks);
       assert.isTrue(pnp.display.invertDisplayPolarity);
       assert.deepStrictEqual(
-        pnp.invertedColors,
+        pnp.display.invertedColors,
         Option.some({ background: Option.none(), foreground: Option.none() }),
       );
       assert.deepStrictEqual(pnp.toolSettings, {
