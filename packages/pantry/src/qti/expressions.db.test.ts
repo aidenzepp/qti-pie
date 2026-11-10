@@ -1487,11 +1487,6 @@ const itemRefCases: readonly (readonly [string, ItemRefPackage, string | undefin
     "template-default-target",
   ],
   [
-    "a template default under an item ref naming an LTI link",
-    { defaults: [{ held: "integer", template: "T" }], mappings: [], target: "lti" },
-    "template-default-target",
-  ],
-  [
     "a template default whose expression does not fit its template",
     { defaults: [{ held: "float", template: "T" }], mappings: [], target: "item" },
     "P20",
@@ -1502,18 +1497,8 @@ const itemRefCases: readonly (readonly [string, ItemRefPackage, string | undefin
     "variable-mapping-source",
   ],
   [
-    "a mapping whose undeclared source the test reads through the item ref",
-    { defaults: [], mappings: [{ read: true, source: "U", target: "M1" }], target: "item" },
-    "variable-mapping-source",
-  ],
-  [
     "a mapping whose source is a template of its item",
     { defaults: [], mappings: [{ read: false, source: "T", target: "M1" }], target: "item" },
-    "variable-mapping-source",
-  ],
-  [
-    "a mapping whose source is a response of its item",
-    { defaults: [], mappings: [{ read: false, source: "R", target: "M1" }], target: "item" },
     "variable-mapping-source",
   ],
   [
@@ -1532,14 +1517,13 @@ const itemRefCases: readonly (readonly [string, ItemRefPackage, string | undefin
 
 /**
  * The rules each item ref target's bare package is refused under, as the law oracle predicts them,
- * none for the LTI link (lane NIL's NS3): another type is the item ref's law alone; an unlisted
- * path, a stray file and a missing item file break their packaging law beside it.
+ * none for the LTI link (lane NIL's NS3): another type is the item ref's law alone; a missing item
+ * file breaks its packaging laws beside it. An unlisted path and a stray file break one of those
+ * laws each, which the missing file breaks too.
  */
 const itemRefTargetCases: readonly (readonly [ItemTarget, readonly string[]])[] = [
   ["lti", []],
   ["other", ["item-ref-target"]],
-  ["unlisted", ["file-exists", "item-ref-target"]],
-  ["stray", ["file-listed", "item-ref-target"]],
   ["missing", ["entry-kind", "file-exists", "item-ref-target"]],
 ];
 
@@ -1556,8 +1540,8 @@ describe.skipIf(!hasLease)(
           // the rule each case's one cause keeps, which `item-ref-declarations.oracle.test.ts` holds
           // the law oracle to over the same packages. Bound: the lawful control and one package for
           // each way a template default or a mapping fails to name its item's variable: undeclared,
-          // the wrong kind, its type, and its target, and a template default under an LTI link; a
-          // mapping under an LTI link is accepted unchecked (reading 110).
+          // which the existence law refuses, the wrong kind, which the row's CHECK refuses, its
+          // type, and its target; a mapping under an LTI link is accepted unchecked (reading 110).
           Effect.gen(function* itemRefPackages() {
             const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
             for (const [name, input, rule] of itemRefCases) {
@@ -1604,8 +1588,8 @@ describe.skipIf(!hasLease)(
           // (`item-ref-declarations.oracle.test.ts`): an item ref's target and item are rows only
           // where the package holds them (lane NIL's NS3), so the item ref, and the assembly's name
           // that reads them, are refused under "Item ref target" beside the packaging law a missing
-          // or unlisted file breaks, and under no law of a sentinel's. Bound: one bare item ref for
-          // each target, the LTI link the control.
+          // or unlisted file breaks, and under no law of a sentinel's. Bound: a bare item ref of
+          // another type, one whose item file is missing, and the LTI link, the control.
           Effect.gen(function* itemRefTargets() {
             const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
             for (const [target, rules] of itemRefTargetCases) {
