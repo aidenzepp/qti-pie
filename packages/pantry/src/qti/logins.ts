@@ -16,7 +16,7 @@ import { login, workload } from "@bjornpagen/grizzle";
 import { Function as Fn, Result } from "effect";
 import { authorReadsOf } from "#pantry/export/scan.ts";
 import { unionsOf } from "#pantry/import/overlays/index.ts";
-import { writtenNames } from "#pantry/import/roster.ts";
+import { writtenNamesOf } from "#pantry/import/roster.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import { authorRole } from "#pantry/qti/roles.ts";
@@ -49,7 +49,7 @@ import type { QtiSchema } from "#pantry/qti/schema.ts";
 export const authorLogin = Fn.memoize((qti: QtiSchema) => {
   const author = authorRole(qti);
   const noInputs = Result.getOrThrowWith(
-    unionsOf<PackageInputs>(writtenNames, []),
+    unionsOf<PackageInputs>(writtenNamesOf(), []),
     (conflict) => conflict,
   );
 
