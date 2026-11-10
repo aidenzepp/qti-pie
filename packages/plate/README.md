@@ -1192,8 +1192,9 @@ for one candidate and the preferences their Personal Needs and Preferences (PNP)
 `noSupports` turns every support off, and `SupportsSchema` checks a value a host builds. Nothing
 reads it yet, so every value renders the same HTML, and each line below lands with its issue:
 
-- `readPnp` reads an AfA PNP 3.0 document into a `Supports` value; today it is a stub
-  *(pending m4-01)*.
+- `readPnp` reads an AfA PNP 3.0 document into a `PnpSupports` value, a `Supports` widened with
+  the preferences no renderer reads yet; `noPnpSupports` sets none and `PnpSupportsSchema` checks
+  one.
 - Catalog supports: a card's content shows when its support is enabled *(pending m3e-04)*, with
   captions *(pending m3e-07)*, glossary on screen *(pending m3e-08)*, magnification and text and
   background colours *(pending m3e-09)*.
