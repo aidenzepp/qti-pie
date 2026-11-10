@@ -15,13 +15,14 @@ import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
  * The author application's session pool: at most 10 sessions, 1 kept open once opened, and the
  * others closed 5,000 ms after their last use.
  *
- * Grizzle chooses no size and no timeout: `DbLayer.make` takes the caller's `PoolBounds`, and these
- * are this package's choice. Pantry's calls on a `Db` run one after another: the import opens one
- * `Db` and applies one ChangeSet, the export reads its documents' pages in order, and each database
- * test file, in a worker of its own, imports one package at a time, so 10 is headroom above what
- * pantry uses, not a measured need. The session kept open serves a process's next call, such as a
- * test file's next import through the same layer, without a new connection attempt; any other
- * closes 5,000 ms after its last use, so a process between calls holds one session of the server.
+ * Grizzle chooses no size and no timeout: `DbLayer.make` takes the caller's `PoolBounds`, and
+ * these are this package's choice. Pantry's calls on a `Db` run one after another: the import
+ * opens one `Db` and applies one ChangeSet, the export reads its documents' pages in order, and the
+ * database tests run one file at a time (`maxWorkers: 1`, vite.config.ts) and import one package at
+ * a time, so 10 is headroom above what pantry uses, not a measured need. The session kept open
+ * serves a process's next call, such as a test file's next import through the same layer, without
+ * a new connection attempt; any other closes 5,000 ms after its last use, so a process between
+ * calls holds one session of the server.
  *
  * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/grizzle/src/adapter/types/layer.ts#L89-L107
  * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/README.md#connecting
