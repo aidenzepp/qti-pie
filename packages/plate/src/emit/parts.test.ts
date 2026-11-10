@@ -644,15 +644,23 @@ describe("resolveOverrides", () => {
     assert.isTrue(Option.isNone(resolved.replacementFor("choice-interaction", "indicator")));
   });
 
-  it("returns a Result, failing UnknownPart with no part for an unknown interaction", () => {
-    const resolved = resolveOverrides({ "hotspot-interaction": {} });
-    assert.isTrue(Result.isResult(resolved));
-    assert.isTrue(Result.isFailure(resolved));
+  it("returns a Result, failing UnknownPart with no part for an unknown interaction: a stub module's owner, which no part names, and never an implemented module's", () => {
+    for (const module of Object.values(modules)) {
+      const resolved = resolveOverrides({ [module.owner]: {} });
+      assert.isTrue(Result.isResult(resolved), module.owner);
 
-    const error = Option.getOrThrow(Result.getFailure(resolved));
-    assert.strictEqual(error._tag, "UnknownPart");
-    assert.strictEqual(error.interaction, "hotspot-interaction");
-    assert.isTrue(Option.isNone(error.part));
+      if (module.implemented) {
+        assert.isTrue(Result.isSuccess(resolved), module.owner);
+        continue;
+      }
+
+      assert.isTrue(Result.isFailure(resolved), module.owner);
+
+      const error = Option.getOrThrow(Result.getFailure(resolved));
+      assert.strictEqual(error._tag, "UnknownPart");
+      assert.strictEqual(error.interaction, module.owner);
+      assert.isTrue(Option.isNone(error.part), module.owner);
+    }
   });
 
   it("fails with UnknownPart naming an unknown part", () => {
