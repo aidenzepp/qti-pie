@@ -465,10 +465,13 @@ const decodedRubric = (
 
 /**
  * The referencing paragraph as the body walk reads it: its `data-catalog-idref` is a marked
- * attribute, so the model drops it, and the reference reaches the catalog module alone.
+ * attribute, so the model drops it, and the reference reaches the catalog module, while the
+ * element keeps the idref as its `catalog` key.
  */
 const referencing = (path: string): BodyNode => ({
   attributes: [],
+  // The attachment hook keys a catalog presenter by the idref the author wrote.
+  catalog: "cat1",
   children: [textNode("The passage.")],
   kind: "element",
   path,
