@@ -329,13 +329,13 @@ export interface FetchReport {
 /**
  * How many pins download at once.
  */
-const concurrency = 4;
+export const concurrency = 4;
 
 /**
  * How long one file's download may take, its body included: the largest pin, the ASI 3.0.1 XSD,
  * is about 19 MB.
  */
-const downloadTimeout = Duration.minutes(5);
+export const downloadTimeout = Duration.minutes(5);
 
 /**
  * Say what a download ended with, for {@link XsdDownloadFailed}'s `reason`.
@@ -343,7 +343,7 @@ const downloadTimeout = Duration.minutes(5);
  * @param error - The request's failure, or the timeout's.
  * @returns A phrase that follows "was not downloaded from <url>:".
  */
-const reasonOf = (error: HttpClientError.HttpClientError | Cause.TimeoutError): string => {
+export const reasonOf = (error: HttpClientError.HttpClientError | Cause.TimeoutError): string => {
   if (Cause.isTimeoutError(error)) {
     return `no complete answer came within ${Duration.format(downloadTimeout)}`;
   }
@@ -533,7 +533,7 @@ export const summaryOf = (report: FetchReport): string => {
  * transient failure (a transport error, a timeout, HTTP 408, 429 or 5xx) tried again up to three
  * times, a second, two and four seconds apart.
  */
-const downloadClient = Layer.effect(
+export const downloadClient = Layer.effect(
   HttpClient.HttpClient,
   HttpClient.HttpClient.pipe(
     Effect.map(
