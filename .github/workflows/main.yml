@@ -1,0 +1,77 @@
+# Per-PR checks for pull requests into main, run off the laptop: pnpm check, crust's tests, pantry's
+# database-free tests, plate's unit suite, and plate's browser suite in Chromium and WebKit. Not run
+# here: pantry's database tests (its `database` vitest project: every `*.db.test.ts` and
+# `*.packaging.test.ts`, and every file gated on a lease, the corpus witness among them), which need
+# grizzle's local cluster and stay local until the cloud database lands; the corpus-witness cmp; and
+# the drain gate. The setup steps repeat plate.yml's so that workflow's job for the renderer/*/main
+# and gate/cloud-fanout branches stays exactly as it is; a change to a pin or a cache goes to both.
+name: main
+
+on:
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: main-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # The whole history: the ledger's agreement test reads pantry's verdict file at an older commit.
+          fetch-depth: 0
+          # pantry's migrations snapshot and manifest are LFS objects.
+          lfs: true
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 12.16.1
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 26.13.0
+          cache: pnpm
+      # xmllint, which PLATE_XMLLINT names for the XSD tests and pantry's xmllint differentials use; the runner image has none.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-utils
+      # The public caches, kept between runs; the fetch below keeps what is present and fetches the rest.
+      # pantry's global setup materializes its fixtures from the examples tarball this cache holds.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/gr8des
+          key: gr8des-${{ runner.os }}-${{ hashFiles('packages/plate/scripts/cloud/fetch-caches.sh', 'packages/plate/src/test/xsd-layout.ts') }}
+      - run: pnpm install --frozen-lockfile
+      - run: bash packages/plate/scripts/cloud/fetch-caches.sh
+      - run: pnpm check
+      - run: pnpm --filter @qti-pie/crust test
+      # pantry's `free` project (packages/pantry/vite.config.ts): every test file but the database ones.
+      # No GR8DES_PG_DATABASE is set, so no lease is held and nothing opens the cluster.
+      - run: pnpm --filter @qti-pie/pantry test --project free
+      - run: pnpm --filter @qti-pie/plate test
+        env:
+          # Plate's time bounds are readings of a laptop; the runner is slower (src/test/timing.ts).
+          PLATE_TIMING_SCALE: "3"
+      # The installed playwright-core's version (the lockfile's, after the frozen install): the browsers cache's key.
+      - id: playwright
+        run: echo "version=$(node -p "require('./packages/plate/node_modules/playwright-core/package.json').version")" >> "$GITHUB_OUTPUT"
+      # Playwright's browsers, kept between runs under the version that downloaded them, where test:browser reads them.
+      - id: browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/gr8des/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      # Chromium's headless shell and WebKit, on a cache miss only (plate's `browsers` script, into the path above).
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter @qti-pie/plate run browsers
+      # The engines' system libraries, every run: the cache holds the browsers, not the runner's apt packages.
+      - run: pnpm --filter @qti-pie/plate exec playwright-core install-deps chromium webkit
+      # The browser suite: the Node-driven files and the in-page files, in Chromium and WebKit headless.
+      - run: pnpm --filter @qti-pie/plate run test:browser
+        timeout-minutes: 15
+        env:
+          # The same slower-runner scale as the unit suite.
+          PLATE_TIMING_SCALE: "3"
