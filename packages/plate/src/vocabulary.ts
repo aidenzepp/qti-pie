@@ -627,6 +627,19 @@ export const behaviourClasses: Readonly<Record<ClassOwner, readonly string[]>> =
 };
 
 /**
+ * The reserved `data-*` table and its predicates (decision D24), defined in `#plate/emit/parts.ts`
+ * and exported here as their declared home: the emitter is a browser module and must not
+ * value-import this file, whose own imports reach `Schema` from `effect`, which the browser
+ * modules' allowlist refuses. See {@link reservedDataNames} there for D24's text.
+ */
+export {
+  isAuthorData,
+  isReservedData,
+  reservedDataNames,
+  reservedDataPrefix,
+} from "#plate/emit/parts.ts";
+
+/**
  * The two navigation modes of a test part, as its `navigation-mode` attribute spells them.
  */
 export const navigationModes = ["linear", "nonlinear"] as const;

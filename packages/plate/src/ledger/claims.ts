@@ -6,14 +6,16 @@
  * tag, so a passing test never makes such a row `covered`.
  *
  * The claims live in one file per area under `src/ledger/claims/`, so an issue of one area writes
- * its own file and no other: `shared.ts` holds those made before the fan-out, and `m3f.ts`, `m4.ts`
- * and `m5.ts` each area's. {@link claimAreas} joins them, in that order, into {@link claims}.
+ * its own file and no other: `shared.ts` holds those made before the fan-out, and `m3f.ts`,
+ * `m4.ts`, `m5.ts` and `pci.ts` each area's. {@link claimAreas} joins them, in that order, into
+ * {@link claims}.
  *
  * @module
  */
 import { m3fClaims } from "#plate/ledger/claims/m3f.ts";
 import { m4Claims } from "#plate/ledger/claims/m4.ts";
 import { m5Claims } from "#plate/ledger/claims/m5.ts";
+import { pciClaims } from "#plate/ledger/claims/pci.ts";
 import { sharedClaims } from "#plate/ledger/claims/shared.ts";
 
 /**
@@ -48,6 +50,7 @@ export const claimAreas: readonly ClaimArea[] = [
   { area: "m3f", claims: m3fClaims },
   { area: "m4", claims: m4Claims },
   { area: "m5", claims: m5Claims },
+  { area: "pci", claims: pciClaims },
 ];
 
 /**

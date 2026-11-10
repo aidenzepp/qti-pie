@@ -156,8 +156,8 @@ server-side: a host that does not import it loads none of it, and no browser mod
 It exports every name of `@qti-pie/plate`. Each function there that returns a `Result` or takes a
 configuration, and `acceptedItem`, is an Effect here. It calls the plain function, and succeeds
 and fails as that function does. The rest are the plain functions themselves: `open`,
-`openPackage` and `configure`, which already return Effects, and the functions that never fail,
-such as `partition`, `postings` and `solution`.
+`openPackage`, `configure` and `readPnp`, which already return Effects, and the functions that never
+fail, such as `partition`, `postings` and `solution`.
 
 ```ts
 import { readFile } from "node:fs/promises";
@@ -1225,6 +1225,9 @@ this split. A host that sends the accepted item to the browser sends what `redac
 - A form that holds a Choice carries `autocomplete="off"`, and its pages send `Cache-Control: no-store`.
   HTML does not allow the attribute on a radio or a checkbox, and without both, the browser can
   show a choice that plate did not render.
+- A host form's first submit button in tree order is the host's own: a `hidden` submit at the
+  form's start when the visible one follows the item, so Enter in a text field submits the item
+  and never activates an End Attempt. In React, `DefaultSubmit` renders it.
 - Render a restored item with the instance and the configuration you first rendered it with. Its
   record holds the instance and the seed `begin` was given or drew, but not the configuration,
   whose `seed` orders a shuffled Choice or Inline Choice. A record that `score` started holds the
