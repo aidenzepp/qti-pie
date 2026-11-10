@@ -31,6 +31,7 @@ import type {
   Verdict,
 } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
+import { modules } from "#plate/model/interactions.ts";
 import type { Item } from "#plate/model/item.ts";
 import { format } from "#plate/model/values.ts";
 import { checkTree, textOf } from "#plate/test/accessibility.ts";
@@ -51,6 +52,16 @@ const fixtures = {
   hotspot: "QTI3_BPIG_Examples/items/QTI3-hotspot.xml",
   mathml: "QTI3_BPIG_Examples/items/MathML.xml",
 } as const;
+
+/**
+ * The verdict `open` gives the hotspot fixture, whose one interaction is a Hotspot, read from the
+ * table of modules: `accepted` once that module renders, `accepted-with-unsupported` while it is a
+ * stub, whose `parse` shows the element as a notice. A module lands by setting `implemented: true`
+ * and editing nothing shared, so no test writes the verdict a stub's kind earns.
+ */
+const hotspotVerdict: Verdict["verdict"] = modules.hotspot.implemented
+  ? "accepted"
+  : "accepted-with-unsupported";
 
 /**
  * The instance token every render here passes, as an author with a stable token would.
@@ -461,7 +472,7 @@ describe("the vertical witness over the fixtures", { tags: ["corpus"] }, () => {
         [fixtures.cat, "refused"],
         [fixtures.fractions, "refused"],
         [fixtures.mathml, "unchecked"],
-        [fixtures.hotspot, "accepted-with-unsupported"],
+        [fixtures.hotspot, hotspotVerdict],
         [fixtures.bg007, "accepted"],
         [fixtures.bg010, "accepted"],
         [fixtures.bg011, "accepted"],
