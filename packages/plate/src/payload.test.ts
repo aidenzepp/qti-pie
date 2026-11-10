@@ -472,7 +472,7 @@ const interactionsIn = (nodes: readonly PayloadNode[]): readonly InteractionPayl
       return interactionsIn(node.children);
     }
 
-    return node.kind === "text" || node.kind === "notice" ? [] : [node];
+    return node.kind === "text" || node.kind === "notice" || isStubbed(node) ? [] : [node];
   });
 
 /**

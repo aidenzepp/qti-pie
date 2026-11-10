@@ -875,8 +875,9 @@ export class PartTableDefect extends Data.TaggedError("PartTableDefect")<{
  * Derive a part's `data-slot` marker (operator ruling, rule `0e767b8d`): a Root carries its
  * component's name, and every other part `<component>-<part>`, the part key in kebab case.
  *
- * Every marker the emitter writes and every check reads comes from here through the part table, so
- * no code spells one by hand.
+ * Every marker the emitter writes and every check reads comes from here, through the part table or
+ * an interaction module's `partRow` (`#plate/interactions/contract.ts`), so no code spells one by
+ * hand.
  *
  * @param interaction The component: an interaction, `item` for the host chrome, or
  *   `test-navigation` for the test chrome.
@@ -884,14 +885,19 @@ export class PartTableDefect extends Data.TaggedError("PartTableDefect")<{
  * @returns The marker: `choice-interaction`, `choice-interaction-indicator`, `item-status-heading`,
  *   `test-navigation-item-button`.
  */
-const slotFor = (interaction: InteractionKey, part: PartKey): string =>
+export const slotFor = (interaction: InteractionKey, part: PartKey): string =>
   part === "root"
     ? interaction
     : `${interaction}-${part.replaceAll(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`;
 
 /**
- * The part table, one row per part of the item chrome, each interaction and the test chrome's
- * navigation, in {@link rows}' order, each with its derived marker.
+ * The part table, one row per part of the item chrome, each interaction plate renders here and the
+ * test chrome's navigation, in {@link rows}' order, each with its derived marker.
+ *
+ * An interaction module's rows live in its module, not here: a module gives each part's
+ * `PartSpec` in its `parts`, and its render places the part through `partRow`
+ * (`#plate/interactions/contract.ts`), which derives the owner, the part and the marker as this
+ * table does. This table, and {@link rowFor}, serve the four shipped kinds and the chrome only.
  *
  * The Notice, the StatusHeading and the Choice Root and Prompt hold their context-free defaults: a
  * phrasing `span`, `h1`, and the `labelledby` markup with no legend. {@link rowFor} gives the row
@@ -964,6 +970,9 @@ const knownParts: ReadonlyMap<string, readonly string[]> = new Map(
  * Under the `legend` markup the Prompt is a `legend` that stays one under a swap, and the Root, a
  * `fieldset`, owns it as its first child and names no Prompt id. Under `labelledby` the rows are
  * the table's: the Prompt keeps the `id` the Root's `aria-labelledby` names.
+ *
+ * It serves the four shipped kinds and the chrome only. An interaction module's parts have no row
+ * in the table: the module places each through `partRow` (`#plate/interactions/contract.ts`).
  *
  * @param interaction The interaction that owns the part.
  * @param part The part.

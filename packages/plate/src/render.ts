@@ -31,11 +31,13 @@ import { renderChoice } from "#plate/interactions/choice.ts";
 import { renderExtendedText } from "#plate/interactions/extended-text.ts";
 import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { renderTextEntry } from "#plate/interactions/text-entry.ts";
+import { renderModule } from "#plate/model/interactions.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
 import type { ResponseValue } from "#plate/model/values.ts";
 import { isRedacted, payload, redactItem } from "#plate/payload.ts";
 import type {
   EmitState,
+  ModulePayload,
   Payload,
   Redacted,
   RenderMode,
@@ -362,13 +364,14 @@ const stateOf = (configuration: Configuration, parts: Resolved, assetBase?: stri
 const liveRegion = { "aria-atomic": "true", "aria-live": "polite", role: "status" } as const;
 
 /**
- * Construct the render function each interaction of a body is handed to, dispatching on its kind.
+ * Construct the render function for the four interactions the hubs render inline, dispatching on
+ * its kind.
  *
  * @param built The render's payload.
  * @param state The render's emit state.
- * @returns The function that renders one interaction through its module.
+ * @returns The function that renders one of them through its module.
  */
-const interactionRenderer =
+const shippedRenderer =
   (built: Payload, state: EmitState): RenderInteraction =>
   (interaction) => {
     switch (interaction.kind) {
@@ -389,6 +392,19 @@ const interactionRenderer =
       }
     }
   };
+
+/**
+ * Construct the render function each interaction of a body is handed to, dispatching on its kind,
+ * with its `modules`, which hands an interaction a module parses to its module's render.
+ *
+ * @param built The render's payload.
+ * @param state The render's emit state.
+ * @returns The function that renders one interaction through its module.
+ */
+const interactionRenderer = (built: Payload, state: EmitState): RenderInteraction =>
+  Object.assign(shippedRenderer(built, state), {
+    modules: (interaction: ModulePayload) => renderModule(interaction, built, state),
+  });
 
 /**
  * Render an item: the item Root around its body, as HTML.

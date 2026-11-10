@@ -74,6 +74,11 @@ export const selectPointModule: InteractionModule<"select-point", SelectPointInt
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Select Point's feature, as the codec refused it
+   * before: the model holds no node of it until issue ei-14 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) => unimplemented({ element, feature, kind: "select-point" }),
+  /**
    * Select Point's payload copy: not implemented; issue ei-14 fills it.
    */
   redact: notImplemented,

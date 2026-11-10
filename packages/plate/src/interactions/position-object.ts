@@ -79,6 +79,12 @@ export const positionObjectModule: InteractionModule<
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Position Object's feature, as the codec refused it
+   * before: the model holds no node of it until issue ei-12 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) =>
+    unimplemented({ element, feature, kind: "position-object" }),
+  /**
    * Position Object's payload copy: not implemented; issue ei-12 fills it.
    */
   redact: notImplemented,

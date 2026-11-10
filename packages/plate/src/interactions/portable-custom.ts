@@ -79,6 +79,12 @@ export const portableCustomModule: InteractionModule<
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Portable Custom Interaction's feature, as the codec
+   * refused it before: the model holds no node of it until issue pci-03 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) =>
+    unimplemented({ element, feature, kind: "portable-custom" }),
+  /**
    * Portable Custom Interaction's payload copy: not implemented; issue pci-03 fills it.
    */
   redact: notImplemented,

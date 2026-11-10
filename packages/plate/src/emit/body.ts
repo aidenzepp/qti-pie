@@ -7,7 +7,8 @@
  * shallowest heading sits at the configured heading level, every other heading keeping its distance
  * from it and capped at `h6` ({@link headingOffsetOf}). A `tr` the author placed directly in a
  * `table` gains the `tbody` the HTML parser would insert, so the tree survives a parse. Text
- * becomes text, an interaction goes to its render function, and each notice `check` handed in
+ * becomes text, an interaction goes to its render function, an interaction a module parses to its
+ * module's (`RenderInteraction.modules`), and each notice `check` handed in
  * becomes the Notice part, a `span` at a phrasing position and a `div` where the parent takes flow
  * content.
  *
@@ -33,49 +34,93 @@ import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { authoredId, authoredIdrefs, headings, positionUnder, rowFor } from "#plate/emit/parts.ts";
 import type { Position, Resolved } from "#plate/emit/parts.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
+import { isModuleKind } from "#plate/interactions/contract.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
 import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
+import type { ModuleKind } from "#plate/interactions/contract.ts";
 import type { KeptUrl, UrlContext } from "#plate/model/url.ts";
 import type {
   AttributePayload,
   ElementPayload,
   EmitState,
   InteractionPayload,
+  ModulePayload,
+  ModulePayloadOf,
   NoticePayload,
   Payload,
   PayloadNode,
 } from "#plate/payload.ts";
 
 /**
- * Render one interaction of the body: the interaction module's render function, with the payload
- * and the state already applied.
+ * Render one interaction a module parses: its module's render function, with the payload and the
+ * state already applied.
  *
- * @param interaction The interaction's payload.
+ * @param interaction The interaction's payload node.
  * @returns The interaction's Root, or the refusal of a part swap.
  */
-export type RenderInteraction = (
-  interaction: InteractionPayload,
-) => Result.Result<Element, PartSwapRefused>;
+export type RenderModule = (interaction: ModulePayload) => Result.Result<Element, PartSwapRefused>;
+
+/**
+ * Render one interaction of the body: the interaction module's render function, with the payload
+ * and the state already applied.
+ */
+export interface RenderInteraction {
+  /**
+   * Render one of the four interactions the hubs render inline.
+   *
+   * @param interaction The interaction's payload.
+   * @returns The interaction's Root, or the refusal of a part swap.
+   */
+  (interaction: InteractionPayload): Result.Result<Element, PartSwapRefused>;
+  /**
+   * Render an interaction a module parses ({@link ModulePayload}) through its module, as `render`'s
+   * renderer does; {@link nestedInteraction}'s refuses one as it refuses any interaction. A render
+   * function without it writes nothing for one, as the walk writes nothing for a node of no kind
+   * the payload defines: only a payload built by hand reaches it so.
+   */
+  readonly modules?: RenderModule;
+}
 
 /**
  * Where a nested interaction was met: inside a Choice's Prompt or choice content, an Extended
- * Text's Prompt, or an Inline Choice's Label. An Inline Choice's choice content is written as
- * option text, never as nodes, so its Label is the only content of one the emitter walks.
+ * Text's Prompt, an Inline Choice's Label, or the content of an interaction a module parses. An
+ * Inline Choice's choice content is written as option text, never as nodes, so its Label is the
+ * only content of one the emitter walks.
  */
 export type NestedWithin =
   | "choice-interaction"
   | "extended-text-interaction"
-  | "inline-choice-interaction";
+  | "inline-choice-interaction"
+  | `${ModuleKind}-interaction`;
 
 /**
- * The content each {@link NestedWithin} names, as the message says it.
+ * The content each shipped {@link NestedWithin} names, as the message says it; a module's owner is
+ * said as its own content.
  */
-const nestedPlaces: Readonly<Record<NestedWithin, string>> = {
+const nestedPlaces: Readonly<Partial<Record<NestedWithin, string>>> = {
   "choice-interaction": "a Choice's Prompt or choice content",
   "extended-text-interaction": "an Extended Text's Prompt",
   "inline-choice-interaction": "an Inline Choice's Label",
 };
+
+/**
+ * Tell whether a payload node is the payload node of an interaction a module parses.
+ *
+ * @param node The payload node.
+ * @returns Whether its kind is a module's ({@link isModuleKind}).
+ */
+export const isModulePayload = (node: PayloadNode): node is ModulePayload =>
+  isModuleKind(node.kind);
+
+/**
+ * Give the response a module kind's payload node binds.
+ *
+ * @param interaction The payload node.
+ * @returns The identifier of its response.
+ */
+const moduleResponse = <K extends ModuleKind>(interaction: ModulePayloadOf<K>): string =>
+  interaction.payload.response;
 
 /**
  * An interaction met inside a Prompt, a choice's content or an Inline Choice's Label, a defect
@@ -87,7 +132,7 @@ const nestedPlaces: Readonly<Record<NestedWithin, string>> = {
  * can hold one. It is thrown, never returned.
  */
 export class NestedInteractionDefect extends Data.TaggedError("NestedInteractionDefect")<{
-  readonly kind: InteractionPayload["kind"];
+  readonly kind: InteractionPayload["kind"] | ModuleKind;
   readonly response: string;
   readonly within: NestedWithin;
 }> {
@@ -95,24 +140,34 @@ export class NestedInteractionDefect extends Data.TaggedError("NestedInteraction
    * The nested interaction, where it sits, and what to change.
    */
   override get message(): string {
-    return `A ${this.kind} interaction for the response ${JSON.stringify(this.response)} sits inside ${nestedPlaces[this.within]}, where QTI's schema admits no interaction; move it out to the item body, or render an item that check accepted.`;
+    return `A ${this.kind} interaction for the response ${JSON.stringify(this.response)} sits inside ${nestedPlaces[this.within] ?? `a ${this.within}'s own content`}, where QTI's schema admits no interaction; move it out to the item body, or render an item that check accepted.`;
   }
 }
 
 /**
  * Give the render function for content where QTI's schema admits no interaction, a Prompt's, a
- * choice's or an Inline Choice's Label's: meeting one is a defect, since only a payload built by
- * hand can hold one.
+ * choice's or an Inline Choice's Label's, or the content of an interaction a module parses: meeting
+ * one is a defect, since only a payload built by hand can hold one.
  *
  * @param within Where the content sits.
  * @returns A render function that throws {@link NestedInteractionDefect}, naming the interaction
- *   and `within`, for any interaction it is handed.
+ *   and `within`, for any interaction it is handed, a module's included.
  */
-export const nestedInteraction =
-  (within: NestedWithin): RenderInteraction =>
-  (nested) => {
-    throw new NestedInteractionDefect({ kind: nested.kind, response: nested.response, within });
-  };
+export const nestedInteraction = (within: NestedWithin): RenderInteraction =>
+  Object.assign(
+    (nested: InteractionPayload): never => {
+      throw new NestedInteractionDefect({ kind: nested.kind, response: nested.response, within });
+    },
+    {
+      modules: (nested: ModulePayload): never => {
+        throw new NestedInteractionDefect({
+          kind: nested.kind,
+          response: moduleResponse(nested),
+          within,
+        });
+      },
+    },
+  );
 
 /**
  * The attributes the XSD declares as references to ids (`xs:IDREF`, `xs:IDREFS`, and `headers`, a
@@ -677,10 +732,19 @@ const elementOf = (
  *
  * @param node The payload node.
  * @param walk What the walk carries.
- * @returns The node as it renders, none when the second line drops it (an element outside
- *   {@link htmlSubset}, or a node of no kind the payload defines), or the refusal of a part swap.
+ * @returns The node as it renders, a module's payload node through `renderInteraction.modules`;
+ *   none when the second line drops it (an element outside {@link htmlSubset}, a node of no kind
+ *   the payload defines, or a module's payload node for a render function without `modules`); or
+ *   the refusal of a part swap.
  */
 const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], PartSwapRefused> => {
+  if (isModulePayload(node)) {
+    return Option.match(Option.fromUndefinedOr(walk.renderInteraction.modules), {
+      onNone: () => Result.succeed([]),
+      onSome: (renderModule) => Result.map(renderModule(node), (root) => [root]),
+    });
+  }
+
   switch (node.kind) {
     case "element": {
       return Option.match(Option.fromUndefinedOr(htmlSubset.get(node.tag)), {
@@ -721,6 +785,12 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
  */
 const headingLevelsIn = (nodes: readonly PayloadNode[]): readonly number[] =>
   nodes.flatMap((node): readonly number[] => {
+    if (isModulePayload(node)) {
+      // A module's payload node is read by its module alone, so its own content is not read here:
+      // no module renders one yet, and the first whose content can hold a heading reads it here.
+      return [];
+    }
+
     switch (node.kind) {
       case "element": {
         if (!htmlSubset.has(node.tag)) {

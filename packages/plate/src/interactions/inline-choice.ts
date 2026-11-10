@@ -19,7 +19,7 @@
  */
 import { Option, Result, pipe } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { emitNodes, nestedInteraction } from "#plate/emit/body.ts";
+import { emitNodes, isModulePayload, nestedInteraction } from "#plate/emit/body.ts";
 import { text, when } from "#plate/emit/node.ts";
 import type { Attributes, Element } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
@@ -102,6 +102,11 @@ const rows: Rows = {
 const textIn = (nodes: readonly PayloadNode[]): string =>
   nodes
     .map((node) => {
+      if (isModulePayload(node)) {
+        // An interaction a module parses is refused here as any interaction is: it writes no text.
+        return "";
+      }
+
       switch (node.kind) {
         case "text": {
           return node.text;

@@ -73,6 +73,11 @@ export const drawingModule: InteractionModule<"drawing", DrawingInteraction, nev
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Drawing's feature, as the codec refused it before:
+   * the model holds no node of it until issue ei-17 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) => unimplemented({ element, feature, kind: "drawing" }),
+  /**
    * Drawing's payload copy: not implemented; issue ei-17 fills it.
    */
   redact: notImplemented,

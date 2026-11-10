@@ -73,6 +73,11 @@ export const associateModule: InteractionModule<"associate", AssociateInteractio
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Associate's feature, as the codec refused it before:
+   * the model holds no node of it until issue ei-04 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) => unimplemented({ element, feature, kind: "associate" }),
+  /**
    * Associate's payload copy: not implemented; issue ei-04 fills it.
    */
   redact: notImplemented,

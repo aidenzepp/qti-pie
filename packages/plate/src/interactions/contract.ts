@@ -10,26 +10,31 @@
  * and the other members the per-kind facts the hubs inline today, each named where it is read.
  *
  * Each of the other kinds is a stub module beside this file: `implemented` is false, its `parts`
- * holds no row, and its `parse` gives the notice an unknown QTI interaction element gives, so the
- * verdicts and the HTML stay what they were. A stub's other members throw {@link NotImplemented}.
- * No hub reaches them: the model holds no node of a stub's kind, since its `parse` gives the
- * notice, and the redacted codec refuses one, so no step past `parse` ever runs for it. The
- * modules form no registry a host can reach: the body walk names each element in one switch, and
- * every hub delegates a stubbed kind through `stubSteps` in `#plate/model/interactions.ts`, one
- * exhaustive switch over the stub modules.
+ * holds no row, its `parse` gives the notice an unknown QTI interaction element gives, so the
+ * verdicts and the HTML stay what they were, and its `payloadSchema` refuses its kind, as the
+ * redacted codec refused it before. A stub's other members throw {@link NotImplemented}. No hub
+ * reaches them: the model holds no node of a stub's kind, since its `parse` gives the notice, and
+ * the redacted codec refuses one, so no step past `parse` ever runs for it. The modules form no
+ * registry a host can reach: the body walk names each element in one switch, and every hub
+ * delegates a module's kind through `#plate/model/interactions.ts`, its `stubSteps` for a model
+ * node and its `renderModule` for a payload node. A module that lands fills only its own file: its
+ * payload node reaches the payload as a `ModulePayload` (`#plate/payload.ts`), its JSON form
+ * through its `payloadSchema`, and each of its parts through {@link partRow}.
  *
  * @module
  */
 import { Data } from "effect";
-import type { Option, Result } from "effect";
+import type { Option, Result, Schema } from "effect";
+import type { SchemaKit } from "#plate/codec/redacted.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import type { Attributes, Element } from "#plate/emit/node.ts";
-import type { PartRow } from "#plate/emit/parts.ts";
+import { slotFor } from "#plate/emit/parts.ts";
+import type { InteractionKey, PartKey, PartRow } from "#plate/emit/parts.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import type { Malformed } from "#plate/form/encoding.ts";
 import type { Locale } from "#plate/messages.ts";
-import type { Interaction, Unsupported } from "#plate/model/item.ts";
+import type { Interaction, StubbedInteraction, Unsupported } from "#plate/model/item.ts";
 import type { ResponseValue, Value } from "#plate/model/values.ts";
 import type { EmitState, Payload, ValidationMessage } from "#plate/payload.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
@@ -40,16 +45,63 @@ import type { Refusal } from "#plate/validate/refusal.ts";
 export type InteractionKind = Interaction["kind"];
 
 /**
+ * A kind plate parses through an interaction module beside this file, one of the seventeen beside
+ * the four the hubs hold inline.
+ */
+export type ModuleKind = StubbedInteraction["kind"];
+
+/**
+ * The module kinds, each once: a record over {@link ModuleKind}, so a kind added to it or taken
+ * from it changes this table or fails to compile.
+ */
+const moduleKinds = {
+  associate: true,
+  drawing: true,
+  "end-attempt": true,
+  "gap-match": true,
+  "graphic-associate": true,
+  "graphic-gap-match": true,
+  "graphic-order": true,
+  hotspot: true,
+  hottext: true,
+  match: true,
+  media: true,
+  order: true,
+  "portable-custom": true,
+  "position-object": true,
+  "select-point": true,
+  slider: true,
+  upload: true,
+} as const satisfies { readonly [K in ModuleKind]: true };
+
+/**
+ * Tell whether a kind is a {@link ModuleKind}, whatever node names it.
+ *
+ * @param kind A node's kind.
+ * @returns Whether a module parses the kind.
+ */
+export const isModuleKind = (kind: string): kind is ModuleKind => Object.hasOwn(moduleKinds, kind);
+
+/**
  * A feature of the QTI 3.0 conformance list, Appendix A, by its identifier: `Q-1` to `Q-21` are
  * the interactions, Associate to Upload in alphabetical order.
  */
 export type FeatureId = `Q-${number}`;
 
 /**
- * The row a module gives one of its parts, before the part table adds the owner, the part key,
- * the derived `data-slot` marker and the placement's `legendOwner`.
+ * The row a module gives one of its parts, before {@link partRow} adds the owner, the part key and
+ * the derived `data-slot` marker. `legendOwner` is false unless the spec says otherwise.
  */
-export type PartSpec = Omit<PartRow, "interaction" | "legendOwner" | "part" | "slot">;
+export type PartSpec = Omit<PartRow, "interaction" | "legendOwner" | "part" | "slot"> & {
+  readonly legendOwner?: boolean;
+};
+
+/**
+ * What a placement sets of a part's row over its {@link PartSpec}, as `rowFor` sets the Notice's
+ * element by its position and the Choice Prompt's by its markup: each field given replaces the
+ * spec's.
+ */
+export type PartPlacement = Partial<Omit<PartRow, "interaction" | "part" | "slot">>;
 
 /**
  * What the body walk hands a module's `parse`: the element's path, and the one way to replace the
@@ -100,10 +152,19 @@ export interface BoundResponse {
  *
  * @template K The kind, as the item model names it.
  * @template I The kind's model node.
- * @template P The kind's payload node, `never` for a stub, which has none yet.
+ * @template P The kind's payload node, `never` for a stub, which has none yet. It names the response
+ *   it binds, as every QTI interaction's `response-identifier` names one.
  * @template Part The kind's part keys, `never` for a stub, which has no row.
+ * @template J The JSON form of the model node in a redacted body, `never` for a stub, whose
+ *   `payloadSchema` refuses every value.
  */
-export interface InteractionModule<K extends InteractionKind, I, P, Part extends string = never> {
+export interface InteractionModule<
+  K extends InteractionKind,
+  I,
+  P extends { readonly response: string },
+  Part extends string = never,
+  J = never,
+> {
   /**
    * The responses the interaction binds, each with its number base, as `postings` reads them.
    */
@@ -145,9 +206,19 @@ export interface InteractionModule<K extends InteractionKind, I, P, Part extends
     context: ParseContext,
   ) => Result.Result<I | Unsupported, Refusal>;
   /**
-   * The rows of the kind's parts, by part key; none for a stub.
+   * The rows of the kind's parts, by part key; none for a stub. {@link partRow} gives a part's row.
    */
   readonly parts: { readonly [Q in Part]: PartSpec };
+  /**
+   * The Schema the redacted codec checks the model node's JSON form with, built from what the codec
+   * hands it, so that no browser module value-imports Schema; for a stub, the kit's `unimplemented`
+   * schema, which refuses the kind naming its feature.
+   *
+   * @param kit The codec's Schema and its shared field schemas, the body's recursive one among
+   *   them.
+   * @returns The model node's codec: its type `I`, its encoded side `J`.
+   */
+  readonly payloadSchema: (kit: SchemaKit) => Schema.Codec<I, J>;
   /**
    * Copy the model node into the payload node the page may know.
    */
@@ -190,6 +261,38 @@ export interface InteractionModule<K extends InteractionKind, I, P, Part extends
     configuration: Configuration,
   ) => readonly ValidationMessage[];
 }
+
+/**
+ * Give the row of one of a module's parts, as a module's render places it with `applyPart`: its
+ * {@link PartSpec}, with what the placement sets over it, owned by the module's `owner`, keyed by
+ * the part, and marked by the `data-slot` value the part table derives for every part (`<owner>`
+ * for the Root, `<owner>-<part>` in kebab case otherwise). `legendOwner` is false unless the spec
+ * or the placement says otherwise.
+ *
+ * A module's rows live in the module, not in the part table: `rowFor` serves the four shipped
+ * kinds and the chrome only, so a module calls this and never `rowFor`.
+ *
+ * @param module The module, by its owner and its parts.
+ * @param part The part.
+ * @param placement What the placement sets over the spec, nothing by default.
+ * @returns The part's row.
+ */
+export const partRow = <Part extends PartKey>(
+  module: { readonly owner: InteractionKey; readonly parts: { readonly [Q in Part]: PartSpec } },
+  part: Part,
+  placement: PartPlacement = {},
+): PartRow => {
+  const { legendOwner = false, ...spec } = module.parts[part];
+
+  return {
+    ...spec,
+    legendOwner,
+    ...placement,
+    interaction: module.owner,
+    part,
+    slot: slotFor(module.owner, part),
+  };
+};
 
 /**
  * A step of a stub interaction module ran: a defect of plate, which no item or host can cause.

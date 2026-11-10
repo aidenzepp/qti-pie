@@ -73,6 +73,11 @@ export const hotspotModule: InteractionModule<"hotspot", HotspotInteraction, nev
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Hotspot's feature, as the codec refused it before:
+   * the model holds no node of it until issue m3d-07 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) => unimplemented({ element, feature, kind: "hotspot" }),
+  /**
    * Hotspot's payload copy: not implemented; issue m3d-07 fills it.
    */
   redact: notImplemented,

@@ -35,12 +35,14 @@ import { positionObjectModule } from "#plate/interactions/position-object.ts";
 import { selectPointModule } from "#plate/interactions/select-point.ts";
 import { sliderModule } from "#plate/interactions/slider.ts";
 import { uploadModule } from "#plate/interactions/upload.ts";
+import type { ModuleKind } from "#plate/interactions/contract.ts";
 import { isInteraction, regionsOf } from "#plate/model/interactions.ts";
-import type { Region } from "#plate/model/interactions.ts";
+import type { Modules, Region } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
+  StubInteraction,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { modelledBaseTypes, modelledCardinalities } from "#plate/model/values.ts";
@@ -166,6 +168,13 @@ interface UnsupportedJson {
 }
 
 /**
+ * An interaction a module parses, in the JSON form: the encoded side of its module's
+ * `payloadSchema`, read from the module, so a module that lands needs no line here; none while
+ * every module is a stub, whose encoded side is `Never`.
+ */
+type ModuleJson = ReturnType<Modules[ModuleKind]["payloadSchema"]>["Encoded"];
+
+/**
  * A node of the body in the JSON form: the encoded side of {@link BodyNodeSchema}, written out
  * because the body is recursive and its suspended reference needs a declared type.
  */
@@ -174,6 +183,8 @@ type BodyNodeJson =
   | BodyTextJson
   | ChoiceInteractionJson
   | InlineChoiceInteractionJson
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents -- `ModuleJson` is never while every module is a stub; a module that lands adds its JSON form through it, with no line here.
+  | ModuleJson
   | TextEntryInteractionJson
   | ExtendedTextInteractionJson
   | UnsupportedJson;
@@ -368,17 +379,17 @@ const textControlFields = {
  * has no step past `parse`. Its encoded side is `Never`, so decoding refuses a body node of its
  * kind, as for a printed variable ({@link NoPrintedVariable}), and `render` never meets one. Its
  * type side holds every field of the model's placeholder, so the codec's body-node union stays the
- * model's `BodyNode`.
+ * model's `BodyNode`. A stub's `payloadSchema` gives it, through {@link SchemaKit}.
  *
- * @param module The kind's stub module, which names the kind, its feature and its element.
+ * @param stub The kind's stub module, by the kind, its feature and its element.
  * @returns The kind's member of {@link BodyNodeSchema}.
  */
-const NoStubInteraction = <K extends string>(module: {
+const unimplemented = <K extends string>(stub: {
   readonly element: string;
   readonly feature: string;
   readonly kind: K;
-}) => {
-  const refusal = `a redacted body holds no ${module.kind} interaction (${module.feature}): plate reads ${module.element} as its notice until its module lands, so redact never writes one`;
+}): Schema.Codec<StubInteraction<K>, never> => {
+  const refusal = `a redacted body holds no ${stub.kind} interaction (${stub.feature}): plate reads ${stub.element} as its notice until its module lands, so redact never writes one`;
 
   return Schema.Never.pipe(
     Schema.decodeTo(
@@ -386,7 +397,7 @@ const NoStubInteraction = <K extends string>(module: {
         ariaLabel: Schema.Option(Schema.String),
         ariaLabelledby: Schema.Option(Schema.String),
         class: Schema.String,
-        kind: Schema.Literal(module.kind),
+        kind: Schema.Literal(stub.kind),
         path: Schema.String,
         prompt: Schema.Option(BodyNodes),
         response: Schema.String,
@@ -400,11 +411,52 @@ const NoStubInteraction = <K extends string>(module: {
 };
 
 /**
+ * What the codec hands an interaction module's `payloadSchema`: Schema itself, so that no browser
+ * module value-imports it, the field schemas the codec's own members share, the body's recursive
+ * reference among them, and the refusal a stub gives.
+ */
+export interface SchemaKit {
+  /**
+   * The body's recursive reference, for a Prompt or a choice's content.
+   */
+  readonly BodyNodes: typeof BodyNodes;
+  readonly ChoiceCount: typeof ChoiceCount;
+  readonly Choices: typeof Choices;
+  readonly Count: typeof Count;
+  readonly NoPath: typeof NoPath;
+  readonly OptionalCount: typeof OptionalCount;
+  readonly OptionalText: typeof OptionalText;
+  readonly Schema: typeof Schema;
+  readonly SchemaGetter: typeof SchemaGetter;
+  /**
+   * The member of a kind whose module is a stub, which refuses the kind naming its feature
+   * ({@link unimplemented}).
+   */
+  readonly unimplemented: typeof unimplemented;
+}
+
+/**
+ * The one {@link SchemaKit} every module's `payloadSchema` is handed.
+ */
+const kit: SchemaKit = {
+  BodyNodes,
+  ChoiceCount,
+  Choices,
+  Count,
+  NoPath,
+  OptionalCount,
+  OptionalText,
+  Schema,
+  SchemaGetter,
+  unimplemented,
+};
+
+/**
  * The Schema of one body node, a union over every kind of `BodyNode`, every field included; its
  * type is {@link BodyNode} and its encoded form {@link BodyNodeJson}, which holds no path
  * ({@link NoPath}), no printed variable ({@link NoPrintedVariable}), no template block or inline
- * ({@link NoTemplateContent}) and no interaction a stub module parses
- * ({@link NoStubInteraction}).
+ * ({@link NoTemplateContent}) and no interaction a stub module parses ({@link unimplemented}). An
+ * interaction a module parses is its module's `payloadSchema`, handed {@link kit}.
  */
 const BodyNodeSchema = Schema.Union([
   Schema.Struct({
@@ -468,23 +520,23 @@ const BodyNodeSchema = Schema.Union([
   }),
   NoPrintedVariable,
   NoTemplateContent,
-  NoStubInteraction(associateModule),
-  NoStubInteraction(drawingModule),
-  NoStubInteraction(endAttemptModule),
-  NoStubInteraction(gapMatchModule),
-  NoStubInteraction(graphicAssociateModule),
-  NoStubInteraction(graphicGapMatchModule),
-  NoStubInteraction(graphicOrderModule),
-  NoStubInteraction(hotspotModule),
-  NoStubInteraction(hottextModule),
-  NoStubInteraction(matchModule),
-  NoStubInteraction(mediaModule),
-  NoStubInteraction(orderModule),
-  NoStubInteraction(portableCustomModule),
-  NoStubInteraction(positionObjectModule),
-  NoStubInteraction(selectPointModule),
-  NoStubInteraction(sliderModule),
-  NoStubInteraction(uploadModule),
+  associateModule.payloadSchema(kit),
+  drawingModule.payloadSchema(kit),
+  endAttemptModule.payloadSchema(kit),
+  gapMatchModule.payloadSchema(kit),
+  graphicAssociateModule.payloadSchema(kit),
+  graphicGapMatchModule.payloadSchema(kit),
+  graphicOrderModule.payloadSchema(kit),
+  hotspotModule.payloadSchema(kit),
+  hottextModule.payloadSchema(kit),
+  matchModule.payloadSchema(kit),
+  mediaModule.payloadSchema(kit),
+  orderModule.payloadSchema(kit),
+  portableCustomModule.payloadSchema(kit),
+  positionObjectModule.payloadSchema(kit),
+  selectPointModule.payloadSchema(kit),
+  sliderModule.payloadSchema(kit),
+  uploadModule.payloadSchema(kit),
 ]);
 
 /**

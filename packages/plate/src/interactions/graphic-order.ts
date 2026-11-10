@@ -78,6 +78,11 @@ export const graphicOrderModule: InteractionModule<
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Graphic Order's feature, as the codec refused it
+   * before: the model holds no node of it until issue ei-10 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) => unimplemented({ element, feature, kind: "graphic-order" }),
+  /**
    * Graphic Order's payload copy: not implemented; issue ei-10 fills it.
    */
   redact: notImplemented,

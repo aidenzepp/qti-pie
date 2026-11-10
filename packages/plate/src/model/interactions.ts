@@ -6,15 +6,18 @@
  * {@link regionsOf} is the one place that knows which content each interaction kind holds: every
  * walk of the body that enters an interaction enters it through the regions this gives, each with
  * its owner, so no walk keeps its own table of the kinds. {@link stubSteps} is the one place that
- * hands a stubbed kind's node to its module, so each hub delegates a stubbed kind in one line.
+ * hands a module kind's model node to its module, and {@link renderModule} the one that hands its
+ * payload node to its module's render, so each hub delegates a module's kind in one line, and a
+ * module that lands changes neither.
  *
  * It lives apart from the item model because the model builder value-imports the Effect runtime,
- * and its callers are browser modules: this module value-imports only `Option` and the stub
- * modules, which value-import only `Data`.
+ * and its callers are browser modules: this module value-imports only `Option` and the interaction
+ * modules, which value-import only `Data` and the part table.
  *
  * @module
  */
 import { Option } from "effect";
+import type { Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import type { Malformed } from "#plate/form/encoding.ts";
 import { associateModule } from "#plate/interactions/associate.ts";
@@ -34,14 +37,13 @@ import { positionObjectModule } from "#plate/interactions/position-object.ts";
 import { selectPointModule } from "#plate/interactions/select-point.ts";
 import { sliderModule } from "#plate/interactions/slider.ts";
 import { uploadModule } from "#plate/interactions/upload.ts";
-import type {
-  BoundResponse,
-  InteractionKind,
-  InteractionModule,
-} from "#plate/interactions/contract.ts";
+import type { Element } from "#plate/emit/node.ts";
+import type { PartSwapRefused } from "#plate/emit/swap.ts";
+import { isModuleKind } from "#plate/interactions/contract.ts";
+import type { BoundResponse, InteractionModule, ModuleKind } from "#plate/interactions/contract.ts";
 import type { BodyNode, Interaction, SimpleChoice, StubbedInteraction } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
-import type { ValidationMessage } from "#plate/payload.ts";
+import type { EmitState, ModulePayloadOf, Payload, ValidationMessage } from "#plate/payload.ts";
 
 /**
  * One region of an interaction: content it holds of its own, with the owner it sits in.
@@ -70,38 +72,87 @@ export interface Region {
 }
 
 /**
- * The kinds plate parses through a stub module, each once: a record over
- * {@link StubbedInteraction}'s kinds, so a kind added to it or taken from it changes this table
- * or fails to compile.
+ * The module of each kind plate parses through one, by kind: a record over {@link ModuleKind}, so
+ * a kind added to it or taken from it changes this table or fails to compile. The types a hub reads
+ * of a module ({@link ModelOf}, {@link PayloadOf}) are read from it, so a module that lands
+ * declares them in its own file.
  */
-const stubbedKinds = {
-  associate: true,
-  drawing: true,
-  "end-attempt": true,
-  "gap-match": true,
-  "graphic-associate": true,
-  "graphic-gap-match": true,
-  "graphic-order": true,
-  hotspot: true,
-  hottext: true,
-  match: true,
-  media: true,
-  order: true,
-  "portable-custom": true,
-  "position-object": true,
-  "select-point": true,
-  slider: true,
-  upload: true,
-} as const satisfies { readonly [K in StubbedInteraction["kind"]]: true };
+const modules = {
+  associate: associateModule,
+  drawing: drawingModule,
+  "end-attempt": endAttemptModule,
+  "gap-match": gapMatchModule,
+  "graphic-associate": graphicAssociateModule,
+  "graphic-gap-match": graphicGapMatchModule,
+  "graphic-order": graphicOrderModule,
+  hotspot: hotspotModule,
+  hottext: hottextModule,
+  match: matchModule,
+  media: mediaModule,
+  order: orderModule,
+  "portable-custom": portableCustomModule,
+  "position-object": positionObjectModule,
+  "select-point": selectPointModule,
+  slider: sliderModule,
+  upload: uploadModule,
+} as const satisfies { readonly [K in ModuleKind]: { readonly kind: K } };
 
 /**
- * Tell whether a node is the placeholder of an interaction plate parses through a stub module.
+ * The module of each {@link ModuleKind}, by kind, as each module declares itself.
+ */
+export type Modules = typeof modules;
+
+/**
+ * The model node of a module's kind, as its module's `redact` reads it.
+ *
+ * @template K The kind.
+ */
+export type ModelOf<K extends ModuleKind> = Parameters<Modules[K]["redact"]>[0];
+
+/**
+ * The payload node of a module's kind, as its module's `redact` gives it: `never` for a stub. It
+ * names the response it binds, as the contract requires of every module's payload node.
+ *
+ * @template K The kind.
+ */
+export type PayloadOf<K extends ModuleKind> = Extract<
+  ReturnType<Modules[K]["redact"]>,
+  { readonly response: string }
+>;
+
+/**
+ * The members of a module the hubs call through {@link stubSteps} and {@link renderModule}, typed
+ * by its kind's model and payload nodes.
+ *
+ * @template K The kind.
+ */
+type Stepped<K extends ModuleKind> = Pick<
+  InteractionModule<K, ModelOf<K>, PayloadOf<K>>,
+  "bindings" | "controls" | "nullValue" | "redact" | "render" | "sequence" | "unnamed" | "validate"
+>;
+
+/**
+ * Each kind's {@link Stepped} members, by kind: a mapped type, so that indexing it by a kind gives
+ * that kind's members, which correlates a node's kind with its module's types.
+ */
+type SteppedModules = { readonly [K in ModuleKind]: Stepped<K> };
+
+/**
+ * {@link modules} as {@link SteppedModules}.
+ */
+const stepped: SteppedModules = modules;
+
+/**
+ * Tell whether a node is one of an interaction plate parses through a module: a model node
+ * ({@link StubbedInteraction}) or a payload node (`ModulePayload`), whichever the node's own type
+ * holds.
  *
  * @param node A body or payload node.
- * @returns Whether its kind is a stubbed kind.
+ * @returns Whether its kind is a {@link ModuleKind}.
  */
-export const isStubbed = (node: { readonly kind: string }): node is StubbedInteraction =>
-  Object.hasOwn(stubbedKinds, node.kind);
+export const isStubbed = <N extends { readonly kind: string }>(
+  node: N,
+): node is Extract<N, { readonly kind: ModuleKind }> => isModuleKind(node.kind);
 
 /**
  * Give a region the owner holds, none when the owner has no such content.
@@ -284,16 +335,21 @@ export const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction
   });
 
 /**
- * The steps of one stubbed interaction, each bound to its node: the members of its module the hubs
- * call ({@link InteractionModule}), so a hub delegates a stubbed kind in one line. Each throws
- * `NotImplemented` until its kind's module lands, and no hub reaches one: the model holds no
- * stubbed node.
+ * The steps of one module kind's model node, each bound to it: the members of its module the hubs
+ * call ({@link InteractionModule}), so a hub delegates a module's kind in one line. A stub's throw
+ * `NotImplemented`, and no hub reaches one: the model holds no stubbed node.
+ *
+ * @template K The kind.
  */
-export interface StubSteps {
+export interface StubSteps<K extends ModuleKind> {
   readonly bindings: () => readonly BoundResponse[];
   readonly controls: () => number;
   readonly nullValue: () => Value;
-  readonly redact: () => never;
+  /**
+   * Copy the node into its payload node, the module's `redact`, as the payload's
+   * {@link ModulePayloadOf} member.
+   */
+  readonly redact: () => ModulePayloadOf<K>;
   readonly sequence: (seed: Option.Option<string>, instance: string) => Option.Option<string>;
   readonly unnamed: (unauthored: boolean) => boolean;
   readonly validate: (
@@ -303,87 +359,107 @@ export interface StubSteps {
 }
 
 /**
- * Bind a stub module's steps to one of its nodes.
+ * Bind a module's steps to one of its kind's model nodes.
  *
- * @param module The kind's module.
+ * @param kind The kind.
  * @param interaction The node.
  * @returns The module's steps, each on the node.
  */
-const stepsOf = <K extends InteractionKind, I>(
-  module: InteractionModule<K, I, never>,
-  interaction: I,
-): StubSteps => ({
-  bindings: () => module.bindings(interaction),
-  controls: () => module.controls(interaction),
-  nullValue: () => module.nullValue(interaction),
-  redact: () => module.redact(interaction),
-  sequence: (seed, instance) => module.sequence(interaction, seed, instance),
-  unnamed: (unauthored) => module.unnamed(interaction, unauthored),
-  validate: (input, configuration) => module.validate(interaction, input, configuration),
-});
+const stepsOf = <K extends ModuleKind>(kind: K, interaction: ModelOf<K>): StubSteps<K> => {
+  const module = stepped[kind];
+
+  return {
+    bindings: () => module.bindings(interaction),
+    controls: () => module.controls(interaction),
+    nullValue: () => module.nullValue(interaction),
+    redact: () => ({ kind, payload: module.redact(interaction) }),
+    sequence: (seed, instance) => module.sequence(interaction, seed, instance),
+    unnamed: (unauthored) => module.unnamed(interaction, unauthored),
+    validate: (input, configuration) => module.validate(interaction, input, configuration),
+  };
+};
 
 /**
- * Give a stubbed interaction's steps, by its kind's module: the one switch that names every
- * stubbed kind's module, so each hub delegates through it.
+ * Give a module kind's model node's steps, by its kind's module: one case per kind, each binding
+ * the node at its own kind, so the payload node {@link StubSteps.redact} gives is the member of its
+ * kind; no case names a module, so a module that lands changes none.
  *
- * @param interaction The stubbed node.
+ * @param interaction The model node.
  * @returns Its module's steps, bound to it.
  */
-export const stubSteps = (interaction: StubbedInteraction): StubSteps => {
+export const stubSteps = (
+  interaction: StubbedInteraction,
+): { readonly [K in ModuleKind]: StubSteps<K> }[ModuleKind] => {
   switch (interaction.kind) {
     case "associate": {
-      return stepsOf(associateModule, interaction);
+      return stepsOf("associate", interaction);
     }
     case "drawing": {
-      return stepsOf(drawingModule, interaction);
+      return stepsOf("drawing", interaction);
     }
     case "end-attempt": {
-      return stepsOf(endAttemptModule, interaction);
+      return stepsOf("end-attempt", interaction);
     }
     case "gap-match": {
-      return stepsOf(gapMatchModule, interaction);
+      return stepsOf("gap-match", interaction);
     }
     case "graphic-associate": {
-      return stepsOf(graphicAssociateModule, interaction);
+      return stepsOf("graphic-associate", interaction);
     }
     case "graphic-gap-match": {
-      return stepsOf(graphicGapMatchModule, interaction);
+      return stepsOf("graphic-gap-match", interaction);
     }
     case "graphic-order": {
-      return stepsOf(graphicOrderModule, interaction);
+      return stepsOf("graphic-order", interaction);
     }
     case "hotspot": {
-      return stepsOf(hotspotModule, interaction);
+      return stepsOf("hotspot", interaction);
     }
     case "hottext": {
-      return stepsOf(hottextModule, interaction);
+      return stepsOf("hottext", interaction);
     }
     case "match": {
-      return stepsOf(matchModule, interaction);
+      return stepsOf("match", interaction);
     }
     case "media": {
-      return stepsOf(mediaModule, interaction);
+      return stepsOf("media", interaction);
     }
     case "order": {
-      return stepsOf(orderModule, interaction);
+      return stepsOf("order", interaction);
     }
     case "portable-custom": {
-      return stepsOf(portableCustomModule, interaction);
+      return stepsOf("portable-custom", interaction);
     }
     case "position-object": {
-      return stepsOf(positionObjectModule, interaction);
+      return stepsOf("position-object", interaction);
     }
     case "select-point": {
-      return stepsOf(selectPointModule, interaction);
+      return stepsOf("select-point", interaction);
     }
     case "slider": {
-      return stepsOf(sliderModule, interaction);
+      return stepsOf("slider", interaction);
     }
     case "upload": {
-      return stepsOf(uploadModule, interaction);
+      return stepsOf("upload", interaction);
     }
     default: {
       return interaction satisfies never;
     }
   }
 };
+
+/**
+ * Render a module kind's payload node through its module's render: its Root, every part placed
+ * through the embedder's replacement.
+ *
+ * @param interaction The payload node, as the payload holds it.
+ * @param payload The render's payload.
+ * @param state The render's emit state.
+ * @returns The interaction's Root, or the refusal of a part swap.
+ */
+export const renderModule = <K extends ModuleKind>(
+  interaction: ModulePayloadOf<K>,
+  payload: Payload,
+  state: EmitState,
+): Result.Result<Element, PartSwapRefused> =>
+  stepped[interaction.kind].render(interaction.payload, payload, state);

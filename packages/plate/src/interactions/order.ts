@@ -73,6 +73,11 @@ export const orderModule: InteractionModule<"order", OrderInteraction, never> = 
    */
   parts: {},
   /**
+   * Refuse the kind in a redacted body, naming Order's feature, as the codec refused it before:
+   * the model holds no node of it until issue ei-06 reads the element.
+   */
+  payloadSchema: ({ unimplemented }) => unimplemented({ element, feature, kind: "order" }),
+  /**
    * Order's payload copy: not implemented; issue ei-06 fills it.
    */
   redact: notImplemented,

@@ -30,6 +30,7 @@ import { shuffleOrder } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
 import { entryName, isPosted, recordText } from "#plate/form/encoding.ts";
 import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
+import type { ModuleKind } from "#plate/interactions/contract.ts";
 import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
@@ -40,6 +41,7 @@ import {
   regionsOf,
   stubSteps,
 } from "#plate/model/interactions.ts";
+import type { PayloadOf } from "#plate/model/interactions.ts";
 import type {
   BodyElement,
   BodyNode,
@@ -409,7 +411,27 @@ export interface ExtendedTextPayload extends TextControlPayload {
 }
 
 /**
- * An interaction payload, which the emitter hands to its interaction's render function.
+ * The payload node of a kind plate parses through an interaction module: the kind, and the node
+ * its module's `redact` gave, which only its module's `render` reads.
+ *
+ * @template K The kind.
+ */
+export interface ModulePayloadOf<K extends ModuleKind> {
+  readonly kind: K;
+  readonly payload: PayloadOf<K>;
+}
+
+/**
+ * The payload node of any kind plate parses through an interaction module, one member per kind: a
+ * member a stub's kind can never hold, since a stub's payload node is `never`, and a module that
+ * lands types its own through its `redact`, so this union needs no line for it. The emitter hands
+ * it to its module's render (`RenderInteraction.modules` in `#plate/emit/body.ts`).
+ */
+export type ModulePayload = { readonly [K in ModuleKind]: ModulePayloadOf<K> }[ModuleKind];
+
+/**
+ * The payload of one of the four interactions the hubs render inline, which the emitter hands to
+ * its interaction's render function.
  */
 export type InteractionPayload =
   | ChoicePayload
@@ -420,7 +442,12 @@ export type InteractionPayload =
 /**
  * A node of the payload's body.
  */
-export type PayloadNode = ElementPayload | InteractionPayload | NoticePayload | TextPayload;
+export type PayloadNode =
+  | ElementPayload
+  | InteractionPayload
+  | ModulePayload
+  | NoticePayload
+  | TextPayload;
 
 /**
  * Everything the emitter may know about one render of an item.
