@@ -36,6 +36,7 @@
 import { Data, Option } from "effect";
 import type { Result } from "effect";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
+import type { ReaderKit } from "#plate/interactions/contract.ts";
 import type { Expression } from "#plate/model/expression.ts";
 import type { AttributeReaders } from "#plate/model/reader.ts";
 import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
@@ -90,10 +91,29 @@ export const isTestFeatureKey = (mark: string): mark is TestFeatureKey => keyMar
 export type TestFeatureId = `${"I" | "P" | "S" | "T"}-${number}`;
 
 /**
+ * The nearest structural element that encloses a module's element, by nesting: the test, a test
+ * part, a section or an item ref. `identifier` is that element's `identifier` attribute as the
+ * model reads it, with its outer XML whitespace removed, and the empty string when the element
+ * writes none.
+ *
+ * A `qti-assessment-section-ref` is a mark and owns nothing, so an element under one takes the
+ * owner above it. A package assembles a test with each section document in its reference's place
+ * before the test is judged, so the `qti-assessment-section` a section document's root names owns
+ * what it holds.
+ */
+export type FeatureOwner =
+  | { readonly identifier: string; readonly kind: "item-ref" }
+  | { readonly identifier: string; readonly kind: "part" }
+  | { readonly identifier: string; readonly kind: "section" }
+  | { readonly kind: "test" };
+
+/**
  * What the test model hands a module's `parse`: the way to record its element as a mark on the
- * verdict, the way to read an expression element as the test's processing reads one, the element's
- * path, and the attribute readers bound to the build (`#plate/model/reader.ts`), so a module reads
- * its element as the test model reads its own and never imports the readers.
+ * verdict, the way to read an expression element as the test's processing reads one, the owner of
+ * the element, the element's path, the reader kit over the test document, and the attribute
+ * readers bound to the build (`#plate/model/reader.ts`), so a module reads its element, its
+ * expressions and the body content under it as the models read their own and never imports the
+ * readers, the expression readers or the body walk.
  */
 export interface TestParseContext {
   /**
@@ -119,11 +139,45 @@ export interface TestParseContext {
    */
   readonly mark: (feature: string) => Result.Result<Option.Option<never>>;
   /**
+   * The owner of the element being parsed: the test, a test part, a section or an item ref
+   * ({@link FeatureOwner}), whichever encloses the element nearest. A module that acts on the
+   * scope its element sits in reads it here and never walks the document for it. The modules of
+   * gate unit W0-BE, which branch on a test's structure, are the first to read it.
+   */
+  readonly owner: FeatureOwner;
+  /**
    * The element path of the element being parsed.
    */
   readonly path: string;
   /**
-   * The attribute readers, bound to the build.
+   * The reader kit over the test document: the attribute readers beside `nodes`, the body walk
+   * that reads an element's children as body nodes, as an item-placed content module reads its own
+   * (`ItemParseContext.read` in `#plate/content/contract.ts`). Issues m3e-01b, which reads a
+   * section's and the test's rubric blocks, and m5-04, which reads test feedback, are the first
+   * modules to read a body through it.
+   *
+   * The kit is a fresh build of the test document by the item model (`parseContextOf` in
+   * `#plate/model/item.ts`), made when `parse` first reads `read`, so its paths are the document's
+   * own and its `names` are the identifiers the document root declares, a test's outcome and
+   * context declarations among them, with the built-in variables. It is valid while `parse` runs:
+   * the features the walk records through it, a notice for each `qti-*` element it does not read
+   * and the marks it places on a body element, are carried into the test's marks when `parse`
+   * returns, as the item model places them: once per feature and path, with `shown` as the walk
+   * gave it, after the marks the module recorded through `mark`, and not again for one the module
+   * recorded itself at the same path.
+   *
+   * A `qti-printed-variable` in a body is read as the walk reads one in an item body: a node that
+   * holds the `identifier` as written, with outer XML whitespace removed, its `base` and `index`
+   * as a number or a variable's name by their lexical form, and its `format`, `field`,
+   * `delimiter` and `mapping-indicator` as `xs:normalizedString`s. The walk resolves no value and
+   * checks no name against `names`, which the item model's processing readers consult and its
+   * body walk does not, so the node is the same whether `identifier` names a test outcome or
+   * names nothing; what the page prints is for the code that presents the test to decide.
+   */
+  readonly read: ReaderKit;
+  /**
+   * The attribute readers, bound to the build. Kept beside `read`, whose kit holds the same
+   * readers over the fresh build, for the modules that already read their element through it.
    */
   readonly readers: AttributeReaders;
 }
@@ -212,7 +266,8 @@ export interface TimedScope {
  * rules.
  *
  * An `expire` answers any intent, a move included, and the session hub (`expireScope` in
- * `#plate/session/expire.ts`, which `advance` calls) carries it out in place of the intent:
+ * `#plate/session/advance.ts`, over the scope `#plate/session/expire.ts` reads) carries it out in
+ * place of the intent:
  *
  * - The request's own responses are not saved: the expiry runs before the step is saved, so the
  *   current item keeps what it held, and only the time the item was shown is added.
@@ -241,15 +296,15 @@ export interface TimedScope {
  * D19 of `docs/spec-readings.md`.
  *
  * An `exit` also answers any intent, and the session hub (`exitScope` in
- * `#plate/session/expire.ts`, which `advance` calls) leaves the scope as an expiry leaves it, and
- * nothing else: no item is submitted, processed or locked, every item of the scope keeps what it
- * holds, and `expired` is not written. An exit answering a move replaces the move, after the step
- * is saved; one answering a submission follows it: the item or the part is submitted first, then
- * the scope is left. The position moves to the first item after the scope in its part; where none
- * follows, an individual part ends and a simultaneous one keeps its position; a part's exit ends
- * the part, and the test's ends every part and closes the test. The place the exit lands on is
- * then entered through `enter`. `qti-pre-condition` (issue m5-05) is the first module to answer
- * `exit`, and the first to answer a `submit-item` with `target`.
+ * `#plate/session/advance.ts`, over the same scope reading) leaves the scope as an expiry leaves
+ * it, and nothing else: no item is submitted, processed or locked, every item of the scope keeps
+ * what it holds, and `expired` is not written. An exit answering a move replaces the move, after
+ * the step is saved; one answering a submission follows it: the item or the part is submitted
+ * first, then the scope is left. The position moves to the first item after the scope in its part;
+ * where none follows, an individual part ends and a simultaneous one keeps its position; a part's
+ * exit ends the part, and the test's ends every part and closes the test. The place the exit lands
+ * on is then entered through `enter`. `qti-pre-condition` (issue m5-05) is the first module to
+ * answer `exit`, and the first to answer a `submit-item` with `target`.
  */
 export type GateVerdict =
   | { readonly detail: string; readonly kind: "refuse"; readonly rule: string }

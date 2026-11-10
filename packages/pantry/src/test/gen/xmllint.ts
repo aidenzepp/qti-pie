@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 /**
  * The XSD oracle: libxml2's schema validator, `xmllint`, judging generated documents against the
  * pinned XSDs, so a test can compare what the derived vocabulary says with what the XSDs say

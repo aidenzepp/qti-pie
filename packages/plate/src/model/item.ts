@@ -17,6 +17,7 @@ import {
   attributeName,
   attributeOf,
   childrenNamed,
+  collapseXmlSpace,
   coordsOf,
   countAttribute,
   doubleAttribute,
@@ -46,6 +47,7 @@ import {
 } from "#plate/model/attributes.ts";
 import type { CatalogReference, ItemParseContext, NodeOf } from "#plate/content/contract.ts";
 import { bodyModuleFor, itemModuleFor, parseBodyContent } from "#plate/content/modules.ts";
+import { adaptivePolicy } from "#plate/engine/adaptive.ts";
 import type {
   ContentNode,
   ItemContentElement,
@@ -69,7 +71,12 @@ import { positionObjectModule } from "#plate/interactions/position-object.ts";
 import { selectPointModule } from "#plate/interactions/select-point.ts";
 import { sliderModule } from "#plate/interactions/slider.ts";
 import { uploadModule } from "#plate/interactions/upload.ts";
-import type { BoundDeclaration, ParseContext, ReaderKit } from "#plate/interactions/contract.ts";
+import type {
+  BoundDeclaration,
+  ModuleKind,
+  ParseContext,
+  ReaderKit,
+} from "#plate/interactions/contract.ts";
 import type { AttributeRefusal, ModelWalk } from "#plate/model/attributes.ts";
 import type {
   Branch,
@@ -86,6 +93,7 @@ import type {
 import { expressionKinds, integerOrRefOf } from "#plate/model/expression.ts";
 import { kindRules, readExpression } from "#plate/model/expressions/read.ts";
 import type { ExpressionReading } from "#plate/model/expressions/read.ts";
+import { containerFor } from "#plate/model/interactions.ts";
 import type { ModuleModel } from "#plate/model/interactions.ts";
 import { readersOf } from "#plate/model/reader.ts";
 import { translate } from "#plate/model/regex.ts";
@@ -736,6 +744,26 @@ export interface Unsupported {
 }
 
 /**
+ * An element an interaction module owns as the container of its interactions, such as the
+ * `qti-position-object-stage` Position Objects stand inside (`ModuleContainer` in
+ * `#plate/interactions/contract.ts`): the module that owns it, and its children as the body walk
+ * read them, the interactions inside it among them. It is no interaction and binds no response;
+ * the walks that find a body's interactions enter it as they enter an element.
+ *
+ * @template K The kind of the module that owns the container.
+ */
+export interface ContainerNode<K extends ModuleKind = ModuleKind> {
+  readonly children: readonly BodyNode[];
+  readonly kind: "container";
+  /**
+   * The kind of the module whose container `parse` gave the node, and whose container `render`
+   * the emitter hands it to.
+   */
+  readonly module: K;
+  readonly path: string;
+}
+
+/**
  * An interaction of the item model: the four plate renders, Choice, Extended Text, Inline Choice
  * and Text Entry, and the seventeen it parses through a module, each node as its module declares
  * it (`ModuleModel` in `#plate/model/interactions.ts`, read from the table of modules), so this
@@ -750,12 +778,14 @@ export type Interaction =
 
 /**
  * A node of the item body: an element, a text, an interaction, a printed variable, a template
- * block or inline, a notice, or the node of a body-placed content element (`ContentNode` in
- * `#plate/content/modules.ts`, one member per content module, each as its module declares it).
+ * block or inline, a notice, the node of a body-placed content element (`ContentNode` in
+ * `#plate/content/modules.ts`, one member per content module, each as its module declares it), or
+ * the container an interaction module owns ({@link ContainerNode}).
  */
 export type BodyNode =
   | BodyElement
   | BodyText
+  | ContainerNode
   | ContentNode
   | Interaction
   | PrintedVariable
@@ -812,6 +842,14 @@ export type UnheldDeclaration = UnheldType &
  * modules read, by element.
  */
 export interface Item {
+  /**
+   * Whether the root's `adaptive` is true: an item whose outcomes the adaptive policy
+   * (`adaptivePolicy` in `#plate/engine/adaptive.ts`) keeps across attempts and closes at
+   * completion once the adaptive items module fills it. `buildItem` always writes it, false when
+   * the attribute is absent, the XSD default; an item built by hand may leave it out, and a reader
+   * then takes it as false, as `records` and `unheld` are taken as empty.
+   */
+  readonly adaptive?: boolean;
   readonly body: readonly BodyNode[];
   /**
    * The nodes the item-placed content modules read from the root's children, by element, each
@@ -908,6 +946,36 @@ const readElements: ReadonlySet<string> = new Set([
  * The features marked on the verdict.
  */
 const marks: readonly FeatureRule[] = renders.marks;
+
+/**
+ * The feature string of the mark an adaptive item carries, as its row of {@link marks} spells it.
+ * The row is recorded only while the adaptive policy is a stub (`adaptivePolicy.implemented`
+ * false): once the adaptive items module fills the policy the item is delivered as adaptive, and
+ * the mark goes while the row, which the vocabulary's tests pin, stays.
+ */
+const adaptiveFeature = 'adaptive="true"';
+
+/**
+ * Report whether a mark is recorded now: every mark but the adaptive item's, which is recorded
+ * only while the adaptive policy is a stub ({@link adaptiveFeature}).
+ *
+ * @param mark The mark's rule.
+ * @returns Whether an element that carries the feature is marked.
+ */
+const recordedNow = (mark: FeatureRule): boolean =>
+  mark.feature !== adaptiveFeature || !adaptivePolicy.implemented;
+
+/**
+ * Read whether an item's root carries `adaptive` true, as the adaptive mark's condition reads it:
+ * `true` or `1` after XSD whitespace handling, and false when the attribute is absent, the XSD
+ * default, or outside `xs:boolean`'s lexical space, which the structural validator refuses before
+ * the model reads the document.
+ *
+ * @param root The `qti-assessment-item` element.
+ * @returns Whether the item is adaptive.
+ */
+const adaptiveOf = (root: SourceElement): boolean =>
+  Option.getOrElse(Option.flatMap(valueOf(root, "adaptive"), xsBooleanOf), () => false);
 
 /**
  * The features shown as a notice in place of their interaction.
@@ -1058,7 +1126,7 @@ const sitsOn = (feature: FeatureRule, element: SourceElement, inBody: boolean): 
  */
 const markElement = (build: Build, element: SourceElement, inBody: boolean): void => {
   for (const mark of marks) {
-    if (sitsOn(mark, element, inBody) && holds(build, mark.when, element)) {
+    if (recordedNow(mark) && sitsOn(mark, element, inBody) && holds(build, mark.when, element)) {
       record(build, { feature: mark.feature, path: pathOf(build, element), shown: "mark" });
     }
   }
@@ -1589,9 +1657,7 @@ const outcomeReporting = (
 
     return {
       interpretation: valueOf(declaration, "interpretation"),
-      longInterpretation: Option.map(valueOf(declaration, "long-interpretation"), (written) =>
-        trimXmlSpace(written).replaceAll(xmlWhitespaceRun, " "),
-      ),
+      longInterpretation: Option.map(valueOf(declaration, "long-interpretation"), collapseXmlSpace),
       masteryValue,
       normalMaximum,
       normalMinimum,
@@ -2594,6 +2660,30 @@ const contentNode = (
   );
 
 /**
+ * Read an element an interaction module owns as the container of its interactions, by the module's
+ * container `parse` (`containerFor` in `#plate/model/interactions.ts`): the element's children are
+ * read as body nodes first, so the interactions inside it reach their own modules, then the
+ * element, those nodes and the element's context are handed to the module.
+ *
+ * @param build The build.
+ * @param element The element.
+ * @param own The `qti-*` elements the module reading this content owns, passed to the children.
+ * @returns Its body node, or a refusal; none when no module declares the element as its container.
+ */
+const containerNode = (
+  build: Build,
+  element: SourceElement,
+  own: Owned,
+): Option.Option<Result.Result<BodyNode, Refusal>> =>
+  (isQti(element) ? containerFor(element.local) : Option.none()).pipe(
+    Option.map((container) =>
+      Result.flatMap(bodyNodes(build, element, own), (children) =>
+        container.parse(element, children, contextOf(build, element)),
+      ),
+    ),
+  );
+
+/**
  * Read an item root child by the `parse` of the item-placed content module that reads it.
  *
  * @template K The child's element.
@@ -2723,9 +2813,10 @@ const catalogOf = (build: Build, element: SourceElement): Pick<BodyElement, "cat
  * @param child The child.
  * @param own The `qti-*` elements the module reading this content owns, each read as an element.
  * @returns Its body node: text as itself, an HTML element with its subtree, an interaction's model
- *   or, for one a module or a body-placed content module reads, what its `parse` gives, a printed
- *   variable's, a template block's or inline's with its content, a module's own element as an
- *   element with its subtree, or a notice for anything else, its subtree dropped; or a refusal.
+ *   or, for one a module or a body-placed content module reads, what its `parse` gives, a module's
+ *   container with its children ({@link containerNode}), a printed variable's, a template block's
+ *   or inline's with its content, a module's own element as an element with its subtree, or a
+ *   notice for anything else, its subtree dropped; or a refusal.
  */
 const bodyNode = (
   build: Build,
@@ -2754,6 +2845,11 @@ const bodyNode = (
   const content = contentNode(build, child);
   if (Option.isSome(content)) {
     return content.value;
+  }
+
+  const container = containerNode(build, child, own);
+  if (Option.isSome(container)) {
+    return container.value;
   }
 
   if (isQti(child, "qti-printed-variable")) {
@@ -4103,36 +4199,37 @@ const recordResponseNames = (
  * becomes its model, and a `qti-template-block` or `qti-template-inline` its model with its
  * content; any other `qti-*` element in the body becomes a notice, its subtree dropped. Each
  * `renders` mark adds an unsupported feature, and so does each `qti-*` element outside the body
- * that the model does not read. Response processing is a rule tree: a built-in template resolves to
- * the tree its text gives, and inline rules become their tree when every element is in the engine.
- * The tree is kept only when the engine holds every identifier it names, the item provides every
- * declaration a built-in template's tree needs, every outcome a lookup sets is single, and it maps
- * no point through an area mapping with a `%` coordinate; each identifier it does not hold is the
- * mark `variable:<identifier>` at the processing element's path, each such need unmet its mark
- * there (`mapping:<identifier>`, `area-mapping:<identifier>` or `outcome-type:<identifier>`), such
- * a point mapping the mark `area-coords-percent` there, and the processing is then none. A response
- * declaration of cardinality `record` is held in `records`, with no mark, whatever interaction
- * binds it: its `qti-correct-response` and `qti-default-value` are read field by field
- * ({@link recordResponse}). The engine holds its record beside response processing, read whole as
- * an operand of `qti-field-value`, `qti-is-null` or `qti-match` ({@link unheldIdentifiers}); a
- * processing that reads it anywhere else is marked `variable:<identifier>`, a template rule that
- * sets its default or its correct response is marked `record-set`, and a Text Entry or an Extended
- * Text bound to one is the string control of cardinality `record`. A declaration of base type
- * `file`, an outcome or template declaration of cardinality `record`, and a record response of base
- * type `file` or with a field of it, are held in `unheld`, beside their mark. `records` and
- * `unheld` are each absent when empty. Template declarations of modelled types are read into
- * `templates`, and a `qti-template-processing` into `templateProcessing` through `templateRules` in
- * `#plate/model/template.ts`, which marks what the engine does not run as response processing's
- * reader does. Its rules are kept only when the engine holds every name they read and set while
- * they run: each name {@link unheldIdentifiers} finds, such as `QTI_CONTEXT`, a context variable,
- * or a template variable, response or outcome the model does not hold, is the mark
- * `variable:<identifier>` at the `qti-template-processing` element's path, and the template
- * processing is then none. Nothing is refused: such an item is accepted with that mark. A template
- * variable the model holds is one the engine holds, unless the item's `qti-template-processing`
- * does not run: then no template variable is held, so a tree that reads one is marked
- * `variable:<identifier>`, and the item has no processing, whatever the tree, since that template
- * processing may set a template variable, a default value or a correct response, so a score
- * computed without it could be wrong.
+ * that the model does not read; the root's `adaptive` true is read into `adaptive` and marked only
+ * while the adaptive policy is a stub ({@link recordedNow}). Response processing is a rule tree: a
+ * built-in template resolves to the tree its text gives, and inline rules become their tree when
+ * every element is in the engine. The tree is kept only when the engine holds every identifier it
+ * names, the item provides every declaration a built-in template's tree needs, every outcome a
+ * lookup sets is single, and it maps no point through an area mapping with a `%` coordinate; each
+ * identifier it does not hold is the mark `variable:<identifier>` at the processing element's path,
+ * each such need unmet its mark there (`mapping:<identifier>`, `area-mapping:<identifier>` or
+ * `outcome-type:<identifier>`), such a point mapping the mark `area-coords-percent` there, and the
+ * processing is then none. A response declaration of cardinality `record` is held in `records`,
+ * with no mark, whatever interaction binds it: its `qti-correct-response` and `qti-default-value`
+ * are read field by field ({@link recordResponse}). The engine holds its record beside response
+ * processing, read whole as an operand of `qti-field-value`, `qti-is-null` or `qti-match`
+ * ({@link unheldIdentifiers}); a processing that reads it anywhere else is marked
+ * `variable:<identifier>`, a template rule that sets its default or its correct response is marked
+ * `record-set`, and a Text Entry or an Extended Text bound to one is the string control of
+ * cardinality `record`. A declaration of base type `file`, an outcome or template declaration of
+ * cardinality `record`, and a record response of base type `file` or with a field of it, are held
+ * in `unheld`, beside their mark. `records` and `unheld` are each absent when empty. Template
+ * declarations of modelled types are read into `templates`, and a `qti-template-processing` into
+ * `templateProcessing` through `templateRules` in `#plate/model/template.ts`, which marks what the
+ * engine does not run as response processing's reader does. Its rules are kept only when the engine
+ * holds every name they read and set while they run: each name {@link unheldIdentifiers} finds,
+ * such as `QTI_CONTEXT`, a context variable, or a template variable, response or outcome the model
+ * does not hold, is the mark `variable:<identifier>` at the `qti-template-processing` element's
+ * path, and the template processing is then none. Nothing is refused: such an item is accepted with
+ * that mark. A template variable the model holds is one the engine holds, unless the item's
+ * `qti-template-processing` does not run: then no template variable is held, so a tree that reads
+ * one is marked `variable:<identifier>`, and the item has no processing, whatever the tree, since
+ * that template processing may set a template variable, a default value or a correct response, so a
+ * score computed without it could be wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
@@ -4303,6 +4400,7 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
     }
 
     const built: Item = {
+      adaptive: adaptiveOf(root),
       body,
       document: source.location,
       identifier,

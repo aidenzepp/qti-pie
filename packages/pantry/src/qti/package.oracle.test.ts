@@ -30,13 +30,12 @@ import {
   resolvedPathPattern,
   srcsetCandidatePattern,
 } from "#pantry/qti/package.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { qtiRelations } from "#pantry/qti/base.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
-import { judge } from "#pantry/test/host-judge.ts";
-import type { HostRows } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
-import type { JudgedLaw } from "#pantry/test/key-copies.ts";
+import { judge, judgedLaws } from "#pantry/test/host-judge.ts";
+import type { HostRows, JudgedLaw } from "#pantry/test/host-judge.ts";
 import { judge as judgeByOracle, lawNames, lawsOf } from "#pantry/test/oracle.ts";
 
 /**
@@ -212,23 +211,23 @@ const isOneCandidate = (candidate: string): boolean => {
 const patternSets = {
   descriptor: {
     candidate: /^[\t\n\r ]*[^,]*[\t\n\r ]*$/u,
-    external: new RegExp(externalHrefPattern, "u"),
-    resolved: new RegExp(resolvedPathPattern, "u"),
+    external: new RegExp(externalHrefPattern.source, "u"),
+    resolved: new RegExp(resolvedPathPattern.source, "u"),
   },
   noDotDotArm: {
-    candidate: new RegExp(srcsetCandidatePattern, "u"),
-    external: new RegExp(externalHrefPattern, "u"),
+    candidate: new RegExp(srcsetCandidatePattern.source, "u"),
+    external: new RegExp(externalHrefPattern.source, "u"),
     resolved: /^(?:(?:[^/.][^/]*|\.[^./][^/]*)(?:\/(?:[^/.][^/]*|\.[^./][^/]*)?)*)?$/u,
   },
   noSlash: {
-    candidate: new RegExp(srcsetCandidatePattern, "u"),
+    candidate: new RegExp(srcsetCandidatePattern.source, "u"),
     external: /^[A-Za-z][A-Za-z0-9+.-]*:/u,
-    resolved: new RegExp(resolvedPathPattern, "u"),
+    resolved: new RegExp(resolvedPathPattern.source, "u"),
   },
   stated: {
-    candidate: new RegExp(srcsetCandidatePattern, "u"),
-    external: new RegExp(externalHrefPattern, "u"),
-    resolved: new RegExp(resolvedPathPattern, "u"),
+    candidate: new RegExp(srcsetCandidatePattern.source, "u"),
+    external: new RegExp(externalHrefPattern.source, "u"),
+    resolved: new RegExp(resolvedPathPattern.source, "u"),
   },
 } as const;
 
@@ -361,7 +360,7 @@ describe("qti/package.ts", () => {
   it("names every check of the package's laws by an oracle law, and the laws compose with the schema's relations", () => {
     // Oracle: the specification as a checker, the oracle's law names (`src/test/oracle.ts`), each
     // spelled with underscores for its spaces, since a check's name is an identifier; and grizzle's
-    // own description check, which a scratch schema of `Qti`'s relations and these laws passes.
+    // own description check, which a scratch schema of the schema's relations and these laws passes.
     const named = new Set<string>(lawNames);
     const checks = packageLaws.flatMap((law) =>
       law.kind === "check" && Predicate.hasProperty(law, "name") && Predicate.isString(law.name)
@@ -374,7 +373,7 @@ describe("qti/package.ts", () => {
       assert.isTrue(named.has(name.replaceAll("_", " ")), name);
     }
 
-    const scratch = schema("QtiPackageProbe", Qti.relations, packageLaws);
+    const scratch = schema("QtiPackageProbe", qtiRelations, packageLaws);
     assert.strictEqual(scratch.statements.length, packageLaws.length);
   });
 

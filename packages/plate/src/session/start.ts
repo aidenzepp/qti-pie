@@ -16,6 +16,7 @@
 import { Array as Arr, Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import { appendSegments, decodeSegment } from "#plate/document/href.ts";
+import { adaptivePolicy } from "#plate/engine/adaptive.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { testScopeOf } from "#plate/engine/outcome.ts";
@@ -794,10 +795,12 @@ const templateDefaultsOf = (
  *   in sequence order: a default reads a value the session's records lack (an
  *   `UnknownIdentifierError`, holder `record`), names no template variable of its item (holder
  *   `item`), or is a value of another type than its variable's (an `OutcomeMismatchError`). A
- *   package that holds the test and its items refuses each of these at `openPackage` but one: a
- *   default whose type a `qti-field-value` decides at run time, such as a field of an item's
- *   declared `record` read through `qti-default`, whose `OutcomeMismatchError` reaches the session
- *   with no answer given, since a `record` declaration types none of its fields.
+ *   package that holds the test and its items keeps all but one of these from the session:
+ *   `openPackage` refuses each, but a default that reads an item's context variable through its
+ *   item ref, which it marks and leaves out. The one that reaches the session is a default whose
+ *   type a `qti-field-value` decides at run time, such as a field of an item's declared `record`
+ *   read through `qti-default`, whose `OutcomeMismatchError` reaches the session with no answer
+ *   given, since a `record` declaration types none of its fields.
  */
 export const partStarted = (
   test: Test,
@@ -1233,6 +1236,7 @@ export const startTest = (
           deliverable(items, test.test.identifier, ref.identifier, namedDocument(test.test, ref)),
           (accepted) => {
             const item: SessionItem = {
+              adaptive: accepted.item.adaptive ?? false,
               datestamp,
               duration: 0,
               firstOutcomes: Option.none(),
@@ -1369,8 +1373,11 @@ const shuffledBy = (
  * Derive an item's place, session control, configuration and whether it is closed.
  *
  * An item is closed when the test has closed, when its part has ended, when a timed scope that
- * holds it has expired (the item is `locked`), or when its effective attempt limit is above 0 and
- * the record's `numAttempts`, the count of processed attempts, has reached it.
+ * holds it has expired (the item is `locked`), or when the adaptive policy says its attempts have
+ * closed it (`adaptivePolicy.closed` in `#plate/engine/adaptive.ts`, given whether the item is
+ * adaptive, its record and its effective attempt limit): for a non-adaptive item, and for every
+ * item while the policy is a stub, when the limit is above 0 and the record's `numAttempts`, the
+ * count of processed attempts, has reached it.
  *
  * @param index The test, indexed for the session.
  * @param session The session.
@@ -1390,14 +1397,13 @@ const inspect = (
     const control = yield* lookUp(index, index.controls, item.ref);
     const configured = shuffledBy(itemConfiguration(configuration, control), session.shuffleSeed);
     const ended = index.ended.has(place.part.identifier);
-    const limit = configured.maxAttempts;
 
     return {
       closed:
         session.status === "closed" ||
         ended ||
         item.locked ||
-        (limit > 0 && item.record.numAttempts >= limit),
+        adaptivePolicy.closed(item.adaptive, item.record, configured.maxAttempts),
       configuration: configured,
       control,
       place,

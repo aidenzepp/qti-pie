@@ -408,6 +408,13 @@ const landedExport = "selectPointModule";
 const landedBrand = "landed-fake" as const;
 
 /**
+ * The element {@link landedGapMatch} declares as the container of its interactions, as a Position
+ * Object's module declares `qti-position-object-stage`: the body walk hands it to the fake's
+ * container `parse` with the interactions inside it parsed.
+ */
+const landedStage = `qti-${landedKind}-stage` as const;
+
+/**
  * One gap text of {@link landedGapMatch}'s model node: a `qti-gap-text`, content it holds beyond
  * its Prompt, read through the kit's body walk.
  */
@@ -570,6 +577,28 @@ const landedGapMatch: InteractionModule<
   }),
   bindings: (interaction) => [{ base: Option.none(), response: interaction.response }],
   connect: () => ({}),
+  /**
+   * The element the fake owns as the container of its interactions ({@link landedStage}): its
+   * `parse` keeps the children the body walk read, marked on the element, so a test sees the walk
+   * hand both in, and its `render` wraps their output in a `div` naming the module, so a test sees
+   * the emitter hand the children's output to the module.
+   */
+  container: {
+    element: landedStage,
+    parse: (element, children, { path, read }) => {
+      read.markElement(element);
+
+      return Result.succeed({ children, kind: "container", module: landedKind, path });
+    },
+    render: (node, children) =>
+      Result.succeed(
+        h(
+          "div",
+          { "data-stage": node.module, "data-stage-size": String(children.length) },
+          children,
+        ),
+      ),
+  },
   content: (interaction) => interaction.content,
   controls: () => 1,
   /**
@@ -937,6 +966,54 @@ const landedRegionsDocument = doc(
               el("qti-gap-text", [attr("identifier", "G1")], [text("cat")]),
               el("qti-gap-text", [attr("identifier", "G2")], [text("dog")]),
               text("gapped"),
+            ],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
+/**
+ * An item whose body holds the fake's container ({@link landedStage}) around two of its
+ * interactions, each bound to its own directed-pair response, with a paragraph between them.
+ */
+const landedStageDocument = doc(
+  "items/landed-stage.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "landed-stage"), attr("title", "Landed stage")],
+    [
+      ...["FIRST", "SECOND"].map((identifier) =>
+        el(
+          "qti-response-declaration",
+          [
+            attr("base-type", "directedPair"),
+            attr("cardinality", "multiple"),
+            attr("identifier", identifier),
+          ],
+          [],
+        ),
+      ),
+      el(
+        "qti-item-body",
+        [],
+        [
+          el(
+            landedStage,
+            [],
+            [
+              el(
+                `qti-${landedKind}-interaction`,
+                [attr("max-associations", "1"), attr("response-identifier", "FIRST")],
+                [el("qti-gap-text", [attr("identifier", "A")], [text("ant")])],
+              ),
+              el("p", [], [text("between")]),
+              el(
+                `qti-${landedKind}-interaction`,
+                [attr("max-associations", "1"), attr("response-identifier", "SECOND")],
+                [el("qti-gap-text", [attr("identifier", "B")], [text("bee")])],
+              ),
             ],
           ),
         ],
@@ -1501,4 +1578,104 @@ describe("a module that lands", () => {
       },
     );
   });
+});
+
+describe("a module that declares a container", () => {
+  it.effect(
+    "is handed its element by the body walk with the interactions inside it parsed, its node survives the payload and the JSON form, and the emitter hands their output to its render",
+    () =>
+      withLanded(
+        Effect.gen(function* container() {
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const codec = yield* Effect.promise(() => import("#plate/codec/redacted.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const configuration = yield* configure({});
+          const built = yield* Effect.fromResult(model.buildItem(landedStageDocument));
+          const [node, ...rest] = built.body;
+          const path = `qti-assessment-item/qti-item-body/${landedStage}`;
+
+          // The walk handed the stage to the module's container parse, its children parsed.
+          assert.lengthOf(rest, 0);
+          if (node?.kind !== "container") {
+            assert.fail(`the body holds a ${node?.kind ?? "nothing"}, not the container`);
+          }
+
+          assert.strictEqual(node.module, landedKind);
+          assert.strictEqual(node.path, path);
+          assert.deepStrictEqual(
+            node.children.map((child) => (isLandedModel(child) ? child.response : child.kind)),
+            ["FIRST", "element", "SECOND"],
+          );
+          assert.deepStrictEqual(built.unsupported, []);
+
+          // The redaction keeps the container, and the payload copies its children through the
+          // modules.
+          const redactedItem = payload.redactItem(built);
+          const [kept] = redactedItem.body;
+
+          assert.strictEqual(kept?.kind, "container");
+
+          const view: View = {
+            finished: false,
+            instance: "q1",
+            locale: configuration.locale,
+            messages: [],
+            mode: "answering",
+            names: new Map(),
+            posted: Option.none(),
+            seed: "",
+            values: new Map(),
+          };
+          const [copied] = payload.payload(redactedItem, view).body;
+
+          if (copied?.kind !== "container") {
+            assert.fail(`the payload holds a ${copied?.kind ?? "nothing"}, not the container`);
+          }
+
+          assert.deepStrictEqual(
+            copied.children.map((child) =>
+              Option.match(landedPayloadOf(child), {
+                onNone: () => child.kind,
+                onSome: (landed) => landed.response,
+              }),
+            ),
+            ["FIRST", "element", "SECOND"],
+          );
+
+          // The JSON form carries the container, with no path, and decodes to the same body.
+          const encoded = yield* Effect.fromResult(codec.encodeRedacted(redactedItem));
+          const [json] = encoded.body;
+
+          assert.deepStrictEqual(Object.keys(json ?? {}).toSorted(), [
+            "children",
+            "kind",
+            "module",
+          ]);
+          assert.strictEqual(json?.kind === "container" ? json.module : undefined, landedKind);
+
+          const decoded = yield* Effect.fromResult(
+            // oxlint-disable-next-line unicorn/prefer-structured-clone -- the round trip is the JSON a host sends to a page, which a structured clone does not take.
+            codec.decodeRedacted(JSON.parse(JSON.stringify(encoded))),
+          );
+          const [again] = decoded.body;
+
+          assert.strictEqual(again?.kind, "container");
+          assert.strictEqual(again?.kind === "container" ? again.children.length : 0, 3);
+
+          // The emitter rendered the children, then the container around their output.
+          const { html } = yield* Effect.fromResult(
+            plate.render(decoded, configuration, { instance: "q1" }),
+          );
+
+          assert.match(
+            html,
+            new RegExp(
+              `<div data-stage="${landedKind}" data-stage-size="3"><div [^>]*data-response="FIRST"[^>]*>.*<p>between</p><div [^>]*data-response="SECOND"[^>]*>.*</div></div>`,
+              "u",
+            ),
+          );
+        }),
+      ),
+  );
 });

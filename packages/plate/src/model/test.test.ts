@@ -10,7 +10,7 @@ import type {
 import { elementsOf } from "#plate/model/attributes.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type { Expression, Rule } from "#plate/model/expression.ts";
-import type { UnsupportedFeature } from "#plate/model/item.ts";
+import type { BodyNode, UnsupportedFeature } from "#plate/model/item.ts";
 import { absentControl, buildTest, withLtiLinks } from "#plate/model/test.ts";
 import type {
   MarkedFeature,
@@ -20,7 +20,13 @@ import type {
   Test,
 } from "#plate/model/test.ts";
 import { stub } from "#plate/test-features/contract.ts";
-import type { TestFeatureKey, TestFeatureModule } from "#plate/test-features/contract.ts";
+import type {
+  FeatureOwner,
+  StubDeclaration,
+  TestFeatureKey,
+  TestFeatureModule,
+  TestParseContext,
+} from "#plate/test-features/contract.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
 import type { TestFeatureTable } from "#plate/test-features/table.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
@@ -1794,6 +1800,409 @@ describe("a test-feature module that reads an expression", () => {
           mark("qti-custom-thing", `${firstPart}/qti-pre-condition/qti-custom-thing`),
         ]);
         assert.isUndefined(built.features);
+      }),
+  );
+});
+
+/**
+ * The facts of the test-level Rubric Block stub, which the rows below replace with a module that
+ * records what its context gives it.
+ */
+const rubricBlockFacts = {
+  element: "qti-rubric-block",
+  feature: ["S-5", "T-13"],
+  issue: "m3e-01b",
+  key: "qti-rubric-block",
+  namespace: qtiNamespace,
+} as const satisfies StubDeclaration<"qti-rubric-block">;
+
+/**
+ * The facts of the Time Limits stub.
+ */
+const timeLimitsFacts = {
+  element: "qti-time-limits",
+  feature: ["T-2"],
+  issue: "m3f-01",
+  key: "qti-time-limits",
+  namespace: qtiNamespace,
+} as const satisfies StubDeclaration<"qti-time-limits">;
+
+/**
+ * The facts of the Section Reference stub.
+ */
+const sectionRefFacts = {
+  element: "qti-assessment-section-ref",
+  feature: ["S-9", "P-2"],
+  issue: "m3f-03",
+  key: "qti-assessment-section-ref",
+  namespace: qtiNamespace,
+} as const satisfies StubDeclaration<"qti-assessment-section-ref">;
+
+/**
+ * Construct a module that has landed for these rows alone: a stub's facts and a `parse` that hands
+ * its element and context to what the row records with, and reads no node.
+ *
+ * @template K The feature's key.
+ * @param facts The stub's facts.
+ * @param record What the row does with each element the walk dispatches and its context.
+ * @returns The module.
+ */
+const faking = <K extends TestFeatureKey>(
+  facts: StubDeclaration<K>,
+  record: (element: SourceElement, context: TestParseContext) => void,
+): TestFeatureModule<K, never> => ({
+  ...stub(facts),
+  parse: (element, context) => {
+    record(element, context);
+
+    return Result.succeed(Option.none());
+  },
+});
+
+/**
+ * Construct the table of stubs with some modules replaced: every module of the default table built
+ * again from its own facts, so a module that lands leaves the rows below as they are.
+ *
+ * @param replacements The modules to put in their keys' places.
+ * @returns The table.
+ */
+const tableOf = (
+  ...replacements: readonly TestFeatureModule<TestFeatureKey, unknown>[]
+): TestFeatureTable =>
+  testFeatures.map(
+    (module) =>
+      replacements.find((replacement) => replacement.key === module.key) ??
+      stub({
+        element: module.element,
+        feature: module.feature,
+        issue: module.issue,
+        key: module.key,
+        namespace: module.namespace,
+      }),
+  );
+
+/**
+ * Construct a `qti-rubric-block` whose `qti-content-body` holds one paragraph and some more
+ * children.
+ *
+ * @param words The paragraph's text.
+ * @param more The content body's other children, none by default.
+ * @returns The block.
+ */
+const rubricBlock = (words: string, more: readonly SourceChild[] = []): SourceElement =>
+  el(
+    "qti-rubric-block",
+    [attr("view", "candidate")],
+    [el("qti-content-body", [], [el("p", [], [text(words)]), ...more])],
+  );
+
+/**
+ * Construct a `qti-time-limits`.
+ *
+ * @returns The element.
+ */
+const timeLimits = (): SourceElement => el("qti-time-limits", [attr("max-time", "60")]);
+
+/**
+ * A test with a rubric block under the test, under part `P1` and under section `S1`, each holding
+ * one paragraph.
+ */
+const blocksOnThree = test([
+  rubricBlock("test words"),
+  part("P1", "linear", "individual", [
+    rubricBlock("part words"),
+    section("S1", [rubricBlock("section words"), itemRef("I1", "items/one.xml")]),
+  ]),
+]);
+
+/**
+ * The path of each rubric block of {@link blocksOnThree}, in document order.
+ */
+const threeBlockPaths = [
+  `${root}/qti-rubric-block`,
+  `${firstPart}/qti-rubric-block`,
+  `${firstPart}/qti-assessment-section/qti-rubric-block`,
+] as const;
+
+/**
+ * A body node as the rows below compare it: an element by its tag and the outlines of what it
+ * holds, a text node by its text, a printed variable by its identifier and any other node by its
+ * kind.
+ */
+type BodyOutline = string | readonly [string, readonly BodyOutline[]];
+
+/**
+ * Outline a body node, so a row asserts what a body holds and not the paths and attributes it
+ * carries: a printed variable by the identifier it names.
+ *
+ * @param node The node.
+ * @returns Its outline.
+ */
+const outlineOf = (node: BodyNode): BodyOutline => {
+  if (node.kind === "element") {
+    return [node.tag, node.children.map(outlineOf)];
+  }
+
+  if (node.kind === "printed-variable") {
+    return `printed ${node.identifier}`;
+  }
+
+  return node.kind === "text" ? node.text : node.kind;
+};
+
+/**
+ * Construct a `qti-printed-variable`.
+ *
+ * @param identifier The variable it names.
+ * @returns The element.
+ */
+const printedVariable = (identifier: string): SourceElement =>
+  el("qti-printed-variable", [attr("identifier", identifier)]);
+
+/**
+ * Read the content body of a rubric block through the context's reader kit, as a module that lands
+ * the block would.
+ *
+ * @param element The block.
+ * @param context The module's context.
+ * @returns What the body walk gave each of the block's content bodies.
+ */
+const readBodies = (
+  element: SourceElement,
+  context: TestParseContext,
+): readonly Result.Result<readonly BodyNode[], Refusal>[] =>
+  context.readers
+    .childrenNamed(element, "qti-content-body")
+    .map((body) => context.read.nodes(body));
+
+describe("buildTest hands a test-feature module the reader kit and the owner of its element", () => {
+  it.effect(
+    "[W0-AT] a rubric block's module learns the owner of each block: the test, a part, a section, in document order",
+    () =>
+      Effect.gen(function* ownersInOrder() {
+        const owners: FeatureOwner[] = [];
+        const table = tableOf(
+          faking(rubricBlockFacts, (_element, context) => {
+            owners.push(context.owner);
+          }),
+        );
+
+        yield* Effect.fromResult(buildTest(blocksOnThree, table));
+
+        assert.deepStrictEqual(owners, [
+          { kind: "test" },
+          { identifier: "P1", kind: "part" },
+          { identifier: "S1", kind: "section" },
+        ]);
+      }),
+  );
+
+  it.effect("[W0-AT] a module reads a block's content body as body nodes", () =>
+    Effect.gen(function* readsBody() {
+      const bodies: Result.Result<readonly BodyNode[], Refusal>[] = [];
+      const table = tableOf(
+        faking(rubricBlockFacts, (element, context) => {
+          bodies.push(...readBodies(element, context));
+        }),
+      );
+
+      yield* Effect.fromResult(buildTest(blocksOnThree, table));
+
+      assert.strictEqual(bodies.length, 3);
+
+      const last = bodies.at(-1);
+      assert.isTrue(last !== undefined && Result.isSuccess(last));
+      assert.deepStrictEqual(
+        Result.getOrElse(last ?? Result.succeed([]), () => assert.fail("the body is refused")).map(
+          outlineOf,
+        ),
+        [["p", ["section words"]]],
+      );
+    }),
+  );
+
+  it.effect("[W0-AT] a time-limits element on an item ref is owned by that item ref", () =>
+    Effect.gen(function* ownedByItemRef() {
+      const owners: FeatureOwner[] = [];
+      const table = tableOf(
+        faking(timeLimitsFacts, (_element, context) => {
+          owners.push(context.owner);
+        }),
+      );
+      const document = test([
+        part("P1", "linear", "individual", [
+          section("S1", [itemRef("I1", "items/one.xml", [], [timeLimits()])]),
+        ]),
+      ]);
+
+      yield* Effect.fromResult(buildTest(document, table));
+
+      assert.deepStrictEqual(owners, [{ identifier: "I1", kind: "item-ref" }]);
+    }),
+  );
+
+  it.effect(
+    "[W0-AT] a notice the body walk gives inside a rubric body reaches the test's marks",
+    () =>
+      Effect.gen(function* noticeReachesMarks() {
+        const table = tableOf(
+          faking(rubricBlockFacts, (element, context) => {
+            readBodies(element, context);
+          }),
+        );
+        const document = test([rubricBlock("words", [el("qti-unknown-thing")])]);
+
+        const built = yield* Effect.fromResult(buildTest(document, table));
+
+        assert.deepStrictEqual(built.unsupported, [
+          {
+            feature: "qti-unknown-thing",
+            path: `${root}/qti-rubric-block/qti-content-body/qti-unknown-thing`,
+            shown: "notice",
+          },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[W0-AT] the stub table is unchanged: a test with rubric blocks marks each block as today",
+    () =>
+      Effect.gen(function* stubsAsToday() {
+        const stubbed = yield* Effect.fromResult(buildTest(blocksOnThree, tableOf()));
+        const byDefault = yield* Effect.fromResult(buildTest(blocksOnThree));
+
+        assert.deepStrictEqual(
+          stubbed.unsupported,
+          threeBlockPaths.map((path) => mark("qti-rubric-block", path)),
+        );
+        assert.isUndefined(stubbed.features);
+        assert.deepStrictEqual(
+          byDefault.unsupported,
+          threeBlockPaths.flatMap((path) => featureMarks("qti-rubric-block", path)),
+        );
+      }),
+  );
+
+  it.effect(
+    "[W0-AT] a printed variable in a rubric body is read as the body walk reads it, whether or not it names a test outcome",
+    () =>
+      Effect.gen(function* printsAsRead() {
+        const outlines: (readonly BodyOutline[])[] = [];
+        const table = tableOf(
+          faking(rubricBlockFacts, (element, context) => {
+            for (const body of readBodies(element, context)) {
+              outlines.push(
+                Result.getOrElse(body, () => assert.fail("the body is refused")).map(outlineOf),
+              );
+            }
+          }),
+        );
+        const document = test([
+          outcome("SCORE", "float"),
+          rubricBlock("words", [printedVariable("SCORE"), printedVariable("NOT-AN-OUTCOME")]),
+        ]);
+
+        const built = yield* Effect.fromResult(buildTest(document, table));
+
+        assert.deepStrictEqual(outlines, [
+          [["p", ["words"]], "printed SCORE", "printed NOT-AN-OUTCOME"],
+        ]);
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[W0-AT] a section reference owns nothing: it takes the owner above it, and so does an element under it",
+    () =>
+      Effect.gen(function* refOwnsNothing() {
+        const refOwners: FeatureOwner[] = [];
+        const limitOwners: FeatureOwner[] = [];
+        const refs = faking(sectionRefFacts, (_element, context) => {
+          refOwners.push(context.owner);
+        });
+        const limits = faking(timeLimitsFacts, (_element, context) => {
+          limitOwners.push(context.owner);
+        });
+        const document = test([
+          part("P1", "linear", "individual", [
+            el(
+              "qti-assessment-section-ref",
+              [attr("identifier", "R1"), attr("href", "sections/one.xml")],
+              [timeLimits()],
+            ),
+          ]),
+        ]);
+
+        yield* Effect.fromResult(buildTest(document, tableOf(refs)));
+        yield* Effect.fromResult(
+          buildTest(
+            document,
+            tableOf(limits).filter((module) => module.key !== "qti-assessment-section-ref"),
+          ),
+        );
+
+        assert.deepStrictEqual(refOwners, [{ identifier: "P1", kind: "part" }]);
+        assert.deepStrictEqual(limitOwners, [{ identifier: "P1", kind: "part" }]);
+      }),
+  );
+
+  it.effect(
+    "[W0-AT] an owner is the nearest enclosing structural element, its identifier trimmed as the model trims it and empty when absent",
+    () =>
+      Effect.gen(function* nearestOwner() {
+        const owners: FeatureOwner[] = [];
+        const table = tableOf(
+          faking(timeLimitsFacts, (_element, context) => {
+            owners.push(context.owner);
+          }),
+        );
+        const document = test([
+          part("P1", "linear", "individual", [
+            section("S1", [
+              section(" S1a ", [timeLimits()]),
+              timeLimits(),
+              itemRef("I1", "items/one.xml", [], [timeLimits()]),
+            ]),
+          ]),
+          // An item ref the tree does not read, since it is not in a section, and so is never refused for
+          // lacking its identifier.
+          el("qti-assessment-item-ref", [attr("href", "items/two.xml")], [timeLimits()]),
+        ]);
+
+        yield* Effect.fromResult(buildTest(document, table));
+
+        assert.deepStrictEqual(owners, [
+          { identifier: "S1a", kind: "section" },
+          { identifier: "S1", kind: "section" },
+          { identifier: "I1", kind: "item-ref" },
+          { identifier: "", kind: "item-ref" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[W0-AT] a feature the module's own mark and the reader kit record at one path is held once",
+    () =>
+      Effect.gen(function* heldOnce() {
+        const table = tableOf(
+          faking(rubricBlockFacts, (element, context) => {
+            context.read.mark(element, "qti-rubric-block");
+            context.read.mark(element, "a-kit-only-feature");
+            context.mark("qti-rubric-block");
+          }),
+        );
+        const document = test([rubricBlock("words")]);
+
+        const built = yield* Effect.fromResult(buildTest(document, table));
+
+        assert.sameDeepMembers(
+          [...built.unsupported],
+          [
+            mark("qti-rubric-block", `${root}/qti-rubric-block`),
+            mark("a-kit-only-feature", `${root}/qti-rubric-block`),
+          ],
+        );
+        assert.strictEqual(built.unsupported.length, 2);
       }),
   );
 });

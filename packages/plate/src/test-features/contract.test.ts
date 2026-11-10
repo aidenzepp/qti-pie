@@ -2,9 +2,10 @@ import { readdirSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
-import { attr, doc, el, qtiNamespace, xincludeNamespace } from "#plate/document/source.ts";
+import { attr, doc, el, qtiNamespace, text, xincludeNamespace } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { pathsOf } from "#plate/model/item.ts";
+import { parseContextOf, pathsOf } from "#plate/model/item.ts";
+import type { BodyNode } from "#plate/model/item.ts";
 import { readersOf } from "#plate/model/reader.ts";
 import { buildTest } from "#plate/model/test.ts";
 import type { Test } from "#plate/model/test.ts";
@@ -15,6 +16,7 @@ import type { TestSession } from "#plate/session/session.ts";
 import { TestFeatureNotImplemented, stub, testFeatureKeys } from "#plate/test-features/contract.ts";
 import type {
   EnterContext,
+  FeatureOwner,
   SequencePlace,
   TestFeatureId,
   TestFeatureKey,
@@ -29,6 +31,7 @@ import {
   gatedBy,
   sequencedBy,
 } from "#plate/test-features/dispatch.ts";
+import { rubricBlockModule } from "#plate/test-features/rubric-block.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
 import type { AnyTestFeature, TestFeatureTable } from "#plate/test-features/table.ts";
 import { open } from "#plate/validate/open.ts";
@@ -177,7 +180,9 @@ const recording = (source: SourceDocument): MarkRecording => {
 
         return Result.succeed(Option.none());
       },
+      owner: { kind: "test" },
       path: "qti-assessment-test/x",
+      read: parseContextOf(source, source.root).context.read,
       readers: readersOf({ builder: "buildTest", document: source, paths: pathsOf(source) }),
     },
     marked,
@@ -270,6 +275,36 @@ const landedTimeLimits: TestFeatureModule<"qti-time-limits", TimeLimitsNode> = {
       return Option.some({ maxTime: maxTime.value, path: context.path });
     }),
   sequence: (context) => context.places.toReversed(),
+};
+
+/**
+ * What the landed rubric-block module reads a block into: the owner of the block and the body nodes
+ * of its content, as the context gave them.
+ */
+interface RubricNode {
+  readonly nodes: readonly BodyNode[];
+  readonly owner: FeatureOwner;
+  readonly path: string;
+}
+
+/**
+ * A rubric-block module as it would land, for this test alone: it reads the block's children
+ * through the context's reader kit, letting its `qti-content-body` through as an element, and
+ * keeps the owner the context names.
+ */
+const landedRubricBlock: TestFeatureModule<"qti-rubric-block", RubricNode> = {
+  ...stub({
+    element: "qti-rubric-block",
+    feature: ["S-5", "T-13"],
+    issue: "m3e-01b",
+    key: "qti-rubric-block",
+    namespace: qtiNamespace,
+  }),
+  implemented: true,
+  parse: (element, context) =>
+    Result.map(context.read.nodes(element, { own: ["qti-content-body"] }), (nodes) =>
+      Option.some({ nodes, owner: context.owner, path: context.path }),
+    ),
 };
 
 /**
@@ -406,6 +441,10 @@ describe("the test-feature modules", () => {
 });
 
 describe("a test-feature module not implemented", () => {
+  it("[W0-AT] the rubric-block stub names its filling issue", () => {
+    assert.strictEqual(rubricBlockModule.issue, "m3e-01b");
+  });
+
   it("parses its element as none, its key recorded once as the mark, and is found by its element", () => {
     const source = testOf([]);
     for (const module of stubs) {
@@ -510,6 +549,39 @@ describe("a test-feature module not implemented", () => {
 });
 
 describe("a test-feature module that has landed", () => {
+  it("[W0-AT] the landed fake compiles against the new context and reads a body: landedTimeLimits keeps reading through readers, a second fake reads the body and its owner and records both", () => {
+    const rubric = el(
+      "qti-rubric-block",
+      [attr("view", "candidate")],
+      [el("qti-content-body", [], [el("p", [], [text("Show your working.")])])],
+    );
+    const source = testOf(["a"], [rubric, timeLimits(60)]);
+    const table = stubbed.map((module) => {
+      if (module.key === "qti-rubric-block") {
+        return landedRubricBlock;
+      }
+
+      return module.key === "qti-time-limits" ? landedTimeLimits : module;
+    });
+    const withBoth = built(source, table);
+    const nodes:
+      | TestFeatureNodes<AnyTestFeature | typeof landedTimeLimits | typeof landedRubricBlock>
+      | undefined = withBoth.features;
+    const sectionPath = "qti-assessment-test/qti-test-part/qti-assessment-section";
+    const [read] = nodes?.["qti-rubric-block"] ?? [];
+
+    assert.deepStrictEqual(nodes?.["qti-time-limits"], [
+      { maxTime: 60, path: `${sectionPath}/qti-time-limits` },
+    ]);
+    assert.deepStrictEqual(read?.owner, { identifier: "S1", kind: "section" });
+    assert.strictEqual(read?.path, `${sectionPath}/qti-rubric-block`);
+    assert.deepStrictEqual(
+      read?.nodes.map((node) => (node.kind === "element" ? node.tag : node.kind)),
+      ["qti-content-body"],
+    );
+    assert.deepStrictEqual(withBoth.unsupported, []);
+  });
+
   it("reaches the model: buildTest holds its node under its key and records no mark for it, where the stub marked it", () => {
     const source = testOf(["a"], [timeLimits(60)]);
     const withStub = built(source, stubbed);
