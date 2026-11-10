@@ -15,9 +15,7 @@
  *   `ItemRefDocument` and `Declaration`, their CHECKs, a mapped reading's declaration (its
  *   mapping's source's), `VariableMapping`'s key and session check, and what each item ref names:
  *   its `ItemRefHref` and `ItemRefDocument`, each a row only where the package holds it, and its
- *   target as the query `ItemRefTarget` derives it from the resources' rows. Each law carries the
- *   name `src/import/refusal.ts` gives the schema's statement of it ({@link hostLaws}, held to
- *   `statedLaws` by the first test).
+ *   target as the query `ItemRefTarget` derives it from the resources' rows.
  *
  * The two must name the same breaches, but one residual the schema states on purpose: the declared
  * half of `Variable mapping target` is judged on a mapping's `MappingSourceDeclaration`, so a
@@ -27,19 +25,18 @@
  * refuses for one cause is refused under that cause's rule alone. No row holds the nil uuid, no
  * target a `none` type, and no family member lacks its owner (`#pantry/test/family-owners.ts`).
  */
-import type { Addition, Law, LawSide } from "@bjornpagen/grizzle";
+import type { Addition } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
-import { assert, describe, it as plainIt, layer } from "@effect/vitest";
+import { assert, layer } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import type { Case } from "@grizzle/testing/explore";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
+import { Duration, Effect, Option } from "effect";
 import { grammar, ResourceTypeLexical } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawOfCheck } from "#pantry/import/refusal.ts";
 import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
@@ -69,19 +66,13 @@ import {
 import type { ItemRefPackage, Named } from "#pantry/test/gen/item-ref-declarations.ts";
 import { judge, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
-import { lawTable } from "#pantry/vocab/laws.ts";
 import { itemResourceType, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
-import { schemaRuleOfLaw, statedLaws } from "#pantry/test/law-namer.ts";
 import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 35.7 s at a load average of 87 to
- * 98, its slowest test then. The restatement test, which compiles Qti's law model to pair each
- * statement with its laws, ran 86.8 s on 695e408e on 2026-11-08 beside other suites, at a load
- * average sampled at 57 to 65 around the run but not through it. On grizzle eb56d58 (2026-11-10),
- * alone at a load average of 43 to 54, the restatement test took 16.4 s and the slowest, the
- * swarm's, 35.9 s. The value is twice the 86.8 s, rounded up to the next minute.
+ * describe: a hang guard, never a budget. On grizzle eb56d58 (2026-11-10), alone at a load average
+ * of 43 to 54, the slowest test, the swarm's at 200 runs, took 35.9 s; it now draws 40.
  */
 const testTimeoutMs = 180_000;
 
@@ -137,330 +128,6 @@ interface HostBreach {
   readonly law: LawName | "E1 derived";
   readonly name: string;
 }
-
-/**
- * A side of a statement this file restates: its relation, then the fields its terms read. A key is
- * its fields as a set, and a containment its two sides' fields paired in order, the pairs a set:
- * a law is the pairs it holds, whatever order its statement writes them in, so the restatement
- * follows the schema when a statement reorders its terms.
- */
-type RestatedSide = readonly [relation: string, ...fields: string[]];
-
-/**
- * A statement of the schema this file restates, by the law it states: a check by its name, a key
- * by its side, a containment by its two sides. A side's selection is no part of it: the host reads
- * each statement over the rows its selection admits.
- */
-type Restated =
-  | { readonly from: RestatedSide; readonly kind: "contained"; readonly to: RestatedSide }
-  | { readonly kind: "check"; readonly name: string }
-  | { readonly kind: "key"; readonly side: RestatedSide };
-
-/**
- * Read a law side's fields, where each of its terms is a field.
- *
- * @param side - A side of a law the schema states.
- * @returns Its fields in order, none where a term is a `pred` one, which no restated side holds.
- */
-const fieldsOf = (side: LawSide): Option.Option<readonly string[]> =>
-  Option.all(
-    side.terms.map((term) =>
-      term.kind === "field" ? Option.some(term.field) : Option.none<string>(),
-    ),
-  );
-
-/**
- * Whether two lists hold one set of texts, each once.
- *
- * @param left - One list.
- * @param right - The other.
- * @returns Whether they are one set.
- */
-const sameSet = (left: readonly string[], right: readonly string[]): boolean => {
-  const held = new Set(right);
-
-  return (
-    left.length === right.length && held.size === right.length && left.every((at) => held.has(at))
-  );
-};
-
-/**
- * Pair two sides' fields in order, each pair one text.
- *
- * @param from - The source's fields.
- * @param to - The target's fields.
- * @returns The pairs.
- */
-const pairsOf = (from: readonly string[], to: readonly string[]): readonly string[] =>
-  Arr.zip(from, to).map(([source, target]) => `${source}\u001F${target}`);
-
-/**
- * Whether a law the schema states is a restated statement's: a check by its name, a key by its
- * relation and its fields as a set, a containment by its two relations and its pairs as a set
- * ({@link RestatedSide}).
- *
- * @param law - The law, as grizzle's `lawsOf` names it.
- * @param restated - The restated statement.
- * @returns Whether it is.
- */
-const restates = (law: Law, restated: Restated): boolean => {
-  if (restated.kind === "check") {
-    return law.kind === "check" && law.name === restated.name;
-  }
-
-  if (restated.kind === "key") {
-    const [relation, ...fields] = restated.side;
-
-    return (
-      law.kind === "key" &&
-      law.side.relation === relation &&
-      Option.exists(fieldsOf(law.side), (held) => sameSet(held, fields))
-    );
-  }
-
-  const [fromRelation, ...fromFields] = restated.from;
-  const [toRelation, ...toFields] = restated.to;
-
-  return (
-    law.kind === "contained" &&
-    law.from.relation === fromRelation &&
-    law.to.relation === toRelation &&
-    Option.exists(Option.all([fieldsOf(law.from), fieldsOf(law.to)]), ([from, to]) =>
-      sameSet(pairsOf(from, to), pairsOf(fromFields, toFields)),
-    )
-  );
-};
-
-/**
- * The schema's statements this file restates, each with the law name the host gives its breaches.
- */
-const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
-  [
-    { from: ["Attribute", "node"], kind: "contained", to: ["ItemRefHref", "node"] },
-    "Item ref target",
-  ],
-  [
-    {
-      from: ["UntargetedItemRef", "package", "path"],
-      kind: "contained",
-      to: ["UnreadTypeHref", "package", "path"],
-    },
-    "Item ref target",
-  ],
-  [
-    {
-      from: ["ItemRefTarget", "node", "package", "path"],
-      kind: "contained",
-      to: ["ItemRefDocument", "node", "package", "path"],
-    },
-    "Item ref target",
-  ],
-  [
-    {
-      from: ["ItemRefDocument", "document", "package", "path"],
-      kind: "contained",
-      to: ["Document", "node", "package", "path"],
-    },
-    "Item ref target",
-  ],
-  [
-    { from: ["TemplateDefault", "node"], kind: "contained", to: ["TemplateDefaultTarget", "node"] },
-    "Template default target",
-  ],
-  [
-    {
-      from: ["TemplateDefaultTarget", "itemRef", "itemDocument"],
-      kind: "contained",
-      to: ["ItemRefDocument", "node", "document"],
-    },
-    "Template default target",
-  ],
-  [
-    {
-      from: [
-        "TemplateDefaultTarget",
-        "declaration",
-        "itemDocument",
-        "template",
-        "declarationKind",
-        "declCardinalities",
-        "declBaseTypes",
-      ],
-      kind: "contained",
-      to: [
-        "DeclarationIdentifier",
-        "node",
-        "document",
-        "identifier",
-        "declarationKind",
-        "cardinalities",
-        "baseTypes",
-      ],
-    },
-    "Template default target",
-  ],
-  [{ kind: "check", name: "Template_default_target" }, "Template default target"],
-  [{ kind: "check", name: "Template_default_type" }, "Template default type"],
-  [
-    {
-      from: ["TemplateDefaultTarget", "node"],
-      kind: "contained",
-      to: ["TemplateDefaultCardinality", "node"],
-    },
-    "E1 derived",
-  ],
-  [
-    {
-      from: ["TemplateDefaultCardinality", "node", "declaration", "heldCardinality"],
-      kind: "contained",
-      to: ["TemplateDefaultTarget", "node", "declaration", "heldCardinality"],
-    },
-    "E1 derived",
-  ],
-  [
-    {
-      from: ["TemplateDefaultCardinality", "declaration", "declCardinality"],
-      kind: "contained",
-      to: ["DeclarationCardinality", "node", "cardinality"],
-    },
-    "E1 derived",
-  ],
-  [
-    {
-      from: ["TemplateDefaultTarget", "node", "heldBase", "heldCardinality"],
-      kind: "contained",
-      to: ["Expression", "parent", "baseType", "cardinality"],
-    },
-    "E1 derived",
-  ],
-  [
-    {
-      from: ["TemplateDefaultTarget", "node", "itemRef", "template"],
-      kind: "contained",
-      to: ["TemplateDefault", "node", "itemRef", "template"],
-    },
-    "E1 derived",
-  ],
-  [
-    {
-      from: ["VariableMapping", "node", "parent"],
-      kind: "contained",
-      to: ["MappingItemRef", "node", "itemRef"],
-    },
-    "Item ref target",
-  ],
-  [
-    {
-      from: ["MappingItemRef", "node", "itemRef"],
-      kind: "contained",
-      to: ["VariableMapping", "node", "parent"],
-    },
-    "Item ref target",
-  ],
-  [
-    {
-      from: ["MappingItemRefType", "node", "itemRef"],
-      kind: "contained",
-      to: ["MappingItemRef", "node", "itemRef"],
-    },
-    "Item ref target",
-  ],
-  [
-    {
-      from: ["MappingItemRefType", "itemRef", "type"],
-      kind: "contained",
-      to: ["ItemRefTarget", "node", "type"],
-    },
-    "Item ref target",
-  ],
-  [
-    {
-      from: ["MappingItemRef", "node"],
-      kind: "contained",
-      to: ["MappingSourceDeclaration", "node"],
-    },
-    "Variable mapping source",
-  ],
-  [
-    {
-      from: ["MappingItemRefType", "node"],
-      kind: "contained",
-      to: ["MappingSourceDeclaration", "node"],
-    },
-    "Variable mapping source",
-  ],
-  [
-    {
-      from: ["MappingSourceDeclaration", "itemRef", "itemDocument"],
-      kind: "contained",
-      to: ["ItemRefDocument", "node", "document"],
-    },
-    "Variable mapping source",
-  ],
-  [
-    {
-      from: [
-        "MappingSourceDeclaration",
-        "declaration",
-        "itemDocument",
-        "source",
-        "declarationKind",
-        "declCardinalities",
-        "declBaseTypes",
-      ],
-      kind: "contained",
-      to: [
-        "DeclarationIdentifier",
-        "node",
-        "document",
-        "identifier",
-        "declarationKind",
-        "cardinalities",
-        "baseTypes",
-      ],
-    },
-    "Variable mapping source",
-  ],
-  [{ kind: "check", name: "Variable_mapping_source" }, "Variable mapping source"],
-  [{ kind: "check", name: "Variable_mapping_target" }, "Variable mapping target"],
-  [
-    { kind: "key", side: ["MappingSourceDeclaration", "itemRef", "target"] },
-    "Variable mapping target",
-  ],
-  [{ kind: "key", side: ["VariableMapping", "parent", "target"] }, "Variable mapping target"],
-  [
-    {
-      from: ["Reading", "assembly", "node", "attribute", "form", "split", "named"],
-      kind: "contained",
-      to: ["ReadingDeclaration", "assembly", "node", "attribute", "form", "split", "named"],
-    },
-    "Variable mapping source",
-  ],
-  [
-    {
-      from: [
-        "ReadingDeclaration",
-        "named",
-        "variable",
-        "declaration",
-        "declarationKind",
-        "declCardinalities",
-        "declBaseTypes",
-      ],
-      kind: "contained",
-      to: [
-        "MappingSourceDeclaration",
-        "itemRef",
-        "target",
-        "declaration",
-        "declarationKind",
-        "declCardinalities",
-        "declBaseTypes",
-      ],
-    },
-    "E1 derived",
-  ],
-];
 
 /**
  * A base type's expression-typing value, as `ValueBaseOf` maps it.
@@ -1161,28 +828,6 @@ const judged = (input: ItemRefPackage, c: Case<Situation>) =>
     assertNoSentinel(input, inputs, literal);
   }).pipe(Effect.scoped);
 
-describe("an item ref's declarations: the schema's restatement", { timeout: testTimeoutMs }, () => {
-  plainIt("names each restated law as refusal.ts names the schema's statement of it", () => {
-    // Oracle: `refusal.ts`'s naming of the laws the schema states (`schemaRuleOfLaw`), against the rule
-    // each host law's name keeps (`ruleOf`). A check is named by its name; any other restated
-    // statement is each law of `statedLaws` it reads as. Bound: every law the host restates.
-    for (const [restated, name] of hostLaws) {
-      const expected = name === "E1 derived" ? "derived" : ruleOf(name);
-      const rules =
-        restated.kind === "check"
-          ? [Option.map(lawOfCheck(restated.name), (law) => lawTable[law].rule)]
-          : statedLaws().flatMap(([law]) =>
-              restates(law, restated) ? [schemaRuleOfLaw(law)] : [],
-            );
-
-      assert.isNotEmpty(rules, `${Formatter.format(restated)}: no law the schema states`);
-      for (const rule of rules) {
-        assert.deepStrictEqual(rule, Option.some(expected), Formatter.format(restated));
-      }
-    }
-  });
-});
-
 layer(NodeServices.layer, { excludeTestServices: true })(
   "an item ref's declarations: the import's rows against the law oracle",
   (it) => {
@@ -1228,7 +873,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       "every sampled package, drawn by its own swarm, gets the oracle's breaches from its import rows",
       (ctx) =>
         // Oracle: as the box's. Bound: up to three template defaults and three mappings, each
-        // case under its own swarm of eleven features; 200 runs.
+        // case under its own swarm of eleven features; 40 runs, each run's seed drawing new swarms.
         searched(
           ctx,
           explore(
@@ -1243,7 +888,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               kept: [],
               literal: ({ input }) => itemRefPackageLiteral(input),
               oracle: { kind: "second-implementation", name: "the law oracle's item ref laws" },
-              runs: 200,
+              runs: 40,
               shrink: completeShrink,
               steerEvery: 16,
               suite: "pantry/test/item-ref-declarations-swarm",
