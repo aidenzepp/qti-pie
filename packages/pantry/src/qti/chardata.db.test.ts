@@ -589,12 +589,16 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
     );
 
     it.effect(
-      "refuses a foreign element only a strict wildcard holds, with no type and no root's name, by the Strictly held check",
+      "refuses a foreign element only a strict wildcard holds, with no type and no root's name, by the Strictly held containment",
       () =>
-        // Oracle: PostgreSQL, the `Strictly_held` CHECK (C44, spec reading 81): a `strict`
-        // wildcard's element is `mustFind` (XML Schema 1.0 Part 1 §3.10.4 clause 2), so with no
-        // governing type and no declaration of its set's roots (`HeldRootsUnder`) it has no
-        // known validity, and its parent is invalid (§3.3.5 [validity] clause 1.1.3).
+        // Oracle: PostgreSQL, the Strictly held containment (C44, C13; spec readings 6 and 81),
+        // a deferred foreign key from `open_element_name` to `open_element_type`, set immediate
+        // for the case: each name row on `StrictlyHeld`'s side, whose name is no root its set
+        // declares there (`HeldRootsUnder`), is contained in `OpenElementType`, so one with no
+        // type row is 23503 on that key. A `strict` wildcard's element is `mustFind` (XML Schema
+        // 1.0 Part 1 §3.10.4 clause 2), so with no governing type and no declaration of its set's
+        // roots it has no known validity, and its parent is invalid (§3.3.5 [validity] clause
+        // 1.1.3).
         // Bound: a foreign element under `qti-companion-materials-info`'s strict slot, and an
         // element named as `cp:manifest` under the same slot, whose set (an item's) declares no
         // manifest; every other law of each row kept.
