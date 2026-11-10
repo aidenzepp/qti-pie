@@ -6,8 +6,9 @@
  * loads, and each declaration states one of its relations as `closed(name, handles)` or
  * `closed.relation(name, fields, key, rows)`. grizzle packs each into a content-addressed constant
  * when a law or a generated field reads it, and installs nothing for one no statement reads. This
- * is the one module under `src/grammar/` that imports grizzle (`purity.test.ts`), so the generators
- * stay pure and each schema module imports its rosters and relations from here.
+ * is the one module under `src/grammar/` that builds with grizzle (`purity.test.ts`; `domains.ts`
+ * reads only its published `regexMaxRepeat`), so the generators stay pure and each schema module
+ * imports its rosters and relations from here.
  *
  * The migration states each constant as one hex literal under its row count and digest, which
  * `grizzle check` decodes, the one form grizzle writes (README, "Closed relations"); a generator

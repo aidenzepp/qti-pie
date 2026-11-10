@@ -10,16 +10,25 @@ const sourceRoot = path.resolve(import.meta.dirname, "..");
 
 /**
  * The pure layers, relative to `src`: vocabulary data, the generators and the XDM model. Each is a
- * function of its inputs, so none reaches grizzle or the modules that talk to the database, and
- * none reads a snapshot: `install.ts` declares each roster in its generator's order.
+ * function of its inputs, so none reaches grizzle's builders or the modules that talk to the
+ * database, and none reads a snapshot: `install.ts` declares each roster in its generator's order.
  */
 const pureLayers = "{vocab,grammar,model}/**/*.ts";
 
 /**
- * The one pure-layer module that imports grizzle: it declares the generators' closed relations to
+ * The pure-layer module that builds with grizzle: it declares the generators' closed relations to
  * it.
  */
 const install = "grammar/install.ts";
+
+/**
+ * Every other pure-layer import of grizzle, each `module: statement`: `domains.ts` writes a
+ * repetition's bound within the limit grizzle publishes, `regexMaxRepeat`, which it reads rather
+ * than restates, and nothing else.
+ */
+const publishedLimits: readonly string[] = [
+  'grammar/domains.ts: import { regexMaxRepeat } from "@bjornpagen/grizzle"',
+];
 
 /**
  * The modules outside `src/test/` that import its helpers today: none since the processing
@@ -212,10 +221,16 @@ const mayReachOracle = (file: string): boolean =>
   file.endsWith(".test.ts") ? /\.oracle(?:\.db)?\.test\.ts$/u.test(file) : file.startsWith("test/");
 
 describe("the pure layers", () => {
-  it("import grizzle only in install.ts", () => {
-    const files = modules(pureLayers).filter((file) => file !== install);
+  it("import grizzle only in install.ts, and its published regexMaxRepeat in domains.ts", () => {
+    const imports = modules(pureLayers)
+      .filter((file) => file !== install)
+      .flatMap((file) =>
+        moduleImports(readFileSync(path.join(sourceRoot, file), "utf-8"))
+          .filter(({ specifier }) => specifier.startsWith("@bjornpagen/grizzle"))
+          .map(({ text }) => `${file}: ${text}`),
+      );
 
-    assert.deepStrictEqual(offences(files, ["@bjornpagen/grizzle"]), []);
+    assert.deepStrictEqual(imports, publishedLimits);
   });
 
   it("import no schema, importer or exporter module", () => {

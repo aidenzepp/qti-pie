@@ -28,17 +28,18 @@
  *
  * The pattern is written in the syntax PostgreSQL's advanced regular expressions, JavaScript's
  * `u`-flag regular expressions and grizzle's `str.regex` grammar share: bracket expressions of code
- * points, non-capturing groups, alternation and bounded quantifiers of at most 255 (PostgreSQL's
- * `RE_DUP_MAX`), and no lookaround, which grizzle's admission refuses
- * (`scalar/regex/parse.ts`). So where a type's constraints intersect, the pattern is their product,
- * and a collapsed core that may not begin or end with whitespace has its first and last characters
- * narrowed, never asserted. XSD's own regex dialect (`\i`, `\c`, block and category escapes, class
- * subtraction) is translated, never passed through.
+ * points, non-capturing groups, alternation and bounded quantifiers of at most grizzle's
+ * `regexMaxRepeat` (PostgreSQL's `RE_DUP_MAX`), and no lookaround, which grizzle's admission
+ * refuses (`scalar/regex/parse.ts`). So where a type's constraints intersect, the pattern is their
+ * product, and a collapsed core that may not begin or end with whitespace has its first and last
+ * characters narrowed, never asserted. XSD's own regex dialect (`\i`, `\c`, block and category
+ * escapes, class subtraction) is translated, never passed through.
  *
  * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, 4.3.6 whiteSpace}
  * @see {@link https://www.w3.org/TR/xmlschema-2/#regexs | XML Schema Part 2, Appendix F, Regular Expressions}
  * @see {@link https://www.postgresql.org/docs/current/functions-matching.html#POSIX-SYNTAX-DETAILS | PostgreSQL, Regular Expression Details}
  */
+import { regexMaxRepeat } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Result, Schema } from "effect";
 import type { Domain, Facet, FacetName, Primitive } from "#pantry/vocab/inventory/types.ts";
 
@@ -3711,14 +3712,6 @@ const spellSet = (set: CodeSet): string => {
 };
 
 /**
- * PostgreSQL's largest repetition count, `RE_DUP_MAX` (19rc1, `src/include/regex/regex.h`): a
- * bound above it is written as several repetitions. grizzle exports it as `regexMaxRepeat`; this
- * pure layer imports no grizzle, so it states the number, and `domains.test.ts` holds every count
- * the grammar writes to grizzle's.
- */
-const repetitionLimit = 255;
-
-/**
  * Whether a written tree is one atom a quantifier may follow without a group.
  *
  * @param tree - The tree.
@@ -3727,7 +3720,8 @@ const repetitionLimit = 255;
 const isAtom = (tree: Regex): boolean => tree._tag === "chars";
 
 /**
- * Write a repetition's quantifier, splitting a bound above {@link repetitionLimit}.
+ * Write a repetition's quantifier, splitting a bound above grizzle's `regexMaxRepeat`, the largest
+ * count PostgreSQL's regex compiler takes (`RE_DUP_MAX`), into several repetitions.
  *
  * @param body - The written body, an atom or a group.
  * @param min - The fewest times.
@@ -3735,8 +3729,9 @@ const isAtom = (tree: Regex): boolean => tree._tag === "chars";
  * @returns The pattern.
  */
 const spellRepeat = (body: string, min: number, max: Option.Option<number>): string => {
-  if (min > repetitionLimit) {
-    return `${body}{${repetitionLimit}}${spellRepeat(body, min - repetitionLimit, max.pipe(Option.map((most) => most - repetitionLimit)))}`;
+  const limit = regexMaxRepeat.value;
+  if (min > limit) {
+    return `${body}{${limit}}${spellRepeat(body, min - limit, max.pipe(Option.map((most) => most - limit)))}`;
   }
 
   return Option.match(max, {
@@ -3748,8 +3743,8 @@ const spellRepeat = (body: string, min: number, max: Option.Option<number>): str
       return min === 1 ? `${body}+` : `${body}{${min},}`;
     },
     onSome: (most) => {
-      if (most > repetitionLimit) {
-        return `${body}{${min},${repetitionLimit}}${spellRepeat(body, 0, Option.some(most - repetitionLimit))}`;
+      if (most > limit) {
+        return `${body}{${min},${limit}}${spellRepeat(body, 0, Option.some(most - limit))}`;
       }
 
       if (min === 0 && most === 1) {
