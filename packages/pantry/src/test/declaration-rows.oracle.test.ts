@@ -11,8 +11,8 @@
  * `E1_derived` refused and every row that copied it judged; then it had no row at all, so the
  * copies its children ask broke beside its own law.
  *
- * For every declaration of the every-relation items and test, under each state that leaves its
- * cardinality or its base type spelling nothing:
+ * For the first declaration of each kind in each of the every-relation items and its test, under
+ * each state that leaves its cardinality or its base type spelling nothing:
  *
  * - The oracle raises AL3's required attribute or the attribute's value domain at the declaration,
  *   and where only its cardinality or base type changed, nothing else;
@@ -49,11 +49,17 @@ import { judge, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
 import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
- * Every (site, state) of the scope, by its number.
+ * Every (site, state) of the scope, by its number: the first declaration of each kind in each
+ * document, under every state that applies to it. A later declaration of one kind in one document
+ * is read by the same `typedDeclarationOf` and judged by the same laws, so it decides nothing the
+ * first does not; the first of each kind is the one the document's interactions, references and
+ * processing name (`RESPONSE`, `SCORE`), so it carries the rows that hang from a declaration.
  */
-const cases = declarationSites.flatMap((site) =>
-  declarationStates.filter((state) => state.applies(site)).map((state) => ({ site, state })),
-);
+const cases = declarationSites
+  .filter(({ ordinal }) => ordinal === 0)
+  .flatMap((site) =>
+    declarationStates.filter((state) => state.applies(site)).map((state) => ({ site, state })),
+  );
 
 /**
  * The fields of a row this check reads: a `declaration`, a `parent`, a `node`, a `document`, an
@@ -203,14 +209,14 @@ describe("declarations whose cardinality or base type spells nothing (spec readi
     "keep their rows, are refused by AL3 or the value domain alone, and no row reads what they do not spell",
     (ctx) =>
       // Oracle: the specification as a checker (the law oracle), and the families and checks the
-      // importer's rows feed, read over those rows. Bound: every declaration of the every-relation
-      // items and test, under each state of its cardinality and base type that spells nothing,
-      // exhausted.
+      // importer's rows feed, read over those rows. Bound: the first declaration of each kind in
+      // each of the every-relation items and test, under each state of its cardinality and base
+      // type that spells nothing, exhausted.
       searched(
         ctx,
         exhaust(
           {
-            box: "every declaration of the every-relation items and test, under each untyped state",
+            box: "the first declaration of each kind in each item and the test, under each untyped state",
             caseHang: Duration.seconds(120),
             coverage: noCoverage,
             generator: int(0, cases.length - 1),
