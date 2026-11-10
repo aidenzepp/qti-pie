@@ -6,7 +6,7 @@ and `saxes`, so grizzle stays out of anything that depends on it. `packages/pant
 QTI 3.0 on [grizzle](vendor/README.md), and exists first to put grizzle through a large, real data model. Read
 [docs/qti-intent.md](docs/qti-intent.md) before planning or changing the QTI model. `packages/plate` (`@qti-pie/plate`)
 is planned: it renders QTI 3.0, depends on crust and never on pantry, and its intent and rules arrive with its own goal;
-pantry's intent (a grizzle test vehicle, delivery out of scope) does not bind it. The packages read the specifications the same way: [docs/spec-readings.md](docs/spec-readings.md). Everything runs locally; there is no deploy target. The shared repository
+pantry's intent (a grizzle test vehicle, delivery out of scope) does not bind it. The packages read the specifications the same way: [docs/spec-readings.md](docs/spec-readings.md). Cloud agents read [docs/cloud-agents.md](docs/cloud-agents.md) as their handbook. Everything runs locally; there is no deploy target. The shared repository
 is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (public, MIT-licensed; main is protected), the remote `origin`.
 
 ## Toolchain
@@ -195,7 +195,7 @@ This is the workflow `factory` records in its ledger; it meets shipyard's five r
   it with `gh pr merge --merge` (a merge commit, never squash or rebase), and fast-forward local `main`. A failed check
   leaves no pull request. If `origin/main` moves after the checks ran, fetch, merge again and re-run the checks before
   merging the pull request. Slices still merge into their feature branch locally and are never pushed.
-- **Remote.** Push only `main`, `qti/<feature>/main`, `renderer/<feature>/main` and `gate/<name>`. Never force-push, and never rewrite a pushed
+- **Remote.** Push only `main`, `qti/<feature>/main`, `renderer/<feature>/main`, `gate/<name>` and `cursor/*` (Cursor's cloud-agent branches, pushed only by the Cursor GitHub app, never by a local seat, deleted after their pull request merges). Never force-push, and never rewrite a pushed
   branch: fixes go forward and are pushed again. Issues that track this project's work may be opened on `origin`.
 - **Audits** take a frozen range on the feature branch. Never rewrite accepted history, never force anything, fix
   forward. The one exception was the operator-authorized move of `snapshot.json` into Git LFS on 2026-11-03, which
