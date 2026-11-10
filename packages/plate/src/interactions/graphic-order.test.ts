@@ -11,6 +11,7 @@ import {
   entryName,
   h,
   open,
+  PartSwapRefused,
   postings,
   redact,
   render,
@@ -726,27 +727,110 @@ describe("[Q-9] Graphic Order", () => {
       }),
   );
 
-  it.effect("[Q-9] a host swaps a part through the part overrides", () =>
-    Effect.gen(function* swapped() {
-      const accepted = yield* fixture("graphic-order.xml");
-      const page = yield* rendered(accepted, {
-        parts: {
-          [owner]: {
-            badge: (props, children) => h("strong", props, children),
-            slot: (props, children) => h("li", { ...props, "data-swapped": "yes" }, children),
+  it.effect(
+    "[Q-9] a host swaps a part through the part overrides, and a Badge swapped to an SVG element stays inside its hotspot's Outline after parsing",
+    () =>
+      Effect.gen(function* swapped() {
+        const accepted = yield* fixture("graphic-order.xml");
+        const page = yield* rendered(accepted, {
+          parts: {
+            [owner]: {
+              badge: (props, children) => h("tspan", props, children),
+              slot: (props, children) => h("li", { ...props, "data-swapped": "yes" }, children),
+            },
           },
-        },
-        values: { RESPONSE: ordered("H1") },
-      });
+          values: { RESPONSE: ordered("H1") },
+        });
+        const house = outlineOf(page.root, "H1") ?? assert.fail("H1 has no outline");
+        const [badge = assert.fail("the page holds no Badge"), ...others] = parts(
+          page.root,
+          "-badge",
+        );
 
-      assert.deepStrictEqual(
-        parts(page.root, "-badge").map((badge) => badge.tag),
-        ["strong"],
-      );
-      assert.isTrue(
-        parts(page.root, "-slot").every((slot) => attr(slot, "data-swapped") === "yes"),
-      );
-    }),
+        assert.lengthOf(others, 0, "one Badge");
+        assert.strictEqual(badge.tag, "tspan");
+        assert.deepStrictEqual(
+          childrenOf(house.svg).map((child) => child.tag),
+          ["rect", "tspan"],
+          "the parser keeps the swapped Badge inside the Outline, after the shape",
+        );
+        assert.isTrue(
+          elementsOf([house.svg]).includes(badge),
+          "the swapped Badge is H1's Outline's own child",
+        );
+        assert.strictEqual(attr(badge, "data-position"), "1");
+        assert.strictEqual(textOf(badge), "1");
+        assert.isTrue(
+          parts(page.root, "-slot").every((slot) => attr(slot, "data-swapped") === "yes"),
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-9] a Badge swap to a strong or a custom element is refused root-not-allowed, since the parser would move or blank it",
+    () =>
+      Effect.gen(function* badgeRefused() {
+        const accepted = yield* fixture("graphic-order.xml");
+
+        for (const tag of ["strong", "qti-badge"]) {
+          const refused = yield* Effect.flip(
+            rendered(accepted, {
+              parts: { [owner]: { badge: (props, children) => h(tag, props, children) } },
+              values: { RESPONSE: ordered("H1") },
+            }),
+          );
+
+          assert.strictEqual(refused._tag, "PartSwapRefused", tag);
+          assert.instanceOf(refused, PartSwapRefused, tag);
+          assert.strictEqual(refused.cause, "root-not-allowed", tag);
+          assert.strictEqual(refused.interaction, owner, tag);
+          assert.strictEqual(refused.part, "badge", tag);
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-9] an Outline swap to a div is refused root-not-allowed, and a swap to an svg keeps the shape and the Badge inside it",
+    () =>
+      Effect.gen(function* outlineSwapped() {
+        const accepted = yield* fixture("graphic-order.xml");
+        const refused = yield* Effect.flip(
+          rendered(accepted, {
+            parts: { [owner]: { outline: (props, children) => h("div", props, children) } },
+            values: { RESPONSE: ordered("H1") },
+          }),
+        );
+        const page = yield* rendered(accepted, {
+          parts: {
+            [owner]: {
+              outline: (props, children) => h("svg", { ...props, "data-swapped": "yes" }, children),
+            },
+          },
+          values: { RESPONSE: ordered("H1") },
+        });
+        const house = outlineOf(page.root, "H1") ?? assert.fail("H1 has no outline");
+
+        assert.strictEqual(refused._tag, "PartSwapRefused");
+        assert.instanceOf(refused, PartSwapRefused);
+        assert.strictEqual(refused.cause, "root-not-allowed");
+        assert.strictEqual(refused.interaction, owner);
+        assert.strictEqual(refused.part, "outline");
+        assert.isAbove(parts(page.root, "-outline").length, 0, "the page draws Outlines");
+        assert.isTrue(
+          parts(page.root, "-outline").every(
+            (svg) => svg.tag === "svg" && attr(svg, "data-swapped") === "yes",
+          ),
+          "every Outline is a swapped svg",
+        );
+        assert.deepStrictEqual(
+          childrenOf(house.svg).map((child) => child.tag),
+          ["rect", "text"],
+        );
+        assert.deepStrictEqual(drawnOf(house.figure), {
+          attrs: { height: "50", width: "70", x: "30", y: "40" },
+          tag: "rect",
+        });
+      }),
   );
 
   it.effect("[Q-9] passes checkTree at base level 2, and its HTML round-trips", () =>
