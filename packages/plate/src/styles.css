@@ -1628,6 +1628,51 @@
 /* end upload-interaction */
 
 /* begin end-attempt-interaction (issue ei-02) */
+
+/* The End Attempt Root: inline, in the run of the author's sentence, as the Inline Choice Root is. */
+:where([data-slot="end-attempt-interaction"]) {
+  display: inline-block;
+}
+
+/*
+ * The End Attempt Control, a native submit button: the navigation buttons' card surface, border
+ * and font. It is 24px at the least in both directions, so a button that stands alone is no
+ * smaller a target than WCAG 2.5.8 (Minimum) asks; in the author's sentence it falls under that
+ * criterion's Inline exception too.
+ */
+:where([data-slot="end-attempt-interaction-control"]) {
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--input, oklch(0.922 0 0));
+  border-radius: calc(var(--radius, 0.625rem) * 0.8);
+  font: inherit;
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/* The End Attempt Control under the pointer, unless it is disabled: a navigation button's hover. */
+:where([data-slot="end-attempt-interaction-control"]:hover:not(:disabled)) {
+  background-color: var(--accent, oklch(0.97 0 0));
+  color: var(--accent-foreground, oklch(0.205 0 0));
+}
+
+/*
+ * A disabled End Attempt Control, in review and solution and when the author disabled the Root. It
+ * stays dimmed in every mode: it carries no answer to read, so no mode shows it at full strength.
+ */
+:where([data-slot="end-attempt-interaction-control"]:disabled) {
+  opacity: 0.5;
+}
+
+/* Focus on the End Attempt Control: the same ring as a navigation button's. */
+:where([data-slot="end-attempt-interaction-control"]:focus-visible) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
+
 /* end end-attempt-interaction */
 
 /* begin portable-custom-interaction (issue pci-03) */

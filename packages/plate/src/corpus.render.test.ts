@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Option, Result } from "effect";
+import { h, text as textNode } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import { configure } from "#plate/index.ts";
 import type { Accepted, Configuration, Element, Node, Verdict } from "#plate/index.ts";
@@ -486,15 +487,39 @@ const r1Problems = (rendering: Rendering, where: string, root: Element): readonl
 };
 
 /**
- * Check one state with `checkTree` at base level 2.
+ * Place a state's root in the page the plain-HTML host serves (`itemPage` and `pageResponse` in
+ * `src/hosts/html.ts`): an `html` carrying the configuration's locale as `lang`, its `body` and
+ * `main`, and in them the host's `form method="post" autocomplete="off"` around the rendered root
+ * and the host's own submit button. The `submit-order` check reads a submit button against the
+ * form that holds it, so an item that renders one, an End Attempt's, is judged in the form a host
+ * serves; `lang` sits where the host writes it, on the `html` the check reads as the tree's root.
  *
- * @param _rendering The render, unused.
+ * @param root The state's root element.
+ * @param locale The locale the state rendered in, which the host writes as the page's `lang`.
+ * @returns The page's root, `html`.
+ */
+const hosted = (root: Element, locale: Configuration["locale"]): Element =>
+  h("html", { lang: locale }, [
+    h("body", {}, [
+      h("main", {}, [
+        h("form", { autocomplete: "off", method: "post" }, [
+          root,
+          h("button", { type: "submit" }, [textNode("Submit")]),
+        ]),
+      ]),
+    ]),
+  ]);
+
+/**
+ * Check one state with `checkTree` at base level 2, in the page a host serves ({@link hosted}).
+ *
+ * @param rendering The render, which gives the locale the host writes as the page's `lang`.
  * @param where The member and state, which every problem names.
  * @param root The state's root element.
  * @returns The violations, as one problem, or none.
  */
-const treeProblems = (_rendering: Rendering, where: string, root: Element): readonly string[] => {
-  const violations = checkTree(root, { baseLevel: 2 });
+const treeProblems = (rendering: Rendering, where: string, root: Element): readonly string[] => {
+  const violations = checkTree(hosted(root, rendering.locale), { baseLevel: 2 });
 
   return violations.length === 0
     ? []
