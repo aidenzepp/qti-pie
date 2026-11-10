@@ -90,38 +90,60 @@ export const kindHelp: Readonly<Record<Kind, string>> = {
 export const cliKind: unique symbol = Symbol("qti.cli.kind");
 
 /**
- * The tags of grizzle's public errors (`adapter/public/errors.ts`), in a literal list so the named
- * failures below can leave them out by type.
+ * The tags of grizzle's public errors (`adapter/public/errors.ts`), each of kind `database`,
+ * written out so the program starts without loading grizzle. `run.test.ts` holds them to grizzle's
+ * classes.
  */
-const grizzleTags = [
-  "CommitUnknown",
-  "CredentialError",
-  "ExecutionFailure",
-  "OpenError",
-  "ReadFailure",
-  "StaleSnapshot",
-  "TokenError",
-  "TransientFailure",
-  "TransportFailure",
-] as const;
+const grizzleKinds = {
+  CommitUnknown: "database",
+  CredentialError: "database",
+  ExecutionFailure: "database",
+  OpenError: "database",
+  ReadFailure: "database",
+  StaleSnapshot: "database",
+  TokenError: "database",
+  TransientFailure: "database",
+  TransportFailure: "database",
+} as const satisfies Readonly<Record<string, Kind>>;
 
 /**
- * The tags of grizzle's public errors (`adapter/public/errors.ts`), which {@link describeFailure}
- * maps to `database` without importing grizzle, so the program starts without loading it, except a
- * program grizzle refused to compile, which is `internal`.
+ * The tags of grizzle's public errors, {@link grizzleKinds}'s keys.
  */
-export const grizzleErrorTags: ReadonlySet<string> = new Set(grizzleTags);
+export const grizzleErrorTags: ReadonlySet<string> = new Set(Object.keys(grizzleKinds));
 
 /**
- * The tags of the failures {@link describeFailure} maps to a kind of their own: grizzle's, the
- * file system's, a refused import's, an import's unsettled commit and an absent package's.
+ * The kind of each failure {@link describeFailure} names by its tag alone, without importing the
+ * module that defines it, so the program starts without loading grizzle, the layer or the engine:
+ * grizzle's public errors are `database` ({@link grizzleKinds}); the layer's two
+ * (`db/connection.ts` and `db/served.ts`) and Effect's `ConfigError`, which a missing or malformed
+ * setting raises, are `config`, the local set-up missing or unreadable; a refused import, an
+ * import's unsettled commit, an absent package and the file system's failure have a kind each.
+ * Two of grizzle's errors are another kind by what they carry: a credential that could not be read
+ * ({@link isCredentialFailure}) and a program grizzle refused to compile ({@link isUncompiled}).
  */
-type KindedTag =
-  | (typeof grizzleTags)[number]
-  | "CommitUnresolved"
-  | "ImportRefused"
-  | "PackageNotFound"
-  | "PlatformError";
+const kindByTag = {
+  ...grizzleKinds,
+  ClusterConfigError: "config",
+  CommitUnresolved: "database",
+  ConfigError: "config",
+  ImportRefused: "import-refused",
+  PackageNotFound: "not-found",
+  PlatformError: "io",
+  ServedLoadError: "config",
+} as const satisfies Readonly<Record<string, Kind>>;
+
+/**
+ * The tags of the failures {@link kindByTag} gives a kind of their own.
+ */
+type KindedTag = keyof typeof kindByTag;
+
+/**
+ * Test whether a tag is one {@link kindByTag} gives a kind.
+ *
+ * @param tag - A failure's tag.
+ * @returns Whether {@link kindByTag} names it.
+ */
+const isKindedTag = (tag: string): tag is KindedTag => Object.hasOwn(kindByTag, tag);
 
 /**
  * Every other failure the export ends with (`#pantry/export/package.ts`): the database holds the
@@ -290,13 +312,13 @@ const isKind = (value: unknown): value is Kind =>
   Predicate.isString(value) && Object.hasOwn(kindExitCode, value);
 
 /**
- * The `_tag` of a failure, when it carries a string one.
+ * The `_tag` of a failure, none when it carries no string one.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
-const tagOf = (failure: unknown): string | undefined =>
+const tagOf = (failure: unknown): Option.Option<string> =>
   Predicate.hasProperty(failure, "_tag") && Predicate.isString(failure._tag)
-    ? failure._tag
-    : undefined;
+    ? Option.some(failure._tag)
+    : Option.none();
 
 /**
  * The tag of a failure qti can name though its kind is `internal`: one of the export's defects or
@@ -307,18 +329,7 @@ const tagOf = (failure: unknown): string | undefined =>
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
 export const namedFailureOf = (failure: unknown): Option.Option<NamedTag> =>
-  Option.filter(Option.fromUndefinedOr(tagOf(failure)), isNamedTag);
-
-/**
- * The tags of the failures that mean the local set-up is missing or unreadable: the layer's two
- * (`db/connection.ts` and `db/served.ts`) and Effect's `ConfigError`, which a missing or malformed
- * setting raises. They are matched by tag so this module imports neither the layer nor the engine.
- */
-const configTags: ReadonlySet<string> = new Set([
-  "ClusterConfigError",
-  "ConfigError",
-  "ServedLoadError",
-]);
+  Option.filter(tagOf(failure), isNamedTag);
 
 /**
  * Whether `failure` is grizzle's report of a password file that could not be read. grizzle never
@@ -329,9 +340,9 @@ const configTags: ReadonlySet<string> = new Set([
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
 const isCredentialFailure = (failure: unknown): boolean =>
-  (tagOf(failure) === "ReadFailure" || tagOf(failure) === "TransportFailure") &&
+  Option.exists(tagOf(failure), (tag) => tag === "ReadFailure" || tag === "TransportFailure") &&
   Predicate.hasProperty(failure, "reason") &&
-  tagOf(failure.reason) === "CredentialError";
+  Option.contains(tagOf(failure.reason), "CredentialError");
 
 /**
  * Whether `failure` is grizzle refusing one of qti's programs as uncompiled, before any SQL is
@@ -343,9 +354,9 @@ const isCredentialFailure = (failure: unknown): boolean =>
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
 const isUncompiled = (failure: unknown): boolean =>
-  (tagOf(failure) === "ExecutionFailure" || tagOf(failure) === "OpenError") &&
+  Option.exists(tagOf(failure), (tag) => tag === "ExecutionFailure" || tag === "OpenError") &&
   Predicate.hasProperty(failure, "reason") &&
-  tagOf(failure.reason) === "CompileError";
+  Option.contains(tagOf(failure.reason), "CompileError");
 
 /**
  * What to do next after grizzle refused to compile one of qti's programs ({@link isUncompiled}).
@@ -362,7 +373,9 @@ const commitUnresolvedHelp =
   "The package may have been stored. Check that the local database cluster is running (`pnpm pg start` in the grizzle clone), then look for the package by the id the message names (`qti export --dry-run <dir> <package-id>`). Import the package again only if the export answers that no package has that id: importing a stored package again stores a second copy.";
 
 /**
- * Name the kind of a failure by what it is.
+ * Name the kind of a failure by what it is: its own kind, a CLI usage error, one of grizzle's
+ * errors that is another kind by what it carries, else the kind its tag has in
+ * {@link kindByTag}, else `internal`.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
 const kindOf = (failure: unknown): Kind => {
@@ -376,25 +389,7 @@ const kindOf = (failure: unknown): Kind => {
     return "cli-usage";
   }
 
-  const tag = tagOf(failure);
-
-  if (tag === "ImportRefused") {
-    return "import-refused";
-  }
-
-  if (tag === "PackageNotFound") {
-    return "not-found";
-  }
-
-  if (tag === "CommitUnresolved") {
-    return "database";
-  }
-
-  if (tag === "PlatformError") {
-    return "io";
-  }
-
-  if ((tag !== undefined && configTags.has(tag)) || isCredentialFailure(failure)) {
+  if (isCredentialFailure(failure)) {
     return "config";
   }
 
@@ -402,7 +397,10 @@ const kindOf = (failure: unknown): Kind => {
     return "internal";
   }
 
-  return tag !== undefined && grizzleErrorTags.has(tag) ? "database" : "internal";
+  return Option.match(Option.filter(tagOf(failure), isKindedTag), {
+    onNone: (): Kind => "internal",
+    onSome: (tag) => kindByTag[tag],
+  });
 };
 
 /**
@@ -432,7 +430,7 @@ const helpOf = (failure: unknown, kind: Kind): string => {
     return uncompiledHelp;
   }
 
-  if (tagOf(failure) === "CommitUnresolved") {
+  if (Option.contains(tagOf(failure), "CommitUnresolved")) {
     return commitUnresolvedHelp;
   }
 
