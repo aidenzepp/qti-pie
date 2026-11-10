@@ -1,34 +1,37 @@
 /**
  * The front door, on the lease: an app's whole use of pantry through `@qti-pie/pantry` alone (GOAL
- * "Implementation shape" item 1, spec U16). The test builds the author login's `DbLayer` itself, as
- * an app does, and runs the operator's script: an accepted corpus zip from its bytes, a QTI-invalid
- * fixture refused at the `Qti` level, the new package found by paging `listPackages`, its documents
- * listed, and one document read and compared with the export.
+ * "Implementation shape" item 1, spec U16). The test builds the author login's runtime itself, as
+ * an app does at grizzle `b927d99`: it reads the served file `grizzle generate` writes for the
+ * installation, serves the login from it with grizzle's `served`, and provides that login's
+ * `DbLayer` and `ServedAuthorLogin`. It then runs the operator's script: an accepted corpus zip
+ * from its bytes, a QTI-invalid fixture refused at the `Qti` level, the new package found by paging
+ * `listPackages`, its documents listed, and one document read and compared with the export.
  *
- * Every program and builder it calls is imported from the package's own name. Only the cluster's
- * connection, the committed snapshot's path and the fixtures come from inside the package: they are
- * this checkout's, which an app supplies from its own.
+ * Every program and name of pantry's it uses is imported from the package's own name. Only the
+ * cluster's connection, the served file's path and the fixtures come from inside the package: they
+ * are this checkout's, which an app supplies from its own installation.
  */
-import { DbLayer } from "@bjornpagen/grizzle";
-import type { PoolBounds, Uuid } from "@bjornpagen/grizzle";
+import { DbLayer, roleNameOf, served } from "@bjornpagen/grizzle/runtime";
+import type { PoolBounds } from "@bjornpagen/grizzle/runtime";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect";
 import { describe } from "vitest";
 import {
-  authorLogin,
   exportPackage,
   importPackage,
   listDocuments,
   listPackages,
-  qti,
   readDocument,
+  ServedAuthorLogin,
 } from "@qti-pie/pantry";
+import type { AuthorLogin } from "@qti-pie/pantry";
 import { loginConnection } from "#pantry/db/connection.ts";
-import { SnapshotText, snapshotPath } from "#pantry/db/snapshot.ts";
+import { servedPath } from "#pantry/db/served.ts";
 import { scannedRows } from "#pantry/export/pages.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The pool an app states for its author login: grizzle states no bounds of its own, so the caller
@@ -37,27 +40,29 @@ import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/
 const frontDoorPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
 
 /**
- * The author login's `DbLayer`, built as an app builds it: `DbLayer.make` over
- * `authorLogin(qti())`, the login's connection to the local cluster (`qti__author_app`, the role
- * `scripts/db.sh migrate` gives a password) and the committed migrations snapshot.
+ * The author login's runtime, built as an app builds it: the served file this checkout's
+ * `grizzle generate` wrote for the `author_app` login, read and parsed as JSON, served as the
+ * login's type (`served<AuthorLogin>`), and its `DbLayer` over the login's connection to the local
+ * cluster (the role `roleNameOf` names, which `scripts/db.sh migrate` gives a password). Beside the
+ * layer it provides `ServedAuthorLogin`, the same served login, whose author role each program
+ * opens its `Db` on.
  *
- * The snapshot is read when the layer is built, never when the file loads, so a run without a
+ * The served file is read when the layer is built, never when the file loads, so a run without a
  * lease opens no file.
  */
 const frontDoorLayer = Layer.unwrap(
   Effect.gen(function* frontDoorLayer() {
     const fs = yield* FileSystem.FileSystem;
-    const connection = yield* loginConnection("qti__author_app");
-    const snapshot = yield* fs
-      .readFileString(snapshotPath)
-      .pipe(Effect.flatMap(Schema.decodeUnknownEffect(SnapshotText)));
+    const connectionOf = yield* loginConnection;
+    const file = yield* fs
+      .readFileString(servedPath)
+      .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))));
+    const login = served<AuthorLogin>(file, "author_app");
 
-    return DbLayer.make({
-      ...connection,
-      login: authorLogin(qti()),
-      pool: frontDoorPool,
-      snapshot,
-    });
+    return Layer.merge(
+      DbLayer.make({ ...connectionOf(roleNameOf(login)), login, pool: frontDoorPool }),
+      Layer.succeed(ServedAuthorLogin, login),
+    );
   }),
 ).pipe(Layer.provide(NodeServices.layer));
 
@@ -122,7 +127,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(frontDoorLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("an app's script through @qti-pie/pantry", (it) => {
       it.effect(
         "accepts a corpus zip from its bytes, then lists, reads and exports the package",
