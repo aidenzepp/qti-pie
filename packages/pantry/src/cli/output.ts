@@ -193,6 +193,8 @@ export const ErrorWitness = WitnessKind;
  *   the database refused it: the laws its refusal names, where each is stated, and whether the
  *   message names the row that broke them (`key` or `row`) or the database named none
  *   (`unreported`).
+ * - `level` is present only when a level an app builds above `Qti` refused the package: that level's
+ *   name, beside `rule`, the level's own rule.
  * - `failure` is present only for an `internal` failure qti can name, such as an export that cannot
  *   rebuild a stored package: the failure's tag.
  */
@@ -204,6 +206,7 @@ export const ErrorObject = Schema.Struct({
   help: Schema.String,
   kind: Schema.String,
   laws: Schema.optionalKey(Schema.Array(ErrorLaw)),
+  level: Schema.optionalKey(Schema.String),
   message: Schema.String,
   ok: Schema.Literal(false),
   rule: Schema.optionalKey(Schema.String),

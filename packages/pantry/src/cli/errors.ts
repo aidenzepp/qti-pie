@@ -11,8 +11,8 @@ import { CliError } from "effect/cli";
 import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
 import type { DatabaseRefusal } from "#pantry/cli/refused.ts";
 import type { exportPackage } from "#pantry/api/export.ts";
+import type { importPackage } from "#pantry/api/import.ts";
 import type { OverlayConflict } from "#pantry/import/overlays/index.ts";
-import type { importPackage } from "#pantry/import/package.ts";
 import type { UnownedLaws } from "#pantry/import/refusal.ts";
 
 /**
@@ -117,16 +117,14 @@ export const grizzleErrorTags: ReadonlySet<string> = new Set(grizzleTags);
 
 /**
  * The tags of the failures {@link describeFailure} maps to a kind of their own: grizzle's, the
- * file system's, a refused import's (refused under a rule of `Qti`, or by a level above it), an
- * import's unsettled commit and an absent package's.
+ * file system's, a refused import's, an import's unsettled commit and an absent package's.
  */
 type KindedTag =
   | (typeof grizzleTags)[number]
   | "CommitUnresolved"
   | "ImportRefused"
   | "PackageNotFound"
-  | "PlatformError"
-  | "RefusedAbove";
+  | "PlatformError";
 
 /**
  * Every other failure the export ends with (pantry's public `exportPackage`,
@@ -141,9 +139,10 @@ export type ExportDefectTag = Exclude<
 >;
 
 /**
- * Every other way the import ends (`#pantry/import/package.ts`): the codec refusing a value the
- * builders wrote (grizzle's `EncodingFailure`), and the two defects it dies with, laws no rule owns
- * and two builders that disagree on a row. Each is a defect of qti, never of the package.
+ * Every other way the import ends (pantry's public `importPackage`, `#pantry/api/import.ts`): the
+ * codec refusing a value the builders wrote (grizzle's `EncodingFailure`), and the two defects it
+ * dies with, laws no rule owns and two builders that disagree on a row. Each is a defect of qti,
+ * never of the package.
  */
 export type ImportDefectTag =
   | Exclude<Effect.Error<ReturnType<typeof importPackage>>["_tag"], KindedTag>
@@ -386,7 +385,7 @@ const kindOf = (failure: unknown): Kind => {
 
   const tag = tagOf(failure);
 
-  if (tag === "ImportRefused" || tag === "RefusedAbove") {
+  if (tag === "ImportRefused") {
     return "import-refused";
   }
 
@@ -455,16 +454,14 @@ const helpOf = (failure: unknown, kind: Kind): string => {
  *
  * An error this program defines names its own kind through {@link cliKind}, as `RefusedByLevel`
  * (`#pantry/cli/verdict.ts`), a package a level above `Qti` refused, names `import-refused`. Every
- * other failure is
- * mapped by what it is, without importing the module that defines it, so the program starts
- * without loading the engine: Effect's CLI errors are `cli-usage`, an `ImportRefused` and a
- * `RefusedAbove` (a package a level above `Qti` refused) are `import-refused`, a
- * `PackageNotFound` is `not-found`, an import's `CommitUnresolved` is `database`, a
- * `PlatformError` is `io`, a missing or unreadable local set-up is `config`, a program grizzle
- * refused to compile before sending any SQL is `internal`, and grizzle's other errors are
- * `database`. Anything else, a defect included, is
- * `internal`; the export's and the import's defects that {@link namedFailureOf} names keep that
- * kind, with a help of their own.
+ * other failure is mapped by what it is, without importing the module that defines it, so the
+ * program starts without loading the engine: Effect's CLI errors are `cli-usage`, an
+ * `ImportRefused` is `import-refused`, a `PackageNotFound` is `not-found`, an import's
+ * `CommitUnresolved` is `database`, a `PlatformError` is `io`, a missing or unreadable local set-up
+ * is `config`, a program grizzle refused to compile before sending any SQL is `internal`, and
+ * grizzle's other errors are `database`. Anything else, a defect included, is `internal`; the
+ * export's and the import's defects that {@link namedFailureOf} names keep that kind, with a help
+ * of their own.
  *
  * @param failure - What a run failed with: the squashed cause of its exit.
  * @returns The kind, the exit code of that kind, and what to do next.

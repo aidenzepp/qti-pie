@@ -21,6 +21,7 @@
         "additionalProperties": true
       }
     },
+    "level": { "type": "string" },
     "message": { "type": "string" },
     "ok": { "type": "boolean", "enum": [false] },
     "rule": { "type": "string" },

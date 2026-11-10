@@ -369,6 +369,40 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
   );
 });
 
+layer(NodeServices.layer, { excludeTestServices: true })("a refusal of a level above Qti", (it) => {
+  it.effect("under --json prints one error object with the level and its rule", () =>
+    // Oracle: the refusal's own fields, the level and the rule it was built with, and the committed
+    // schema of the error object. A level's refusal names no law of `Qti`, so no laws or sources.
+    Effect.gen(function* level() {
+      const byLevel = ending(
+        "import",
+        () =>
+          import("#pantry/cli/verdict.ts").then(
+            ({ RefusedByLevel }) =>
+              new RefusedByLevel({
+                detail: "the item has no reviewer",
+                level: "Review",
+                rule: "item-reviewed",
+              }),
+          ),
+        false,
+      );
+      const { exit, stderr, stdout } = yield* captureCli(["--json"], { command: byLevel });
+      const error = errorLine(stderr);
+
+      assert.strictEqual(stdout, "");
+      assert.strictEqual(stderr.split("\n").length, 1);
+      assert.strictEqual(exitCodeOf(exit), 1);
+      assert.isTrue(matchesCommittedError(stderr), stderr);
+      assert.strictEqual(error.kind, "import-refused");
+      assert.strictEqual(error.level, "Review");
+      assert.strictEqual(error.rule, "item-reviewed");
+      assert.notProperty(error, "laws");
+      assert.notProperty(error, "sources");
+    }),
+  );
+});
+
 /**
  * A witness of each kind a database refusal names its row by: grizzle's key witness, a row the
  * caller holds, and none. A kind `WitnessKind` adds fails to compile here.
