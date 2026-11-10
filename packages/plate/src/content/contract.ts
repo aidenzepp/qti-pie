@@ -13,7 +13,8 @@
  * members throw {@link ContentNotImplemented}, and no walk reaches them: the model holds no node of
  * a stub's element. Each walk dispatches its elements to their module's `parse`: the body walk
  * each body-placed element (`contentNode` in `#plate/model/item.ts`), the item root's walk each
- * item-placed one (`itemContent` there), so landing an element changes only its module.
+ * item-placed one (`itemContent` there), and the item holds each node an item-placed module reads
+ * by its element ({@link ItemContent}), so landing an element changes only its module.
  *
  * @module
  */
@@ -148,6 +149,39 @@ export interface ItemContentModule<E extends string, N, P = never> extends Conte
   ) => Result.Result<Option.Option<N>, Refusal>;
   readonly placement: "item";
 }
+
+/**
+ * The model node an item-placed module's `parse` reads its element into: `never` for a stub, which
+ * has none yet.
+ *
+ * @template M The module.
+ */
+export type ItemNodeOf<M> = M extends {
+  readonly parse: (...args: never[]) => Result.Result<Option.Option<infer N>, Refusal>;
+}
+  ? N
+  : never;
+
+/**
+ * Each item-placed module's model node, keyed by the module's element.
+ *
+ * @template M The item-placed modules.
+ */
+export type ItemNodes<M extends { readonly element: string }> = {
+  readonly [Module in M as Module["element"]]: ItemNodeOf<Module>;
+};
+
+/**
+ * The nodes the item model holds of the elements item-placed modules read: each element a module
+ * read a node of keys those nodes, in document order; an element it read none of is absent. A
+ * stub's element is always absent, as its `parse` reads no node. Derived from the modules, so a
+ * module that lands a model node lands it here with no change to the item model.
+ *
+ * @template M The item-placed modules.
+ */
+export type ItemContent<M extends { readonly element: string }> = {
+  readonly [Name in keyof ItemNodes<M>]?: readonly ItemNodes<M>[Name][];
+};
 
 /**
  * One content element's module, by where the element sits ({@link Placement}).

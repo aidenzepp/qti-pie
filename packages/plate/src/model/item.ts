@@ -53,6 +53,7 @@ import { modalFeedbackModule } from "#plate/content/modal-feedback.ts";
 import { rubricModule } from "#plate/content/rubric.ts";
 import { stimulusRefModule } from "#plate/content/stimulus-ref.ts";
 import { stylesheetModule } from "#plate/content/stylesheet.ts";
+import type { ItemContent, ItemNodes, ItemParseContext } from "#plate/content/contract.ts";
 import { associateModule } from "#plate/interactions/associate.ts";
 import { drawingModule } from "#plate/interactions/drawing.ts";
 import { endAttemptModule } from "#plate/interactions/end-attempt.ts";
@@ -923,10 +924,17 @@ export type UnheldDeclaration = UnheldType &
  * which `unsupported` then marks. Plate cannot run it beside a `qti-template-processing` that does
  * not run (`templateProcessing` none, an element in it marked), which may set a value response
  * processing reads, such as a correct response. `unsupported` lists every feature not rendered, in
- * document order, each once per feature and path.
+ * document order, each once per feature and path. `content` holds the nodes the item-placed content
+ * modules read, by element.
  */
 export interface Item {
   readonly body: readonly BodyNode[];
+  /**
+   * The nodes the item-placed content modules read from the root's children, by element, each
+   * element's in document order ({@link ItemContent}). Absent when they read none, as every module
+   * that is still a stub reads none, so an item built by hand may leave it out.
+   */
+  readonly content?: ItemContent<ItemPlacedModule>;
   /**
    * The document's location as the host named it.
    */
@@ -2592,12 +2600,43 @@ const bodyContent = contentModules.filter(
 );
 
 /**
+ * One of the content modules of the elements placed directly under the item root.
+ */
+type ItemPlacedModule = Extract<AnyContentModule, { readonly placement: "item" }>;
+
+/**
+ * The element of an item-placed content module.
+ */
+type ItemElement = keyof ItemNodes<ItemPlacedModule>;
+
+/**
+ * The model node the module of the item-placed element K reads, `never` while it is a stub.
+ *
+ * @template K The element.
+ */
+type ItemNode<K extends ItemElement> = ItemNodes<ItemPlacedModule>[K];
+
+/**
+ * One node an item-placed content module read, beside the element it was read from.
+ *
+ * @template K The element.
+ */
+interface ItemPartNode<K extends ItemElement> {
+  readonly element: K;
+  readonly node: ItemNode<K>;
+}
+
+/**
+ * The item content as the item root's walk collects it ({@link ItemContent}).
+ */
+type ItemContentBuild = { [K in ItemElement]?: ItemNode<K>[] };
+
+/**
  * The content modules of the elements the item root's walk reads: those placed directly under the
  * item root.
  */
 const itemContent = contentModules.filter(
-  (module): module is Extract<AnyContentModule, { readonly placement: "item" }> =>
-    module.placement === "item",
+  (module): module is ItemPlacedModule => module.placement === "item",
 );
 
 /**
@@ -2627,6 +2666,32 @@ const contentNode = (
 };
 
 /**
+ * Read an item root child by the `parse` of the item-placed content module that reads it.
+ *
+ * @template K The child's element.
+ * @param module The module.
+ * @param part The child.
+ * @param context The child's path and the way to record its mark.
+ * @returns The node the module read, beside the child's element; none once it recorded the mark;
+ *   or a refusal.
+ */
+const parseItemPart = <K extends ItemElement>(
+  module: {
+    readonly element: K;
+    readonly parse: (
+      element: SourceElement,
+      context: ItemParseContext,
+    ) => Result.Result<Option.Option<ItemNode<K>>, Refusal>;
+  },
+  part: SourceElement,
+  context: ItemParseContext,
+): Result.Result<Option.Option<ItemPartNode<K>>, Refusal> =>
+  Result.map(
+    module.parse(part, context),
+    Option.map((node) => ({ element: module.element, node })),
+  );
+
+/**
  * Read an item root child the root's walk has no branch of its own for: by its content module's
  * `parse`, which the element's path and the way to record its mark are handed to, when an
  * item-placed module reads it; otherwise as the mark keyed by its name, when the model does not
@@ -2634,12 +2699,13 @@ const contentNode = (
  *
  * @param build The build.
  * @param part The child, its own marks recorded.
- * @returns None, as the model holds no node of the child, or a refusal from its module's `parse`.
+ * @returns The node its module read, beside its element; none when no module reads it or its module
+ *   recorded the mark; or a refusal from its module's `parse`.
  */
 const itemPart = (
   build: Build,
   part: SourceElement,
-): Result.Result<Option.Option<never>, Refusal> => {
+): Result.Result<Option.Option<ItemPartNode<ItemElement>>, Refusal> => {
   const path = pathOf(build, part);
   const module = itemContent.find(
     (candidate) => candidate.namespace === part.namespace && candidate.element === part.local,
@@ -2651,9 +2717,7 @@ const itemPart = (
       return Result.succeed(Option.none());
     };
 
-    // Every item-placed module is a stub, whose model node is `never`: the item model has no place
-    // for such a node yet, so a module that lands one fails to compile here until it gains one.
-    return module.parse(part, { mark, path });
+    return parseItemPart(module, part, { mark, path });
   }
 
   if (!readElements.has(part.local)) {
@@ -2662,6 +2726,37 @@ const itemPart = (
 
   return Result.succeed(Option.none());
 };
+
+/**
+ * Add the node an item-placed content module read to the item content, after the nodes read
+ * before it from its element.
+ *
+ * @template K The node's element.
+ * @param content The item content collected so far, typed over K alone, so TypeScript relates the
+ *   write of the node's element's list to the node's own type when the modules' node types differ.
+ * @param read The node beside its element, or none when the module read none.
+ */
+const collectItemPart = <K extends ItemElement>(
+  content: { [P in K]?: ItemNode<P>[] },
+  read: Option.Option<ItemPartNode<K>>,
+): void => {
+  if (Option.isSome(read)) {
+    const { element, node } = read.value;
+    const nodes: ItemNode<K>[] = content[element] ?? [];
+    nodes.push(node);
+    content[element] = nodes;
+  }
+};
+
+/**
+ * Give the item the content its walk collected, when the item-placed content modules read any.
+ *
+ * @param item The item without it.
+ * @param content The item content collected.
+ * @returns The item, with `content` when it holds a node.
+ */
+const withItemContent = (item: Item, content: ItemContentBuild): Item =>
+  Object.keys(content).length === 0 ? item : { ...item, content };
 
 /**
  * Read one child of a body element.
@@ -4116,6 +4211,7 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
         }
       });
     const body: BodyNode[] = [];
+    const content: ItemContentBuild = {};
     let processing: Option.Option<ReadProcessing> = Option.none();
     let templateRead: Option.Option<ReadTemplateProcessing> = Option.none();
 
@@ -4195,7 +4291,7 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
         );
       } else {
         markElement(build, part, false);
-        yield* itemPart(build, part);
+        collectItemPart(content, yield* itemPart(build, part));
       }
     }
 
@@ -4259,9 +4355,10 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
       unsupported: build.unsupported,
     };
 
-    // `records` is absent when the item makes no record response declaration it holds, and `unheld`
-    // when it makes no declaration it holds no value of, as a model built by hand leaves them out.
+    // `records` is absent when the item makes no record response declaration it holds, `unheld`
+    // when it makes no declaration it holds no value of, and `content` when the item-placed content
+    // modules read no node, as a model built by hand leaves them out.
     const withRecords: Item = records.size === 0 ? built : { ...built, records };
 
-    return unheld.size === 0 ? withRecords : { ...withRecords, unheld };
+    return withItemContent(unheld.size === 0 ? withRecords : { ...withRecords, unheld }, content);
   });
