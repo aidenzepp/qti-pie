@@ -5,6 +5,7 @@ import { configure } from "#plate/configuration.ts";
 import { catalogInfoModule } from "#plate/content/catalog-info.ts";
 import { ContentNotImplemented, defaultView } from "#plate/content/contract.ts";
 import type {
+  AttachAnswer,
   BodyContentModule,
   CatalogReference,
   ContentNodeOf,
@@ -30,8 +31,9 @@ import {
   ssmlNamespace,
   text,
 } from "#plate/document/source.ts";
-import type { SourceDocument } from "#plate/document/source.ts";
-import { h } from "#plate/emit/node.ts";
+import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
+import type { ReferencingElement } from "#plate/emit/body.ts";
+import { h, text as outputText } from "#plate/emit/node.ts";
 import type { BodyNode } from "#plate/model/item.ts";
 import type { PayloadNode } from "#plate/payload.ts";
 import { catalogSupports, noSupports } from "#plate/supports.ts";
@@ -751,15 +753,259 @@ describe("the item Root's hook", () => {
   );
 });
 
+/**
+ * The node of an {@link attaching} fake: nothing but its presence, which keys the fake's node in
+ * the item content so the attach hub asks the fake.
+ */
+interface Attacher {
+  readonly present: true;
+}
+
+/**
+ * The stubs two {@link attaching} fakes replace, in the item table's order: the Companion Materials
+ * stub before the Stylesheet stub. The hubs key a module's steps by its element, so a fake keeps
+ * its slot's element, as the file's other fakes do; neither is the catalog module, whose own
+ * `attach` is issue m3e-08's.
+ */
+const attacherSlots = [
+  {
+    element: "qti-companion-materials-info",
+    exported: "companionMaterialsModule",
+    specifier: "#plate/content/companion-materials.ts",
+  },
+  {
+    element: "qti-stylesheet",
+    exported: "stylesheetModule",
+    specifier: "#plate/content/stylesheet.ts",
+  },
+] as const;
+
+/**
+ * The element of an {@link attacherSlots} slot.
+ */
+type AttacherElement = (typeof attacherSlots)[number]["element"];
+
+/**
+ * An item-placed module as one that attaches beside a referencing element would be: it reads its
+ * element into a node of no content, keeps it under every support and view, writes a marker
+ * after the body, and answers the attach hub as `answer` says for each reference.
+ *
+ * @template E The fake's element, its slot's.
+ * @param element The fake's element.
+ * @param answer The answer for a reference.
+ * @returns The module, to register in place of the slot's stub.
+ */
+const attaching = <E extends AttacherElement>(
+  element: E,
+  answer: (reference: ReferencingElement) => AttachAnswer,
+): ItemContentModule<E, Attacher, Attacher, Attacher> => ({
+  attach: (reference) => Result.succeed(answer(reference)),
+  content: () => [],
+  copy: (node) => node,
+  element,
+  feature: [],
+  implemented: true,
+  namespace: qtiNamespace,
+  parse: () => Result.succeed(Option.some({ present: true })),
+  payloadSchema: ({ Schema }) => Schema.Struct({ present: Schema.Literal(true) }),
+  placement: "item",
+  redact: (node) => Option.some(node),
+  render: () => Result.succeed(h("div", { "data-attacher": element })),
+});
+
+/**
+ * An item whose body holds the given nodes and whose root holds one element per attaching fake.
+ *
+ * @param body The body's elements.
+ * @param attachers The fakes' elements.
+ * @returns The document.
+ */
+const attachingDocument = (
+  body: readonly SourceElement[],
+  attachers: readonly AttacherElement[],
+): SourceDocument =>
+  doc(
+    "items/attaching.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "attaching"), attr("title", "Attaching")],
+      [el("qti-item-body", [], body), ...attachers.map((name) => el(name, [], []))],
+    ),
+  );
+
+/**
+ * A paragraph holding a `span` with the authored id `t` that references the catalog `c`.
+ */
+const termParagraph: SourceElement = el(
+  "p",
+  [],
+  [
+    text("A "),
+    el("span", [attr("id", "t"), attr("data-catalog-idref", "c")], [text("term")]),
+    text(" follows."),
+  ],
+);
+
+/**
+ * Render an item with the attaching fakes registered, each at its slot.
+ *
+ * @param document The item.
+ * @param fakes The fakes, each at the slot of its element.
+ * @returns The rendered HTML, under the instance `q1`.
+ */
+const renderAttaching = (
+  document: SourceDocument,
+  fakes: readonly ItemContentModule<AttacherElement, Attacher, Attacher, Attacher>[],
+): Effect.Effect<string, unknown> =>
+  withLanded(
+    Effect.gen(function* renderedWithFakes() {
+      const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+      const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+      const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+      const configuration = yield* configure({});
+      const built = yield* Effect.fromResult(model.buildItem(document));
+      const { html } = yield* Effect.fromResult(
+        plate.render(payload.redactItem(built), configuration, { instance: "q1" }),
+      );
+
+      return html;
+    }),
+    attacherSlots.flatMap(({ element, exported, specifier }) =>
+      fakes
+        .filter((fake) => fake.element === element)
+        .map((fake) => ({ exports: { [exported]: fake }, specifier })),
+    ),
+  );
+
+/**
+ * An answer placed after the block, as a glossary would answer: a `details` pointing at the
+ * referencing element.
+ *
+ * @param reference The referencing element.
+ * @returns The answer.
+ */
+const definition = (reference: ReferencingElement): AttachAnswer => ({
+  attributes: {},
+  nodes: [
+    h("details", { "data-for": reference.id }, [
+      h("summary", {}, [outputText("term")]),
+      outputText("meaning"),
+    ]),
+  ],
+  place: "after-block",
+});
+
+describe("an item-placed module that attaches", () => {
+  it.effect(
+    "[W0-AS.2] an item-placed module's attach answer lands after the referencing element",
+    () =>
+      Effect.gen(function* afterElement() {
+        const html = yield* renderAttaching(
+          attachingDocument([termParagraph], ["qti-companion-materials-info"]),
+          [
+            attaching("qti-companion-materials-info", () => ({
+              attributes: {},
+              nodes: [h("small", {}, [outputText("note")])],
+              place: "after-element",
+            })),
+          ],
+        );
+
+        assert.include(html, '<p>A <span id="q1--t">term</span><small>note</small> follows.</p>');
+      }),
+  );
+
+  it.effect(
+    "[W0-AS.2] the answer's attributes land on the referencing element, its own winning",
+    () =>
+      Effect.gen(function* attributesLand() {
+        const html = yield* renderAttaching(
+          attachingDocument([termParagraph], ["qti-companion-materials-info"]),
+          [
+            attaching("qti-companion-materials-info", () => ({
+              attributes: { "aria-details": "x", id: "mine" },
+              nodes: [],
+              place: "after-element",
+            })),
+          ],
+        );
+
+        assert.include(html, '<p>A <span id="q1--t" aria-details="x">term</span> follows.</p>');
+        assert.notInclude(html, "mine");
+      }),
+  );
+
+  it.effect("[W0-AS.2] an after-block answer lands after the enclosing flow element", () =>
+    Effect.gen(function* afterBlock() {
+      const inParagraph = yield* renderAttaching(
+        attachingDocument([termParagraph], ["qti-companion-materials-info"]),
+        [attaching("qti-companion-materials-info", definition)],
+      );
+      const atFlow = yield* renderAttaching(
+        attachingDocument(
+          [
+            el(
+              "div",
+              [attr("id", "d"), attr("data-catalog-idref", "c")],
+              [el("p", [], [text("inside")])],
+            ),
+            el("p", [], [text("after")]),
+          ],
+          ["qti-companion-materials-info"],
+        ),
+        [attaching("qti-companion-materials-info", definition)],
+      );
+
+      assert.include(
+        inParagraph,
+        '<p>A <span id="q1--t">term</span> follows.</p><details data-for="q1--t"><summary>term</summary>meaning</details>',
+      );
+      assert.include(
+        atFlow,
+        '<div id="q1--d"><p>inside</p></div><details data-for="q1--d"><summary>term</summary>meaning</details><p>after</p>',
+      );
+    }),
+  );
+
+  it.effect(
+    "[W0-AS.2] two item-placed modules' answers fold: attributes merge, nodes concatenate, after-block wins",
+    () =>
+      Effect.gen(function* folded() {
+        const html = yield* renderAttaching(
+          attachingDocument([termParagraph], ["qti-companion-materials-info", "qti-stylesheet"]),
+          [
+            attaching("qti-companion-materials-info", () => ({
+              attributes: { "aria-details": "a", "data-order": "first" },
+              nodes: [h("small", {}, [outputText("one")])],
+              place: "after-element",
+            })),
+            attaching("qti-stylesheet", () => ({
+              attributes: { "data-order": "second" },
+              nodes: [h("small", {}, [outputText("two")])],
+              place: "after-block",
+            })),
+          ],
+        );
+
+        assert.include(
+          html,
+          '<p>A <span id="q1--t" aria-details="a" data-order="second">term</span> follows.</p><small>one</small><small>two</small>',
+        );
+      }),
+  );
+});
+
 describe("the catalog presenters", () => {
-  it("are one stub per predefined catalog support, each naming its support, which the catalog module holds", () => {
+  it("[W0-AS.2] the presenter pin is derived from implemented: one presenter per predefined catalog support, each naming its support, which the catalog module holds, and each stub throwing ContentNotImplemented", () => {
     assert.deepStrictEqual(Object.keys(presenters).toSorted(), [...catalogSupports].toSorted());
     assert.strictEqual(catalogInfoModule.presenters, presenters);
     for (const support of catalogSupports) {
       const presenter = presenters[support];
 
       assert.strictEqual(presenter.support, support);
-      assert.isFalse(presenter.implemented);
+      if (presenter.implemented) {
+        continue;
+      }
 
       const ran = Result.try({
         catch: (thrown) => thrown,

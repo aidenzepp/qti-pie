@@ -44,24 +44,26 @@
  *   §2.7.1.3, "There must be one value for each of the languages referred to by the language
  *   attributes on the associated assessmentItem, test or object bank and its 'bodyElements'",
  *   normative by its §1.2. Each language an item's or a test's `xml:lang` states is listed by every
- *   general category of each record that names the document (Q5.12's `LomObject`: a `lom:lom` of
- *   the `cp:metadata` of a resource of an item or a test type whose `href` names it). A document no
- *   such category describes states nothing, so a resource whose record has no general category is
- *   not judged. It is a universal over pairs, stated by counts: {@link DocumentGenerals} counts the
- *   categories that describe a document, each language's {@link GeneralLang} witnesses count the
- *   categories that list it (`DocumentLang.generals`), and the two are equal. Q5.07 had culled the
- *   old one-sided flag `DocumentLang.lomGeneral` with a read in its place, on the orchestrator's
- *   ruling that R26 had no source; UP's audit found the source and the ruling is reversed, so the
- *   read is this refusal. In place (spec reading 117), an included fragment's elements are its
- *   item's body elements: each item instance's `xml:lang` carriers are placed under its assembly
- *   ({@link PlacedXmlLang}, as many as its document has, `Document.langs`), gathered per form
- *   ({@link AssembledLang}), and each form the assembly states is listed by every category that
- *   describes the item ({@link PlacedGeneralLang}, {@link assembledLang}). The binding counts "the
- *   associated assessmentItem ... and its 'bodyElements'", and a catalog is "outside the content
- *   body node" (information model §5.28), so R26 counts no `xml:lang` under a `qti-catalog-info`
- *   (reading R9-c): each {@link XmlLang} names its {@link CatalogScope}, read up the tree as
- *   {@link SsmlScope} reads a fragment, and {@link DocumentLang}, {@link AssembledLang} and their
- *   carriers count the carriers whose scope is their document. Every `xml:lang` keeps its row.
+ *   general category of each record that names the document (a `lom:lom` of the `cp:metadata` of a
+ *   resource of an item or a test type whose `href` names it). A document no such category
+ *   describes states nothing, so a resource whose record has no general category is not judged. It
+ *   is a universal over pairs, which the database states as a rule over a query (`DescribedLang`,
+ *   `#pantry/qti/queries.ts`): each form that states a language, under each category describing its
+ *   document, has its compared value ({@link DocumentLang}'s `value`) among the languages the
+ *   category lists ({@link ResourceLomLanguageSet}). Q5.07 had culled the old one-sided flag
+ *   `DocumentLang.lomGeneral` with a read in its place, on the orchestrator's ruling that R26 had
+ *   no source; UP's audit found the source and the ruling is reversed, so the read is this refusal.
+ *   In place (spec reading 117), an included fragment's elements are its item's body elements: each
+ *   item instance's `xml:lang` carriers are placed under its assembly ({@link PlacedXmlLang}, as
+ *   many as its document has, `Document.langs`), gathered per form ({@link AssembledLang}), and
+ *   each form the assembly states is listed by every category that describes the item
+ *   (`DescribedAssembledLang`). The binding counts "the associated assessmentItem ... and its
+ *   'bodyElements'", and a catalog is "outside the content body node" (information model §5.28), so
+ *   R26 counts no `xml:lang` under a `qti-catalog-info` (reading R9-c): each {@link XmlLang} names
+ *   its {@link CatalogScope}, read up the tree as {@link SsmlScope} reads a fragment, and
+ *   {@link DocumentLang}, {@link AssembledLang} and their carriers count only the carriers whose
+ *   scope is their document ({@link BodyXmlLang}, {@link PlacedBodyXmlLang}). Every `xml:lang`
+ *   keeps its row.
  * - **Reading 3** (rule `ssml-fragment`): SSML's "document" is each `speak` fragment. A `speak`'s
  *   `startmark` and `endmark` name a `mark` its fragment defines exactly once (law "SSML trim
  *   mark", SSML 1.1 §3.1.1.1), and a `lookup`'s `ref` a `lexicon` of its fragment (law "SSML
@@ -85,9 +87,11 @@
  * subtags … are to be treated as case insensitive", RFC 5646 §2.1.1, which XML 1.0 §2.12 names for
  * `xml:lang`). A tag's subtags are ASCII letters, digits and hyphens (RFC 5646 §2.1), so its case
  * is ASCII's, and both sides compare by `Compute.lowerAscii`: {@link LomLanguage}'s `tag` and
- * {@link GeneralLang}'s `value`. An empty `xml:lang`, or one of whitespace alone, states no
+ * {@link DocumentLang}'s `value`. An empty `xml:lang`, or one of whitespace alone, states no
  * language ("there is no language information available", XML 1.0 §2.12), so it asks for no
- * listing.
+ * listing; nor does a form that is no language tag once collapsed, which identifies no language
+ * (RFC 5646 §2.1), so its value domain refuses it alone (spec reading 174,
+ * {@link statedLanguagePattern}).
  *
  * Every copy of an attribute into an overlay follows C18 the other way round, from
  * `select(Attribute, φ)` into the overlay, beside a key over the same selection whose UNIQUE serves
@@ -116,7 +120,6 @@ import {
   fold,
   generated,
   key,
-  mirrors,
   Monoid,
   natural,
   on,
@@ -127,35 +130,28 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
-import { namingPattern } from "#pantry/grammar/domains.ts";
+import { languageTag } from "#pantry/grammar/attributes.ts";
 import {
   AttributeGrammar,
   AttributeModelOf,
   AttributeName,
-  AttributeSlotOf,
-  ChildGrammar,
-  GoverningOf,
+  Governor,
   Identity,
   NodeKind,
-  ResourceType,
   SchemaVersion,
   TextDomain,
   toolLabelKinds,
-  TypeName,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { Attribute, Idref, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, Idref, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import {
-  LomGeneral,
-  LomObject,
-  LomRecord,
-  recordDocumentTypes,
-  ResourceLomGeneral,
-} from "#pantry/qti/metadata.ts";
-import { Node, nodeRef } from "#pantry/qti/node.ts";
-import { Instance, itemKind, testKind } from "#pantry/qti/tests.ts";
+import { ObjectLang } from "#pantry/qti/metadata.ts";
+import { admitsHere, Node, nodeRef } from "#pantry/qti/node.ts";
+import { ManifestId, ResourceId } from "#pantry/qti/package.ts";
+import { Instance } from "#pantry/qti/tests.ts";
+import { recordDocumentTypes } from "#pantry/vocab/terms/metadata.ts";
+import { itemKind, testKind } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * XML whitespace `S`, possibly none: what an ID's lexical form holds around its value, the
@@ -163,7 +159,7 @@ import { Instance, itemKind, testKind } from "#pantry/qti/tests.ts";
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
  */
-export const spacePattern = "^[\\t\\n\\r ]*$";
+export const spacePattern = Compute.pattern("^[\\t\\n\\r ]*$");
 
 /**
  * A nonempty run holding no XML whitespace: an ID's value once its lexical form's outer whitespace
@@ -171,12 +167,23 @@ export const spacePattern = "^[\\t\\n\\r ]*$";
  * ({@link namingPattern}); that an IDREF token is, AL1's lexical half over the attribute and
  * TextDomain's over the element's text.
  */
-export const idValuePattern = "^[^\\t\\n\\r ]+$";
+export const idValuePattern = Compute.pattern("^[^\\t\\n\\r ]+$");
+
+/**
+ * An `xml:lang` form that states a language once collapsed: a well-formed BCP 47 tag
+ * (`languageTag`, spec reading 129) with XML whitespace around it, which collapsing strips, since a
+ * tag holds none. Any other form states no language and asks no record to list it: the empty one
+ * and one of whitespace alone (XML 1.0 §2.12), and one that is no tag, which identifies no language
+ * (RFC 5646 §2.1), so its value domain refuses it alone (spec reading 174).
+ */
+export const statedLanguagePattern = Compute.pattern<string>(
+  `^[\\t\\n\\r ]*(?:${languageTag})[\\t\\n\\r ]*$`,
+);
 
 /**
  * A same-document fragment reference: `#` and one or more characters (MathML 3 §4.2.7).
  */
-const shareFragmentPattern = "^#.+$";
+const shareFragmentPattern = Compute.pattern("^#.+$");
 
 /**
  * The nil uuid: the start of the owner-axis copy of `document`, which every member's owner
@@ -203,8 +210,8 @@ const labelledRootVersion = "3.0.1";
  * - **the host's:** `before`, `id` and `after`, the lexical form split around its value, which
  *   `E1_derived` proves, and for an attribute, `owner`, the node itself: a row whose `owner` is its
  *   `node` is an attribute's, every other a text's; and `admitted`, whether the grammar admits the
- *   element that carries it where it stands (`ChildGrammar`, {@link admittedNodes}), which
- *   `E1_derived` proves both ways.
+ *   element that carries it where it stands (its parent's admission map, {@link admittedNodes}),
+ *   which `E1_derived` proves both ways.
  *
  * Every ID has its row, an unadmitted element's too, so the copy from the attribute or the text
  * stays complete; only an admitted element's ID is bound ({@link IdBinding}'s `admitted`).
@@ -242,7 +249,7 @@ export const IdBinding = relation(
  * domain is an `xs:ID`, an `xs:IDREF` or an `xs:IDREFS` one (`ValueIdentity`), which only an
  * `xsi:type` gives an element in the pinned grammar.
  *
- * - **copied from the node:** `node`, `document`, `kind`, `version`, `governs`, `owner` (its parent)
+ * - **copied from the node:** `node`, `document`, `kind`, `version`, `governor`, `owner` (its parent)
  *   and `lexical`, its string value, `Node.stringValue`, which the string value's fold steps
  *   because TextDomain checks the text (`#pantry/qti/node.ts` `inCheckedText`);
  * - **drawn:** `idrefs`, its {@link TextIdref} count;
@@ -252,7 +259,7 @@ export const IdentityText = relation(
   "IdentityText",
   {
     document: uuid,
-    governs: closedId(TypeName),
+    governor: closedId(Governor),
     idrefText: accumulated(keyText, ""),
     idrefs: drawn(natural),
     kind: closedId(NodeKind),
@@ -308,13 +315,18 @@ export const XmlLang = relation(
 
 /**
  * The `xml:lang` lexical forms a document carries, a projection keyed by its heading (sets ruling
- * 2): one row per (document, form), its `carriers` the elements that carry it, and `generals` the
- * general categories that list its language ({@link GeneralLang}).
+ * 2): one row per (document, form), its `carriers` the elements that carry it, and `value`, the
+ * language the form names as R26 compares it: the form's value, collapsed (an `xs:language`'s
+ * whiteSpace) and case-folded (`Compute.lowerAscii`, RFC 5646 §2.1.1), which the database derives,
+ * within the form's own byte bound.
  */
-export const DocumentLang = relation(
+export const DocumentLang = relation.generated(
   "DocumentLang",
-  { carriers: drawn(natural), document: uuid, generals: drawn(natural), lang: keyText },
+  { carriers: drawn(natural), document: uuid, lang: keyText },
   ["document", "lang"],
+  (d) => ({
+    value: generated(keyText, Compute.cast(Compute.lowerAscii(Compute.collapse(d.lang)), keyText)),
+  }),
 );
 
 /**
@@ -338,58 +350,12 @@ export const LomLanguage = relation(
  *
  * It is keyed by the category's node, not by a resource: one hop from a `lom:language` cannot tell
  * a resource's record from the manifest's, a file's or an external one. R26 reads the categories
- * of the records that name a document through {@link GeneralObject}.
+ * of the records that name a document through a query (`namingGenerals`,
+ * `#pantry/qti/queries.ts`).
  */
 export const ResourceLomLanguageSet = relation(
   "ResourceLomLanguageSet",
   { carriers: drawn(natural), general: uuid, lang: keyText },
-  ["general", "lang"],
-);
-
-/**
- * A resource's LOM general category, keyed by its `lom:general` node: its record, and `named`, the
- * type of the document the record names (Q5.12's `LomRecord.named`), `none` for a record that
- * names none. It is exactly Q5.12's `ResourceLomGeneral` rows, both ways, so a selection reads the
- * categories R26 binds.
- */
-export const GeneralNamed = relation(
-  "GeneralNamed",
-  { general: uuid, named: closedId(ResourceType), record: uuid },
-  ["general"],
-);
-
-/**
- * A general category of a record that names a document, keyed by its `lom:general` node: its
- * record and that document (Q5.12's `LomObject`), the item or test whose languages it lists.
- */
-export const GeneralObject = relation(
-  "GeneralObject",
-  { document: uuid, general: uuid, record: uuid },
-  ["general"],
-);
-
-/**
- * A document, keyed by its node, with `generals`, the count of the general categories that describe
- * it ({@link GeneralObject}): the one total fact of how many categories each of its languages is
- * listed by, 0 for a document no naming record describes.
- */
-export const DocumentGenerals = relation(
-  "DocumentGenerals",
-  { document: uuid, generals: drawn(natural) },
-  ["document"],
-);
-
-/**
- * One language of a document that one of the general categories describing it lists, keyed by
- * (category, form): R26's witness.
- *
- * - `lang` is the document's `xml:lang` form ({@link DocumentLang}), and `value` its value collapsed
- *   and case-folded, `lowerAscii(collapse(lang))`, nonempty since the form states a language;
- * - `value` is a language the category lists ({@link ResourceLomLanguageSet}).
- */
-export const GeneralLang = relation(
-  "GeneralLang",
-  { document: uuid, general: uuid, lang: keyText, value: keyText },
   ["general", "lang"],
 );
 
@@ -641,24 +607,16 @@ export const PlacedBodyXmlLang = relation(
 
 /**
  * The `xml:lang` forms an item's assembly carries, a projection keyed by its heading: one row per
- * (assembly, form), its `carriers` the placed elements that carry it, and `generals` the general
- * categories describing the item that list its language ({@link PlacedGeneralLang}), as
- * {@link DocumentLang} is a document's.
+ * (assembly, form), its `carriers` the placed elements that carry it, and `value`, the language the
+ * form names as R26 compares it, derived as {@link DocumentLang}'s is.
  */
-export const AssembledLang = relation(
+export const AssembledLang = relation.generated(
   "AssembledLang",
-  { assembly: uuid, carriers: drawn(natural), generals: drawn(natural), lang: keyText },
+  { assembly: uuid, carriers: drawn(natural), lang: keyText },
   ["assembly", "lang"],
-);
-
-/**
- * One language of an item's assembly that one of the general categories describing the item lists,
- * keyed by (category, form): R26's witness in place, as {@link GeneralLang} is a document's.
- */
-export const PlacedGeneralLang = relation(
-  "PlacedGeneralLang",
-  { assembly: uuid, general: uuid, lang: keyText, value: keyText },
-  ["general", "lang"],
+  (a) => ({
+    value: generated(keyText, Compute.cast(Compute.lowerAscii(Compute.collapse(a.lang)), keyText)),
+  }),
 );
 
 /**
@@ -686,34 +644,20 @@ export const assembledLangFamily = counted(
   fin(AssembledLang, "carriers"),
 );
 
-/**
- * The general categories that list each assembly form's language, counted by
- * `AssembledLang.generals`.
- */
-export const placedGeneralLangFamily = counted(
-  on(PlacedGeneralLang, "assembly", "lang"),
-  fin(AssembledLang, "generals"),
-);
-
 export const identityRelations = {
   AssembledId,
   AssembledLang,
   BodyXmlLang,
   CatalogScope,
-  DocumentGenerals,
   DocumentId,
   DocumentLang,
   FragmentValue,
-  GeneralLang,
-  GeneralNamed,
-  GeneralObject,
   IdBinding,
   IdentityText,
   IdrefTarget,
   LabelUse,
   LomLanguage,
   PlacedBodyXmlLang,
-  PlacedGeneralLang,
   PlacedId,
   PlacedIdref,
   PlacedXmlLang,
@@ -746,12 +690,8 @@ type IdentityHandle = (typeof Identity.handles)[number];
  * @returns The predicate.
  */
 const identityIn = (a: AttributeRow, identities: readonly IdentityHandle[]) => {
-  const model = AttributeModelOf.at(
-    "model",
-    a.version,
-    GoverningOf.at("governor", a.version, a.kind, a.governs),
-  );
-  const domain = AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, a.name));
+  const model = AttributeModelOf.at("model", a.version, a.governor);
+  const domain = AttributeGrammar.at("domain", model, a.name);
 
   return a.and(ValueIdentity.has(domain), a.in(ValueIdentity.at("identity", domain), identities));
 };
@@ -773,11 +713,10 @@ type GovernedRow = RowScalars<typeof Node> | RowScalars<typeof IdentityText>;
  * @returns The predicate.
  */
 const textIdentityIn = (n: GovernedRow, identities: readonly IdentityHandle[]) => {
-  const governor = GoverningOf.at("governor", n.version, n.kind, n.governs);
-  const domain = TextDomain.at("domain", n.version, governor);
+  const domain = TextDomain.at("domain", n.version, n.governor);
 
   return n.and(
-    TextDomain.has(n.version, governor),
+    TextDomain.has(n.version, n.governor),
     ValueIdentity.has(domain),
     n.in(ValueIdentity.at("identity", domain), identities),
   );
@@ -810,12 +749,43 @@ export const idAttributes = select(Attribute, idTyped);
 
 /**
  * The ID-typed attributes whose value is one of their document's IDs: those whose lexical form
- * names something once collapsed ({@link namingPattern}), each the source of a {@link DocumentId},
- * with a key of its own over `node` that the copy's reverse probe reads (C18).
+ * names something once collapsed ({@link namingPattern}), each the source of a {@link DocumentId}.
+ * Its conditions include every one of {@link idAttributes}', whose key over `node` holds it to one
+ * per element, so it needs no key of its own: grizzle keys a containment's target by a key whose
+ * selection's conditions are all the target's (README, "Keys"), and installs the UNIQUE each copy
+ * back into it references, a {@link DocumentId}'s and a `th`'s `TableHeader`'s at its kind
+ * (`#pantry/qti/html.ts`).
  */
-const namingIdAttributes = select(Attribute, (a) =>
+export const namingIdAttributes = select(Attribute, (a) =>
   a.and(idTyped(a), Compute.matches(a.lexical, namingPattern)),
 );
+
+/**
+ * The ID values of one element kind: the {@link namingIdAttributes} of that kind, which a `th`'s
+ * `TableHeader` copies back into (`#pantry/qti/html.ts`). Its conditions include every one of
+ * {@link idAttributes}', whose key over `node` holds it, and its kind is a field it fixes to a value
+ * beyond its terms, so it needs no key of its own (grizzle's fixed target, at `3cc8fbd`).
+ *
+ * @param kind - The element kind.
+ * @returns The selection.
+ */
+export const namingIdAttributesOf = (kind: "th") =>
+  select(Attribute, (a) =>
+    a.and(idTyped(a), Compute.matches(a.lexical, namingPattern), a.eq(a.kind, kind)),
+  );
+
+/**
+ * The ID-typed attributes of one manifest element kind in a manifest, a `cp:manifest`'s or a
+ * `cp:resource`'s `identifier`, which its {@link ManifestId} or {@link ResourceId} copies back
+ * into. Its conditions include every one of {@link idAttributes}', whose key over `node` holds it,
+ * and its kind and document type are fields it fixes to values beyond its terms, so it needs no key
+ * of its own (grizzle's fixed target, at `3cc8fbd`).
+ *
+ * @param kind - The manifest element's kind.
+ * @returns The selection.
+ */
+const manifestIdAttributes = (kind: "cp:manifest" | "cp:resource") =>
+  select(Attribute, (a) => a.and(idTyped(a), a.eq(a.kind, kind), a.eq(a.documentType, "manifest")));
 
 /**
  * The elements whose text is of an identity type, the source of {@link IdentityText}.
@@ -841,14 +811,14 @@ const attributeIds = select(DocumentId, (d) => d.eq(d.owner, d.node));
 const textIds = select(DocumentId, (d) => d.ne(d.owner, d.node));
 
 /**
- * State that the grammar admits a node where it stands: its parent's content model names its kind
- * (`ChildGrammar`'s key set, the guard decision 440 put in `#pantry/qti/node.ts` `positioned`).
- * "N5 admitted" refuses every member it is false of.
+ * State that the grammar admits a node where it stands: its parent's family's admission map holds
+ * its kind (`#pantry/qti/node.ts` `admitsHere`, the guard decision 440 put in `positioned`). "N5
+ * admitted" refuses every member it is false of.
  *
  * @param n - The row.
  * @returns The statement.
  */
-const admits = (n: RowScalars<typeof Node>) => ChildGrammar.has(n.version, n.parentKind, n.kind);
+const admits = (n: RowScalars<typeof Node>) => admitsHere(n);
 
 /**
  * The nodes the grammar admits where they stand, whose IDs bind.
@@ -945,18 +915,6 @@ const lomLanguages = select(Node, (n) =>
 );
 
 /**
- * The general categories of the records that name a document: each has its
- * {@link GeneralObject}.
- */
-const namingGenerals = select(GeneralNamed, (g) => g.ne(g.named, "none"));
-
-/**
- * The forms that state a language: every `xml:lang` but an empty one or one of whitespace alone,
- * which states none (XML 1.0 §2.12).
- */
-const statedLangs = select(DocumentLang, (d) => d.not(Compute.matches(d.lang, spacePattern)));
-
-/**
  * The SSML attributes reading 3's laws read, the source of {@link SsmlAttribute}.
  */
 const ssmlAttributes = select(Attribute, (a) =>
@@ -1043,50 +1001,6 @@ export const lomLanguageFamily = counted(
 );
 
 /**
- * The general categories that describe each document, counted by `DocumentGenerals.generals`.
- */
-export const generalObjectFamily = counted(
-  on(GeneralObject, "document"),
-  fin(DocumentGenerals, "generals"),
-);
-
-/**
- * The general categories that list each document form's language, counted by
- * `DocumentLang.generals`.
- */
-export const generalLangFamily = counted(
-  on(GeneralLang, "document", "lang"),
-  fin(DocumentLang, "generals"),
-);
-
-/**
- * R26 (law "Document lang", rule `document-lang`): each form that states a language counts as many
- * listing categories as describe its document. A {@link GeneralLang} witness names a category of
- * the document and a language that category lists, one per category (its key), so the counts are
- * equal exactly when every category lists it.
- */
-export const documentLang = contained(
-  on(statedLangs, "document", "generals"),
-  on(DocumentGenerals, "document", "generals"),
-);
-
-/**
- * The forms of an item's assembly that state a language, as {@link statedLangs} are a document's.
- */
-const statedAssembledLangs = select(AssembledLang, (a) =>
-  a.not(Compute.matches(a.lang, spacePattern)),
-);
-
-/**
- * R26 in place (law "Document lang", spec reading 117): each form an item's assembly states, its
- * included fragments' among them, counts as many listing categories as describe the item.
- */
-export const assembledLang = contained(
-  on(statedAssembledLangs, "assembly", "generals"),
-  on(DocumentGenerals, "document", "generals"),
-);
-
-/**
  * The attributes that hold each fragment's values, counted by `FragmentValue.carriers`.
  */
 export const fragmentValueFamily = counted(
@@ -1125,10 +1039,11 @@ export const ssmlLexiconReference = contained(
  * Every statement over the identity overlays, each `check` named by its oracle law:
  *
  * - **DocumentId:** at most one ID-typed attribute per element (the key over its selection), each
- *   whose value is an NCName copied into its row and each attribute row such an attribute's (C18,
- *   with the key over that selection); each ID-typed text whose value is an NCName copied into its
- *   row, bound to the element's parent, and each text row such a text's; the value set apart from
- *   its outer whitespace (`E1_derived`);
+ *   whose value is an NCName copied into its row and each attribute row such an attribute's (C18),
+ *   the way back keyed by that key, since its selection lies within the key's; each ID-typed text
+ *   whose value is an NCName copied into its row, bound to the element's parent, and each text row
+ *   such a text's, the way back keyed by `IdentityText`'s own; the value set apart from its outer
+ *   whitespace (`E1_derived`);
  * - **IdBinding:** the projection's counted family, each binding carried and admitted as its IDs are,
  *   each ID admitted exactly where its element is (`E1_derived`), and "DocumentId key" over the
  *   admitted bindings;
@@ -1147,6 +1062,9 @@ export const ssmlLexiconReference = contained(
  *   item's;
  * - **DocumentLang:** each `xml:lang` copied into its `XmlLang` row and each row an attribute's, the
  *   counted family over the carriers outside every catalog, and each form carried (`E1_derived`);
+ *   and each assessment object's `ObjectLang` (`#pantry/qti/metadata.ts`) an attribute's, through
+ *   the key over every `xml:lang` (the one-way rule), its node an assessment object's root by its
+ *   containment into `AssessmentObject`;
  * - **CatalogScope:** each `XmlLang` on its scope's row, each scope on its node's {@link nodeRef}
  *   tuple, a `qti-catalog-info` its own scope, a root that is none the document's and every other
  *   element its parent's (`E1_derived`);
@@ -1154,12 +1072,9 @@ export const ssmlLexiconReference = contained(
  *   row, its category its parent and its language its string value, and each row an element's; its
  *   tag the value case-folded, the counted family over the tags, and each language listed
  *   (`E1_derived`);
- * - **R26:** each resource's general category with its record's `named`, both ways; each one of a
- *   naming record with its document; each document with its count of categories; each witness a
- *   category's of its document, listing its form's value collapsed and case-folded; and
- *   {@link documentLang}; in place, each item instance's carriers placed and counted against its
- *   document's, each assembly form's carriers and listing categories counted, each witness a
- *   category's of the item, listing its form's value; and {@link assembledLang};
+ * - **R26:** in place, each item instance's carriers placed and counted against its document's, and
+ *   each assembly form's carriers counted; R26 itself reads the documents the records name, so it
+ *   is a rule over a query (`identityQueryLawsByName`, `#pantry/qti/queries.ts`);
  * - **Reading 3:** each read SSML attribute copied into its {@link SsmlAttribute} row, both ways, its
  *   value its lexical form collapsed, and placed in its element's fragment; each fragment's values
  *   counted; each scope on its node's {@link nodeRef} tuple, a `speak` its own fragment, a root
@@ -1167,21 +1082,18 @@ export const ssmlLexiconReference = contained(
  *   and {@link ssmlLexiconReference};
  * - **Label tools:** each `label` that asks for its tool copied into its `LabelUse` row and each row
  *   a label's, its root kind its document's, and in an item each label's document one whose root
- *   carries `tool-name` and `tool-version`.
+ *   carries `tool-name` and `tool-version`;
+ * - **Manifest overlay:** each {@link ManifestId} and {@link ResourceId} row has its node's
+ *   `identifier`, the way back of the copy `#pantry/qti/package.ts` states (C18): an ID-typed
+ *   attribute at its node, of its kind (`cp:manifest` or `cp:resource`), in the manifest (type
+ *   `manifest`). Each of the two kinds has one ID-typed attribute, its `identifier`, in every
+ *   version, so this is the containment in the manifest's `identifier` selection, read through the
+ *   key over the ID-typed attributes, with no second key over the narrower selection (the one-way
+ *   rule; `#pantry/qti/identity.copyback.test.ts`).
  */
 export const identityLawsByName = {
-  "Document lang": [
-    contained(on(GeneralLang, "general", "value"), on(ResourceLomLanguageSet, "general", "lang")),
-    documentLang,
-    contained(
-      on(PlacedGeneralLang, "general", "value"),
-      on(ResourceLomLanguageSet, "general", "lang"),
-    ),
-    assembledLang,
-  ],
   "DocumentId key": [
     key(on(idAttributes, "node")),
-    key(on(namingIdAttributes, "node")),
     contained(
       on(namingIdAttributes, "node", "document", "lexical"),
       on(DocumentId, "node", "document", "lexical"),
@@ -1192,7 +1104,6 @@ export const identityLawsByName = {
       on(DocumentId, "node", "document", "owner", "lexical"),
     ),
     contained(on(textIds, "node"), on(idTexts, "node")),
-    key(on(idTexts, "node")),
     idBindingFamily,
     key(on(admittedBindings, "document", "id")),
     key(on(AssembledId, "assembly", "id")),
@@ -1221,8 +1132,8 @@ export const identityLawsByName = {
       on(IdentityText, "node", "document", "owner", "lexical"),
     ),
     contained(
-      on(IdentityText, "node", "kind", "version", "document", "governs"),
-      on(Node, "id", "kind", "version", "document", "governs"),
+      on(IdentityText, "node", "kind", "version", "document", "governor"),
+      on(Node, "id", "kind", "version", "document", "governor"),
     ),
     textIdrefFamily,
     contained(on(TextIdref, "node", "document"), on(IdentityText, "node", "document")),
@@ -1273,14 +1184,13 @@ export const identityLawsByName = {
       on(XmlLang, "node", "document", "lang"),
     ),
     contained(on(XmlLang, "node"), on(langAttributes, "node")),
+    contained(on(ObjectLang, "node"), on(langAttributes, "node")),
     contained(on(XmlLang, "node", "scope"), on(CatalogScope, "node", "scope")),
     contained(
       on(bodyLangs, "node", "document", "lang"),
       on(BodyXmlLang, "node", "document", "lang"),
     ),
     contained(on(BodyXmlLang, "node"), on(bodyLangs, "node")),
-    key(on(bodyLangs, "node")),
-    key(on(bodyPlacedLangs, "instance", "node")),
     contained(
       on(bodyPlacedLangs, "instance", "node", "assembly", "document", "lang"),
       on(PlacedBodyXmlLang, "instance", "node", "assembly", "document", "lang"),
@@ -1312,23 +1222,9 @@ export const identityLawsByName = {
     check("E1_derived", LomLanguage, (l) => l.eq(l.tag, Compute.lowerAscii(l.lang))),
     lomLanguageFamily,
     check("E1_derived", ResourceLomLanguageSet, (s) => s.gt(s.carriers, 0n)),
-    mirrors(on(GeneralNamed, "general"), on(ResourceLomGeneral, "node")),
-    contained(on(GeneralNamed, "general", "record"), on(LomGeneral, "node", "parent")),
-    contained(on(GeneralNamed, "record", "named"), on(LomRecord, "node", "named")),
-    contained(on(namingGenerals, "general", "record"), on(GeneralObject, "general", "record")),
-    contained(on(GeneralObject, "general", "record"), on(GeneralNamed, "general", "record")),
-    contained(on(GeneralObject, "record", "document"), on(LomObject, "record", "document")),
-    mirrors(on(DocumentGenerals, "document"), on(Document, "node")),
-    generalObjectFamily,
-    generalLangFamily,
-    contained(on(GeneralLang, "general", "document"), on(GeneralObject, "general", "document")),
-    check("E1_derived", GeneralLang, (g) =>
-      g.and(g.eq(g.value, Compute.lowerAscii(Compute.collapse(g.lang))), g.ne(g.value, "")),
-    ),
     documentLangFamily,
     placedLangFamily,
     assembledLangFamily,
-    placedGeneralLangFamily,
     contained(
       on(PlacedXmlLang, "instance", "document", "assembly"),
       on(Instance, "id", "document", "assembly"),
@@ -1338,13 +1234,6 @@ export const identityLawsByName = {
       on(XmlLang, "node", "document", "lang", "scope"),
     ),
     check("E1_derived", AssembledLang, (a) => a.gt(a.carriers, 0n)),
-    contained(
-      on(PlacedGeneralLang, "general", "assembly"),
-      on(GeneralObject, "general", "document"),
-    ),
-    check("E1_derived", PlacedGeneralLang, (g) =>
-      g.and(g.eq(g.value, Compute.lowerAscii(Compute.collapse(g.lang))), g.ne(g.value, "")),
-    ),
     key(on(ssmlAttributes, "node", "name")),
     contained(
       on(ssmlAttributes, "node", "name", "kind", "lexical"),
@@ -1406,7 +1295,10 @@ export const identityLawsByName = {
     contained(on(itemLabels, "document"), on(toolNames, "document")),
     contained(on(itemLabels, "document"), on(toolVersions, "document")),
   ],
-  "Node key": [key(on(identityNodes, "id")), key(on(lomLanguages, "id"))],
+  "Manifest overlay": [
+    contained(on(ManifestId, "node"), on(manifestIdAttributes("cp:manifest"), "node")),
+    contained(on(ResourceId, "node"), on(manifestIdAttributes("cp:resource"), "node")),
+  ],
   "SSML lexicon reference": [ssmlLexiconReference],
   "SSML trim mark": [ssmlTrimMark],
 } as const;

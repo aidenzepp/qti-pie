@@ -1,12 +1,14 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * Rosters and closed relations as values (fin.md §17).
  *
  * A roster is a closed vocabulary of handles, each coded by its position. A closed relation is
  * fixed when the schema compiles, so it has no table: grizzle packs it into a constant. This module
- * holds the rows a generator states, refuses a row with a value outside its field's code space or
- * a key stated twice, and answers lookups on the host. It packs and sizes nothing: grizzle does,
- * and refuses a constant past PostgreSQL's longest bit string itself (README, "Limits").
+ * holds the rows a generator states and, for a relation a serving path reads by key, its index
+ * ({@link indexed}); a test indexes any other itself. It checks no row, packs nothing and sizes
+ * nothing: grizzle refuses a value outside its field's code space and a key
+ * stated twice when it declares and packs the relation, and a constant past PostgreSQL's longest
+ * bit string (README, "Limits"); {@link faultOf} is the same row check for the tests over a
+ * composition.
  *
  * The shapes follow grizzle's two declaration forms (grizzle D1 to D3): a roster, and
  * `closed.relation(name, fields, key, rows)`. A key digit is a closed id, a field over a roster
@@ -14,7 +16,7 @@
  * closed id or an open-typed value, the latter coded by its active domain within the relation in
  * value order (fin.md §17, "Codes").
  */
-import { Array as Arr, Option, Result, Schema } from "effect";
+import { Array as Arr, Option, Predicate, Schema } from "effect";
 import type { Source, Sources } from "#pantry/vocab/inventory/types.ts";
 
 /**
@@ -145,7 +147,8 @@ type AnyRow = Readonly<Record<string, Primitive>>;
 
 /**
  * A closed relation under a declared key: its rows, one per key, each value within its field's code
- * space. A relation with no payload is a set.
+ * space. A relation with no payload is a set. It answers no lookup: a relation the host reads by
+ * key is {@link Indexed}, built where a serving path reads it, and a test indexes any other itself.
  */
 export interface Closed<Key extends readonly AnyKeyField[], Payload extends readonly AnyField[]> {
   readonly name: string;
@@ -159,6 +162,15 @@ export interface Closed<Key extends readonly AnyKeyField[], Payload extends read
    * The rows as stated, every value within its field's code space.
    */
   readonly rows: readonly Row<Key, Payload>[];
+}
+
+/**
+ * A closed relation the host reads by key: its rows, indexed once by their keys ({@link indexed}).
+ */
+export interface Indexed<
+  Key extends readonly AnyKeyField[],
+  Payload extends readonly AnyField[],
+> extends Closed<Key, Payload> {
   /**
    * Find the row at a key.
    *
@@ -172,16 +184,31 @@ export interface Closed<Key extends readonly AnyKeyField[], Payload extends read
 }
 
 /**
- * A closed relation whose rows carry their spec source (the operator's ruling of 2026-11-05): the
+ * A closed relation whose rows carry their spec source (Bjorn's ruling of 2026-11-05): the
  * XSD particle or declaration a row reads, by file and line in its version, or the specification
- * or spec reading that states it. A refusal maps from its law to its source rule by this lookup,
- * so it explains itself from the law, the row's keys and the grammar's constants. The source is
- * host data: it never enters the relation's constant.
+ * or spec reading that states it. A refusal maps from its law to its source rule by its row's
+ * source, so it explains itself from the law, the row's keys and the grammar's constants. The
+ * source is host data: it never enters the relation's constant.
  */
 export interface Sourced<
   Key extends readonly AnyKeyField[],
   Payload extends readonly AnyField[],
 > extends Closed<Key, Payload> {
+  /**
+   * Each row with its source, in the rows' order.
+   */
+  readonly sourced: readonly SourcedRow<Key, Payload>[];
+}
+
+/**
+ * A sourced relation the host reads by key: its rows and their sources, indexed once by their keys
+ * ({@link indexedSourced}).
+ */
+export interface IndexedSourced<
+  Key extends readonly AnyKeyField[],
+  Payload extends readonly AnyField[],
+>
+  extends Indexed<Key, Payload>, Sourced<Key, Payload> {
   /**
    * Find where the row at a key comes from.
    *
@@ -211,17 +238,18 @@ export interface SourcedRow<
  *
  * @param sources - The row's sources.
  * @param at - The version's index among the row's versions.
- * @param row - The row, as the defect's message names it.
+ * @param row - The row, as the defect's message names it: spelled only for the defect, so a load
+ *   that meets none spells no row.
  * @returns The version's source.
  * @throws {Error} When the row states no source at the index, so its sources do not align with
  *   its versions: a defect of the leaf or the facet that states it.
  */
-export const sourceIn = (sources: Sources, at: number, row: string): Source =>
+export const sourceIn = (sources: Sources, at: number, row: () => string): Source =>
   Option.getOrThrowWith(
     Arr.get(sources, at),
     () =>
       new Error(
-        `${row} states ${String(sources.length)} sources and no source for its version at index ${String(at)}, and a row states one source per version, the first version's first. State the version's source.`,
+        `${row()} states ${String(sources.length)} sources and no source for its version at index ${String(at)}, and a row states one source per version, the first version's first. State the version's source.`,
       ),
   );
 
@@ -267,8 +295,8 @@ export const rowsAt = <K, R>(groups: ReadonlyMap<K, readonly R[]>, key: K): read
 export const int8Max = 9_223_372_036_854_775_807n;
 
 /**
- * Two rows of a closed relation at one key. A key is a law of the relation (fin.md §17, E4): its
- * string has one cell per key, so the second row has nowhere to go.
+ * Two rows of a closed relation at one key, a fault {@link faultOf} finds. A key is a law of the
+ * relation (fin.md §17, E4): its string has one cell per key, so the second row has nowhere to go.
  */
 export class KeyCollision extends Schema.TaggedError<KeyCollision>()("KeyCollision", {
   key: Schema.String,
@@ -284,7 +312,7 @@ export class KeyCollision extends Schema.TaggedError<KeyCollision>()("KeyCollisi
 
 /**
  * A row of a closed relation whose value for a field is not in that field's code space, so the
- * value has no code.
+ * value has no code: a fault {@link faultOf} finds.
  */
 export class OutsideCodeSpace extends Schema.TaggedError<OutsideCodeSpace>()("OutsideCodeSpace", {
   field: Schema.String,
@@ -300,7 +328,8 @@ export class OutsideCodeSpace extends Schema.TaggedError<OutsideCodeSpace>()("Ou
 }
 
 /**
- * A roster that lists one handle twice, so the handle has no single code.
+ * A roster that lists one handle twice, so the handle has no single code: a fault {@link repeatOf}
+ * finds.
  */
 export class RepeatedValue extends Schema.TaggedError<RepeatedValue>()("RepeatedValue", {
   field: Schema.String,
@@ -316,35 +345,47 @@ export class RepeatedValue extends Schema.TaggedError<RepeatedValue>()("Repeated
 }
 
 /**
- * The ways a stated closed relation is refused.
- */
-export type ClosedRelationError = KeyCollision | OutsideCodeSpace | RepeatedValue;
-
-/**
- * Construct a roster from its handles in code order.
+ * Construct a roster from its handles in code order. It checks no handle: grizzle refuses a roster
+ * that lists a handle twice when it declares one (`closed(name, handles)`), and {@link repeatOf}
+ * is the same check for the tests over a composition, a roster grizzle never sees among them.
  *
  * @param name - The roster's name.
  * @param handles - The handles, in code order.
- * @returns The roster, or the first handle it lists twice.
+ * @returns The roster.
  */
 export const roster = <const Handle extends string>(
   name: string,
   handles: readonly Handle[],
-): Result.Result<Roster<Handle>, RepeatedValue> => {
+): Roster<Handle> => {
   const codes = new Map<Primitive, number>(handles.map((handle, code) => [handle, code]));
 
-  return Arr.findFirst(handles, (handle, code) => codes.get(handle) !== code).pipe(
-    Option.match({
-      onNone: () =>
-        Result.succeed({
-          codeOf: (handle: Primitive) => Option.fromNullishOr(codes.get(handle)),
-          handles,
-          has: (value: string): value is Handle => codes.has(value),
-          name,
-        }),
-      onSome: (handle) =>
-        Result.fail(new RepeatedValue({ field: "handle", relation: name, value: handle })),
-    }),
+  return {
+    codeOf: (handle: Primitive) => Option.fromNullishOr(codes.get(handle)),
+    handles,
+    has: (value: string): value is Handle => codes.has(value),
+    name,
+  };
+};
+
+/**
+ * Find the first handle a roster lists twice, which has no single code. A composition's rosters are
+ * fixed data, so this is the tests' reading of them (`compose.test.ts`), never a load's.
+ *
+ * @param held - The roster.
+ * @returns The fault, or none.
+ */
+export const repeatOf = (held: Roster<string>): Option.Option<RepeatedValue> => {
+  const seen = new Set<string>();
+
+  return Arr.findFirst(held.handles, (handle) => {
+    const repeated = seen.has(handle);
+    seen.add(handle);
+
+    return repeated;
+  }).pipe(
+    Option.map(
+      (handle) => new RepeatedValue({ field: "handle", relation: held.name, value: handle }),
+    ),
   );
 };
 
@@ -432,59 +473,6 @@ export const dependentField = <const Name extends string>(
 ): DependentField<Name> => ({ _tag: "dependent", name, roster: over, sizeOf });
 
 /**
- * A field's code space, every value it ranges over in code order, at its widest.
- *
- * @param field - The field.
- * @returns A roster's handles, or an open field's values.
- */
-const spaceOf = (field: AnyField | DependentField<string>): readonly unknown[] =>
-  field._tag === "value" ? field.values : field.roster.handles;
-
-/**
- * Code a value in a field's code space.
- *
- * @param field - The field.
- * @param value - The value.
- * @returns Its code, or none for a value outside the code space.
- */
-const codeIn = (
-  field: AnyField | DependentField<string>,
-  value: Primitive | undefined,
-): Option.Option<number> => {
-  if (value === undefined) {
-    return Option.none();
-  }
-
-  return field._tag === "value"
-    ? Arr.findFirstIndex(field.values, (held) => held === value)
-    : field.roster.codeOf(value);
-};
-
-/**
- * Compute a row's mixed-radix index over fields, the first field the most significant digit.
- *
- * @param fields - The fields, in index order.
- * @param row - The row, holding a value under each field's name.
- * @returns The index, or the first field whose code space does not hold the row's value.
- */
-const indexIn = <F extends AnyField | DependentField<string>>(
-  fields: readonly F[],
-  row: AnyRow,
-): Result.Result<number, F> => {
-  let index = 0;
-  for (const field of fields) {
-    const code = codeIn(field, row[field.name]);
-    if (Option.isNone(code)) {
-      return Result.fail(field);
-    }
-
-    index = index * spaceOf(field).length + code.value;
-  }
-
-  return Result.succeed(index);
-};
-
-/**
  * Write a row's values under its fields' names, for a failure's message.
  *
  * @param fields - The fields to write, in order.
@@ -495,99 +483,6 @@ const spell = (fields: readonly (AnyField | DependentField<string>)[], row: AnyR
   fields.map(({ name }) => `${name} ${String(row[name])}`).join(", ");
 
 /**
- * The host's index of a key, which a lookup and the key law read: each key one number, and a value
- * outside its field's code space, a dependent one past its prefix's size among them, refused.
- */
-interface Layout {
-  readonly indexOf: (row: AnyRow) => Result.Result<number, AnyField | DependentField<string>>;
-}
-
-/**
- * One prefix's block of a dependent key's index: the index it starts at, and each key field from
- * the first dependent one on, with the size of its code space under the prefix.
- */
-interface Block {
-  readonly digits: readonly { readonly field: AnyKeyField; readonly size: number }[];
-  readonly start: number;
-}
-
-/**
- * Find a row's block among a prefix's: the block of the handles the row holds in the prefix
- * fields, or the first field whose roster does not hold the row's value.
- */
-type BlockOf = (row: AnyRow) => Result.Result<Block, AnyKeyField>;
-
-/**
- * Lay out a key's index: row-major mixed radix over the closed ids before the first dependent
- * field, then each such prefix's block, the mixed radix of the remaining fields at the sizes the
- * prefix gives them, at the sum of the earlier prefixes' block sizes (fin.md §17, "The index"), so
- * no two keys share an index.
- *
- * @param key - The key's fields.
- * @returns The layout.
- */
-const layoutOf = (key: readonly AnyKeyField[]): Layout => {
-  const split = key.findIndex((field) => field._tag === "dependent");
-  if (split === -1) {
-    return { indexOf: (row) => indexIn(key, row) };
-  }
-
-  const rest = key.slice(split);
-  let start = 0;
-  // The prefixes are walked most significant field first, each field's handles in code order, so
-  // the blocks are made in row-major order and each starts where the one before it ends.
-  const blocksUnder = (
-    fields: readonly AnyKeyField[],
-    prefix: Readonly<Record<string, string>>,
-  ): BlockOf => {
-    if (!Arr.isReadonlyArrayNonEmpty(fields)) {
-      const digits = rest.map((field) => ({
-        field,
-        size: field._tag === "dependent" ? field.sizeOf(prefix) : field.roster.handles.length,
-      }));
-      const block: Block = { digits, start };
-      start += digits.reduce((product, { size }) => product * size, 1);
-
-      return () => Result.succeed(block);
-    }
-
-    const [field, ...after] = fields;
-    const byHandle = new Map<Primitive, BlockOf>(
-      field.roster.handles.map((handle) => [
-        handle,
-        blocksUnder(after, { ...prefix, [field.name]: handle }),
-      ]),
-    );
-
-    return (row) =>
-      Option.match(
-        Option.flatMap(Option.fromNullishOr(row[field.name]), (value) =>
-          Option.fromNullishOr(byHandle.get(value)),
-        ),
-        { onNone: () => Result.fail(field), onSome: (blockOf) => blockOf(row) },
-      );
-  };
-  const blockOf = blocksUnder(key.slice(0, split), {});
-
-  return {
-    indexOf: (row) =>
-      Result.flatMap(blockOf(row), (block) => {
-        let index = 0;
-        for (const { field, size } of block.digits) {
-          const code = codeIn(field, row[field.name]);
-          if (Option.isNone(code) || code.value >= size) {
-            return Result.fail(field);
-          }
-
-          index = index * size + code.value;
-        }
-
-        return Result.succeed(block.start + index);
-      }),
-  };
-};
-
-/**
  * A key as a lookup names it: a handle for each key field.
  */
 type KeyOf<Key extends readonly AnyKeyField[]> = {
@@ -595,60 +490,172 @@ type KeyOf<Key extends readonly AnyKeyField[]> = {
 };
 
 /**
- * Index a relation's stated entries by their rows' keys: every value must lie in its field's code
- * space, and no two rows may share a key (E4).
+ * Number a row's key: its key fields' codes as the digits of a mixed-radix numeral, the first
+ * field the most significant, each digit's base its field's code space (its roster's size). Two
+ * keys have one number exactly when they are one key, and the number is exact while the product of
+ * the bases stays within `Number.MAX_SAFE_INTEGER`, which {@link lookupOf} holds every index to.
  *
- * @param relation - The relation as a generator states it, its rows aside.
- * @param relation.key - Its key's fields in index order, the first the most significant digit.
- * @param relation.name - Its name, as its laws and its failures name it.
- * @param relation.payload - The fields outside the key, none for a set.
- * @param entries - Its rows, each with whatever the host reads beside it.
- * @returns The entry at a key, none where the relation holds no row, or the first reason the rows
- *   are refused.
+ * @param key - The key's fields.
+ * @param row - The row, or a lookup's key.
+ * @returns The key's number, or none for a key that leaves a field out or holds a value outside
+ *   its field's code space, which no row is at.
  */
-const indexed = <
-  Key extends readonly AnyKeyField[],
-  Payload extends readonly AnyField[],
-  Entry extends { readonly row: Row<Key, Payload> },
->(
-  relation: { readonly key: Key; readonly name: string; readonly payload: Payload },
-  entries: readonly Entry[],
-): Result.Result<(key: KeyOf<Key>) => Option.Option<Entry>, ClosedRelationError> =>
-  Result.gen(function* indexEntries() {
-    const { key, name, payload } = relation;
-    const layout = layoutOf(key);
-    const byIndex = new Map<number, Entry>();
-    const outside = (row: AnyRow) => (field: AnyField | DependentField<string>) =>
-      new OutsideCodeSpace({ field: field.name, relation: name, value: String(row[field.name]) });
-
-    for (const entry of entries) {
-      const { row } = entry;
-      const index = yield* Result.mapError(layout.indexOf(row), outside(row));
-      yield* Result.mapError(indexIn(payload, row), outside(row));
-
-      if (byIndex.has(index)) {
-        return yield* Result.fail(new KeyCollision({ key: spell(key, row), relation: name }));
-      }
-
-      byIndex.set(index, entry);
+const keyNumberOf = (key: readonly AnyKeyField[], row: AnyRow): number | undefined => {
+  let number = 0;
+  for (const field of key) {
+    const value = row[field.name];
+    const code =
+      value === undefined ? undefined : Option.getOrUndefined(field.roster.codeOf(String(value)));
+    if (code === undefined) {
+      return undefined;
     }
 
-    return (at: KeyOf<Key>) =>
-      Result.getSuccess(layout.indexOf(at)).pipe(
-        Option.flatMap((index) => Option.fromNullishOr(byIndex.get(index))),
-      );
-  });
+    number = number * field.roster.handles.length + code;
+  }
+
+  return number;
+};
 
 /**
- * Construct a closed relation from rows of handles and values: every value must lie in its field's
- * code space, and no two rows may share a key (E4).
+ * Index a relation's entries by their rows' keys, for its lookups: the entry at a key, none where
+ * no row is, and none for a key that leaves a field out.
+ *
+ * It checks no row. A row's values lie in their code spaces and its key is its own because the
+ * relation's constant says so: grizzle refuses a closed id outside its roster and two rows of one
+ * key when `install.ts` declares the relation (`closed.relation`, `closedRows` in grizzle's
+ * `schema/relation.ts`), and a slot past its owner's count when it packs the relation
+ * (`plannedRelation` in `physical/ddl/constants.ts`); {@link faultOf} is the same check for the
+ * tests over a composition, a relation grizzle never sees among them, and no load runs it.
+ *
+ * @param key - The relation's key fields.
+ * @param entries - Its rows, each with whatever the host reads beside it.
+ * @returns The entry at a key.
+ * @throws {Error} When the key's code space has more keys than a number holds exactly, so two keys
+ *   could share a number: a key of more or wider fields than any relation of the composition has.
+ */
+const lookupOf = <Key extends readonly AnyKeyField[], Entry extends { readonly row: AnyRow }>(
+  key: Key,
+  entries: readonly Entry[],
+): ((at: KeyOf<Key>) => Option.Option<Entry>) => {
+  const space = key.reduce((size, field) => size * field.roster.handles.length, 1);
+  if (space > Number.MAX_SAFE_INTEGER) {
+    throw new Error(
+      `A key over ${key.map(({ name }) => name).join(", ")} has ${String(space)} keys, more than a number holds exactly; index it by fewer or narrower fields.`,
+    );
+  }
+
+  const byKey = new Map<number, Entry>();
+  for (const entry of entries) {
+    const at = keyNumberOf(key, entry.row);
+    if (at !== undefined) {
+      byKey.set(at, entry);
+    }
+  }
+
+  return (at) => {
+    const number = keyNumberOf(key, at);
+
+    return number === undefined ? Option.none() : Option.fromNullishOr(byKey.get(number));
+  };
+};
+
+/**
+ * Whether a field's code space holds a row's value: a roster's handle for a closed id, one of its
+ * values for an open field, and for a dependent `fin` a code below the size its prefix gives it.
+ *
+ * @param field - The field.
+ * @param value - The row's value under the field's name, if it holds one.
+ * @param prefix - The row's handles in the key fields before the key's first dependent one.
+ * @returns Whether the value has a code.
+ */
+const holds = (
+  field: AnyField | DependentField<string>,
+  value: Primitive | undefined,
+  prefix: Readonly<Record<string, string>>,
+): boolean => {
+  switch (field._tag) {
+    case "id": {
+      return Predicate.isString(value) && field.roster.has(value);
+    }
+    case "value": {
+      return field.values.some((held) => held === value);
+    }
+    case "dependent": {
+      return (
+        Predicate.isString(value) &&
+        Option.exists(field.roster.codeOf(value), (code) => code < field.sizeOf(prefix))
+      );
+    }
+    default: {
+      return field satisfies never;
+    }
+  }
+};
+
+/**
+ * Find the first fault of a relation's rows, in row order: a value outside its field's code space,
+ * a dependent one past its prefix's size among them, or a second row at a key already stated (E4:
+ * a closed relation's string has one cell per key).
+ *
+ * A composition's relations are fixed data, so this is the tests' reading of them
+ * (`compose.test.ts`, over every relation a composition states, and each generator's own test),
+ * never a load's: a load builds a relation's lookups and checks nothing ({@link closed}).
+ *
+ * @param relation - The relation.
+ * @param relation.key - Its key's fields in index order.
+ * @param relation.name - Its name, as the fault names it.
+ * @param relation.payload - The fields outside the key.
+ * @param relation.rows - Its rows.
+ * @returns The first fault, or none.
+ */
+export const faultOf = (relation: {
+  readonly key: readonly AnyKeyField[];
+  readonly name: string;
+  readonly payload: readonly AnyField[];
+  readonly rows: readonly AnyRow[];
+}): Option.Option<KeyCollision | OutsideCodeSpace> => {
+  const { key, name, payload, rows } = relation;
+  const split = key.findIndex((field) => field._tag === "dependent");
+  const prefixFields = split === -1 ? key : key.slice(0, split);
+  const fields = [...key, ...payload];
+  const seen = new Set<number | undefined>();
+  for (const row of rows) {
+    const prefix = Object.fromEntries(
+      prefixFields.map(({ name: field }) => [field, String(row[field])] as const),
+    );
+    const outside = fields.find((field) => !holds(field, row[field.name], prefix));
+    if (outside !== undefined) {
+      return Option.some(
+        new OutsideCodeSpace({
+          field: outside.name,
+          relation: name,
+          value: String(row[outside.name]),
+        }),
+      );
+    }
+
+    const number = keyNumberOf(key, row);
+    if (seen.has(number)) {
+      return Option.some(new KeyCollision({ key: spell(key, row), relation: name }));
+    }
+
+    seen.add(number);
+  }
+
+  return Option.none();
+};
+
+/**
+ * Construct a closed relation from rows of handles and values. It indexes nothing and checks no
+ * row: grizzle checks them when it declares and packs the relation, and the tests with
+ * {@link faultOf}.
  *
  * @param relation - The relation as a generator states it.
  * @param relation.key - Its key's fields in index order, the first the most significant digit.
  * @param relation.name - Its name, as its laws and its failures name it.
  * @param relation.payload - The fields outside the key, none for a set.
  * @param relation.rows - Its rows.
- * @returns The relation, or the first reason it is refused.
+ * @returns The relation.
  */
 export const closed = <
   const Key extends readonly AnyKeyField[],
@@ -658,32 +665,42 @@ export const closed = <
   readonly name: string;
   readonly payload: Payload;
   readonly rows: readonly Row<Key, Payload>[];
-}): Result.Result<Closed<Key, Payload>, ClosedRelationError> =>
-  Result.map(
-    indexed(
-      relation,
-      relation.rows.map((row) => ({ row })),
-    ),
-    (at): Closed<Key, Payload> => ({
-      key: relation.key,
-      lookup: (key) => Option.map(at(key), ({ row }) => row),
-      name: relation.name,
-      payload: relation.payload,
-      rows: relation.rows,
-    }),
-  );
+}): Closed<Key, Payload> => ({
+  key: relation.key,
+  name: relation.name,
+  payload: relation.payload,
+  rows: relation.rows,
+});
 
 /**
- * Construct a closed relation whose rows carry their sources (the operator's ruling of 2026-11-05),
- * each row stated with its own: the source is host data, read by key, and never enters the
- * relation's constant.
+ * Index a closed relation's rows by their keys, for a reader that looks rows up: built once, where
+ * a serving path reads the relation by key ({@link lookupOf}).
+ *
+ * @param relation - The relation.
+ * @returns It, answering lookups.
+ */
+export const indexed = <Key extends readonly AnyKeyField[], Payload extends readonly AnyField[]>(
+  relation: Closed<Key, Payload>,
+): Indexed<Key, Payload> => {
+  const at = lookupOf(
+    relation.key,
+    relation.rows.map((row) => ({ row })),
+  );
+
+  return { ...relation, lookup: (key) => Option.map(at(key), ({ row }) => row) };
+};
+
+/**
+ * Construct a closed relation whose rows carry their sources (Bjorn's ruling of 2026-11-05),
+ * each row stated with its own: the source is host data, which never enters the relation's
+ * constant. It indexes nothing and checks no row.
  *
  * @param relation - The relation as a generator states it, each row with its source.
  * @param relation.key - Its key's fields in index order, the first the most significant digit.
  * @param relation.name - Its name, as its laws and its failures name it.
  * @param relation.payload - The fields outside the key, none for a set.
  * @param relation.rows - Its rows, each with where it comes from.
- * @returns The relation, answering each key's source, or the first reason it is refused.
+ * @returns The relation.
  */
 export const sourced = <
   const Key extends readonly AnyKeyField[],
@@ -693,12 +710,32 @@ export const sourced = <
   readonly name: string;
   readonly payload: Payload;
   readonly rows: readonly SourcedRow<Key, Payload>[];
-}): Result.Result<Sourced<Key, Payload>, ClosedRelationError> =>
-  Result.map(indexed(relation, relation.rows), (at): Sourced<Key, Payload> => ({
-    key: relation.key,
+}): Sourced<Key, Payload> => ({
+  key: relation.key,
+  name: relation.name,
+  payload: relation.payload,
+  rows: relation.rows.map(({ row }) => row),
+  sourced: relation.rows,
+});
+
+/**
+ * Index a sourced relation's rows and their sources by their keys, for a reader that looks either
+ * up: built once, where a serving path reads the relation by key ({@link lookupOf}).
+ *
+ * @param relation - The relation.
+ * @returns It, answering lookups and sources.
+ */
+export const indexedSourced = <
+  Key extends readonly AnyKeyField[],
+  Payload extends readonly AnyField[],
+>(
+  relation: Sourced<Key, Payload>,
+): IndexedSourced<Key, Payload> => {
+  const at = lookupOf(relation.key, relation.sourced);
+
+  return {
+    ...relation,
     lookup: (key) => Option.map(at(key), ({ row }) => row),
-    name: relation.name,
-    payload: relation.payload,
-    rows: relation.rows.map(({ row }) => row),
     sourceOf: (key) => Option.map(at(key), ({ source }) => source),
-  }));
+  };
+};

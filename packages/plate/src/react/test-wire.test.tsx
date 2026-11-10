@@ -7,10 +7,17 @@
 import { assert, describe, expectTypeOf, it, vi } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { encodeRedacted } from "#plate/codec/redacted.ts";
+import type { SavedResponsesJson } from "#plate/codec/session.ts";
 import { encodeItemView } from "#plate/codec/view.ts";
+import type { ItemViewPayloadSchema } from "#plate/codec/view.ts";
 import { configure } from "#plate/configuration.ts";
 import { encodeIntent, intentName } from "#plate/form/intent.ts";
-import type { TestServerOptions } from "#plate/react/contract.tsx";
+import type {
+  ItemViewPayload,
+  Posted,
+  TestServerOptions,
+  TestTransport,
+} from "#plate/react/contract.tsx";
 import { fetchTransport, NoTestProvider } from "#plate/react/test-provider.tsx";
 import { redact } from "#plate/render.ts";
 import { open } from "#plate/validate/open.ts";
@@ -105,5 +112,25 @@ describe("TestServerOptions", () => {
   it("names the session from the request and takes the clock", () => {
     expectTypeOf<TestServerOptions["sessionOf"]>().toEqualTypeOf<(request: Request) => string>();
     expectTypeOf<TestServerOptions["now"]>().toEqualTypeOf<(() => Date) | undefined>();
+  });
+});
+
+describe("ItemViewPayload", () => {
+  it("[W0-AN.2] ItemViewPayload carries disabled, values and an optional posted", () => {
+    expectTypeOf<ItemViewPayload["disabled"]>().toEqualTypeOf<boolean>();
+    expectTypeOf<ItemViewPayload["values"]>().toEqualTypeOf<SavedResponsesJson>();
+    expectTypeOf<ItemViewPayload["posted"]>().toEqualTypeOf<
+      Readonly<Record<string, readonly string[]>> | undefined
+    >();
+  });
+
+  it("[W0-AN.2] the view codec's Schema type is the contract's ItemViewPayload", () => {
+    expectTypeOf<typeof ItemViewPayloadSchema.Type>().toEqualTypeOf<ItemViewPayload>();
+  });
+});
+
+describe("TestTransport", () => {
+  it("[W0-AN.2] the transport's view is typed to the wire", () => {
+    expectTypeOf<ReturnType<TestTransport["view"]>>().toEqualTypeOf<Promise<Posted>>();
   });
 });

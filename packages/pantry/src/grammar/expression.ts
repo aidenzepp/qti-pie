@@ -4,23 +4,18 @@
  *
  * Each generator is a function of a composition's rosters and its vocabularies' facets, which
  * state the rows in the shape the QTI vocabulary states them. A row naming a handle the
- * composition has no code for is refused by {@link closed}.
+ * composition has no code for is a fault of the rows (`faultOf`), which the tests find and grizzle
+ * refuses.
  *
  * None of the four has a version digit, because each holds in 3.0.0 and 3.0.1 alike: the ASI 3.0
  * and 3.0.1 XSDs give the same arity rows, which `expression.test.ts` checks over the pinned XSD
  * cache, and the binding and mapping rules are stated once for both versions.
  */
 import { Option } from "effect";
-import type { Array as Arr, Result } from "effect";
+import type { Array as Arr } from "effect";
 import { closed, idField, int8Max, valueField } from "#pantry/grammar/closed.ts";
 import { maxOccursOf } from "#pantry/grammar/content.ts";
-import type {
-  Closed,
-  ClosedRelationError,
-  IdField,
-  Roster,
-  ValueField,
-} from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, Roster, ValueField } from "#pantry/grammar/closed.ts";
 import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";
 
 /**
@@ -200,13 +195,12 @@ const withoutMapKey: ReadonlySet<string> = new Set(["duration", "file"]);
  * @param input - The `NodeKind` roster and each vocabulary's facet.
  * @param input.kinds - The `NodeKind` roster.
  * @param input.facets - The vocabularies' facets.
- * @returns The relation, or the reason it has no constant, such as an expression kind the
- *   composition does not hold.
+ * @returns The relation.
  */
 export const operatorArity = (input: {
   readonly facets: readonly ExpressionFacet[];
   readonly kinds: Roster<string>;
-}): Result.Result<OperatorArity, ClosedRelationError> => {
+}): OperatorArity => {
   const rows = input.facets.flatMap((facet) => facet.arities);
 
   return closed({
@@ -233,13 +227,12 @@ export const operatorArity = (input: {
  * @param input - The rosters and each vocabulary's facet.
  * @param input.rosters - The `BaseType`, `TypedCardinality` and `NodeKind` rosters.
  * @param input.facets - The vocabularies' facets.
- * @returns The relation, or the reason it has no constant, such as an interaction kind the
- *   composition does not hold.
+ * @returns The relation.
  */
 export const bindingFit = (input: {
   readonly facets: readonly ExpressionFacet[];
   readonly rosters: Rosters;
-}): Result.Result<BindingFit, ClosedRelationError> =>
+}): BindingFit =>
   closed({
     key: [
       idField("baseType", input.rosters.baseTypes),
@@ -263,12 +256,12 @@ export const bindingFit = (input: {
  * @param input - The `NodeKind` roster and each vocabulary's facet.
  * @param input.kinds - The `NodeKind` roster.
  * @param input.facets - The vocabularies' facets.
- * @returns The relation, or the reason it has no constant.
+ * @returns The relation.
  */
 export const recordBindingFit = (input: {
   readonly facets: readonly ExpressionFacet[];
   readonly kinds: Roster<string>;
-}): Result.Result<RecordBindingFit, ClosedRelationError> =>
+}): RecordBindingFit =>
   closed({
     key: [idField("kind", input.kinds)],
     name: "RecordBindingFit",
@@ -281,11 +274,9 @@ export const recordBindingFit = (input: {
  * every base type that has a map key.
  *
  * @param baseTypes - The `BaseType` roster.
- * @returns The relation, or the reason it has no constant.
+ * @returns The relation.
  */
-export const mappableBaseType = (
-  baseTypes: Roster<string>,
-): Result.Result<MappableBaseType, ClosedRelationError> =>
+export const mappableBaseType = (baseTypes: Roster<string>): MappableBaseType =>
   closed({
     key: [idField("baseType", baseTypes)],
     name: "MappableBaseType",
@@ -685,11 +676,11 @@ export const resolutions = ["declared", "builtIn", "unresolved"] as const;
  * The tables a processing reference needs its declaration to hold, in code order: the
  * `ReferencedTable` roster's handles. `qti-map-response` needs a `qti-mapping` and
  * `qti-map-response-point` a `qti-area-mapping` (information model §2.11.3.29 and §2.11.3.30);
- * `qti-lookup-outcome-value` a `qti-match-table` or a `qti-interpolation-table` (§2.5.1.4); every
- * other reference `none`.
+ * `qti-lookup-outcome-value` a `qti-match-table` or a `qti-interpolation-table` (§2.5.1.4). Every
+ * other reference needs none, and claims none: a claim is a row of its own (`VariableRefTable`), so
+ * no handle stands for its absence.
  */
 export const referencedTables = [
-  "none",
   "qti-mapping",
   "qti-area-mapping",
   "qti-match-table",
@@ -776,8 +767,10 @@ export const rpTemplatePattern = (template: Exclude<RpTemplate, "none">): string
  * - `numeric`: `integer` when every typed operand is an integer, `unknown` when one is unknown, else
  *   `float` (information model §2.11.3: Sum, Product, Subtract, Min, Max);
  * - `container`: its operands' one base type, `any` for none, `unknown` for several;
- * - `first`: its one operand's base type (Index, Random);
- * - `second`: its second operand's type (Delete);
+ * - `first`: its operands' one base type, as `container`'s, of a single result (Index, Random, whose
+ *   one operand types it);
+ * - `second`: its later operands' one base type and one cardinality, `any` and no cardinality
+ *   (NULL's) for none, `unknown` for several (Delete, whose second operand types it);
  * - `declared`: the type of the variable its `identifier` names (Variable, Default, Correct);
  * - `attribute`: its own attribute's (BaseValue's and TestVariables' `base-type`, MathOperator's
  *   `name`).

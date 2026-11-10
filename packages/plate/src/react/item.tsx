@@ -52,6 +52,13 @@ import { drawInstance } from "#plate/seed.ts";
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
 /**
+ * The key of an interaction root: every interaction's key ends in `-interaction`, and the chrome's
+ * (`item`, `test-navigation`) and the content slots' do not. {@link isInteractionRoot} is the same
+ * rule at run time.
+ */
+type InteractionRootKey = Extract<InteractionKey, `${string}-interaction`>;
+
+/**
  * Each interaction's component, by its key: what `Item` places at a root of that kind.
  */
 const components = {
@@ -77,17 +84,27 @@ const components = {
   "text-entry-interaction": TextEntry,
   "upload-interaction": Upload,
 } as const satisfies {
-  readonly [I in Exclude<InteractionKey, "item" | "test-navigation">]: InteractionComponent<I>;
+  readonly [I in InteractionRootKey]: InteractionComponent<I>;
 };
+
+/**
+ * Whether a key is an interaction root's, so `Item` places a component at it.
+ *
+ * @param key The key.
+ * @returns Whether it ends in `-interaction`.
+ */
+const isInteractionRoot = (key: InteractionKey): key is InteractionRootKey =>
+  key.endsWith("-interaction");
 
 /**
  * Give the component `Item` places at an interaction root of a key.
  *
  * @param key The interaction's key.
- * @returns Its component, or undefined for a key no interaction component has.
+ * @returns Its component, or undefined for a key no interaction component has: the chrome's and
+ *   the content slots'.
  */
 const componentFor = (key: InteractionKey): InteractionComponent<InteractionKey> | undefined =>
-  key === "item" || key === "test-navigation" ? undefined : components[key];
+  isInteractionRoot(key) ? components[key] : undefined;
 
 /**
  * Project the item in scope: its tree from the item's root, each interaction root through its

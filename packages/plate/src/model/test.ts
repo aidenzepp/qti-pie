@@ -27,6 +27,7 @@ import type { ReaderKit } from "#plate/interactions/contract.ts";
 import {
   attributeOf,
   childrenNamed,
+  collapseXmlSpace,
   elementsOf,
   floatOf,
   greatestInt,
@@ -552,7 +553,7 @@ const itemRef = (
       }),
       control,
       fixed,
-      href: trimXmlSpace(href).replaceAll(xmlWhitespaceRun, " "),
+      href: collapseXmlSpace(href),
       identifier,
       kind: "item-ref",
       mappings: new Map(mappings),
@@ -710,6 +711,15 @@ interface FeatureWalk {
 }
 
 /**
+ * The way a feature walk reads an expression element: the test's expression reading, recording
+ * its marks where the walk's go.
+ *
+ * @param marks Where the walk records its marks.
+ * @returns The reading.
+ */
+type FeatureReading = (marks: MarkedFeature[]) => ExpressionReading;
+
+/**
  * The owner of what sits directly in the test: the test itself.
  */
 const testOwner: FeatureOwner = { kind: "test" };
@@ -818,13 +828,16 @@ const freshKitOf = (source: SourceDocument, element: SourceElement): FreshKit =>
 
 /**
  * Read an element a test-feature module names by the module's `parse`, which the way to record
- * the element's mark, its owner, its path, the reader kit over the test document and the readers
- * are handed to: a stub records the mark and reads no node; a module that has landed reads its
- * node, which is collected under the module's key. The features the module's reader kit recorded
- * join the marks once `parse` returns ({@link carryRecorded}).
+ * the element's mark, the way to read an expression, its owner, its path, the reader kit over the
+ * test document and the readers are handed to: a stub records the mark and reads no node; a module
+ * that has landed reads its node, which is collected under the module's key. An expression the
+ * module reads is read as the test's outcome processing reads one, and what the reading marks is
+ * recorded where the walk's marks go. The features the module's reader kit recorded join the
+ * marks once `parse` returns ({@link carryRecorded}).
  *
  * @param build The build.
  * @param into Where the marks and the nodes are collected.
+ * @param reading The way to build the test's expression reading over the walk's marks.
  * @param module The element's module.
  * @param visit The element the walk reached, with its path.
  * @param owner The owner of the element.
@@ -833,6 +846,7 @@ const freshKitOf = (source: SourceDocument, element: SourceElement): FreshKit =>
 const readFeature = (
   build: ModelWalk,
   into: FeatureWalk,
+  reading: FeatureReading,
   module: TestFeatureModule<TestFeatureKey, unknown>,
   visit: Visit,
   owner: FeatureOwner,
@@ -842,6 +856,7 @@ const readFeature = (
 
   return Result.map(
     module.parse(element, {
+      expression: (child) => readExpression(reading(into.marks), child),
       mark: (feature) => {
         into.marks.push({ feature, path, shown: "mark" });
 
@@ -884,12 +899,14 @@ const readFeature = (
  * @param build The build.
  * @param placed The marks a reader gave, keyed by the element they stand at.
  * @param features The test-feature modules.
+ * @param reading The way to build the test's expression reading, for a module that reads one.
  * @returns The marks, each once per feature and path, and the nodes; or a module's refusal.
  */
 const marksOf = (
   build: ModelWalk,
   placed: ReadonlyMap<SourceElement, readonly MarkedFeature[]>,
   features: TestFeatureTable,
+  reading: FeatureReading,
 ): Result.Result<FeatureWalk, Refusal> =>
   Result.gen(function* walkFeatures() {
     const source = build.document;
@@ -926,7 +943,7 @@ const marksOf = (
           declared.add(element);
         }
       } else if (module !== undefined) {
-        yield* readFeature(build, into, module, visit, owner);
+        yield* readFeature(build, into, reading, module, visit, owner);
         quiet.add(element);
       } else if (isQti(element) && element.local === "qti-item-session-control") {
         marks.push(...controlMarks(element, path));
@@ -1878,7 +1895,9 @@ export const buildTest = (
       placed.set(processing.value, read.marks);
     }
 
-    const walked = yield* marksOf(build, placed, features);
+    const walked = yield* marksOf(build, placed, features, (marks) =>
+      processingReading(build, names.named, marks),
+    );
     const held = featuresOf(walked.nodes);
     const test: Test = {
       declared: names.declared,
