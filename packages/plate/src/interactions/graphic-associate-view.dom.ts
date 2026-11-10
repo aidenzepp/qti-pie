@@ -495,7 +495,7 @@ export const createPairList = (root: HTMLElement): PairList => {
 
       const current = new Set<Element>(items);
 
-      for (const item of list.querySelectorAll(":scope > *")) {
+      for (const item of list.querySelectorAll(`:scope > [data-slot="${markers.pair}"]`)) {
         if (!current.has(item)) {
           item.remove();
         }
