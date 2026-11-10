@@ -6,8 +6,10 @@ import {
   decode,
   encode,
   entryName,
+  isPosted,
   isXmlText,
   partition,
+  pointEntryNames,
 } from "#plate/form/encoding.ts";
 import type {
   Binding,
@@ -16,7 +18,7 @@ import type {
   RecordBinding,
   ValueBinding,
 } from "#plate/form/encoding.ts";
-import { format } from "#plate/model/values.ts";
+import { format, modelledBaseTypes } from "#plate/model/values.ts";
 import type {
   RecordField,
   RecordValue,
@@ -93,6 +95,51 @@ const identifier = (text: string): Single => ({ baseType: "identifier", value: t
  * @returns The value.
  */
 const stringOf = (text: string): Single => ({ baseType: "string", value: text });
+
+/**
+ * Construct a point value.
+ *
+ * @param x The horizontal coordinate.
+ * @param y The vertical coordinate.
+ * @returns The value.
+ */
+const pointOf = (x: bigint, y: bigint): Single => ({ baseType: "point", value: [x, y] });
+
+/**
+ * Construct a boolean value.
+ *
+ * @param truth The boolean.
+ * @returns The value.
+ */
+const booleanOf = (truth: boolean): Single => ({ baseType: "boolean", value: truth });
+
+/**
+ * The two entry names a point value of the response `RESPONSE` posts under.
+ */
+const [xName, yName] = pointEntryNames(entryName(instance, "RESPONSE"));
+
+/**
+ * Construct the entries a form posts for a point response `RESPONSE`: every `.x` entry, then every
+ * `.y` entry, so the test chooses how many of each.
+ *
+ * @param xs The values posted under the `.x` name, in order.
+ * @param ys The values posted under the `.y` name, in order.
+ * @returns The entries.
+ */
+const postedPoints = (
+  xs: readonly (string | Blob)[],
+  ys: readonly (string | Blob)[],
+): readonly Entry[] => [...xs.map((x): Entry => [xName, x]), ...ys.map((y): Entry => [yName, y])];
+
+/**
+ * Give the reason posted entries are refused under a binding.
+ *
+ * @param entries The posted entries.
+ * @param bound The binding.
+ * @returns The reason, or none when the entries decode.
+ */
+const reasonOf = (entries: readonly Entry[], bound: ValueBinding): Option.Option<string> =>
+  Option.map(Result.getFailure(decode(entries, bound)), ({ reason }) => reason);
 
 /**
  * Construct a field of a record.
@@ -651,6 +698,164 @@ describe("encode and decode", () => {
       );
     }),
   );
+});
+
+describe("a point or boolean binding", () => {
+  it("posts identifier, string, integer, float, directedPair, pair, point and boolean, and nothing else", () => {
+    assert.deepStrictEqual(modelledBaseTypes.filter(isPosted), [
+      "identifier",
+      "boolean",
+      "integer",
+      "float",
+      "string",
+      "point",
+      "pair",
+      "directedPair",
+    ]);
+    assert.isFalse(isPosted("duration"));
+    assert.isFalse(isPosted("uri"));
+    assert.isFalse(isPosted("file"));
+  });
+
+  it("names a point's two entries <name>.x and <name>.y", () => {
+    assert.deepStrictEqual(pointEntryNames("i.R"), ["i.R.x", "i.R.y"]);
+  });
+
+  it.effect(
+    "encodes a point as two entries, x then y, and decodes them back, single, ordered and multiple",
+    () =>
+      Effect.gen(function* pointRoundTrip() {
+        const single = binding("point");
+        const ordered = binding("point", "ordered");
+        const multiple = binding("point", "multiple");
+        const one = value(single, pointOf(3n, 4n));
+        const two = value(ordered, pointOf(-1n, 20n), pointOf(5n, 0n));
+
+        assert.deepStrictEqual(encode(one, single), [
+          [xName, "3"],
+          [yName, "4"],
+        ]);
+        assert.deepStrictEqual(encode(two, ordered), [
+          [xName, "-1"],
+          [yName, "20"],
+          [xName, "5"],
+          [yName, "0"],
+        ]);
+        assert.deepStrictEqual(yield* roundTrip(single, one), one);
+        assert.deepStrictEqual(yield* roundTrip(ordered, two), two);
+        assert.deepStrictEqual(
+          yield* roundTrip(multiple, value(multiple, pointOf(1n, 2n), pointOf(1n, 2n))),
+          value(multiple, pointOf(1n, 2n), pointOf(1n, 2n)),
+        );
+      }),
+  );
+
+  it.effect(
+    "decodes a point from the .x and .y entries by position, trimmed, skipping a position where both are empty",
+    () =>
+      Effect.gen(function* pointPositions() {
+        const single = binding("point");
+        const ordered = binding("point", "ordered");
+
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(postedPoints([" 3 "], ["\t4\n"]), single)),
+          value(single, pointOf(3n, 4n)),
+        );
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(postedPoints(["1", "", "5"], ["2", "", "6"]), ordered)),
+          value(ordered, pointOf(1n, 2n), pointOf(5n, 6n)),
+        );
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(postedPoints([""], [""]), single)),
+          value(single),
+        );
+        assert.deepStrictEqual(yield* Effect.fromResult(decode([], single)), value(single));
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode([[entryName(instance, "RESPONSE"), "3 4"]], single)),
+          value(single),
+          "an entry under the bare name is not a point's",
+        );
+      }),
+  );
+
+  it("refuses a point with a missing partner, a non-integer coordinate, unequal counts, a second pair on a single, a file and a bad character", () => {
+    const single = binding("point");
+    const ordered = binding("point", "ordered");
+
+    assert.deepStrictEqual(reasonOf(postedPoints(["3"], []), single), Option.some("point"));
+    assert.deepStrictEqual(reasonOf(postedPoints(["3"], [""]), single), Option.some("point"));
+    assert.deepStrictEqual(reasonOf(postedPoints([""], ["4"]), single), Option.some("point"));
+    assert.deepStrictEqual(reasonOf(postedPoints(["1.5"], ["4"]), single), Option.some("point"));
+    assert.deepStrictEqual(reasonOf(postedPoints(["3"], ["1e2"]), single), Option.some("point"));
+    assert.deepStrictEqual(reasonOf(postedPoints(["3 4"], ["5"]), single), Option.some("point"));
+    assert.deepStrictEqual(
+      reasonOf(postedPoints(["1", "3"], ["2"]), ordered),
+      Option.some("point"),
+      "two x entries and one y",
+    );
+    assert.deepStrictEqual(
+      reasonOf(postedPoints(["1", "3"], ["2", "4"]), single),
+      Option.some("single-many"),
+    );
+    assert.deepStrictEqual(
+      reasonOf(postedPoints(["3"], [new Blob(["4"])]), single),
+      Option.some("file"),
+    );
+    assert.deepStrictEqual(
+      reasonOf(postedPoints(["3"], ["4\u0000"]), single),
+      Option.some("character"),
+    );
+
+    const refused = Result.getFailure(decode(postedPoints(["3"], []), single));
+    assert.deepStrictEqual(
+      refused.pipe(Option.map(({ entry }) => entry)),
+      Option.some(entryName(instance, "RESPONSE")),
+    );
+    assert.isTrue(
+      Option.exists(refused, (malformed) =>
+        malformed.message.includes("two whole numbers, x in its .x entry and y in its .y entry"),
+      ),
+    );
+  });
+
+  it.effect(
+    "encodes a boolean as true or false and decodes the lexical form, single and multiple",
+    () =>
+      Effect.gen(function* booleanRoundTrip() {
+        const single = binding("boolean");
+        const multiple = binding("boolean", "multiple");
+        const truth = value(single, booleanOf(true));
+        const both = value(multiple, booleanOf(false), booleanOf(true));
+
+        assert.deepStrictEqual(encode(truth, single), posted("true"));
+        assert.deepStrictEqual(encode(both, multiple), posted("false", "true"));
+        assert.deepStrictEqual(yield* roundTrip(single, truth), truth);
+        assert.deepStrictEqual(yield* roundTrip(multiple, both), both);
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(posted("false"), single)),
+          value(single, booleanOf(false)),
+        );
+        assert.deepStrictEqual(yield* Effect.fromResult(decode([], single)), value(single));
+        assert.deepStrictEqual(yield* Effect.fromResult(decode(posted(""), single)), value(single));
+      }),
+  );
+
+  it("refuses a boolean that is not the lexical true or false", () => {
+    const single = binding("boolean");
+
+    for (const text of ["yes", "1", "0", "TRUE", " true", "True"]) {
+      assert.deepStrictEqual(reasonOf(posted(text), single), Option.some("boolean"), text);
+    }
+    assert.deepStrictEqual(reasonOf(posted("true", "false"), single), Option.some("single-many"));
+    assert.isTrue(
+      Option.exists(
+        Result.getFailure(decode(posted("yes"), single)),
+        (malformed) =>
+          malformed.message ===
+          `The form entry "${single.name}" is not a boolean; post true or false, as the form gives it.`,
+      ),
+    );
+  });
 });
 
 describe("a record binding", () => {
