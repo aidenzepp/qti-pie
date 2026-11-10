@@ -10,6 +10,7 @@ import { decode, entryName } from "#plate/form/encoding.ts";
 import {
   checkResponses,
   configure,
+  h,
   open,
   postings,
   redact,
@@ -642,6 +643,81 @@ describe("the Hotspot module", () => {
             assert.lengthOf(partsIn(choice, "label"), 1, file);
           }
         }
+      }),
+  );
+
+  it.effect(
+    "[Q-10] an Outline swap to a div or a custom element is refused root-not-allowed, since under it the shapes would draw nothing",
+    () =>
+      Effect.gen(function* outlineRefused() {
+        const accepted = yield* accept("hotspot.xml");
+        const configuration = yield* configure({});
+
+        for (const tag of ["div", "qti-outline"]) {
+          const result = render(redact(accepted), configuration, {
+            instance,
+            parts: {
+              "hotspot-interaction": { outline: (props, children) => h(tag, props, children) },
+            },
+          });
+
+          assert.isTrue(Result.isFailure(result), tag);
+          if (Result.isSuccess(result)) {
+            return;
+          }
+
+          const refused = result.failure;
+
+          assert.strictEqual(refused._tag, "PartSwapRefused", tag);
+          if (refused._tag !== "PartSwapRefused") {
+            return;
+          }
+
+          assert.strictEqual(refused.cause, "root-not-allowed", tag);
+          assert.strictEqual(refused.interaction, "hotspot-interaction", tag);
+          assert.strictEqual(refused.part, "outline", tag);
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-10] an Outline swap to an svg is kept: each Outline is the replacement with its one shape inside, the marker, aria-hidden and viewBox merged",
+    () =>
+      Effect.gen(function* outlineKept() {
+        const accepted = yield* accept("hotspot.xml");
+        const tree = renderTree(redact(accepted), yield* configure({}), {
+          parts: {
+            "hotspot-interaction": {
+              outline: (props, children) => h("svg", { ...props, "data-swapped": "yes" }, children),
+            },
+          },
+        });
+        const outlines = partsIn(tree, "outline");
+
+        assert.lengthOf(outlines, 4);
+        for (const outline of outlines) {
+          assert.strictEqual(outline.tag, "svg");
+          assert.strictEqual(outline.attrs["data-swapped"], "yes");
+          assert.strictEqual(outline.attrs["aria-hidden"], "true");
+          assert.strictEqual(outline.attrs["viewBox"], "0 0 400 300");
+        }
+        assert.deepStrictEqual(
+          outlines.map((outline) => shapeOf(outline).tag),
+          ["rect", "circle", "polygon", "rect"],
+        );
+        assert.deepStrictEqual(shapeOf(outlines[3] ?? tree), {
+          attrs: {
+            "data-shape": "default",
+            fill: "none",
+            height: "100%",
+            "pointer-events": "visible",
+            width: "100%",
+            x: "0",
+            y: "0",
+          },
+          tag: "rect",
+        });
+        assert.isTrue(roundTrips(tree));
       }),
   );
 });
