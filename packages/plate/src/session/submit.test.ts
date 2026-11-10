@@ -1,4 +1,4 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { begin } from "#plate/begin.ts";
 import { decodeRecord } from "#plate/codec/record.ts";
@@ -8,6 +8,8 @@ import type { Configuration } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
 import type { SourceElement } from "#plate/document/source.ts";
+import type * as Adaptive from "#plate/engine/adaptive.ts";
+import type { AdaptivePolicy } from "#plate/engine/adaptive.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
 import { runOutcomes, testScopeOf } from "#plate/engine/outcome.ts";
 import { drawBelow, drawStream, outcomeLabel } from "#plate/engine/random.ts";
@@ -21,7 +23,7 @@ import { attemptLimits } from "#plate/session/control.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import { itemView, present, recordStep, startTest } from "#plate/session/start.ts";
 import { SubmissionRefused, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
-import type { SubmissionRule } from "#plate/session/submit.ts";
+import type { SubmissionFailure, SubmissionRule } from "#plate/session/submit.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
@@ -2521,6 +2523,189 @@ describe("submitItem and a record response", () => {
           ["ANSWER"],
         );
         assert.strictEqual(itemAt(accepted(submit("12", 6)), 1).record.numAttempts, 1);
+      }),
+  );
+});
+
+/**
+ * Write the text of a hand-built adaptive Choice item: `RESPONSE`, a single identifier whose
+ * correct response is `A`, and processing that sets `SCORE` to 1 and the built-in
+ * `completionStatus` to `completed` when `RESPONSE` is correct, and `SCORE` to 0 otherwise, so the
+ * item completes when the candidate gets it right and not before.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const adaptiveItemXml = (identifier: string): string =>
+  [
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="true" time-dependent="false">`,
+    '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+    "<qti-correct-response><qti-value>A</qti-value></qti-correct-response>",
+    "</qti-response-declaration>",
+    '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+    "<qti-item-body>",
+    choiceXml("RESPONSE", ["A", "B", "C"].map(plainChoice).join("")),
+    "</qti-item-body>",
+    "<qti-response-processing><qti-response-condition><qti-response-if>",
+    '<qti-match><qti-variable identifier="RESPONSE"/><qti-correct identifier="RESPONSE"/></qti-match>',
+    '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>',
+    '<qti-set-outcome-value identifier="completionStatus"><qti-base-value base-type="identifier">completed</qti-base-value></qti-set-outcome-value>',
+    "</qti-response-if><qti-response-else>",
+    '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">0</qti-base-value></qti-set-outcome-value>',
+    "</qti-response-else></qti-response-condition></qti-response-processing>",
+    "</qti-assessment-item>",
+  ].join("");
+
+/**
+ * The adaptive policy's module file, which {@link withAdaptiveAnswers} mocks.
+ */
+const policyFile = "#plate/engine/adaptive.ts";
+
+/**
+ * Say whether a record's built-in `completionStatus` is `completed`.
+ *
+ * @param record The record.
+ * @returns Whether the item's processing completed it.
+ */
+const completed = (record: ItemRecord): boolean => {
+  const status = record.outcomes["completionStatus"]?.values[0];
+
+  return status?.baseType === "identifier" && status.value === "completed";
+};
+
+/**
+ * Run an effect with an adaptive policy that answers for an adaptive item as the adaptive items
+ * module will: closed when its record's `completionStatus` is `completed`, and no attempt limit;
+ * a non-adaptive item keeps the stub's answers. Every module that reads the policy is loaded
+ * afresh, and the stub restored after.
+ *
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withAdaptiveAnswers = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(policyFile, async (importOriginal) => {
+      const actual = await importOriginal<typeof Adaptive>();
+      const answers: AdaptivePolicy = {
+        ...actual.adaptivePolicy,
+        closed: (adaptive, record, limit) =>
+          adaptive ? completed(record) : actual.adaptivePolicy.closed(adaptive, record, limit),
+        limit: (adaptive, limit) => (adaptive ? 0 : limit),
+      };
+
+      return { ...actual, adaptivePolicy: answers };
+    });
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(policyFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
+ * Give the rule a transition's refusal names, by the failure's tag, so a refusal from a module
+ * loaded afresh under a mock, whose class is not this file's, is read as one.
+ *
+ * @param result What the transition returned.
+ * @returns The rule, or `accepted` when the transition succeeded.
+ */
+const ruleOf = (result: Result.Result<TestSession, SubmissionFailure>): string =>
+  Result.match(result, {
+    onFailure: (failure) =>
+      failure._tag === "SubmissionRefused"
+        ? failure.rule
+        : assert.fail(`expected SubmissionRefused, not ${failure._tag}`),
+    onSuccess: () => "accepted",
+  });
+
+describe("submitItem and the adaptive policy", () => {
+  it.effect(
+    "[W0-BD] a policy that keeps an adaptive item open past its limit is consulted by the submission: a second attempt is accepted, and one after completion is item-closed",
+    () =>
+      withAdaptiveAnswers(
+        Effect.gen(function* adaptiveSubmission() {
+          const submission = yield* Effect.promise(() => import("#plate/session/submit.ts"));
+          const sessions = yield* Effect.promise(() => import("#plate/session/start.ts"));
+          const delivery = yield* builtDelivery(
+            "adaptive",
+            [partOf("part", ["grows"], { control: 'max-attempts="1"' })],
+            [["grows", adaptiveItemXml("grows")]],
+          );
+          const configuration = yield* configure({});
+          const begun = Result.getOrElse(
+            sessions.startTest(delivery.test, delivery.items, configuration, {
+              instance,
+              now: startedAt,
+            }),
+            (failure) => assert.fail(`startTest refused: ${failure.message}`),
+          );
+          const submit = (session: TestSession, choice: string, seconds: number) =>
+            submission.submitItem(
+              delivery.test,
+              delivery.items,
+              session,
+              stepOf("submit-item", { RESPONSE: chosen(choice) }),
+              configuration,
+              { now: after(seconds) },
+            );
+          const disabledAt = (session: TestSession): boolean =>
+            Result.getOrElse(
+              sessions.itemView(delivery.test, session, configuration, 1),
+              (failure) => assert.fail(`itemView failed: ${failure.message}`),
+            ).disabled;
+
+          assert.isTrue(itemAt(begun, 1).adaptive);
+
+          const first = accepted(submit(begun, "B", 5));
+          const second = accepted(submit(first, "C", 6));
+
+          assert.strictEqual(itemAt(second, 1).record.numAttempts, 2);
+          assert.isFalse(completed(itemAt(second, 1).record));
+          assert.isFalse(disabledAt(second));
+
+          const third = accepted(submit(second, "A", 7));
+
+          assert.isTrue(completed(itemAt(third, 1).record));
+          assert.deepStrictEqual(scoreOf(itemAt(third, 1).record), scored(1));
+          assert.isTrue(disabledAt(third));
+          assert.strictEqual(ruleOf(submit(third, "B", 8)), "item-closed");
+        }),
+      ),
+  );
+
+  it.effect(
+    "[W0-BD] the stub policy refuses as today: the second attempt at an adaptive item of max-attempts 1 is attempts-exhausted",
+    () =>
+      Effect.gen(function* stubSubmission() {
+        const delivery = yield* builtDelivery(
+          "adaptive-stub",
+          [partOf("part", ["grows"], { control: 'max-attempts="1"' })],
+          [["grows", adaptiveItemXml("grows")]],
+        );
+        const configuration = yield* configure({});
+        const begun = started(delivery, configuration);
+        const submit = (session: TestSession, choice: string, seconds: number) =>
+          submitItem(
+            delivery.test,
+            delivery.items,
+            session,
+            stepOf("submit-item", { RESPONSE: chosen(choice) }),
+            configuration,
+            { now: after(seconds) },
+          );
+
+        assert.isTrue(itemAt(begun, 1).adaptive);
+
+        const first = accepted(submit(begun, "B", 5));
+
+        assert.strictEqual(itemAt(first, 1).record.numAttempts, 1);
+        assert.isFalse(completed(itemAt(first, 1).record));
+        assert.isTrue(closedAt(delivery, first, 1));
+        assert.strictEqual(refusedRule(submit(first, "A", 6)), "attempts-exhausted");
       }),
   );
 });

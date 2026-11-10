@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect";
 import { packageBudget, readZip, unsafeEntryPath } from "#pantry/package/zip.ts";

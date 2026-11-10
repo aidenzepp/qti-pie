@@ -6,11 +6,12 @@
  * dormant until one is enabled: the fifteen predefined names of QTI's card `support` vocabulary
  * and its `ext:` extensions. The delivery layer holds the preferences a Personal Needs and
  * Preferences document gives, which is a separate AfA PNP 3.0 document QTI never references: the
- * additional testing time, answer masking, read-aloud, the display preferences, the tools, and the
- * preferences a renderer reads to choose and show catalog content (the braille preferences, the
- * sign language, the keyword translation's language, breaks, and whether a long description shows
- * visually). A host fills it from a PNP, from a testing program's choice for every candidate, or by
- * hand; plate reads no PNP here.
+ * additional testing time, answer masking, read-aloud, the display preferences (the text
+ * preferences and the polarity colours included), the tools, and the preferences a renderer reads
+ * to choose and show catalog content (the braille preferences, the sign language, the keyword
+ * translation's language, breaks, whether captions and alternative text are on, and whether a long
+ * description shows visually). A host fills it from a PNP, from a testing program's choice for
+ * every candidate, or by hand; plate reads no PNP here.
  *
  * Beside the contract, {@link PnpSupports} widens it with the preferences a PNP gives that no
  * renderer reads yet, as `readPnp` reads them, and {@link noPnpSupports} sets none of them. When a
@@ -117,6 +118,11 @@ export interface DisplayPreferences {
    */
   readonly invertDisplayPolarity: boolean;
   /**
+   * The colours `invert-display-polarity` names, each as written (A-20), none when the feature is
+   * off; the inversion itself is `invertDisplayPolarity`.
+   */
+  readonly invertedColors: Option.Option<PolarityColors>;
+  /**
    * Whether text of the class `qti-keyword-emphasis` is given more emphasis (A-23).
    */
   readonly keywordEmphasis: boolean;
@@ -134,6 +140,11 @@ export interface DisplayPreferences {
    */
   readonly magnification: Option.Option<number>;
   /**
+   * The `text-appearance` preferences beyond the two colours (A-42b), none when the feature is
+   * off; the colours are `textAppearance`.
+   */
+  readonly text: Option.Option<TextPreferences>;
+  /**
    * The text and background colours (A-42a), none for the defaults.
    */
   readonly textAppearance: Option.Option<TextAppearance>;
@@ -145,6 +156,11 @@ export interface DisplayPreferences {
  */
 export interface Supports {
   readonly additionalTestingTime: Option.Option<AdditionalTestingTime>;
+  /**
+   * Whether the PNP feature `alternative-text` is on: a PNP turns it on by assigning it without
+   * `prohibit-set` naming it.
+   */
+  readonly alternativeText: boolean;
   /**
    * Whether a Choice's choices start covered, each uncovered by the candidate (A-8).
    */
@@ -158,6 +174,11 @@ export interface Supports {
    * `environment`'s `breaks`.
    */
   readonly breaks: boolean;
+  /**
+   * Whether the PNP feature `captions` is on: a PNP turns it on by assigning it without
+   * `prohibit-set` naming it.
+   */
+  readonly captions: boolean;
   /**
    * The catalog supports enabled, predefined or `ext:`: a card naming one shows its content.
    */
@@ -197,16 +218,20 @@ export interface Supports {
  */
 export const noSupports: Supports = {
   additionalTestingTime: Option.none(),
+  alternativeText: false,
   answerMasking: false,
   braille: Option.none(),
   breaks: false,
+  captions: false,
   catalog: new Set(),
   display: {
     invertDisplayPolarity: false,
+    invertedColors: Option.none(),
     keywordEmphasis: false,
     languageOfInterface: Option.none(),
     layoutSingleColumn: false,
     magnification: Option.none(),
+    text: Option.none(),
     textAppearance: Option.none(),
   },
   keywordTranslationLanguage: Option.none(),
@@ -472,7 +497,7 @@ export interface FontSize {
 }
 
 /**
- * The `text-appearance` feature's preferences beyond the colours {@link Supports} carries.
+ * The `text-appearance` feature's preferences beyond the colours {@link TextAppearance} carries.
  *
  * `colorTheme` is the guide's `color-theme`, which the schema lacks (row 1), so it has no
  * vocabulary and is the value as written. `letterSpacing` is the number as written, in pixels
@@ -532,9 +557,9 @@ export interface PnpSupports extends Supports {
   readonly atStart: ReadonlySet<PnpFeature>;
   /**
    * The active features: every feature the profile assigns and `prohibit-set` does not name, the
-   * features the contract has no field for (`captions`, `alternative-text`, `item-translation`,
-   * `encouragement`) included. A feature only a set names, such as one in `optional` that the
-   * profile does not assign, is not active, and its settings are not read.
+   * features the contract has no field for (`item-translation`, `encouragement`) included. A
+   * feature only a set names, such as one in `optional` that the profile does not assign, is not
+   * active, and its settings are not read.
    */
   readonly features: ReadonlySet<PnpFeature>;
   readonly hazards: ReadonlySet<HazardAvoidance>;
@@ -544,7 +569,6 @@ export interface PnpSupports extends Supports {
    */
   readonly ignored: readonly string[];
   readonly inputRequirements: ReadonlySet<InputRequirement>;
-  readonly invertedColors: Option.Option<PolarityColors>;
   /**
    * The `xml:lang` of each language feature, as written.
    */
@@ -559,7 +583,6 @@ export interface PnpSupports extends Supports {
    */
   readonly prohibited: ReadonlySet<PnpFeature>;
   readonly spoken: Option.Option<SpokenPreferences>;
-  readonly text: Option.Option<TextPreferences>;
   readonly toolSettings: ToolSettings;
 }
 
@@ -574,11 +597,9 @@ export const noPnpSupports: PnpSupports = {
   hazards: new Set(),
   ignored: [],
   inputRequirements: new Set(),
-  invertedColors: Option.none(),
   languages: new Map(),
   optional: new Set(),
   prohibited: new Set(),
   spoken: Option.none(),
-  text: Option.none(),
   toolSettings: { calculatorType: Option.none(), highlightColor: Option.none() },
 };

@@ -48,7 +48,7 @@ type CaseKind =
   | "m:mtr";
 
 /**
- * Write an element of a kind, which governs no type (`GoverningOf` gives MathML's `none`).
+ * Write an element of a kind, which no named type governs.
  *
  * @param kind - Its kind.
  * @param children - Its children, in order.
@@ -63,7 +63,7 @@ const elementOf = (
   _tag: "element",
   attributes,
   children,
-  governs: "none",
+  governs: Option.none(),
   kind,
   namespaces: [],
   prefix: "m",
