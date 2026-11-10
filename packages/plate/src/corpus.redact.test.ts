@@ -2,6 +2,10 @@ import { isDeepStrictEqual } from "node:util";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option, Predicate, Result, Schema } from "effect";
 import { RedactedSchema } from "#plate/codec/redacted.ts";
+import { bodyModuleFor } from "#plate/content/modules.ts";
+import { readSource } from "#plate/document/read.ts";
+import { walk as walkSource } from "#plate/document/source.ts";
+import type { SourceElement } from "#plate/document/source.ts";
 import { configure, encodeRedacted, open, redact } from "#plate/index.ts";
 import type { Accepted, Configuration, RedactedJson } from "#plate/index.ts";
 import { formatPrinted } from "#plate/engine/format.ts";
@@ -144,6 +148,11 @@ interface Subject {
   readonly bodySource: string;
   readonly item: Item;
   /**
+   * The texts plate's own normalisation writes into the body before the walk reads it
+   * ({@link normalisedTexts}), which no secret of the item can be.
+   */
+  readonly normalised: readonly string[];
+  /**
    * What `encodeRedacted(redact(…))` gave for the item.
    */
   readonly json: RedactedJson;
@@ -194,6 +203,48 @@ const bodySourceOf = (bytes: Uint8Array): string => {
 
   return text.slice(start, text.indexOf(">", last) + 1);
 };
+
+/**
+ * Collect every attribute value and every run of text an element holds, at any depth.
+ *
+ * @param element The element.
+ * @returns Its texts, in document order.
+ */
+const textsOf = (element: SourceElement): readonly string[] => [
+  ...element.attributes.map((attribute) => attribute.value),
+  ...element.children.flatMap((child) => {
+    if (child.kind === "text") {
+      return [child.text];
+    }
+
+    return child.kind === "element" ? textsOf(child) : [];
+  }),
+];
+
+/**
+ * Give the texts the content modules' own normalisation writes into a member's body before the
+ * walk reads it: for each element a body-placed module reads, every attribute value and text of
+ * what its `normalise` gives, at any depth, when it has one. What plate itself writes gives nothing
+ * of the author's away, so the secrets exclude these beside the body's source: MathML's `mfenced`
+ * expansion writes `fence="true"` and `separator="true"` (MathML 3 section 3.3.8) into a body
+ * whose source spells neither, and an item that scores by a base value `true` would otherwise
+ * count it as a leak.
+ *
+ * @param member The opened member.
+ * @returns The texts, in document order; none when the member's source does not read.
+ */
+const normalisedTexts = (member: Member): readonly string[] =>
+  Exit.match(Effect.runSyncExit(readSource(member.location, member.bytes)), {
+    onFailure: () => [],
+    onSuccess: (source) =>
+      [...walkSource(source)].flatMap(({ element }) =>
+        Option.match(bodyModuleFor(element), {
+          onNone: () => [],
+          onSome: (module) =>
+            module.normalise === undefined ? [] : textsOf(module.normalise(element)),
+        }),
+      ),
+  });
 
 /**
  * Give the spellings a text may take in markup: as it reads, and escaped as a serialiser writes
@@ -333,9 +384,10 @@ const candidatesOf = (item: Item): readonly Secret[] => [
 
 /**
  * Give an item's secrets (Q16): each candidate three characters or longer that occurs nowhere in
- * its body source or its title, once per text.
+ * its body source, in what plate's own normalisation writes into the body, or its title, once per
+ * text.
  *
- * @param subject The item, with its body source.
+ * @param subject The item, with its body source and the normalisation's texts.
  * @returns The secrets, each with the first place the item holds it.
  */
 const secretsOf = (subject: Subject): readonly Secret[] => {
@@ -346,6 +398,7 @@ const secretsOf = (subject: Subject): readonly Secret[] => {
       longEnough.test(candidate.text) &&
       !seen.has(candidate.text) &&
       !occursIn(subject.bodySource, candidate.text) &&
+      !subject.normalised.some((written) => written.includes(candidate.text)) &&
       !subject.item.title.includes(candidate.text);
     seen.add(candidate.text);
 
@@ -487,6 +540,7 @@ const subjectOf = (
               item: accepted.item,
               json,
               location,
+              normalised: normalisedTexts(member),
               record,
               redacted,
               state: name,
