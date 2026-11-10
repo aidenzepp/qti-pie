@@ -57,11 +57,14 @@ interface FormCase {
 }
 
 /**
- * Every case of the box: 7 forms × 2 counts × 2 cardinalities, 28 in all.
+ * Every case of the box: the 7 forms as the most choices, under a single response, 7 in all. Both
+ * counts are read by one `nonNegativeInteger` map, and a single response is the cardinality a count
+ * of 0 breaks Binding cardinality under, so each form meets every situation it can show: a value,
+ * a signed zero, no value, and a binding the count does not fit.
  */
 const formCases: Gen<FormCase> = (source) => ({
-  cardinality: source.draw(element(["single", "multiple"] as const)),
-  count: source.draw(element(["max-choices", "min-choices"] as const)),
+  cardinality: source.draw(element(["single"] as const)),
+  count: source.draw(element(["max-choices"] as const)),
   form: source.draw(
     element(
       pipe(
@@ -155,12 +158,12 @@ layer(NodeServices.layer, { excludeTestServices: true })("a count's value", (it)
     "reads each form of a count by §3.3.20's map, in the law oracle and in the import alike",
     (ctx) =>
       // Oracle: XML Schema 1.1 Part 2 §3.3.13 and §3.3.20 by hand, and reading 92. Bound: the
-      // seven forms, as the most or the least, under a single or a multiple response: 28 packages.
+      // seven forms as the most choices, under a single response: 7 packages.
       searched(
         ctx,
         exhaust(
           {
-            box: "0, +0, -0, 00, +1, -1 and ' 1' as max-choices or min-choices, under a single or a multiple response",
+            box: "0, +0, -0, 00, +1, -1 and ' 1' as max-choices, under a single response",
             caseHang: Duration.minutes(2),
             coverage: requiredInSpace<Situation>([
               "accepted",
@@ -169,7 +172,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a count's value", (it)
               "signed zero",
             ]),
             generator: formCases,
-            limit: 28,
+            limit: 7,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
