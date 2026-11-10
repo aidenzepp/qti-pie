@@ -191,12 +191,12 @@ CREATE VIEW "qti_queries__author"."declaration" ("base_types", "cardinalities", 
 SELECT "r1"."base_types", "r1"."cardinalities", "r1"."declaration_kind", ("qti"."__declaration_kind_names_o62wpad2p7"())["r1"."declaration_kind" + 1]::"pg_catalog"."text", "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."masteries", "r1"."maximums", "r1"."minimums", "r1"."nearest", "r1"."node", "r1"."parent", "r1"."parent_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."parent_kind" + 1]::"pg_catalog"."text", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
 FROM "qti"."declaration" AS "r1";
 
-CREATE VIEW "qti_queries__author"."declaration_base_type" ("base_type", "base_type_name", "base_type_lexical", "node", "value_base", "value_base_name") AS
-SELECT "r1"."base_type", ("qti"."__base_type_names_ok3nu5nck4"())["r1"."base_type" + 1]::"pg_catalog"."text", "r1"."base_type_lexical", "r1"."node", "r1"."value_base", ("qti"."__value_base_names_pjzlcpdwvv"())["r1"."value_base" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti_queries__author"."declaration_base_type" ("base_type", "base_type_name", "node", "base_type_lexical", "value_base", "value_base_name") AS
+SELECT "r1"."base_type", ("qti"."__base_type_names_ok3nu5nck4"())["r1"."base_type" + 1]::"pg_catalog"."text", "r1"."node", "r1"."base_type_lexical", "r1"."value_base", ("qti"."__value_base_names_pjzlcpdwvv"())["r1"."value_base" + 1]::"pg_catalog"."text"
 FROM "qti"."declaration_base_type" AS "r1";
 
-CREATE VIEW "qti_queries__author"."declaration_cardinality" ("cardinality", "cardinality_name", "cardinality_lexical", "node") AS
-SELECT "r1"."cardinality", ("qti"."__cardinality_names_kqiairsoqa"())["r1"."cardinality" + 1]::"pg_catalog"."text", "r1"."cardinality_lexical", "r1"."node"
+CREATE VIEW "qti_queries__author"."declaration_cardinality" ("cardinality", "cardinality_name", "node", "cardinality_lexical") AS
+SELECT "r1"."cardinality", ("qti"."__cardinality_names_kqiairsoqa"())["r1"."cardinality" + 1]::"pg_catalog"."text", "r1"."node", "r1"."cardinality_lexical"
 FROM "qti"."declaration_cardinality" AS "r1";
 
 CREATE VIEW "qti_queries__author"."declaration_identifier" ("base_types", "cardinalities", "declaration_kind", "declaration_kind_name", "document", "identifier", "identifier_lead", "identifier_lexical", "identifier_trail", "node", "parent_kind", "parent_kind_name") AS
@@ -359,8 +359,8 @@ CREATE VIEW "qti_queries__author"."literal" ("base_type", "base_type_name", "car
 SELECT "r1"."base_type", ("qti"."__value_base_names_pjzlcpdwvv"())["r1"."base_type" + 1]::"pg_catalog"."text", "r1"."cardinality", ("qti"."__value_cardinality_names_wzwznoycgf"())["r1"."cardinality" + 1]::"pg_catalog"."text", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."language", ("qti"."__language_names_pvmtywwssv"())["r1"."language" + 1]::"pg_catalog"."text", "r1"."node", "r1"."parent", "r1"."text"
 FROM "qti"."literal" AS "r1";
 
-CREATE VIEW "qti_queries__author"."literal_typed" ("base_type", "base_type_name", "node", "text", "type_code", "type_code_name") AS
-SELECT "r1"."base_type", ("qti"."__value_base_names_pjzlcpdwvv"())["r1"."base_type" + 1]::"pg_catalog"."text", "r1"."node", "r1"."text", "r1"."type_code", ("qti"."__base_type_names_ok3nu5nck4"())["r1"."type_code" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti_queries__author"."literal_typed" ("node", "text", "type_code", "type_code_name", "base_type", "base_type_name") AS
+SELECT "r1"."node", "r1"."text", "r1"."type_code", ("qti"."__base_type_names_ok3nu5nck4"())["r1"."type_code" + 1]::"pg_catalog"."text", "r1"."base_type", ("qti"."__value_base_names_pjzlcpdwvv"())["r1"."base_type" + 1]::"pg_catalog"."text"
 FROM "qti"."literal_typed" AS "r1";
 
 CREATE VIEW "qti_queries__author"."lom_entry" ("document", "holder", "identifier_kind", "identifier_kind_name", "identifier_start", "kind", "kind_name", "lead", "nearest", "node", "parent", "start", "text", "token", "trail", "version", "version_name") AS
@@ -707,8 +707,8 @@ CREATE VIEW "qti_queries__author"."resource" ("document", "kind", "kind_name", "
 SELECT "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."nearest", "r1"."node", "r1"."package", "r1"."parent", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
 FROM "qti"."resource" AS "r1";
 
-CREATE VIEW "qti_queries__author"."resource_document" ("document_type", "document_type_name", "node", "package", "path", "root_kind", "root_kind_name", "type", "type_name") AS
-SELECT "r1"."document_type", ("qti"."__document_type_names_b6nphfgptk"())["r1"."document_type" + 1]::"pg_catalog"."text", "r1"."node", "r1"."package", "r1"."path", "r1"."root_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."root_kind" + 1]::"pg_catalog"."text", "r1"."type", ("qti"."__resource_type_names_4wps2tgde3"())["r1"."type" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti_queries__author"."resource_document" ("node", "package", "path", "root_kind", "root_kind_name", "type", "type_name", "document_type", "document_type_name") AS
+SELECT "r1"."node", "r1"."package", "r1"."path", "r1"."root_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."root_kind" + 1]::"pg_catalog"."text", "r1"."type", ("qti"."__resource_type_names_4wps2tgde3"())["r1"."type" + 1]::"pg_catalog"."text", "r1"."document_type", ("qti"."__document_type_names_b6nphfgptk"())["r1"."document_type" + 1]::"pg_catalog"."text"
 FROM "qti"."resource_document" AS "r1";
 
 CREATE VIEW "qti_queries__author"."resource_file" ("files", "path", "resource", "scope", "scope_name") AS
@@ -959,8 +959,8 @@ CREATE VIEW "qti_queries__author"."value" ("base_types", "cardinalities", "decla
 SELECT "r1"."base_types", "r1"."cardinalities", "r1"."declaration", "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."nearest", "r1"."node", "r1"."parent", "r1"."start", "r1"."text", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
 FROM "qti"."value" AS "r1";
 
-CREATE VIEW "qti_queries__author"."value_base_type" ("base_type", "base_type_name", "base_type_lexical", "cardinalities", "node") AS
-SELECT "r1"."base_type", ("qti"."__base_type_names_ok3nu5nck4"())["r1"."base_type" + 1]::"pg_catalog"."text", "r1"."base_type_lexical", "r1"."cardinalities", "r1"."node"
+CREATE VIEW "qti_queries__author"."value_base_type" ("base_type", "base_type_name", "cardinalities", "node", "base_type_lexical") AS
+SELECT "r1"."base_type", ("qti"."__base_type_names_ok3nu5nck4"())["r1"."base_type" + 1]::"pg_catalog"."text", "r1"."cardinalities", "r1"."node", "r1"."base_type_lexical"
 FROM "qti"."value_base_type" AS "r1";
 
 CREATE VIEW "qti_queries__author"."value_set" ("base_types", "cardinalities", "declaration_kind", "declaration_kind_name", "document", "element_children", "elements", "fields", "kind", "kind_name", "nearest", "node", "parent", "start", "version", "version_name") AS
@@ -979,8 +979,8 @@ CREATE VIEW "qti_queries__author"."variable_ref" ("after", "attribute", "attribu
 SELECT "r1"."after", "r1"."attribute", ("qti"."__attribute_name_names_q6tmzcty4e"())["r1"."attribute" + 1]::"pg_catalog"."text", "r1"."base_type", ("qti"."__value_base_names_pjzlcpdwvv"())["r1"."base_type" + 1]::"pg_catalog"."text", "r1"."before", "r1"."cardinality", ("qti"."__value_cardinality_names_wzwznoycgf"())["r1"."cardinality" + 1]::"pg_catalog"."text", "r1"."document", "r1"."element_base", ("qti"."__value_base_names_pjzlcpdwvv"())["r1"."element_base" + 1]::"pg_catalog"."text", "r1"."element_cardinality", ("qti"."__value_cardinality_names_wzwznoycgf"())["r1"."element_cardinality" + 1]::"pg_catalog"."text", "r1"."identifier", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."language", ("qti"."__language_names_pvmtywwssv"())["r1"."language" + 1]::"pg_catalog"."text", "r1"."lexical", "r1"."node", "r1"."parent", "r1"."resolution", ("qti"."__reference_resolution_names_3knvypuotm"())["r1"."resolution" + 1]::"pg_catalog"."text", "r1"."root_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."root_kind" + 1]::"pg_catalog"."text"
 FROM "qti"."variable_ref" AS "r1";
 
-CREATE VIEW "qti_queries__author"."variable_ref_cardinality" ("attribute", "attribute_name", "cardinality", "cardinality_name", "decl_cardinality", "decl_cardinality_name", "declaration", "node") AS
-SELECT "r1"."attribute", ("qti"."__attribute_name_names_q6tmzcty4e"())["r1"."attribute" + 1]::"pg_catalog"."text", "r1"."cardinality", ("qti"."__value_cardinality_names_wzwznoycgf"())["r1"."cardinality" + 1]::"pg_catalog"."text", "r1"."decl_cardinality", ("qti"."__cardinality_names_kqiairsoqa"())["r1"."decl_cardinality" + 1]::"pg_catalog"."text", "r1"."declaration", "r1"."node"
+CREATE VIEW "qti_queries__author"."variable_ref_cardinality" ("attribute", "attribute_name", "decl_cardinality", "decl_cardinality_name", "declaration", "node", "cardinality", "cardinality_name") AS
+SELECT "r1"."attribute", ("qti"."__attribute_name_names_q6tmzcty4e"())["r1"."attribute" + 1]::"pg_catalog"."text", "r1"."decl_cardinality", ("qti"."__cardinality_names_kqiairsoqa"())["r1"."decl_cardinality" + 1]::"pg_catalog"."text", "r1"."declaration", "r1"."node", "r1"."cardinality", ("qti"."__value_cardinality_names_wzwznoycgf"())["r1"."cardinality" + 1]::"pg_catalog"."text"
 FROM "qti"."variable_ref_cardinality" AS "r1";
 
 CREATE VIEW "qti_queries__author"."variable_ref_declaration" ("attribute", "attribute_name", "base_type", "base_type_name", "cardinality", "cardinality_name", "decl_base_types", "decl_cardinalities", "declaration", "declaration_kind", "declaration_kind_name", "document", "identifier", "kind", "kind_name", "language", "language_name", "node") AS
