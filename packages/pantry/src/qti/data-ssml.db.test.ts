@@ -46,11 +46,12 @@ const withDataSsml = (name: string, value: string) =>
   });
 
 /**
- * The values Data-SSML 1.0 §3.4 refuses, each by what it is and its fixture's name.
+ * The values Data-SSML 1.0 §3.4 refuses, each by what it is and its fixture's name: one of each
+ * way the law refuses, a value with no `DataSsml` row (text that is not JSON), a row a check
+ * refuses (an unknown name, a value outside an enumeration) and a member its rule refuses.
  */
 const refused = [
   { name: "unknown-name", value: '{"brk":{}}', what: "an unknown name" },
-  { name: "wrong-type", value: '{"break":{"time":2}}', what: "a value of the wrong type" },
   {
     name: "outside-enumeration",
     value: '{"break":{"strength":"loud"}}',
