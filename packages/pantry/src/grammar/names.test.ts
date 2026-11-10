@@ -3,10 +3,10 @@ import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage, requiredInSpace } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
-import { roster } from "#pantry/grammar/closed.ts";
+import { indexed, roster } from "#pantry/grammar/closed.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import {
   expandedText,
@@ -15,7 +15,7 @@ import {
   textsPattern,
   vocabularyNamespacesPattern,
 } from "#pantry/grammar/names.ts";
-import { expandedNameOf, noType } from "#pantry/grammar/xsi.ts";
+import { expandedNameOf } from "#pantry/grammar/xsi.ts";
 import { globalKinds } from "#pantry/vocab/inventory/vocabularies.ts";
 import {
   namespaceClassOf,
@@ -24,6 +24,7 @@ import {
   xsNamespace,
 } from "#pantry/vocab/namespaces.ts";
 import { foreignRoots, schemaSets } from "#pantry/vocab/open.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * The composed grammar of production. It is composed once, when the module loads.
@@ -126,12 +127,16 @@ describe("patternLiteral", () => {
 
 /**
  * Each (version, parent) family whose content admits a foreign element, with the expanded names of
- * the element kinds it admits there: the oracle's own reading of `Admission` and `ElementName`.
+ * the element kinds it admits there: the oracle's own reading of the admission maps, spelled out,
+ * and `ElementName`.
  */
 const foreignHosts: ReadonlyMap<string, ReadonlySet<string>> = (() => {
   const hosts = new Map<string, Set<string>>();
   const foreign = new Set<string>();
-  for (const { child, parent, version } of grammar.admission.rows) {
+  for (const { child, parent, version } of admittedOf(
+    grammar.content.contentModelOf,
+    grammar.content.admissionIn,
+  )) {
     const at = `${version} ${parent}`;
     const names = hosts.get(at) ?? new Set<string>();
     for (const name of Option.toArray(grammar.kinds.elementName.lookup({ kind: child }))) {
@@ -252,7 +257,7 @@ describe("TypeAvailable", () => {
           {
             box: `every TypeName handle, ${grammar.typeAvailable.rows.length}, under ${parentNamespaces.length} namespaces`,
             caseHang,
-            coverage: requiredInSpace<"none" | "vocabulary" | "xs">(["none", "vocabulary", "xs"]),
+            coverage: requiredInSpace<"vocabulary" | "xs">(["vocabulary", "xs"]),
             generator: int(0, grammar.typeAvailable.rows.length - 1),
             limit: grammar.typeAvailable.rows.length,
             literal: Formatter.format,
@@ -268,7 +273,7 @@ describe("TypeAvailable", () => {
               });
               const vocabularyType = typeNamespace === xsNamespace ? "xs" : "vocabulary";
 
-              c.note(type === noType ? "none" : vocabularyType);
+              c.note(vocabularyType);
 
               const vocabularies = vocabularyNamespacesPattern(
                 Object.values(vocabularyNamespaces).map(({ namespace }) => namespace),
@@ -276,7 +281,7 @@ describe("TypeAvailable", () => {
               const wrong = parentNamespaces.filter(
                 (parent) =>
                   (matches(namespaces, parent) || !matches(vocabularies, parent)) !==
-                  (type === noType || availableBySets(parent, typeNamespace)),
+                  availableBySets(parent, typeNamespace),
               );
 
               assert.deepStrictEqual(wrong, [], type);
@@ -364,8 +369,8 @@ describe("HeldRootsUnder", () => {
       ["3.0.1"],
       ["3.0.0", "3.0.1"],
     ];
-    const versions = Result.getOrThrow(roster("SchemaVersion", schemaVersions));
-    const kinds = Result.getOrThrow(roster("NodeKind", ["host", "foreign-element"]));
+    const versions = roster("SchemaVersion", schemaVersions);
+    const kinds = roster("NodeKind", ["host", "foreign-element"]);
     const wrong: string[] = [];
     for (const first of subsets) {
       for (const second of subsets) {
@@ -373,24 +378,22 @@ describe("HeldRootsUnder", () => {
           { kind: "a:r", local: "r", namespace: "urn:a", versions: first },
           { kind: "b:s", local: "s", namespace: "urn:b", versions: second },
         ];
-        const relation = Result.getOrThrow(
-          heldRootsUnder({
-            classOf: () => "foreign-element",
-            held: schemaVersions.map((version) => ({
-              child: "foreign-element",
-              parent: "host",
-              version,
-            })),
-            kinds,
-            namespaceOf: () => namespaceNameOf("urn:host"),
-            reads: () => true,
-            roots,
-            versions,
-          }),
-        );
+        const relation = heldRootsUnder({
+          classOf: () => "foreign-element",
+          held: schemaVersions.map((version) => ({
+            child: "foreign-element",
+            parent: "host",
+            version,
+          })),
+          kinds,
+          namespaceOf: () => namespaceNameOf("urn:host"),
+          reads: () => true,
+          roots,
+          versions,
+        });
         for (const version of schemaVersions) {
           const names = Option.getOrElse(
-            Option.map(relation.lookup({ parent: "host", version }), (row) => row.names),
+            Option.map(indexed(relation).lookup({ parent: "host", version }), (row) => row.names),
             () => "(none)",
           );
           for (const { local, namespace, versions: declared } of roots) {

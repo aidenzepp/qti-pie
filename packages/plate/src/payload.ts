@@ -33,8 +33,13 @@ import { integerOf } from "#plate/engine/numbers.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
 import { entryName, isPosted, recordText } from "#plate/form/encoding.ts";
-import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
-import type { ModuleKind, RedactKit } from "#plate/interactions/contract.ts";
+import type { Binding, DecodeOptions, ModuleBinding } from "#plate/form/encoding.ts";
+import type {
+  InteractionModule,
+  ModuleEntry,
+  ModuleKind,
+  RedactKit,
+} from "#plate/interactions/contract.ts";
 import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
@@ -44,10 +49,18 @@ import {
   isInteraction,
   isStubbed,
   mapRegions,
+  modules,
   regionsOf,
   stubSteps,
 } from "#plate/model/interactions.ts";
-import type { PayloadOf } from "#plate/model/interactions.ts";
+import type {
+  ModelOf,
+  ModelOfIn,
+  ModuleTable,
+  Modules,
+  PayloadOf,
+  PayloadOfIn,
+} from "#plate/model/interactions.ts";
 import type {
   BodyElement,
   BodyNode,
@@ -69,6 +82,7 @@ import type { RedactRecord } from "#plate/model/record.ts";
 import { format, isRecordValue, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, ResponseValue, Single, Value } from "#plate/model/values.ts";
 import { clampOutputBudget, defaultOutputBudget } from "#plate/output-budget.ts";
+import type { HostFacts } from "#plate/pci/host.ts";
 import { noSupports } from "#plate/supports.ts";
 import type { Supports } from "#plate/supports.ts";
 import type { OutcomeView } from "#plate/vocabulary.ts";
@@ -109,6 +123,12 @@ export interface View {
    * Whether the author disabled every control.
    */
   readonly finished: boolean;
+  /**
+   * The host's facts, which reach each interaction module's `redact` through its kit
+   * (`RedactKit.host`) and nothing else: the empty record when absent, so every module sees a
+   * record. A render input, never item data: the payload holds no field of it.
+   */
+  readonly host?: HostFacts;
   /**
    * The item instance key, which scopes every id and each default entry name.
    */
@@ -654,6 +674,10 @@ interface Build {
    * Whether the view's mode lets the candidate change a response ({@link ModePayload}).
    */
   readonly editable: boolean;
+  /**
+   * The host's facts, the view's or the empty record, handed whole to each module's `redact`.
+   */
+  readonly host: HostFacts;
   /**
    * The ids the author gave the item's elements, unscoped ({@link authoredIdsIn}).
    */
@@ -1257,6 +1281,14 @@ const choiceNotice = "template-identifier";
 const parameterNotice = "param";
 
 /**
+ * What {@link printBody}'s walk reads of an item: its body, the nodes its content modules read, the
+ * template declarations that decide which `param` is a `param-variable` parameter, and the
+ * unsupported features that list its notices. Naming no more than that lets the walk run over body
+ * nodes that belong to no item ({@link printNodes}).
+ */
+type Printable = Pick<Item, "body" | "content" | "templates" | "unsupported">;
+
+/**
  * What a walk of {@link printBody} writes in place of a printed variable and of a `param-variable`
  * parameter the values cover: `"text"` writes the text each prints or passes, through
  * `formatPrinted`, as {@link redactItem} gives the page, at most `budget` characters of it in all;
@@ -1273,6 +1305,18 @@ type Writing = { readonly budget: number; readonly kind: "text" } | { readonly k
 const structureOnly: Writing = { kind: "structure" };
 
 /**
+ * The walk that writes each printed text within the output budget a caller holds it to.
+ *
+ * @param limits The output budget, clamped to 1 to 536,870,888; none for the configuration's
+ *   default, 16,777,216.
+ * @returns The walk.
+ */
+const textWithin = (limits?: Pick<Configuration, "outputBudget">): Writing => ({
+  budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget),
+  kind: "text",
+});
+
+/**
  * The text of one printed variable or `param-variable` parameter, not yet formatted: given the most
  * characters it may hold, `formatPrinted`'s text, none when it would pass that or {@link textBound}.
  */
@@ -1282,8 +1326,9 @@ type Printer = (bound: number) => Option.Option<string>;
  * Give the kit a module's `redact` reads one interaction's content and the view through: the copy
  * of body nodes, and the view's facts about the interaction as the shipped kinds' payloads read
  * them ({@link shown}, {@link formNameOf}, the posted strings, the seed, the instance, `autofocus`
- * and the unnamed position), so a module bakes into its payload node what a Choice's or a Text
- * Entry's payload holds, and no hub names its kind.
+ * and the unnamed position), and the host's facts whole, so a module bakes into its payload node
+ * what a Choice's or a Text Entry's payload holds and what only its host knows, and no hub names
+ * its kind.
  *
  * @param interaction The interaction being redacted.
  * @param build The build.
@@ -1292,6 +1337,7 @@ type Printer = (bound: number) => Option.Option<string>;
 const redactKit = (interaction: Interaction, build: Build): RedactKit => ({
   autofocus: Option.exists(build.autofocus, (first) => first === interaction),
   formName: (response) => formNameOf(build, response),
+  host: build.host,
   instance: build.instance,
   nodes: (nodes) => copyNodes(nodes, build),
   posted: (response) => build.posted.pipe(Option.map((posted) => posted.get(response) ?? [])),
@@ -1606,7 +1652,10 @@ const shownBy = (
  * @returns The declaration; none for an element other than `param`, and for a `param` whose
  *   `value` names no template variable or one not declared `param-variable`.
  */
-const parameterOf = (item: Item, node: BodyElement): Option.Option<TemplateDeclaration> =>
+const parameterOf = (
+  item: Pick<Item, "templates">,
+  node: BodyElement,
+): Option.Option<TemplateDeclaration> =>
   node.tag === "param"
     ? Arr.findFirst(node.attributes, (attribute) => attribute.name === "value").pipe(
         Option.flatMap(({ value }) => Option.fromUndefinedOr(item.templates.get(value))),
@@ -1656,7 +1705,7 @@ interface Expanded {
  *   some {@link Expanded} for a parameter the values expand; some none for one they withhold.
  */
 const expandedParameter = (
-  item: Item,
+  item: Printable,
   printing: Option.Option<RedactRecord>,
   node: BodyElement,
 ): Option.Option<Option.Option<Expanded>> =>
@@ -1757,7 +1806,7 @@ const expandedParameter = (
  *   the page sees that passed its bound, none under `"structure"`.
  */
 const printBody = (
-  item: Item,
+  item: Printable,
   printing: Option.Option<RedactRecord>,
   writing: Writing,
   supports: Supports,
@@ -2135,6 +2184,44 @@ const printBody = (
 };
 
 /**
+ * Show body nodes that belong to no item from the values given: the walk {@link redactItem} shows an
+ * item's body by, over these nodes alone, so a test's rubric or feedback prints its variables as an
+ * item's body does.
+ *
+ * A printed variable the record covers becomes a text node of what it prints, or nothing for NULL;
+ * one it does not cover, and every one when there is no record, stays its notice,
+ * `qti-printed-variable`. A template block or inline and a `param-variable` parameter are decided
+ * as for an item with no template declarations: the record's template values show or withhold a
+ * block or inline, and a `param` is never a `param-variable` parameter, so it keeps its `value`.
+ * The printed text is held to `limits.outputBudget` and to `formatPrinted`'s bound as for an item,
+ * the first text past either printing nothing; the nodes carry no `unprinted`, so a caller that
+ * must fail on a text left blank holds its own limit.
+ *
+ * It shares {@link printBody}'s walk with {@link redactItem}, which it leaves unchanged: the nodes
+ * are walked as an item's body with no unsupported features, no content nodes and no template
+ * declarations, and the item's notices and bindings are none of its output.
+ *
+ * @param nodes The body nodes.
+ * @param record The values the nodes are shown by, none to withhold every printed variable and
+ *   template block and inline.
+ * @param limits The output budget the printed text is held to, clamped to 1 to 536,870,888; none
+ *   for the configuration's default, 16,777,216.
+ * @returns The nodes, each printed variable its text or its notice.
+ */
+export const printNodes = (
+  nodes: readonly BodyNode[],
+  record: Option.Option<RedactRecord>,
+  limits?: Pick<Configuration, "outputBudget">,
+): readonly BodyNode[] =>
+  printBody(
+    { body: nodes, templates: new Map(), unsupported: [] },
+    record,
+    textWithin(limits),
+    noSupports,
+    defaultView,
+  ).body;
+
+/**
  * Give the response bindings a redaction lists: each response the item declares but the
  * hidden-only ones, those of a base type in document order, then the record responses in document
  * order. The item keeps the two kinds in two maps, so their order across the two is not kept.
@@ -2246,7 +2333,7 @@ export const redactItem = (
   const { body, content, hiddenOnly, notices, unprinted } = printBody(
     item,
     printingOf(item, record),
-    { budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget), kind: "text" },
+    textWithin(limits),
     supports,
     view,
   );
@@ -2366,6 +2453,12 @@ export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): Readonly
  * through its `absentValue` (`InteractionModule` in `#plate/interactions/contract.ts`), which the
  * posting carries as `options.absent` and `decode` gives for no entry: End Attempt's `false`,
  * once issue ei-02 lands it.
+ *
+ * A response bound by an interaction whose module declares `entry` (`InteractionModule` in
+ * `#plate/interactions/contract.ts`) posts one entry holding the module's own text, whatever its
+ * base type and cardinality, under a `ModuleBinding` (`#plate/form/encoding.ts`) over the first
+ * such interaction's entry in document order, which `decode` routes to the module; the module is
+ * consulted before the base type, so a module posts a value of a base type no control posts.
  */
 export interface Posting {
   readonly binding: Binding;
@@ -2402,6 +2495,75 @@ const formBinding = (response: ResponseBinding, name: string): Option.Option<Bin
 
   return isPosted(baseType) ? Option.some({ baseType, cardinality, name }) : Option.none();
 };
+
+/**
+ * Each module kind's `entry` member in a table, typed by its kind's model node: what
+ * {@link postingsIn} reads of a module beyond the steps `stubSteps` binds. A table assigned to its
+ * own `EntriesIn` is the check that every module's `entry` takes its own node, as `SteppedIn` in
+ * `#plate/model/interactions.ts` checks the steps.
+ *
+ * @template T The table.
+ */
+type EntriesIn<T extends ModuleTable> = {
+  readonly [K in ModuleKind]: Pick<
+    InteractionModule<K, ModelOfIn<T, K>, PayloadOfIn<T, K>>,
+    "entry"
+  >;
+};
+
+/**
+ * `modules` as {@link EntriesIn} of itself.
+ */
+const moduleEntries: EntriesIn<Modules> = modules;
+
+/**
+ * Give how a module kind's model node reads its posted text, by its kind's module: none when the
+ * module does not say.
+ *
+ * @param kind The kind.
+ * @param interaction The node.
+ * @returns The module's `entry` of the node, `undefined` when it has none.
+ */
+const moduleEntry = <K extends ModuleKind>(
+  kind: K,
+  interaction: ModelOf<K>,
+): ModuleEntry | undefined => moduleEntries[kind].entry?.(interaction);
+
+/**
+ * Give how an interaction reads the posted text of the response it binds, when its module reads
+ * its own: a module kind's node answers through its module's `entry`, and every other
+ * interaction, a shipped kind, a stub or a module that leaves the member unset, answers none, so
+ * its response posts under the lexical forms.
+ *
+ * @param interaction The interaction.
+ * @returns The module's entry, or none.
+ */
+const entryOf = (interaction: Interaction): Option.Option<ModuleEntry> =>
+  isStubbed(interaction)
+    ? Option.fromUndefinedOr(moduleEntry(interaction.kind, interaction))
+    : Option.none();
+
+/**
+ * Give the binding a response travels through the form under when an interaction's module reads
+ * its posted text: one entry, under the module's `decode` and `encode`, of the declared
+ * cardinality.
+ *
+ * @param response The response's binding as the page knows it.
+ * @param entry The module's entry.
+ * @param name The entry name its control posts under.
+ * @returns The module binding.
+ */
+const moduleBinding = (
+  response: ResponseBinding,
+  entry: ModuleEntry,
+  name: string,
+): ModuleBinding => ({
+  cardinality: response.cardinality,
+  decode: entry.decode,
+  encode: entry.encode,
+  kind: "module",
+  name,
+});
 
 /**
  * Give the number base an interaction's posted text is read in: a Text Entry's or an Extended
@@ -2456,7 +2618,11 @@ export const postingsIn = (
   return redaction.responses.flatMap((response): readonly Posting[] => {
     const { identifier } = response;
     const bound = byResponse.get(identifier) ?? [];
-    const binding = formBinding(response, entryName(instance, identifier));
+    const name = entryName(instance, identifier);
+    const binding: Option.Option<Binding> = Option.orElse(
+      Option.map(Arr.findFirst(bound, entryOf), (entry) => moduleBinding(response, entry, name)),
+      () => formBinding(response, name),
+    );
     if (Option.isNone(binding) || bound.length === 0) {
       return [];
     }
@@ -2495,10 +2661,12 @@ export const postingsIn = (
  * @param redacted The item, through `redact`.
  * @param instance The instance token the render used, one `checkInstance` passes.
  * @returns The postings: a response no interaction binds, or of a base type no interaction posts
- *   (`isPosted`), has none. A pair response's values decode one per posted entry, as the pair's two
- *   identifiers separated by a space. A point response's values decode one per pair of posted
- *   entries, `<name>.x` and `<name>.y`, and a boolean response's from the one entry holding `true`
- *   or `false` ({@link Posting}).
+ *   (`isPosted`) and no module reads through its `entry`, has none. A pair response's values
+ *   decode one per posted entry, as the pair's two identifiers separated by a space. A point
+ *   response's values decode one per pair of posted entries, `<name>.x` and `<name>.y`, and a
+ *   boolean response's from the one entry holding `true` or `false` ({@link Posting}). A response
+ *   an interaction whose module declares `entry` binds decodes through that module from its one
+ *   entry, whatever its base type.
  */
 export const postings = (redacted: Redacted, instance: string): readonly Posting[] =>
   postingsIn(redacted, instance);
@@ -2508,11 +2676,13 @@ export const postings = (redacted: Redacted, instance: string): readonly Posting
  * item and the author's inputs.
  *
  * @param redacted The item, through {@link redactItem}.
- * @param view The author's inputs: the instance, the mode, the seed, values, names, messages and
- *   posted strings.
+ * @param view The author's inputs: the instance, the mode, the seed, values, names, messages,
+ *   posted strings and the host's facts.
  * @returns The payload. It holds no correct response, mapping, default, processing rule, seed,
  *   template value or feedback content of the item, whatever the view; the seed only orders a
- *   shuffled Choice's or Inline Choice's choices, and a value it shows is one the view gave.
+ *   shuffled Choice's or Inline Choice's choices, and a value it shows is one the view gave. It
+ *   holds no field of the host's facts either: those reach each module's `redact` through its kit
+ *   alone.
  */
 export const payload = (redacted: Redacted, view: View): Payload => {
   const messages = identifyMessages(view.instance, view.messages);
@@ -2528,6 +2698,7 @@ export const payload = (redacted: Redacted, view: View): Payload => {
       messages.some((entry) => entry.response === interaction.response),
     ),
     editable: view.mode === "answering",
+    host: view.host ?? {},
     instance: view.instance,
     messages,
     names: view.names,
@@ -2550,3 +2721,36 @@ export const payload = (redacted: Redacted, view: View): Payload => {
     title: redacted.title,
   };
 };
+
+/**
+ * Copy body nodes that belong to no item into payload nodes, as {@link payload} copies an item's
+ * body, for the content a test shows beside its items: the nodes carry no response to restore and
+ * no message to show, so the copy is the item body's with no values, no names, no posted strings,
+ * no host facts and no messages.
+ *
+ * It is the item copy's own walk, `copyNodes`, which stays private: a printed variable or a
+ * template block left in the nodes becomes its notice, as it does in a body {@link redactItem} did
+ * not print ({@link printNodes} prints them first). An interaction among the nodes copies as it
+ * does in an item with no values; a caller that admits none refuses it where it emits.
+ *
+ * @param nodes The body nodes.
+ * @param instance The instance key that scopes the ids the nodes' elements carry.
+ * @returns The payload nodes, in order.
+ */
+export const copyBodyNodes = (
+  nodes: readonly BodyNode[],
+  instance: string,
+): readonly PayloadNode[] =>
+  copyNodes(nodes, {
+    autofocus: Option.none(),
+    editable: false,
+    host: {},
+    ids: new Set(authoredIdsIn(nodes)),
+    instance,
+    messages: [],
+    names: new Map(),
+    posted: Option.none(),
+    seed: Option.none(),
+    unnamed: new Map(),
+    values: new Map(),
+  });

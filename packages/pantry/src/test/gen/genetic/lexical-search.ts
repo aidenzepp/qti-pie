@@ -38,6 +38,7 @@ import type { Swarm } from "@grizzle/testing/swarm";
 import type { Source } from "@grizzle/testing/source";
 import { Console, Deferred, Effect, Option } from "effect";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
+import { enumerationKept } from "#pantry/grammar/domains.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { below, oneOf } from "#pantry/test/gen/genetic/engine.ts";
 import type { Edited, Judgment, Problem } from "#pantry/test/gen/genetic/engine.ts";
@@ -497,7 +498,7 @@ export const edgeClassesOf = (value: string, domain: ValueDomain): readonly stri
   }
 
   const date = datePrefix.exec(core)?.groups;
-  const { enumeration } = domain;
+  const enumeration = enumerationKept(domain.definition, domain.pattern);
 
   return [
     ...new Set([
@@ -592,7 +593,7 @@ export const searchSitesOf = (sites: Sites): readonly Site[] => {
     }
 
     const dictionary = [...at.values()].flatMap(({ domain, xsd }) => [
-      ...domain.enumeration,
+      ...enumerationKept(domain.definition, domain.pattern),
       ...Option.match(xsd, { onNone: () => [], onSome: enumerationsOf }),
       ...drawnOf(domain),
       ...familiesOf(domain, xsd).flatMap((name) => familyTable.get(name) ?? []),

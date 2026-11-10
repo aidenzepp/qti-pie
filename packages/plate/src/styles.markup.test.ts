@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import { contentModules } from "#plate/content/modules.ts";
+import type { AnyContentModule } from "#plate/content/modules.ts";
+import { rootHook } from "#plate/content/root.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { partForSlot, rowFor } from "#plate/emit/parts.ts";
@@ -35,11 +38,13 @@ import type {
 import { isModuleKind } from "#plate/interactions/contract.ts";
 import type { InteractionKind } from "#plate/interactions/contract.ts";
 import { modules } from "#plate/model/interactions.ts";
+import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import { renderNavigation } from "#plate/navigation.ts";
 import type { NavigationOptions, NavigationState } from "#plate/navigation.ts";
 import { compounds, scanSheet } from "#plate/test/css.ts";
 import type { AttributeTest, Compound, Sheet } from "#plate/test/css.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { hasStub, stubBaseType, stubCardinality, stubKind } from "#plate/test/stub-kind.ts";
 import { styledClasses } from "#plate/vocabulary.ts";
 import type { ClassOwner } from "#plate/vocabulary.ts";
 
@@ -68,6 +73,15 @@ const descended: ReadonlySet<string> = new Set(["has", "is", "where"]);
  */
 const elementsOf = (trees: readonly Node[]): readonly Element[] =>
   trees.flatMap((node) => (node.kind === "element" ? [node, ...elementsOf(node.children)] : []));
+
+/**
+ * Read the text of the nodes, at any depth.
+ *
+ * @param nodes The nodes.
+ * @returns Their text in document order, joined with no separator.
+ */
+const textOf = (nodes: readonly Node[]): string =>
+  nodes.map((node) => (node.kind === "text" ? node.text : textOf(node.children))).join("");
 
 /**
  * Read a selector's compounds at any depth outside `:not`: unlike `compoundsDeep` in
@@ -377,11 +391,20 @@ const classesOf = (owner: ClassOwner): string => styledClasses[owner].join(" ");
  * outcome, its body and the `match_correct` template.
  *
  * @param identifier The item's identifier, also its title.
- * @param declarations The item's `qti-response-declaration` elements.
+ * @param declarations The item's `qti-response-declaration` elements, and any outcome declaration
+ *   of its own, which stand before the `SCORE` declaration.
  * @param body The content of its `qti-item-body`.
+ * @param around The item-level content that stands before the body (`before`, such as
+ *   `qti-companion-materials-info`) and after the response processing (`after`, such as
+ *   `qti-modal-feedback`), none by default.
  * @returns The document as UTF-8 bytes, as a host reads it from storage.
  */
-const itemBytes = (identifier: string, declarations: string, body: string): Uint8Array =>
+const itemBytes = (
+  identifier: string,
+  declarations: string,
+  body: string,
+  around: { readonly after?: string; readonly before?: string } = {},
+): Uint8Array =>
   new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8"?>
 <qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
  identifier="${identifier}" title="${identifier}" time-dependent="false" xml:lang="en-US">
@@ -391,10 +414,12 @@ const itemBytes = (identifier: string, declarations: string, body: string): Uint
    <qti-value>0</qti-value>
   </qti-default-value>
  </qti-outcome-declaration>
+ ${around.before ?? ""}
  <qti-item-body>
   ${body}
  </qti-item-body>
  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct"/>
+ ${around.after ?? ""}
 </qti-assessment-item>`);
 
 /**
@@ -402,6 +427,13 @@ const itemBytes = (identifier: string, declarations: string, body: string): Uint
  */
 interface Authored {
   readonly bytes: Uint8Array;
+  /**
+   * The content elements the item holds, by local name, in its body or beside it, each the
+   * element of a content module (`#plate/content/modules.ts`), which {@link expectedVerdict}
+   * reads the verdict `open` gives the item from beside {@link Authored.kinds}; none when it
+   * holds none.
+   */
+  readonly content?: readonly string[];
   /**
    * The kind of each interaction the body holds, which {@link expectedVerdict} reads the verdict
    * `open` gives the item from.
@@ -415,29 +447,144 @@ interface Authored {
    * The entries a refused answer posts, by response identifier; empty when the item has none.
    */
   readonly posted: Readonly<Record<string, readonly string[]>>;
+  /**
+   * The record of one processed attempt the item is redacted with, so what shows only after an
+   * attempt, such as feedback, is in the markup; none redacts the item as it reads with no record.
+   */
+  readonly record?: RedactRecord;
 }
+
+/**
+ * Find the content module that reads an element, from the table of content modules.
+ *
+ * @param element An element's local name, as {@link Authored.content} names it.
+ * @returns The module whose `element` it is; the test fails when none reads it.
+ */
+const contentModuleOf = (element: string): AnyContentModule =>
+  contentModules.find((module) => module.element === element) ??
+  assert.fail(`no content module reads ${element}`);
 
 /**
  * Read the verdict `open` gives an authored item from the table of modules: `accepted` while every
  * interaction it holds is one plate renders, `accepted-with-unsupported` while one is of a kind
- * whose module is a stub, which its `parse` shows as a notice. A module lands by setting
- * `implemented: true` and editing nothing shared, so no row writes its verdict: the row names its
- * kinds, and the table says which of them render today.
+ * whose module is a stub, which its `parse` shows as a notice. A content element reads the same
+ * way: a stub content module marks its element, so the verdict is `accepted-with-unsupported` while
+ * the module of any element the item holds is one. A module lands by setting `implemented: true`
+ * and editing nothing shared, so no row writes its verdict: the row names its kinds and content
+ * elements, and the tables say which of them render today.
  *
  * @param item The authored item.
  * @returns The verdict `open` gives it.
  */
 const expectedVerdict = (item: Authored): "accepted" | "accepted-with-unsupported" =>
-  item.kinds.some((kind) => isModuleKind(kind) && !modules[kind].implemented)
+  item.kinds.some((kind) => isModuleKind(kind) && !modules[kind].implemented) ||
+  (item.content ?? []).some((element) => !contentModuleOf(element).implemented)
     ? "accepted-with-unsupported"
     : "accepted";
 
 /**
+ * The declarations of the content witness items: the `RESPONSE` the `match_correct` template
+ * requires, and the `FEEDBACK` outcome the feedback elements read.
+ */
+const contentDeclarations = `<qti-response-declaration base-type="identifier" cardinality="single" identifier="RESPONSE">
+  <qti-correct-response>
+   <qti-value>spider</qti-value>
+  </qti-correct-response>
+ </qti-response-declaration>
+ <qti-outcome-declaration base-type="identifier" cardinality="single" identifier="FEEDBACK"/>`;
+
+/**
+ * The record of one attempt processed on a content witness item, as `score` leaves it: the answer
+ * `spider` scored 1, and `FEEDBACK` at `correct`, the value its feedback elements show on, so
+ * feedback that shows after an attempt is in the redacted item.
+ *
+ * @param location The item's location.
+ * @param identifier The item's identifier.
+ * @returns The record, whose `numAttempts` is 1.
+ */
+const attempted = (location: string, identifier: string): ItemRecord => ({
+  attempt: "submitted",
+  correct: {},
+  defaults: {},
+  document: location,
+  instance,
+  item: identifier,
+  kind: "item",
+  notices: [],
+  numAttempts: 1,
+  outcomes: {
+    FEEDBACK: {
+      baseType: "identifier",
+      cardinality: "single",
+      values: [{ baseType: "identifier", value: "correct" }],
+    },
+    SCORE: { baseType: "float", cardinality: "single", values: [{ baseType: "float", value: 1 }] },
+  },
+  records: {},
+  responses: {
+    RESPONSE: {
+      baseType: "identifier",
+      cardinality: "single",
+      values: [{ baseType: "identifier", value: "spider" }],
+    },
+  },
+  seed: "",
+  templates: {},
+});
+
+/**
+ * A correct-response value of each base type a row of `stubDeclarations` gives, which the stub
+ * witness writes under its declaration. The stub's element is never read for its choices, so the
+ * identifiers name nothing.
+ */
+const correctOf: Readonly<Record<typeof stubBaseType, string>> = {
+  directedPair: "a b",
+  identifier: "a",
+  pair: "a b",
+  point: "120 80",
+};
+
+/**
+ * The stub witness: an item of the stub kind `#plate/test/stub-kind.ts` derives from the table of
+ * modules, which plate shows as an item Notice, so the stylesheet's compounds that name one keep an
+ * element to match after Order lands and its row's verdict turns `accepted`. Its element, its
+ * declaration and its name all come from that file, so the row follows the stub kind with no edit.
+ * The declaration is the one the stub kind's row of `stubDeclarations` gives, so the bare element
+ * binds. The correct response is one value of its base type, the shape the `match_correct` template
+ * requires of every declaration: `correctOf` holds a value per base type, and a base type a later
+ * row adds fails to compile here until it has one. {@link authored} includes the row only while
+ * {@link hasStub}: when no stub remains, no authored item can show an item Notice, and the
+ * `[Q-12]` compound test finds no element for the stylesheet's Notice compounds, which whoever
+ * lands the last core settles.
+ */
+const stubWitness: Authored = {
+  bytes: itemBytes(
+    `witness-${stubKind}`,
+    `<qti-response-declaration base-type="${stubBaseType}" cardinality="${stubCardinality}" identifier="RESPONSE">
+  <qti-correct-response>
+   <qti-value>${correctOf[stubBaseType]}</qti-value>
+  </qti-correct-response>
+ </qti-response-declaration>`,
+    `<p>Mark where the spider waits on its web.</p>
+  <${modules[stubKind].element} response-identifier="RESPONSE"/>`,
+  ),
+  kinds: [stubKind],
+  location: `witness/${stubKind}.xml`,
+  posted: {},
+};
+
+/**
  * The items the witness renders: both Choice cardinalities, prompt shapes and orientations, a Text
  * Entry inside a `p`, an Extended Text with a prompt, an Inline Choice with a Label and one
- * without, and two interactions whose modules are stubs, so the stylesheet's Notice rules keep an
- * element to match until the last stub lands. Each interaction carries every class the stylesheet
- * styles for it, and a body element every body class.
+ * without, and, while a bare stub remains, one interaction whose module is a stub, so the
+ * stylesheet's Notice rules keep an element to match until the last stub lands. Each interaction
+ * carries every class the stylesheet styles for it, and a body element every body class.
+ * Then one item for each content slot (a modal feedback, a feedback block with a feedback inline,
+ * companion materials, an image with its alt text, a rubric block), each redacted with the record
+ * of one attempt, so the markup of a content module that lands is in the witness with no row added
+ * here. The `rubric` slot is witnessed through the item's rubric block. The test-level slots
+ * `test-feedback` and `test-stylesheet` have no item row: a test's feedback and its stylesheet
+ * reach the page through the test's session, which an item cannot stand for.
  */
 const authored: readonly Authored[] = [
   {
@@ -551,33 +698,96 @@ const authored: readonly Authored[] = [
     location: "witness/order.xml",
     posted: {},
   },
+  ...(hasStub ? [stubWitness] : []),
+  {
+    bytes: itemBytes(
+      "witness-modal-feedback",
+      contentDeclarations,
+      "<p>Which animal spins this web?</p>",
+      {
+        after: `<qti-modal-feedback outcome-identifier="FEEDBACK" identifier="correct" show-hide="show" title="Result">
+   <qti-content-body>
+    <p>Well done: a spider.</p>
+   </qti-content-body>
+  </qti-modal-feedback>`,
+      },
+    ),
+    content: ["qti-modal-feedback"],
+    kinds: [],
+    location: "witness/modal-feedback.xml",
+    posted: {},
+    record: attempted("witness/modal-feedback.xml", "witness-modal-feedback"),
+  },
+  {
+    bytes: itemBytes(
+      "witness-feedback",
+      contentDeclarations,
+      `<p>That web belongs to a <qti-feedback-inline outcome-identifier="FEEDBACK" identifier="correct" show-hide="show">spider</qti-feedback-inline>.</p>
+  <qti-feedback-block outcome-identifier="FEEDBACK" identifier="correct" show-hide="show">
+   <qti-content-body>
+    <p>A spider has eight legs.</p>
+   </qti-content-body>
+  </qti-feedback-block>`,
+    ),
+    content: ["qti-feedback-block", "qti-feedback-inline"],
+    kinds: [],
+    location: "witness/feedback.xml",
+    posted: {},
+    record: attempted("witness/feedback.xml", "witness-feedback"),
+  },
+  {
+    bytes: itemBytes(
+      "witness-companion-materials",
+      contentDeclarations,
+      "<p>Count the legs, using the calculator if you wish.</p>",
+      {
+        before: `<qti-companion-materials-info>
+   <qti-calculator>
+    <qti-calculator-type>basic</qti-calculator-type>
+    <qti-description>A four-function calculator</qti-description>
+   </qti-calculator>
+  </qti-companion-materials-info>`,
+      },
+    ),
+    content: ["qti-companion-materials-info"],
+    kinds: [],
+    location: "witness/companion-materials.xml",
+    posted: {},
+    record: attempted("witness/companion-materials.xml", "witness-companion-materials"),
+  },
   {
     /*
-     * A Select Point, the stub planned to land last: this row keeps a stub witness, and so an item
-     * Notice for the compounds that name one, after Order lands and its row's verdict turns
-     * `accepted`. Its declaration is the one `skip.test.ts`'s stub item binds under, `multiple`
-     * cardinality of `point`, because the binding rule reads the element's `max-choices` (unwritten,
-     * `0`) against the declaration before any module does, so the bare element binds. The correct
-     * response is the one the `match_correct` template requires of every declaration. Retirement:
-     * when Select Point lands while the table of modules still holds a stub, this row moves to that
-     * kind (its element from the table, its declaration to the base type it binds); when the last
-     * stub lands, this row is deleted, since no authored item can then show an item Notice, and
-     * whoever deletes it settles the stylesheet's Notice compounds, which the `[Q-12]` compound test
-     * then finds no element for.
+     * The alt-text slot's item has an image with its `alt` and holds no content element: no content
+     * module reads the alt text a catalog card may give it before issue m5-11 lands, so the item's
+     * verdict is `accepted` and its markup is the image as the body walk copies it.
      */
     bytes: itemBytes(
-      "witness-select-point",
-      `<qti-response-declaration base-type="point" cardinality="multiple" identifier="RESPONSE">
-  <qti-correct-response>
-   <qti-value>120 80</qti-value>
-  </qti-correct-response>
- </qti-response-declaration>`,
-      `<p>Mark where the spider waits on its web.</p>
-  <${modules["select-point"].element} response-identifier="RESPONSE"/>`,
+      "witness-alt-text",
+      contentDeclarations,
+      `<p><img src="web.png" alt="A garden spider waits at the centre of its web"/></p>`,
     ),
-    kinds: ["select-point"],
-    location: "witness/select-point.xml",
+    content: [],
+    kinds: [],
+    location: "witness/alt-text.xml",
     posted: {},
+    record: attempted("witness/alt-text.xml", "witness-alt-text"),
+  },
+  {
+    bytes: itemBytes(
+      "witness-rubric",
+      contentDeclarations,
+      `<p>Name the animal that spins this web.</p>
+  <qti-rubric-block view="candidate">
+   <qti-content-body>
+    <p>Answer with one word.</p>
+   </qti-content-body>
+  </qti-rubric-block>`,
+    ),
+    content: ["qti-rubric-block"],
+    kinds: [],
+    location: "witness/rubric.xml",
+    posted: {},
+    record: attempted("witness/rubric.xml", "witness-rubric"),
   },
 ];
 
@@ -632,11 +842,14 @@ const refusalsOf = (
  *
  * @param item The hand-written item.
  * @param configuration The configuration.
+ * @param supports The supports the host enabled, which the redaction and every render take;
+ *   `noSupports` by default.
  * @returns The renders' trees, and the refused answer's messages.
  */
 const rendersOf = Effect.fnUntraced(function* rendersOf(
   item: Authored,
   configuration: Configuration,
+  supports: Supports = noSupports,
 ) {
   const verdict: Verdict = yield* open(item.location, item.bytes);
   if (
@@ -650,7 +863,7 @@ const rendersOf = Effect.fnUntraced(function* rendersOf(
 
   assert.strictEqual(verdict.verdict, expectedVerdict(item), item.location);
 
-  const redacted = redact(verdict.accepted);
+  const redacted = redact(verdict.accepted, item.record, undefined, { supports });
   const messages = refusalsOf(verdict.accepted, redacted, item.posted, configuration);
   assert.deepStrictEqual(
     [...new Set(messages.map((entry) => entry.response))].toSorted(),
@@ -666,7 +879,7 @@ const rendersOf = Effect.fnUntraced(function* rendersOf(
     ...(messages.length > 0 ? [{ instance, messages, posted: item.posted }] : []),
   ];
   const rendered = yield* Effect.fromResult(
-    Result.all(states.map((options) => render(redacted, configuration, options))),
+    Result.all(states.map((options) => render(redacted, configuration, { ...options, supports }))),
   );
 
   return { messages, trees: rendered.flatMap((entry) => parseHtml(entry.html)) };
@@ -880,6 +1093,31 @@ const maskedTrees = Effect.fnUntraced(function* maskedTrees(configuration: Confi
 });
 
 /**
+ * The supports of a candidate with a magnification of 1.5 (the display preference whose marker the
+ * Root hook writes), every other support off.
+ */
+const magnifying: Supports = {
+  ...noSupports,
+  display: { ...noSupports.display, magnification: Option.some(1.5) },
+};
+
+/**
+ * Render {@link choiceItem} in every state with a magnification on, as a host does for a candidate
+ * who has one: the support-driven witness of the Root's `data-magnification` marker (issues m3e-09b
+ * and m5-12), which the Root hook writes under `supports.display.magnification` once it lands; the
+ * hook is a stub until then, and the Root is the one the chrome writes. The redaction takes the
+ * same supports as the render, as the render contract asks.
+ *
+ * @param configuration The configuration.
+ * @returns The renders' trees.
+ */
+const magnifiedTrees = Effect.fnUntraced(function* magnifiedTrees(configuration: Configuration) {
+  const { trees } = yield* rendersOf(choiceItem, configuration, magnifying);
+
+  return trees;
+});
+
+/**
  * Read and scan the stylesheet through the package's own import alias.
  */
 const readSheet = Effect.tryPromise(() =>
@@ -888,7 +1126,8 @@ const readSheet = Effect.tryPromise(() =>
 
 /**
  * Render every markup the sheet styles: each authored item in every state, both Status headings,
- * the navigation, the navigation of a timed test and a Choice with answer masking on.
+ * the navigation, the navigation of a timed test, a Choice with answer masking on and a Choice
+ * with a magnification on.
  *
  * @param configuration The configuration.
  * @returns The trees, and the refused answers' messages.
@@ -911,6 +1150,7 @@ const markupOf = Effect.fnUntraced(function* markupOf(configuration: Configurati
       ...(yield* navigationTrees(configuration)),
       ...(yield* timedNavigationTrees(configuration)),
       ...(yield* maskedTrees(configuration)),
+      ...(yield* magnifiedTrees(configuration)),
     ],
   };
 });
@@ -1036,8 +1276,9 @@ describe("styles.css over emitted markup", () => {
     assert.isTrue(expected.has("accepted"));
     assert.strictEqual(
       expected.has("accepted-with-unsupported"),
-      Object.values(modules).some((module) => !module.implemented),
-      "an item of a stub kind is authored while the table of modules holds a stub",
+      Object.values(modules).some((module) => !module.implemented) ||
+        contentModules.some((module) => !module.implemented),
+      "an item of a stub kind or content element is authored while a table of modules holds a stub",
     );
   });
 
@@ -1107,5 +1348,72 @@ describe("styles.css over emitted markup", () => {
           "the negative control: a rule keyed on type misses the swapped button",
         );
       }),
+  );
+
+  it.effect(
+    "[W0-CONTENT-PARTS] a witness item per content slot renders, with a record of one attempt, to the verdict its modules give",
+    () =>
+      Effect.gen(function* contentSlots() {
+        const configuration = yield* configure({});
+        const witnessed = authored.filter((item) => item.record !== undefined);
+
+        assert.deepStrictEqual(
+          witnessed.map((item) => item.location),
+          [
+            "witness/modal-feedback.xml",
+            "witness/feedback.xml",
+            "witness/companion-materials.xml",
+            "witness/alt-text.xml",
+            "witness/rubric.xml",
+          ],
+        );
+        assert.deepStrictEqual(
+          new Set(witnessed.flatMap((item) => item.content ?? [])),
+          new Set([
+            "qti-companion-materials-info",
+            "qti-feedback-block",
+            "qti-feedback-inline",
+            "qti-modal-feedback",
+            "qti-rubric-block",
+          ]),
+        );
+
+        for (const item of witnessed) {
+          const { trees } = yield* rendersOf(item, configuration);
+          const notices = elementsOf(trees)
+            .filter((element) =>
+              Option.contains(attribute(element, "data-slot"), rowFor("item", "notice").slot),
+            )
+            .map((element) => textOf(element.children));
+
+          for (const element of item.content ?? []) {
+            const module = contentModuleOf(element);
+
+            assert.strictEqual(
+              notices.some((notice) => notice.includes(element)),
+              module.placement === "body" && !module.implemented,
+              `${item.location}: ${element} shows its Notice while it is a body-placed stub`,
+            );
+          }
+        }
+      }),
+  );
+
+  it.effect("[W0-CONTENT-PARTS] a supports-driven Root witness renders with a magnification", () =>
+    Effect.gen(function* magnifiedRoot() {
+      const trees = yield* magnifiedTrees(yield* configure({}));
+      const roots = elementsOf(trees).filter((element) =>
+        Option.contains(attribute(element, "data-slot"), rowFor("item", "root").slot),
+      );
+
+      assert.isNotEmpty(roots);
+      for (const root of roots) {
+        assert.strictEqual(
+          Option.isSome(attribute(root, "data-magnification")),
+          rootHook.implemented,
+          "the Root carries data-magnification as the Root hook is implemented",
+        );
+      }
+    }),
   );
 });

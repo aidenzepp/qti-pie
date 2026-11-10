@@ -12,7 +12,8 @@
 import { Data, Option, Result } from "effect";
 
 /**
- * The base types the value model holds values of: every QTI base type but `file`.
+ * The base types the value model holds values of: every QTI base type, `file` included. A `file`
+ * value is a {@link FileValue}, the posted file's name, size and type, never its bytes.
  */
 export const modelledBaseTypes = [
   "identifier",
@@ -25,6 +26,7 @@ export const modelledBaseTypes = [
   "directedPair",
   "duration",
   "uri",
+  "file",
 ] as const;
 
 /**
@@ -39,10 +41,8 @@ export type ModelledBaseType = (typeof modelledBaseTypes)[number];
 export const modelledCardinalities = ["single", "multiple", "ordered"] as const;
 
 /**
- * Report whether the value model holds values of a base type.
- *
- * `file` is a valid QTI base type the value model does not hold, so its declarations are marked
- * unsupported rather than refused.
+ * Report whether the value model holds values of a base type: every QTI base type is one, so a
+ * text outside the `base-type` list, such as `record`, is what it refuses.
  *
  * @param baseType A `base-type` attribute value.
  * @returns Whether `baseType` is a {@link ModelledBaseType}.
@@ -661,16 +661,32 @@ export const doubleLexical =
   /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|-?INF|NaN)$/u;
 
 /**
+ * A posted file as the form reports it: the `name` the `File` carries (the empty string for a bare
+ * `Blob`), its `size` in bytes, and its MIME `type` (the empty string when the browser reports
+ * none). Plate never holds the bytes: the host keeps them under the response's entry name
+ * (`entryName` in `#plate/form/encoding.ts`), and plate stores, compares and reports the file by
+ * these three fields alone. Upload (`ei-01`) and Drawing (`ei-17`) are the first modules to bind a
+ * `file` response.
+ */
+export interface FileValue {
+  readonly name: string;
+  readonly size: number;
+  readonly type: string;
+}
+
+/**
  * One QTI value, tagged by its base type: a string for `identifier`, `string` and `uri`; a
  * `bigint` for `integer`; a number for `float`; a boolean for `boolean`; two `bigint`s for `point`,
  * the horizontal coordinate first; two identifiers for `pair` and `directedPair`, the source
- * first; and a number of seconds for `duration`.
+ * first; a number of seconds for `duration`; and a {@link FileValue} for `file`.
  *
  * An integer, and each coordinate of a point, is exact at any size. A float is an xs:double. A
  * duration is its seconds in an xs:double, never truncated (readings 29 and 68; G-R3, pending: a
  * duration is a number of seconds, written as a float is). It is not numerical (G-R1, pending): no
- * arithmetic takes one. `SingleSchema` in `#plate/codec/values.ts` checks and encodes this type at
- * the boundaries.
+ * arithmetic takes one. A file's lexical form is its name alone: {@link format} writes it and
+ * {@link parseLexical} reads it as a file with no bytes, since text carries no size and no type;
+ * the posted form, which carries both, is `decode`'s in `#plate/form/encoding.ts`. `SingleSchema`
+ * in `#plate/codec/values.ts` checks and encodes this type at the boundaries.
  */
 export type Single =
   | { readonly baseType: "identifier"; readonly value: string }
@@ -682,7 +698,8 @@ export type Single =
   | { readonly baseType: "pair"; readonly value: readonly [string, string] }
   | { readonly baseType: "directedPair"; readonly value: readonly [string, string] }
   | { readonly baseType: "duration"; readonly value: number }
-  | { readonly baseType: "uri"; readonly value: string };
+  | { readonly baseType: "uri"; readonly value: string }
+  | { readonly baseType: "file"; readonly value: FileValue };
 
 /**
  * A QTI value of a modelled base type, as the session record, the engine and the form encoding
@@ -795,6 +812,7 @@ const expected = {
   boolean: "true or false",
   directedPair: "two NCNames separated by whitespace, such as A B",
   duration: durationForm((text) => text),
+  file: "the file's name, at least one character, such as photo.png; its bytes are never written",
   float: "a decimal or exponent number such as 2.5 or 1E3, or INF, -INF or NaN",
   identifier: "an NCName: a letter or _ first, then letters, digits, -, _ or .",
   integer: "decimal digits with an optional sign, such as -12",
@@ -945,12 +963,24 @@ const readPair = (baseType: "pair" | "directedPair", lexical: string): Option.Op
 };
 
 /**
+ * Read the lexical form of a file: its name, as a result's `value` element and {@link format}
+ * write one. Text names a file and nothing more, so the file it reads is known by name alone,
+ * with no bytes: `size` 0 and `type` the empty string, where a posted file carries what the form
+ * reports (`decode` in `#plate/form/encoding.ts`). An empty name names no file.
+ *
+ * @param lexical The lexical form, with no outer whitespace removed.
+ * @returns The file, or none when the text is empty.
+ */
+const readFile = (lexical: string): Option.Option<Single> =>
+  valueIf(lexical !== "", { baseType: "file", value: { name: lexical, size: 0, type: "" } });
+
+/**
  * How each base type reads its lexical form: the value it names, or none when the text is outside
  * the lexical space.
  *
  * A duration reads as a float does, its seconds in xs:double's lexical space: `90.5`, `INF`,
  * `-INF`, `NaN` and a negative are durations, and an ISO 8601 duration such as `PT1M30.5S` is
- * outside it (reading 68).
+ * outside it (reading 68). A file reads as its name alone ({@link readFile}).
  */
 const readers = {
   boolean: (lexical: string) =>
@@ -961,6 +991,7 @@ const readers = {
   directedPair: (lexical: string) => readPair("directedPair", lexical),
   duration: (lexical: string) =>
     valueIf(doubleLexical.test(lexical), { baseType: "duration", value: readDouble(lexical) }),
+  file: readFile,
   float: (lexical: string) =>
     valueIf(doubleLexical.test(lexical), { baseType: "float", value: readDouble(lexical) }),
   identifier: (lexical: string) =>
@@ -1047,15 +1078,23 @@ const formatFloat = (number: number): string => {
  *
  * `String` writes the exact decimal digits of an integer of any size, never an exponent: no `+`,
  * no leading zeros, and `0` for a written `-0`. A point's coordinates are written the same way. A
- * duration is written as its seconds, as a float is.
+ * duration is written as its seconds, as a float is. A file is written as its name, the one field
+ * text can carry (a proposed reading of the results form; the operator has not ruled): its size
+ * and type are the form's, so {@link parseLexical} reads the name back as a file of that name
+ * alone.
  *
  * @param single The value to write.
- * @returns The lexical form, which {@link parseLexical} reads back to the same value; a pair is its
- *   two identifiers, and a point its two coordinates, separated by one space.
+ * @returns The lexical form, which {@link parseLexical} reads back to the same value, a file
+ *   excepted; a pair is its two identifiers, and a point its two coordinates, separated by one
+ *   space.
  */
 export const format = (single: Single): string => {
   if (single.baseType === "boolean") {
     return single.value ? "true" : "false";
+  }
+
+  if (single.baseType === "file") {
+    return single.value.name;
   }
 
   if (single.baseType === "integer") {
@@ -1083,10 +1122,19 @@ export const format = (single: Single): string => {
  * @param left One single.
  * @param right The other single.
  * @returns Whether they share a base type and are equal: a `pair` in either order, a
- *   `directedPair` in order, a `point` when both coordinates are equal, integers, floats and
- *   durations by value (`===` compares two bigints by value) and strings by code point.
+ *   `directedPair` in order, a `point` when both coordinates are equal, a `file` when its name,
+ *   size and type are each equal, integers, floats and durations by value (`===` compares two
+ *   bigints by value) and strings by code point.
  */
 export const sameSingle = (left: Single, right: Single): boolean => {
+  if (left.baseType === "file" && right.baseType === "file") {
+    return (
+      left.value.name === right.value.name &&
+      left.value.size === right.value.size &&
+      left.value.type === right.value.type
+    );
+  }
+
   if (left.baseType === "pair" && right.baseType === "pair") {
     const [a, b] = left.value;
     const [c, d] = right.value;
