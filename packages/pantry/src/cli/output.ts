@@ -110,16 +110,17 @@ const pickMode = (named: readonly OutputMode[]): Option.Option<OutputMode> =>
   Arr.findFirst(named, (mode) => mode !== "text").pipe(Option.orElse(() => Arr.head(named)));
 
 /**
- * The value `--output` gives in `arg`: the next word for `--output`, the rest for `--output=…`.
+ * The value `--output` gives in `arg`: the next word for `--output`, the rest for `--output=…`,
+ * none for any other argument or an `--output` that ends the line.
  */
-const outputValue = (arg: string, next: string | undefined): string | undefined => {
+const outputValue = (arg: string, next: Option.Option<string>): Option.Option<string> => {
   const prefix = "--output=";
 
   if (arg === "--output") {
     return next;
   }
 
-  return arg.startsWith(prefix) ? arg.slice(prefix.length) : undefined;
+  return arg.startsWith(prefix) ? Option.some(arg.slice(prefix.length)) : Option.none();
 };
 
 /**
@@ -139,9 +140,9 @@ export const modeOfArguments = (args: readonly string[]): Option.Option<OutputMo
       return [arg === "--json" ? "json" : "jsonl"];
     }
 
-    const value = outputValue(arg, before[index + 1]);
+    const value = outputValue(arg, Arr.get(before, index + 1));
 
-    return outputModes.filter((mode) => mode === value);
+    return outputModes.filter((mode) => Option.contains(value, mode));
   });
 
   return pickMode(named);
