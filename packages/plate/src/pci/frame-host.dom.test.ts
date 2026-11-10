@@ -28,6 +28,7 @@ import type {
 } from "#plate/pci/frame-host.dom.ts";
 import { redact, render } from "#plate/render.ts";
 import { upgrade } from "#plate/runtime.dom.ts";
+import type { Upgraded, UpgradedRoot } from "#plate/runtime/contract.dom.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -336,6 +337,16 @@ const frameOf = (root: HTMLElement): HTMLIFrameElement => {
 };
 
 /**
+ * The interaction roots an upgrade attached a controller to, without the item Root's content
+ * controller, which every upgrade of a rendered item attaches beside them.
+ *
+ * @param upgraded What the upgrade did.
+ * @returns Its interaction entries, in document order.
+ */
+const interactionsOf = (upgraded: Upgraded): readonly UpgradedRoot[] =>
+  upgraded.controllers.filter((entry) => "kind" in entry);
+
+/**
  * The frame's data block, as far as this test reads it.
  */
 interface DataBlock {
@@ -463,7 +474,7 @@ describe(server.browser, () => {
       const upgraded = upgrade(container);
 
       await sleep(quiet);
-      assert.deepStrictEqual(upgraded.controllers, [{ kind: "portable-custom", root }]);
+      assert.deepStrictEqual(interactionsOf(upgraded), [{ kind: "portable-custom", root }]);
       assert.isNull(root.querySelector("iframe"));
       assert.isFalse(notice?.hidden);
       assert.strictEqual(document.activeElement, active);
@@ -717,7 +728,7 @@ describe(server.browser, () => {
       const readyAgain = nextEvent(root, "pci-ready");
       const again = upgrade(container);
 
-      assert.deepStrictEqual(again.controllers, [{ kind: "portable-custom", root }]);
+      assert.deepStrictEqual(interactionsOf(again), [{ kind: "portable-custom", root }]);
       assert.strictEqual(root.querySelectorAll("iframe").length, 1);
       await readyAgain;
 
