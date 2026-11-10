@@ -46,7 +46,7 @@ import {
   constraintsDescribed,
   judged,
   loginSession,
-  qtiSchema,
+  qtiSchemaName,
   rowsOf,
   sqlRowOf,
   statedInserts,
@@ -309,7 +309,7 @@ const documentHrefContainment = (client: Parameters<typeof rowsOf>[0]) =>
       WHERE t.tgrelid = pg_catalog.to_regclass($1)
         AND pg_catalog.obj_description(t.oid, 'pg_trigger') LIKE $2`,
     [
-      `${qtiSchema}.${tableOf(ResourceHref.name)}`,
+      `${qtiSchemaName}.${tableOf(ResourceHref.name)}`,
       `trigger of rule TypedHref(package, path, type) where % in ${ResourceDocument.name}(package, path, type)`,
     ],
   ).pipe(Effect.map((rows) => rows.map(({ tgname }) => tgname)));
