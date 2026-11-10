@@ -135,20 +135,32 @@ const runScript = Effect.fn("test.dbScript.run")(function* runScript(
  * The password commands whose run gives no password, by the shell text after `#!/bin/sh`, and the
  * exit code the script must report: a run that exits otherwise than 0 is refused whatever it
  * printed, as src/db/connection.ts's `PasswordCommandFailed` refuses it, and one that exits 0 with
- * nothing but whitespace as its `PasswordCommandSilent` does.
+ * nothing but whitespace as its `PasswordCommandSilent` does. Every subcommand refuses through the
+ * same `as_owner`, so each command is run through `create`, which loads no config, and the first
+ * through `check-clear` too, whose refusal exits 2 after loading the config's roles.
  */
 const refusedCommands = [
   {
     body: "printf 'half a password'\nexit 3",
     exitCode: 3,
     name: "exits 3 after printing part of a password",
+    subcommands: [
+      ["create", 1],
+      ["check-clear", 2],
+    ],
   },
   {
     body: "echo 'error: not signed in'\nexit 1",
     exitCode: 1,
     name: "exits 1 with an error on standard output",
+    subcommands: [["create", 1]],
   },
-  { body: "printf '  \\n'", exitCode: 0, name: "exits 0 printing only whitespace" },
+  {
+    body: "printf '  \\n'",
+    exitCode: 0,
+    name: "exits 0 printing only whitespace",
+    subcommands: [["create", 1]],
+  },
 ] as const;
 
 layer(NodeServices.layer, { excludeTestServices: true })(
@@ -156,7 +168,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
   (it) => {
     for (const refused of refusedCommands) {
       it.effect(
-        `refuses a password command that ${refused.name}, naming its exit code, the command and the role, and starts no psql: create, drop and check-clear`,
+        `refuses a password command that ${refused.name}, naming its exit code, the command and the role, and starts no psql`,
         () =>
           Effect.gen(function* refusedCommand() {
             const scratch = yield* scriptScratch;
@@ -167,11 +179,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               GR8DES_PG_PASSWORD_COMMAND: command,
             };
 
-            for (const [subcommand, code] of [
-              ["create", 1],
-              ["drop", 1],
-              ["check-clear", 2],
-            ] as const) {
+            for (const [subcommand, code] of refused.subcommands) {
               const run = yield* runScript(subcommand, environment);
 
               assert.strictEqual(run.code, code, `${subcommand}: ${run.stderr}`);
@@ -219,29 +227,29 @@ layer(NodeServices.layer, { excludeTestServices: true })(
     );
 
     it.effect(
-      "names the local cluster's CA as GRIZZLE_PG_STATE's where GR8DES_PG_CA is unset or empty, and as GR8DES_PG_CA's where it is set: grizzle migrate's report and psql's CA",
+      "names the local cluster's CA as GRIZZLE_PG_STATE's where GR8DES_PG_CA is unset, in grizzle migrate's report, and gives psql that CA where it is unset or empty",
       () =>
+        // Bound: one grizzle migrate, the case deee42c1 fixed (db.sh exported a default
+        // GR8DES_PG_CA, so the config named the variable); the config's own reading of an empty or
+        // a named GR8DES_PG_CA is db/connection.test.ts's.
         Effect.gen(function* missingCa() {
           const scratch = yield* scriptScratch;
           const command = yield* scratch.command("password.sh", "echo the-password");
           const local = `${scratch.state}/tls/ca.crt`;
-          const named = `${scratch.state}/named.crt`;
+          const run = yield* runScript("migrate", {
+            ...scratch.environment,
+            GR8DES_PG_PASSWORD_COMMAND: command,
+          });
+
+          assert.notStrictEqual(run.code, 0);
+          assert.include(
+            run.stderr,
+            `Cannot read the local database's CA certificate at ${local}.`,
+          );
+          assert.include(run.stderr, "pnpm pg:init");
+          assert.notInclude(run.stderr, "the file GR8DES_PG_CA names");
 
           for (const ca of [undefined, ""]) {
-            const run = yield* runScript("migrate", {
-              ...scratch.environment,
-              GR8DES_PG_CA: ca,
-              GR8DES_PG_PASSWORD_COMMAND: command,
-            });
-
-            assert.notStrictEqual(run.code, 0);
-            assert.include(
-              run.stderr,
-              `Cannot read the local database's CA certificate at ${local}.`,
-            );
-            assert.include(run.stderr, "pnpm pg:init");
-            assert.notInclude(run.stderr, "the file GR8DES_PG_CA names");
-
             yield* runScript("create", {
               ...scratch.environment,
               GR8DES_PG_CA: ca,
@@ -256,15 +264,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           for (const line of runs) {
             assert.include(line, `sslrootcert=${local}`);
           }
-
-          const run = yield* runScript("migrate", {
-            ...scratch.environment,
-            GR8DES_PG_CA: named,
-            GR8DES_PG_PASSWORD_COMMAND: command,
-          });
-
-          assert.notStrictEqual(run.code, 0);
-          assert.include(run.stderr, `${named}, the file GR8DES_PG_CA names`);
         }),
     );
   },
