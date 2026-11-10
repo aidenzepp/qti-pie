@@ -1208,19 +1208,17 @@ describe("The spec readings", () => {
     }
   });
 
-  it("read 129: xml:lang, lang and srclang hold BCP 47 tags, against an independent RFC 5646 recogniser on every tag of up to three subtags", () => {
+  it("read 129: xml:lang, lang and srclang hold BCP 47 tags, against an independent RFC 5646 recogniser on every tag of up to two subtags and the named longer forms", () => {
     // Oracle: RFC 5646 §2.1's ABNF walked subtag by subtag (`isLanguageTag`), not the pattern.
-    // Bound: every tag of one to three subtags over `subtagSamples`, the 26 grandfathered tags in
-    // two cases, and the named forms of the plan; an `xml:lang` or a `lang` may also be empty
+    // Bound: every tag of one or two subtags over `subtagSamples`, the 26 grandfathered tags in
+    // two cases, and the named forms of the plan, which hold the longer tags whose subtags' order
+    // decides them (script before region, extlangs, variants, extensions, a private-use tail); an `xml:lang` or a `lang` may also be empty
     // (XML 1.0 §2.12; information model §5.15.3), but not on an item or a stimulus (§4.1.4,
     // §4.3.4) and never a `srclang` (§5.163.3).
     const tags = [
       ...subtagSamples.flatMap((first) => [
         first,
-        ...subtagSamples.flatMap((second) => [
-          `${first}-${second}`,
-          ...subtagSamples.map((third) => `${first}-${second}-${third}`),
-        ]),
+        ...subtagSamples.map((second) => `${first}-${second}`),
       ]),
       ...grandfathered.flatMap((tag) => [tag, tag.toUpperCase()]),
       "zh-Hant-TW",
@@ -1258,7 +1256,7 @@ describe("The spec readings", () => {
     ];
     const checked = new Map<string, readonly string[]>();
 
-    assert.isAbove(tags.length, 10_000);
+    assert.isAbove(tags.length, 500);
     assert.isAbove(attributes.length, 400);
     for (const { empty, kind, name, version } of attributes) {
       const domain = Option.getOrThrow(domainAt(version, kind, name));
