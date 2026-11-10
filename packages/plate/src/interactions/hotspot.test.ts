@@ -615,6 +615,20 @@ describe("the Hotspot module", () => {
   );
 
   it.effect(
+    "[Q-10] the root carries max-choices as data-max-choices, 0 for no limit, for the runtime",
+    () =>
+      Effect.gen(function* carriesLimit() {
+        const roots = [
+          (yield* rendered("hotspot.xml")).tree,
+          (yield* rendered("hotspot-single.xml")).tree,
+          renderTree(redact(yield* acceptXml(shortCircle)), yield* configure({})),
+        ].map((tree) => onlyPart(tree, "root").attrs["data-max-choices"]);
+
+        assert.deepStrictEqual(roots, ["2", "1", "0"]);
+      }),
+  );
+
+  it.effect(
     "[Q-10] the stacking changes no outline, control or label: passes checkTree and round-trips with data-area",
     () =>
       Effect.gen(function* unchanged() {

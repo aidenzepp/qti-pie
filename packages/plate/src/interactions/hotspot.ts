@@ -40,8 +40,9 @@
  * stated limit. The strings this module adds, the positional name of a hotspot with no
  * `hotspot-label`, are English and live here (D7).
  *
- * The runtime polish, pointer hit-testing inside a non-rectangular area and announcements, is
- * issue m3d-08, not this module's.
+ * The runtime polish, which hotspot a click selects and the announcements, is issue m3d-08, not
+ * this module's. The Root carries `max-choices` as `data-max-choices`, which that runtime reads for
+ * the selection limit and the count, as the Order and Graphic Order Roots carry theirs.
  *
  * @module
  */
@@ -321,7 +322,7 @@ const parts = {
     defaults: {},
     element: "fieldset",
     listOwner: false,
-    merged: ["role", "aria-labelledby", "aria-label", "class"],
+    merged: ["role", "aria-labelledby", "aria-label", "class", "data-max-choices"],
     tagClass: "fieldset",
   },
 } as const satisfies { readonly [Q in HotspotPart]: PartSpec };
@@ -576,9 +577,10 @@ interface Connected {
 /**
  * Compute every attribute of every part of one Hotspot: the connect function.
  *
- * - Root: the marker, `role="group"`, `data-mode`, `data-disabled` when finished, the author's
- *   `class`, and the group's name: the Prompt names it (`aria-labelledby` → the Prompt's id), else
- *   the author's `aria-label` and `aria-labelledby`.
+ * - Root: the marker, `role="group"`, `data-mode`, `data-disabled` when finished, `data-max-choices`
+ *   (the `max-choices` count, 0 for no limit, for the runtime), the author's `class`, and the
+ *   group's name: the Prompt names it (`aria-labelledby` → the Prompt's id), else the author's
+ *   `aria-label` and `aria-labelledby`.
  * - Prompt: the marker and its id.
  * - Image, Choices: the marker.
  * - Choice: the marker, `data-area` (its hotspot's shape, which the stylesheet reads to lay the
@@ -643,6 +645,7 @@ const connect = (interaction: HotspotPayload, payload: Payload): Connected => {
       ...(prompted ? { "aria-labelledby": promptId } : authorsName(interaction, instance)),
       ...when(interaction.class !== "", { class: interaction.class }),
       ...when(payload.finished, { "data-disabled": true }),
+      "data-max-choices": String(interaction.maxChoices),
       "data-mode": payload.mode,
       "data-slot": rows.root.slot,
       role: "group",
