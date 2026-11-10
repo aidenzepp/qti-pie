@@ -38,6 +38,8 @@ import { lawTable } from "#pantry/vocab/laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's test states: a hang guard, never a budget.
+ * Measured 2026-11-10: 1.1 s at a load average of 72 to 317, its one test, the slowest of three
+ * runs. The value is over 500 times that, so it stays 600_000.
  */
 const testTimeoutMs = 600_000;
 
