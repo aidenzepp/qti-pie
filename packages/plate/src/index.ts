@@ -120,6 +120,7 @@ export {
   isPosted,
   Malformed,
   partition,
+  postedStrings,
 } from "#plate/form/encoding.ts";
 
 export { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
