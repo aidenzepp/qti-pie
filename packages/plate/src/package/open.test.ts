@@ -1132,22 +1132,41 @@ const chainPackage = (length: number): ReadonlyMap<string, Uint8Array> => {
 };
 
 /**
- * Open a {@link chainPackage} and check that its test is accepted, reading the chain's last item
- * ref with its processing marked.
+ * The `assembly-limit` refusal of a test whose assembled document passes a limit of the delivery
+ * (issue m3f-03b): at the test document, `test.xml`, with its `check` naming the limit that
+ * stopped the copy, where the judging's own `assembly-limit` refusal names a `bound` and no
+ * `check`, and sits at the package.
+ *
+ * @param check The limit passed.
+ * @param limit What the limit allows.
+ * @param reached The count at which the copy stopped.
+ * @returns The refusal's facts.
+ */
+const deliveryRefused = (
+  check: "delivery-depth" | "delivery-instances" | "delivery-size",
+  limit: string,
+  reached: string,
+): Seen => ({
+  detail: { check, limit, reached },
+  document: fileLocation(location, "test.xml"),
+  location: { kind: "document" },
+  rule: "assembly-limit",
+});
+
+/**
+ * Open a {@link chainPackage} and check that the judging admits it and the delivery refuses it: its
+ * assembled test nests as deep as the chain is long, past the 256 elements the delivery allows, so
+ * the package's one refusal is the test's `assembly-limit` with `check: "delivery-depth"`, and the
+ * test is never delivered unassembled with its section refs marked.
  *
  * @param length How many section documents the chain holds.
- * @returns Nothing; the test fails when the package is not accepted so.
+ * @returns Nothing; the test fails when the package is not refused so.
  */
-const acceptsChain = (length: number) =>
-  Effect.gen(function* chainAccepted() {
+const refusesChain = (length: number) =>
+  Effect.gen(function* chainRefused() {
     const verdict = yield* openPackage(location, chainPackage(length));
-    const { test } = testOf(acceptedOf(verdict), fileLocation(location, "test.xml"));
 
-    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
-    assert.deepStrictEqual(
-      test.unsupported.map((feature) => feature.feature),
-      ["qti-assessment-section-ref", `variable:I${length - 1}.SCORE`],
-    );
+    assert.deepStrictEqual(refusalsOf(verdict), [deliveryRefused("delivery-depth", "256", "257")]);
   });
 
 /**
@@ -2207,21 +2226,27 @@ const namingPackage = (
 
 /**
  * Report whether a verdict is the refusal of a package whose tests assemble past plate's assembly
- * limit.
+ * limit, the judging's: its `assembly-limit` refusal names a `bound` and no `check`. The delivery's
+ * own `assembly-limit` refusal of a test the judging admitted, whose assembled document passes a
+ * delivery limit, names a `check` (`delivery-depth`, `delivery-instances` or `delivery-size`) and
+ * is no refusal of the judging's limit (issue m3f-03b).
  *
  * @param verdict The verdict.
- * @returns Whether it carries an `assembly-limit` refusal.
+ * @returns Whether it carries the judging's `assembly-limit` refusal.
  */
 const pastLimit = (verdict: PackageVerdict): boolean =>
   verdict.verdict === "refused" &&
-  verdict.refusals.some((refusal) => refusal.rule === "assembly-limit");
+  verdict.refusals.some(
+    (refusal) => refusal.rule === "assembly-limit" && refusal.detail["check"] === undefined,
+  );
 
 /**
  * Open a package to its end, for a timing that runs the opening as plain code: a package within
- * plate's assembly limit, so that the timing measures its judgement, not the refusal of the limit.
+ * the judging's assembly limit, so that the timing measures its judgement, not the refusal of the
+ * limit. The delivery may still refuse a test the judging admitted ({@link pastLimit}).
  *
  * @param files The package's files.
- * @returns The opening, which checks only that the package is within the assembly limit.
+ * @returns The opening, which checks only that the package is within the judging's assembly limit.
  */
 const opening = (files: ReadonlyMap<string, Uint8Array>) => (): void => {
   assert.isFalse(
@@ -3638,6 +3663,13 @@ interface FamilyMember {
    * The bound the package one step past passes.
    */
   readonly bound: "bytes" | "placements";
+  /**
+   * The `check` of the delivery's refusal of the package at the largest size the bounds admit, for
+   * a shape the judging accepts whole whose assembled test nests deeper than the delivery allows
+   * (issue m3f-03b); none for a package the judging refuses by another rule or the delivery
+   * accepts.
+   */
+  readonly delivery?: "delivery-depth";
   readonly id: string;
   readonly name: string;
   /**
@@ -3668,6 +3700,7 @@ const familyMembers: readonly FamilyMember[] = [
   {
     at: () => ladderPackage(1, 1023, "every rung's item"),
     bound: "placements",
+    delivery: "delivery-depth",
     id: "N2 bottom",
     name: "a ladder read at its bottom",
     past: () => ladderPackage(64, 16, "every rung's item"),
@@ -3682,6 +3715,7 @@ const familyMembers: readonly FamilyMember[] = [
   {
     at: () => chainedPartsPackage(1, 2048, "the next document's item"),
     bound: "placements",
+    delivery: "delivery-depth",
     id: "N3 pre",
     name: "a chain under parts, read through",
     past: () => chainedPartsPackage(64, 33, "the next document's item"),
@@ -5044,29 +5078,38 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      `[T-9] accepts I1.SCORE and S2.duration that a section document in the reach holds, its item ref resolved from its own path, with the test's processing marked by name and its items its own (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))`,
+      `[T-9] accepts I1.SCORE and S2.duration that a section document in the reach holds, its item ref resolved from its own path: the delivered test places that document, so the processing that reads I1.SCORE through the placed item ref is held and runs unmarked, while the one that reads S2.duration is marked by name, as the test model holds no section's duration (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"); issue m3f-03b)`,
       () =>
         Effect.gen(function* reachedReads() {
           const testPath = fileLocation(location, "test.xml");
           const cases = [
-            ["I1.SCORE", settingTotal(variableXml("I1.SCORE"))],
+            ["I1.SCORE", settingTotal(variableXml("I1.SCORE")), true],
             [
               "S2.duration",
               `<qti-outcome-condition><qti-outcome-if><qti-is-null>${variableXml("S2.duration")}</qti-is-null>${settingTotal(oneFloat)}</qti-outcome-if></qti-outcome-condition>`,
+              false,
             ],
           ] as const;
 
-          for (const [reference, processing] of cases) {
+          for (const [reference, processing, held] of cases) {
             const verdict = yield* openReferring(processing);
             const { items, test } = testOf(acceptedOf(verdict), testPath);
 
-            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", reference);
-            assert.deepStrictEqual(test.test.outcomeProcessing, { kind: "marked" }, reference);
+            assert.strictEqual(
+              verdict.verdict,
+              held ? "accepted" : "accepted-with-unsupported",
+              reference,
+            );
+            assert.strictEqual(
+              test.test.outcomeProcessing.kind,
+              held ? "runs" : "marked",
+              reference,
+            );
             // The delivered test is assembled from the section document it places (issue m3f-03),
             // so no section ref is marked and the section document's item ref is among its items.
             assert.deepStrictEqual(
               test.unsupported.map((feature) => feature.feature),
-              [`variable:${reference}`],
+              held ? [] : [`variable:${reference}`],
               reference,
             );
             assert.deepStrictEqual([...items.keys()], ["ITEM0", "I1"], reference);
@@ -5222,8 +5265,8 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "gives a verdict for a long chain of section refs, 2,048 section documents each naming the next, the most plate's assembly limit admits, and does not throw (R5)",
-      () => acceptsChain(2048),
+      "gives a verdict for a long chain of section refs, 2,048 section documents each naming the next, the most plate's assembly limit admits, and does not throw (R5): the judging admits it, and the delivery refuses it assembly-limit with check delivery-depth, as its assembled test nests past 256 elements",
+      () => refusesChain(2048),
       chainTimeoutMs,
     );
 
@@ -5241,8 +5284,8 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "gives the same verdict for a long chain of section refs of 1,500 section documents, the control",
-      () => acceptsChain(1500),
+      "gives the same verdict for a long chain of section refs of 1,500 section documents, the control: the delivery refuses it assembly-limit with check delivery-depth",
+      () => refusesChain(1500),
       chainTimeoutMs,
     );
 
@@ -7038,12 +7081,14 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r12 assembly limit finding 10: 640 parts, each placing one section document whose item ref holds 640 dotted pre-conditions, are refused assembly-limit naming the bytes bound, in under the thread CPU of the same 640 section refs in one part, which opens within the limit with no refusal",
+      "align-54 r12 assembly limit finding 10: 640 parts, each placing one section document whose item ref holds 640 dotted pre-conditions, are refused assembly-limit naming the bytes bound, in under the thread CPU of the same 640 section refs in one part, which the judging admits within its limit and the delivery refuses assembly-limit with check delivery-size, as its assembled test holds 640 copies of the document and more elements than the delivery allows",
       () =>
         Effect.gen(function* placingRefused() {
           const one = placingPackage(hostilePlacingParts, "one part");
           const many = placingPackage(hostilePlacingParts, "a part each");
-          assert.deepStrictEqual(refusalsOf(yield* openPackage(location, one)), []);
+          assert.deepStrictEqual(refusalsOf(yield* openPackage(location, one)), [
+            deliveryRefused("delivery-size", "262144", "262145"),
+          ]);
 
           let oneMs = Number.POSITIVE_INFINITY;
           for (let run = 0; run < growthRuns; run += 1) {
@@ -7478,8 +7523,8 @@ describe("package/open.ts", () => {
     );
 
     it.effect.each(familyMembers)(
-      "align-54 r12 assembly limit $id: $name, at the largest size the bounds admit, opens within them in under 2 s of thread CPU, the heap growing by under 512 MiB",
-      ({ at }) =>
+      "align-54 r12 assembly limit $id: $name, at the largest size the bounds admit, opens within them in under 2 s of thread CPU, the heap growing by under 512 MiB, and where its assembled test nests past the delivery's depth limit the delivery refuses it delivery-depth",
+      ({ at, delivery }) =>
         Effect.gen(function* withinLimit() {
           const files = at();
           const before = memoryUsage().heapUsed;
@@ -7496,6 +7541,15 @@ describe("package/open.ts", () => {
             withinLimitHeap,
             `the heap grew by ${(grown / 2 ** 20).toFixed(0)} MiB while the package opened`,
           );
+          if (delivery !== undefined) {
+            assert.deepStrictEqual(
+              refusalsOf(yield* openPackage(location, files)).map((refusal) => [
+                refusal.rule,
+                refusal.detail["check"],
+              ]),
+              [["assembly-limit", delivery]],
+            );
+          }
         }),
       growthTimeoutMs,
     );
@@ -7625,7 +7679,7 @@ describe("package/open.ts", () => {
 
   describe("openPackage, a test whose one counting reading of a name is a section document's", () => {
     it.effect(
-      "align-54 r12 counting reading in a section document N1: a.2.SCORE beside an own a a selection with replacement can repeat, whose item declares no SCORE, and x.y.SCORE beside an own x.y, whose item declares no SCORE, each read through a section document's a.2 or x alone, are delivered with the processing marked, variable:<name> at the processing, while the test document's own verdict runs it",
+      "align-54 r12 counting reading in a section document N1: a.2.SCORE beside an own a a selection with replacement can repeat, whose item declares no SCORE, and x.y.SCORE beside an own x.y, whose item declares no SCORE, each read through a section document's a.2 or x alone, are held: the delivered test places that section document, so its item ref is the test's own, and the processing runs unmarked, as the test document's own verdict runs it (issue m3f-03b)",
       () =>
         Effect.gen(function* countingInSection() {
           for (const [name, own, placed, before, declarations] of [
@@ -7641,13 +7695,9 @@ describe("package/open.ts", () => {
             const verdict = yield* openCounting(name, own, placed, before, declarations);
             const { alone, delivered } = deliveredAndAlone(verdict);
 
-            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", name);
-            assert.deepStrictEqual(delivered.test.outcomeProcessing, { kind: "marked" }, name);
-            assert.deepStrictEqual(
-              variableMarks(delivered),
-              [[`variable:${name}`, processingPath]],
-              name,
-            );
+            assert.strictEqual(verdict.verdict, "accepted", name);
+            assert.strictEqual(delivered.test.outcomeProcessing.kind, "runs", name);
+            assert.deepStrictEqual(variableMarks(delivered), [], name);
             assert.strictEqual(alone.test.outcomeProcessing.kind, "runs", name);
             assert.deepStrictEqual(variableMarks(alone), [], name);
           }
