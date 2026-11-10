@@ -104,14 +104,20 @@ const database = Config.schema(DatabaseName, "GR8DES_PG_DATABASE").pipe(
 );
 
 /**
+ * The local cluster's state folder, which `GRIZZLE_PG_STATE` names (`~/.local/var/grizzle/pg19rc1`
+ * by default, where grizzle's `pnpm pg:init` makes it): it holds the cluster's CA, `tls/ca.crt`,
+ * and the migration identity's password, `<role>.password`, which scripts/db.sh reads.
+ */
+export const clusterState = underHome("GRIZZLE_PG_STATE", ".local/var/grizzle/pg19rc1");
+
+/**
  * The CA file a connection verifies the server against, and the setting that named it: the file
- * `GR8DES_PG_CA` names, else `tls/ca.crt` in the local cluster's state folder, which
- * `GRIZZLE_PG_STATE` names (`~/.local/var/grizzle/pg19rc1` by default, where grizzle's `pnpm
- * pg:init` makes it).
+ * `GR8DES_PG_CA` names, else `tls/ca.crt` in the local cluster's state folder
+ * ({@link clusterState}).
  */
 const caFile = Config.all({
   set: Config.option(Config.String("GR8DES_PG_CA")),
-  state: underHome("GRIZZLE_PG_STATE", ".local/var/grizzle/pg19rc1"),
+  state: clusterState,
 }).pipe(
   Config.map(({ set, state }) =>
     Option.match(set, {
@@ -150,7 +156,7 @@ const localCluster = Config.all({
  * unset or empty, as scripts/db.sh reads it. Where it is set, it replaces both local sources: the
  * migration identity's `GR8DES_PG_MIGRATION_PASSWORD` and each login's password file.
  */
-const passwordCommand = Config.option(Config.String("GR8DES_PG_PASSWORD_COMMAND")).pipe(
+export const passwordCommand = Config.option(Config.String("GR8DES_PG_PASSWORD_COMMAND")).pipe(
   Config.map(Option.filter((command) => command !== "")),
 );
 
