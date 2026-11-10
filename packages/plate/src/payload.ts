@@ -69,6 +69,7 @@ import type { RedactRecord } from "#plate/model/record.ts";
 import { format, isRecordValue, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, ResponseValue, Single, Value } from "#plate/model/values.ts";
 import { clampOutputBudget, defaultOutputBudget } from "#plate/output-budget.ts";
+import type { HostFacts } from "#plate/pci/host.ts";
 import { noSupports } from "#plate/supports.ts";
 import type { Supports } from "#plate/supports.ts";
 import type { OutcomeView } from "#plate/vocabulary.ts";
@@ -109,6 +110,12 @@ export interface View {
    * Whether the author disabled every control.
    */
   readonly finished: boolean;
+  /**
+   * The host's facts, which reach each interaction module's `redact` through its kit
+   * (`RedactKit.host`) and nothing else: the empty record when absent, so every module sees a
+   * record. A render input, never item data: the payload holds no field of it.
+   */
+  readonly host?: HostFacts;
   /**
    * The item instance key, which scopes every id and each default entry name.
    */
@@ -661,6 +668,10 @@ interface Build {
    * Whether the view's mode lets the candidate change a response ({@link ModePayload}).
    */
   readonly editable: boolean;
+  /**
+   * The host's facts, the view's or the empty record, handed whole to each module's `redact`.
+   */
+  readonly host: HostFacts;
   /**
    * The ids the author gave the item's elements, unscoped ({@link authoredIdsIn}).
    */
@@ -1289,8 +1300,9 @@ type Printer = (bound: number) => Option.Option<string>;
  * Give the kit a module's `redact` reads one interaction's content and the view through: the copy
  * of body nodes, and the view's facts about the interaction as the shipped kinds' payloads read
  * them ({@link shown}, {@link formNameOf}, the posted strings, the seed, the instance, `autofocus`
- * and the unnamed position), so a module bakes into its payload node what a Choice's or a Text
- * Entry's payload holds, and no hub names its kind.
+ * and the unnamed position), and the host's facts whole, so a module bakes into its payload node
+ * what a Choice's or a Text Entry's payload holds and what only its host knows, and no hub names
+ * its kind.
  *
  * @param interaction The interaction being redacted.
  * @param build The build.
@@ -1299,6 +1311,7 @@ type Printer = (bound: number) => Option.Option<string>;
 const redactKit = (interaction: Interaction, build: Build): RedactKit => ({
   autofocus: Option.exists(build.autofocus, (first) => first === interaction),
   formName: (response) => formNameOf(build, response),
+  host: build.host,
   instance: build.instance,
   nodes: (nodes) => copyNodes(nodes, build),
   posted: (response) => build.posted.pipe(Option.map((posted) => posted.get(response) ?? [])),
@@ -2521,11 +2534,13 @@ export const postings = (redacted: Redacted, instance: string): readonly Posting
  * item and the author's inputs.
  *
  * @param redacted The item, through {@link redactItem}.
- * @param view The author's inputs: the instance, the mode, the seed, values, names, messages and
- *   posted strings.
+ * @param view The author's inputs: the instance, the mode, the seed, values, names, messages,
+ *   posted strings and the host's facts.
  * @returns The payload. It holds no correct response, mapping, default, processing rule, seed,
  *   template value or feedback content of the item, whatever the view; the seed only orders a
- *   shuffled Choice's or Inline Choice's choices, and a value it shows is one the view gave.
+ *   shuffled Choice's or Inline Choice's choices, and a value it shows is one the view gave. It
+ *   holds no field of the host's facts either: those reach each module's `redact` through its kit
+ *   alone.
  */
 export const payload = (redacted: Redacted, view: View): Payload => {
   const messages = identifyMessages(view.instance, view.messages);
@@ -2541,6 +2556,7 @@ export const payload = (redacted: Redacted, view: View): Payload => {
       messages.some((entry) => entry.response === interaction.response),
     ),
     editable: view.mode === "answering",
+    host: view.host ?? {},
     instance: view.instance,
     messages,
     names: view.names,

@@ -420,13 +420,6 @@ export const messageAttributes = [
 ] as const;
 
 /**
- * The `data-*` names plate reserves for itself on a part (`reservedDataNames`, `reservedDataPrefix`
- * and `isReservedData`), re-exported from the emitter's part table, which owns them, so the model
- * hub reads the one table the Root write consults without the emitter loading these tables.
- */
-export { isReservedData, reservedDataNames, reservedDataPrefix } from "#plate/emit/parts.ts";
-
-/**
  * The two URI prefixes of QTI 3's response-processing templates (reading 9.23's shared part).
  *
  * A built-in template is either prefix followed by its name, with or without `.xml`.
@@ -632,6 +625,19 @@ export const behaviourClasses: Readonly<Record<ClassOwner, readonly string[]>> =
    */
   "text-entry-interaction": [],
 };
+
+/**
+ * The reserved `data-*` table and its predicates (decision D24), defined in `#plate/emit/parts.ts`
+ * and exported here as their declared home: the emitter is a browser module and must not
+ * value-import this file, whose own imports reach `Schema` from `effect`, which the browser
+ * modules' allowlist refuses. See {@link reservedDataNames} there for D24's text.
+ */
+export {
+  isAuthorData,
+  isReservedData,
+  reservedDataNames,
+  reservedDataPrefix,
+} from "#plate/emit/parts.ts";
 
 /**
  * The two navigation modes of a test part, as its `navigation-mode` attribute spells them.

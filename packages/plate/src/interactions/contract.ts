@@ -72,6 +72,7 @@ import type {
   UnnamedPosition,
   ValidationMessage,
 } from "#plate/payload.ts";
+import type { HostFacts } from "#plate/pci/host.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import type { BaseType, Cardinality } from "#plate/vocabulary.ts";
 
@@ -289,7 +290,8 @@ export interface ParseContext {
  * content, its Prompt or a choice's, reaches the payload as a Choice's does, and the view's facts
  * about the interaction's responses, each as the payload reads it for the four shipped kinds, so a
  * module restores a stored response into its parts, writes its hidden inputs under the name the
- * host chose, and shuffles by the configuration's seed, with no hub naming its kind. The view's
+ * host chose, and shuffles by the configuration's seed, with no hub naming its kind, and the
+ * host's facts ({@link RedactKit.host}), so a module reads what only its host knows. The view's
  * values are the host's: a value a module's interaction binds has passed the module's `restore`
  * (through `restore` in `#plate/restore.ts`) or `solution` (`#plate/solution.ts`) when the host
  * read them from there, so what a module shows is what its own step gave.
@@ -308,6 +310,16 @@ export interface RedactKit {
    * @returns The entry name.
    */
   readonly formName: (response: string) => string;
+  /**
+   * The host's facts, the view's `host` as the author passed it to `render`, the empty record when
+   * the author passed none: what only the host knows, such as the URL of a script it serves
+   * (`HostFacts` in `#plate/pci/host.ts`). A module reads only its own member and writes what its
+   * controller needs onto its own Root, as `data-*` attributes among the Root's merged attributes;
+   * a module whose member is absent renders as with none. The facts are a render input, never item
+   * data: they reach no redacted item, no JSON form and no `Payload` field, only the payload node a
+   * module bakes them into.
+   */
+  readonly host: HostFacts;
   /**
    * The item instance key, which scopes every id and entry name, and keys a shuffle with the seed
    * and the response.
