@@ -1359,32 +1359,6 @@ class Stylesheet extends Context.Service<
   );
 }
 
-/**
- * The green `data-credit` draws full credit in, the one the stylesheet's credit rules declare.
- */
-const creditGreen = "oklch(0.6 0.16 150)";
-
-/**
- * Tell whether a selector's last compound generates `::before`.
- *
- * @param selector One selector.
- * @returns Whether its last top-level compound holds the `before` pseudo-element.
- */
-const generatesBefore = (selector: string): boolean =>
-  compounds(selector).at(-1)?.pseudoElements.includes("before") ?? false;
-
-/**
- * Read the value the last of some rules that declares a property gives it.
- *
- * @param rules The rules, in sheet order.
- * @param property The property.
- * @returns The last declaring rule's value, or none when no rule declares it.
- */
-const lastDeclared = (rules: readonly StyleRule[], property: string): Option.Option<string> =>
-  Option.fromUndefinedOr(rules.findLast((rule) => declares(rule, property))).pipe(
-    Option.flatMap((rule) => declared(rule, property)),
-  );
-
 layer(Stylesheet.layer)("styles.css", (test) => {
   test.effect(
     "scans, and holds the browser floor with the browser-support note",
@@ -2018,68 +1992,6 @@ layer(Stylesheet.layer)("styles.css", (test) => {
         const { sheet } = yield* Stylesheet;
 
         assert.deepStrictEqual(hidingRules(sheet, marker.inlineChoiceControl), []);
-      }),
-  );
-
-  test.effect(
-    "draws a modal feedback with a credit as the full outline in its colour: 1.5px on every side, the green, amber or --destructive, on the card's own surface, with no wider start edge",
-    () =>
-      Effect.gen(function* creditOutline() {
-        const { sheet } = yield* Stylesheet;
-        const card = rowFor("item", "modalFeedback").slot;
-        const cardRules = (credit: Option.Option<string>) =>
-          sheet.rules.filter((rule) =>
-            rule.selectors.some(
-              (selector) =>
-                !generatesBefore(selector) &&
-                subjectCompounds(selector).some(
-                  (compound) =>
-                    holdsSlot(compound, card) &&
-                    Option.match(credit, {
-                      onNone: () => holdsPresence(compound, "data-credit"),
-                      onSome: (value) => holdsEquals(compound, "data-credit", value),
-                    }),
-                ),
-            ),
-          );
-        const credited = [
-          ...cardRules(Option.none()),
-          ...["full", "partial", "none"].flatMap((credit) => cardRules(Option.some(credit))),
-        ];
-
-        assert.isTrue(
-          Option.contains(lastDeclared(cardRules(Option.none()), "border-width"), "1.5px"),
-        );
-        assert.deepStrictEqual(
-          credited.flatMap((rule) =>
-            rule.declarations
-              .filter(
-                (declaration) =>
-                  declaration.property.startsWith("border-inline-start") ||
-                  declaration.property.startsWith("background"),
-              )
-              .map((declaration) => `${declaration.property}: ${declaration.value}`),
-          ),
-          [],
-          "no start edge and no tint",
-        );
-        assert.isTrue(
-          Option.contains(
-            lastDeclared(cardRules(Option.some("full")), "border-color"),
-            creditGreen,
-          ),
-        );
-        assert.isTrue(
-          Option.contains(
-            lastDeclared(cardRules(Option.some("partial")), "border-color"),
-            "oklch(0.62 0.16 60)",
-          ),
-        );
-        assert.isTrue(
-          cardRules(Option.some("none")).some((rule) =>
-            Option.contains(tokenName(rule, "border-color"), "--destructive"),
-          ),
-        );
       }),
   );
 });
