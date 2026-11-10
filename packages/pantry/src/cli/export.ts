@@ -18,7 +18,7 @@ const ExportEntry = Schema.Struct({ bytes: Schema.Int, path: Schema.String });
 
 /**
  * What `export` returns under `--output json`: the package, where it was written and every file
- * written, read back from the target.
+ * written.
  */
 const ExportWritten = Schema.Struct({
   entries: Schema.Array(ExportEntry),
@@ -54,8 +54,8 @@ export const ExportData = Schema.Union([ExportPlanned, ExportWritten]);
  *
  * The engine loads when the handler runs, so `--help` and a usage error never pay for it, and the
  * exporter loads inside the database's pool (`withAuthorApp`), so neither does a run that cannot
- * reach the database. `exportPackage` returns nothing, so under `--output json` the entries are
- * read back from what it wrote; text mode prints nothing and does not read them.
+ * reach the database. Under `--output json` it lists the entries `exportPackage` wrote, in the
+ * order it wrote them, each with its size; text mode prints nothing.
  *
  * Under `--dry-run` nothing is written and the target is not touched: the entries the export would
  * write are listed with their sizes, and whether the target would be created or replaced. A dry run
@@ -103,10 +103,10 @@ export const exportCommand = Command.make(
       return;
     }
 
-    yield* replaceWith(target, (written) =>
+    const written = yield* replaceWith(target, (staged) =>
       withAuthorApp(
         () => import("#pantry/export/package.ts"),
-        ({ exportPackage }) => exportPackage(id, written),
+        ({ exportPackage }) => exportPackage(id, staged),
       ),
     );
 
@@ -114,19 +114,13 @@ export const exportCommand = Command.make(
       return;
     }
 
-    const { listPackage, readEntry } = yield* Effect.promise(
-      () => import("#pantry/package/read.ts"),
-    );
-    const listed = yield* listPackage(target);
-    const entries = yield* Effect.all(
-      listed.map(({ path }) =>
-        readEntry(target, path).pipe(Effect.map((bytes) => ({ bytes: bytes.byteLength, path }))),
-      ),
-    );
-
     yield* emitSuccess(mode, {
       command: "export",
-      data: { entries, package_id: packageId, target },
+      data: {
+        entries: written.map(({ bytes, path }) => ({ bytes: bytes.byteLength, path })),
+        package_id: packageId,
+        target,
+      },
       dataSchema: ExportData,
       ok: true,
     });
