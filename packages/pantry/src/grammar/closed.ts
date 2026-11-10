@@ -397,17 +397,11 @@ export const repeatOf = (held: Roster<string>): Option.Option<RepeatedValue> => 
  * @param size - The number of codes.
  * @returns The roster; its numerals are distinct, so it is always one.
  */
-export const fin = (name: string, size: number): Roster<string> => {
-  const handles = Array.from({ length: size }, (_, code) => String(code));
-  const codes = new Map<Primitive, number>(handles.map((handle, code) => [handle, code]));
-
-  return {
-    codeOf: (handle) => Option.fromNullishOr(codes.get(handle)),
-    handles,
-    has: (value: string): value is string => codes.has(value),
+export const fin = (name: string, size: number): Roster<string> =>
+  roster(
     name,
-  };
-};
+    Array.from({ length: size }, (_, code) => String(code)),
+  );
 
 /**
  * Construct a key or payload field over a roster.
@@ -500,20 +494,20 @@ type KeyOf<Key extends readonly AnyKeyField[]> = {
  * @returns The key's number, or none for a key that leaves a field out or holds a value outside
  *   its field's code space, which no row is at.
  */
-const keyNumberOf = (key: readonly AnyKeyField[], row: AnyRow): number | undefined => {
+const keyNumberOf = (key: readonly AnyKeyField[], row: AnyRow): Option.Option<number> => {
   let number = 0;
   for (const field of key) {
-    const value = row[field.name];
-    const code =
-      value === undefined ? undefined : Option.getOrUndefined(field.roster.codeOf(String(value)));
-    if (code === undefined) {
-      return undefined;
+    const code = Option.flatMap(Option.fromNullishOr(row[field.name]), (value) =>
+      field.roster.codeOf(String(value)),
+    );
+    if (Option.isNone(code)) {
+      return Option.none();
     }
 
-    number = number * field.roster.handles.length + code;
+    number = number * field.roster.handles.length + code.value;
   }
 
-  return number;
+  return Option.some(number);
 };
 
 /**
@@ -546,17 +540,13 @@ const lookupOf = <Key extends readonly AnyKeyField[], Entry extends { readonly r
 
   const byKey = new Map<number, Entry>();
   for (const entry of entries) {
-    const at = keyNumberOf(key, entry.row);
-    if (at !== undefined) {
+    for (const at of Option.toArray(keyNumberOf(key, entry.row))) {
       byKey.set(at, entry);
     }
   }
 
-  return (at) => {
-    const number = keyNumberOf(key, at);
-
-    return number === undefined ? Option.none() : Option.fromNullishOr(byKey.get(number));
-  };
+  return (at) =>
+    Option.flatMap(keyNumberOf(key, at), (number) => Option.fromNullishOr(byKey.get(number)));
 };
 
 /**
@@ -564,15 +554,16 @@ const lookupOf = <Key extends readonly AnyKeyField[], Entry extends { readonly r
  * values for an open field, and for a dependent `fin` a code below the size its prefix gives it.
  *
  * @param field - The field.
- * @param value - The row's value under the field's name, if it holds one.
+ * @param row - The row, which holds no value where it leaves the field out.
  * @param prefix - The row's handles in the key fields before the key's first dependent one.
- * @returns Whether the value has a code.
+ * @returns Whether the row's value under the field's name has a code.
  */
 const holds = (
   field: AnyField | DependentField<string>,
-  value: Primitive | undefined,
+  row: AnyRow,
   prefix: Readonly<Record<string, string>>,
 ): boolean => {
+  const value = row[field.name];
   switch (field._tag) {
     case "id": {
       return Predicate.isString(value) && field.roster.has(value);
@@ -615,15 +606,14 @@ export const faultOf = (relation: {
   readonly rows: readonly AnyRow[];
 }): Option.Option<KeyCollision | OutsideCodeSpace> => {
   const { key, name, payload, rows } = relation;
-  const split = key.findIndex((field) => field._tag === "dependent");
-  const prefixFields = split === -1 ? key : key.slice(0, split);
+  const prefixFields = Arr.takeWhile(key, (field) => field._tag !== "dependent");
   const fields = [...key, ...payload];
-  const seen = new Set<number | undefined>();
+  const seen = new Set<number>();
   for (const row of rows) {
     const prefix = Object.fromEntries(
       prefixFields.map(({ name: field }) => [field, String(row[field])] as const),
     );
-    const outside = fields.find((field) => !holds(field, row[field.name], prefix));
+    const outside = fields.find((field) => !holds(field, row, prefix));
     if (outside !== undefined) {
       return Option.some(
         new OutsideCodeSpace({
@@ -634,12 +624,14 @@ export const faultOf = (relation: {
       );
     }
 
-    const number = keyNumberOf(key, row);
-    if (seen.has(number)) {
-      return Option.some(new KeyCollision({ key: spell(key, row), relation: name }));
-    }
+    // Every value has a code here, so the key has its number.
+    for (const number of Option.toArray(keyNumberOf(key, row))) {
+      if (seen.has(number)) {
+        return Option.some(new KeyCollision({ key: spell(key, row), relation: name }));
+      }
 
-    seen.add(number);
+      seen.add(number);
+    }
   }
 
   return Option.none();
