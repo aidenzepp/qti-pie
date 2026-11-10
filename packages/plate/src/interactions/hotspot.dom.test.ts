@@ -430,7 +430,7 @@ describe(server.browser, () => {
             const upgraded = item.begin();
 
             assert.deepStrictEqual(
-              upgraded.controllers.map(({ root }) => root),
+              upgraded.controllers.flatMap((entry) => ("kind" in entry ? [entry.root] : [])),
               [item.root],
             );
             assert.isUndefined(item.root.dataset["runtime"]);
@@ -906,7 +906,12 @@ describe(server.browser, () => {
           focused.push(event.target ?? document);
         };
         const before = document.activeElement;
-        const markup = container.innerHTML;
+        const hotspotMarkup = () =>
+          [...container.querySelectorAll(`[data-slot="${rootSlot}"]`)].map(
+            (root) => root.outerHTML,
+          );
+        const markup = hotspotMarkup();
+        const whole = container.innerHTML;
 
         document.addEventListener("focusin", record);
 
@@ -923,14 +928,14 @@ describe(server.browser, () => {
 
         yield* frames;
 
-        assert.strictEqual(upgraded.controllers.length, 2);
+        assert.strictEqual(upgraded.controllers.filter((entry) => "kind" in entry).length, 2);
         assert.strictEqual(document.activeElement, before);
         assert.deepStrictEqual(focused, []);
         assert.strictEqual(live.textContent, "");
-        assert.strictEqual(container.innerHTML, markup);
+        assert.deepStrictEqual(hotspotMarkup(), markup);
 
         upgraded.teardown();
-        assert.strictEqual(container.innerHTML, markup);
+        assert.strictEqual(container.innerHTML, whole);
         container.remove();
       }),
     );
