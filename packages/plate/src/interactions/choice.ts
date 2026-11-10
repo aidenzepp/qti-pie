@@ -10,6 +10,20 @@
  * native group by their shared `name`. The Prompt and each choice's content go through the body's
  * {@link emitNodes}, so they get the body's id scoping, heading shift, URLs and Notices.
  *
+ * Answer masking (A-8): when the host's `supports.answerMasking` is on, every choice starts covered
+ * and the candidate uncovers each one. The covered row is `li > details > [summary, Control,
+ * Label]`, the `details` the Mask part and its `summary` the Mask Toggle part. A closed `details`
+ * renders nothing but its `summary`, so the Control is neither seen, focusable nor in the
+ * accessibility tree, and opening the toggle (Enter or Space, or a click) is the browser's own
+ * disclosure, which needs no script and posts nothing: the Control's name, value and type are what
+ * they are unmasked. The toggle reads "Show choice N of M" by the choice's position, in the text
+ * this module holds (D7). The masks apply in `answering` only: `review` and `solution`, a finished
+ * item and a Choice that is not editable render unmasked. A choice whose Control renders `checked`
+ * (a restored or posted answer) renders its `details` open, so the candidate sees what they gave.
+ * Closing a mask again, and covering the choices anew when the candidate returns to the item, are
+ * not required of A-8 and are not done. The mask is the Choice's alone; no other interaction reads
+ * `answerMasking`.
+ *
  * {@link validateChoice} checks a value the caller decoded, in two tiers: tier (a) always, tier (b)
  * only under `validateResponses` (D5).
  *
@@ -18,7 +32,7 @@
 import { Option, Result, pipe } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import { emitNodes, nestedInteraction } from "#plate/emit/body.ts";
-import { h, when } from "#plate/emit/node.ts";
+import { h, text, when } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { promptMarkupFor, rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOf, PartRow, PromptMarkup, RowContext } from "#plate/emit/parts.ts";
@@ -55,8 +69,28 @@ type ChoicePart = PartOf<typeof owner>;
 type Rows = { readonly [P in ChoicePart]: PartRow };
 
 /**
+ * The text of a mask's toggle by locale, in English and local to this module (D7): "Show choice N
+ * of M", `N` the choice's position as emitted and `M` the number of choices, each already written
+ * for the locale by {@link numeral}. It is the toggle's whole accessible name, so the masked
+ * choice is named by its position while its own text stays covered.
+ */
+const maskToggleTexts: Readonly<Record<Locale, (n: string, count: string) => string>> = {
+  en: (n, count) => `Show choice ${n} of ${count}`,
+};
+
+/**
+ * What covers one choice: the attributes of its Mask and of the Mask's Toggle, and the Toggle's
+ * text.
+ */
+interface Mask {
+  readonly mask: Attributes;
+  readonly text: string;
+  readonly toggle: Attributes;
+}
+
+/**
  * The attributes the connect function computes for one choice's parts, beside the content its
- * Label holds.
+ * Label holds and the mask that covers the choice, none when it is shown.
  */
 interface ChoiceItem {
   readonly choice: Attributes;
@@ -64,6 +98,7 @@ interface ChoiceItem {
   readonly control: Attributes;
   readonly indicator: Attributes;
   readonly label: Attributes;
+  readonly mask: Option.Option<Mask>;
 }
 
 /**
@@ -126,6 +161,10 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  *   its position as emitted; `aria-invalid` and `aria-describedby` → the message ids when the
  *   response is invalid; and `autofocus` on the first Control when the payload says.
  * - Indicator: `aria-hidden="true"`. Label: its id, and `for` → its Control.
+ * - Mask, when `answerMasking` holds and the Choice is `editable` and not finished (so only in
+ *   `answering`): the marker, and `open` when the choice's Control renders `checked`; its Toggle:
+ *   the marker, and the text "Show choice n of count" for the choice's position (A-8). A Mask is
+ *   given no name of its own, because its Toggle names it.
  *
  * Every id is `scopedId(instance, response, part, index)`.
  *
@@ -134,6 +173,7 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  * @param rows The rows of the Choice's parts as placed.
  * @param markup The Prompt's markup, none when there is no Prompt.
  * @param locale The locale of the renderer's own text.
+ * @param answerMasking Whether the host enabled answer masking for the candidate.
  * @returns The attributes of every part.
  * @see https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#constructing-the-form-data-set
  */
@@ -143,18 +183,21 @@ const connect = (
   rows: Rows,
   markup: Option.Option<PromptMarkup>,
   locale: Locale,
+  answerMasking: boolean,
 ): Connected => {
   const { instance } = payload;
   const promptId = scopedId(instance, interaction.response, "prompt");
   const labelledby = Option.contains(markup, "labelledby");
   const type =
     interaction.maxChoices === 1n || interaction.cardinality === "single" ? "radio" : "checkbox";
+  const masked = answerMasking && interaction.editable && !payload.finished;
 
   return {
     choices: { "data-slot": rows.choices.slot },
     items: interaction.choices.map((choice, index) => {
       const controlId = scopedId(instance, interaction.response, "control", index);
       const labelId = scopedId(instance, interaction.response, "label", index);
+      const checked = interaction.restore.includes(choice.identifier);
 
       return {
         choice: { "data-slot": rows.choice.slot },
@@ -171,7 +214,7 @@ const connect = (
             "aria-invalid": "true",
           }),
           ...when(interaction.autofocus && index === 0, { autofocus: true }),
-          ...when(interaction.restore.includes(choice.identifier), { checked: true }),
+          ...when(checked, { checked: true }),
           "data-slot": rows.control.slot,
           ...when(payload.finished || !interaction.editable, { disabled: true }),
           id: controlId,
@@ -181,6 +224,16 @@ const connect = (
         },
         indicator: { "aria-hidden": "true", "data-slot": rows.indicator.slot },
         label: { "data-slot": rows.label.slot, for: controlId, id: labelId },
+        mask: masked
+          ? Option.some({
+              mask: { "data-slot": rows.mask.slot, ...when(checked, { open: true }) },
+              text: maskToggleTexts[locale](
+                numeral(locale, index + 1),
+                numeral(locale, interaction.choices.length),
+              ),
+              toggle: { "data-slot": rows.maskToggle.slot },
+            })
+          : Option.none(),
       };
     }),
     prompt: { "data-slot": rows.prompt.slot, ...when(labelledby, { id: promptId }) },
@@ -246,9 +299,17 @@ export const labelAsSpan = (node: Node): Node => {
  * `label` in a choice's content is written as a `span` ({@link labelAsSpan}) before the Label part
  * takes it, so a replacement Label is handed the rewritten children.
  *
+ * Under `state.supports.answerMasking`, in `answering` and while the item is not finished, each
+ * `li` holds one Mask, a `details`, in place of its Control and Label: `li > details > [Toggle,
+ * Control, Label]`. The Toggle is placed first and handed its text, then the Mask is handed the
+ * Toggle, the Control and the Label, and the Choice is handed the Mask alone, so a replacement of
+ * any of the three keeps what it is handed (I2). A state without `supports` reads as masking off,
+ * and then the HTML is what it is with no mask.
+ *
  * @param interaction The Choice's payload.
  * @param payload The payload of the whole render, which gives the instance and `finished`.
- * @param state The locale, the heading level and the resolved part overrides.
+ * @param state The locale, the heading level, the resolved part overrides and the supports, whose
+ *   `answerMasking` decides whether each choice is covered.
  * @returns The Choice Root, or {@link PartSwapRefused} when a replacement breaks the swap
  *   invariant.
  * @throws {NestedInteractionDefect} When the Prompt or a choice's content holds an interaction,
@@ -272,7 +333,28 @@ export const renderChoice = (
     );
     const markup = promptContent.pipe(Option.map(promptMarkupFor));
     const rows = rowsFor(markup);
-    const props = connect(interaction, payload, rows, markup, state.locale);
+    const props = connect(
+      interaction,
+      payload,
+      rows,
+      markup,
+      state.locale,
+      state.supports?.answerMasking ?? false,
+    );
+    const cover = (
+      mask: Mask,
+      children: readonly Node[],
+    ): Result.Result<Element, PartSwapRefused> =>
+      Result.gen(function* choiceMask() {
+        const toggle = yield* applyPart(
+          rows.maskToggle,
+          mask.toggle,
+          [text(mask.text)],
+          replacement("maskToggle"),
+        );
+
+        return yield* applyPart(rows.mask, mask.mask, [toggle, ...children], replacement("mask"));
+      });
 
     const choices = yield* pipe(
       props.items.map((item) =>
@@ -291,13 +373,10 @@ export const renderChoice = (
             replacement("label"),
           );
           const control = yield* applyPart(rows.control, item.control, [], replacement("control"));
+          const shown: readonly Node[] = [control, label];
+          const covered = Option.isSome(item.mask) ? [yield* cover(item.mask.value, shown)] : shown;
 
-          return yield* applyPart(
-            rows.choice,
-            item.choice,
-            [control, label],
-            replacement("choice"),
-          );
+          return yield* applyPart(rows.choice, item.choice, covered, replacement("choice"));
         }),
       ),
       Result.all,
