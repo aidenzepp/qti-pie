@@ -55,6 +55,7 @@ const sessionOf = (id: string): TestSession => ({
   instance: id,
   items: [
     {
+      comment: Option.none(),
       datestamp: "2026-11-05T10:00:12.500Z",
       duration: 12.5,
       firstOutcomes: Option.some(fresh(bg007Item, `${id}.1`).outcomes),

@@ -41,6 +41,7 @@ const session: TestSession = {
   instance: "s1",
   items: [
     {
+      comment: Option.none(),
       datestamp: "2026-11-05T10:00:00.000Z",
       duration: 0,
       firstOutcomes: Option.none(),
