@@ -81,6 +81,11 @@ interface BodyElementJson {
   readonly catalog?: string;
   readonly children: readonly BodyNodeJson[];
   readonly kind: "element";
+  /**
+   * The element's stimulus reference, the author's `data-stimulus-idref`, present only when it
+   * carries one.
+   */
+  readonly stimulus?: string;
   readonly tag: string;
 }
 
@@ -264,7 +269,9 @@ const OptionalText = Schema.OptionFromOptionalKey(Schema.String);
  * string`, so the codec's body-node union stays the model's `BodyNode`, and `redact`'s own result
  * keeps its paths on the server. An element's `catalog` key is no path: it is the author's own
  * catalog identifier, the `data-catalog-idref` they wrote, which names a `qti-catalog` and nothing
- * about where the element sits, so the form keeps it for the emitter's attachment hook.
+ * about where the element sits, so the form keeps it for the emitter's attachment hook. Nor is an
+ * element's `stimulus` key: it is the author's own stimulus identifier, the `data-stimulus-idref`
+ * they wrote, no path, kept for the emitter's dock hook.
  */
 const NoPath = Schema.optionalKey(Schema.Unknown).pipe(
   Schema.decodeTo(Schema.String, {
@@ -578,6 +585,7 @@ const BodyNodeSchema = Schema.Union([
     children: BodyNodes,
     kind: Schema.Literal("element"),
     path: NoPath,
+    stimulus: Schema.optionalKey(Schema.String),
     tag: Schema.String,
   }),
   Schema.Struct({ kind: Schema.Literal("text"), text: Schema.String }),

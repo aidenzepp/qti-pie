@@ -86,6 +86,7 @@ import { clampOutputBudget, defaultOutputBudget } from "#plate/output-budget.ts"
 import type { HostFacts } from "#plate/pci/host.ts";
 import { noSupports } from "#plate/supports.ts";
 import type { Supports } from "#plate/supports.ts";
+import type { AcceptedStimulus } from "#plate/validate/verdict.ts";
 import type { OutcomeView } from "#plate/vocabulary.ts";
 
 /**
@@ -218,6 +219,13 @@ export interface ElementPayload {
   readonly catalog?: string;
   readonly children: readonly PayloadNode[];
   readonly kind: "element";
+  /**
+   * The `data-stimulus-idref` the element carries, as the model kept it (`BodyElement.stimulus`):
+   * the author's identifier of the stimulus whose body renders inside the element, the key the
+   * emitter hands `RenderInteraction.dock` for the element. Never a path. Absent when the element
+   * names no stimulus. The attribute itself stays in `attributes`.
+   */
+  readonly stimulus?: string;
   readonly tag: string;
 }
 
@@ -1346,6 +1354,12 @@ const textWithin = (limits?: Pick<Configuration, "outputBudget">): Writing => ({
 });
 
 /**
+ * No stimulus document: what a redaction runs with when the host handed none, and what the
+ * structure reads run with, since no content module binds a response.
+ */
+const noDocuments: ReadonlyMap<string, AcceptedStimulus> = new Map();
+
+/**
  * The text of one printed variable or `param-variable` parameter, not yet formatted: given the most
  * characters it may hold, `formatPrinted`'s text, none when it would pass that or {@link textBound}.
  */
@@ -1414,8 +1428,12 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
         kind: "element",
         tag: node.tag,
       };
+      const referencing =
+        node.catalog === undefined ? element : { ...element, catalog: node.catalog };
 
-      return node.catalog === undefined ? element : { ...element, catalog: node.catalog };
+      return node.stimulus === undefined
+        ? referencing
+        : { ...referencing, stimulus: node.stimulus };
     }
     case "text": {
       return { kind: "text", text: node.text };
@@ -1837,6 +1855,10 @@ const expandedParameter = (
  *   parameter.
  * @param writing Whether the walk writes each printed variable's and parameter's text (`"text"`),
  *   within its budget, or none (`"structure"`).
+ * @param supports The supports the host enabled, which each content module's `redact` decides by.
+ * @param view The view the item is shown to, which each content module's `redact` decides by.
+ * @param documents The stimulus documents the host handed, keyed by location, which each content
+ *   module's `redact` reads through its kit; empty when it handed none.
  * @returns The body, every printed variable its text (nothing under `"structure"`) or its notice,
  *   every template block and inline its content, nothing or its notice, and every `param-variable`
  *   parameter its value (as written under `"structure"`) or its notice; the features shown as
@@ -1849,6 +1871,7 @@ const printBody = (
   writing: Writing,
   supports: Supports,
   view: OutcomeView,
+  documents: ReadonlyMap<string, AcceptedStimulus>,
 ): RedactedBody => {
   const listed = item.unsupported.filter((entry) => entry.shown === "notice");
   const listedAt = new Map<string, number[]>();
@@ -1992,12 +2015,13 @@ const printBody = (
   /**
    * Give the kit a content module's `redact` decides by: the walk over the nodes it keeps, as the
    * page sees them, the walk over the nodes it withholds, as content the page does not see, the
-   * record, the supports and the view.
+   * stimulus documents the host handed, the record, the supports and the view.
    *
    * @param seen Whether the page sees the module's node.
    * @returns The kit.
    */
   const contentKit = (seen: boolean): ContentRedactKit => ({
+    documents,
     // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and the kit are mutually recursive, as a content node holds body nodes; the kit's walks run only after both are defined.
     nodes: (nodes) => nodesOf(nodes, seen),
     record: printing,
@@ -2291,6 +2315,7 @@ export const printNodes = (
     textWithin(limits),
     noSupports,
     defaultView,
+    noDocuments,
   ).body;
 
 /**
@@ -2393,6 +2418,15 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
  *   module's `redact` decides by: what catalog content the copy holds, among the rest.
  * @param view The view the item is shown to, the candidate's when absent, which each content
  *   module's `redact` decides by: which rubric blocks the copy holds, among the rest.
+ * @param _feedback Declared by gate-bc as `feedback`, whose redaction reads it; this gate unit
+ *   holds its position and reads nothing of it, so the name carries the underscore the unused
+ *   parameter check asks for until gate-bc reads it.
+ * @param documents The stimulus documents the host handed, keyed by the document's location as
+ *   the host named it (`AcceptedStimulus.document`); empty when it handed none. Each content
+ *   module's `redact` reads them through its kit (`ContentRedactKit.documents`): the module that
+ *   reads a stimulus reference (`m3e-02`'s) looks a reference's `href` up here, resolved against
+ *   `Item.document`, since a resource names a document only through its `href`, and a resource
+ *   with no `href` names none.
  * @returns The redacted item.
  */
 export const redactItem = (
@@ -2401,6 +2435,8 @@ export const redactItem = (
   limits?: Pick<Configuration, "outputBudget">,
   supports: Supports = noSupports,
   view: OutcomeView = defaultView,
+  _feedback = true,
+  documents: ReadonlyMap<string, AcceptedStimulus> = noDocuments,
 ): Redacted => {
   const { body, content, held, hiddenOnly, notices, unprinted } = printBody(
     item,
@@ -2408,6 +2444,7 @@ export const redactItem = (
     textWithin(limits),
     supports,
     view,
+    documents,
   );
 
   return brandRedacted({
@@ -2478,6 +2515,7 @@ export const redactStructure = (item: Item, record?: RedactRecord): RedactedStru
     structureOnly,
     noSupports,
     defaultView,
+    noDocuments,
   );
 
   return { body, hiddenOnly, notices, responses: bindingsShown(item, hiddenOnly) };
@@ -2506,7 +2544,8 @@ export const redactStructure = (item: Item, record?: RedactRecord): RedactedStru
  * @returns The responses, in the order the walk first meets them.
  */
 export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): ReadonlySet<string> =>
-  printBody(item, printingOf(item, record), structureOnly, noSupports, defaultView).hiddenOnly;
+  printBody(item, printingOf(item, record), structureOnly, noSupports, defaultView, noDocuments)
+    .hiddenOnly;
 
 /**
  * How one response travels through a host's form: its identifier, its binding, and the options

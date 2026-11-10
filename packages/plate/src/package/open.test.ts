@@ -5763,6 +5763,49 @@ describe("package/open.ts", () => {
         }),
     );
 
+    it.effect("[W0-AR] a package's stimulus carries its body", () =>
+      Effect.gen(function* stimulusBodyCarried() {
+        const verdict = yield* openPackage(
+          location,
+          packageOf({
+            "items/q.xml": itemXml("q"),
+            [manifestFile]: manifestXml(
+              resourceXml("Q", "imsqti_item_xmlv3p0", "items/q.xml"),
+              resourceXml("S", "imsqti_stimulus_xmlv3p0", "stimuli/harbour.xml"),
+            ),
+            "stimuli/harbour.xml": `<qti-assessment-stimulus xmlns="${qti}" identifier="harbour" title="The harbour" xml:lang="fr"><qti-stimulus-body><p>Le port <em>dort</em>.</p><p>La nuit tombe.</p></qti-stimulus-body></qti-assessment-stimulus>`,
+          }),
+        );
+        const stimulusLocation = fileLocation(location, "stimuli/harbour.xml");
+        const stimulus = acceptedOf(verdict).stimuli.get(stimulusLocation);
+
+        assert.isDefined(stimulus);
+        assert.strictEqual(stimulus?.document, stimulusLocation);
+        assert.deepStrictEqual(stimulus?.lang, Option.some("fr"));
+        assert.deepStrictEqual(
+          stimulus?.body.map((node) => (node.kind === "element" ? node.tag : node.kind)),
+          ["p", "p"],
+        );
+        assert.deepStrictEqual(stimulus?.body[0], {
+          attributes: [],
+          children: [
+            { kind: "text", text: "Le port " },
+            {
+              attributes: [],
+              children: [{ kind: "text", text: "dort" }],
+              kind: "element",
+              path: "qti-assessment-stimulus/qti-stimulus-body/p[1]/em",
+              tag: "em",
+            },
+            { kind: "text", text: "." },
+          ],
+          kind: "element",
+          path: "qti-assessment-stimulus/qti-stimulus-body/p[1]",
+          tag: "p",
+        });
+      }),
+    );
+
     it.effect(
       "files leaves out the document of every QTI resource type, outcome declarations, response processing, a response-processing template and a fragment among them, and keeps a file such a resource lists besides its document",
       () =>
