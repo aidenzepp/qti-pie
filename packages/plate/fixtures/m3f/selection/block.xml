@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  identifier="fixed-block" title="A fixed invisible sub-section">
+  <qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">
+    <qti-assessment-section identifier="outer" title="Outer section" visible="true">
+      <qti-ordering shuffle="true"/>
+      <qti-assessment-item-ref identifier="x" href="choice.xml"/>
+      <qti-assessment-item-ref identifier="r" href="choice.xml"/>
+      <qti-assessment-section identifier="inner" title="Inner section" visible="false"
+        keep-together="false" fixed="true">
+        <qti-assessment-item-ref identifier="y1" href="choice.xml"/>
+        <qti-assessment-item-ref identifier="y2" href="choice.xml"/>
+      </qti-assessment-section>
+      <qti-assessment-item-ref identifier="z" href="choice.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+</qti-assessment-test>

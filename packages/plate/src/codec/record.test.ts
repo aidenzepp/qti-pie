@@ -237,12 +237,12 @@ describe("decodeRecord", () => {
 
 describe("the stored record's version", () => {
   it.effect(
-    "[T-14] [I-5] stored at version 4: written as version 4 with its records, and read back exactly",
+    "[T-14] [I-5] stored at version 5: written as version 5 with its records, and read back exactly",
     () =>
       Effect.gen(function* writesVersion() {
         const stored = yield* Effect.fromResult(encodeRecord(recorded));
 
-        assert.strictEqual(stored.version, 4);
+        assert.strictEqual(stored.version, 5);
         assert.deepStrictEqual(
           stored.records["DETAIL"]?.fields.map((field) => field.value.value),
           ["1e400", String(10n ** 399n), "INF"],
@@ -270,7 +270,7 @@ describe("the stored record's version", () => {
   );
 
   it.effect(
-    "[T-1] [T-14] [I-5] reads only a record stored at version 4: one stored at version 3 or 2, without records, or at version 1, without the template fields too, is InvalidRecord at stage decode, naming the version found",
+    "[T-1] [T-14] [I-5] reads only a record stored at version 5: one stored at version 3 or 2, without records, or at version 1, without the template fields too, is InvalidRecord at stage decode, naming the version found",
     () =>
       Effect.gen(function* refusesOtherVersion() {
         const { records: _records, ...third } = yield* Effect.fromResult(encodeRecord(templated));

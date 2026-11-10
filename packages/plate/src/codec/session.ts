@@ -88,7 +88,7 @@ const sessionFields = {
 
 /**
  * The Schema of a test session as the host stores it: {@link sessionFields} with the
- * {@link SequenceSchema delivered sequence} and the version, `4`.
+ * {@link SequenceSchema delivered sequence} and the version, `5`.
  */
 const StoredSessionSchema = Schema.Struct({
   ...sessionFields,
@@ -119,7 +119,7 @@ export const TestSessionSchema = StoredSessionSchema.pipe(
 );
 
 /**
- * A test session in the form the host stores: JSON-safe data that names its version, `4`. Every
+ * A test session in the form the host stores: JSON-safe data that names its version, `5`. Every
  * value is written as the stored item record writes it, integers as their decimal digits, so no
  * integer is rounded on the way through the host, the test's `outcomes` among them; each item's
  * `record` is a stored item record, its seed, template values, correct responses and defaults with
@@ -174,7 +174,7 @@ export interface SessionTest {
     /**
      * The nodes the test's feature modules read, as `Test.features` holds them: a test that holds a
      * `qti-selection` may deliver fewer item refs than it holds, and one that holds none delivers
-     * each once. A test built by hand may leave it out, and then selects nothing.
+     * each once per placement. A test built by hand may leave it out, and then selects nothing.
      */
     readonly features?: { readonly "qti-selection"?: readonly unknown[] };
     /**
@@ -194,8 +194,11 @@ export interface SessionTest {
     }[];
     /**
      * The identifiers of the item refs a selection with replacement can repeat, as
-     * `Test.repeatable` holds them: the only item refs a session may deliver more than once. A test
-     * built by hand may leave it out, and then none repeats.
+     * `Test.repeatable` holds them: the only item refs a session may deliver more often than the
+     * test places them. A placement is not a selection (S-9, T-14, issue m3f-02b): a section
+     * document the test places twice supplies each of its item refs twice, and a session delivers
+     * each twice without `repeatable` naming it. A test built by hand may leave it out, and then
+     * none repeats.
      */
     readonly repeatable?: ReadonlySet<string>;
   };
@@ -231,7 +234,7 @@ export class InvalidSession extends Data.TaggedError("InvalidSession")<{
    */
   readonly stage: SessionStage;
   /**
-   * The value the stored session holds under `version`, which is `4` when something else is
+   * The value the stored session holds under `version`, which is `5` when something else is
    * wrong; none when it is not an object or names no version, and at stage `encode`, where no
    * stored session was read.
    */
@@ -382,10 +385,38 @@ const partsOfRefs = (test: SessionTest): ReadonlyMap<string, number> => {
 };
 
 /**
+ * Count how many times each item ref identifier is placed in a test: one for each item ref element
+ * across its parts, nested sections' included.
+ *
+ * The count is of elements, because an assembled test holds a section document it places twice
+ * twice, each placement its own copy (`#plate/package/assemble.ts`), so each item ref of that
+ * document is placed twice, and `startTest` delivers an instance of each per placement (S-9).
+ *
+ * @param test The test.
+ * @returns Each item ref identifier's placements, by identifier, in document order.
+ */
+const placementsOf = (test: SessionTest): ReadonlyMap<string, number> => {
+  const placed = new Map<string, number>();
+  for (const part of test.test.parts) {
+    for (const ref of refsIn(part.children)) {
+      placed.set(ref.identifier, (placed.get(ref.identifier) ?? 0) + 1);
+    }
+  }
+
+  return placed;
+};
+
+/**
  * The session's items are the delivered sequence the stored form carries, one item per entry, and
  * that sequence is a delivery of the test: each entry names one of the test's item refs, the
- * entries meet the test's parts in order, no item ref is delivered twice unless a selection with
- * replacement can repeat it, and a test that holds no `qti-selection` delivers every item ref.
+ * entries meet the test's parts in order, no item ref is delivered more often than the test places
+ * it unless a selection with replacement can repeat it, and a test that holds no `qti-selection`
+ * delivers each of its item refs once per placement (S-9, T-14, issue m3f-02b).
+ *
+ * A placement is not a selection: a section document the test places twice supplies each of its
+ * item refs twice, so its session delivers each twice, and `repeatable`, which `with-replacement`
+ * alone fills, stays what a selection with replacement can repeat. Without a selection every
+ * identifier is delivered exactly as often as it is placed, `repeatable` or not.
  *
  * Which item refs a selection drops, and in what order an ordering puts those it keeps, is drawn at
  * `startTest` under the session's seed and stored, so these are the conditions every delivery meets
@@ -400,9 +431,10 @@ const itemsRule: SessionRule = (session, test, sequence) => {
   }
 
   const parts = partsOfRefs(test);
+  const placed = placementsOf(test);
   const repeatable = test.test.repeatable ?? new Set<string>();
   const selects = (test.test.features?.["qti-selection"]?.length ?? 0) > 0;
-  const seen = new Set<string>();
+  const delivered = new Map<string, number>();
   let reached = 0;
   const broken = Arr.findFirst(session.items, (item, index) => {
     const listed = sequence[index];
@@ -427,13 +459,16 @@ const itemsRule: SessionRule = (session, test, sequence) => {
     }
 
     reached = part;
-    if (seen.has(item.ref) && !repeatable.has(item.ref)) {
+
+    const times = (delivered.get(item.ref) ?? 0) + 1;
+    const places = placed.get(item.ref) ?? 0;
+    if (times > places && !repeatable.has(item.ref)) {
       return Option.some(
-        `${path} is ${JSON.stringify(item.ref)}, which an earlier item already delivers, where only an item ref under a selection with replacement is delivered twice`,
+        `${path} is ${JSON.stringify(item.ref)}, which an earlier item already delivers, where the test places it ${counted(places, "time")}`,
       );
     }
 
-    seen.add(item.ref);
+    delivered.set(item.ref, times);
 
     return Option.none();
   });
@@ -441,13 +476,15 @@ const itemsRule: SessionRule = (session, test, sequence) => {
   return Option.orElse(broken, () =>
     selects
       ? Option.none()
-      : Arr.findFirst([...parts.keys()], (identifier) =>
-          seen.has(identifier)
+      : Arr.findFirst([...placed], ([identifier, places]) => {
+          const times = delivered.get(identifier) ?? 0;
+
+          return times === places
             ? Option.none()
             : Option.some(
-                `items delivers no item for the item ref ${JSON.stringify(identifier)}, where a test that holds no selection delivers each of its item refs`,
-              ),
-        ),
+                `items delivers the item ref ${JSON.stringify(identifier)} ${counted(times, "time")}, where the test places it ${counted(places, "time")} and a test that holds no selection delivers each of its item refs once per placement`,
+              );
+        }),
   );
 };
 
@@ -775,11 +812,12 @@ const fitting = (
  * The session must be one the renderer wrote for this test: after it names the test and its
  * document, its items are the delivered sequence the stored form carries, one per entry, and that
  * sequence is a delivery of the test (`itemsRule`: each entry an item ref of the test, the entries
- * meeting its parts in order, an item ref repeated only where a selection with replacement can
- * repeat it, and every item ref delivered when the test holds no selection), so a session of a
- * test that selects or shuffles decodes as it was written, the sequence read as stored and never
- * drawn again; the items are numbered from 1 in order, each record's instance the session's
- * instance, a `.` and the item's sequence index; its
+ * meeting its parts in order, an item ref delivered no more often than the test places it unless a
+ * selection with replacement can repeat it, and every item ref delivered once per placement when
+ * the test holds no selection, as a section document placed twice supplies each of its item refs
+ * twice; S-9, T-14, issue m3f-02b), so a session of a test that selects or shuffles decodes as it
+ * was written, the sequence read as stored and never drawn again; the items are numbered from 1 in
+ * order, each record's instance the session's instance, a `.` and the item's sequence index; its
  * parts are the test's parts in order, ended, then at most one current, then pending, and none
  * current once the session is closed; `started`, `updated` and each item's `datestamp` are ISO
  * 8601 UTC instants, `updated` not before `started`; `position` is the index of one of its items,

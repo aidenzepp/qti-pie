@@ -10,6 +10,13 @@ These entries list the surface of M1 and M2, what M3 adds to it, and each change
 reads the specification. plate is not published, and both of its entry points are unstable until
 M3.
 
+### The stored version (m3f-02b)
+
+- Both stored forms are version 5. A `StoredTestSession` carries `sequence`, the item refs its items
+  deliver in delivery order, which a test's selection and ordering draw once at `startTest`. plate
+  refuses a version-4 record or session with `InvalidRecord` or `InvalidSession`, a session written
+  before `sequence` among them, so nothing stored at version 4 reads.
+
 ### The full-Effect phase (FE)
 
 - `render`, `renderStatus` and `renderNavigation` return, never throw, `MarkupRefused` for host

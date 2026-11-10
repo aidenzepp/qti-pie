@@ -316,7 +316,7 @@ export const step = (
 ## Records
 
 The host stores two records as JSON and hands each back on the next request. plate writes both.
-Each function that reads one back checks that it has version 4, that each field has its type, and
+Each function that reads one back checks that it has version 5, that each field has its type, and
 that each value is well formed. `restore` also checks that each response and outcome in an item's
 record fits the item's declarations, as `results` does, and refuses another item's record with
 `RecordMismatch`, as `score` does. For an item whose template processing runs, `score` and
@@ -342,10 +342,10 @@ one does not fit. Keep the stored session where only your server can change it.
 
 | Record | Holds | Written by | Read by |
 | --- | --- | --- | --- |
-| `StoredRecord`, `version: 4` | One item's seed, template values, attempts, responses and outcomes, its `record` answers in `records`, and the correct responses and defaults its template processing set | `begin`, `score` | `score`, `restore`, `results` |
-| `StoredTestSession`, `version: 4` | A test session, with its processing seed and its shuffle seed, its items' records and template defaults, each item's saved responses and `record` answers in `saved`, its position and its parts, and the test's outcomes with the count of its outcome processing runs | `encodeSession` | `decodeSession`, `results` |
+| `StoredRecord`, `version: 5` | One item's seed, template values, attempts, responses and outcomes, its `record` answers in `records`, and the correct responses and defaults its template processing set | `begin`, `score` | `score`, `restore`, `results` |
+| `StoredTestSession`, `version: 5` | A test session, with its processing seed and its shuffle seed, its items' records and template defaults, each item's saved responses and `record` answers in `saved`, its position and its parts, and the test's outcomes with the count of its outcome processing runs | `encodeSession` | `decodeSession`, `results` |
 
-plate reads only version 4, and refuses a record of another version with `InvalidRecord` or
+plate reads only version 5, and refuses a record of another version with `InvalidRecord` or
 `InvalidSession`. A change to either form is a changelog entry. The TSDoc on each type documents
 its fields.
 
