@@ -4,9 +4,9 @@
  * `#plate/react/contract.tsx`, {@link encodeItemView} writes it in the JSON form the wire carries,
  * and {@link decodeItemView} checks one that arrived before a page trusts it.
  *
- * The Schema's type is that interface, which `src/react/test-wire.test.tsx` pins. This file does
- * not import it: the contract is a `.tsx` file, which the root `tsc` project, with no `--jsx`,
- * refuses to resolve from a `.ts` one.
+ * The Schema's type is that interface, which `src/react/assessment-test-wire.test.tsx` pins. This
+ * file does not import it: the contract is a `.tsx` file, which the root `tsc` project, with no
+ * `--jsx`, refuses to resolve from a `.ts` one.
  *
  * The payload is JSON-safe but for one field: `navigation.time` holds two `Option`s, which
  * `JSON.stringify` does not write. The codec writes each as an optional number, absent for none,

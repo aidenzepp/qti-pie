@@ -1322,8 +1322,9 @@ Its components are stubs today, and each line below lands with its issue:
 - A component for each interaction plate renders and for the item's chrome *(pending m3g-02)*,
   for the M3.d interactions *(pending m3g-03)*, and for the elective interactions and Portable
   Custom *(pending m3g-04)*.
-- `TestProvider` runs a test over a host's transport, with its hooks, and `createTestServer` puts
-  plate's session functions behind it on the server *(pending m3g-06)*.
+- `AssessmentTestProvider` runs a test over a host's transport, with its hooks, and
+  `createAssessmentTestServer` puts plate's session functions behind it on the server
+  *(pending m3g-06)*.
 - A shadcn registry item installs the components and the sheet *(pending m3g-05)*.
 
 ## Accessibility supports
