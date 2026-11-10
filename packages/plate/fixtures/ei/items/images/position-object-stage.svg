@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300" viewBox="0 0 500 300">
+  <title>A park with a pond, a lawn and a grove</title>
+  <rect width="500" height="300" fill="#e3efd9"/>
+  <ellipse cx="250" cy="150" rx="90" ry="55" fill="#9cc3d9" stroke="#3f6f8a" stroke-width="2"/>
+  <circle cx="100" cy="100" r="30" fill="#8fc48a" stroke="#2f6b2a" stroke-width="2"/>
+  <circle cx="400" cy="200" r="30" fill="#8fc48a" stroke="#2f6b2a" stroke-width="2"/>
+  <path d="M 0 260 Q 250 220 500 260" fill="none" stroke="#b08a5a" stroke-width="6"/>
+</svg>

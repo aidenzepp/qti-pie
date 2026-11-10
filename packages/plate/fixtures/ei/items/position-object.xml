@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="ei-position-object" title="Park plan" adaptive="false" time-dependent="false"
+  xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="point">
+    <qti-correct-response>
+      <qti-value>250 150</qti-value>
+    </qti-correct-response>
+    <qti-area-mapping default-value="0">
+      <qti-area-map-entry shape="circle" coords="250,150,40" mapped-value="2"/>
+    </qti-area-mapping>
+  </qti-response-declaration>
+  <qti-response-declaration identifier="PINS" cardinality="multiple" base-type="point">
+    <qti-correct-response>
+      <qti-value>100 100</qti-value>
+      <qti-value>400 200</qti-value>
+    </qti-correct-response>
+    <qti-area-mapping default-value="0">
+      <qti-area-map-entry shape="circle" coords="100,100,30" mapped-value="1"/>
+      <qti-area-map-entry shape="circle" coords="400,200,30" mapped-value="1"/>
+    </qti-area-mapping>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <p>Place the fountain in the pond, and a bench in each grove.</p>
+    <qti-position-object-stage>
+      <img src="images/position-object-stage.svg" width="500" height="300"
+        alt="A park with a pond in the middle and a grove at each end"/>
+      <qti-position-object-interaction response-identifier="RESPONSE" center-point="10 20">
+        <img src="images/position-object-token.svg" width="40" height="40" alt="The fountain"/>
+      </qti-position-object-interaction>
+      <qti-position-object-interaction response-identifier="PINS" max-choices="2">
+        <img src="images/position-object-token.svg" width="40" height="40" alt="A bench"/>
+      </qti-position-object-interaction>
+    </qti-position-object-stage>
+  </qti-item-body>
+  <qti-response-processing>
+    <qti-set-outcome-value identifier="SCORE">
+      <qti-sum>
+        <qti-map-response-point identifier="RESPONSE"/>
+        <qti-map-response-point identifier="PINS"/>
+      </qti-sum>
+    </qti-set-outcome-value>
+  </qti-response-processing>
+</qti-assessment-item>
