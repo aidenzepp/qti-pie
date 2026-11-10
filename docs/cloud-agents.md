@@ -92,6 +92,7 @@ Each rule is one line, and each has a reason in the fan-out plan.
 15. Every exported name has TSDoc, per `.agents/skills/document-code/SKILL.md`.
 16. Commit as `<type>(plate): <title>`, per `.agents/skills/conventional-commits/SKILL.md`.
 17. Create no scratch file in the checkout except under `packages/plate/work/`, which git ignores.
+18. A module's part that lives inside an `svg` declares `svg-content`, and its `svg` part declares `svg`, never `any`, because the HTML parser moves an HTML tag out of an svg and keeps any other name as a foreign element, so a host's swap to an HTML tag breaks the picture.
 
 ## The pull request
 

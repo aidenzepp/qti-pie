@@ -583,6 +583,84 @@ describe("tag classes", () => {
   });
 });
 
+/**
+ * A test-only row of a part inside an `svg`, as Graphic Order's Badge is: the Notice's row with an
+ * SVG `text` element that only an SVG element may replace.
+ */
+const badgeRow: PartRow = {
+  ...rowFor("item", "notice"),
+  element: "text",
+  merged: [],
+  tagClass: "svg-content",
+};
+
+/**
+ * A test-only row of the `svg` that opens a picture under an HTML parent, as an Outline is: the
+ * Badge's row with the `svg` element only.
+ */
+const outlineRow: PartRow = { ...badgeRow, element: "svg", tagClass: "svg" };
+
+describe("allows, the SVG tag classes", () => {
+  it("[W0-SVG-PARTS] svg-content admits the SVG elements a badge may become", () => {
+    for (const tag of ["text", "tspan", "g", "use", "image", "foreignObject", "textPath", "svg"]) {
+      assert.isTrue(allows(badgeRow, h(tag, {})), tag);
+    }
+  });
+
+  it("[W0-SVG-PARTS] svg-content refuses every HTML tag the parser moves out of an svg", () => {
+    for (const tag of [
+      "strong",
+      "span",
+      "div",
+      "p",
+      "em",
+      "b",
+      "i",
+      "ul",
+      "li",
+      "img",
+      "h1",
+      "pre",
+      "sub",
+      "sup",
+    ]) {
+      assert.isFalse(allows(badgeRow, h(tag, {})), tag);
+    }
+  });
+
+  it("[W0-SVG-PARTS] svg-content refuses an HTML name the parser would keep as a foreign element, and a custom element", () => {
+    for (const tag of ["label", "button", "input", "select", "my-badge", "qti-badge"]) {
+      assert.isFalse(allows(badgeRow, h(tag, {})), tag);
+    }
+  });
+
+  it("[W0-SVG-PARTS] svg-content refuses a, script and style", () => {
+    for (const tag of ["a", "script", "style"]) {
+      assert.isFalse(allows(badgeRow, h(tag, {})), tag);
+    }
+  });
+
+  it("[W0-SVG-PARTS] svg-content matches an SVG name in its own case only", () => {
+    assert.isTrue(allows(badgeRow, h("foreignObject", {})));
+    for (const tag of ["foreignobject", "FOREIGNOBJECT", "Text"]) {
+      assert.isFalse(allows(badgeRow, h(tag, {})), tag);
+    }
+  });
+
+  it("[W0-SVG-PARTS] svg admits the svg element only", () => {
+    assert.isTrue(allows(outlineRow, h("svg", {})));
+    for (const tag of ["g", "div", "text", "my-figure", "span"]) {
+      assert.isFalse(allows(outlineRow, h(tag, {})), tag);
+    }
+  });
+
+  it("[W0-SVG-PARTS] no row of the part table carries an SVG class: the chrome and the shipped kinds are HTML", () => {
+    assert.isTrue(
+      partTable.every((row) => row.tagClass !== "svg" && row.tagClass !== "svg-content"),
+    );
+  });
+});
+
 describe("positionUnder", () => {
   it("gives phrasing under a p, under a phrasing element and inside an open p", () => {
     assert.strictEqual(positionUnder("p", false), "phrasing");
