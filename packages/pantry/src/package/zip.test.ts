@@ -1,5 +1,5 @@
 /**
- * The package container, checked as properties: `readZip`, and `listPackage` and `readPackage`
+ * The package container, checked as properties: `readZip`, and `listPackage` and `readEntries`
  * over a `.zip`, against a model of what a package archive is; `writeZip` against the reader; and
  * the corpus's zips against their directory forms.
  *
@@ -27,7 +27,7 @@ import { keep, swarm, swarmChoice } from "@grizzle/testing/swarm";
 import type { Swarm } from "@grizzle/testing/swarm";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, FileSystem, Formatter, Layer, Result } from "effect";
-import { listPackage, PackageReadError, readEntry, readPackage } from "#pantry/package/read.ts";
+import { listPackage, PackageReadError, readEntry, readEntries } from "#pantry/package/read.ts";
 import type { Entry, PackageFile } from "#pantry/package/read.ts";
 import { packageBudget, readZip, writeZip, ZipRefusal } from "#pantry/package/zip.ts";
 import type { ZipBudget, ZipEntry } from "#pantry/package/zip.ts";
@@ -885,7 +885,7 @@ const observed = (
     };
   }
 
-  // listPackage and readPackage give a zip's manifest-root refusal as their own.
+  // listPackage and readEntries give a zip's manifest-root refusal as their own.
   if (failure instanceof PackageReadError && failure.rule === "manifest-root") {
     return entryRefused("manifest-root", failure.path);
   }
@@ -894,7 +894,7 @@ const observed = (
 };
 
 /**
- * `readPackage`'s files as `readZip`'s entries.
+ * `readEntries`'s files as `readZip`'s entries.
  */
 const asEntries = Result.map((files: readonly PackageFile[]): readonly ZipEntry[] =>
   files.map((file) => ({ bytes: file.bytes, path: file.path })),
@@ -964,7 +964,7 @@ describe("package/zip.ts readZip, and package/read.ts over a .zip", () => {
                   expected,
                 );
                 assert.deepStrictEqual(
-                  observed(asEntries(yield* Effect.result(readPackage(file))), file),
+                  observed(asEntries(yield* Effect.result(readEntries(file))), file),
                   expected,
                 );
                 assert.deepStrictEqual(
@@ -1293,13 +1293,13 @@ describe("package/read.ts over the corpus", () => {
           }
 
           const zip = yield* materializeZip(name);
-          const fromDirectory = yield* readPackage(dir);
+          const fromDirectory = yield* readEntries(dir);
 
           // The directory form is Info-ZIP's `unzip` of the same member with every `.DS_Store`
           // deleted (fixtures.ts), so it is a second reader of the archive. The forms' byte
           // containers differ (a Buffer from the file system, a Uint8Array from the inflater), and
           // the contract is their bytes.
-          const fromZip = yield* readPackage(zip);
+          const fromZip = yield* readEntries(zip);
 
           assert.deepStrictEqual(
             plain(fromZip).filter((entry) => !isFinderFile(entry.path)),
@@ -1316,7 +1316,7 @@ describe("package/read.ts over the corpus", () => {
             name,
           );
 
-          // readPackage's contract: its entries are listPackage's, each with readEntry's bytes.
+          // readEntries's contract: its entries are listPackage's, each with readEntry's bytes.
           for (const entry of fromDirectory) {
             assert.deepStrictEqual(
               Uint8Array.from(yield* readEntry(dir, entry.path)),

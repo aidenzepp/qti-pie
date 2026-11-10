@@ -13,7 +13,7 @@ import { fold } from "#pantry/model/folds.ts";
 import type { FoldedAttribute, FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import {
   contentLawOf,
   documentBreaches,
@@ -2043,7 +2043,7 @@ describe("MathML foreign element, on rows the codec did not write", () => {
 describe("the fixtures the importer accepts today", () => {
   it.effect("simple breaks no law", () =>
     Effect.gen(function* simple() {
-      const files = yield* readPackage(fixtures.simple);
+      const files = yield* readEntries(fixtures.simple);
       const breaches = breachesOf(yield* judge(files, grammar, laws));
 
       assert.deepStrictEqual(breaches, [], shown(breaches));

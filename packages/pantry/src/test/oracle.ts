@@ -6743,7 +6743,7 @@ const inPlaceBreaches = (
  * rows, so its breaches are that refusal alone; a manifest that does not fold lists nothing, and
  * its refusal is the judgment's one breach.
  *
- * @param files - The package's entries, as `readPackage` reads them.
+ * @param files - The package's entries, as `readEntries` reads them.
  * @param grammar - The composed grammar.
  * @param laws - Its tables, from {@link lawsOf}.
  * @returns The judgment.

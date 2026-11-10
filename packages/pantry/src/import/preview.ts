@@ -2,12 +2,12 @@
  * What an import would write, without the database: the package read, shredded and built into its
  * rows as `importPackage` builds them, and nothing written (plan W5, Q5.15).
  *
- * The dry run is the import's own read ({@link readProgram} of `#pantry/import/program.ts`): the
- * read, the shred and the overlay builders. The database's laws do not run, so a package this
- * accepts can still be refused by an import, and the preview says so (`databaseChecked`). Nothing
- * here reaches the author login (`#pantry/qti/own-login.ts`), whose workload grizzle builds when
- * that module is evaluated, so a dry run never pays for it; `src/cli/startup.test.ts` holds this
- * module to that.
+ * The dry run is the import's own read and build ({@link readProgram} of
+ * `#pantry/import/program.ts`, `readPackage` then `programOf`): the read, the shred and the overlay
+ * builders. The database's laws do not run, so a package this accepts can still be refused by an
+ * import, and the preview says so (`databaseChecked`). Nothing here reaches the author login
+ * (`#pantry/qti/own-login.ts`), whose workload grizzle builds when that module is evaluated, so a
+ * dry run never pays for it; `src/cli/startup.test.ts` holds this module to that.
  */
 import { Effect } from "effect";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";

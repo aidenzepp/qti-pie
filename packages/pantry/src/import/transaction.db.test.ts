@@ -29,7 +29,8 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
-import { importPackage, WrapApply } from "#pantry/import/package.ts";
+import { WrapApply } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 
 import { Qti } from "#pantry/qti/own.ts";
 
@@ -191,7 +192,7 @@ const packageXid = (client: Client, id: string) =>
 const importDrawn = (members: MemberCounts) =>
   Effect.gen(function* importsDrawn() {
     const dir = yield* scopedPackage(everyRelationPackage(members));
-    const id = yield* importPackage(dir);
+    const id = yield* importDir(dir);
 
     return { dir, id };
   });

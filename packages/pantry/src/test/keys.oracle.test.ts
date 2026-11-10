@@ -28,7 +28,7 @@ import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Predicate, Sch
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { keyText, keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -904,7 +904,7 @@ const judgedEntries = (
 ) =>
   Effect.gen(function* judgedEntriesCase() {
     const dir = yield* scopedPackage(entries);
-    const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+    const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
     const breaches =
       judgment._tag === "Judged"
         ? judgment.breaches

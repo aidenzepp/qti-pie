@@ -74,7 +74,7 @@ const fileOf = (file: RecordCase["file"]): string => {
 /**
  * Write a case's package from `simple`'s entries.
  *
- * @param base - `simple`'s entries, as `readPackage` returns them.
+ * @param base - `simple`'s entries, as `readEntries` returns them.
  * @param drawn - The case.
  * @returns The case's entries.
  */

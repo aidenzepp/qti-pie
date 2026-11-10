@@ -12,7 +12,7 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect } from "effect";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import {
   everyRelationPackage,
@@ -38,7 +38,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/every-relatio
     "draws packages whose entries are a keyed set, whose import writes every stored relation of Qti, and which the law oracle accepts",
     (ctx) =>
       // Oracle: the specification as a checker. A package's entries are a set by path, read back
-      // by `readPackage` as written, each once; the import's program (`readProgram`, the rows its
+      // by `readEntries` as written, each once; the import's program (`readProgram`, the rows its
       // one ChangeSet writes, counted by `rowCountsOf`) holds a row of each stored relation of
       // `Qti`, grizzle's `writableNamesOf(Qti)`; and the law oracle (`#pantry/test/oracle.ts`, plan
       // §1.3 to §1.7 on the host) finds no breach.
@@ -79,7 +79,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/every-relatio
 
               const entries = everyRelationPackage(members);
               const dir = yield* scopedPackage(entries);
-              const files = yield* readPackage(dir);
+              const files = yield* readEntries(dir);
               const read = files.map(({ path }) => path);
 
               assert.strictEqual(new Set(read).size, read.length, "a path read twice");

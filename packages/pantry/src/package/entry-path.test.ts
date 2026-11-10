@@ -16,7 +16,7 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, FileSystem, Formatter } from "effect";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { writeZip } from "#pantry/package/zip.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
@@ -54,7 +54,7 @@ const refusedByRuling = (path: string): boolean => path.includes("\\") || /^[A-Z
  * @returns The verdict.
  */
 const verdictOf = (dir: string) =>
-  readPackage(dir).pipe(
+  readEntries(dir).pipe(
     Effect.map(() => "accepted"),
     Effect.catchTags({
       PackageReadError: (refusal) => Effect.succeed(refusal.rule),

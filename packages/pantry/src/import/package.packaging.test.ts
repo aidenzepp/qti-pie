@@ -9,7 +9,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Layer, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { previewPackage } from "#pantry/import/preview.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { importAgreesWithOracle, packagingFixtures } from "#pantry/test/oracle-verdict.ts";
@@ -50,7 +50,7 @@ describe.skipIf(!hasLease)(
           // file entry lists, so include-target alone refuses it; rtest01-include-target names a
           // file no entry holds, so file-exists refuses it as well, as the law oracle states.
           Effect.gen(function* includeTarget() {
-            const refused = yield* Effect.flip(importPackage(yield* dir));
+            const refused = yield* Effect.flip(importDir(yield* dir));
 
             const named = refused instanceof ImportRefused ? refused.rules : [refused._tag];
             const expected: readonly string[] = rules;

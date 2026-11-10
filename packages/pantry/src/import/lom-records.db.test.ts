@@ -11,8 +11,8 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { fileRecords, namings, recordPackageOf, rulesOf } from "#pantry/test/lom-records.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
@@ -40,7 +40,7 @@ describe.skipIf(!hasLease)(
                   Effect.gen(function* recordVerdict() {
                     const fs = yield* FileSystem.FileSystem;
                     const dir = yield* scratchDirectory("lom-records-");
-                    const base = yield* readPackage(yield* materialize("simple"));
+                    const base = yield* readEntries(yield* materialize("simple"));
                     for (const entry of recordPackageOf(base, drawn)) {
                       yield* fs.makeDirectory(path.dirname(`${dir}/${entry.path}`), {
                         recursive: true,
@@ -48,7 +48,7 @@ describe.skipIf(!hasLease)(
                       yield* fs.writeFile(`${dir}/${entry.path}`, entry.bytes);
                     }
 
-                    const outcome = yield* Effect.result(importPackage(dir));
+                    const outcome = yield* Effect.result(importDir(dir));
 
                     if (rules.length === 0) {
                       assert.strictEqual(outcome._tag, "Success", JSON.stringify(drawn));

@@ -20,7 +20,7 @@ import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, pipe } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
@@ -191,7 +191,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a count's value", (it)
                 }
 
                 const dir = yield* scopedPackage(packageOf(drawn));
-                const verdict = yield* oracleVerdict(yield* readPackage(dir));
+                const verdict = yield* oracleVerdict(yield* readEntries(dir));
                 const program = yield* readProgram(dir);
                 const label = Formatter.format(drawn);
 

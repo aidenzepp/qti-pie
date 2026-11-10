@@ -30,7 +30,7 @@ import { Duration, Effect } from "effect";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { BranchTarget } from "#pantry/qti/tests.ts";
 import {
   assemblyLiteral,
@@ -341,7 +341,7 @@ const judge = (assembly: Assembly, c: Case<Situation>) =>
   Effect.gen(function* judged() {
     const literal = assemblyLiteral(assembly);
     const dir = yield* scopedPackage(assemblyPackage(assembly));
-    const verdict = yield* oracleVerdict(yield* readPackage(dir));
+    const verdict = yield* oracleVerdict(yield* readEntries(dir));
     const predicted = modelVerdict(assembly);
     const program = yield* readProgram(dir);
     const byLaws = rowsRules(program.inputs, assembly, literal);

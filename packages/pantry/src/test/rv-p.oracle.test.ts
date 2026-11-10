@@ -76,7 +76,7 @@ interface HrefCase {
 }
 
 /**
- * Write a case's package: the manifest, the item and each entry, as `readPackage` reads one.
+ * Write a case's package: the manifest, the item and each entry, as `readEntries` reads one.
  *
  * @param input - The case.
  * @returns The package's entries.

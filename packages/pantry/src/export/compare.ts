@@ -12,7 +12,7 @@
  */
 import { Array as Arr, Effect, Option } from "effect";
 import type { FileSystem, PlatformError } from "effect";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
 import type { ZipEntry, ZipRefusal } from "#pantry/package/zip.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
@@ -222,7 +222,7 @@ export const compareRecord = Effect.fn("compare.compareRecord")(function* compar
 /**
  * Compare an export directory or zip with the package directory or zip it was made from.
  *
- * Both sides are read whole by `readPackage`, so a directory and a zip of the same files compare
+ * Both sides are read whole by `readEntries`, so a directory and a zip of the same files compare
  * alike; the source's entries are the record its import wrote (`recordOf`), and the export's are
  * compared with them by {@link compareRecord}.
  *
@@ -237,7 +237,7 @@ export const comparePackage = Effect.fn("compare.comparePackage")(function* comp
 ): Effect.fn.Return<Report, CompareError, FileSystem.FileSystem> {
   yield* Effect.annotateCurrentSpan({ exportDir, sourceDir });
 
-  return yield* compareRecord(yield* readPackage(sourceDir), yield* readPackage(exportDir));
+  return yield* compareRecord(yield* readEntries(sourceDir), yield* readEntries(exportDir));
 });
 
 /**

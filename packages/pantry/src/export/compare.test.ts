@@ -8,7 +8,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, FileSystem, Formatter, Layer } from "effect";
 import { compareRecord, comparePackage, renderReport } from "#pantry/export/compare.ts";
 import type { Outcome } from "#pantry/export/compare.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { writeZip } from "#pantry/package/zip.ts";
 import type { ZipEntry } from "#pantry/package/zip.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
@@ -344,7 +344,7 @@ const recordsOf = Effect.gen(function* recordsOf() {
   return new Map(
     yield* Effect.all(
       sources.map(([name, dir]) =>
-        readPackage(dir).pipe(
+        readEntries(dir).pipe(
           Effect.map((record): readonly [Source, readonly ZipEntry[]] => [name, record]),
         ),
       ),
@@ -447,7 +447,7 @@ layer(TestLayer, { excludeTestServices: true })("export/compare.ts", (it) => {
     Effect.gen(function* directoryAndZip() {
       const fs = yield* FileSystem.FileSystem;
       const simple = yield* materialize("simple");
-      const record = yield* readPackage(simple);
+      const record = yield* readEntries(simple);
 
       yield* fs.makeDirectory(workDirectory, { recursive: true });
 

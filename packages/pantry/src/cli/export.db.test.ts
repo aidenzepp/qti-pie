@@ -9,7 +9,7 @@ import { ExportData } from "#pantry/cli/export.ts";
 import { ErrorObject, successEnvelope } from "#pantry/cli/output.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { PackageNotFound } from "#pantry/export/package.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
 import { captureCli } from "#pantry/test/cli.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -77,7 +77,7 @@ describe.skipIf(!hasLease)(
           const folder = yield* fresh("dry-run");
           const absent = path.join(folder, "absent");
           const real = path.join(folder, "real");
-          const id = yield* importPackage(fixtures.simple);
+          const id = yield* importDir(fixtures.simple);
 
           const text = yield* captureCli(["export", "--dry-run", absent, id]);
 
@@ -107,7 +107,7 @@ describe.skipIf(!hasLease)(
           Effect.gen(function* dryRunJson() {
             const folder = yield* fresh("dry-run-json");
             const absent = path.join(folder, "absent");
-            const id = yield* importPackage(fixtures.simple);
+            const id = yield* importDir(fixtures.simple);
             const { exit, stderr, stdout } = yield* captureCli([
               "--json",
               "export",
@@ -139,7 +139,7 @@ describe.skipIf(!hasLease)(
         Effect.gen(function* dryRunRefused() {
           const fs = yield* FileSystem.FileSystem;
           const folder = yield* fresh("dry-run-refused");
-          const id = yield* importPackage(fixtures.simple);
+          const id = yield* importDir(fixtures.simple);
           const file = path.join(folder, "a.txt");
 
           yield* fs.writeFileString(file, "kept");
@@ -159,7 +159,7 @@ describe.skipIf(!hasLease)(
         Effect.gen(function* dryRunReplace() {
           const fs = yield* FileSystem.FileSystem;
           const folder = yield* fresh("dry-run-replace");
-          const id = yield* importPackage(fixtures.simple);
+          const id = yield* importDir(fixtures.simple);
           const file = path.join(folder, "a.txt");
 
           yield* fs.writeFileString(file, "kept");
@@ -189,7 +189,7 @@ describe.skipIf(!hasLease)(
           const folder = yield* fresh("link");
           const linked = path.join(folder, "linked");
           const link = path.join(folder, "link");
-          const id = yield* importPackage(fixtures.simple);
+          const id = yield* importDir(fixtures.simple);
 
           yield* fs.makeDirectory(linked, { recursive: true });
           yield* fs.writeFileString(path.join(linked, "kept.txt"), "kept");

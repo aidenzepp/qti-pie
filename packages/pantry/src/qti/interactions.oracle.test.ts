@@ -29,7 +29,7 @@ import {
   itemBuiltInNames,
 } from "#pantry/qti/interactions.ts";
 import { Qti } from "#pantry/qti/own.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -503,7 +503,7 @@ describe("qti/interactions.ts, reading 104 by the law oracle", () => {
       // a simple choice of one name, a gap and a gap text of one gap match named alike and apart,
       // and a hotspot choice beside a hottext of one name.
       Effect.gen(function* choiceNames() {
-        const files = yield* readPackage(fixtures.simple);
+        const files = yield* readEntries(fixtures.simple);
         for (const { breaks, edits, name } of choiceNameCases) {
           const edited = editedItem(files, edits, name);
           const judgment = yield* judge(edited, grammar, oracleLaws);
@@ -535,7 +535,7 @@ describe("qti/interactions.ts, reading 104 by the law oracle", () => {
       // of; each must break exactly the case's laws among reading 104's two, and judge both.
       // Bound: the same 12 packages as the oracle's own test above.
       Effect.gen(function* choiceNamesByRows() {
-        const files = yield* readPackage(fixtures.simple);
+        const files = yield* readEntries(fixtures.simple);
         for (const { breaks, edits, name } of choiceNameCases) {
           const edited = editedItem(files, edits, name);
           const judgment = yield* judge(edited, grammar, oracleLaws);

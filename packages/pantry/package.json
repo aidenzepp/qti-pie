@@ -10,9 +10,12 @@
   "exports": {
     "./db/connection.ts": "./src/db/connection.ts",
     "./db/install.ts": "./src/db/install.ts",
+    "./db/layer.ts": "./src/db/layer.ts",
     "./export/pages.ts": "./src/export/pages.ts",
     "./export/render.ts": "./src/export/render.ts",
     "./export/scan.ts": "./src/export/scan.ts",
+    "./import/package.ts": "./src/import/package.ts",
+    "./import/read.ts": "./src/import/read.ts",
     "./qti/logins.ts": "./src/qti/logins.ts",
     "./qti/roles.ts": "./src/qti/roles.ts",
     "./qti/schema.ts": "./src/qti/schema.ts"

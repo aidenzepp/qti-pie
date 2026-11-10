@@ -19,7 +19,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Array as Arr, ConfigProvider, Effect, FileSystem, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { materialize, weightedNames } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
@@ -200,7 +200,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     "fixture" in drawn.source
                       ? yield* fixtureDirectory(drawn.source.fixture)
                       : yield* scopedPackage(entriesOf(drawn.source.test));
-                  const verdict = yield* oracleVerdict(yield* readPackage(dir));
+                  const verdict = yield* oracleVerdict(yield* readEntries(dir));
                   const program = yield* readProgram(dir);
                   const { broken } = judge(hostRowsOf(program.inputs), laws);
                   const [first, ...rest] = broken.map(({ law }) => law);

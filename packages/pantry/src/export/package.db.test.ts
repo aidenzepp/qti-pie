@@ -34,8 +34,8 @@ import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import type { Report } from "#pantry/export/compare.ts";
 import { compareWithRecord, exportEntries, exportPackage } from "#pantry/export/package.ts";
 
-import { importPackage } from "#pantry/import/package.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import {
@@ -158,7 +158,7 @@ const TestLayer = Layer.effect(
       Effect.gen(function* importOne() {
         const dir = yield* source;
 
-        return { dir, id: yield* importPackage(dir), name };
+        return { dir, id: yield* importDir(dir), name };
       }),
     { concurrency: 1 },
   ),
@@ -179,7 +179,7 @@ const importHookTimeoutMs = 2 * leaseTestTimeoutMs;
  */
 const exportedChoice = (dir: string) =>
   Effect.gen(function* exportChoice() {
-    const entries = yield* exportEntries(yield* importPackage(dir));
+    const entries = yield* exportEntries(yield* importDir(dir));
     const choice = entries.find((entry) => entry.path === "choice.xml");
 
     assert.isDefined(choice, dir);
@@ -259,7 +259,7 @@ describe.skipIf(!hasLease)(
                   );
                 }
 
-                assert.deepStrictEqual(yield* readPackage(zip), yield* readPackage(directory));
+                assert.deepStrictEqual(yield* readEntries(zip), yield* readEntries(directory));
               }
             }).pipe(Effect.scoped),
         );

@@ -44,7 +44,7 @@ const manifest = `<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsc
  * breaks.
  *
  * @param body - The item body's content.
- * @returns The package's entries, as `readPackage` reads them.
+ * @returns The package's entries, as `readEntries` reads them.
  */
 const packageOf = (body: string): readonly PackageFile[] =>
   Object.entries({

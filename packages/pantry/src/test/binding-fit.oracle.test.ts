@@ -50,7 +50,7 @@ import { Duration, Effect, Option } from "effect";
 import { Qti } from "#pantry/qti/own.ts";
 import { BindingFit, grammar, RecordBindingFit } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { anyTypeKinds } from "#pantry/qti/interactions.ts";
 import type {
   BindingBaseType,
@@ -437,7 +437,7 @@ describe("a gap match interaction's gaps", () => {
               Effect.gen(function* gapCaseHolds() {
                 const label = `${String(drawn.gaps)} gaps bound ${drawn.cardinality}, max-associations ${Option.getOrElse(drawn.most, () => "unwritten")}`;
                 const dir = yield* scopedPackage(gapPackageOf(drawn));
-                const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+                const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
                 assert.strictEqual(judgment._tag, "Judged", label);
 
                 const breaches = judgment._tag === "Judged" ? judgment.breaches : [];

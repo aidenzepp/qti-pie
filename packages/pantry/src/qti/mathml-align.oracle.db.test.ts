@@ -21,9 +21,9 @@ import { Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { composed } from "#pantry/grammar/compose.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { MathAction, MathAlignScope } from "#pantry/qti/mathml-align.ts";
 import { assertVerdict, judged, loginSession, statedInserts } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
@@ -245,8 +245,8 @@ describe.skipIf(!hasLease)(
           Effect.gen(function* refusedAlign() {
             const package_ = yield* dir();
             const grammar = Result.getOrThrow(composed());
-            const judgment = yield* judge(yield* readPackage(package_), grammar, lawsOf(grammar));
-            const refused = yield* Effect.flip(importPackage(package_));
+            const judgment = yield* judge(yield* readEntries(package_), grammar, lawsOf(grammar));
+            const refused = yield* Effect.flip(importDir(package_));
 
             assert.isTrue(
               judgment._tag === "Judged" && judgment.breaches.some((breach) => breach.law === law),
@@ -284,8 +284,8 @@ describe.skipIf(!hasLease)(
           Effect.gen(function* acceptedAlign() {
             const package_ = yield* dir();
             const grammar = Result.getOrThrow(composed());
-            const judgment = yield* judge(yield* readPackage(package_), grammar, lawsOf(grammar));
-            const imported = yield* Effect.result(importPackage(package_));
+            const judgment = yield* judge(yield* readEntries(package_), grammar, lawsOf(grammar));
+            const imported = yield* Effect.result(importDir(package_));
 
             assert.deepStrictEqual(verdictOf(judgment), { verdict: "accepted" }, name);
             assert.isTrue(

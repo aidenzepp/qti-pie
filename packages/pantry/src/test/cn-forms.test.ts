@@ -8,7 +8,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Array as Arr, Effect, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
@@ -75,7 +75,7 @@ const verdicts = (cn: string) =>
         packageOf(withCn(cn)).map(({ bytes, path }) => [path, bytes] as const),
       );
       const dir = yield* scopedPackage(entries);
-      const oracle = yield* oracleVerdict(yield* readPackage(dir));
+      const oracle = yield* oracleVerdict(yield* readEntries(dir));
       const program = yield* readProgram(dir);
       const { broken } = judge(hostRowsOf(program.inputs), laws);
       const [first, ...rest] = broken.map(({ law }) => law);

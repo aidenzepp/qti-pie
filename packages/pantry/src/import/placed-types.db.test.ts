@@ -12,7 +12,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { writePackage } from "#pantry/test/gen/every-relation.ts";
@@ -68,7 +68,7 @@ describe.skipIf(!hasLease)(
               const dir = yield* scratchDirectory("placed-types-");
               yield* writePackage(entries, dir);
 
-              const outcome = yield* Effect.result(importPackage(dir));
+              const outcome = yield* Effect.result(importDir(dir));
 
               if (refused) {
                 assert.isTrue(

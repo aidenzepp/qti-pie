@@ -19,7 +19,7 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as plain, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem } from "effect";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materialize, negativeNames } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { expectations } from "#pantry/test/negatives.ts";
@@ -74,7 +74,7 @@ const verdictOf = Effect.fn("negatives.oracle.verdictOf")(function* verdictOf(na
     { asPrimary: true },
   );
   const dir = yield* materialize(name).pipe(Effect.provide(config));
-  const verdict = yield* oracleVerdict(yield* readPackage(dir));
+  const verdict = yield* oracleVerdict(yield* readEntries(dir));
 
   return verdict.kind === "accepted" ? "accepted" : [...verdict.rules].toSorted();
 });

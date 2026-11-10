@@ -80,7 +80,7 @@ interface RootCase {
 }
 
 /**
- * Write a case's package, each file's text encoded as UTF-8, as `readPackage` returns one: a 3.0.0
+ * Write a case's package, each file's text encoded as UTF-8, as `readEntries` returns one: a 3.0.0
  * manifest whose one resource lists `doc.xml` under the case's type, and `doc.xml`, the case's root
  * alone, in its vocabulary's namespace.
  *

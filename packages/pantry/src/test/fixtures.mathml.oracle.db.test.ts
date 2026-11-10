@@ -10,8 +10,8 @@ import { Effect, Formatter, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { compareWithRecord } from "#pantry/export/package.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import {
   materializeMathml,
   mathmlNegatives,
@@ -37,13 +37,13 @@ describe.skipIf(!hasLease)(
           // importer's rule is the entry's.
           Effect.gen(function* refused() {
             const dir = yield* materializeMathml(name);
-            const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+            const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
             const rules = new Set<string>(
               judgment._tag === "CodecRefusal"
                 ? [judgment.rule]
                 : judgment.breaches.map(({ law }) => ruleOf(law)),
             );
-            const failure = yield* Effect.flip(importPackage(dir));
+            const failure = yield* Effect.flip(importDir(dir));
 
             assert.instanceOf(failure, ImportRefused);
 
@@ -66,7 +66,7 @@ describe.skipIf(!hasLease)(
           // Oracle: PostgreSQL accepts the package whole, and the exporter's account of the
           // stored `Entry` family equals the entries it was imported from.
           Effect.gen(function* roundTrips() {
-            const id = yield* importPackage(yield* materializeMathml(name));
+            const id = yield* importDir(yield* materializeMathml(name));
             const report = yield* compareWithRecord(id);
 
             assert.isFalse(

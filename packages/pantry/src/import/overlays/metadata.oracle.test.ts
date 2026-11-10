@@ -35,7 +35,7 @@ import type { Composed } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { languageTagPattern, objectTypes, resourceMetadata } from "#pantry/qti/metadata.ts";
 import type {
@@ -1207,7 +1207,7 @@ describe("import/overlays/metadata.ts, the metaData fixture", () => {
       // Oracle: a second implementation, the law oracle's `LomObjectIdentifier` over each package.
       // Bound: the fixture, and its entry edited to `choice` and to `choice` padded.
       Effect.gen(function* metaData() {
-        const files = yield* readPackage(fixtures.metaData);
+        const files = yield* readEntries(fixtures.metaData);
 
         for (const [label, edited, expected] of [
           ["metaData", files, 1],

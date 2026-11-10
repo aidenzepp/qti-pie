@@ -88,7 +88,7 @@ const item = `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item"
 
 /**
  * Build the base package with its item edited, each file's text encoded as UTF-8, as
- * `readPackage` returns one.
+ * `readEntries` returns one.
  *
  * @param text - The item's text.
  * @returns The entries, sorted by path.

@@ -36,7 +36,7 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 
 import { authorRole, loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -134,7 +134,7 @@ describe.skipIf(!hasLease)(
             assert.isBelow(recordBytes, flightMaxBytes.value, "the record is past one flight");
 
             const source = yield* scopedPackage(entries);
-            const [importElapsed, id] = yield* Effect.timed(importPackage(source));
+            const [importElapsed, id] = yield* Effect.timed(importDir(source));
             const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
             const client = yield* authorSession;
             const record = yield* recordTransactions(client, id);

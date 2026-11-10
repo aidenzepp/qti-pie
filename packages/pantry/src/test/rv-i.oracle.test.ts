@@ -71,7 +71,7 @@ interface Written {
 }
 
 /**
- * Build a one-item package, each file's text encoded as UTF-8, as `readPackage` returns one.
+ * Build a one-item package, each file's text encoded as UTF-8, as `readEntries` returns one.
  *
  * @param written - The case.
  * @returns The entries, sorted by path.

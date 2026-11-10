@@ -17,7 +17,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { authorRole, judgedCase, loginSession } from "#pantry/test/direct-sql.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { restoredNames } from "#pantry/test/fixtures.ts";
@@ -73,7 +73,7 @@ describe.skipIf(!hasLease)(
       for (const [name, rule] of refused) {
         it.effect(`refuses ${name} naming ${rule}`, () =>
           Effect.gen(function* refusesAria() {
-            const failure = yield* Effect.flip(importPackage(yield* materialize(name)));
+            const failure = yield* Effect.flip(importDir(yield* materialize(name)));
 
             assert.strictEqual(failure._tag, "ImportRefused", `${name}: refused by another error`);
 
@@ -89,7 +89,7 @@ describe.skipIf(!hasLease)(
       for (const name of accepted) {
         it.effect(`accepts ${name}`, () =>
           Effect.gen(function* acceptsFixture() {
-            const id = yield* importPackage(yield* materialize(name));
+            const id = yield* importDir(yield* materialize(name));
 
             assert.isString(id, name);
           }),
@@ -99,7 +99,7 @@ describe.skipIf(!hasLease)(
       for (const name of patterns) {
         it.effect(`accepts ${name}, its qti-pattern-match pattern stored as {NOSUCH}`, () =>
           Effect.gen(function* acceptsPattern() {
-            const id = yield* importPackage(yield* materialize(name));
+            const id = yield* importDir(yield* materialize(name));
             const client = yield* loginSession;
             // The login holds no SELECT of its own, so the stored row is read as the author role,
             // a case that writes nothing and reads it.

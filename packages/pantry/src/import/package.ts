@@ -1,9 +1,9 @@
 /**
- * The importer's front door: a package directory in, one committed package out or one named
- * refusal (plan W5, Q5.15; the W5 amendment's A, C19 and C22).
+ * The importer's front door: a package as `readPackage` read it (`#pantry/import/read.ts`) in, one
+ * committed package out or one named refusal (plan W5, Q5.15; the W5 amendment's A, C19 and C22).
  *
- * The package is read, shredded and built into its rows once (`readProgram` of
- * `#pantry/import/program.ts`), and written by the author login's `importWrite` member, the one
+ * The read package is built into its rows once (`programOf` of `#pantry/import/program.ts`), its
+ * directory never read again, and written by the author login's `importWrite` member, the one
  * ChangeSet step over the author role (`changeSetOf` of `#pantry/import/write.ts`) that `grizzle
  * generate` compiled into the login's served file, applied once to the package's facts
  * (`packageFactsOf`). The apply is one transaction, so the database holds the whole package or
@@ -21,9 +21,9 @@ import {
 import type { Uuid } from "@bjornpagen/grizzle";
 import type { ApplyError, DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
 import { Clock, Context, Duration, Effect, Option, Random, Ref, Schedule, Schema } from "effect";
-import type { FileSystem, PlatformError } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
-import { readProgram } from "#pantry/import/program.ts";
+import { programOf } from "#pantry/import/program.ts";
+import type { QtiPackage } from "#pantry/import/read.ts";
 import { refusalOf } from "#pantry/import/refusal.ts";
 import { AuthorLogin } from "#pantry/db/served.ts";
 import { packageFactsOf } from "#pantry/import/write.ts";
@@ -183,35 +183,36 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
 });
 
 /**
- * Import the package at `dir`.
+ * Import a package `readPackage` read.
  *
- * Reads the package once, shreds the documents its manifest names, mints every id afresh and builds
- * every row, then applies them as one ChangeSet through the author role. `Db.open` contacts nothing
- * of the database and refuses only what the host decides (grizzle `d994809c`), so it runs once; the
- * `importWrite` apply is retried on a transient refusal and on nothing else. When the commit's
- * outcome is unknown the package row is read back by its id ({@link settleCommitUnknown}): present,
- * the import was accepted; absent, the error is the answer; a read-back that fails is
- * `CommitUnresolved`. The same package imported twice is two packages, each with its own ids. The
- * retries run on {@link RetrySchedule}, and each attempt of the apply through {@link WrapApply}.
+ * Mints every id afresh and builds every row from the package's documents and files, reading
+ * nothing of its directory, then applies them as one ChangeSet through the author role. `Db.open`
+ * contacts nothing of the database and refuses only what the host decides (grizzle `d994809c`), so
+ * it runs once; the `importWrite` apply is retried on a transient refusal and on nothing else. When
+ * the commit's outcome is unknown the package row is read back by its id ({@link
+ * settleCommitUnknown}): present, the import was accepted; absent, the error is the answer; a
+ * read-back that fails is `CommitUnresolved`. The same package imported twice, or one package value
+ * imported twice, is two packages, each with its own ids. The retries run on {@link RetrySchedule},
+ * and each attempt of the apply through {@link WrapApply}; both are references whose defaults are
+ * the live ones, so a caller provides neither.
  *
- * @param dir - The package directory or `.zip` file.
- * @returns The id of the committed package. Fails with `ImportRefused` naming the rules the package
- *   was refused under, whether the reader, the codec or the database refused it; with the
- *   platform's error when the directory cannot be read; with `CommitUnresolved` when the commit's
- *   outcome is unknown and the read-back failed, so the package may or may not be stored; and with
- *   grizzle's own error when the database failed for a reason that is not a refusal.
+ * @param pkg - The package, as `readPackage` read it.
+ * @returns The id of the committed package. Fails with `ImportRefused` naming the rules the
+ *   database refused the package under; with `CommitUnresolved` when the commit's outcome is
+ *   unknown and the read-back failed, so the package may or may not be stored; and with grizzle's
+ *   own error when the database failed for a reason that is not a refusal.
  */
 export const importPackage = Effect.fn("import.importPackage")(function* importPackage(
-  dir: string,
+  pkg: QtiPackage,
 ): Effect.fn.Return<
   Uuid,
-  ImportRefused | PlatformError.PlatformError | ApplyError | OpenError | CommitUnresolved,
-  AuthorLogin | FileSystem.FileSystem | DbLayer<AuthorRole>
+  ImportRefused | ApplyError | OpenError | CommitUnresolved,
+  AuthorLogin | DbLayer<AuthorRole>
 > {
   const schedule = yield* RetrySchedule;
   const wrap = yield* WrapApply;
   const login = yield* AuthorLogin;
-  const program = yield* readProgram(dir);
+  const program = yield* programOf(pkg);
   const { packageId } = program;
   const facts = packageFactsOf(program.inputs);
   const db = yield* Db.open(login.roles.author, {});

@@ -21,7 +21,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 
 import type { Quotation } from "#pantry/qti/quotation.ts";
 import { quotationMarks } from "#pantry/qti/quotation.ts";
@@ -236,7 +236,7 @@ describe.skipIf(!hasLease)(
               },
             ];
             for (const { dir, refused } of cases) {
-              const outcome = yield* Effect.result(importPackage(yield* dir));
+              const outcome = yield* Effect.result(importDir(yield* dir));
 
               assert.isTrue(
                 refused

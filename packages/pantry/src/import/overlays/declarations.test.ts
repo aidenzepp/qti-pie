@@ -42,14 +42,14 @@ import type {
   XdmDocument,
   XdmElement,
 } from "#pantry/model/xdm.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { declarationKinds, valueSetKinds } from "#pantry/qti/declarations.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { settings } from "#pantry/test/settings.ts";
 
 /**
- * The file system and processes the fixtures' materializer and `readPackage` need.
+ * The file system and processes the fixtures' materializer and `readEntries` need.
  */
 const TestLayer = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
@@ -1001,7 +1001,7 @@ const declaredVersion = (manifest: XmlDocument): Option.Option<string> =>
  */
 const documentsOf = (dir: string) =>
   Effect.gen(function* packageDocuments() {
-    const files = yield* readPackage(dir);
+    const files = yield* readEntries(dir);
     const manifest = files.find(({ kind }) => kind === "manifest");
     if (manifest === undefined) {
       return [];

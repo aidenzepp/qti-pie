@@ -234,7 +234,7 @@ const labelCases: Gen<LabelCase> = (source) => ({
  * is one paragraph.
  *
  * @param drawn - The case.
- * @returns The package's entries, as `readPackage` reads them.
+ * @returns The package's entries, as `readEntries` reads them.
  */
 const labelPackage = (drawn: LabelCase): readonly PackageFile[] => {
   const root = [
@@ -348,7 +348,7 @@ describe("test/oracle.ts, Label tools", { timeout: buildTimeout }, () => {
 const cp = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
 
 /**
- * Write a package's entries from their texts, as `readPackage` reads them.
+ * Write a package's entries from their texts, as `readEntries` reads them.
  *
  * @param files - Each entry's text by its path, the manifest at `imsmanifest.xml`.
  * @returns The entries.

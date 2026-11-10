@@ -21,7 +21,7 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
@@ -113,7 +113,7 @@ describe("spec reading 122: main's fixtures, under lom-learning-resource-type", 
       // LOM vocabulary (source LOMv1.0) from `exercise` to `exam`, which §2.7.5.1 forbids.
       // Bound: the two fixtures.
       Effect.gen(function* fixture() {
-        const files = yield* readPackage(yield* materialize(name));
+        const files = yield* readEntries(yield* materialize(name));
         const breaches = yield* breachesOf(files);
         const database = yield* databaseOf(files);
 

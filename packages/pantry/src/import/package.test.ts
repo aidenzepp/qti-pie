@@ -29,11 +29,11 @@ import { describe, inject } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import {
   CommitUnresolved,
-  importPackage,
   RetrySchedule,
   settleCommitUnknown,
   WrapApply,
 } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
@@ -333,7 +333,7 @@ describe.skipIf(!hasLease)(
       it.effect("accepts simple and returns the package's id", () =>
         // Oracle: PostgreSQL, every law over `simple`, and the package read back by its id.
         Effect.gen(function* acceptsSimple() {
-          const id = yield* importPackage(fixtures.simple);
+          const id = yield* importDir(fixtures.simple);
           const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
 
           assert.match(id, uuidPattern);
@@ -355,7 +355,7 @@ describe.skipIf(!hasLease)(
           // Oracle: the specification as a checker, the rule Q5.08's law keeps (the retired guard's,
           // `value-single` and `value-lexical`, as the refusal table maps them).
           Effect.gen(function* refusedBeyondOracle() {
-            const refused = yield* Effect.flip(importPackage(yield* materialize(name)));
+            const refused = yield* Effect.flip(importDir(yield* materialize(name)));
 
             assert.isTrue(
               refused instanceof ImportRefused &&
@@ -382,7 +382,7 @@ describe.skipIf(!hasLease)(
         // Oracle: the specification as a checker, the retry rule: a transient failure is retried.
         Effect.gen(function* retriesTransient() {
           const attempts = yield* Ref.make(0);
-          const id: Uuid = yield* importPackage(fixtures.simple).pipe(
+          const id: Uuid = yield* importDir(fixtures.simple).pipe(
             Effect.provideService(WrapApply, <A>(apply: Effect.Effect<A, ApplyError>) =>
               Effect.flatMap(
                 Ref.getAndUpdate(attempts, (n) => n + 1),
@@ -403,7 +403,7 @@ describe.skipIf(!hasLease)(
         Effect.gen(function* givesUp() {
           const attempts = yield* Ref.make(0);
           const result = yield* Effect.result(
-            importPackage(fixtures.simple).pipe(
+            importDir(fixtures.simple).pipe(
               Effect.provideService(RetrySchedule, quickly),
               Effect.provideService(WrapApply, () =>
                 Effect.andThen(
@@ -426,7 +426,7 @@ describe.skipIf(!hasLease)(
         // Oracle: the specification as a checker, `CommitUnknown`'s resolution: the apply ran and
         // committed, so the package is read back and the import answers its id.
         Effect.gen(function* readsBack() {
-          const id = yield* importPackage(fixtures.simple).pipe(
+          const id = yield* importDir(fixtures.simple).pipe(
             Effect.provideService(WrapApply, (apply) =>
               Effect.andThen(apply, Effect.fail(new CommitUnknown())),
             ),
@@ -442,7 +442,7 @@ describe.skipIf(!hasLease)(
         // read back, so the error is the answer.
         Effect.gen(function* notThere() {
           const result = yield* Effect.result(
-            importPackage(fixtures.simple).pipe(
+            importDir(fixtures.simple).pipe(
               Effect.provideService(WrapApply, () => Effect.fail(new CommitUnknown())),
             ),
           );

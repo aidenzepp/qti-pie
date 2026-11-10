@@ -10,7 +10,8 @@ pantry imports a QTI 3.0 package, a directory or a `.zip` file, into a local Pos
 to files. It exists first to put [grizzle](../../vendor/README.md) through a large, real data model, so delivery is
 out of scope. It is pre-release, and it reads XML through [crust](../crust/README.md). Its `package.json` exports only
 what an install outside this workspace composes: the `Qti` schema built for a policy, the author role and login, the
-connections, and the export's document scan with its rows-to-XML step.
+connections, the import's read and write with the layer they run on, and the export's document scan with its rows-to-XML
+step.
 
 ## Install
 

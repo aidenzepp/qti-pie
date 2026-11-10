@@ -56,7 +56,7 @@ import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { LabelUse } from "#pantry/qti/identity.ts";
@@ -946,7 +946,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
             );
             assert.strictEqual(packages.length, acceptedPackages.size);
             for (const { dir, name } of packages) {
-              const files = yield* readPackage(dir);
+              const files = yield* readEntries(dir);
               const version = yield* Effect.orDie(
                 Effect.fromResult(versionOf(schemaVersions, yield* declaredVersionOf(files))),
               );

@@ -46,7 +46,7 @@ const manifest = `<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsc
  * the rules break, with a float `SCORE`, an integer `COUNT` and a boolean `FLAG` declared.
  *
  * @param rules - The response processing's content.
- * @returns The package's entries, as `readPackage` reads them.
+ * @returns The package's entries, as `readEntries` reads them.
  */
 const packageOf = (rules: string): readonly PackageFile[] =>
   Object.entries({

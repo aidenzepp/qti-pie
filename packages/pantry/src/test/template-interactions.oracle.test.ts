@@ -150,7 +150,7 @@ const bodyOf = ({ depth, host, interaction }: TemplateCase): string =>
   hostBodies[host](depth, interactionMarkup[interaction]);
 
 /**
- * Write a case's item and manifest, each file's text encoded as UTF-8, as `readPackage` returns
+ * Write a case's item and manifest, each file's text encoded as UTF-8, as `readEntries` returns
  * one.
  *
  * @param drawn - The case.

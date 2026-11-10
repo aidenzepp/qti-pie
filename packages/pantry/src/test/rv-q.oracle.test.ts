@@ -49,7 +49,7 @@ const itemOf = (body: string): string =>
   `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false" adaptive="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-item-body>${body}</qti-item-body></qti-assessment-item>`;
 
 /**
- * Build the package of one item from its body, each file encoded as UTF-8, as `readPackage`
+ * Build the package of one item from its body, each file encoded as UTF-8, as `readEntries`
  * returns one.
  *
  * @param body - The item body's content.

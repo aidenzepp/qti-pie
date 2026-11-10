@@ -16,7 +16,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Option, Schema } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
@@ -470,7 +470,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   const expected = external ? ["Remote section ref"] : [];
                   const dir = yield* scopedPackage(sectionRefPackage(href));
                   const judgment = yield* judgeOracle(
-                    yield* readPackage(dir),
+                    yield* readEntries(dir),
                     grammar,
                     lawsOf(grammar),
                   );

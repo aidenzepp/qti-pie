@@ -35,7 +35,7 @@ import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { fileScratchDirectory } from "#pantry/test/scratch.ts";
@@ -232,7 +232,7 @@ const corpusDocuments = Effect.fn("xsd.corpusDocuments")(function* corpusDocumen
   const documents: CorpusDocument[] = [];
 
   for (const entry of corpus) {
-    const files = yield* readPackage(entry.dir);
+    const files = yield* readEntries(entry.dir);
     const manifest = files.find(({ kind }) => kind === "manifest");
     const declared = manifest === undefined ? "" : declaredOf(manifest.bytes);
 

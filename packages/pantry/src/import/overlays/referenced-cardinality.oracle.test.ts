@@ -35,7 +35,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
@@ -606,7 +606,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           for (const held of choiceCases) {
             const label = `V ${held.kind}${held.cardinality.attribute || " no cardinality"}, a choice named ${held.chosen}`;
             const dir = yield* scopedPackage(choicePackageOf(held));
-            const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+            const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
             assert.strictEqual(judgment._tag, "Judged", label);
 
             const oracle =

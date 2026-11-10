@@ -11,8 +11,8 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { cyclePackageOf, cycles, includerCounts, tails } from "#pantry/test/inclusion-cycles.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
@@ -38,7 +38,7 @@ describe.skipIf(!hasLease)(
               Effect.gen(function* cycleVerdict() {
                 const fs = yield* FileSystem.FileSystem;
                 const dir = yield* scratchDirectory("inclusion-cycles-");
-                const base = yield* readPackage(yield* materialize("rtest01"));
+                const base = yield* readEntries(yield* materialize("rtest01"));
                 for (const file of cyclePackageOf(base, { cycle, includers, tail })) {
                   yield* fs.makeDirectory(path.dirname(`${dir}/${file.path}`), {
                     recursive: true,
@@ -46,7 +46,7 @@ describe.skipIf(!hasLease)(
                   yield* fs.writeFile(`${dir}/${file.path}`, file.bytes);
                 }
 
-                const outcome = yield* Effect.result(importPackage(dir));
+                const outcome = yield* Effect.result(importDir(dir));
 
                 if (cycle === "none") {
                   assert.strictEqual(outcome._tag, "Success", "the acyclic package");

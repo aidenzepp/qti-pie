@@ -35,7 +35,7 @@ import type { Client } from "pg";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { Flag } from "#pantry/grammar/install.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { governorOf } from "#pantry/import/fold.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
@@ -990,7 +990,7 @@ describe.skipIf(!hasLease)(
               const dir = `${directory}/c${String(at)}`;
               yield* writePackage(r26PackageOf(xmlLang, lomLang, named), dir);
 
-              const outcome = yield* Effect.result(importPackage(dir));
+              const outcome = yield* Effect.result(importDir(dir));
               const rules =
                 outcome._tag === "Failure" && outcome.failure instanceof ImportRefused
                   ? outcome.failure.rules

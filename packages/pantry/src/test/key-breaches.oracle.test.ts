@@ -13,7 +13,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { evaluatedKeys, keyBreachesOf } from "#pantry/test/key-breaches.ts";
 import { packagingFixtures } from "#pantry/test/oracle-verdict.ts";
@@ -60,7 +60,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           const read = new Set<string>();
           for (const name of packagingFixtures) {
             const dir = yield* materialize(name);
-            const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+            const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
             const program = yield* Effect.result(readProgram(dir));
             if (Result.isFailure(program)) {
               assert.strictEqual(judgment._tag, "CodecRefusal", `${name}: the reader refused it`);

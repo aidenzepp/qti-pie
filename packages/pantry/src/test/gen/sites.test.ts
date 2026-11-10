@@ -22,7 +22,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import type { Site } from "#pantry/qti/tests.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -305,7 +305,7 @@ const judged = (box: SiteBox, c: Case<Situation>) =>
   Effect.gen(function* judgedSites() {
     const literal = siteLiteral(box);
     const dir = yield* scopedPackage(sitePackage(box));
-    const verdict = yield* oracleVerdict(yield* readPackage(dir));
+    const verdict = yield* oracleVerdict(yield* readEntries(dir));
     const program = yield* readProgram(dir);
     const byRows = rowRules(program.inputs, literal);
     const byCases = rulesOfBox(box);

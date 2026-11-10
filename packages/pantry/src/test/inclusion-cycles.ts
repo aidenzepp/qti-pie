@@ -115,7 +115,7 @@ const replaceOnce = (text: string, search: string, replacement: string): string 
 /**
  * Write a case's package from `rtest01`'s entries.
  *
- * @param base - `rtest01`'s entries, as `readPackage` returns them.
+ * @param base - `rtest01`'s entries, as `readEntries` returns them.
  * @param drawn - The case.
  * @returns The case's entries, sorted by path.
  */

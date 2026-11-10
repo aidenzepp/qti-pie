@@ -16,8 +16,8 @@ import { Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { composed } from "#pantry/grammar/compose.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materializeSpec } from "#pantry/test/fixtures.ts";
 import type { FixtureSpec } from "#pantry/test/fixtures.ts";
 import { mathmlSpecOf } from "#pantry/test/fixtures.mathml.ts";
@@ -118,8 +118,8 @@ describe.skipIf(!hasLease)(
           Effect.gen(function* refusedCn() {
             const dir = yield* materializeSpec(formulaSpec(`p6n-27-${spec}`, block));
             const grammar = Result.getOrThrow(composed());
-            const judgment = yield* judge(yield* readPackage(dir), grammar, lawsOf(grammar));
-            const refused = yield* Effect.flip(importPackage(dir));
+            const judgment = yield* judge(yield* readEntries(dir), grammar, lawsOf(grammar));
+            const refused = yield* Effect.flip(importDir(dir));
 
             assert.isTrue(
               judgment._tag === "Judged" && judgment.breaches.some((breach) => breach.law === law),
@@ -149,8 +149,8 @@ describe.skipIf(!hasLease)(
           Effect.gen(function* acceptedCn() {
             const dir = yield* materializeSpec(formulaSpec(`p6n-27-${spec}`, block));
             const grammar = Result.getOrThrow(composed());
-            const judgment = yield* judge(yield* readPackage(dir), grammar, lawsOf(grammar));
-            const imported = yield* Effect.result(importPackage(dir));
+            const judgment = yield* judge(yield* readEntries(dir), grammar, lawsOf(grammar));
+            const imported = yield* Effect.result(importDir(dir));
 
             assert.deepStrictEqual(verdictOf(judgment), { verdict: "accepted" }, name);
             assert.isTrue(

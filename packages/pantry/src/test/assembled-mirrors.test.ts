@@ -24,7 +24,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Predicate } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
@@ -174,7 +174,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             const dir = yield* scopedPackage(
               everyRelationPackage({ choices: 2, hotspots: 1, hottexts: 1 }),
             );
-            const verdict = yield* oracleVerdict(yield* readPackage(dir));
+            const verdict = yield* oracleVerdict(yield* readEntries(dir));
             const program = yield* readProgram(dir);
             const rows = hostRowsOf(program.inputs);
             const laws = judgedLaws(Qti);

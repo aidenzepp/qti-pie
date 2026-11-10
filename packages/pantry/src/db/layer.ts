@@ -1,3 +1,4 @@
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { DbLayer, roleNameOf, served } from "@bjornpagen/grizzle/runtime";
 import type { PoolBounds } from "@bjornpagen/grizzle/runtime";
 import { Effect, FileSystem, Layer, Option, Schema } from "effect";
@@ -72,3 +73,20 @@ export const AuthorAppLayer = Layer.unwrap(
     );
   }),
 ).pipe(Layer.provide(connectionServices));
+
+/**
+ * Everything an import in this process runs on, one layer that needs nothing: Node's file system,
+ * which the package's read (`readPackage` of `#pantry/import/read.ts`) reads the package through,
+ * and {@link AuthorAppLayer}, the author login and its `DbLayer`, which its write (`importPackage`
+ * of `#pantry/import/package.ts`) applies through. So
+ * `readPackage(dir).pipe(Effect.flatMap(importPackage), Effect.provide(ImportLive))` imports a
+ * package, here and in an install outside this package alike, and the command line runs every
+ * command that reaches the database on it (`#pantry/cli/engine.ts` `withAuthorApp`).
+ *
+ * It is built from the process's settings, read through Effect `Config`: the cluster's
+ * (`GR8DES_PG_HOST`, `GR8DES_PG_PORT`, `GR8DES_PG_DATABASE`, `GR8DES_PG_CA`, `GR8DES_PG_SECRETS`)
+ * and the install `GR8DES_QTI_INSTALL` names, whose served file it opens (`#pantry/db/install.ts`).
+ * The import's `RetrySchedule` and `WrapApply` are references whose defaults are the live ones, so
+ * the layer provides neither. Building it fails as {@link AuthorAppLayer} fails.
+ */
+export const ImportLive = Layer.merge(AuthorAppLayer, NodeFileSystem.layer);

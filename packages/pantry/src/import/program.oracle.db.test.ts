@@ -25,11 +25,12 @@ import { Duration, Effect, Formatter, Layer, Option, Result } from "effect";
 import { describe, inject } from "vitest";
 import { composed } from "#pantry/grammar/compose.ts";
 
-import { importPackage, WrapApply } from "#pantry/import/package.ts";
+import { WrapApply } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { readProgram } from "#pantry/import/program.ts";
 
 import type { NodeMember, NodeRoot, PackageInputs } from "#pantry/import/write.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 
 import { Package } from "#pantry/qti/package.ts";
 import { materialize, materializeSpec, specOf } from "#pantry/test/fixtures.ts";
@@ -257,7 +258,7 @@ const holdsVerdict = (
       return;
     }
 
-    const refused = yield* Effect.flip(importPackage(dir));
+    const refused = yield* Effect.flip(importDir(dir));
 
     assert.include(
       refused instanceof ImportRefused ? refused.rules : [refused._tag],
@@ -409,8 +410,8 @@ describe.skipIf(!hasLease)(
         // packages grows by two.
         Effect.gen(function* twice() {
           const before = yield* storedPackages;
-          const first = yield* importPackage(fixtures.simple);
-          const second = yield* importPackage(fixtures.simple);
+          const first = yield* importDir(fixtures.simple);
+          const second = yield* importDir(fixtures.simple);
 
           assert.notStrictEqual(first, second);
           assert.strictEqual(yield* storedPackages, before + 2n);
@@ -424,7 +425,7 @@ describe.skipIf(!hasLease)(
         Effect.gen(function* noRow() {
           const before = yield* storedPackages;
           const failed = yield* Effect.flip(
-            importPackage(fixtures.simple).pipe(
+            importDir(fixtures.simple).pipe(
               Effect.provideService(WrapApply, () => Effect.fail(new CommitUnknown())),
             ),
           );
@@ -475,7 +476,7 @@ describe.skipIf(!hasLease)(
                   search: "<qti-item-body>",
                 },
               ]);
-              const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+              const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
               const { outcome } = yield* applyEdited(dir);
 
               assert.strictEqual(
@@ -527,7 +528,7 @@ describe.skipIf(!hasLease)(
               ],
               name: "empty-section",
             });
-            const judgment = yield* judge(yield* readPackage(dir), grammar, lawsOf(grammar));
+            const judgment = yield* judge(yield* readEntries(dir), grammar, lawsOf(grammar));
             const { outcome } = yield* applyEdited(dir);
 
             assert.isTrue(
@@ -648,7 +649,7 @@ describe.skipIf(!hasLease)(
               (dir) =>
                 Effect.gen(function* oneLawBroken() {
                   const grammar = Result.getOrThrow(composed());
-                  const judgment = yield* judge(yield* readPackage(dir), grammar, lawsOf(grammar));
+                  const judgment = yield* judge(yield* readEntries(dir), grammar, lawsOf(grammar));
 
                   assert.deepStrictEqual(
                     judgment._tag === "Judged" ? judgment.breaches.map(({ law }) => law) : judgment,
@@ -1059,7 +1060,7 @@ describe.skipIf(!hasLease)(
           // lastUpdated's value domain) beside every other law, as Q5.12 states each fixture's
           // verdict.
           Effect.gen(function* metadataVerdict() {
-            const outcome = yield* Effect.result(importPackage(yield* materialize(name)));
+            const outcome = yield* Effect.result(importDir(yield* materialize(name)));
 
             if (rules.length === 0) {
               assert.isTrue(outcome._tag === "Success", `${name} was refused`);
@@ -1093,7 +1094,7 @@ describe.skipIf(!hasLease)(
               yield* holdsVerdict(
                 name,
                 dir,
-                verdictOf(yield* judge(yield* readPackage(dir), grammar, lawsOf(grammar))),
+                verdictOf(yield* judge(yield* readEntries(dir), grammar, lawsOf(grammar))),
               );
 
               return;
@@ -1151,7 +1152,7 @@ describe.skipIf(!hasLease)(
         // Oracle: PostgreSQL, the value domain of cp:resource's type, its 3.0.0 enumeration (spec
         // reading 67), with the importer's refusal: its rule (Q5.06's case).
         Effect.gen(function* lti() {
-          const refused = yield* Effect.flip(importPackage(fixtures.lti));
+          const refused = yield* Effect.flip(importDir(fixtures.lti));
 
           assert.instanceOf(refused, ImportRefused);
           assert.include(
@@ -1165,7 +1166,7 @@ describe.skipIf(!hasLease)(
         // Oracle: the specification as a checker, `CommitUnknown`'s resolution: the apply ran and
         // committed, so the package is read back and the import answers its id.
         Effect.gen(function* readsBack() {
-          const id = yield* importPackage(fixtures.simple).pipe(
+          const id = yield* importDir(fixtures.simple).pipe(
             Effect.provideService(WrapApply, (apply) =>
               Effect.andThen(apply, Effect.fail(new CommitUnknown())),
             ),

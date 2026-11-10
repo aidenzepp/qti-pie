@@ -12,8 +12,8 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -57,7 +57,7 @@ describe.skipIf(!hasLease)(
             Effect.gen(function* dateVerdict() {
               const fs = yield* FileSystem.FileSystem;
               const dir = yield* scratchDirectory("statistic-dates-");
-              for (const file of yield* readPackage(yield* materialize("usage3"))) {
+              for (const file of yield* readEntries(yield* materialize("usage3"))) {
                 const text = new TextDecoder().decode(file.bytes);
                 yield* fs.makeDirectory(path.dirname(`${dir}/${file.path}`), { recursive: true });
                 yield* fs.writeFile(
@@ -70,7 +70,7 @@ describe.skipIf(!hasLease)(
                 );
               }
 
-              const outcome = yield* Effect.result(importPackage(dir));
+              const outcome = yield* Effect.result(importDir(dir));
 
               if (day) {
                 assert.strictEqual(outcome._tag, "Success", lexical);

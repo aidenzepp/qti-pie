@@ -26,7 +26,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
@@ -295,7 +295,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               Effect.scoped(
                 Effect.gen(function* oneCase() {
                   const dir = yield* scopedPackage(packageOf(drawn));
-                  const judgment = yield* judgeOracle(yield* readPackage(dir), grammar, oracleLaws);
+                  const judgment = yield* judgeOracle(yield* readEntries(dir), grammar, oracleLaws);
                   assert.strictEqual(judgment._tag, "Judged", Formatter.format(drawn));
 
                   const oracle = new Set<string>(

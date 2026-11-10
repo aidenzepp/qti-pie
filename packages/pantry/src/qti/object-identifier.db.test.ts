@@ -16,7 +16,7 @@ import { Db, query, uuid, v, login, workload } from "@bjornpagen/grizzle";
 import { Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { keyTextBytes } from "#pantry/qti/limits.ts";
 import { ObjectIdentifier } from "#pantry/qti/metadata.ts";
 
@@ -158,7 +158,7 @@ describe.skipIf(!hasLease)(
           Effect.scoped(
             Effect.gen(function* keyedAtTheBound() {
               const identifier = identifierOf(keyTextBytes);
-              const pkg = yield* importPackage(yield* scopedPackage(testPackageOf(identifier)));
+              const pkg = yield* importDir(yield* scopedPackage(testPackageOf(identifier)));
               const db = yield* Db.open((yield* ProbeLogin).roles.author, {});
               const rows = yield* (yield* db.workload.testByIdentifier.execute({
                 identifier,
@@ -178,7 +178,7 @@ describe.skipIf(!hasLease)(
           Effect.scoped(
             Effect.gen(function* refusedPastTheBound() {
               const outcome = yield* Effect.result(
-                importPackage(yield* scopedPackage(testPackageOf(identifierOf(keyTextBytes + 1)))),
+                importDir(yield* scopedPackage(testPackageOf(identifierOf(keyTextBytes + 1)))),
               );
 
               assert.isTrue(

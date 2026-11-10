@@ -46,11 +46,11 @@ import { grammar } from "#pantry/grammar/install.ts";
 import { ownContext } from "#pantry/import/fold.ts";
 import { rowsOf } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataIds } from "#pantry/import/overlays/metadata.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { StatisticDate, UsageValueBaseType } from "#pantry/qti/metadata.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -253,7 +253,7 @@ describe.skipIf(!hasLease)(
                 member: metaDataMember,
                 name: `lom-laws-${label}`,
               });
-              const outcome = yield* Effect.result(importPackage(dir));
+              const outcome = yield* Effect.result(importDir(dir));
               const rules =
                 outcome._tag === "Failure" && outcome.failure instanceof ImportRefused
                   ? outcome.failure.rules
@@ -291,7 +291,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
           ["usage3-feb-30", "2004-02-30"],
           ["usage3-bad-month", "2004-13-04"],
         ] as const satisfies readonly (readonly [FixtureName, string])[]) {
-          const built = yield* builtOf(yield* readPackage(yield* materialize(name)));
+          const built = yield* builtOf(yield* readEntries(yield* materialize(name)));
           assert.isNotEmpty(built.dates, `${name} writes a lastUpdated`);
           assert.strictEqual(
             built.dates.some(({ day }) => day === bad),
@@ -342,7 +342,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
           ["usage3-float-padded", 1, false],
           ["usage3-integer-float", 1, true],
         ] as const satisfies readonly (readonly [FixtureName, number, boolean])[]) {
-          const built = yield* builtOf(inRecords(yield* readPackage(yield* materialize(name))));
+          const built = yield* builtOf(inRecords(yield* readEntries(yield* materialize(name))));
           assert.lengthOf(built.values, count, `${name} writes a baseType on ${String(count)}`);
 
           for (const row of built.values) {

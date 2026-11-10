@@ -25,7 +25,7 @@ import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { exportEntries } from "#pantry/export/package.ts";
 import { grammar } from "#pantry/grammar/install.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { names } from "#pantry/model/names.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import {
@@ -77,7 +77,7 @@ const importedOf = Effect.fn("test.attributeOrder.imported")(function* importedO
   files: readonly PackageFile[],
 ) {
   const dir = yield* scopedPackage(new Map(files.map(({ bytes, path }) => [path, bytes])));
-  const outcome = yield* Effect.result(importPackage(dir));
+  const outcome = yield* Effect.result(importDir(dir));
   if (Result.isSuccess(outcome)) {
     return { id: outcome.success, verdict: "accepted" } satisfies Imported;
   }

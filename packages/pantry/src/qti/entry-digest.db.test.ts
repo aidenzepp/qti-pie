@@ -18,7 +18,7 @@ import { Db, login, query, uuid, v, workload } from "@bjornpagen/grizzle";
 import type { Addition, Fact } from "@bjornpagen/grizzle";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import type { EntryRow } from "#pantry/package/record.ts";
 import { authorWorkloadsOf } from "#pantry/qti/logins.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -164,7 +164,7 @@ describe.skipIf(!hasLease)(
               assert.isTrue(digestUnwritten.unwritten && digestUnwritten.importerWritesNone);
 
               const entries = packageEntries();
-              const pkg = yield* importPackage(yield* scopedPackage(entries));
+              const pkg = yield* importDir(yield* scopedPackage(entries));
               const db = yield* Db.open((yield* ProbeLogin).roles.author, {});
               const rows = yield* (yield* db.workload.entryDigests.execute({ package: pkg }))
                 .collect;

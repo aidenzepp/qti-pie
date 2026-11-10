@@ -41,7 +41,7 @@ import { grammar, ResourceTypeLexical } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { lawOfCheck } from "#pantry/import/refusal.ts";
 import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
 import type {
   DeclarationBaseType,
@@ -1125,7 +1125,7 @@ const judged = (input: ItemRefPackage, c: Case<Situation>) =>
   Effect.gen(function* judgeBoth() {
     const literal = itemRefPackageLiteral(input);
     const dir = yield* scopedPackage(itemRefPackageEntries(input));
-    const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+    const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
     const breaches = judgment._tag === "Judged" ? judgment.breaches : [];
     const rules = new Set(breaches.map(({ law }) => ruleOf(law)));
     const { inputs } = yield* readProgram(dir);

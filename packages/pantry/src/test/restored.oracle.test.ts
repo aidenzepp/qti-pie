@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { examplesTarball, materialize } from "#pantry/test/fixtures.ts";
 import { judge, verdictOf } from "#pantry/test/oracle.ts";
@@ -115,7 +115,7 @@ const assertAccepted = (judgment: Judgment) => {
 /**
  * Judge a read package with one of its files' texts rewritten.
  *
- * @param files - The package's files, as `readPackage` returns them.
+ * @param files - The package's files, as `readEntries` returns them.
  * @param path - The file to rewrite.
  * @param rewrite - Maps the file's text to its new text.
  * @returns The judgment.
@@ -151,7 +151,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       () =>
         Effect.gen(function* langCaseMismatch() {
           const dir = yield* materialize("lang-case-mismatch");
-          const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+          const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
 
           if (judgment._tag === "CodecRefusal") {
             assert.fail(
@@ -246,7 +246,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       () =>
         Effect.gen(function* unresolvedTestPattern() {
           const dir = yield* materialize("pattern-unresolved-test");
-          const files = yield* readPackage(dir);
+          const files = yield* readEntries(dir);
 
           assertAccepted(yield* judge(files, grammar, laws));
 
@@ -306,7 +306,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       "a usage value outside a record is untyped text whatever baseType it writes, and inside a record it is typed (reading 105)",
       () =>
         Effect.gen(function* usageValue() {
-          const files = yield* readPackage(yield* materialize("usage3-integer-float"));
+          const files = yield* readEntries(yield* materialize("usage3-integer-float"));
           const typed = (rewrite: (original: string) => string) =>
             judgedWith(files, "example.xml", rewrite).pipe(
               Effect.map(

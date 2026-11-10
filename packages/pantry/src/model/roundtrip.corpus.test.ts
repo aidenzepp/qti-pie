@@ -41,7 +41,7 @@ import { unshred } from "#pantry/model/unshred.ts";
 import type { XdmNames } from "#pantry/model/unshred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { settings } from "#pantry/test/settings.ts";
@@ -742,7 +742,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           const scratch = path.join(scratchDir, "out.xml");
           const reports: Report[] = [];
           for (const { dir, name } of packages) {
-            const files = yield* readPackage(dir);
+            const files = yield* readEntries(dir);
             const version = versionOf(schemaVersions, yield* declaredVersion(files));
             for (const file of files.filter((entry) => entry.path.endsWith(".xml"))) {
               reports.push({

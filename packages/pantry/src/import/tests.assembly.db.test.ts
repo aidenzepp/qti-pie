@@ -19,7 +19,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -61,7 +61,7 @@ describe.skipIf(!hasLease)(
             // Oracle: the case's laws, as the table above states them, judged by PostgreSQL in the
             // importer's one ChangeSet.
             Effect.gen(function* importsCase() {
-              const outcome = yield* Effect.result(importPackage(yield* materialize(name)));
+              const outcome = yield* Effect.result(importDir(yield* materialize(name)));
 
               if (Result.isSuccess(outcome)) {
                 assert.strictEqual(verdict, "accepted", `${name}: accepted`);

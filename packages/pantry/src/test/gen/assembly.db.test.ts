@@ -23,7 +23,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import {
   assemblyLiteral,
   assemblyPackage,
@@ -59,7 +59,7 @@ const importJudged = (assembly: Assembly) =>
     const literal = assemblyLiteral(assembly);
     const predicted = modelVerdict(assembly);
     const outcome = yield* Effect.result(
-      importPackage(yield* scopedPackage(assemblyPackage(assembly))),
+      importDir(yield* scopedPackage(assemblyPackage(assembly))),
     );
 
     if (Result.isSuccess(outcome)) {

@@ -41,7 +41,7 @@ import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { authorRoleOf } from "#pantry/qti/roles.ts";
 import {
@@ -151,7 +151,7 @@ const keep = (assembly: Assembly) =>
   Effect.gen(function* kept() {
     const literal = assemblyLiteral(assembly);
     const dir = yield* scopedPackage(assemblyPackage(assembly));
-    const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+    const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
     const outcome = yield* Effect.result(readProgram(dir));
     if (judgment._tag === "CodecRefusal") {
       assert.isTrue(

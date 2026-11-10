@@ -107,7 +107,7 @@ const labelAt = (drawn: LabelCase, place: Place): string =>
   carries(drawn, place) ? ` label="${place}"` : "";
 
 /**
- * Write a one-item package for a case, each file's text encoded as UTF-8, as `readPackage` returns
+ * Write a one-item package for a case, each file's text encoded as UTF-8, as `readEntries` returns
  * one: the manifest naming the item, and an item with an outcome its printed variable names, the
  * companion materials the case draws and a body of one paragraph.
  *

@@ -385,7 +385,7 @@ export const isElementNode = (grammar: ComposedGrammar, node: FoldedNode<Compose
   Option.isSome(grammar.kinds.isElement.lookup({ kind: node.kind }));
 
 /**
- * Order two paths by UTF-16 code unit, the order `readPackage` lists entries in.
+ * Order two paths by UTF-16 code unit, the order `readEntries` lists entries in.
  *
  * @param left - One path.
  * @param right - The other.
@@ -400,7 +400,7 @@ const byCodeUnit = (left: string, right: string): number => {
 };
 
 /**
- * Read a package's entries as `readPackage` returns them: each with its kind, sorted by path.
+ * Read a package's entries as `readEntries` returns them: each with its kind, sorted by path.
  *
  * @param entries - The package.
  * @returns Its files.

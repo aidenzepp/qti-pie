@@ -3,7 +3,7 @@
  * the import's reader with no database: the verdict `import/program.oracle.db.test.ts` holds
  * PostgreSQL to is the one the oracle predicts for the same package.
  *
- * Oracle: the law oracle (`judge`, `verdictOf`) over each package as `readPackage` reads it, and
+ * Oracle: the law oracle (`judge`, `verdictOf`) over each package as `readEntries` reads it, and
  * the import's own reader for the codec's refusals, which happen before any row exists.
  */
 import { NodeServices } from "@effect/platform-node";
@@ -11,7 +11,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/test/processing-fixtures.ts";
@@ -53,7 +53,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           const statedOf = yield* processingVerdicts;
           for (const name of processingFixtureNames) {
             const dir = yield* materializeProcessing(name);
-            const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+            const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
             const held = statedOf(name);
 
             assert.strictEqual(

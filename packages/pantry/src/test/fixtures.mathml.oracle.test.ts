@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { examplesTarball } from "#pantry/test/fixtures.ts";
 import {
   materializeMathml,
@@ -20,7 +20,7 @@ const tarballPresent = existsSync(Effect.runSync(examplesTarball));
 
 /**
  * Judge one materialized MathML fixture with the law oracle, as `oracle.test.ts` judges `simple`:
- * the files of the package directory `readPackage` reads, then `judge` over the composed grammar
+ * the files of the package directory `readEntries` reads, then `judge` over the composed grammar
  * and its tables.
  *
  * @param name - The fixture's name.
@@ -29,7 +29,7 @@ const tarballPresent = existsSync(Effect.runSync(examplesTarball));
 const judgedFixture = Effect.fn("judgedFixture")(function* judgedFixture(name: MathmlFixtureName) {
   const dir = yield* materializeMathml(name);
 
-  return yield* judge(yield* readPackage(dir), grammar, laws);
+  return yield* judge(yield* readEntries(dir), grammar, laws);
 });
 
 layer(NodeServices.layer, { excludeTestServices: true })(

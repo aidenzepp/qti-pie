@@ -20,7 +20,7 @@ import { lexical, date } from "@bjornpagen/grizzle";
 import { Array as Arr, Duration, Effect, Equivalence, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
@@ -195,7 +195,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         // Oracle: the platform's Gregorian calendar (`namesDay`). Bound: 7 years by 10 months and
         // days by 2 spacings, 140 packages of `usage3`.
         Effect.gen(function* oracleBox() {
-          const files = yield* readPackage(yield* materialize("usage3"));
+          const files = yield* readEntries(yield* materialize("usage3"));
 
           return yield* searched(
             ctx,

@@ -36,7 +36,7 @@ import { collapse } from "#pantry/grammar/domains.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
@@ -193,7 +193,7 @@ const judgedBothWays = Effect.fn("test.manifestIdentifiers.judgedBothWays")(
         Object.entries(files).map(([path, written]) => [path, text.encode(written)] as const),
       ),
     );
-    const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+    const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
     const minted = new Set<string>();
     const { inputs } = yield* readProgram(dir, (): NodeId => {
       const id: NodeId = randomUUID();

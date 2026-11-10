@@ -12,7 +12,7 @@ import { shred, versionOf } from "#pantry/model/shred.ts";
 import { unshred } from "#pantry/model/unshred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { examplesTarball, materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
@@ -125,7 +125,7 @@ const idOf = (index: number): NodeId =>
  * Materialize a fixture in a root of its own and read its package.
  *
  * @param name - The fixture's name.
- * @returns The package's entries, as `readPackage` reads them.
+ * @returns The package's entries, as `readEntries` reads them.
  */
 const packageOf = Effect.fn("fixtures.ssml.packageOf")(function* packageOf(name: FixtureName) {
   const fs = yield* FileSystem.FileSystem;
@@ -144,7 +144,7 @@ const packageOf = Effect.fn("fixtures.ssml.packageOf")(function* packageOf(name:
 
   assert.strictEqual(yield* fs.exists(dir), true, name);
 
-  return yield* readPackage(dir);
+  return yield* readEntries(dir);
 });
 
 /**

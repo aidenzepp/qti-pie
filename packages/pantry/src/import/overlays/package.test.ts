@@ -54,7 +54,7 @@ import type {
   XdmClosedElement,
   XdmDocument,
 } from "#pantry/model/xdm.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import type { FixtureName, NamedPackage } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
@@ -64,7 +64,7 @@ import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
- * The file system and processes the fixtures' materializer and `readPackage` need.
+ * The file system and processes the fixtures' materializer and `readEntries` need.
  */
 const TestLayer = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
@@ -936,7 +936,7 @@ layer(TestLayer, { excludeTestServices: true })("import/overlays/package.ts, fix
           )),
         ];
         for (const [name, dir] of read) {
-          const files = yield* readPackage(dir);
+          const files = yield* readEntries(dir);
           const manifest = files.find(({ kind }) => kind === "manifest");
           assert.isDefined(manifest, name);
           if (manifest === undefined) {

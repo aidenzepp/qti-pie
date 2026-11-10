@@ -22,8 +22,8 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materialize, pciNames, pciNegativeNames, pciVerdicts } from "#pantry/test/fixtures.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { importAgreesWithOracle, oracleVerdict } from "#pantry/test/oracle-verdict.ts";
@@ -101,8 +101,8 @@ const written = (files: Readonly<Record<string, string>>) =>
  */
 const refusedAsOracle = (dir: string, label: string) =>
   Effect.gen(function* refusal() {
-    const expected = yield* oracleVerdict(yield* readPackage(dir));
-    const failure = yield* Effect.flip(importPackage(dir));
+    const expected = yield* oracleVerdict(yield* readEntries(dir));
+    const failure = yield* Effect.flip(importDir(dir));
 
     const given =
       failure instanceof ImportRefused

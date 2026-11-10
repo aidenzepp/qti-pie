@@ -28,7 +28,7 @@ import type { Addition } from "@bjornpagen/grizzle";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import type { Site } from "#pantry/qti/tests.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -302,7 +302,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
             Effect.scoped(
               Effect.gen(function* onePlacement() {
                 const dir = yield* scopedPackage(packageOf(placement));
-                const verdict = yield* oracleVerdict(yield* readPackage(dir));
+                const verdict = yield* oracleVerdict(yield* readEntries(dir));
                 const program = yield* readProgram(dir);
                 const sites = [...program.inputs.Site.values()]
                   .map(siteRow)
@@ -378,7 +378,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
             '      <div aria-labelledby="outer"><qti-printed-variable',
           );
           const dir = yield* scopedPackage(named);
-          const verdict = yield* oracleVerdict(yield* readPackage(dir));
+          const verdict = yield* oracleVerdict(yield* readEntries(dir));
           const program = yield* readProgram(dir);
           const { broken } = judge(hostRowsOf(program.inputs), laws);
           const [first, ...rest] = broken.map(({ law }) => law);

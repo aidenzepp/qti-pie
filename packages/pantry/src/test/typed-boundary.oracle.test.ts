@@ -13,7 +13,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
 import { judge, lawsOf, ruleOf, verdictOf } from "#pantry/test/oracle.ts";
@@ -326,7 +326,7 @@ const judged = (fixture: FixtureName, label: string, edits: readonly TextEdit[])
       name: `typed-boundary-${label.replaceAll(/[^\da-z]+/giu, "-")}`,
     });
 
-    return yield* judge(yield* readPackage(dir), grammar, laws);
+    return yield* judge(yield* readEntries(dir), grammar, laws);
   });
 
 layer(NodeServices.layer, { excludeTestServices: true })(

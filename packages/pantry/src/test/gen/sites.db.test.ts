@@ -16,8 +16,8 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import {
   outsideRulesOfBox,
@@ -46,9 +46,9 @@ const importJudged = (box: SiteBox) =>
   Effect.gen(function* judgedOnLease() {
     const literal = siteLiteral(box);
     const dir = yield* scopedPackage(sitePackage(box));
-    const verdict = yield* oracleVerdict(yield* readPackage(dir));
+    const verdict = yield* oracleVerdict(yield* readEntries(dir));
     const rules = new Set([...rulesOfBox(box), ...outsideRulesOfBox(box)]);
-    const outcome = yield* Effect.result(importPackage(dir));
+    const outcome = yield* Effect.result(importDir(dir));
     if (Result.isSuccess(outcome)) {
       assert.strictEqual(rules.size, 0, `${literal} was accepted`);
       assert.strictEqual(verdict.kind, "accepted", `${literal} was accepted`);

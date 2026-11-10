@@ -23,7 +23,7 @@ import {
   ValueDomainOf,
 } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import {
@@ -418,7 +418,7 @@ describe("qti/declarations.ts, Declaration not reserved by parent", () => {
           yield* Effect.scoped(
             Effect.gen(function* oneCase() {
               const dir = yield* scopedPackage(declaringPackage(drawn.root, drawn.identifier));
-              const judgment = yield* judgeOracle(yield* readPackage(dir), grammar, oracleLaws);
+              const judgment = yield* judgeOracle(yield* readEntries(dir), grammar, oracleLaws);
               assert.strictEqual(judgment._tag, "Judged", JSON.stringify(drawn));
 
               const oracle = new Set<string>(

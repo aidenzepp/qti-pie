@@ -19,7 +19,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Layer, Predicate, Result } from "effect";
 import { packageNameOf, packageRecordOf } from "#pantry/import/record.ts";
 import type { PackageRecord } from "#pantry/import/record.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import {
   Entry,
@@ -43,7 +43,7 @@ import { judge as judgeByOracle, lawNames, lawsOf } from "#pantry/test/oracle.ts
 const testTimeoutMs = 120_000;
 
 /**
- * The file system and processes the fixtures' materializer and `readPackage` need.
+ * The file system and processes the fixtures' materializer and `readEntries` need.
  */
 const TestLayer = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
@@ -434,7 +434,7 @@ describe("qti/package.ts", () => {
     // Oracle: grizzle's own insert type, `AdditionIn` of the record's schema: the record is a
     // member fact of `Package` exactly, its entries nested at `entries`.
     const record = packageRecordOf({
-      files: [{ bytes: new Uint8Array([1, 2]), kind: "manifest", path: "imsmanifest.xml" }],
+      files: [{ bytes: new Uint8Array([1, 2]), path: "imsmanifest.xml" }],
       id: packageId,
       name: "pkg",
     });
@@ -453,12 +453,12 @@ layer(TestLayer, { excludeTestServices: true })(
       Effect.gen(function* sameRecord() {
         for (const name of ["simple", "sharedMedia"] as const) {
           const fromDirectory = packageRecordOf({
-            files: yield* readPackage(yield* materialize(name)),
+            files: yield* readEntries(yield* materialize(name)),
             id: packageId,
             name,
           });
           const fromZip = packageRecordOf({
-            files: yield* readPackage(yield* materializeZip(name)),
+            files: yield* readEntries(yield* materializeZip(name)),
             id: packageId,
             name,
           });
@@ -502,7 +502,7 @@ const judgedFixture = (
   ...edits: readonly { readonly at: string; readonly from: string; readonly to: string }[]
 ) =>
   Effect.gen(function* judgedPackage() {
-    const files = yield* readPackage(yield* materialize(name));
+    const files = yield* readEntries(yield* materialize(name));
     const edited = files.map((file) => {
       const mine = edits.filter(({ at }) => at === file.path);
       if (mine.length === 0) {

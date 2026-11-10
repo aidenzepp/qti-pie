@@ -9,7 +9,7 @@ import type { ZipEntry, ZipRefusal } from "#pantry/package/zip.ts";
 const MANIFEST = "imsmanifest.xml";
 
 /**
- * How many entries `listPackage` inspects, and `readPackage` reads, at once; a package is read
+ * How many entries `listPackage` inspects, and `readEntries` reads, at once; a package is read
  * from a local disk, so a small bound keeps the read quick without opening an unbounded number of
  * requests.
  */
@@ -50,7 +50,7 @@ export interface Entry {
 }
 
 /**
- * One entry of a package with its bytes, untouched, as {@link readPackage} reads it.
+ * One entry of a package with its bytes, untouched, as {@link readEntries} reads it.
  */
 export interface PackageFile extends Entry {
   readonly bytes: Uint8Array;
@@ -252,7 +252,7 @@ export const readEntry = Effect.fn("package.readEntry")(function* readEntry(
  *   path leads outside the package directory through a link. Any other {@link ZipRefusal} flows
  *   out as itself.
  */
-export const readPackage = Effect.fn("package.readPackage")(function* readPackage(
+export const readEntries = Effect.fn("package.readEntries")(function* readEntries(
   dir: string,
 ): Effect.fn.Return<
   readonly PackageFile[],

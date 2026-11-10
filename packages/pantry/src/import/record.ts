@@ -1,6 +1,6 @@
 /**
  * The record of a package as the importer writes it (plan §1.6, fin.md P7): the `Package` row with
- * its `Entry` rows nested in listing order, from what `readPackage` read.
+ * its `Entry` rows nested in listing order, from what `readEntries` read.
  *
  * The record is every entry's bytes as read, so the model is rebuildable from it, and it is the
  * write's one sequence over a package: grizzle draws each entry's `at` from its place in the
@@ -25,14 +25,14 @@ export type PackageRecord = Addition<typeof Package> & { readonly entries: reado
  * Name a package by the place it was read from: the last segment of its directory or zip file's
  * path, as given.
  *
- * @param source - The directory or `.zip` file `readPackage` read, `/`-separated.
+ * @param source - The directory or `.zip` file `readEntries` read, `/`-separated.
  * @returns Its last non-empty segment, or the path itself when it has no `/`.
  */
 export const packageNameOf = (source: string): string =>
   source.split("/").findLast((segment) => segment.length > 0) ?? source;
 
 /**
- * Build a package's record from what `readPackage` read.
+ * Build a package's record from its entries, each its path and its bytes, as the read holds them.
  *
  * @param input - The package's identity and its entries.
  * @param input.id - The package's id, the one its overlays name it by.
@@ -41,7 +41,7 @@ export const packageNameOf = (source: string): string =>
  * @returns The `Package` insert, its entries in the listing's order, each content its bytes.
  */
 export const packageRecordOf = (input: {
-  readonly files: readonly PackageFile[];
+  readonly files: readonly Pick<PackageFile, "bytes" | "path">[];
   readonly id: Uuid;
   readonly name: string;
 }): PackageRecord => ({ entries: recordOf(input.files), id: input.id, name: input.name });

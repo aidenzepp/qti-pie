@@ -140,10 +140,15 @@ export const roundtripCommand = Command.make(
     }
 
     const { packageId, report } = yield* withAuthorApp(
-      () => Promise.all([import("#pantry/import/package.ts"), import("#pantry/export/package.ts")]),
-      ([{ importPackage }, { compareExported, exportPackage }]) =>
+      () =>
+        Promise.all([
+          import("#pantry/import/read.ts"),
+          import("#pantry/import/package.ts"),
+          import("#pantry/export/package.ts"),
+        ]),
+      ([{ readPackage }, { importPackage }, { compareExported, exportPackage }]) =>
         Effect.gen(function* roundtripOnPool() {
-          const stored = yield* importPackage(dir);
+          const stored = yield* importPackage(yield* readPackage(dir));
           const compared = yield* replaceWith(exportDir, (written) =>
             Effect.flatMap(exportPackage(stored, written), (entries) =>
               compareExported(stored, entries),

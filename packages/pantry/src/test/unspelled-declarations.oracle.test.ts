@@ -47,7 +47,7 @@ interface ItemParts {
 }
 
 /**
- * Write an item and its manifest, each file's text encoded as UTF-8, as `readPackage` returns
+ * Write an item and its manifest, each file's text encoded as UTF-8, as `readEntries` returns
  * one.
  *
  * @param parts - The item's parts.

@@ -15,7 +15,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Array as Arr, Effect, Formatter, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
@@ -222,7 +222,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("an assembled document'
             Effect.scoped(
               Effect.gen(function* oneCase() {
                 const dir = yield* scopedPackage(entriesOf(drawn));
-                const verdict = yield* oracleVerdict(yield* readPackage(dir));
+                const verdict = yield* oracleVerdict(yield* readEntries(dir));
                 const program = yield* readProgram(dir);
                 const { broken } = judge(hostRowsOf(program.inputs), laws);
                 const [first, ...rest] = broken.map(({ law }) => law);

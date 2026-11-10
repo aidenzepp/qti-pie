@@ -39,8 +39,9 @@ export const ImportData = Schema.Union([ImportStored, ImportPreview]);
  * is stated (`#pantry/cli/present.ts`), and the key of the row that broke them where grizzle's
  * witness names one; where it names none, as for a foreign key, the refusal says so.
  *
- * `importPackage` and the dry run read through `readPackage`, which reads a zip as it reads a
- * directory. The engine loads when the handler runs, so `--help` and a usage error never pay for
+ * The import reads the package once (`readPackage`), a zip as it reads a directory, then writes
+ * what it read (`importPackage`); the dry run reads it the same way. The engine loads when the
+ * handler runs, so `--help` and a usage error never pay for
  * it, and the importer loads inside the database's pool (`withAuthorApp`), so neither does a run
  * that cannot reach the database.
  */
@@ -68,8 +69,8 @@ export const importCommand = Command.make(
     }
 
     const packageId = yield* withAuthorApp(
-      () => import("#pantry/import/package.ts"),
-      ({ importPackage }) => importPackage(dir),
+      () => Promise.all([import("#pantry/import/read.ts"), import("#pantry/import/package.ts")]),
+      ([{ readPackage }, { importPackage }]) => Effect.flatMap(readPackage(dir), importPackage),
     );
 
     yield* emitSuccess(mode, {

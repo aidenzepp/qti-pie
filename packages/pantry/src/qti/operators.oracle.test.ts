@@ -455,7 +455,7 @@ const attributesOf = (attributes: readonly (readonly [string, string | undefined
  * integer `COUNT` and a boolean `FLAG` declared.
  *
  * @param rules - The response processing's content.
- * @returns The package's entries, as `readPackage` reads them.
+ * @returns The package's entries, as `readEntries` reads them.
  */
 const packageOf = (rules: string): readonly PackageFile[] =>
   Object.entries({

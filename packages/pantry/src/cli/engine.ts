@@ -1,10 +1,11 @@
 import { Effect } from "effect";
 
 /**
- * Run `use` on the engine module `load` imports, inside the author application's pool, and load
- * that module only once the pool's settings resolve.
+ * Run `use` on the engine module `load` imports, on `ImportLive` (`#pantry/db/layer.ts`), the
+ * author application's pool and login and the file system, the one layer an import runs on, and
+ * load that module only once the pool's settings resolve.
  *
- * `Effect.provide` builds `AuthorAppLayer` before the effect it wraps runs, so the cluster's
+ * `Effect.provide` builds `ImportLive` before the effect it wraps runs, so the cluster's
  * settings, its CA and the snapshot are read first, and a run that cannot reach the database fails
  * there, with kind `config`, before `load` runs. The importer and the exporter reach the author
  * login (`#pantry/qti/own-login.ts`), whose workload grizzle builds when that module is evaluated,
@@ -21,7 +22,7 @@ export const withAuthorApp = Effect.fn("cli.withAuthorApp")(function* withAuthor
   load: () => Promise<M>,
   use: (engine: M) => Effect.Effect<A, E, R>,
 ) {
-  const { AuthorAppLayer } = yield* Effect.promise(() => import("#pantry/db/layer.ts"));
+  const { ImportLive } = yield* Effect.promise(() => import("#pantry/db/layer.ts"));
 
-  return yield* Effect.promise(load).pipe(Effect.flatMap(use), Effect.provide(AuthorAppLayer));
+  return yield* Effect.promise(load).pipe(Effect.flatMap(use), Effect.provide(ImportLive));
 });

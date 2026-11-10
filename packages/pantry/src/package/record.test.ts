@@ -62,7 +62,7 @@ const fileOf: Gen<{
 });
 
 /**
- * A listing as `readPackage` gives one: up to five files at distinct paths, each one's bytes in
+ * A listing as `readEntries` gives one: up to five files at distinct paths, each one's bytes in
  * each placement.
  */
 const listingOf: Gen<readonly (PackageFile & { readonly placement: Placement })[]> = (source) =>

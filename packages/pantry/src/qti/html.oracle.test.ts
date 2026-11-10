@@ -108,7 +108,7 @@ const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
  * Write the one-item package whose body holds the markup, under 3.0.1.
  *
  * @param body - The item body's content.
- * @returns The package's entries, as `readPackage` reads them.
+ * @returns The package's entries, as `readEntries` reads them.
  */
 const packageOf = (body: string): readonly PackageFile[] =>
   Object.entries({

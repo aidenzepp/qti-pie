@@ -21,7 +21,7 @@ import { composed } from "#pantry/grammar/compose.ts";
 import { typedHrefsOf } from "#pantry/import/overlays/package.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { Edit } from "#pantry/test/fixtures.ts";
 import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
@@ -99,7 +99,7 @@ const judgedListedAgain = (type: string, before: boolean) =>
       edits: [...simple.edits, listedAgain(type, before)],
       name: `listed-again-${type.replaceAll(/[^\da-z]+/giu, "-")}-${before ? "before" : "after"}`,
     });
-    const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+    const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
     const minted = new Set<string>();
     const { inputs } = yield* readProgram(dir, (): NodeId => {
       const id: NodeId = randomUUID();
@@ -143,7 +143,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               edits: [...simple.edits, ...edits],
               name: `resource-types-${label.replaceAll(/[^\da-z]+/giu, "-")}`,
             });
-            const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+            const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
             const minted = new Set<string>();
             const { inputs } = yield* readProgram(dir, (): NodeId => {
               const id: NodeId = randomUUID();

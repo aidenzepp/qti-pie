@@ -38,7 +38,7 @@ import {
   resolveIn,
 } from "#pantry/import/overlays/package.ts";
 import type { HrefResolution, WhiteSpace } from "#pantry/import/overlays/package.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { settings } from "#pantry/test/settings.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
@@ -229,7 +229,7 @@ const corpus: Effect.Effect<Corpus> = Effect.runSync(
       const references: Reference[] = [];
       const uncensused = new Set<string>();
       for (const { dir, name } of packages) {
-        for (const file of yield* readPackage(dir)) {
+        for (const file of yield* readEntries(dir)) {
           const read = file.path.endsWith(".xml")
             ? yield* Effect.option(readXml(file.bytes))
             : Option.none();

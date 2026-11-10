@@ -8,8 +8,8 @@
 import { assert } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
@@ -33,7 +33,7 @@ export type OracleVerdict =
 /**
  * Predict a package's verdict by the law oracle over its entries.
  *
- * @param files - The package's entries, as `readPackage` read them.
+ * @param files - The package's entries, as `readEntries` read them.
  * @returns The verdict.
  */
 export const oracleVerdict = (files: readonly PackageFile[]): Effect.Effect<OracleVerdict> =>
@@ -50,7 +50,7 @@ export const oracleVerdict = (files: readonly PackageFile[]): Effect.Effect<Orac
 /**
  * The rule the oracle's reader and codec refuse a package under, before any law is judged.
  *
- * @param files - The package's entries, as `readPackage` read them.
+ * @param files - The package's entries, as `readEntries` read them.
  * @returns The rule, or none when the oracle reads every document and judges the laws.
  */
 export const oracleCodecRule = (
@@ -72,8 +72,8 @@ export const oracleCodecRule = (
  */
 export const importAgreesWithOracle = (dir: string, label: string) =>
   Effect.gen(function* agreesWithOracle() {
-    const expected = yield* oracleVerdict(yield* readPackage(dir));
-    const outcome = yield* Effect.result(importPackage(dir));
+    const expected = yield* oracleVerdict(yield* readEntries(dir));
+    const outcome = yield* Effect.result(importDir(dir));
 
     if (Result.isSuccess(outcome)) {
       assert.strictEqual(

@@ -1178,7 +1178,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) =>
       Effect.gen(function* freshIds() {
         const program = yield* readProgram(fixtures.simple);
         const listed = program.documents.map(({ listed: held }) => held);
-        const entries = program.files.map(({ path }) => path);
+        const entries = [...program.inputs.Package.values()].flatMap((record) =>
+          record.entries.map(({ path }) => path),
+        );
         const first = nodeIdsOf(listed, entries);
         const second = nodeIdsOf(listed, entries);
         const idsOf = (minted: typeof first) => [
@@ -1214,7 +1216,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) =>
       Effect.gen(function* relisted() {
         const program = yield* readProgram(fixtures.simple);
         const listed = program.documents.map(({ listed: held }) => held);
-        const entries = program.files.map(({ path }) => path);
+        const entries = [...program.inputs.Package.values()].flatMap((record) =>
+          record.entries.map(({ path }) => path),
+        );
         for (const again of listed) {
           const minted = nodeIdsOf(
             [...listed, { ...again, documentType: "imsqti_item_xmlv3p0" }],

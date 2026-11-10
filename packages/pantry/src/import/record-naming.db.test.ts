@@ -25,7 +25,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Layer, Record } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 import type { Rule } from "#pantry/import/rules.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
@@ -133,7 +133,7 @@ describe.skipIf(!hasLease)(
               const dir = yield* scratchDirectory("record-naming-");
               yield* writePackage(entries, dir);
 
-              const outcome = yield* Effect.result(importPackage(dir));
+              const outcome = yield* Effect.result(importDir(dir));
               const said = `${name}: ${outcome._tag === "Failure" ? outcome.failure.message : "accepted"}`;
               const rules =
                 outcome._tag === "Failure" && outcome.failure instanceof ImportRefused

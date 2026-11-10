@@ -4,7 +4,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
 import { Console, Effect, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
 import { examplesTarball, materializeCorpus } from "#pantry/test/fixtures.ts";
 import { explain, judge, lawsOf, ruleOf, verdictOf } from "#pantry/test/oracle.ts";
@@ -142,7 +142,7 @@ const rulesOf = (judgment: Judgment): string => {
 };
 
 /**
- * The rule each of `readPackage`'s own refusals is named by: a package with no manifest at its
+ * The rule each of `readEntries`'s own refusals is named by: a package with no manifest at its
  * root, and an entry path that leads outside it.
  */
 const readRules = {
@@ -179,7 +179,7 @@ const predict = Effect.fn("prewitness.predict")(function* predict(entry: {
   readonly member: string;
   readonly name: string;
 }) {
-  const judgment = yield* readPackage(entry.dir).pipe(
+  const judgment = yield* readEntries(entry.dir).pipe(
     Effect.flatMap((files) => judge(files, grammar, laws)),
     Effect.catchTags({
       PackageReadError: (failure) =>

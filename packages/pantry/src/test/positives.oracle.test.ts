@@ -4,7 +4,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import {
   catalogNames,
   companionNames,
@@ -47,7 +47,7 @@ const laws = lawsOf(grammar);
  * Materialize a fixture in a root of its own and read its package.
  *
  * @param name - The fixture's name.
- * @returns The package's entries, as `readPackage` reads them.
+ * @returns The package's entries, as `readEntries` reads them.
  */
 const packageOf = Effect.fn("positives.packageOf")(function* packageOf(name: FixtureName) {
   const fs = yield* FileSystem.FileSystem;
@@ -64,7 +64,7 @@ const packageOf = Effect.fn("positives.packageOf")(function* packageOf(name: Fix
   );
   const dir = yield* materialize(name).pipe(Effect.provide(config));
 
-  return yield* readPackage(dir);
+  return yield* readEntries(dir);
 });
 
 layer(NodeServices.layer, { excludeTestServices: true })(

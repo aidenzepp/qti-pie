@@ -56,7 +56,7 @@ import { nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
 import { qtiRelations } from "#pantry/qti/base.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import {
@@ -593,7 +593,7 @@ describe(
           ["usage3-float-padded", 0],
         ] as const satisfies readonly (readonly [FixtureName, number])[]) {
           const judgment = yield* judge(
-            yield* readPackage(yield* materialize(name)),
+            yield* readEntries(yield* materialize(name)),
             grammar,
             lawsOf(grammar),
           );

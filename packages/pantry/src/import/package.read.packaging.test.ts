@@ -9,7 +9,7 @@ import { Effect, Option, Result } from "effect";
 import type { PlatformError } from "effect";
 import { inject } from "vitest";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { oracleCodecRule, packagingFixtures } from "#pantry/test/oracle-verdict.ts";
@@ -49,7 +49,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           ["usageData", yield* materializePackage("usageData")],
         ];
         for (const [name, dir] of dirs) {
-          const expected = yield* oracleCodecRule(yield* readPackage(dir));
+          const expected = yield* oracleCodecRule(yield* readEntries(dir));
           const read = yield* Effect.result(readProgram(dir));
 
           assert.deepStrictEqual(

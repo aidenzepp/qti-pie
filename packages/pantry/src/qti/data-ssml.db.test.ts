@@ -17,7 +17,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { previewPackage } from "#pantry/import/preview.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 import { materializeSpec } from "#pantry/test/fixtures.ts";
@@ -90,7 +90,7 @@ describe.skipIf(!hasLease)(
             Effect.gen(function* refusedPackage() {
               const dir = yield* withDataSsml(name, value);
               const preview = yield* previewPackage(dir);
-              const refusal = yield* Effect.flip(importPackage(dir));
+              const refusal = yield* Effect.flip(importDir(dir));
 
               assert.isFalse(preview.databaseChecked, value);
               assert.isTrue(refusal instanceof ImportRefused, `${value}: ${refusal._tag}`);
@@ -115,7 +115,7 @@ describe.skipIf(!hasLease)(
           // Oracle: Data-SSML 1.0's JSON Schema, §3.4: the value is one it admits, so no law
           // refuses the package's rows.
           Effect.gen(function* acceptedPackage() {
-            const imported = yield* Effect.result(importPackage(yield* withDataSsml(name, value)));
+            const imported = yield* Effect.result(importDir(yield* withDataSsml(name, value)));
 
             assert.isTrue(
               Result.isSuccess(imported),

@@ -17,7 +17,7 @@ import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { fileRecords, namings, recordPackageOf } from "#pantry/test/lom-records.ts";
 import type { RecordCase } from "#pantry/test/lom-records.ts";
@@ -87,7 +87,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         // Oracle: the case as written. Bound: the resource's identifier and title each the item's
         // or another, by the file's record none, a title, an identifier or both, 16 packages.
         Effect.gen(function* recordBox() {
-          const base = yield* readPackage(yield* materialize("simple"));
+          const base = yield* readEntries(yield* materialize("simple"));
 
           return yield* searched(
             ctx,

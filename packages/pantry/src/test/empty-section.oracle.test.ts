@@ -88,7 +88,7 @@ const itemRef = (identifier: string): string =>
   `<qti-assessment-item-ref identifier="${identifier}" href="item.xml"/>`;
 
 /**
- * Write a test and item package for a case, each file's text encoded as UTF-8, as `readPackage`
+ * Write a test and item package for a case, each file's text encoded as UTF-8, as `readEntries`
  * returns one: the outer section `S`, in XSD order its rubric block, its item ref and its inner
  * section `S2`, in the one test part.
  *

@@ -77,7 +77,7 @@ export const test = `<qti-assessment-test xmlns="${asi}" identifier="T" title="T
 </qti-assessment-test>`;
 
 /**
- * Build a package from its files' texts, each encoded as UTF-8, as `readPackage` returns one.
+ * Build a package from its files' texts, each encoded as UTF-8, as `readEntries` returns one.
  *
  * @param files - Each file's text by path; `imsmanifest.xml` is the manifest.
  * @returns The entries, sorted by path.

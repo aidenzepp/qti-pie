@@ -9,7 +9,7 @@ import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { matchesCommitted, spawnCli } from "#pantry/test/cli.ts";
 import { examplesTarball, materializeCorpus } from "#pantry/test/fixtures.ts";
 import { hasLease, settings } from "#pantry/test/settings.ts";
@@ -125,7 +125,7 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
   yield* fs.remove(cwd, { force: true, recursive: true });
   yield* fs.makeDirectory(cwd, { recursive: true });
 
-  const [importTime, direct] = yield* importPackage(entry.dir).pipe(Effect.result, Effect.timed);
+  const [importTime, direct] = yield* importDir(entry.dir).pipe(Effect.result, Effect.timed);
 
   if (Duration.toMillis(importTime) > tally.slowestImport.millis) {
     tally.slowestImport = { millis: Duration.toMillis(importTime), name: entry.name };

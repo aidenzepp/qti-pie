@@ -23,7 +23,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, FileSystem, Formatter, Option, Predicate, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { cyclePackageOf, cycles, includerCounts, tails } from "#pantry/test/inclusion-cycles.ts";
@@ -139,7 +139,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         // cycle, each placed by none to three set items, each with and without a tail fragment the
         // fragment alone includes: 24 packages of `rtest01`.
         Effect.gen(function* cycleBox() {
-          const base = yield* readPackage(yield* materialize("rtest01"));
+          const base = yield* readEntries(yield* materialize("rtest01"));
 
           return yield* searched(
             ctx,

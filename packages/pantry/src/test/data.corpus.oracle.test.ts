@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
 import { Effect, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment } from "#pantry/test/oracle.ts";
@@ -109,7 +109,7 @@ const concernsData = (breach: Breach): boolean => {
  * @returns The judgment.
  */
 const judged = Effect.fn("data.corpus.judged")(function* judged(dir: string) {
-  const files = yield* readPackage(dir);
+  const files = yield* readEntries(dir);
 
   return yield* judge(files, grammar, laws);
 });

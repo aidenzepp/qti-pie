@@ -23,7 +23,7 @@ import { sample } from "@grizzle/testing/source";
 import { Effect, Option } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import {
   assemblyPackage,
   sampledBounds,
@@ -125,7 +125,7 @@ export const kindNamer = (grammar: ComposedGrammar): ((element: Element) => stri
 const fixtureEntries = Effect.fnUntraced(function* fixtureEntries(
   name: (typeof packagingFixtures)[number],
 ) {
-  const files = yield* readPackage(yield* materialize(name));
+  const files = yield* readEntries(yield* materialize(name));
 
   return new Map(files.map(({ bytes, path }) => [path, bytes]));
 });

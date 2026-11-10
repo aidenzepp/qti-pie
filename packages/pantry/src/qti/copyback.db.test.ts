@@ -30,7 +30,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Layer, Option, Schema } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { ValueBase } from "#pantry/qti/expression-types.ts";
 import {
   constraintDescribed,
@@ -245,7 +245,7 @@ describe.skipIf(!hasLease)(
             const dir = yield* scopedPackage(
               everyRelationPackage({ choices: 2, hotspots: 1, hottexts: 1 }),
             );
-            const id = yield* importPackage(dir);
+            const id = yield* importDir(dir);
             const client = yield* loginSession;
 
             return yield* searched(

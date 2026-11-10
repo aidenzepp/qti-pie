@@ -18,7 +18,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
 import { materialize, negativeNames } from "#pantry/test/fixtures.ts";
 import { expectations } from "#pantry/test/negatives.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -49,7 +49,7 @@ describe.skipIf(!hasLease)(
             // Oracle: the law oracle accepts the negative's spec, its positive's own, so
             // PostgreSQL accepts the package whole.
             Effect.gen(function* acceptsDirect() {
-              yield* importPackage(yield* materialize(name));
+              yield* importDir(yield* materialize(name));
             }),
           );
         } else {
@@ -58,7 +58,7 @@ describe.skipIf(!hasLease)(
             // rule is one of the oracle's breaches; where the oracle finds exactly one, it is
             // that one.
             Effect.gen(function* refusesNegative() {
-              const failure = yield* Effect.flip(importPackage(yield* materialize(name)));
+              const failure = yield* Effect.flip(importDir(yield* materialize(name)));
 
               assert.instanceOf(failure, ImportRefused, `${name}: refused by another error`);
 

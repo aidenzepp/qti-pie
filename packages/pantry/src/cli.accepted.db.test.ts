@@ -17,8 +17,8 @@ import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage } from "#pantry/export/compare.ts";
 import { compareWithRecord } from "#pantry/export/package.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { captureCli, matchesCommitted } from "#pantry/test/cli.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -109,12 +109,12 @@ describe.skipIf(!hasLease)(
         it.effect(
           `${name}: --json export writes every entry, comparing equal with the package`,
           () =>
-            // Oracle: the package as `readPackage` lists it, the files the export left on disk, and
+            // Oracle: the package as `readEntries` lists it, the files the export left on disk, and
             // `comparePackage` of the package with them, which reads no database.
             Effect.gen(function* exports() {
               const fs = yield* FileSystem.FileSystem;
               const dir = yield* source;
-              const id = yield* importPackage(dir);
+              const id = yield* importDir(dir);
               const target = yield* freshTarget(name, "export");
               const { exit, stderr, stdout } = yield* captureCli(["--json", "export", target, id]);
 
@@ -122,7 +122,7 @@ describe.skipIf(!hasLease)(
               assert.isTrue(matchesCommitted("export")(stdout), stdout);
 
               const { data } = Schema.decodeUnknownSync(exportEnvelope)(stdout);
-              const listed = yield* readPackage(dir);
+              const listed = yield* readEntries(dir);
 
               assert.strictEqual(data.package_id, id);
               assert.deepStrictEqual(

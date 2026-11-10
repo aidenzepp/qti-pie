@@ -32,8 +32,8 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import { readPackage } from "#pantry/package/read.ts";
+import { importDir } from "#pantry/test/import-dir.ts";
+import { readEntries } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import {
@@ -335,8 +335,8 @@ describe.skipIf(!hasLease)(
           Effect.scoped(
             Effect.gen(function* refusedCatalog() {
               const dir = yield* scopedPackage(files);
-              const expected = yield* oracleVerdict(yield* readPackage(dir));
-              const refused = yield* Effect.flip(importPackage(dir));
+              const expected = yield* oracleVerdict(yield* readEntries(dir));
+              const refused = yield* Effect.flip(importDir(dir));
 
               assert.deepStrictEqual(
                 expected.kind === "refused" ? [...expected.rules] : [],
@@ -369,8 +369,8 @@ describe.skipIf(!hasLease)(
           Effect.scoped(
             Effect.gen(function* acceptedCatalog() {
               const dir = yield* scopedPackage(files);
-              const expected = yield* oracleVerdict(yield* readPackage(dir));
-              const imported = yield* Effect.result(importPackage(dir));
+              const expected = yield* oracleVerdict(yield* readEntries(dir));
+              const imported = yield* Effect.result(importDir(dir));
 
               assert.strictEqual(expected.kind, "accepted", `${name}: the oracle's verdict`);
               assert.isTrue(
@@ -388,13 +388,13 @@ describe.skipIf(!hasLease)(
     })("the phase-9 fixtures, round-tripped and refused through the importer", (it) => {
       for (const name of [...catalogNames, ...companionNames]) {
         it.effect(`${name}: imports, exports and compares equal with its source`, () =>
-          // Oracle: the source package as `readPackage` lists it, and `comparePackage` of it with
+          // Oracle: the source package as `readEntries` lists it, and `comparePackage` of it with
           // the files the export wrote, which reads no database.
           Effect.scoped(
             Effect.gen(function* roundTripped() {
               const fs = yield* FileSystem.FileSystem;
               const dir = yield* materialize(name);
-              const id = yield* importPackage(dir);
+              const id = yield* importDir(dir);
 
               yield* fs.makeDirectory(workDirectory, { recursive: true });
 
@@ -423,7 +423,7 @@ describe.skipIf(!hasLease)(
           // Oracle: the predicted column of the spec's 4.9 table, the rules `catalogVerdicts` gives
           // the negative, which the free fixture tests hold the law oracle to.
           Effect.gen(function* refusedNegative() {
-            const refused = yield* Effect.flip(importPackage(yield* materialize(name)));
+            const refused = yield* Effect.flip(importDir(yield* materialize(name)));
 
             assert.isTrue(refused instanceof ImportRefused, `${name}: ${refused._tag}`);
 
