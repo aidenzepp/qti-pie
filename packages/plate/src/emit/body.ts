@@ -289,6 +289,11 @@ const idReferences: ReadonlySet<string> = new Set([
  * The attributes the XSD declares by name on every HTML element of the item body but `param` and
  * `template`: ARIA's states and properties, the global attributes, and QTI's
  * `data-catalog-idref` and `data-qti-suppress-tts`.
+ *
+ * `data-qti-suppress-tts` here and `data-ssml` in {@link textual} are written through as the
+ * model carries them (decision D22): the browser's read-aloud engine reads the speech plan from
+ * the rendered HTML, `data-ssml` being "the container for the equivalent JSON value that is to be
+ * passed to the SSML processor" (reading R7-a).
  */
 const globalAttributes: readonly string[] = [
   "aria-activedescendant",

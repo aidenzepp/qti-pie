@@ -252,8 +252,6 @@ describe("the closed value sets", () => {
           'base-type=""',
           "xml:base",
           "data-catalog-idref",
-          "data-qti-suppress-tts",
-          "data-ssml",
         ],
       ],
       [
