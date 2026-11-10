@@ -1,10 +1,15 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { catalogInfoModule } from "#plate/content/catalog-info.ts";
 import { companionMaterialsModule } from "#plate/content/companion-materials.ts";
 import { ContentNotImplemented } from "#plate/content/contract.ts";
-import type { ContentModule, Placement } from "#plate/content/contract.ts";
+import type {
+  ContentModule,
+  ItemContentModule,
+  ItemParseContext,
+  Placement,
+} from "#plate/content/contract.ts";
 import { feedbackBlockModule } from "#plate/content/feedback-block.ts";
 import { feedbackInlineModule } from "#plate/content/feedback-inline.ts";
 import { mathmlModule } from "#plate/content/mathml.ts";
@@ -27,6 +32,14 @@ import { noSupports } from "#plate/supports.ts";
 interface Recording {
   readonly context: ParseContext;
   readonly noticed: string[];
+}
+
+/**
+ * An item-placed parse context and the features its marks named, in order.
+ */
+interface MarkRecording {
+  readonly context: ItemParseContext;
+  readonly marked: string[];
 }
 
 /**
@@ -172,6 +185,28 @@ const recording = (path: string): Recording => {
 };
 
 /**
+ * Construct an item-placed parse context that records every mark it is asked for.
+ *
+ * @param path The element's path.
+ * @returns The context and the features its marks named.
+ */
+const markRecording = (path: string): MarkRecording => {
+  const marked: string[] = [];
+
+  return {
+    context: {
+      mark: (feature) => {
+        marked.push(feature);
+
+        return Result.succeed(Option.none());
+      },
+      path,
+    },
+    marked,
+  };
+};
+
+/**
  * Run one step of a stub and give the element named by the {@link ContentNotImplemented} it threw.
  *
  * @param step The step.
@@ -210,18 +245,35 @@ describe("the stub content modules", () => {
     }
   });
 
-  it("parse their element as the unsupported node naming it, recorded once, as the body walk gives any element it does not read", () => {
+  it("parse a body element as the unsupported node naming it, recorded once, as the body walk gives any element it does not read", () => {
     for (const { expected, module } of stubs) {
-      const path = `qti-assessment-item/qti-item-body/${expected.notice}`;
-      const { context, noticed } = recording(path);
-      const unsupported: Unsupported = { feature: expected.notice, kind: "unsupported", path };
+      if (module.placement === "body") {
+        const path = `qti-assessment-item/qti-item-body/${expected.notice}`;
+        const { context, noticed } = recording(path);
+        const unsupported: Unsupported = { feature: expected.notice, kind: "unsupported", path };
 
-      assert.deepStrictEqual(
-        module.parse(elementOf(expected), context),
-        Result.succeed(unsupported),
-        expected.element,
-      );
-      assert.deepStrictEqual(noticed, [expected.notice], expected.element);
+        assert.deepStrictEqual(
+          module.parse(elementOf(expected), context),
+          Result.succeed(unsupported),
+          expected.element,
+        );
+        assert.deepStrictEqual(noticed, [expected.notice], expected.element);
+      }
+    }
+  });
+
+  it("parse an item element as none, its mark recorded once, as the item root's walk records any element it does not read", () => {
+    for (const { expected, module } of stubs) {
+      if (module.placement === "item") {
+        const { context, marked } = markRecording(`qti-assessment-item/${expected.element}`);
+
+        assert.deepStrictEqual(
+          module.parse(elementOf(expected), context),
+          Result.succeed(Option.none()),
+          expected.element,
+        );
+        assert.deepStrictEqual(marked, [expected.element], expected.element);
+      }
     }
   });
 
@@ -345,4 +397,104 @@ describe("the body walk", () => {
         );
       }),
   );
+});
+
+/**
+ * An item-placed stub as the item root's walk test reads it: the module, the specifier and export
+ * name it is imported by, and the attributes a hand-built item gives its element.
+ */
+interface ItemStub {
+  readonly attributes: ReturnType<typeof attr>[];
+  readonly exported: string;
+  readonly module: ItemContentModule<string, never>;
+  readonly specifier: string;
+}
+
+/**
+ * The five item-placed stubs, in the brief's order.
+ */
+const itemStubs: readonly ItemStub[] = [
+  {
+    attributes: [
+      attr("identifier", "HINT"),
+      attr("outcome-identifier", "FEEDBACK"),
+      attr("show-hide", "show"),
+    ],
+    exported: "modalFeedbackModule",
+    module: modalFeedbackModule,
+    specifier: "#plate/content/modal-feedback.ts",
+  },
+  {
+    attributes: [],
+    exported: "companionMaterialsModule",
+    module: companionMaterialsModule,
+    specifier: "#plate/content/companion-materials.ts",
+  },
+  {
+    attributes: [attr("href", "style.css"), attr("type", "text/css")],
+    exported: "stylesheetModule",
+    module: stylesheetModule,
+    specifier: "#plate/content/stylesheet.ts",
+  },
+  {
+    attributes: [],
+    exported: "catalogInfoModule",
+    module: catalogInfoModule,
+    specifier: "#plate/content/catalog-info.ts",
+  },
+  {
+    attributes: [attr("identifier", "passage"), attr("href", "passage.xml")],
+    exported: "stimulusRefModule",
+    module: stimulusRefModule,
+    specifier: "#plate/content/stimulus-ref.ts",
+  },
+];
+
+describe("the item root's walk", () => {
+  for (const { attributes, exported, module, specifier } of itemStubs) {
+    it.effect(
+      `dispatches ${module.element} to its stub, which records the mark the walk recorded before`,
+      () =>
+        Effect.gen(function* walkRoot() {
+          const parsed: string[] = [];
+          const counting: ItemContentModule<string, never> = {
+            ...module,
+            parse: (source, context) => {
+              parsed.push(source.local);
+
+              return module.parse(source, context);
+            },
+          };
+          vi.resetModules();
+          vi.doMock(specifier, () => ({ [exported]: counting }));
+
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const item = yield* Effect.fromResult(
+            model.buildItem(
+              doc(
+                "item.xml",
+                el(
+                  "qti-assessment-item",
+                  [attr("identifier", "item"), attr("title", "Item")],
+                  [el(module.element, attributes), el("qti-item-body", [], [])],
+                ),
+              ),
+            ),
+          );
+
+          assert.deepStrictEqual(parsed, [module.element]);
+          assert.deepStrictEqual(
+            item.unsupported.map(({ feature, path, shown }) => [feature, path, shown]),
+            [[module.element, `qti-assessment-item/${module.element}`, "mark"]],
+          );
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              vi.doUnmock(specifier);
+              vi.resetModules();
+            }),
+          ),
+        ),
+    );
+  }
 });

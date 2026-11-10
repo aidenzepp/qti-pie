@@ -2564,10 +2564,9 @@ const stubNode = (
 };
 
 /**
- * The content modules of the elements the body walk reads: those placed in the item body, of the
- * nine content modules. The item root's walk reads none yet.
+ * The nine content modules, each read by the walk its placement names.
  */
-const bodyContent = [
+const contentModules = [
   rubricModule,
   feedbackInlineModule,
   feedbackBlockModule,
@@ -2577,7 +2576,29 @@ const bodyContent = [
   catalogInfoModule,
   stimulusRefModule,
   mathmlModule,
-].filter((module) => module.placement === "body");
+] as const;
+
+/**
+ * One of the nine content modules.
+ */
+type AnyContentModule = (typeof contentModules)[number];
+
+/**
+ * The content modules of the elements the body walk reads: those placed in the item body.
+ */
+const bodyContent = contentModules.filter(
+  (module): module is Extract<AnyContentModule, { readonly placement: "body" }> =>
+    module.placement === "body",
+);
+
+/**
+ * The content modules of the elements the item root's walk reads: those placed directly under the
+ * item root.
+ */
+const itemContent = contentModules.filter(
+  (module): module is Extract<AnyContentModule, { readonly placement: "item" }> =>
+    module.placement === "item",
+);
 
 /**
  * Read a body element a content module reads, by its module's `parse`, which the element's notice
@@ -2603,6 +2624,43 @@ const contentNode = (
   return Option.some(
     module.parse(element, { notice: (feature) => notice(build, feature, path), path }),
   );
+};
+
+/**
+ * Read an item root child the root's walk has no branch of its own for: by its content module's
+ * `parse`, which the element's path and the way to record its mark are handed to, when an
+ * item-placed module reads it; otherwise as the mark keyed by its name, when the model does not
+ * read it.
+ *
+ * @param build The build.
+ * @param part The child, its own marks recorded.
+ * @returns None, as the model holds no node of the child, or a refusal from its module's `parse`.
+ */
+const itemPart = (
+  build: Build,
+  part: SourceElement,
+): Result.Result<Option.Option<never>, Refusal> => {
+  const path = pathOf(build, part);
+  const module = itemContent.find(
+    (candidate) => candidate.namespace === part.namespace && candidate.element === part.local,
+  );
+  if (module !== undefined) {
+    const mark = (feature: string): Result.Result<Option.Option<never>> => {
+      record(build, { feature, path, shown: "mark" });
+
+      return Result.succeed(Option.none());
+    };
+
+    // Every item-placed module is a stub, whose model node is `never`: the item model has no place
+    // for such a node yet, so a module that lands one fails to compile here until it gains one.
+    return module.parse(part, { mark, path });
+  }
+
+  if (!readElements.has(part.local)) {
+    record(build, { feature: part.local, path, shown: "mark" });
+  }
+
+  return Result.succeed(Option.none());
 };
 
 /**
@@ -4137,9 +4195,7 @@ export const buildItem = (source: SourceDocument): Result.Result<Item, Refusal> 
         );
       } else {
         markElement(build, part, false);
-        if (!readElements.has(part.local)) {
-          record(build, { feature: part.local, path: pathOf(build, part), shown: "mark" });
-        }
+        yield* itemPart(build, part);
       }
     }
 

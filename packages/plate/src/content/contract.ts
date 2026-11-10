@@ -7,18 +7,18 @@
  * feedback, modal feedback, companion materials, a stylesheet, a catalog, a stimulus reference, or
  * MathML. Each sits in the item body or directly under the item root ({@link Placement}).
  *
- * Each module beside this file is a stub: `implemented` is false and its `parse` gives the notice
- * the body walk gives any element it does not read, so the verdicts and the HTML stay what they
- * were. Its other members throw {@link ContentNotImplemented}, and no walk reaches them: the model
- * holds no node of a stub's element, since its `parse` gives the notice. The body walk dispatches
- * each body-placed element to its module's `parse` (`contentNode` in `#plate/model/item.ts`); the
- * item root's walk does not call an item-placed module yet, and records its element as a mark, as
- * it does every `qti-*` element it does not read.
+ * Each module beside this file is a stub: `implemented` is false and its `parse` gives what the
+ * walk that reads it gives any element it does not read, so the verdicts and the HTML stay what
+ * they were: a body-placed stub gives the notice, an item-placed one records the mark. Its other
+ * members throw {@link ContentNotImplemented}, and no walk reaches them: the model holds no node of
+ * a stub's element. Each walk dispatches its elements to their module's `parse`: the body walk
+ * each body-placed element (`contentNode` in `#plate/model/item.ts`), the item root's walk each
+ * item-placed one (`itemContent` there), so landing an element changes only its module.
  *
  * @module
  */
 import { Data } from "effect";
-import type { Result } from "effect";
+import type { Option, Result } from "effect";
 import type { SourceElement } from "#plate/document/source.ts";
 import type { Element } from "#plate/emit/node.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
@@ -41,15 +41,34 @@ export type ContentFeatureId = `I-${number}`;
 export type Placement = "body" | "item";
 
 /**
- * One content element's module.
+ * What the item root's walk hands an item-placed module's `parse`: the way to record its element as
+ * a mark on the verdict only, as that walk records every `qti-*` element it does not read, since an
+ * element outside the body has no place a notice could take.
+ */
+export interface ItemParseContext {
+  /**
+   * Record the feature as a mark at the element's path.
+   *
+   * @param feature The feature's key, as the verdict names it.
+   * @returns None, as the model then holds no node of the element.
+   */
+  readonly mark: (feature: string) => Result.Result<Option.Option<never>>;
+  /**
+   * The element path of the element being parsed.
+   */
+  readonly path: string;
+}
+
+/**
+ * The members every content module has, whatever its {@link Placement}.
  *
  * @template E The element's local name.
  * @template N The element's model node, `never` for a stub, which has none yet.
  * @template P The element's payload node, `never` for a stub, which has none yet.
  */
-export interface ContentModule<E extends string, N, P = never> {
+interface ContentModuleBase<E extends string, N, P> {
   /**
-   * The element's local name, which the walk dispatches on with {@link ContentModule.namespace}.
+   * The element's local name, which the walk dispatches on with the module's `namespace`.
    */
   readonly element: E;
   /**
@@ -58,7 +77,8 @@ export interface ContentModule<E extends string, N, P = never> {
    */
   readonly feature: readonly ContentFeatureId[];
   /**
-   * Whether the module renders the element: false for a stub, whose `parse` gives the notice.
+   * Whether the module renders the element: false for a stub, whose `parse` gives the notice or
+   * the mark.
    */
   readonly implemented: boolean;
   /**
@@ -70,14 +90,6 @@ export interface ContentModule<E extends string, N, P = never> {
    * deprecated `mfenced` into the elements it stands for; absent for an element read as written.
    */
   readonly normalise?: (element: SourceElement) => SourceElement;
-  /**
-   * Read the element into its model node, or its notice.
-   */
-  readonly parse: (
-    element: SourceElement,
-    context: ParseContext,
-  ) => Result.Result<N | Unsupported, Refusal>;
-  readonly placement: Placement;
   /**
    * Copy the model node into the payload node the page may know.
    */
@@ -94,10 +106,66 @@ export interface ContentModule<E extends string, N, P = never> {
 }
 
 /**
+ * The module of an element in the item body, which the body walk reads.
+ *
+ * @template E The element's local name.
+ * @template N The element's model node, `never` for a stub, which has none yet.
+ * @template P The element's payload node, `never` for a stub, which has none yet.
+ */
+export interface BodyContentModule<E extends string, N, P = never> extends ContentModuleBase<
+  E,
+  N,
+  P
+> {
+  /**
+   * Read the element into its model node, or its notice.
+   */
+  readonly parse: (
+    element: SourceElement,
+    context: ParseContext,
+  ) => Result.Result<N | Unsupported, Refusal>;
+  readonly placement: "body";
+}
+
+/**
+ * The module of an element directly under the item root, which the item root's walk reads.
+ *
+ * @template E The element's local name.
+ * @template N The element's model node, `never` for a stub, which has none yet.
+ * @template P The element's payload node, `never` for a stub, which has none yet.
+ */
+export interface ItemContentModule<E extends string, N, P = never> extends ContentModuleBase<
+  E,
+  N,
+  P
+> {
+  /**
+   * Read the element into its model node, or none once it has recorded the element's mark.
+   */
+  readonly parse: (
+    element: SourceElement,
+    context: ItemParseContext,
+  ) => Result.Result<Option.Option<N>, Refusal>;
+  readonly placement: "item";
+}
+
+/**
+ * One content element's module, by where the element sits ({@link Placement}).
+ *
+ * @template E The element's local name.
+ * @template N The element's model node, `never` for a stub, which has none yet.
+ * @template P The element's payload node, `never` for a stub, which has none yet.
+ */
+export type ContentModule<E extends string, N, P = never> =
+  | BodyContentModule<E, N, P>
+  | ItemContentModule<E, N, P>;
+
+/**
  * A step of a stub content module ran: a defect of plate, which no item or host can cause.
  *
- * A stub's `parse` gives the notice, so the model never holds a node of its element, and no walk
- * reaches the stub's other steps. It is thrown, never returned, and only from a stub's body.
+ * A stub's `parse` gives the notice or the mark, so the model never holds a node of its element,
+ * and no walk reaches the stub's other steps. It is thrown, never returned, and only from a stub's
+ * body.
  */
 export class ContentNotImplemented extends Data.TaggedError("ContentNotImplemented")<{
   readonly element: string;
@@ -106,6 +174,6 @@ export class ContentNotImplemented extends Data.TaggedError("ContentNotImplement
    * Which content module's step ran, and what a stub supports.
    */
   override get message(): string {
-    return `The content module for ${this.element} is a stub: only its parse runs, and it gives the notice. Another of its steps ran, which no item can cause; land the module before its element reaches the model.`;
+    return `The content module for ${this.element} is a stub: only its parse runs, and it gives the notice or the mark. Another of its steps ran, which no item can cause; land the module before its element reaches the model.`;
   }
 }
