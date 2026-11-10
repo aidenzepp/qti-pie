@@ -143,6 +143,7 @@ const declared = {
  * The kit a stub's `redact` is handed here: it never reads it, as it throws first.
  */
 const redactKit: ContentRedactKit = {
+  documents: new Map(),
   nodes: (nodes) => nodes,
   record: Option.none(),
   supports: noSupports,
