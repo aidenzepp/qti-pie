@@ -50,14 +50,13 @@ import {
   owedRules,
   refusalOf,
 } from "#pantry/import/refusal.ts";
-import type { RefusalLaw } from "#pantry/import/refusal.ts";
+import type { LawName, RefusalLaw } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 import { beginsWith, mergedAxes } from "#pantry/test/merged-axes.ts";
 import type { Axis } from "#pantry/test/merged-axes.ts";
-import type { LawName } from "#pantry/import/refusal.ts";
 import {
   NotQti3,
   notQti3Reasons,
@@ -93,6 +92,16 @@ const testTimeoutMs = 120_000;
  * explanation reads.
  */
 const grammar = Result.getOrThrow(composed());
+
+/**
+ * The laws a refusal of `laws` prints, as the database reported them: empty unless its origin is
+ * the database's.
+ */
+const printed = (laws: Arr.NonEmptyReadonlyArray<RefusalLaw>) => {
+  const refused = refusalOf({ kind: "every", laws }, { kind: "unreported" }, grammar);
+
+  return refused.origin._tag === "Database" ? refused.origin.laws : [];
+};
 
 /**
  * A scratch schema, in the shapes `node.ts` and `attributes.ts` state, built with grizzle's own
@@ -806,11 +815,6 @@ describe("the merged axes and the laws no row states", () => {
       } as const;
       const installed = constraintNamesOf(Qti)(stated);
       const cdnInstalled = "cdn_origin_domain";
-      const printed = (laws: Arr.NonEmptyReadonlyArray<RefusalLaw>) => {
-        const refused = refusalOf({ kind: "every", laws }, { kind: "unreported" }, grammar);
-
-        return refused.origin._tag === "Database" ? refused.origin.laws : [];
-      };
 
       assert.deepStrictEqual(
         printed([
