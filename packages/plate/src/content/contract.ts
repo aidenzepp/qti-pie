@@ -330,15 +330,22 @@ export interface ItemContentModule<
    * reference and keeping in the listing the cards no presenter claims. Absent for a module that
    * attaches nothing.
    *
+   * The hub hands the module the payload nodes it holds of the module's element, since the answer
+   * for a reference is a function of the module's own payload, which the render holds and `state`
+   * and `kit` do not carry (issue m3e-08).
+   *
    * @param reference The referencing element: the catalog's idref and the element's id.
    * @param state The emit state.
    * @param kit The render kit, whose `nodes` emits a card's content.
+   * @param nodes The payload nodes the item holds of this module's element, in document order;
+   *   never empty, as the hub asks a module only when it holds one.
    * @returns The answer, empty to attach nothing, or the refusal of a part swap.
    */
   readonly attach?: (
     reference: ReferencingElement,
     state: EmitState,
     kit: ContentRenderKit,
+    nodes: readonly P[],
   ) => Result.Result<AttachAnswer, PartSwapRefused>;
   /**
    * Read the element into its model node, or none once it has recorded the element's mark.
@@ -473,6 +480,29 @@ export type ItemContentPayload<M extends { readonly element: string }> = {
 };
 
 /**
+ * What a catalog presenter gives for a referencing element when it has more to say than nodes: the
+ * nodes, and optionally the attributes the referencing element takes and where the nodes go, as
+ * {@link AttachAnswer} states them. An absent `attributes` adds none, and an absent `place` is
+ * `after-element`, so a presenter that gives the bare nodes of {@link CatalogPresenter.present}
+ * says the same as one that gives `{ nodes }` alone (issue m3e-08).
+ */
+export interface CatalogPresentation {
+  /**
+   * Attributes merged onto the referencing element, which keeps its own on a clash and its `id`
+   * (`AttachAnswer.attributes`), such as an `aria-details` that names a presented element.
+   */
+  readonly attributes?: Attributes;
+  /**
+   * The nodes to place beside the referencing element.
+   */
+  readonly nodes: readonly Node[];
+  /**
+   * Where the nodes go, `after-element` when absent (`AttachAnswer.place`).
+   */
+  readonly place?: AttachAnswer["place"];
+}
+
+/**
  * The presenter of one catalog support: how a catalog card for the support attaches to the element
  * that references the catalog, when the host enabled the support. The catalog module resolves each
  * reference to its card and hands the card here; each support's presentation is its own module in
@@ -490,16 +520,26 @@ export interface CatalogPresenter<S extends CatalogSupport, C = never> {
   /**
    * Render the card's content for the referencing element, given the emit state and the kit.
    *
+   * A presenter that only places nodes gives them as an array, as every presenter did before the
+   * reference was handed in; one that also marks the referencing element, or places its nodes after
+   * the element's block, gives a {@link CatalogPresentation} (issue m3e-08).
+   *
    * @param card The card the catalog module resolved for the support.
    * @param state The emit state.
    * @param kit The render kit, whose `nodes` emits the card's content.
-   * @returns The nodes to attach beside the referencing element, or the refusal of a part swap.
+   * @param reference The element the card is presented for: the catalog's idref and the element's
+   *   emitted id, which a presenter points at or names in what it gives. The catalog module hands
+   *   it whenever it presents a card beside an element; a presenter called without one has no
+   *   element to name.
+   * @returns The nodes to attach beside the referencing element, or the nodes with the attributes
+   *   and place a {@link CatalogPresentation} adds, or the refusal of a part swap.
    */
   readonly present: (
     card: C,
     state: EmitState,
     kit: ContentRenderKit,
-  ) => Result.Result<readonly Node[], PartSwapRefused>;
+    reference?: ReferencingElement,
+  ) => Result.Result<readonly Node[] | CatalogPresentation, PartSwapRefused>;
   readonly support: S;
 }
 

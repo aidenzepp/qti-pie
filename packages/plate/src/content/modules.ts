@@ -653,7 +653,7 @@ const foldAnswer = (folded: AttachAnswer, answer: AttachAnswer): AttachAnswer =>
 
 /**
  * Ask the item-placed module of one element what it attaches beside a referencing element, when it
- * declares `attach` and the payload holds a node of its element.
+ * declares `attach` and the payload holds a node of its element, handing it those nodes.
  *
  * @template E The element.
  * @param element The element.
@@ -675,7 +675,7 @@ const attachedByElement = <E extends ItemContentElement>(
 
   return attach === undefined || nodes === undefined || nodes.length === 0
     ? Option.none()
-    : Option.some(attach(reference, state, kit));
+    : Option.some(attach(reference, state, kit, nodes));
 };
 
 /**
