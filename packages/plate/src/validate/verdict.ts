@@ -367,34 +367,6 @@ const isKeptEverywhere = (attribute: SourceAttribute): boolean =>
   isAllowance(attribute) || isInstanceAttribute(attribute) || isLangOrBase(attribute);
 
 /**
- * The QTI elements whose wildcard `data-*` attributes carry parameters a reader declares, which E3
- * keeps as written: a `qti-card-entry`'s align with a candidate's PNP (`data-reading-type`,
- * `data-braille-type`; QTI information model section 5.27, read by the catalog module), and a
- * `qti-portable-custom-interaction`'s are its module's configuration. Elsewhere a `data-*` only a
- * wildcard admits is removed and marked, until the gate's table of author `data-*` attributes
- * (the operator's ruling: they pass through except plate's reserved names) subsumes this list.
- * The structural walk has judged each name by then (reading 13) and admitted it on these elements,
- * which the Schematron's extension lists cover (reading 90).
- */
-const dataParameterElements: ReadonlySet<string> = new Set([
-  "qti-card-entry",
-  "qti-portable-custom-interaction",
-]);
-
-/**
- * Report whether an attribute is a `data-*` parameter E3 keeps on its element: a `data-` attribute
- * in no namespace on an element of {@link dataParameterElements}.
- *
- * @param element The QTI-namespace element.
- * @param attribute The attribute.
- * @returns Whether it stays as written.
- */
-const isDataParameter = (element: SourceElement, attribute: SourceAttribute): boolean =>
-  dataParameterElements.has(element.local) &&
-  attribute.namespace === "" &&
-  attribute.local.startsWith("data-");
-
-/**
  * Report whether an element's table declares an attribute by its exact namespace and local name,
  * a prohibited declaration not counting.
  *
@@ -442,9 +414,8 @@ const isKept = (table: Option.Option<ContentTable>, attribute: SourceAttribute):
   );
 
 /**
- * Secure one element's attributes: remove each one only a wildcard admits (E3), but for a `data-*`
- * parameter of an element that declares them ({@link isDataParameter}), and pass each URL
- * attribute through `url.ts`.
+ * Secure one element's attributes: remove each one only a wildcard admits (E3; {@link isKept}
+ * names what stays, an author `data-*` among it), and pass each URL attribute through `url.ts`.
  *
  * An element the structural walk checked is read by the table that governs it, so an attribute a
  * valid `xsi:type`'s type declares is kept (AD-9); any other QTI-namespace element by its name's
@@ -475,7 +446,7 @@ const secureAttributes = (
   );
   const kept: SourceAttribute[] = [];
   for (const attribute of element.attributes) {
-    if (!isKept(table, attribute) && !isDataParameter(element, attribute)) {
+    if (!isKept(table, attribute)) {
       marks.push({ feature: `attribute:${attributeName(attribute)}`, path, shown: "mark" });
       continue;
     }
