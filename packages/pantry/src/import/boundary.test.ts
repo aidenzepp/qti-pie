@@ -25,8 +25,9 @@ type ByStep = readonly (readonly [step: Step, entries: readonly string[]])[];
  * ZIP and XML to typed rows and back, and the command line. It hands the PostgreSQL side a
  * package's rows and gets the scan's rows back.
  *
- * `import/package.ts`, `import/write.ts` and `export/package.ts` stay here, the XML program, the
- * row builders and the export's unshred and zip, once S10 takes out the parts §2.3 keeps:
+ * `import/read.ts`, the package read and parsed before the database, is here. `import/package.ts`,
+ * `import/write.ts` and `export/package.ts` stay here, the XML program, the row builders and the
+ * export's unshred and zip, once S10 takes out the parts §2.3 keeps:
  * `ingest`, `changeSetOf` with the row type, and the reads. `model/folds.ts`, which §2.1 does not
  * list, is here with the rest of the XDM model: the import's builders and the law oracle both
  * fold with it.
@@ -43,6 +44,7 @@ const xmlSide = [
   "import/package.ts",
   "import/preview.ts",
   "import/program.ts",
+  "import/read.ts",
   "import/record.ts",
   "import/roster.ts",
   "import/rules.ts",
