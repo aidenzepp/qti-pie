@@ -316,6 +316,7 @@ const interactionsIn = (nodes: readonly PayloadNode[]): readonly InteractionPayl
     }
 
     switch (node.kind) {
+      case "container":
       case "element": {
         return interactionsIn(node.children);
       }
