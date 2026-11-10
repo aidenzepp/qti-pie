@@ -123,6 +123,10 @@ export interface View {
    * The name each response's controls post under, `entryName(instance, response)` when absent.
    */
   readonly names: ReadonlyMap<string, string>;
+  /**
+   * The strings a refused post sent, by response, read only when `messages` is not empty. A point
+   * response posts two strings per value, its x then its y, in the order `encode` writes them.
+   */
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
   /**
    * The configuration's `seed`, a string written as given, which keys a shuffled Choice's or Inline
@@ -457,6 +461,18 @@ export interface ModulePayloadOf<K extends ModuleKind> {
 export type ModulePayload = { readonly [K in ModuleKind]: ModulePayloadOf<K> }[ModuleKind];
 
 /**
+ * The payload node of the container an interaction module owns (`ContainerNode` in
+ * `#plate/model/item.ts`): the kind of the module, and its children copied as any body nodes are.
+ * The emitter emits the children, then hands the node and their output to the module's container
+ * render (`RenderInteraction.containers` in `#plate/emit/body.ts`).
+ */
+export interface ContainerPayload {
+  readonly children: readonly PayloadNode[];
+  readonly kind: "container";
+  readonly module: ModuleKind;
+}
+
+/**
  * The payload of one of the four interactions the hubs render inline, which the emitter hands to
  * its interaction's render function.
  */
@@ -467,11 +483,13 @@ export type InteractionPayload =
   | TextEntryPayload;
 
 /**
- * A node of the payload's body: an element, a text, an interaction, a notice, or the payload node
- * of a body-placed content element (`ContentPayload` in `#plate/content/modules.ts`, one member per
- * content module, each as its module's `copy` gives it).
+ * A node of the payload's body: an element, a text, an interaction, a notice, the payload node of a
+ * body-placed content element (`ContentPayload` in `#plate/content/modules.ts`, one member per
+ * content module, each as its module's `copy` gives it), or a module's container
+ * ({@link ContainerPayload}).
  */
 export type PayloadNode =
+  | ContainerPayload
   | ContentPayload
   | ElementPayload
   | InteractionPayload
@@ -684,6 +702,9 @@ const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
           ...node.attributes.flatMap(({ name, value }) => (name === "id" ? [value] : [])),
           ...authoredIdsIn(node.children),
         ];
+      }
+      case "container": {
+        return authoredIdsIn(node.children);
       }
       case "template-block":
       case "template-inline": {
@@ -1320,6 +1341,9 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
     case "text": {
       return { kind: "text", text: node.text };
     }
+    case "container": {
+      return { children: copyNodes(node.children, build), kind: "container", module: node.module };
+    }
     case "content": {
       return contentSteps(node).copy(copyKit(build));
     }
@@ -1937,6 +1961,11 @@ const printBody = (
           reach(node.path, (entry) => entry.feature === node.feature, seen);
 
           return [node];
+        }
+        case "container": {
+          reach(node.path, () => true, seen);
+
+          return [{ ...node, children: nodesOf(node.children, seen) }];
         }
         case "content": {
           reach(node.path, () => true, seen);

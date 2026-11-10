@@ -10,7 +10,7 @@
  * @module
  */
 import { Effect, Option, Result } from "effect";
-import { decode, Malformed, partition } from "#plate/form/encoding.ts";
+import { decode, Malformed, partition, postedStrings } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
 import type { ResponseValue } from "#plate/model/values.ts";
@@ -50,7 +50,9 @@ export const entriesOf = Effect.fnUntraced(function* entriesOf(
 
 /**
  * Read what a post carries for an item: its own entries, partitioned by the item's instance, each
- * response decoded through the item's `postings`, with the strings posted for it.
+ * response decoded through the item's `postings`, with the strings posted for it, which
+ * {@link postedStrings} collects under the entry names of the response's binding, a point's two
+ * coordinate names among them.
  *
  * The postings are those of the item as `redact` gives it with the record it was rendered from, so
  * an interaction its template values hide, or a choice they hide, posts nothing here as it showed
@@ -87,12 +89,7 @@ export const postOf = (
       ),
     ),
     posted: Object.fromEntries(
-      itemPostings.map(({ binding, identifier }) => [
-        identifier,
-        own.flatMap(([name, value]) =>
-          name !== binding.name || value instanceof Blob ? [] : [value],
-        ),
-      ]),
+      itemPostings.map(({ binding, identifier }) => [identifier, postedStrings(own, binding)]),
     ),
   };
 };

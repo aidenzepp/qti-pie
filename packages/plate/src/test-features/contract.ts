@@ -34,6 +34,7 @@
 import { Data, Option } from "effect";
 import type { Result } from "effect";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
+import type { ReaderKit } from "#plate/interactions/contract.ts";
 import type { AttributeReaders } from "#plate/model/reader.ts";
 import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
 import type { Intent, TestSession } from "#plate/session/session.ts";
@@ -86,10 +87,28 @@ export const isTestFeatureKey = (mark: string): mark is TestFeatureKey => keyMar
 export type TestFeatureId = `${"I" | "P" | "S" | "T"}-${number}`;
 
 /**
+ * The nearest structural element that encloses a module's element, by nesting: the test, a test
+ * part, a section or an item ref. `identifier` is that element's `identifier` attribute as the
+ * model reads it, with its outer XML whitespace removed, and the empty string when the element
+ * writes none.
+ *
+ * A `qti-assessment-section-ref` is a mark and owns nothing, so an element under one takes the
+ * owner above it. A package assembles a test with each section document in its reference's place
+ * before the test is judged, so the `qti-assessment-section` a section document's root names owns
+ * what it holds.
+ */
+export type FeatureOwner =
+  | { readonly identifier: string; readonly kind: "item-ref" }
+  | { readonly identifier: string; readonly kind: "part" }
+  | { readonly identifier: string; readonly kind: "section" }
+  | { readonly kind: "test" };
+
+/**
  * What the test model hands a module's `parse`: the way to record its element as a mark on the
- * verdict, the element's path, and the attribute readers bound to the build
- * (`#plate/model/reader.ts`), so a module reads its element as the test model reads its own and
- * never imports the readers.
+ * verdict, the owner of the element, the element's path, the reader kit over the test document,
+ * and the attribute readers bound to the build (`#plate/model/reader.ts`), so a module reads its
+ * element and the body content under it as the models read their own and never imports the
+ * readers or the body walk.
  */
 export interface TestParseContext {
   /**
@@ -101,11 +120,45 @@ export interface TestParseContext {
    */
   readonly mark: (feature: string) => Result.Result<Option.Option<never>>;
   /**
+   * The owner of the element being parsed: the test, a test part, a section or an item ref
+   * ({@link FeatureOwner}), whichever encloses the element nearest. A module that acts on the
+   * scope its element sits in reads it here and never walks the document for it. The modules of
+   * gate unit W0-BE, which branch on a test's structure, are the first to read it.
+   */
+  readonly owner: FeatureOwner;
+  /**
    * The element path of the element being parsed.
    */
   readonly path: string;
   /**
-   * The attribute readers, bound to the build.
+   * The reader kit over the test document: the attribute readers beside `nodes`, the body walk
+   * that reads an element's children as body nodes, as an item-placed content module reads its own
+   * (`ItemParseContext.read` in `#plate/content/contract.ts`). Issues m3e-01b, which reads a
+   * section's and the test's rubric blocks, and m5-04, which reads test feedback, are the first
+   * modules to read a body through it.
+   *
+   * The kit is a fresh build of the test document by the item model (`parseContextOf` in
+   * `#plate/model/item.ts`), made when `parse` first reads `read`, so its paths are the document's
+   * own and its `names` are the identifiers the document root declares, a test's outcome and
+   * context declarations among them, with the built-in variables. It is valid while `parse` runs:
+   * the features the walk records through it, a notice for each `qti-*` element it does not read
+   * and the marks it places on a body element, are carried into the test's marks when `parse`
+   * returns, as the item model places them: once per feature and path, with `shown` as the walk
+   * gave it, after the marks the module recorded through `mark`, and not again for one the module
+   * recorded itself at the same path.
+   *
+   * A `qti-printed-variable` in a body is read as the walk reads one in an item body: a node that
+   * holds the `identifier` as written, with outer XML whitespace removed, its `base` and `index`
+   * as a number or a variable's name by their lexical form, and its `format`, `field`,
+   * `delimiter` and `mapping-indicator` as `xs:normalizedString`s. The walk resolves no value and
+   * checks no name against `names`, which the item model's processing readers consult and its
+   * body walk does not, so the node is the same whether `identifier` names a test outcome or
+   * names nothing; what the page prints is for the code that presents the test to decide.
+   */
+  readonly read: ReaderKit;
+  /**
+   * The attribute readers, bound to the build. Kept beside `read`, whose kit holds the same
+   * readers over the fresh build, for the modules that already read their element through it.
    */
   readonly readers: AttributeReaders;
 }
@@ -142,12 +195,55 @@ export interface GateContext {
 }
 
 /**
+ * A scope a time limit bounds, named for the session hub: an item ref, a section, a test part or
+ * the test, by its identifier (the test's own for `test`). A module's `gate` names the scope whose
+ * time has run out, and the hub knows how to leave each kind, so the module never reads the
+ * session's structure. The session records each scope that expired, in order, as
+ * `TestSession.expired`.
+ */
+export interface TimedScope {
+  readonly identifier: string;
+  readonly kind: "item-ref" | "part" | "section" | "test";
+}
+
+/**
  * What a module's `gate` says of an intent: `refuse`, with the module's own rule and the reason in
- * words, or, for a move, `target`, the sequence index the move reaches in place of the one the
- * part's modes give (a branch rule's target). None lets the intent through to the modes' rules.
+ * words; for a move, `target`, the sequence index the move reaches in place of the one the part's
+ * modes give (a branch rule's target); or `expire`, that the time of a scope the intent falls in
+ * has run out. None lets the intent through to the modes' rules.
+ *
+ * An `expire` answers any intent, a move included, and the session hub (`expireScope` in
+ * `#plate/session/expire.ts`, which `advance` calls) carries it out in place of the intent:
+ *
+ * - The request's own responses are not saved: the expiry runs before the step is saved, so the
+ *   current item keeps what it held, and only the time the item was shown is added.
+ * - Every presented item of the scope whose attempt is open, or which holds saved responses not yet
+ *   processed, is submitted with its saved responses, as a submission processes it; an item of the
+ *   scope never presented is ended without an attempt. In a simultaneous part an item ref's or a
+ *   section's expiry processes nothing, since the part's submission processes each item once: the
+ *   items are locked and wait for `submit-part`. A part's or the test's expiry processes each
+ *   presented item once in either submission mode.
+ * - The scope is left: an item ref's expiry moves on in a linear part, as `next` does there, and in a
+ *   nonlinear part leaves the position where it is; a section's expiry moves to the first item
+ *   after the section when the current item is in it, else leaves the position, and ends the part
+ *   when no item of the part follows an individual section; a part's expiry ends the part, so the
+ *   next part that holds an item becomes current or the test closes; the test's expiry ends every
+ *   part and closes the test.
+ * - Each item of the scope is left `locked`, so it is closed: its controls render disabled, and
+ *   `submit-item` is no longer offered for it.
+ * - The scope is appended to the session's `expired`, so a host learns it happened by reading the
+ *   session `advance` returns; `advance` returns the session as for any other step. A scope expires
+ *   once: an `expire` naming a scope already in `expired` lets the intent through to the modes'
+ *   rules, so a module states that a scope's time is over as often as it is asked, and keeps no
+ *   memory of what the hub did.
+ * - A restored session reads `locked` and `expired` back, so the stored form carries them.
+ *
+ * `qti-time-limits` (issue m3f-01b) is the first module to answer `expire`, implementing reading
+ * D19 of `docs/spec-readings.md`.
  */
 export type GateVerdict =
   | { readonly detail: string; readonly kind: "refuse"; readonly rule: string }
+  | { readonly kind: "expire"; readonly scope: TimedScope }
   | { readonly kind: "target"; readonly sequenceIndex: number };
 
 /**

@@ -117,6 +117,7 @@ export {
   isPosted,
   Malformed,
   partition,
+  postedStrings,
 } from "#plate/form/encoding.ts";
 
 export { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
@@ -249,7 +250,7 @@ export { catalogSupports, noPnpSupports, noSupports, toolPreferences } from "#pl
 
 export type { QtiContext } from "#plate/test-features/context-declaration.ts";
 
-export type { FeatureRefusal, TestFeatureKey } from "#plate/test-features/contract.ts";
+export type { FeatureRefusal, TestFeatureKey, TimedScope } from "#plate/test-features/contract.ts";
 
 export type { ResourceMetadata } from "#plate/test-features/metadata.ts";
 
