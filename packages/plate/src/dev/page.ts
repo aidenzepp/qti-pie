@@ -1404,7 +1404,7 @@ const serveRuntime = (
           return source === undefined
             ? notFound()
             : new Response(source, {
-                headers: { ...pageHeaders, "content-type": runtimeScriptType },
+                headers: { ...pageHeaders(), "content-type": runtimeScriptType },
               });
         }),
       )
