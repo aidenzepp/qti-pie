@@ -10,7 +10,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { overlayPartsOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { documentLayerNames, overlayNames, writtenNames } from "#pantry/import/roster.ts";
+import { documentLayerNames, overlayNamesOf, writtenNamesOf } from "#pantry/import/roster.ts";
 import { changeSetOf, documentRowsOf } from "#pantry/import/write.ts";
 import { Author } from "#pantry/test/author.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -71,7 +71,7 @@ layer(NodeServices.layer)("the derived roster", (it) => {
         const { parts } = yield* everyRelation;
         const written = new Set(parts.flatMap((part) => Object.keys(part)));
 
-        assert.deepStrictEqual(sortedNames(written), [...overlayNames]);
+        assert.deepStrictEqual(sortedNames(written), [...overlayNamesOf()]);
       }).pipe(Effect.scoped),
     testTimeoutMs,
   );
@@ -98,8 +98,8 @@ layer(NodeServices.layer)("the derived roster", (it) => {
           members.map(({ relation }) => relation),
         );
 
-        assert.deepStrictEqual(sortedNames(Object.keys(program.inputs)), [...writtenNames]);
-        assert.deepStrictEqual(sortedNames(inserted), [...writtenNames]);
+        assert.deepStrictEqual(sortedNames(Object.keys(program.inputs)), [...writtenNamesOf()]);
+        assert.deepStrictEqual(sortedNames(inserted), [...writtenNamesOf()]);
         assert.strictEqual(new Set(inserted).size, inserted.length);
       }).pipe(Effect.scoped),
     testTimeoutMs,

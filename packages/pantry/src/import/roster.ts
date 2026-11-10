@@ -14,7 +14,7 @@
  * the keys of `PackageInputs` and `OverlayRows` are one set.
  */
 import { writableNamesOf } from "@bjornpagen/grizzle";
-import { Option, Schema } from "effect";
+import { Function as Fn, Option, Schema } from "effect";
 import type { OverlayRows } from "#pantry/import/overlays/index.ts";
 import type { DocumentLayerRows, PackageInputs } from "#pantry/import/write.ts";
 import {
@@ -27,6 +27,7 @@ import {
   SdDecl,
   XmlDecl,
 } from "#pantry/qti/chardata.ts";
+import type { QtiSchema } from "#pantry/qti/schema.ts";
 import { qti } from "#pantry/qti/schema.ts";
 
 /**
@@ -61,19 +62,33 @@ const OrderedFamily = Schema.Struct({
 });
 
 /**
- * Every ordered family's member relation: written nested at its owner's count field, never inserted
- * on its own.
+ * Every ordered family's member relation in a schema: written nested at its owner's count field,
+ * never inserted on its own. Memoized by the schema's identity (Effect's `Function.memoize`).
+ *
+ * @param schema - The schema, `Qti`.
+ * @returns The member relations' names.
  */
-const nestedMembers: ReadonlySet<string> = new Set(
-  qti().statements.flatMap((statement) =>
-    Option.match(Schema.decodeUnknownOption(OrderedFamily)(statement), {
-      onNone: () => [],
-      onSome: ({ family: { source } }) => [
-        "relation" in source ? source.relation.name : source.name,
-      ],
-    }),
-  ),
+const nestedMembersIn = Fn.memoize(
+  (schema: QtiSchema): ReadonlySet<string> =>
+    new Set(
+      schema.statements.flatMap((statement) =>
+        Option.match(Schema.decodeUnknownOption(OrderedFamily)(statement), {
+          onNone: () => [],
+          onSome: ({ family: { source } }) => [
+            "relation" in source ? source.relation.name : source.name,
+          ],
+        }),
+      ),
+    ),
 );
+
+/**
+ * Read every ordered family's member relation of `Qti` (`qti()`), on the first call rather than
+ * when this module loads, and return that one set on every call.
+ *
+ * @returns The member relations' names.
+ */
+const nestedMembers = (): ReadonlySet<string> => nestedMembersIn(qti());
 
 /**
  * Order relation names by their code points, the order the merge reports its first conflict in.
@@ -85,16 +100,31 @@ const sorted = <N extends string>(names: readonly N[]): readonly N[] =>
   names.toSorted((x, y) => (x < y ? -1 : Number(x > y)));
 
 /**
- * Every relation an import writes directly, in code point order: each stored relation of `Qti`,
- * grizzle's `writableNamesOf(Qti)`, that no ordered family nests.
+ * Every relation an import writes directly in a schema, in code point order: each stored relation,
+ * grizzle's `writableNamesOf`, that no ordered family nests. Memoized by the schema's identity.
+ *
+ * @param schema - The schema, `Qti`.
+ * @returns The written relations' names.
  */
-// SAFETY: the stored relations of `Qti` less the ordered families' members are the keys of
-// `PackageInputs`, which the builders' row types state by hand; `roster.test.ts` holds the two to
-// one set over a real import.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-export const writtenNames = sorted(
-  writableNamesOf(qti()).filter((name) => !nestedMembers.has(name)),
-) as readonly (keyof PackageInputs)[];
+const writtenNamesIn = Fn.memoize(
+  (schema: QtiSchema): readonly (keyof PackageInputs)[] =>
+    // SAFETY: the stored relations of `Qti` less the ordered families' members are the keys of
+    // `PackageInputs`, which the builders' row types state by hand; `roster.test.ts` holds the two
+    // to one set over a real import.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+    sorted(
+      writableNamesOf(schema).filter((name) => !nestedMembers().has(name)),
+    ) as readonly (keyof PackageInputs)[],
+);
+
+/**
+ * Read every relation an import writes directly, in code point order: each stored relation of
+ * `Qti` (`qti()`) that no ordered family nests. Read on the first call rather than when this module
+ * loads, and that one array returned on every call.
+ *
+ * @returns The written relations' names.
+ */
+export const writtenNamesOf = (): readonly (keyof PackageInputs)[] => writtenNamesIn(qti());
 
 /**
  * The document layer's relation names, in code point order.
@@ -106,13 +136,28 @@ export const documentLayerNames = sorted(
 ) as readonly (keyof DocumentLayerRows)[];
 
 /**
- * Every overlay's relation name, in code point order: each written relation but the two roots and
- * the document layer's.
+ * Every overlay's relation name in a schema, in code point order: each written relation but the two
+ * roots and the document layer's. Memoized by the schema's identity.
+ *
+ * @param schema - The schema, `Qti`.
+ * @returns The overlays' relation names.
  */
-// SAFETY: `PackageInputs` is `DocumentLayerRows & OverlayRows` with `Node` and `Package`, so the
-// written names less those are the keys of `OverlayRows`; `roster.test.ts` holds them to the keys
-// `overlayRowsOf` gives.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-export const overlayNames = writtenNames.filter(
-  (name) => name !== "Node" && name !== "Package" && !Object.hasOwn(documentLayer, name),
-) as readonly (keyof OverlayRows)[];
+const overlayNamesIn = Fn.memoize(
+  (schema: QtiSchema): readonly (keyof OverlayRows)[] =>
+    // SAFETY: `PackageInputs` is `DocumentLayerRows & OverlayRows` with `Node` and `Package`, so
+    // the written names less those are the keys of `OverlayRows`; `roster.test.ts` holds them to
+    // the keys `overlayRowsOf` gives.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+    writtenNamesIn(schema).filter(
+      (name) => name !== "Node" && name !== "Package" && !Object.hasOwn(documentLayer, name),
+    ) as readonly (keyof OverlayRows)[],
+);
+
+/**
+ * Read every overlay's relation name, in code point order: each relation an import writes but the
+ * two roots and the document layer's. Read on the first call rather than when this module loads,
+ * and that one array returned on every call.
+ *
+ * @returns The overlays' relation names.
+ */
+export const overlayNamesOf = (): readonly (keyof OverlayRows)[] => overlayNamesIn(qti());

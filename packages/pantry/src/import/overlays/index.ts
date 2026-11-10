@@ -85,7 +85,7 @@ import type { AssembledRows, TestRows } from "#pantry/import/overlays/tests.ts";
 import type { PlacedDocument } from "#pantry/import/write.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { overlayNames } from "#pantry/import/roster.ts";
+import { overlayNamesOf } from "#pantry/import/roster.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 
 /**
@@ -441,4 +441,4 @@ export const overlayRowsOf = (
   documents: readonly PlacedDocument[],
   mint: () => NodeId,
 ): Result.Result<OverlayRows, OverlayConflict> =>
-  unionsOf<OverlayRows>(overlayNames, overlayPartsOf(documents, mint));
+  unionsOf<OverlayRows>(overlayNamesOf(), overlayPartsOf(documents, mint));
