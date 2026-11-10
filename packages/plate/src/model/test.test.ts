@@ -18,6 +18,8 @@ import type {
   TemplateDefault,
   Test,
 } from "#plate/model/test.ts";
+import type { TestFeatureKey } from "#plate/test-features/contract.ts";
+import { testFeatures } from "#plate/test-features/table.ts";
 import { checkStructure } from "#plate/validate/structure.ts";
 import { tables } from "#plate/validate/tables.ts";
 
@@ -221,6 +223,19 @@ const nodesOf = (built: Test): readonly SectionChild[] =>
 const mark = (feature: string, path: string): MarkedFeature => ({ feature, path, shown: "mark" });
 
 /**
+ * The marks a test feature's element at a path gives, read from its module's `implemented` flag
+ * in the table the test model consults: the feature's own mark while the module is a stub, and
+ * none once it delivers the feature, so a test that pins the marks around the element stays true
+ * when the module lands.
+ *
+ * @param key The feature's key, as the verdict names it.
+ * @param path The element's path.
+ * @returns The feature's mark while its module is a stub; none once it has landed.
+ */
+const featureMarks = (key: TestFeatureKey, path: string): readonly MarkedFeature[] =>
+  testFeatures.some((module) => module.key === key && !module.implemented) ? [mark(key, path)] : [];
+
+/**
  * Find a section or an item reference of a test by identifier and kind.
  *
  * @param built The test.
@@ -389,17 +404,17 @@ describe("buildTest", () => {
 
         assert.deepStrictEqual(checkStructure(marked, tables), []);
         assert.deepStrictEqual(built.unsupported, [
-          mark("qti-time-limits", `${root}/qti-time-limits`),
-          mark("qti-rubric-block", `${root}/qti-rubric-block`),
+          ...featureMarks("qti-time-limits", `${root}/qti-time-limits`),
+          ...featureMarks("qti-rubric-block", `${root}/qti-rubric-block`),
           mark('allow-comment="true"', `${firstPart}/qti-item-session-control`),
-          mark("qti-time-limits", `${firstSection}/qti-time-limits`),
-          mark("qti-selection", `${firstSection}/qti-selection`),
-          mark("qti-ordering", `${firstSection}/qti-ordering`),
+          ...featureMarks("qti-time-limits", `${firstSection}/qti-time-limits`),
+          ...featureMarks("qti-selection", `${firstSection}/qti-selection`),
+          ...featureMarks("qti-ordering", `${firstSection}/qti-ordering`),
           mark(
             "max-attempts:negative",
             `${firstSection}/qti-assessment-item-ref[1]/qti-item-session-control/@max-attempts`,
           ),
-          mark("qti-assessment-section-ref", `${firstPart}/qti-assessment-section-ref`),
+          ...featureMarks("qti-assessment-section-ref", `${firstPart}/qti-assessment-section-ref`),
         ]);
         assert.deepStrictEqual([...nodeNamed(built, "I1", "item-ref").weights], [["DOUBLE", 2]]);
         assert.strictEqual(built.outcomeProcessing.kind, "runs");
@@ -1352,14 +1367,14 @@ describe("buildTest's template defaults", () => {
         assert.deepStrictEqual(checkStructure(replacing, tables), []);
         assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
         assert.deepStrictEqual(built.unsupported, [
-          mark("qti-assessment-section-ref", sectionRefPath),
+          ...featureMarks("qti-assessment-section-ref", sectionRefPath),
           mark("variable:a.2.SCORE", processingPath),
         ]);
         assert.deepStrictEqual(built.repeatable, new Set());
         assert.strictEqual(repeated.outcomeProcessing.kind, "runs");
         assert.deepStrictEqual(repeated.unsupported, [
-          mark("qti-selection", `${firstPart}/qti-assessment-section/qti-selection`),
-          mark("qti-assessment-section-ref", sectionRefPath),
+          ...featureMarks("qti-selection", `${firstPart}/qti-assessment-section/qti-selection`),
+          ...featureMarks("qti-assessment-section-ref", sectionRefPath),
         ]);
         assert.deepStrictEqual(repeated.repeatable, new Set(["a"]));
       }),
@@ -1493,11 +1508,11 @@ describe("buildTest's template defaults", () => {
         }
         assert.strictEqual(ownBuilt.outcomeProcessing.kind, "runs");
         assert.deepStrictEqual(ownBuilt.unsupported, [
-          mark("qti-assessment-section-ref", sectionRefPath),
+          ...featureMarks("qti-assessment-section-ref", sectionRefPath),
         ]);
         assert.deepStrictEqual(repeatableBuilt.unsupported, [
-          mark("qti-selection", `${firstPart}/qti-assessment-section/qti-selection`),
-          mark("qti-assessment-section-ref", sectionRefPath),
+          ...featureMarks("qti-selection", `${firstPart}/qti-assessment-section/qti-selection`),
+          ...featureMarks("qti-assessment-section-ref", sectionRefPath),
           mark("variable:a.b.SCORE", processingPath),
           mark("variable:a.2.b.SCORE", processingPath),
         ]);
