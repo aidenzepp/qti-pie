@@ -10,9 +10,16 @@ import { searched } from "@grizzle/testing/vitest";
 import { runOfProcess } from "@grizzle/testing/vitest/run";
 import { Array as Arr, Duration, Effect, FileSystem, Formatter, Option, Result } from "effect";
 import { int8Max } from "#pantry/grammar/closed.ts";
-import { composed } from "#pantry/grammar/compose.ts";
+import { composed, namespaceOfKind, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { accepts, contentModelOf } from "#pantry/grammar/content.ts";
+import {
+  contentModelOf,
+  editedBy,
+  finds,
+  followPairsOf,
+  mixedEndingsOf,
+} from "#pantry/grammar/content.ts";
+import type { ModelEdit } from "#pantry/grammar/content.ts";
 import {
   documentLayer,
   fragmentRoots,
@@ -28,6 +35,7 @@ import type {
   Source,
 } from "#pantry/vocab/inventory/types.ts";
 import { asiNamespace, vocabularyNamespaces } from "#pantry/vocab/namespaces.ts";
+import { automatonOf, breachesOf } from "#pantry/vocab/sequencing.ts";
 import type { NamespaceClass } from "#pantry/vocab/namespaces.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import {
@@ -45,6 +53,7 @@ import {
   XsdOracleLayer,
   xsdContents,
 } from "#pantry/test/gen/grammar.ts";
+import { accepts, admittedOf, indexesOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 import type {
   Content,
   DrawnChild,
@@ -112,7 +121,7 @@ const arityHolds = (
   parent: string,
   children: readonly string[],
 ): boolean =>
-  Option.match(composedGrammar.operatorArity.lookup({ kind: parent }), {
+  Option.match(indexesOf(composedGrammar).operatorArity.lookup({ kind: parent }), {
     onNone: () => true,
     onSome: ({ max, min }) => BigInt(children.length) >= min && BigInt(children.length) <= max,
   });
@@ -418,7 +427,10 @@ const probesOf = (input: {
       return [];
     }
 
-    const admitted = composedGrammar.admission.rows
+    const admitted = admittedOf(
+      composedGrammar.content.contentModelOf,
+      composedGrammar.content.admissionIn,
+    )
       .filter(
         (row) =>
           row.version === version &&
@@ -675,13 +687,13 @@ const languagesOf = (
   parent: string,
   particle: Particle,
 ): Languages => {
-  const { admission, kinds } = composedGrammar;
+  const { content, kinds } = composedGrammar;
   const resolve = (members: readonly { readonly name: XsdName }[]) =>
     members.flatMap((member) =>
       Option.toArray(resolverOf(kinds)(member.name.namespace, member.name.local, parent)),
     );
   const named = new Set(elementsOf(particle).flatMap(({ members }) => resolve(members)));
-  const byWildcard = admission.rows
+  const byWildcard = admittedOf(content.contentModelOf, content.admissionIn)
     .filter(
       (row) =>
         row.version === version &&
@@ -913,7 +925,8 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
       // reported.
       Effect.gen(function* everyModel() {
         const composedGrammar = yield* grammar;
-        const { admission, kinds } = composedGrammar;
+        const { content, kinds } = composedGrammar;
+        const admission = admittedOf(content.contentModelOf, content.admissionIn);
         const draw = yield* seededDraw;
         const isElement = (kind: string) => Option.isSome(kinds.isElement.lookup({ kind }));
         const disagreements: string[] = [];
@@ -950,7 +963,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
                   ...new Set(elementsOf(particle).flatMap((held) => resolve(held.members))),
                 ],
               });
-              const admitted = admission.rows
+              const admitted = admission
                 .filter(
                   (row) => row.version === version && row.parent === parent && isElement(row.child),
                 )
@@ -1310,7 +1323,7 @@ const arityStates = (
 ): boolean => {
   const { max, min } = group.occurs;
   const exact = Option.exists(
-    composedGrammar.operatorArity.lookup({ kind: parent }),
+    indexesOf(composedGrammar).operatorArity.lookup({ kind: parent }),
     (row) => row.min === BigInt(min) && row.max === (Number.isFinite(max) ? BigInt(max) : int8Max),
   );
 
@@ -1493,7 +1506,9 @@ describe.skipIf(!cached)("the content grammar's sources", () => {
       // Oracle: the pinned XSD files' own text, read line by line apart from every reader, and
       // the versions their names pin. The box is every row of the five relations.
       Effect.gen(function* sources() {
-        const { admission, content } = yield* grammar;
+        const composedGrammar = yield* grammar;
+        const { admission, content } = composedGrammar;
+        const { counted } = indexesOf(composedGrammar);
         const fs = yield* FileSystem.FileSystem;
         const directory = yield* xsdDirectory;
         const lines = new Map<string, readonly string[]>();
@@ -1546,15 +1561,18 @@ describe.skipIf(!cached)("the content grammar's sources", () => {
               }
             }
           });
-        for (const row of admission.rows) {
+        for (const row of admittedOf(content.contentModelOf, content.admissionIn)) {
           yield* check("Admission", row.version, admission.sourceOf(row));
         }
 
         // A model's rows are its families', each family's sourced to its own particles: every
         // position a family's model names in `Follow`, `Last` or `Symbol`.
-        const followed = Map.groupBy(content.follow.rows, ({ model }) => model);
+        const followed = Map.groupBy(followPairsOf(content), ({ model }) => model);
         const ended = Map.groupBy(content.last.rows, ({ model }) => model);
-        const shared = Map.groupBy(content.symbol.rows, ({ model }) => model);
+        const shared = Map.groupBy(
+          symbolRowsOf(content.symbolSetOf, content.symbolMember),
+          ({ model }) => model,
+        );
         const sharedOf = new Map(
           content.sharedModelOf.rows.map(({ model, parent, version }) => [
             `${version} ${parent}`,
@@ -1582,7 +1600,7 @@ describe.skipIf(!cached)("the content grammar's sources", () => {
         }
 
         for (const row of content.counted.rows) {
-          yield* check("Counted", row.version, content.counted.sourceOf(row));
+          yield* check("Counted", row.version, counted.sourceOf(row));
         }
 
         assert.isAbove(checked.size, 0);
@@ -1803,6 +1821,29 @@ const refusal = (model: ContentModel, capped: string): string =>
     onSuccess: () => "composed",
   });
 
+/**
+ * A toy cap of one kind in `p`'s model.
+ *
+ * @param kind - The kind it caps.
+ * @returns The edit.
+ */
+const capOf = (kind: string): ModelEdit => ({
+  _tag: "cap",
+  kind,
+  parent: "p",
+  source: "a toy cap",
+});
+
+/**
+ * A toy model's particle.
+ *
+ * @param model - The model, which holds element-only content.
+ * @param model.content - Its content.
+ * @returns Its particle.
+ */
+const particleOf = ({ content }: ContentModel) =>
+  content._tag === "element-only" ? content.particle : assert.fail("a toy model's particle");
+
 describe("the cap edit, which spec reading 130's LOM caps read (content.ts, cappedBy)", () => {
   it.effect(
     "holds a capped kind to one child of its family, beside the automaton, every family of at most 4 over 3 kinds, each cap of 1 or 2 kinds",
@@ -1846,7 +1887,7 @@ describe("the cap edit, which spec reading 130's LOM caps read (content.ts, capp
       }),
   );
 
-  it("refuses a cap of a kind its model names at two positions or beside another kind, and one of a kind it names nowhere", () => {
+  it("refuses a cap of a kind its model names at two positions or beside another kind, and finds none in a model that names its kind nowhere", () => {
     // Oracle: the edit's contract, a cap counts one position, which names the kind alone.
     const shared = toyModel(
       toyGroup("sequence", false, toyGroup("choice", true, toyElement("a", "b"), toyElement("c"))),
@@ -1865,7 +1906,11 @@ describe("the cap edit, which spec reading 130's LOM caps read (content.ts, capp
 
     assert.strictEqual(refusal(shared, "a"), "UncountedCap");
     assert.strictEqual(refusal(twice, "a"), "UncountedCap");
-    assert.strictEqual(refusal(without, "c"), "UnreadEdit");
+    // A cap of a kind the model names nowhere leaves the model as it is; `finds` is the tests'
+    // check, which the composition's test runs over every edit.
+    assert.isFalse(finds(particleOf(without), capOf("c")));
+    assert.isTrue(finds(particleOf(without), capOf("a")));
+    assert.strictEqual(refusal(without, "c"), "composed");
     assert.strictEqual(refusal(shared, "c"), "composed");
     assert.strictEqual(refusal(twice, "b"), "composed");
   });
@@ -1879,7 +1924,7 @@ describe("the installed automata", () => {
       // nothing with the construction. A position no family can reach, or none can leave
       // lawfully, would make an admitted kind a dead letter, which a content model never states.
       Effect.gen(function* trim() {
-        const { admission, content } = yield* grammar;
+        const { content } = yield* grammar;
         // Each model's automaton, which every family of it reads (`ContentModelOf`).
         const families = new Map<
           string,
@@ -1894,7 +1939,7 @@ describe("the installed automata", () => {
 
           return held;
         };
-        for (const { from, model, to } of content.follow.rows) {
+        for (const { from, model, to } of followPairsOf(content)) {
           const { edges } = familyOf(model);
           edges.set(from, (edges.get(from) ?? new Set()).add(to));
         }
@@ -1909,14 +1954,17 @@ describe("the installed automata", () => {
             model,
           ]),
         );
-        const sharedAt = Map.groupBy(content.symbol.rows, ({ model }) => model);
+        const sharedAt = Map.groupBy(
+          symbolRowsOf(content.symbolSetOf, content.symbolMember),
+          ({ model }) => model,
+        );
         const named = [
-          ...content.follow.rows.flatMap(({ from, model, to }) => [
+          ...followPairsOf(content).flatMap(({ from, model, to }) => [
             { model, position: from },
             { model, position: to },
           ]),
           ...content.last.rows,
-          ...admission.rows
+          ...admittedOf(content.contentModelOf, content.admissionIn)
             .filter(({ position }) => position !== "0")
             .map(({ parent, position, version }) => ({
               model: modelOf.get(`${version} ${parent}`) ?? "",
@@ -1972,6 +2020,138 @@ describe("the installed automata", () => {
       }),
     testTimeoutMs,
   );
+
+  it.effect(
+    "decide every child's position: from no state of a family's model do two of the positions its kind is named at follow",
+    () =>
+      // Oracle: the installed rows alone. A kind one position names is placed there; a kind several
+      // name is placed by the state, at the one of its `Symbol` positions (through `SharedModelOf`)
+      // that `Follow` allows from its predecessor's. Were two to follow one state, no state would
+      // decide the child's position, and an XSD's Unique Particle Attribution keeps a kind from that
+      // only where the kind carries what the XSD tells its particles apart by. The composition
+      // never checks it: the models are fixed, so this test is where a model that breaks it fails.
+      Effect.gen(function* decided() {
+        const { content } = yield* grammar;
+        const follows = new Set(
+          followPairsOf(content).map(({ from, model, to }) => `${model} ${from} ${to}`),
+        );
+        const positionsOf = new Map(
+          content.modelPositions.rows.map(({ model, positions }) => [model, positions]),
+        );
+        const symbolsOf = Map.groupBy(
+          symbolRowsOf(content.symbolSetOf, content.symbolMember),
+          ({ model }) => model,
+        );
+        const undecided = content.sharedModelOf.rows.flatMap(
+          ({ model: shared, parent, version }) => {
+            const model = Option.getOrThrow(contentModelOf(content, { parent, version }));
+            const states = Option.getOrThrow(Option.fromNullishOr(positionsOf.get(model)));
+            const byKind = Map.groupBy(
+              Option.getOrThrow(Option.fromNullishOr(symbolsOf.get(shared))),
+              ({ kind }) => kind,
+            );
+
+            return [...byKind].flatMap(([kind, named]) =>
+              Arr.range(0, states - 1).flatMap((from) => {
+                const next = named.filter(({ position }) =>
+                  follows.has(`${model} ${String(from)} ${position}`),
+                );
+
+                return next.length > 1
+                  ? [
+                      `${version} ${parent}: ${kind} from ${String(from)} at ${next.map(({ position }) => position).join(" and ")}`,
+                    ]
+                  : [];
+              }),
+            );
+          },
+        );
+
+        assert.isAbove(content.sharedModelOf.rows.length, 0);
+        assert.deepStrictEqual(undecided.slice(0, 20), []);
+      }),
+    testTimeoutMs,
+  );
+
+  it.effect(
+    "keep Unique Particle Attribution in every model of the composition, each reading's edits applied",
+    () =>
+      // Oracle: XML Schema 1.0 Part 1 §3.8.6, as `breachesOf` reads it. `sequencing.test.ts` reads
+      // the XSDs' own models; this reads every model the composition builds an automaton of, as
+      // `contentOf` builds it: the facets' own models among them, and every model a reading edits
+      // or restates. The composition never checks it: the models are fixed, so this test is where
+      // a model or a reading that breaks it fails.
+      Effect.gen(function* unique() {
+        const { kinds } = yield* grammar;
+        const namespaceOf = (kind: string) => namespaceOfKind(kinds, kind);
+        const edits = vocabularies.flatMap(({ facets }) => facets.content.edits);
+        const breaches = vocabularies
+          .flatMap((entry) => [...entry.models, ...entry.facets.content.models])
+          .flatMap(({ content, kind, versions }) =>
+            content._tag === "element-only" || content._tag === "mixed"
+              ? breachesOf(
+                  automatonOf(editedBy(content.particle, edits, kind)),
+                  namespaceOf,
+                  namespaceOf(kind),
+                ).map(
+                  (breach) => `${kind} in ${versions.join(" and ")}: ${Formatter.format(breach)}`,
+                )
+              : [],
+          );
+
+        assert.deepStrictEqual(breaches.slice(0, 20), []);
+      }),
+    testTimeoutMs,
+  );
+
+  it("find in every reading's edit what it names in its parent's model, as the edits before it leave the model", () => {
+    // Oracle: each edit's contract (`finds`): a leading kind, a capped or ending kind, the kind an
+    // edit admits another beside, is one its parent's model names; an edit that finds nothing
+    // leaves the model as it is, so it states nothing. The composition never checks it: the
+    // readings are fixed, so this test is where a reading that names the wrong kind or parent fails.
+    const edits = vocabularies.flatMap(({ facets }) => facets.content.edits);
+    const read = new Set<ModelEdit>();
+    for (const { content, kind } of vocabularies.flatMap((entry) => [
+      ...entry.models,
+      ...entry.facets.content.models,
+    ])) {
+      if (content._tag === "element-only" || content._tag === "mixed") {
+        const own = edits.filter(({ parent }) => parent === kind);
+        for (const [at, edit] of own.entries()) {
+          if (finds(editedBy(content.particle, own.slice(0, at), kind), edit)) {
+            read.add(edit);
+          }
+        }
+      }
+    }
+
+    assert.isAbove(edits.length, 0);
+    assert.deepStrictEqual(
+      edits.filter((edit) => !read.has(edit)).map(({ parent, source }) => `${parent}: ${source}`),
+      [],
+    );
+  });
+
+  it("list, in every reading's ending, all or none of the kinds of each position of its model", () => {
+    // Oracle: the ending's contract (`mixedEndingsOf`): a family's last state is its last child's
+    // position, so an ending that lists some of one position's kinds cannot tell a family that
+    // ends there with one of them from one that ends with another. The composition never checks
+    // it: the readings are fixed, so this test is where such an ending fails.
+    const edits = vocabularies.flatMap(({ facets }) => facets.content.edits);
+    const mixed = vocabularies
+      .flatMap((entry) => [...entry.models, ...entry.facets.content.models])
+      .flatMap(({ content, kind, versions }) =>
+        content._tag === "element-only" || content._tag === "mixed"
+          ? mixedEndingsOf(automatonOf(editedBy(content.particle, edits, kind)), edits, kind).map(
+              ({ ending, kinds }) =>
+                `${kind} in ${versions.join(" and ")}: ${ending.source} lists part of ${kinds.join(", ")}`,
+            )
+          : [],
+      );
+
+    assert.isTrue(edits.some(({ _tag }) => _tag === "ends"));
+    assert.deepStrictEqual(mixed, []);
+  });
 });
 
 describe.skipIf(!cached)("spec reading 40 in ssml:speak", () => {
@@ -2189,7 +2369,7 @@ const automatonRowsOf = (
   [
     ...Option.toArray(contentModelOf(composedGrammar.content, { parent, version })).flatMap(
       (model) => [
-        ...composedGrammar.content.follow.rows
+        ...followPairsOf(composedGrammar.content)
           .filter((row) => row.model === model)
           .map(({ from, to }) => `follow ${from} ${to}`),
         ...composedGrammar.content.last.rows
@@ -2197,7 +2377,7 @@ const automatonRowsOf = (
           .map(({ position }) => `last ${position}`),
       ],
     ),
-    ...composedGrammar.admission.rows
+    ...admittedOf(composedGrammar.content.contentModelOf, composedGrammar.content.admissionIn)
       .filter((row) => row.version === version && row.parent === parent)
       .map(({ child, position }) => `admits ${child} at ${position}`),
   ].toSorted();
@@ -2270,7 +2450,10 @@ const widenedProbesOf = (input: {
 
   return Option.toArray(reading.particle).flatMap((particle) => {
     const named = new Set(elementsOf(particle).flatMap(kindOf));
-    const held = composedGrammar.admission.rows
+    const held = admittedOf(
+      composedGrammar.content.contentModelOf,
+      composedGrammar.content.admissionIn,
+    )
       .filter(
         (row) =>
           row.version === version &&

@@ -1,10 +1,11 @@
 /**
  * The delegations the hubs consult the test-feature table through, each the one site of its hub:
- * {@link featureAt} and {@link parseFeature} for the test model, {@link sequencedBy} for the
- * session's start, {@link gatedBy} for its moves and submissions, and {@link deliveredBy} for the
- * package. Each takes the table, so a test can hand one holding a module that has landed, and each
- * folds the modules in the table's order. This is a browser module, reached from the session: it
- * value-imports from `effect` only `Option`.
+ * {@link featureAt} and {@link parseFeature} for the test model, {@link sequencedBy} for the session's
+ * start, {@link gatedBy} for its moves and submissions, {@link enteredBy} for each place it lands on,
+ * {@link deliveredBy} for the package, and {@link presentedBy} for the session's views. Each takes
+ * the table, so a test can hand one holding a module that has landed, and each folds the modules in
+ * the table's order. This is a browser module, reached from the session: it value-imports from
+ * `effect` only `Option`.
  *
  * @module
  */
@@ -13,10 +14,14 @@ import type { SourceElement } from "#plate/document/source.ts";
 import type { Test } from "#plate/model/test.ts";
 import type {
   DeliveryContext,
+  EnterContext,
+  EnterVerdict,
   FeatureRefusal,
   GateContext,
+  PresentContext,
   SequenceContext,
   SequencePlace,
+  TestContent,
   TestFeatureKey,
   TestFeatureModule,
   TimedScope,
@@ -24,11 +29,13 @@ import type {
 import type { TestFeatureTable } from "#plate/test-features/table.ts";
 
 /**
- * What a gate decides for an intent: a feature's refusal, the sequence index a move reaches in a
- * feature's place of the modes' target, the timed scope whose time has run out, which the hub
- * expires in place of the intent, or nothing.
+ * What a gate decides for an intent: a feature's refusal, the sequence index the intent reaches in
+ * a feature's place of the modes' target, the timed scope whose time has run out, which the hub
+ * expires in place of the intent, the scope the session leaves, which the hub exits without
+ * submitting or locking anything, or nothing.
  */
 export type Gated =
+  | { readonly kind: "exit"; readonly scope: TimedScope }
   | { readonly kind: "expire"; readonly scope: TimedScope }
   | { readonly kind: "refused"; readonly refusal: FeatureRefusal }
   | { readonly kind: "target"; readonly sequenceIndex: number };
@@ -72,8 +79,8 @@ export const sequencedBy = (
 
 /**
  * Ask each module, in order, what it does with an intent, and give the first answer: a refusal
- * under the module's key, a move's target, or the expiry of a timed scope, passed through as the
- * module gave it.
+ * under the module's key, a target, the expiry of a timed scope or the exit from one, passed
+ * through as the module gave it.
  *
  * @param features The table.
  * @param context The intent, the session, the test, and the time where the hub has one.
@@ -102,6 +109,29 @@ export const gatedBy = (features: TestFeatureTable, context: GateContext): Optio
 };
 
 /**
+ * Ask each module, in order, what it does with a place the session is about to present, and give
+ * the first answer: a skip or an exit, passed through as the module gave it.
+ *
+ * @param features The table.
+ * @param context The place's sequence index, the session with its item not yet presented, the
+ *   test, the items and the time.
+ * @returns The first module's answer, none when every module lets the place be entered.
+ */
+export const enteredBy = (
+  features: TestFeatureTable,
+  context: EnterContext,
+): Option.Option<EnterVerdict> => {
+  for (const module of features) {
+    const verdict = module.enter(context);
+    if (Option.isSome(verdict)) {
+      return verdict;
+    }
+  }
+
+  return Option.none();
+};
+
+/**
  * Give the test a package delivers: each module's `deliver` over the test the one before it gave.
  *
  * @param features The table.
@@ -116,3 +146,19 @@ export const deliveredBy = (features: TestFeatureTable, context: DeliveryContext
 
   return test;
 };
+
+/**
+ * Give the content the modules present at a place: each module's `present` nodes, kept with the
+ * module's key, in the table's order and each module's nodes in the order it gave them.
+ *
+ * @param features The table.
+ * @param context The place, the session and the test.
+ * @returns The content to show at the place, none when no module presents any.
+ */
+export const presentedBy = (
+  features: TestFeatureTable,
+  context: PresentContext,
+): readonly TestContent[] =>
+  features.flatMap((module) =>
+    module.present(context).map((node): TestContent => ({ key: module.key, node })),
+  );

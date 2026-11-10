@@ -19,6 +19,7 @@ import { Array as Arr, Data, Option, Result } from "effect";
 import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord } from "#plate/codec/record.ts";
 import type { Configuration } from "#plate/configuration.ts";
+import { adaptivePolicy } from "#plate/engine/adaptive.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { runOutcomes, testScopeOf } from "#plate/engine/outcome.ts";
 import { drawStream, outcomeLabel } from "#plate/engine/random.ts";
@@ -546,11 +547,14 @@ export const partEnded = (
  * Submit the current item of an individual part: process one attempt over its responses.
  *
  * The step is saved first. Then, in order: a closed test is `test-closed`; a simultaneous part is
- * `wrong-submission-mode`; an item whose processed attempts, the record's `numAttempts`, have
- * reached its effective attempt limit above 0 is `attempts-exhausted`, and an item closed otherwise
- * `item-closed`; under `allow-skipping` false an item whose every response a page can post and the
- * candidate can give is NULL or its default, the one its record's template processing set or else
- * its declared one, is `skipping-not-allowed`, a record response counted beside the others; under
+ * `wrong-submission-mode`; the item is looked up among the items (`deliveredItem`), so the adaptive
+ * policy (`adaptivePolicy` in `#plate/engine/adaptive.ts`) can be given whether it is adaptive; an
+ * item whose processed attempts, the record's `numAttempts`, have reached the attempt limit the
+ * policy's `limit` gives for its effective one, above 0, is `attempts-exhausted`, and an item
+ * closed otherwise, its view `disabled`, which consults the policy's `closed`, is `item-closed`;
+ * under `allow-skipping` false an item whose every response a page can post and the candidate can
+ * give is NULL or its default, the one its record's template processing set or else its declared
+ * one, is `skipping-not-allowed`, a record response counted beside the others; under
  * `validate-responses` true, responses `checkResponses` gives messages for, a record response's
  * typed text among them, are `responses-invalid`. `checkResponses` judges them under the item's
  * record, the template values its page was shown with, so a choice its template hides is refused
@@ -600,7 +604,11 @@ export const submitItem = (
       return yield* refuse("wrong-submission-mode");
     }
 
-    const limit = view.configuration.maxAttempts;
+    const accepted = yield* deliveredItem(items, saved, item);
+    const limit = adaptivePolicy.limit(
+      accepted.item.adaptive ?? false,
+      view.configuration.maxAttempts,
+    );
     if (limit > 0 && item.record.numAttempts >= limit) {
       return yield* refuse("attempts-exhausted");
     }
@@ -609,7 +617,6 @@ export const submitItem = (
       return yield* refuse("item-closed");
     }
 
-    const accepted = yield* deliveredItem(items, saved, item);
     const values = valuesOf(item);
     if (
       !view.configuration.allowSkipping &&

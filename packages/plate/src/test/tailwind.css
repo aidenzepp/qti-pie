@@ -1,0 +1,3 @@
+/* gate-tailwind (issue #291): the reference app's stylesheet shape, linked by tailwind.dom.test.tsx. */
+@import "tailwindcss";
+@import "@qti-pie/plate/styles.css";

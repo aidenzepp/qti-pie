@@ -10,6 +10,15 @@
  * session lifecycle (`begin`, `startTest`, `advance`, `results`) is `#plate/effect/session.ts`'s.
  * Nothing outside `src/effect/` imports this module.
  *
+ * The mirrors that do an item's or a session's work run in a span named for them, `plate.render`
+ * and the rest, whose attributes are identifiers, counts and fixed vocabulary, and log at the debug
+ * level, after it, an instance drawn for the caller. No span attribute or log holds a response, a
+ * record value, the item's body or HTML, a stored form or a validation message's text, since a
+ * program may export its telemetry where the page's data must not go; a failure is recorded by its
+ * span, never logged. The short glue (`current`, `itemView`, `permits`, `allowedIntents`,
+ * `navigationState`, `renderNavigation`, `renderTestContent`, `decode` and `acceptedItem`) runs in
+ * no span of its own.
+ *
  * @module
  */
 import { Data, Effect, Option } from "effect";
@@ -85,6 +94,8 @@ import type {
   ResponsesRefused,
 } from "#plate/score.ts";
 import type { IntentRefused, StepResponseMisfit } from "#plate/session/advance.ts";
+import { renderTestContent as plainRenderTestContent } from "#plate/session/content.ts";
+import type { TestContentOptions } from "#plate/session/content.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { allowedIntents as plainAllowedIntents } from "#plate/session/intents.ts";
 import type { Intent, Responses, TestSession } from "#plate/session/session.ts";
@@ -102,6 +113,7 @@ import type {
   Permits,
   TestNotDeliverable,
 } from "#plate/session/start.ts";
+import type { TestContent } from "#plate/test-features/contract.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import { acceptedItem as plainAcceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest, Verdict, VerdictKind } from "#plate/validate/verdict.ts";
@@ -186,13 +198,26 @@ export type PlateError =
   | UnmappedResponseError;
 
 /**
+ * Draw an instance through `Randomness`, and log at the debug level that an instance was drawn,
+ * under the item's identifier and never the instance.
+ *
+ * @param identifier The item's `item.identifier` annotation.
+ * @returns The drawn instance.
+ */
+const drawnInstanceOf = (identifier: Readonly<Record<string, string>>): Effect.Effect<string> =>
+  Effect.tap(drawnInstance, () =>
+    Effect.logDebug("an instance was drawn").pipe(Effect.annotateLogs(identifier)),
+  );
+
+/**
  * Render an item, as the plain `render` does, under the {@link Configuration} service, drawing an
  * instance through `Randomness` when the host gives none.
  *
  * A host's instance is used as given, and then nothing is drawn. Absent, it is
  * {@link drawnInstance}'s, a lowercase UUID v4 in `drawInstance`'s format, drawn before the plain
  * call, so a render that fails has still drawn one; the same item, configuration, options and drawn
- * bytes give the HTML the plain `render` gives under that instance.
+ * bytes give the HTML the plain `render` gives under that instance. Its span, `plate.render`,
+ * carries `item.identifier` and `render.mode`, and a drawn instance is logged at the debug level.
  *
  * @example
  *   render(redacted, { mode: "review" }).pipe(Effect.provide(ConfigurationFromEnv));
@@ -204,7 +229,7 @@ export type PlateError =
  *   {@link NotRedacted}, {@link UnknownPart}, {@link InvalidInstance}, {@link PartSwapRefused},
  *   {@link InvalidHeadingLevel}, {@link MarkupRefused} or {@link OutputTooLarge}.
  */
-export const render = Effect.fnUntraced(function* render(
+export const render = Effect.fn("plate.render")(function* render(
   item: Redacted,
   options: Options = {},
 ): Effect.fn.Return<
@@ -218,15 +243,19 @@ export const render = Effect.fnUntraced(function* render(
   | UnknownPart,
   Configuration
 > {
+  const identifier = { "item.identifier": item.identifier };
+  // The plain render's own default mode, so the attribute names the mode the HTML was written in.
+  yield* Effect.annotateCurrentSpan({ ...identifier, "render.mode": options.mode ?? "answering" });
+
   const configuration = yield* Configuration;
-  const instance = options.instance ?? (yield* drawnInstance);
+  const instance = options.instance ?? (yield* drawnInstanceOf(identifier));
 
   return yield* Effect.fromResult(plainRender(item, configuration, { ...options, instance }));
 });
 
 /**
  * Render the Status part, as the plain `renderStatus` does, under the {@link Configuration}
- * service.
+ * service. Its span, `plate.renderStatus`, carries `status.heading`, the heading's vocabulary key.
  *
  * @param input The author's Status input.
  * @param options The part overrides, none by default.
@@ -234,7 +263,7 @@ export const render = Effect.fnUntraced(function* render(
  *   {@link InvalidInstance}, {@link UnknownPart}, {@link InvalidHeadingLevel},
  *   {@link PartSwapRefused} or {@link MarkupRefused}.
  */
-export const renderStatus = Effect.fnUntraced(function* renderStatus(
+export const renderStatus = Effect.fn("plate.renderStatus")(function* renderStatus(
   input: StatusInput,
   options: Pick<Options, "parts"> = {},
 ): Effect.fn.Return<
@@ -242,6 +271,8 @@ export const renderStatus = Effect.fnUntraced(function* renderStatus(
   InvalidHeadingLevel | InvalidInstance | MarkupRefused | PartSwapRefused | UnknownPart,
   Configuration
 > {
+  yield* Effect.annotateCurrentSpan("status.heading", input.heading);
+
   const configuration = yield* Configuration;
 
   return yield* Effect.fromResult(plainRenderStatus(input, configuration, options));
@@ -263,6 +294,37 @@ export const renderNavigation = Effect.fnUntraced(function* renderNavigation(
   const configuration = yield* Configuration;
 
   return yield* Effect.fromResult(plainRenderNavigation(state, configuration, options));
+});
+
+/**
+ * Render the content a test shows beside an item or beside the summary, as the plain
+ * `renderTestContent` does, under the {@link Configuration} service, drawing an instance through
+ * `Randomness` when the host gives none.
+ *
+ * A host's instance is used as given, and then nothing is drawn. Absent, it is
+ * {@link drawnInstance}'s, drawn before the plain call and logged at the debug level, so the same
+ * content, configuration, options and drawn bytes give the HTML the plain call gives under that
+ * instance.
+ *
+ * @param content The `content` of an item view or of the summary.
+ * @param options The author's further inputs, none by default.
+ * @returns The Root's HTML and the instance it used, or the plain `renderTestContent`'s failure:
+ *   {@link UnknownPart}, {@link InvalidInstance}, {@link PartSwapRefused} or {@link MarkupRefused}.
+ */
+export const renderTestContent = Effect.fnUntraced(function* renderTestContent(
+  content: readonly TestContent[],
+  options: TestContentOptions = {},
+): Effect.fn.Return<
+  Rendered,
+  InvalidInstance | MarkupRefused | PartSwapRefused | UnknownPart,
+  Configuration
+> {
+  const configuration = yield* Configuration;
+  const instance = options.instance ?? (yield* drawnInstanceOf({}));
+
+  return yield* Effect.fromResult(
+    plainRenderTestContent(content, configuration, { ...options, instance }),
+  );
 });
 
 /**
@@ -304,57 +366,70 @@ export const itemView = Effect.fnUntraced(function* itemView(
 });
 
 /**
- * Read a redacted item from its JSON form, as the plain `decodeRedacted` does.
+ * Read a redacted item from its JSON form, as the plain `decodeRedacted` does. Its span,
+ * `plate.decodeRedacted`, carries the item's `item.identifier` once the form is read; a form it
+ * refuses names none.
  *
  * @param input The JSON form, as the page received it.
  * @returns The redacted item, marked as `render` requires, or {@link InvalidRedacted} at stage
  *   `decode`.
  */
-export const decodeRedacted = Effect.fnUntraced(function* decodeRedacted(
+export const decodeRedacted = Effect.fn("plate.decodeRedacted")(function* decodeRedacted(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The page receives the JSON form as any value, and the plain decodeRedacted this lifts is the check that parses it.
   input: unknown,
 ): Effect.fn.Return<Redacted, InvalidRedacted> {
-  return yield* Effect.fromResult(plainDecodeRedacted(input));
+  const item = yield* Effect.fromResult(plainDecodeRedacted(input));
+  yield* Effect.annotateCurrentSpan("item.identifier", item.identifier);
+
+  return item;
 });
 
 /**
  * Write a redacted item in the JSON form a host sends to a page, as the plain `encodeRedacted`
- * does.
+ * does. Its span, `plate.encodeRedacted`, carries `item.identifier`.
  *
  * @param item The item `redact` gave.
  * @returns The JSON form, or {@link InvalidRedacted} at stage `encode`.
  */
-export const encodeRedacted = Effect.fnUntraced(function* encodeRedacted(
+export const encodeRedacted = Effect.fn("plate.encodeRedacted")(function* encodeRedacted(
   item: Redacted,
 ): Effect.fn.Return<RedactedJson, InvalidRedacted> {
+  yield* Effect.annotateCurrentSpan("item.identifier", item.identifier);
+
   return yield* Effect.fromResult(plainEncodeRedacted(item));
 });
 
 /**
- * Read a stored test session back, as the plain `decodeSession` does.
+ * Read a stored test session back, as the plain `decodeSession` does. Its span,
+ * `plate.decodeSession`, carries the test's `test.identifier`.
  *
  * @param input The stored session, as the host returned it.
  * @param test The test the session must belong to: the `AcceptedTest` `check` gave.
  * @returns The session, or the plain `decodeSession`'s failure: {@link SessionMismatch} or
  *   {@link InvalidSession} at stage `decode`.
  */
-export const decodeSession = Effect.fnUntraced(function* decodeSession(
+export const decodeSession = Effect.fn("plate.decodeSession")(function* decodeSession(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The host stores the session and hands it back as any value, and the plain decodeSession this lifts is the check that parses it.
   input: unknown,
   test: SessionTest,
 ): Effect.fn.Return<TestSession, InvalidSession | SessionMismatch> {
+  yield* Effect.annotateCurrentSpan("test.identifier", test.test.identifier);
+
   return yield* Effect.fromResult(plainDecodeSession(input, test));
 });
 
 /**
- * Write a test session in the form the host stores, as the plain `encodeSession` does.
+ * Write a test session in the form the host stores, as the plain `encodeSession` does. Its span,
+ * `plate.encodeSession`, carries `test.identifier`.
  *
  * @param session The session.
  * @returns The stored session, or {@link InvalidSession} at stage `encode`.
  */
-export const encodeSession = Effect.fnUntraced(function* encodeSession(
+export const encodeSession = Effect.fn("plate.encodeSession")(function* encodeSession(
   session: TestSession,
 ): Effect.fn.Return<StoredTestSession, InvalidSession> {
+  yield* Effect.annotateCurrentSpan("test.identifier", session.test);
+
   return yield* Effect.fromResult(plainEncodeSession(session));
 });
 
@@ -435,22 +510,26 @@ export const navigationState = Effect.fnUntraced(function* navigationState(
 });
 
 /**
- * Read an item's stored record back, as the plain `restore` does.
+ * Read an item's stored record back, as the plain `restore` does. Its span, `plate.restore`,
+ * carries `item.identifier`.
  *
  * @param document The document `check` accepted, the item the record is for.
  * @param record The record `begin` or the last `score` returned, as the host stored it.
  * @returns The decoded record and its responses, or the plain `restore`'s failure:
  *   {@link InvalidRecord} at stage `decode` or {@link RecordMismatch}.
  */
-export const restore = Effect.fnUntraced(function* restore(
+export const restore = Effect.fn("plate.restore")(function* restore(
   document: Accepted,
   record: StoredRecord,
 ): Effect.fn.Return<Restored, InvalidRecord | RecordMismatch> {
+  yield* Effect.annotateCurrentSpan("item.identifier", document.item.identifier);
+
   return yield* Effect.fromResult(plainRestore(document, record));
 });
 
 /**
- * Score an attempt at an item, as the plain `score` does.
+ * Score an attempt at an item, as the plain `score` does. Its span, `plate.score`, carries
+ * `item.identifier` and `responses.count`, how many responses were posted, never their values.
  *
  * @param document The document `check` accepted.
  * @param responses The candidate's responses by identifier.
@@ -460,7 +539,7 @@ export const restore = Effect.fnUntraced(function* restore(
  *   {@link RecordMismatch}, {@link RecordRequired}, {@link InvalidResponses},
  *   {@link ResponsesRefused} or an {@link EngineFailure}.
  */
-export const score = Effect.fnUntraced(function* score(
+export const score = Effect.fn("plate.score")(function* score(
   document: Accepted,
   responses: Responses,
   record?: StoredRecord,
@@ -473,6 +552,11 @@ export const score = Effect.fnUntraced(function* score(
   | RecordRequired
   | ResponsesRefused
 > {
+  yield* Effect.annotateCurrentSpan({
+    "item.identifier": document.item.identifier,
+    "responses.count": Object.keys(responses).length,
+  });
+
   return yield* Effect.fromResult(plainScore(document, responses, record));
 });
 
@@ -512,17 +596,19 @@ export const permits = Effect.fnUntraced(function* permits(
 /**
  * Copy an accepted item into the form the page may know, as the plain `redact` does, holding its
  * printed text to the {@link Configuration} service's `outputBudget`, the budget {@link render}
- * holds its HTML to. It never fails.
+ * holds its HTML to. It never fails. Its span, `plate.redact`, carries `item.identifier`.
  *
  * @param document The document `check` accepted.
  * @param record The attempt's template values and outcome values, such as the `record` of the
  *   plain `Restored`; none to show the item as it reads with no record.
  * @returns The redacted item, the one input {@link render} takes.
  */
-export const redact = Effect.fnUntraced(function* redact(
+export const redact = Effect.fn("plate.redact")(function* redact(
   document: Accepted,
   record?: RedactRecord,
 ): Effect.fn.Return<Redacted, never, Configuration> {
+  yield* Effect.annotateCurrentSpan("item.identifier", document.item.identifier);
+
   const configuration = yield* Configuration;
 
   return plainRedact(document, record, configuration);
@@ -531,7 +617,8 @@ export const redact = Effect.fnUntraced(function* redact(
 /**
  * Validate responses as the item's interactions do, without scoring them, as the plain
  * `checkResponses` does, under the {@link Configuration} service, which gives the locale and
- * `validateResponses`. It never fails: a response it refuses is a message in its value.
+ * `validateResponses`. It never fails: a response it refuses is a message in its value. Its span,
+ * `plate.checkResponses`, carries `item.identifier` and `messages.count`, never a message's text.
  *
  * @param document The document `check` accepted.
  * @param responses The responses by identifier, each a value, a record or the `Malformed` `decode`
@@ -541,14 +628,18 @@ export const redact = Effect.fnUntraced(function* redact(
  * @returns Every message of the interactions shown, in their document order; none when all are
  *   accepted.
  */
-export const checkResponses = Effect.fnUntraced(function* checkResponses(
+export const checkResponses = Effect.fn("plate.checkResponses")(function* checkResponses(
   document: Accepted,
   responses: Readonly<Record<string, Malformed | ResponseValue>>,
   record?: ResponsesRecord,
 ): Effect.fn.Return<readonly ValidationMessage[], never, Configuration> {
-  const configuration = yield* Configuration;
+  yield* Effect.annotateCurrentSpan("item.identifier", document.item.identifier);
 
-  return plainCheckResponses(document, responses, configuration, record);
+  const configuration = yield* Configuration;
+  const messages = plainCheckResponses(document, responses, configuration, record);
+  yield* Effect.annotateCurrentSpan("messages.count", messages.length);
+
+  return messages;
 });
 
 /**

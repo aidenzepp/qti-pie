@@ -7,8 +7,9 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { elementsOf } from "#plate/model/attributes.ts";
 import { buildItem } from "#plate/model/item.ts";
-import type { Rule } from "#plate/model/expression.ts";
+import type { Expression, Rule } from "#plate/model/expression.ts";
 import type { BodyNode, UnsupportedFeature } from "#plate/model/item.ts";
 import { absentControl, buildTest, withLtiLinks } from "#plate/model/test.ts";
 import type {
@@ -542,7 +543,7 @@ describe("buildTest", () => {
   );
 
   it.effect(
-    "[T-1] holds a test outcome of base type duration, its default read as seconds, and marks one of base type file",
+    "[T-1] [W0-AY] holds a test outcome of base type duration, its default read as seconds, and one of base type file, unmarked",
     () =>
       Effect.gen(function* holdsDurationOutcome() {
         const built = yield* Effect.fromResult(
@@ -555,7 +556,8 @@ describe("buildTest", () => {
           ),
         );
 
-        assert.deepStrictEqual([...built.outcomes.keys()], ["TIME"]);
+        // The file outcome was the mark `base-type="file"` before `[W0-AY]`; a file is held now.
+        assert.deepStrictEqual([...built.outcomes.keys()], ["TIME", "UPLOAD"]);
         assert.deepStrictEqual(built.outcomes.get("TIME")?.baseType, "duration");
         assert.deepStrictEqual(
           built.outcomes.get("TIME")?.defaultValue,
@@ -565,9 +567,9 @@ describe("buildTest", () => {
             values: [{ baseType: "duration", value: 90.5 }],
           }),
         );
-        assert.deepStrictEqual(built.unsupported, [
-          mark('base-type="file"', `${root}/qti-outcome-declaration[2]`),
-        ]);
+        assert.deepStrictEqual(built.outcomes.get("UPLOAD")?.baseType, "file");
+        assert.deepStrictEqual(built.outcomes.get("UPLOAD")?.defaultValue, Option.none());
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 
@@ -1710,6 +1712,95 @@ describe("withLtiLinks", () => {
 
         assert.deepStrictEqual(linked.outcomeProcessing, built.outcomeProcessing);
         assert.deepStrictEqual(linked.unsupported, [mark("lti-link", ref)]);
+      }),
+  );
+});
+
+/**
+ * The table of stubs with a pre-condition module, landed for this test alone, whose `parse` reads
+ * its element's one child through the context's `expression` and records what it gave.
+ *
+ * @param into Where each read is recorded.
+ * @returns The table.
+ */
+const readingPreConditions = (
+  into: Result.Result<Option.Option<Expression>, Refusal>[],
+): TestFeatureTable => {
+  const node = { read: true };
+  const reading: TestFeatureModule<"qti-pre-condition", typeof node> = {
+    ...stub({
+      element: "qti-pre-condition",
+      feature: [],
+      issue: "m5-05",
+      key: "qti-pre-condition",
+      namespace: qtiNamespace,
+    }),
+    implemented: true,
+    parse: (element, context) => {
+      const [child] = elementsOf(element);
+      const read: Result.Result<Option.Option<Expression>, Refusal> = child === undefined
+        ? context.mark("qti-pre-condition")
+        : context.expression(child);
+      into.push(read);
+
+      return read.pipe(Result.map((expression) => expression.pipe(Option.map(() => node))));
+    },
+  };
+
+  return testFeatures.map((module) => (module.key === "qti-pre-condition" ? reading : module));
+};
+
+describe("a test-feature module that reads an expression", () => {
+  it.effect(
+    "[W0-BE] a pre-condition's expression reaches a module's parse as an expression: a qti-base-value of boolean true reads as the base-value kind",
+    () =>
+      Effect.gen(function* readsExpression() {
+        const reads: Result.Result<Option.Option<Expression>, Refusal>[] = [];
+        const document = test([
+          part("P1", "linear", "individual", [
+            el(
+              "qti-pre-condition",
+              [],
+              [el("qti-base-value", [attr("base-type", "boolean")], [text("true")])],
+            ),
+            section("S1", [itemRef("I1", "items/one.xml")]),
+          ]),
+        ]);
+        const built = yield* Effect.fromResult(buildTest(document, readingPreConditions(reads)));
+        const [read] = reads;
+
+        assert.strictEqual(reads.length, 1);
+        assert.isTrue(read !== undefined && Result.isSuccess(read));
+        if (read !== undefined && Result.isSuccess(read)) {
+          assert.isTrue(Option.isSome(read.success));
+          assert.strictEqual(Option.getOrUndefined(read.success)?.kind, "base-value");
+        }
+
+        const nodes: readonly unknown[] | undefined = built.features?.["qti-pre-condition"];
+
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(nodes, [{ read: true }]);
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] an element the engine does not run under a pre-condition is marked where the walk's marks go",
+    () =>
+      Effect.gen(function* marksUnread() {
+        const reads: Result.Result<Option.Option<Expression>, Refusal>[] = [];
+        const document = test([
+          part("P1", "linear", "individual", [
+            el("qti-pre-condition", [], [el("qti-custom-thing")]),
+            section("S1", [itemRef("I1", "items/one.xml")]),
+          ]),
+        ]);
+        const built = yield* Effect.fromResult(buildTest(document, readingPreConditions(reads)));
+
+        assert.deepStrictEqual(reads, [Result.succeed(Option.none())]);
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-custom-thing", `${firstPart}/qti-pre-condition/qti-custom-thing`),
+        ]);
+        assert.isUndefined(built.features);
       }),
   );
 });
