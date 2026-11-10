@@ -16,6 +16,7 @@
 import { Array as Arr, Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import { appendSegments, decodeSegment } from "#plate/document/href.ts";
+import { adaptivePolicy } from "#plate/engine/adaptive.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { testScopeOf } from "#plate/engine/outcome.ts";
@@ -1024,6 +1025,7 @@ export const startTest = (
           deliverable(items, test.test.identifier, ref.identifier, namedDocument(test.test, ref)),
           (accepted) => {
             const item: SessionItem = {
+              adaptive: accepted.item.adaptive ?? false,
               datestamp,
               duration: 0,
               firstOutcomes: Option.none(),
@@ -1170,8 +1172,11 @@ const shuffledBy = (
  * Derive an item's place, session control, configuration and whether it is closed.
  *
  * An item is closed when the test has closed, when its part has ended, when a timed scope that
- * holds it has expired (the item is `locked`), or when its effective attempt limit is above 0 and
- * the record's `numAttempts`, the count of processed attempts, has reached it.
+ * holds it has expired (the item is `locked`), or when the adaptive policy says its attempts have
+ * closed it (`adaptivePolicy.closed` in `#plate/engine/adaptive.ts`, given whether the item is
+ * adaptive, its record and its effective attempt limit): for a non-adaptive item, and for every
+ * item while the policy is a stub, when the limit is above 0 and the record's `numAttempts`, the
+ * count of processed attempts, has reached it.
  *
  * @param index The test, indexed for the session.
  * @param session The session.
@@ -1191,14 +1196,13 @@ const inspect = (
     const control = yield* lookUp(index, index.controls, item.ref);
     const configured = shuffledBy(itemConfiguration(configuration, control), session.shuffleSeed);
     const ended = index.ended.has(place.part.identifier);
-    const limit = configured.maxAttempts;
 
     return {
       closed:
         session.status === "closed" ||
         ended ||
         item.locked ||
-        (limit > 0 && item.record.numAttempts >= limit),
+        adaptivePolicy.closed(item.adaptive, item.record, configured.maxAttempts),
       configuration: configured,
       control,
       place,
