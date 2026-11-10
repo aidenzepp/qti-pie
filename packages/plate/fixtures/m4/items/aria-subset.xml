@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A hand-written item whose body, prompt and choice content carry each of the six ARIA attributes the XSD declares, with ID references to elements of the same item. -->
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m4-aria-subset" title="ARIA subset" adaptive="false" time-dependent="false" xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>B</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <h2 id="pool-title" class="probe-title">Tide pools</h2>
+    <p id="pool-intro" class="probe-intro">A tide pool keeps sea water in a hollow of the rock after the tide goes out.</p>
+    <p id="pool-hint" class="probe-hint">Compare the water line on each rock before you choose.</p>
+    <div id="pool-region" class="probe-region" role="region" aria-labelledby="pool-title pool-intro" aria-describedby="pool-hint">
+      <p id="pool-status" class="probe-status" role="status" aria-live="polite">The tide is out.</p>
+      <p id="pool-group" class="probe-group" role="group" aria-label="Depth readings">Three readings follow.</p>
+      <span id="pool-wave" class="probe-wave" aria-hidden="true">~ ~ ~</span>
+    </div>
+    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-prompt>Which pool is <span id="prompt-depth" class="probe-prompt" aria-label="deepest pool">the deepest</span> at low tide?</qti-prompt>
+      <qti-simple-choice identifier="A">The north pool</qti-simple-choice>
+      <qti-simple-choice identifier="B"><span id="choice-middle" class="probe-choice" aria-describedby="pool-hint">The middle pool</span></qti-simple-choice>
+      <qti-simple-choice identifier="C">The south pool</qti-simple-choice>
+    </qti-choice-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+</qti-assessment-item>
