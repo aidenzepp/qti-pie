@@ -1621,7 +1621,7 @@ describe("checkResponses", () => {
         const unknown = { response, text: message("en", "unknownChoice") };
         const hiding = visibleAs("C");
         const revealing = visibleAs("B");
-        const redacted = redactItem(accepted.item, { outcomes: {}, ...hiding });
+        const redacted = redactItem(accepted.item, { numAttempts: 0, outcomes: {}, ...hiding });
 
         assert.deepStrictEqual(
           choiceIn(payload(redacted, answering)).choices.map(({ identifier }) => identifier),

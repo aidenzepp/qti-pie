@@ -149,6 +149,7 @@ const valuesOf = (item: Item, state: Option.Option<RecordState>): Option.Option<
   Option.match(state, {
     onNone: () =>
       Option.some({
+        numAttempts: 0,
         outcomes: outcomeDefaults(item),
         templates: unrunTemplateProcessing(item)
           ? {}

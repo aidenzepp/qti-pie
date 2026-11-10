@@ -57,9 +57,11 @@ export interface ItemRecord {
 
 /**
  * The part of an {@link ItemRecord} `redact` reads: the outcomes and the template values it shows
- * an item by. It holds no seed, so nothing redacted can redraw the values.
+ * an item by, and the count of attempts processed, which tells a content module whether the
+ * response processing it shows feedback for has run. It holds no seed, so nothing redacted can
+ * redraw the values.
  */
-export type RedactRecord = Pick<ItemRecord, "outcomes" | "templates">;
+export type RedactRecord = Pick<ItemRecord, "numAttempts" | "outcomes" | "templates">;
 
 /**
  * The part of an {@link ItemRecord} `checkResponses` reads: the template values that decide which

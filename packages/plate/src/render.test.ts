@@ -1,8 +1,9 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Predicate, Result, Struct } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
-import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
+import type { ItemContentModule } from "#plate/content/contract.ts";
+import { attr, doc, el, qtiNamespace, text as sourceText } from "#plate/document/source.ts";
 import type { SourceDocument } from "#plate/document/source.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
@@ -1245,6 +1246,7 @@ describe("redact, a printed variable", () => {
     Effect.gen(function* printsRecorded() {
       const configuration = yield* defaults;
       const recorded = redact(acceptForTest(counting), {
+        numAttempts: 0,
         outcomes: {},
         templates: { N: one({ baseType: "integer", value: 7n }) },
       });
@@ -1376,6 +1378,7 @@ describe("render, the output budget", () => {
    * A record whose `S` is {@link sprawlingLength} characters long.
    */
   const sprawlingRecord: RedactRecord = {
+    numAttempts: 0,
     outcomes: {},
     templates: { S: one({ baseType: "string", value: "y".repeat(sprawlingLength) }) },
   };
@@ -1424,6 +1427,7 @@ describe("render, the output budget", () => {
           identifier: "slotted",
         });
         const record: RedactRecord = {
+          numAttempts: 0,
           outcomes: {},
           templates: { S: one({ baseType: "string", value: "y".repeat(100) }) },
         };
@@ -1612,6 +1616,7 @@ const hiding: Item = {
  * @returns The record.
  */
 const strings = (templates: Readonly<Record<string, string>>): RedactRecord => ({
+  numAttempts: 0,
   outcomes: {},
   templates: Object.fromEntries(
     Object.entries(templates).map(([identifier, value]) => [
@@ -1628,6 +1633,7 @@ describe("render, a printed text past its bound", () => {
       Effect.gen(function* failsPastWidth() {
         const configuration = yield* defaults;
         const shown = redact(acceptForTest(widened), {
+          numAttempts: 0,
           outcomes: {},
           templates: { N: one({ baseType: "integer", value: 5n }) },
         });
@@ -1694,6 +1700,7 @@ describe("render, a printed text past its bound", () => {
         const hidden = yield* Effect.fromResult(
           render(
             redact(acceptForTest(hiding), {
+              numAttempts: 0,
               outcomes: {},
               templates: {
                 S: one({ baseType: "string", value: "y".repeat(1_000_001) }),
@@ -2174,6 +2181,7 @@ describe("render, the redaction mark", () => {
         const slotted = redact(
           acceptForTest({ ...sprawling, body: [slotsOfS(4500)], identifier: "slotted" }),
           {
+            numAttempts: 0,
             outcomes: {},
             templates: { S: one({ baseType: "string", value: "y".repeat(100) }) },
           },
@@ -2535,5 +2543,86 @@ describe("render, an element that references a catalog", () => {
         );
         assert.notInclude(expected, "glossary");
       }),
+  );
+});
+
+/**
+ * The model node, payload node and JSON form of {@link feedbackProbe}: a label.
+ */
+interface ProbeNode {
+  readonly label: string;
+}
+
+/**
+ * A Modal Feedback module as one that has landed would be, reduced to what the feedback option
+ * reaches: it keeps its node only when the attempt was processed and the host lets feedback show.
+ * The test registers it in place of the stub.
+ */
+const feedbackProbe: ItemContentModule<"qti-modal-feedback", ProbeNode, ProbeNode, ProbeNode> = {
+  content: () => [],
+  copy: (node) => node,
+  element: "qti-modal-feedback",
+  feature: ["I-10"],
+  implemented: true,
+  namespace: qtiNamespace,
+  parse: () => Result.succeed(Option.some({ label: "feedback" })),
+  payloadSchema: ({ Schema }) => Schema.Struct({ label: Schema.String }),
+  placement: "item",
+  redact: (node, kit) =>
+    kit.feedback.processed && kit.feedback.shown ? Option.some(node) : Option.none(),
+  render: (node) => Result.succeed(h("dialog", {}, [text(node.label)])),
+};
+
+/**
+ * An item holding one Modal Feedback after its body.
+ */
+const feedbackDocument: SourceDocument = doc(
+  "items/feedback.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "feedback"), attr("title", "Feedback")],
+    [
+      el("qti-item-body", [], [el("p", [], [sourceText("Question.")])]),
+      el("qti-modal-feedback", [attr("identifier", "correct"), attr("show-hide", "show")], []),
+    ],
+  ),
+);
+
+describe("redact, the feedback option", () => {
+  it.effect("[W0-BC] redact passes the feedback option through", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        vi.resetModules();
+        vi.doMock("#plate/content/modal-feedback.ts", () => ({
+          modalFeedbackModule: feedbackProbe,
+        }));
+      }),
+      () =>
+        Effect.gen(function* passesThrough() {
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const verdict = yield* Effect.promise(() => import("#plate/validate/verdict.ts"));
+          const accepted = verdict.acceptForTest(
+            yield* Effect.fromResult(model.buildItem(feedbackDocument)),
+          );
+          const record: RedactRecord = { numAttempts: 1, outcomes: {}, templates: {} };
+          const kept = { "qti-modal-feedback": [{ label: "feedback" }] };
+
+          assert.deepStrictEqual<unknown>(plate.redact(accepted, record).content, kept);
+          assert.deepStrictEqual<unknown>(
+            plate.redact(accepted, record, undefined, { feedback: true }).content,
+            kept,
+          );
+          assert.isFalse(
+            "content" in plate.redact(accepted, record, undefined, { feedback: false }),
+          );
+          assert.isFalse("content" in plate.redact(accepted));
+        }),
+      () =>
+        Effect.sync(() => {
+          vi.doUnmock("#plate/content/modal-feedback.ts");
+          vi.resetModules();
+        }),
+    ),
   );
 });

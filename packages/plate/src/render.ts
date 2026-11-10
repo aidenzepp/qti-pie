@@ -96,9 +96,13 @@ export interface Options {
  * supports the host enabled for the candidate, `noSupports` when absent, which decide what catalog
  * content the redacted item holds, and `view`, the view the item is shown to, the candidate's when
  * absent, which decides which rubric blocks it holds: each content module's `redact` decides by
- * both, so content a view or a support does not show never reaches the page.
+ * both, so content a view or a support does not show never reaches the page. And `feedback`,
+ * whether the host lets feedback show, true when absent, which each feedback module's `redact`
+ * decides by beside whether the record counts an attempt processed. A host in a test session passes
+ * `feedbackShown(view)` (`#plate/session/feedback.ts`) and never derives it by hand.
  */
 export interface RedactOptions {
+  readonly feedback?: boolean;
   readonly supports?: Supports;
   readonly view?: OutcomeView;
 }
@@ -341,6 +345,7 @@ export const redact = (
     limits,
     options.supports ?? noSupports,
     options.view ?? defaultView,
+    options.feedback ?? true,
   );
 
 /**

@@ -9,7 +9,8 @@
  * `permits`, `allowedIntents` and `advance` run a test session, which `encodeSession` and
  * `decodeSession` store; `navigationState` and the intent helpers (`intentName`, `encodeIntent`,
  * `decodeIntent`) are the navigation API, and `renderNavigation` adds plain-button parts over it.
- * `results` writes a Results Reporting document.
+ * `feedbackShown` gives, from an item's view, the `feedback` option `redact` takes: whether the
+ * session lets the item's feedback show. `results` writes a Results Reporting document.
  *
  * Supports: `render` and `redact` take a `Supports` value, which `noSupports` gives with every
  * support off and `SupportsSchema` checks when a host builds one. `readPnp` reads a `PnpSupports`
@@ -63,6 +64,8 @@ export { PnpSupportsSchema, SupportsSchema } from "#plate/codec/supports.ts";
 export type { Configuration } from "#plate/configuration.ts";
 
 export { configure, InvalidConfiguration } from "#plate/configuration.ts";
+
+export type { FeedbackFacts } from "#plate/content/contract.ts";
 
 export type { StatusInput } from "#plate/emit/item.ts";
 
@@ -186,6 +189,8 @@ export type { AdvanceFailure } from "#plate/session/advance.ts";
 export { advance, IntentRefused, StepResponseMisfit } from "#plate/session/advance.ts";
 
 export { UnknownItemRef } from "#plate/session/control.ts";
+
+export { feedbackShown } from "#plate/session/feedback.ts";
 
 export { allowedIntents } from "#plate/session/intents.ts";
 

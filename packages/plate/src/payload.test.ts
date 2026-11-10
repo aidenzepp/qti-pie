@@ -1,6 +1,7 @@
 import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
+import { defaultView } from "#plate/content/contract.ts";
 import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -54,6 +55,7 @@ import type {
   View,
 } from "#plate/payload.ts";
 import { redact, render } from "#plate/render.ts";
+import { noSupports } from "#plate/supports.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { stubElement, stubKind } from "#plate/test/stub-kind.ts";
@@ -845,6 +847,23 @@ describe("redactItem", () => {
     assert.strictEqual(copied.document, "items/capitals.xml");
     assert.strictEqual(copied.identifier, "capitals");
   });
+
+  it("[W0-BC] redactItem's output is unchanged for every module that does not read feedback", () => {
+    const attempted: RedactRecord = { ...fresh(item, instance), numAttempts: 1 };
+
+    for (const given of [undefined, attempted]) {
+      const defaulted = redactItem(item, given);
+
+      assert.deepStrictEqual(
+        redactItem(item, given, undefined, noSupports, defaultView, true),
+        defaulted,
+      );
+      assert.deepStrictEqual(
+        redactItem(item, given, undefined, noSupports, defaultView, false),
+        defaulted,
+      );
+    }
+  });
 });
 
 /**
@@ -1037,7 +1056,7 @@ describe("redactItem on printed variables", () => {
       Option.none(),
     );
     const accepted = Option.getOrThrow(acceptedItem(verdict));
-    const withheld = redact(accepted, { outcomes: {}, templates: {} });
+    const withheld = redact(accepted, { numAttempts: 0, outcomes: {}, templates: {} });
     const link = `${bodyPath}/p/a`;
 
     assert.deepStrictEqual(accepted.unsupported, [
@@ -1511,6 +1530,7 @@ const choicesShown = (redaction: Redacted): readonly string[] => {
  * @returns The record's part `redact` reads.
  */
 const holding = (templates: Readonly<Record<string, Value>>): RedactRecord => ({
+  numAttempts: 0,
   outcomes: {},
   templates,
 });

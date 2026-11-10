@@ -19,6 +19,7 @@ import { redact, render } from "#plate/render.ts";
 import { upgrade } from "#plate/runtime.dom.ts";
 import { liveRegionOf } from "#plate/runtime/announce.dom.ts";
 import {
+  contentRuntimeSlots,
   interactionRootSelector,
   runtimeKindOf,
   runtimeKinds,
@@ -224,6 +225,31 @@ describe(server.browser, () => {
       }),
     );
 
+    it.effect("[W0-BC] every rendered fixture item has no content root", () =>
+      Effect.gen(function* fixturesHoldNoContentRoot() {
+        const contentRootSelector = contentRuntimeSlots
+          .map((slot) => `[data-slot="${slot}"]`)
+          .join(",");
+
+        assert.isAbove(everyFixtureItem.length, 0);
+
+        for (const path of everyFixtureItem) {
+          const container = mount(yield* renderedFixture(path));
+          const upgraded = upgrade(container);
+
+          assert.isNull(container.querySelector(contentRootSelector), path);
+          assert.deepStrictEqual(
+            upgraded.controllers.filter((entry) => "slot" in entry),
+            [],
+            path,
+          );
+
+          upgraded.teardown();
+          container.remove();
+        }
+      }),
+    );
+
     it("reads a runtime kind from an interaction root's marker only", () => {
       assert.strictEqual(runtimeKindOf("gap-match-interaction"), "gap-match");
       assert.strictEqual(runtimeKindOf("portable-custom-interaction"), "portable-custom");
@@ -305,8 +331,12 @@ describe(server.browser, () => {
               label,
             );
 
-            for (const { kind, root } of upgraded.controllers) {
-              assert.strictEqual(root.dataset["slot"], `${kind}-interaction`, label);
+            for (const entry of upgraded.controllers) {
+              assert.isTrue("kind" in entry, label);
+
+              if ("kind" in entry) {
+                assert.strictEqual(entry.root.dataset["slot"], `${entry.kind}-interaction`, label);
+              }
             }
 
             for (const [slot, count] of countBySlot(container, upgraded)) {
