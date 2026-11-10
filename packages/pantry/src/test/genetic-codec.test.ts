@@ -144,7 +144,7 @@ const recorded: readonly Recorded[] = [
   {
     signature: /^O1 crust refused-element-depth, libxml2 accepts$/u,
     source:
-      "crust's reader bound, read.ts defaultElementDepth (256), which XML 1.0 leaves to the processor (section 5.1 sets no limit); libxml2 2.9.13's xmlParserMaxDepth of 256 is checked after the 257th element is pushed, so it reads 257 levels and refuses 258",
+      "crust's reader bound, read.ts ELEMENT_DEPTH (256), which XML 1.0 leaves to the processor (section 5.1 sets no limit); libxml2 2.9.13's xmlParserMaxDepth of 256 is checked after the 257th element is pushed, so it reads 257 levels and refuses 258",
     why: "an implementation limit, documented as xmllint's default and one level below libxml2's effective bound; crust's comment calls 256 xmllint's limit, which the probe shows admits 257 (a note for crust's owner, no specification rule)",
   },
 ];
