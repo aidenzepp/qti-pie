@@ -1985,6 +1985,7 @@ describe("the public surface", () => {
         "render",
         "renderNavigation",
         "renderStatus",
+        "renderTestContent",
         "restore",
         "results",
         "score",
