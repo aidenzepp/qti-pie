@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 /**
  * Fill the spec cache, `~/.cache/gr8des/`, with every file the tests read from it: the pinned XSDs,
  * the specification sources the spec cache pins, and the text renderings derived from them, each

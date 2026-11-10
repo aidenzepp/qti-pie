@@ -287,7 +287,7 @@ export const DocumentType = closed(
  * `ResourceDocumentType`: resource type → document type, the type of the documents a resource of
  * the type lists, spelled as the resource type is: a document a resource lists holds the type of
  * that resource, a row of its own (`ResourceDocument`), and its `DocumentType` by this function.
- * `none` names no resource, and has no row.
+ * Every resource type has a row.
  */
 export const ResourceDocumentType = closed.relation(
   "ResourceDocumentType",

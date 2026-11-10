@@ -23,10 +23,11 @@ const startupForbidden = [
 ];
 
 /**
- * The built author login: its builder, whose workload (the export scan) grizzle builds on
- * `authorLogin`'s first call, and the test fixture, which builds it when the module is evaluated.
- * The dry run never needs the login, and the database layer serves it from its committed served
- * file without evaluating a schema module, so neither may reach either module statically.
+ * The built author login: its builder, whose workloads (the export's reads and the import's write
+ * program) grizzle builds on `authorLogin`'s first call, and the test fixture, which builds it when
+ * the module is evaluated. The dry run needs no login, and the database layer serves the login's
+ * committed file instead, without evaluating a schema module, so neither may reach either module
+ * statically.
  */
 const loginForbidden = ["#pantry/qti/logins.ts", "#pantry/test/author.ts"];
 
@@ -171,7 +172,7 @@ describe("the author login's place in the graph", () => {
     assert.deepStrictEqual(offences, []);
   });
 
-  it("is not reached statically from the database layer, which serves it from its served file", () => {
+  it("is not reached statically from the database layer, which serves the login's committed file", () => {
     const offences = forbiddenImports(
       path.join(sourceRoot, "db", "layer.ts"),
       loginForbidden,

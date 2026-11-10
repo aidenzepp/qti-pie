@@ -1,7 +1,7 @@
 import { DbLayer, roleNameOf, served } from "@bjornpagen/grizzle/runtime";
 import type { PoolBounds } from "@bjornpagen/grizzle/runtime";
 import { Effect, FileSystem, Layer, Schema } from "effect";
-import { connectionServices, loginConnection } from "#pantry/db/connection.ts";
+import { connectionServices, primedLoginConnection } from "#pantry/db/connection.ts";
 import { ServedAuthorLogin, ServedLoadError, ServedText, servedPath } from "#pantry/db/served.ts";
 import type { AuthorLogin } from "#pantry/qti/logins.ts";
 
@@ -25,10 +25,11 @@ const authorAppPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
 
 /**
  * The author application's pool on the local cluster: the login's connection
- * (`#pantry/db/connection.ts`), with the password of the role grizzle installs for the login, its
- * pool, and the login's committed served workload, `migrations/qti/served/author_app.json`
- * (`#pantry/db/served.ts` `servedPath`), read from disk and served as the login's type (grizzle's
- * `served`), with no schema module evaluated: the login's type is an `import type`.
+ * (`#pantry/db/connection.ts` `primedLoginConnection`), with the password of the role grizzle
+ * installs for the login, its pool, and the login's committed served workload,
+ * `migrations/qti/served/author_app.json` (`#pantry/db/served.ts` `servedPath`), read from disk
+ * and served as the login's type (grizzle's `served`), with no schema module evaluated: the login's
+ * type is an `import type`.
  *
  * It provides the login's `DbLayer`, for the author role, and {@link ServedAuthorLogin}, the served
  * login itself, whose `roles.author` every `Db.open` takes: grizzle opens a `Db` only on a role of
@@ -36,22 +37,25 @@ const authorAppPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
  *
  * Building the layer fails with Effect's `ConfigError` for a missing or malformed setting, with a
  * `ClusterConfigError` (`#pantry/db/connection.ts`) when the CA is unreadable, with a
- * {@link ServedLoadError} when the served file is, and with grizzle's `OpenError` at stage `config`
- * for a file of another login. A missing password file is not found here: it fails each connection
- * attempt with grizzle's `CredentialError`.
+ * {@link ServedLoadError} when the served file is, with the command's `PasswordCommandError` where
+ * `GR8DES_PG_PASSWORD_COMMAND` names one, which the build runs once for the login's role before
+ * any connection attempt, and with grizzle's `OpenError` at stage `config` for a file of another
+ * login. A missing password file is not found here: it fails each connection attempt with
+ * grizzle's `CredentialError`.
  */
 export const AuthorAppLayer = Layer.unwrap(
   Effect.gen(function* AuthorAppLayer() {
     const fs = yield* FileSystem.FileSystem;
-    const connectionOf = yield* loginConnection;
+    const connectionOf = yield* primedLoginConnection;
     const file = yield* fs.readFileString(servedPath).pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(ServedText)),
       Effect.mapError((reason) => new ServedLoadError({ path: servedPath, reason })),
     );
     const login = served<AuthorLogin>(file, "author_app");
+    const connection = yield* connectionOf(roleNameOf(login));
 
     return Layer.merge(
-      DbLayer.make({ ...connectionOf(roleNameOf(login)), login, pool: authorAppPool }),
+      DbLayer.make({ ...connection, login, pool: authorAppPool }),
       Layer.succeed(ServedAuthorLogin, login),
     );
   }),

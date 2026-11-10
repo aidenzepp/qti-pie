@@ -1,8 +1,10 @@
 /**
  * The one reader of a TypeScript module's imports, and the one walk of the graph they make, for the
  * tests that hold pantry's module graph to a rule: the command line's and the entry's startup
- * graphs (`src/cli/startup.test.ts`, `src/index.startup.test.ts`) and the boundary between the
- * XML side and the PostgreSQL side (`src/import/boundary.test.ts`).
+ * graphs (`src/cli/startup.test.ts`, `src/index.startup.test.ts`), the boundary between the XML
+ * side and the PostgreSQL side (`src/import/boundary.test.ts`), the pure layers
+ * (`src/grammar/purity.test.ts`), and the import's read, which evaluates no schema module
+ * (`src/import/schema-free.test.ts`).
  */
 import path from "node:path";
 import { Predicate } from "effect";
