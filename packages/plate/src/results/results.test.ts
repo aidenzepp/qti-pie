@@ -401,6 +401,34 @@ const recordedXml = [
 ].join("");
 
 /**
+ * An item written for this test with a single identifier response `RESPONSE`, bound to a Choice,
+ * and a single `file` response `UPLOAD`, bound to an Upload interaction the renderer does not
+ * implement (`ei-01`), which is its notice.
+ */
+const uploadingXml = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="uploading"',
+  ' title="Uploading" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>',
+  '<qti-response-declaration identifier="UPLOAD" cardinality="single" base-type="file"/>',
+  '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+  '<qti-simple-choice identifier="A">Yes</qti-simple-choice>',
+  '<qti-simple-choice identifier="B">No</qti-simple-choice>',
+  "</qti-choice-interaction>",
+  '<qti-upload-interaction response-identifier="UPLOAD"/>',
+  "</qti-item-body></qti-assessment-item>",
+].join("");
+
+/**
+ * The file a candidate posted to {@link uploadingXml}'s `UPLOAD`, as plate holds it: its name,
+ * size and type, never its bytes.
+ */
+const photo: Value = {
+  baseType: "file",
+  cardinality: "single",
+  values: [{ baseType: "file", value: { name: "photo.png", size: 2048, type: "image/png" } }],
+};
+
+/**
  * The record a candidate's "2.5" gives: its text and the fields read from it as a number.
  */
 const twoAndAHalf: RecordValue = {
@@ -622,6 +650,7 @@ const sessionItem = (
   sequenceIndex: number,
   changes: Partial<SessionItem> = {},
 ): SessionItem => ({
+  adaptive: false,
   datestamp: updated,
   duration: 0,
   firstOutcomes: Option.none(),
@@ -2211,6 +2240,45 @@ describe("results", () => {
           ["numAttempts", "RESPONSE", "NUMBER"],
         );
         assert.notInclude(xml, "correctResponse");
+      }),
+    { tags: ["results-xsd"] },
+  );
+
+  it.effect(
+    "[W0-AY] writes a file response in results as its name alone, baseType file, valid against the Results XSD, and a NULL file response as an empty candidateResponse",
+    () =>
+      Effect.gen(function* fileResponseWritten() {
+        const uploading = yield* acceptItem(
+          "items/uploading.xml",
+          new TextEncoder().encode(uploadingXml),
+        );
+        const record = yield* Effect.fromResult(
+          score(uploading, { RESPONSE: identifiers("A"), UPLOAD: photo }),
+        );
+        const { report, xml } = yield* reported(itemInputOf(uploading, record));
+        const item = itemOf(report, "uploading");
+
+        yield* assertValid(xml);
+        assert.deepStrictEqual(item.responses["UPLOAD"]?.attributes, {
+          answeredStatus: "answered",
+          baseType: "file",
+          cardinality: "single",
+          identifier: "UPLOAD",
+        });
+        assert.deepStrictEqual(yield* candidateOf(xml, "uploading", "UPLOAD"), [[{}, "photo.png"]]);
+        assert.notInclude(xml, "2048");
+        assert.notInclude(xml, "image/png");
+
+        const unanswered = yield* Effect.fromResult(
+          score(uploading, { RESPONSE: identifiers("A") }),
+        );
+        const absent = yield* reported(itemInputOf(uploading, unanswered));
+        yield* assertValid(absent.xml);
+        assert.deepStrictEqual(
+          itemOf(absent.report, "uploading").responses["UPLOAD"]?.attributes["answeredStatus"],
+          "presented",
+        );
+        assert.deepStrictEqual(yield* candidateOf(absent.xml, "uploading", "UPLOAD"), []);
       }),
     { tags: ["results-xsd"] },
   );

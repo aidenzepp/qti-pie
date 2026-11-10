@@ -6,7 +6,14 @@
  */
 import { assert, describe, expectTypeOf, it } from "@effect/vitest";
 import { Effect } from "effect";
-import type { TestServerOptions } from "#plate/react/contract.tsx";
+import type { SavedResponsesJson } from "#plate/codec/session.ts";
+import type { ItemViewPayloadSchema } from "#plate/codec/view.ts";
+import type {
+  ItemViewPayload,
+  Posted,
+  TestServerOptions,
+  TestTransport,
+} from "#plate/react/contract.tsx";
 import { fetchTransport, NoTestProvider, NotImplemented } from "#plate/react/test-provider.tsx";
 
 describe("NoTestProvider", () => {
@@ -35,5 +42,25 @@ describe("TestServerOptions", () => {
   it("names the session from the request and takes the clock", () => {
     expectTypeOf<TestServerOptions["sessionOf"]>().toEqualTypeOf<(request: Request) => string>();
     expectTypeOf<TestServerOptions["now"]>().toEqualTypeOf<(() => Date) | undefined>();
+  });
+});
+
+describe("ItemViewPayload", () => {
+  it("[W0-AN.2] ItemViewPayload carries disabled, values and an optional posted", () => {
+    expectTypeOf<ItemViewPayload["disabled"]>().toEqualTypeOf<boolean>();
+    expectTypeOf<ItemViewPayload["values"]>().toEqualTypeOf<SavedResponsesJson>();
+    expectTypeOf<ItemViewPayload["posted"]>().toEqualTypeOf<
+      Readonly<Record<string, readonly string[]>> | undefined
+    >();
+  });
+
+  it("[W0-AN.2] the view codec's Schema type is the contract's ItemViewPayload", () => {
+    expectTypeOf<typeof ItemViewPayloadSchema.Type>().toEqualTypeOf<ItemViewPayload>();
+  });
+});
+
+describe("TestTransport", () => {
+  it("[W0-AN.2] the transport's view is typed to the wire", () => {
+    expectTypeOf<ReturnType<TestTransport["view"]>>().toEqualTypeOf<Promise<Posted>>();
   });
 });

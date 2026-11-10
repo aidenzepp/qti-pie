@@ -12,6 +12,7 @@ import { configure } from "#plate/configuration.ts";
 import { controller } from "#plate/interactions/media.dom.ts";
 import { redact, render } from "#plate/render.ts";
 import { upgrade } from "#plate/runtime.dom.ts";
+import type { RuntimeKind, Upgraded, UpgradedRoot } from "#plate/runtime.dom.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -227,6 +228,19 @@ const rootOf = (container: HTMLElement): HTMLElement => {
 };
 
 /**
+ * The interaction entries of an upgrade, each a kind and a root, in document order. The runtime
+ * also upgrades the item Root through its content controller (`#plate/content/root.dom.ts`) and
+ * reports it after the interactions, so a case about the Media reads the interaction entries alone.
+ *
+ * @param result The upgrade.
+ * @returns Its entries that carry a kind.
+ */
+const interactionEntries = (
+  result: Upgraded,
+): readonly Extract<UpgradedRoot, { readonly kind: RuntimeKind }>[] =>
+  result.controllers.flatMap((entry) => ("kind" in entry ? [entry] : []));
+
+/**
  * Read the live region's text.
  *
  * @param container The mounted item.
@@ -247,9 +261,15 @@ describe(server.browser, () => {
           const root = rootOf(container);
           const upgraded = upgrade(container);
 
-          assert.deepStrictEqual(upgraded.controllers, [{ kind: "media", root }], file);
+          assert.deepStrictEqual(interactionEntries(upgraded), [{ kind: "media", root }], file);
           assert.isUndefined(root.dataset["runtime"], file);
-          assert.strictEqual(container.querySelectorAll("[data-runtime]").length, 0, file);
+          // The item Root's own controller marks the Root element (`#plate/content/root.dom.ts`);
+          // no other element carries a mark.
+          assert.strictEqual(
+            container.querySelectorAll('[data-runtime]:not([data-slot="item"])').length,
+            0,
+            file,
+          );
 
           upgraded.teardown();
           container.remove();
@@ -521,7 +541,7 @@ describe(server.browser, () => {
 
           const again = upgrade(container);
 
-          assert.lengthOf(again.controllers, 1);
+          assert.lengthOf(interactionEntries(again), 1);
           again.teardown();
           container.remove();
         }),
@@ -566,7 +586,7 @@ describe(server.browser, () => {
 
       await frames();
 
-      assert.lengthOf(upgraded.controllers, 2);
+      assert.lengthOf(interactionEntries(upgraded), 2);
       assert.strictEqual(document.activeElement, before);
       assert.strictEqual(liveText(container), "");
       assert.strictEqual(container.querySelectorAll("input").length, 0);

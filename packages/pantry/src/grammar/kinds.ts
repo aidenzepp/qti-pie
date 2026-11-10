@@ -1,24 +1,20 @@
 /**
  * The kinds generator: the `NodeKind` and `AttributeName` rosters, the `IsElement` and
- * `Interaction` sets over `NodeKind`, and the closed relations between an element's XML name and
- * its kind, as rows of handles (fin.md §17), from a list of vocabularies.
+ * `Interaction` sets over `NodeKind`, and the closed relation between an element kind and its XML
+ * name (`ElementName`), as rows of handles (fin.md §17), from a list of vocabularies, with the
+ * resolution of a name under a parent that reads it.
  *
  * Each relation is fixed when the schema compiles. The rosters and the two sets erase to the
  * constants the document layer reads (`Node.elements` and `Node.parentIsInteraction` derive from
- * the sets, plan §1.3). The name relations are the host's, for shredding an element into its kind
- * and rendering a kind back into its name; no law reads them, so none is installed.
+ * the sets, plan §1.3). The names are the host's, for shredding an element into its kind and
+ * rendering a kind back into its name; no law reads them, so they are not installed.
  */
-import { Option, Result } from "effect";
-import { closed, idField, roster, valueField } from "#pantry/grammar/closed.ts";
+import { Array as Arr } from "effect";
+import type { Option } from "effect";
+import { closed, idField, indexed, roster, valueField } from "#pantry/grammar/closed.ts";
 import { spelledNamespace } from "#pantry/vocab/namespaces.ts";
 import type { Nameless, NamespaceClass, NamespaceName } from "#pantry/vocab/namespaces.ts";
-import type {
-  Closed,
-  ClosedRelationError,
-  IdField,
-  Roster,
-  ValueField,
-} from "#pantry/grammar/closed.ts";
+import type { IdField, Indexed, Roster, ValueField } from "#pantry/grammar/closed.ts";
 
 /**
  * The QTI schema versions the model admits, in code order: the `SchemaVersion` roster's handles,
@@ -151,7 +147,7 @@ export type NameOf<V extends readonly Vocabulary[]> =
 /**
  * A set over `NodeKind`: one bit per kind, set for each kind it holds.
  */
-export type KindSet<Kind extends string> = Closed<readonly [IdField<"kind", Kind>], readonly []>;
+export type KindSet<Kind extends string> = Indexed<readonly [IdField<"kind", Kind>], readonly []>;
 
 /**
  * The closed relations of kinds and attribute names one vocabulary list generates.
@@ -171,7 +167,7 @@ export interface Kinds<Kind extends string, Name extends string> {
    * `ElementName`: the namespace name and local name each element kind is written with, as crust's
    * tree spells them (`spelledNamespace`), since the codec reads and writes names against them.
    */
-  readonly elementName: Closed<
+  readonly elementName: Indexed<
     readonly [IdField<"kind", Kind>],
     readonly [ValueField<"namespace", string>, ValueField<"local", string>]
   >;
@@ -231,6 +227,36 @@ const namesIn = <V extends readonly Vocabulary[]>(
 ): readonly V[number]["attributes"][number][] => vocabulary.attributes;
 
 /**
+ * Read the element kinds of a vocabulary list with the names they are written with: each kind with
+ * a local name of a namespaced vocabulary, its local name and its namespace as crust's tree spells
+ * it (`spelledNamespace`). A nameless vocabulary's kinds name no element. `ElementName`'s rows are
+ * these, and the names a document is written under (`#pantry/model/names.ts`) are read off them
+ * with no composition.
+ *
+ * @param vocabularies - The vocabularies, in composition order.
+ * @returns Each element kind and its name, in the vocabularies' order.
+ */
+export const elementsOf = <Kind extends string>(
+  vocabularies: readonly {
+    readonly kinds: readonly { readonly handle: Kind; readonly local: string }[];
+    readonly namespace: Nameless | NamespaceName;
+  }[],
+): readonly {
+  readonly handle: Kind;
+  readonly row: { readonly local: string; readonly namespace: string };
+}[] =>
+  vocabularies.flatMap(({ kinds, namespace }) =>
+    namespace._tag === "nameless"
+      ? []
+      : kinds
+          .filter(({ local }) => local !== "")
+          .map(({ handle, local }) => ({
+            handle,
+            row: { local, namespace: spelledNamespace(namespace) },
+          })),
+  );
+
+/**
  * Generate the kind and name relations of a vocabulary list.
  *
  * A code is a handle's position in its roster, and a roster's handles only append (grizzle's D1,
@@ -244,39 +270,27 @@ const namesIn = <V extends readonly Vocabulary[]>(
  *   declares them for, XML Schema's `xsi:` names and `xml.xsd`'s `xml:` names: every roster holds
  *   them, after the open classes, at the same codes.
  * @param source.vocabularies - The vocabularies, in composition order.
- * @returns The relations, or the first reason one has no constant: a kind two vocabularies declare,
- *   or an attribute name a vocabulary shares with an open class (`RepeatedValue`); an interaction
- *   listed twice (`KeyCollision`); or an interaction outside `NodeKind` (`OutsideCodeSpace`).
+ * @returns The relations. A kind two vocabularies declare, or an attribute name a vocabulary shares
+ *   with an open class, is a roster's fault (`repeatOf`), and an interaction listed twice or
+ *   outside `NodeKind` a fault of `Interaction`'s rows (`faultOf`): the tests find both, and
+ *   grizzle refuses both.
  */
 export const generate = <const V extends readonly Vocabulary[]>(source: {
   readonly interactions: readonly KindOf<V>[];
   readonly layer: readonly NameOf<V>[];
   readonly vocabularies: V;
-}): Result.Result<KindRosters<KindOf<V>, NameOf<V>>, ClosedRelationError> =>
-  Result.gen(function* generateKinds() {
-    const { vocabularies } = source;
-    const versions = yield* roster("SchemaVersion", schemaVersions);
-    const nodeKind = yield* roster("NodeKind", [
-      ...fixedKinds,
-      ...vocabularies.flatMap(kindsIn<V>),
-    ]);
-    const attributeName = yield* roster("AttributeName", [
-      ...openClasses,
-      ...new Set([...source.layer, ...vocabularies.flatMap(namesIn<V>)]),
-    ]);
-    // A nameless vocabulary's kinds name no element, so only a namespaced one's are elements.
-    const elements = vocabularies.flatMap(({ kinds, namespace }) =>
-      namespace._tag === "nameless"
-        ? []
-        : kinds
-            .filter(({ local }) => local !== "")
-            .map(({ handle, local }) => ({
-              handle,
-              row: { local, namespace: spelledNamespace(namespace) },
-            })),
-    );
-    const kind = idField("kind", nodeKind);
-    const elementName = yield* closed({
+}): KindRosters<KindOf<V>, NameOf<V>> => {
+  const { vocabularies } = source;
+  const versions = roster("SchemaVersion", schemaVersions);
+  const nodeKind = roster("NodeKind", [...fixedKinds, ...vocabularies.flatMap(kindsIn<V>)]);
+  const attributeName = roster("AttributeName", [
+    ...openClasses,
+    ...new Set([...source.layer, ...vocabularies.flatMap(namesIn<V>)]),
+  ]);
+  const elements = elementsOf<KindOf<V>>(vocabularies);
+  const kind = idField("kind", nodeKind);
+  const elementName = indexed(
+    closed({
       key: [kind],
       name: "ElementName",
       payload: [
@@ -294,8 +308,10 @@ export const generate = <const V extends readonly Vocabulary[]>(source: {
         local: row.local,
         namespace: row.namespace,
       })),
-    });
-    const isElement = yield* closed({
+    }),
+  );
+  const isElement = indexed(
+    closed({
       key: [kind],
       name: "IsElement",
       payload: [],
@@ -307,23 +323,26 @@ export const generate = <const V extends readonly Vocabulary[]>(source: {
       ].map((handle) => ({
         kind: handle,
       })),
-    });
-    const interaction = yield* closed({
+    }),
+  );
+  const interaction = indexed(
+    closed({
       key: [kind],
       name: "Interaction",
       payload: [],
       rows: source.interactions.map((handle) => ({ kind: handle })),
-    });
+    }),
+  );
 
-    return {
-      attributeName,
-      elementName,
-      interaction,
-      isElement,
-      nodeKind,
-      versions,
-    };
-  });
+  return {
+    attributeName,
+    elementName,
+    interaction,
+    isElement,
+    nodeKind,
+    versions,
+  };
+};
 
 /**
  * The kind relations of a vocabulary list before the content grammar: every one but `resolve`,
@@ -335,74 +354,44 @@ export type KindRosters<Kind extends string, Name extends string> = Omit<
 >;
 
 /**
- * `KindByNameUnder`: (namespace, local, parent) → kind, the relation {@link resolution} reads a
- * name's kind from. Its kind payload is an id field over the `NodeKind` roster, so `closed` refuses
- * a row whose kind is outside it, and a row's kind is a `Kind` by its type.
- */
-export type KindByNameUnder<Kind extends string> = Closed<
-  readonly [IdField<"namespace", string>, IdField<"local", string>, IdField<"parent", string>],
-  readonly [IdField<"kind", Kind>]
->;
-
-/**
- * Add name resolution to a composition's kinds: `KindByNameUnder`, (namespace, local, parent) →
- * kind, for every element kind each parent admits.
+ * Add name resolution to a composition's kinds: `resolve`, from an element's expanded name and its
+ * parent's kind to the element kind the parent admits with that name.
  *
  * A name resolves by locality (XML Schema Part 1, §3.3.2, §3.10.4): an element particle of the
  * parent's model declares it, or a wildcard of the model finds its top-level declaration, and
  * either way the parent admits that kind. So resolution is read off admission: a name resolves
- * under a parent to the element kind the parent admits with that name, and to none where it
- * admits none, as for an element no declaration names there. The root's parent is the document
- * node, whose model names the root kinds.
+ * under a parent to the element kind of that name the parent admits, and to none where it admits
+ * none, as for an element no declaration names there. The root's parent is the document node,
+ * whose model names the root kinds. A name's kinds are few, so `resolve` reads its candidates, the
+ * element kinds `ElementName` writes with it, and asks the parent's admission of each, in
+ * `NodeKind` code order; no relation of (name, parent) is built. A parent admits at most one kind
+ * of a name, as XML Schema's Element Declarations Consistent requires of a content model
+ * (§3.8.6), which the composition's tests hold (`compose.test.ts`).
  *
  * @param kinds - The composition's kinds.
- * @param admitted - Each parent and a kind it admits, in any version.
- * @returns The kinds with `resolve`, or a `KeyCollision` naming two kinds of one name that one
- *   parent admits, or an `OutsideCodeSpace` naming a parent the roster lacks.
+ * @param admits - Whether a parent admits a kind as a child in some version: the content
+ *   grammar's admission maps.
+ * @returns The kinds with `resolve`.
  */
 export const resolution = <Kind extends string, Name extends string>(
   kinds: KindRosters<Kind, Name>,
-  admitted: readonly { readonly child: string; readonly parent: string }[],
-): Result.Result<Kinds<Kind, Name>, ClosedRelationError> =>
-  Result.gen(function* generateResolution() {
-    const anyKind: Roster<string> = kinds.nodeKind;
-    // The child is read back from its `ElementName` row, whose key is a `NodeKind` handle, so each
-    // row's kind is a `Kind` by its type, as the payload below needs.
-    const named = [
-      ...new Map(
-        admitted.flatMap(({ child, parent }) =>
-          Option.toArray(kinds.elementName.lookup({ kind: child })).map(
-            ({ kind, local, namespace }) =>
-              [
-                `${namespace} ${local} ${parent} ${kind}`,
-                { kind, local, namespace, parent },
-              ] as const,
-          ),
-        ),
-      ).values(),
-    ];
-    // The payload ranges over the `NodeKind` roster itself, so a resolved kind is a `Kind` by
-    // construction and `resolve` needs no test of it. The annotation is the guard: a payload over
-    // a wider roster (`anyKind`) is no `KindByNameUnder<Kind>`, and `tsc` refuses it.
-    const under: KindByNameUnder<Kind> = yield* closed({
-      key: [
-        idField(
-          "namespace",
-          yield* roster("Namespace", [...new Set(named.map(({ namespace }) => namespace))]),
-        ),
-        idField("local", yield* roster("LocalName", [...new Set(named.map(({ local }) => local))])),
-        idField("parent", anyKind),
-      ],
-      name: "KindByNameUnder",
-      payload: [idField("kind", kinds.nodeKind)],
-      rows: named,
-    });
+  admits: (parent: string, kind: Kind) => boolean,
+): Kinds<Kind, Name> => {
+  // Each expanded name's element kinds, by namespace and then local name, in code order. The kind
+  // is `ElementName`'s key, a `NodeKind` handle, so a resolved kind is a `Kind` by its type.
+  const candidates = new Map<string, Map<string, Kind[]>>();
+  for (const { kind, local, namespace } of kinds.elementName.rows) {
+    candidates
+      .getOrInsertComputed(namespace, () => new Map())
+      .getOrInsertComputed(local, () => [])
+      .push(kind);
+  }
 
-    return {
-      ...kinds,
-      resolve: (namespaceName: string, localName: string, parentKind: Kind) =>
-        under
-          .lookup({ local: localName, namespace: namespaceName, parent: parentKind })
-          .pipe(Option.map(({ kind }) => kind)),
-    };
-  });
+  return {
+    ...kinds,
+    resolve: (namespaceName: string, localName: string, parentKind: Kind) =>
+      Arr.findFirst(candidates.get(namespaceName)?.get(localName) ?? [], (kind) =>
+        admits(parentKind, kind),
+      ),
+  };
+};

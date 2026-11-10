@@ -32,9 +32,9 @@ import type { ItemRef, OutcomeProcessing, Section, Test, TestPart } from "#plate
 import type { ModelledBaseType, RecordValue, Value } from "#plate/model/values.ts";
 import { openPackage } from "#plate/package/open.ts";
 import { fileLocation, manifestFile } from "#plate/package/store.ts";
-import type { SessionItem } from "#plate/session/session.ts";
 import { startTest } from "#plate/session/start.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
+import { sessionItem } from "#plate/test/session-item.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
 import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
 import type { CpVersion } from "#plate/vocabulary.ts";
@@ -564,31 +564,6 @@ const record = (name: string, score: number, numAttempts: number): ItemRecord =>
 });
 
 /**
- * Construct a session item.
- *
- * @param itemRecord Its record.
- * @param sequenceIndex Its place in the sequence, from 1.
- * @param presented Whether it was presented.
- * @returns The session item, which delivers the item ref named after its record's item.
- */
-const sessionItem = (
-  itemRecord: ItemRecord,
-  sequenceIndex: number,
-  presented: boolean,
-): SessionItem => ({
-  datestamp: "2026-11-07T00:00:00.000Z",
-  duration: 0,
-  firstOutcomes: Option.none(),
-  locked: false,
-  presented,
-  record: itemRecord,
-  ref: itemRecord.item,
-  saved: Option.none(),
-  sequenceIndex,
-  templateDefaults: Option.none(),
-});
-
-/**
  * A test of two parts: `P1`'s section `S1` holds `ITEM1` and the nested section `S2`, which holds
  * `ITEM2`; `P2`'s section `S3` holds `ITEM3`. `ITEM1` is in the categories `alpha` and `beta`,
  * weights `SCORE` by 2 and maps nothing; `ITEM2` maps `TOTAL` to `SCORE`; `ITEM3` has none of
@@ -627,9 +602,9 @@ const structured: Pick<Test, "declared" | "outcomes" | "parts"> = {
  */
 const session = {
   items: [
-    sessionItem(record("ITEM1", 1e16, 3), 1, true),
-    sessionItem(record("ITEM2", 1, 1), 2, true),
-    sessionItem(record("ITEM3", -1e16, 0), 3, false),
+    sessionItem({ presented: true, record: record("ITEM1", 1e16, 3), sequenceIndex: 1 }),
+    sessionItem({ presented: true, record: record("ITEM2", 1, 1), sequenceIndex: 2 }),
+    sessionItem({ presented: false, record: record("ITEM3", -1e16, 0), sequenceIndex: 3 }),
   ],
 };
 
@@ -919,7 +894,7 @@ const durationGap = new UnknownIdentifierError({
 
 describe("testScopeOf over built models", () => {
   it.effect(
-    "[T-9] the outcome interpreter's scope of a session reads an item's file and record declarations as NULL of their type, and never splits a test's context name",
+    "[T-9] [W0-AY] the outcome interpreter's scope of a session reads an item's file response as its held NULL file value, its record declaration as NULL of its type, and never splits a test's context name",
     () =>
       Effect.gen(function* builtScope() {
         const item = yield* Effect.fromResult(buildItem(unheldItem));
@@ -939,20 +914,21 @@ describe("testScopeOf over built models", () => {
         const started = fresh(item, "sitting.1");
         const sitting = {
           items: [
-            sessionItem(
-              { ...started, outcomes: { ...started.outcomes, SCORE: float(0.75) } },
-              1,
-              true,
-            ),
+            sessionItem({
+              presented: true,
+              record: { ...started, outcomes: { ...started.outcomes, SCORE: float(0.75) } },
+              sequenceIndex: 1,
+            }),
           ],
         };
         const scope = testScopeOf(plain, items, sitting, new Map(), Option.none());
         const withContext = testScopeOf(contextual, items, sitting, new Map(), Option.none());
 
-        assert.deepStrictEqual(Result.getOrThrow(prefixedVariable(scope, "ITEM1.F")).reading, {
-          kind: "unheld",
-          type: { baseType: "file", cardinality: "single" },
-        });
+        // A file response is held (`[W0-AY]`): a fresh record holds its NULL file value.
+        assert.deepStrictEqual(
+          heldValue(Result.getOrThrow(prefixedVariable(scope, "ITEM1.F")).reading),
+          { baseType: "file", cardinality: "single", values: [] },
+        );
         assert.deepStrictEqual(Result.getOrThrow(prefixedVariable(scope, "ITEM1.R")).reading, {
           kind: "unheld",
           type: { baseType: "file", cardinality: "record" },
@@ -968,7 +944,7 @@ describe("testScopeOf over built models", () => {
   );
 
   it.effect(
-    "[T-9] testScopeOf holds each file or record response of an item with whether it declares a correct response, and no outcome",
+    "[T-9] [W0-AY] testScopeOf holds no file response as unheld, since the item model holds one, and no outcome",
     () =>
       Effect.gen(function* unheldResponsesScope() {
         const item = yield* Effect.fromResult(
@@ -1006,14 +982,24 @@ describe("testScopeOf over built models", () => {
         const scope = testScopeOf(
           yield* Effect.fromResult(buildTest(testDocument([]))),
           new Map([["ITEM1", acceptForTest(item)]]),
-          { items: [sessionItem(fresh(item, "sitting.1"), 1, true)] },
+          {
+            items: [
+              sessionItem({ presented: true, record: fresh(item, "sitting.1"), sequenceIndex: 1 }),
+            ],
+          },
           new Map(),
           Option.none(),
         );
 
+        // `FR` was the one unheld response here before `[W0-AY]`; a file response is held now, so
+        // the entry has none, and the record outcome `R` is no response.
         assert.deepStrictEqual(
           scope.items.map((entry) => entry.unheldResponses),
-          [new Map([["FR", false]])],
+          [new Map()],
+        );
+        assert.deepStrictEqual(
+          scope.items.map((entry) => [...entry.declarations.responses.keys()]),
+          [["RESPONSE", "FR"]],
         );
       }),
   );
@@ -1060,7 +1046,11 @@ describe("testScopeOf over built models", () => {
         const scope = testScopeOf(
           yield* Effect.fromResult(buildTest(testDocument([]))),
           new Map([["ITEM1", acceptForTest(item)]]),
-          { items: [sessionItem(fresh(item, "sitting.1"), 1, true)] },
+          {
+            items: [
+              sessionItem({ presented: true, record: fresh(item, "sitting.1"), sequenceIndex: 1 }),
+            ],
+          },
           new Map(),
           Option.none(),
         );
@@ -1091,7 +1081,15 @@ describe("testScopeOf over built models", () => {
             testScopeOf(
               test,
               new Map([["ITEM1", acceptForTest(item)]]),
-              { items: [sessionItem(fresh(item, "sitting.1"), 1, true)] },
+              {
+                items: [
+                  sessionItem({
+                    presented: true,
+                    record: fresh(item, "sitting.1"),
+                    sequenceIndex: 1,
+                  }),
+                ],
+              },
               new Map(),
               Option.none(),
             ),
@@ -1264,7 +1262,11 @@ describe("runOutcomes over a record response through its item ref", () => {
           const scope = testScopeOf(
             test,
             items,
-            { items: [sessionItem({ ...started, records }, 1, true)] },
+            {
+              items: [
+                sessionItem({ presented: true, record: { ...started, records }, sequenceIndex: 1 }),
+              ],
+            },
             new Map(),
             Option.none(),
           );
@@ -1311,11 +1313,11 @@ describe("runOutcomes over a record response through its item ref", () => {
           new Map([["ITEM1", acceptForTest(item)]]),
           {
             items: [
-              sessionItem(
-                { ...fresh(item, "sitting.1"), records: { RREC: answeredRecord } },
-                1,
-                true,
-              ),
+              sessionItem({
+                presented: true,
+                record: { ...fresh(item, "sitting.1"), records: { RREC: answeredRecord } },
+                sequenceIndex: 1,
+              }),
             ],
           },
           new Map(),

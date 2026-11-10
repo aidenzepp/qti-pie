@@ -34,6 +34,7 @@ import { globalKinds } from "#pantry/vocab/inventory/vocabularies.ts";
 import type { Domain, ValueType } from "#pantry/vocab/inventory/types.ts";
 import { xmllintValidate } from "#pantry/xml/oracle.ts";
 import type { XsdMessage } from "#pantry/xml/oracle.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * The namespace an attribute handle's prefix stands for, for the handles a probe writes with a
@@ -1342,7 +1343,7 @@ export const targetsOf = Effect.fn("lexical.targetsOf")(function* targetsOf(
   const targets = new Map<string, readonly Target[]>(plain);
   for (const [kind, held] of contents) {
     if ((plain.get(kind) ?? []).length === 0 && held.some(({ type }) => type === "anonymous")) {
-      const parent = grammar.admission.rows.find(
+      const parent = admittedOf(grammar.content.contentModelOf, grammar.content.admissionIn).find(
         (row) =>
           row.version === version && row.child === kind && (plain.get(row.parent) ?? []).length > 0,
       );

@@ -7,7 +7,8 @@
  * same value: an integer as its exact digits at any size (reading 45), a float as its shortest
  * round trip with `INF`, `-INF` and `NaN`, and a point, pair or directed pair as its two parts
  * separated by one space. A duration is its seconds, written as a float is (readings 29 and 68).
- * A record writes one `value` per field, each in its own base type's form.
+ * A file is its name (a proposed reading; see {@link resultValue}). A record writes one `value`
+ * per field, each in its own base type's form.
  *
  * @module
  */
@@ -28,7 +29,11 @@ export type ResultSingle = Single;
  * it.
  *
  * A duration is written as its seconds, `90.5` and never `PT1M30.5S`, in the form a float takes,
- * `INF`, `-INF` and `NaN` included (reading 68).
+ * `INF`, `-INF` and `NaN` included (reading 68). A file is written as its name, `photo.png`: plate
+ * holds a file's name, size and type and never its bytes, and the name is the one of the three a
+ * reader of the result can act on, the host holding the bytes under the response's entry name.
+ * This is a proposed reading; the operator has not ruled, and the alternative is a URI the host
+ * serves the file at.
  *
  * @param single The value to write.
  * @returns Its lexical form.
