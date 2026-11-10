@@ -16,7 +16,7 @@ import type {
 import { kindRules } from "#plate/model/expressions/read.ts";
 import { buildItem } from "#plate/model/item.ts";
 import { outcomeDefaults } from "#plate/model/record.ts";
-import { nullOf } from "#plate/model/values.ts";
+import { format, nullOf } from "#plate/model/values.ts";
 import type { RecordValue, Single, Value } from "#plate/model/values.ts";
 import { bg007Item, float, integer } from "#plate/test/fixtures.ts";
 import {
@@ -430,7 +430,7 @@ describe("the containers family's evaluators", () => {
       assert.deepStrictEqual(
         evaluated(pairOf("contains", container, part)),
         truth(expected),
-        `${container.cardinality} ${container.values.map((single) => String(single.value)).join(",")} and ${part.values.map((single) => String(single.value)).join(",")}`,
+        `${container.cardinality} ${container.values.map((single) => format(single)).join(",")} and ${part.values.map((single) => format(single)).join(",")}`,
       );
     }
 
@@ -457,7 +457,7 @@ describe("the containers family's evaluators", () => {
           },
           `${container.cardinality} under ${key}`,
         );
-        seen.add(String(member?.value));
+        seen.add(member === undefined ? "" : format(member));
       }
 
       assert.deepStrictEqual(
