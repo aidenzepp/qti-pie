@@ -1,6 +1,9 @@
 /*
  * The `qti-pie` registry item's sheet: it brings in plate's sheet and sets no token. The tokens
  * (--background, --foreground, --card, --primary, --border and the rest) are the host's shadcn
- * theme's, which plate's sheet reads with fallbacks, so this file never declares one.
+ * theme's, which plate's sheet reads with fallbacks, so this file never declares one. Tailwind v4
+ * orders its layers `theme, base, components, utilities`. An unlayered rule beats every layered
+ * one, so the import joins `components`, below `utilities`, and a utility on a plate part wins
+ * (GitHub issue #284, issue m3g-05b).
  */
-@import "@qti-pie/plate/styles.css";
+@import "@qti-pie/plate/styles.css" layer(components);

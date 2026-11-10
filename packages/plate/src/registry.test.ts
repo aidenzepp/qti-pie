@@ -222,8 +222,19 @@ describe("the shadcn registry", () => {
     const sheet = entryEnding(readItem(), ".css");
     const css = withoutComments(readListed(sheet.path));
 
-    assert.include(css, '@import "@qti-pie/plate/styles.css";');
+    assert.include(css, '@import "@qti-pie/plate/styles.css" layer(components);');
     assert.notMatch(css, /:root/u);
     assert.notMatch(css, /(?:^|[\s;{])--[\w-]+\s*:/u);
+  });
+
+  it("[m3g-05b] the item's sheet imports plate's sheet into the components layer, and nothing else", () => {
+    const sheet = entryEnding(readItem(), ".css");
+    const css = withoutComments(readListed(sheet.path));
+    const atRules = (css.match(/(?<=^|[;{}])\s*@[\w-]+/gu) ?? []).map((rule) => rule.trim());
+
+    assert.deepStrictEqual(atRules, ["@import"]);
+    assert.deepStrictEqual(css.match(/@import[^;]*;/gu), [
+      '@import "@qti-pie/plate/styles.css" layer(components);',
+    ]);
   });
 });

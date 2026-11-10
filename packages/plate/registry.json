@@ -21,7 +21,7 @@
           "target": "~/styles/qti-pie.css"
         }
       ],
-      "docs": "Import styles/qti-pie.css once, from your app's global stylesheet or entry file; it brings in @qti-pie/plate/styles.css and sets no theme token, so your shadcn theme styles plate's parts. Then use QtiItem, QtiStatus, QtiNavigation, QtiChoice, QtiTextEntry, QtiExtendedText and QtiInlineChoice from the installed qti-pie component in place of the components of the same name in @qti-pie/plate/react. @qti-pie/plate is not published to npm yet, so this item installs into an app that already has it, as a workspace package or a tarball."
+      "docs": "Import styles/qti-pie.css once, from your app's global stylesheet or entry file; it brings in @qti-pie/plate/styles.css and sets no theme token, so your shadcn theme styles plate's parts; plate's sheet enters the components cascade layer, below Tailwind's utilities and any of your unlayered rules, so a utility on a plate part wins. Then use QtiItem, QtiStatus, QtiNavigation, QtiChoice, QtiTextEntry, QtiExtendedText and QtiInlineChoice from the installed qti-pie component in place of the components of the same name in @qti-pie/plate/react. @qti-pie/plate is not published to npm yet, so this item installs into an app that already has it, as a workspace package or a tarball."
     }
   ]
 }

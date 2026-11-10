@@ -1,0 +1,3 @@
+/* issue m3g-05b: a shadcn host's global stylesheet with the qti-pie item installed, linked by qti-pie.layer.dom.test.tsx. */
+@import "tailwindcss";
+@import "./qti-pie.css";
