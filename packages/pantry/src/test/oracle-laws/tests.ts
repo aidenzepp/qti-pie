@@ -360,10 +360,10 @@ const stimulusRefKeyOf = (listed: ListedRows): readonly Breach[] => {
  * Judge what each item ref of a test or section document names, whether or not it writes an
  * identifier: its href, where it writes one, names an item or an LTI link of the package (B2, B3),
  * and one that writes none names nothing, which AL3 alone refuses (spec reading 155); each variable
- * mapping's source, where it writes one, an outcome its item declares and its target no other
- * variable of it (A34, reading 97); and each template default's template, where it writes one, a
- * template its item declares (A37). An unwritten or unread identifier names nothing, which AL3
- * alone refuses.
+ * mapping's source, where it writes one, an outcome its item declares, by its first declaration of
+ * the name where it declares it more than once, and its target no other variable of it (A34,
+ * reading 97); and each template default's template, where it writes one, a template its item
+ * declares (A37). An unwritten or unread identifier names nothing, which AL3 alone refuses.
  *
  * @param input - The package.
  * @param document - The document.
@@ -399,6 +399,17 @@ const itemRefLawsOf = (
         onNone: () => [],
         onSome: (held) => (held.get(name) ?? []).map(({ kind }) => kind),
       });
+    /**
+     * The kind of the first declaration, in document order, of a name in the item: the one the
+     * import's `MappingSourceDeclaration` holds, as the document builder keeps the first of a
+     * repeated name (`declarationsOf` of `#pantry/import/overlays/expressions.ts`), which
+     * "Declaration key" refuses the second of.
+     *
+     * @param name - The collapsed identifier.
+     * @returns The kind, none where the item declares nothing under the name.
+     */
+    const firstKindOf = (name: string): Option.Option<string> =>
+      declared.pipe(Option.flatMap((held) => Option.fromNullishOr(held.get(name)?.[0]?.kind)));
     const children = elementsOf(rows, node.id);
     const mappings = children
       .filter(({ kind }) => kind === "qti-variable-mapping")
@@ -410,12 +421,13 @@ const itemRefLawsOf = (
         // An unwritten or unread source-identifier names nothing: AL3 refuses it alone, as the
         // importer writes no row for an absent attribute (reading 155). Neither half of a pair with
         // one half unwritten or unread names anything, as the importer writes a mapping's row only
-        // where both are written.
+        // where both are written. A source the item declares more than once is judged by its first
+        // declaration, as the importer's source row holds it.
         const sourced =
           linked ||
           Option.isNone(written) ||
           Option.isNone(targeted) ||
-          kindsOf(source).includes("qti-outcome-declaration")
+          Option.contains(firstKindOf(source), "qti-outcome-declaration")
             ? []
             : [breachAt(rows, mapping, "Variable mapping source", { itemRef, source })];
         const shadowed =
