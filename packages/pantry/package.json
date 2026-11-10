@@ -7,7 +7,9 @@
     "#pantry/*": "./src/*",
     "#migrations/*": "./migrations/*"
   },
-  "exports": {},
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "db": "scripts/db.sh",
     "fetch-xsds": "node src/vocab/derive/fetch-xsds.ts",
