@@ -1336,7 +1336,7 @@
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--muted-foreground, oklch(0.556 0 0));
   background-color: var(--muted, oklch(0.97 0 0));
-  color: var(--foreground, oklch(0.145 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
   font-weight: 500;
   text-align: start;
   vertical-align: middle;
@@ -1408,12 +1408,12 @@
   opacity: 1;
 }
 
-/* Focus on a Cell, by its Control: the same 3px ring at half strength as a Choice row's. */
+/* Focus on a Cell, by its Control: the same 3px ring at offset 0 and half strength as a Choice row's. */
 :where(
   [data-slot="match-interaction-cell"]:has([data-slot="match-interaction-control"]:focus-visible)
 ) {
   outline-width: 3px;
-  outline-offset: -3px;
+  outline-offset: 0;
   outline-style: solid;
   outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
 }
