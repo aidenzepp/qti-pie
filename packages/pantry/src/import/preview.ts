@@ -11,6 +11,7 @@
  */
 import { Effect } from "effect";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
+import type { PackageSource } from "#pantry/package/read.ts";
 
 /**
  * How much a package holds: the rows it would write and the relations they fall in, and that no
@@ -32,18 +33,18 @@ export interface Preview {
 }
 
 /**
- * Read the package at `dir` as `importPackage` does and count what it would write, without opening
- * the database.
+ * Read the package at `source` as `importPackage` does and count what it would write, without
+ * opening the database.
  *
- * @param dir - The package directory or `.zip` file.
+ * @param source - The package directory, `.zip` file or zip archive's bytes.
  * @returns The counts. Fails with `ImportRefused` naming the rule the reader, the container or the
  *   codec refused the package under, and with the platform's error when the package cannot be
  *   read.
  */
 export const previewPackage = Effect.fn("import.previewPackage")(function* previewPackage(
-  dir: string,
+  source: PackageSource,
 ) {
-  const counts = [...rowCountsOf(yield* readProgram(dir)).values()];
+  const counts = [...rowCountsOf(yield* readProgram(source)).values()];
   const preview: Preview = {
     databaseChecked: false,
     relations: counts.filter((count) => count > 0).length,
