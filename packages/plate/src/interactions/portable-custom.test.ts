@@ -8,12 +8,14 @@ import type { Configuration } from "#plate/configuration.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
 import { entryName } from "#plate/form/encoding.ts";
+import { portableCustomModule } from "#plate/interactions/portable-custom.ts";
 import { fresh } from "#plate/model/record.ts";
 import { encodeRecord } from "#plate/codec/record.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 import { openPackage } from "#plate/package/open.ts";
 import { postings } from "#plate/payload.ts";
 import type { RenderMode } from "#plate/payload.ts";
+import type { HostFacts, PciHostFacts } from "#plate/pci/host.ts";
 import { redact, render } from "#plate/render.ts";
 import { restore } from "#plate/restore.ts";
 import { solution } from "#plate/solution.ts";
@@ -123,20 +125,80 @@ const variant = (change: (text: string) => string) =>
   );
 
 /**
+ * The attributes the module's Root row merges, as the module declares them.
+ */
+const rootMerged: readonly string[] = portableCustomModule.parts.root.merged;
+
+/**
+ * The Root attributes the host facts give, named once here and pinned to {@link rootMerged} by
+ * their own row, so every other row reads them through the module's declaration.
+ */
+const hostAttributes = {
+  entry: "data-pci-entry",
+  loader: "data-pci-loader",
+  routes: "data-pci-routes",
+} as const;
+
+/**
+ * The host facts of a hand-built frame host for {@link instance}: an AMD loader URL, and, for the
+ * fixture's response, two classified routes, the first with a fallback and the second without.
+ */
+const facts: PciHostFacts = {
+  loader: "/host/pci/loader.js",
+  modules: new Map([
+    [
+      response,
+      [
+        {
+          fallback: Option.some("/host/pci/package/modules/fallback/counter.js"),
+          id: "counter",
+          primary: Option.some("/host/pci/package/modules/counter.js"),
+          waitSeconds: { fallback: 12, primary: 7 },
+        },
+        {
+          fallback: Option.none(),
+          id: "helper",
+          primary: Option.some("https://cdn.example/helper.js"),
+          waitSeconds: { fallback: 7, primary: 0 },
+        },
+      ],
+    ],
+  ]),
+};
+
+/**
+ * The route JSON the Root carries, as the frame host reads it: each absent location is no key.
+ */
+const RoutesSchema = Schema.Array(
+  Schema.Struct({
+    fallback: Schema.optionalKey(Schema.String),
+    id: Schema.String,
+    primary: Schema.optionalKey(Schema.String),
+    waitSeconds: Schema.Struct({ fallback: Schema.Number, primary: Schema.Number }),
+  }),
+);
+
+/**
  * Render an accepted item in one mode and parse its HTML into the item Root.
  *
  * @param accepted The item.
  * @param configuration The configuration.
  * @param mode The render mode, `answering` by default.
+ * @param host The host's facts, none by default.
  * @returns The HTML and its one root element.
  */
 const rendered = (
   accepted: Accepted,
   configuration: Configuration,
   mode: RenderMode = "answering",
+  host?: HostFacts,
 ): { readonly html: string; readonly root: Element } => {
   const redacted = redact(accepted, undefined, configuration);
-  const result = render(redacted, configuration, { instance, mode });
+  const result = render(
+    redacted,
+    configuration,
+    host === undefined ? { instance, mode } : { host, instance, mode },
+  );
   if (Result.isFailure(result)) {
     return assert.fail(`render failed: ${result.failure._tag}: ${result.failure.message}`);
   }
@@ -185,46 +247,66 @@ const only = (tree: Element, slot: string): Element => {
 };
 
 /**
- * The configuration the Root's `data-pci-configuration` writes, as the frame host reads it.
+ * The configuration the Root's `data-pci-configuration` writes, as the frame host reads it: no
+ * module fact, which the Root's routes replace.
  */
 const ConfigurationSchema = Schema.Struct({
   contextVariables: Schema.Array(Schema.String),
-  module: Schema.optionalKey(Schema.String),
-  modules: Schema.optionalKey(
-    Schema.Struct({
-      modules: Schema.Array(
-        Schema.Struct({
-          fallbackPath: Schema.optionalKey(Schema.String),
-          id: Schema.String,
-          primaryPath: Schema.optionalKey(Schema.String),
-        }),
-      ),
-      primaryConfiguration: Schema.optionalKey(Schema.String),
-      secondaryConfiguration: Schema.optionalKey(Schema.String),
-    }),
-  ),
   properties: Schema.Record(Schema.String, Schema.String),
   responseIdentifier: Schema.String,
   templateVariables: Schema.Array(Schema.String),
 });
 
 /**
- * Read the one JSON attribute of the Root, `data-pci-configuration`.
+ * Decode a value against {@link ConfigurationSchema}, a key it does not name refused.
+ */
+const decodeConfiguration = Schema.decodeUnknownResult(ConfigurationSchema, {
+  onExcessProperty: "error",
+});
+
+/**
+ * Read one attribute of the Root as text, failing the test when the Root does not carry it.
+ *
+ * @param root The PCI Root.
+ * @param attribute The attribute's name.
+ * @returns The text written.
+ */
+const textAttribute = (root: Element, attribute: string): string => {
+  const written = root.attrs[attribute];
+
+  return written === undefined || written === true
+    ? assert.fail(`the Root carries no ${attribute}`)
+    : written;
+};
+
+/**
+ * Read the Root's `data-pci-configuration`.
  *
  * @param root The PCI Root.
  * @returns The configuration it carries, parsed and checked.
  */
 const configurationOf = (root: Element): typeof ConfigurationSchema.Type => {
-  const written = root.attrs["data-pci-configuration"];
-  if (written === undefined || written === true) {
-    return assert.fail("the Root carries no data-pci-configuration");
-  }
-
-  const decoded = Schema.decodeUnknownResult(ConfigurationSchema)(JSON.parse(written));
+  const decoded = decodeConfiguration(JSON.parse(textAttribute(root, "data-pci-configuration")));
 
   return Result.isSuccess(decoded)
     ? decoded.success
     : assert.fail(`the configuration does not decode: ${decoded.failure.message}`);
+};
+
+/**
+ * Read the Root's route attribute.
+ *
+ * @param root The PCI Root.
+ * @returns The routes it carries, parsed and checked, a key the schema does not name refused.
+ */
+const routesOf = (root: Element): typeof RoutesSchema.Type => {
+  const decoded = Schema.decodeUnknownResult(RoutesSchema, { onExcessProperty: "error" })(
+    JSON.parse(textAttribute(root, hostAttributes.routes)),
+  );
+
+  return Result.isSuccess(decoded)
+    ? decoded.success
+    : assert.fail(`the routes do not decode: ${decoded.failure.message}`);
 };
 
 /**
@@ -309,7 +391,7 @@ describe("the Portable Custom Interaction module", () => {
   );
 
   it.effect(
-    "[Q-16] the configuration attribute holds dataset-named properties, the variable identifiers and the module facts",
+    "[Q-16] the configuration JSON holds dataset-named properties and the variable identifiers, and no module facts",
     () =>
       Effect.gen(function* configured() {
         const configuration = yield* configure({});
@@ -318,13 +400,144 @@ describe("the Portable Custom Interaction module", () => {
 
         assert.deepStrictEqual(written, {
           contextVariables: [],
-          module: "counter",
           properties: { maxCount: "5", "start_value-2": "1" },
           responseIdentifier: response,
           templateVariables: ["START"],
         });
+        // The schema the frame host reads by refuses the written facts, so a Root carrying them
+        // fails the row above, not only this one.
+        assert.isTrue(Result.isFailure(decodeConfiguration({ ...written, module: "counter" })));
+        assert.isTrue(
+          Result.isFailure(
+            decodeConfiguration({ ...written, modules: { modules: [{ id: "counter" }] } }),
+          ),
+        );
       }),
   );
+
+  it.effect(
+    "[Q-16] the Root carries the classified routes, the loader and the entry when the host gives its facts",
+    () =>
+      Effect.gen(function* hosted() {
+        const configuration = yield* configure({});
+        const { root } = rendered(yield* fixture, configuration, "answering", { pci: facts });
+        const pci = only(root, slots.root);
+
+        assert.deepStrictEqual(routesOf(pci), [
+          {
+            fallback: "/host/pci/package/modules/fallback/counter.js",
+            id: "counter",
+            primary: "/host/pci/package/modules/counter.js",
+            waitSeconds: { fallback: 12, primary: 7 },
+          },
+          {
+            id: "helper",
+            primary: "https://cdn.example/helper.js",
+            waitSeconds: { fallback: 7, primary: 0 },
+          },
+        ]);
+        assert.strictEqual(pci.attrs[hostAttributes.loader], facts.loader);
+        assert.strictEqual(pci.attrs[hostAttributes.entry], "counter");
+        assert.deepStrictEqual(configurationOf(pci), {
+          contextVariables: [],
+          properties: { maxCount: "5", "start_value-2": "1" },
+          responseIdentifier: response,
+          templateVariables: ["START"],
+        });
+        assert.lengthOf(slotted(root, slots.notice), 1);
+      }),
+  );
+
+  it.effect("[Q-16] the Root carries none of the three without host facts", () =>
+    Effect.gen(function* unhosted() {
+      const configuration = yield* configure({});
+      const accepted = yield* fixture;
+
+      for (const [label, host] of [
+        ["no host option", undefined],
+        ["a host without pci facts", {}],
+        ["pci facts that route another response", { pci: { ...facts, modules: new Map() } }],
+      ] as const) {
+        const { root } = rendered(accepted, configuration, "answering", host);
+        const pci = only(root, slots.root);
+
+        for (const attribute of Object.values(hostAttributes)) {
+          assert.notProperty(pci.attrs, attribute, `${label}: ${attribute}`);
+        }
+        assert.property(pci.attrs, "data-pci-configuration", label);
+        assert.include(textOf(only(root, slots.notice)), "script", label);
+      }
+    }),
+  );
+
+  it.effect(
+    "[Q-16] a module the author named that the facts do not route is a notice on the Notice part",
+    () =>
+      Effect.gen(function* dropped() {
+        const configuration = yield* configure({});
+        const accepted = yield* variant((text) =>
+          text.replace(
+            "<qti-interaction-markup>",
+            '<qti-interaction-modules><qti-interaction-module id="counter"/><qti-interaction-module id="helper"/></qti-interaction-modules><qti-interaction-markup>',
+          ),
+        );
+        const [counter] = facts.modules.get(response) ?? [];
+
+        assert.isDefined(counter);
+
+        const routed: PciHostFacts = {
+          ...facts,
+          modules: new Map([[response, counter === undefined ? [] : [counter]]]),
+        };
+        const { root } = rendered(accepted, configuration, "answering", { pci: routed });
+        const pci = only(root, slots.root);
+        const notice = textOf(only(root, slots.notice));
+
+        assert.deepStrictEqual(
+          routesOf(pci).map((route) => route.id),
+          ["counter"],
+        );
+        assert.include(notice, '"helper"');
+        assert.notInclude(notice, '"counter"');
+
+        // Every named module routed: the Notice says nothing of a module.
+        const complete = rendered(accepted, configuration, "answering", { pci: facts });
+
+        assert.notInclude(textOf(only(complete.root, slots.notice)), "helper");
+      }),
+  );
+
+  it.effect(
+    "[Q-16] an unlisted fallback is left out of the route JSON, not written as an empty string",
+    () =>
+      Effect.gen(function* noFallback() {
+        const configuration = yield* configure({});
+        const { root } = rendered(yield* fixture, configuration, "answering", { pci: facts });
+        const pci = only(root, slots.root);
+        const [, helper] = routesOf(pci);
+
+        assert.isDefined(helper);
+        assert.notProperty(helper ?? {}, "fallback");
+        assert.notInclude(textAttribute(pci, hostAttributes.routes), '"fallback":""');
+        assert.include(
+          textAttribute(pci, hostAttributes.routes),
+          '{"id":"helper","primary":"https://cdn.example/helper.js","waitSeconds":{"fallback":7,"primary":0}}',
+        );
+      }),
+  );
+
+  it("[Q-16] the Root row merges the three new attributes", () => {
+    assert.includeMembers(
+      [...rootMerged],
+      [
+        "data-entry-name",
+        "data-pci-type",
+        "data-pci-status",
+        "data-pci-configuration",
+        ...Object.values(hostAttributes),
+      ],
+    );
+  });
 
   it.effect(
     "[Q-16] the markup is transformed: a printed variable shows its value, feedback and template content follow the item's state",
@@ -480,13 +693,18 @@ describe("the Portable Custom Interaction module", () => {
       const { root } = rendered(item, configuration);
       const written = configurationOf(only(root, slots.root));
 
-      assert.strictEqual(written.module, "counter");
-      assert.deepStrictEqual(written.modules, {
-        modules: [{ id: "counter", primaryPath: "modules/counter" }],
-        primaryConfiguration: "modules/module_resolution.js",
-      });
+      // The written module facts (`module`, the listed module and its configuration) stay on the
+      // model node for the host's resolution and reach the page only as the host's routes.
       assert.strictEqual(written.responseIdentifier, response);
       assert.deepStrictEqual(written.properties, { maxCount: "5", "start_value-2": "0" });
+
+      const json = JSON.stringify(
+        yield* Effect.fromResult(encodeRedacted(redact(item, undefined, configuration))),
+      );
+
+      assert.include(json, '"module":"counter"');
+      assert.include(json, '"primaryPath":"modules/counter"');
+      assert.include(json, '"primaryConfiguration":"modules/module_resolution.js"');
     }),
   );
 

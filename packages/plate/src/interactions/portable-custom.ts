@@ -22,15 +22,23 @@
  * `render` emits this structure: a `qti-portable-custom-interaction` Root carrying `data-pci-type`
  * (the type identifier), `data-pci-status` (from the render mode: an answering render is
  * `interacting`, `review` is `review`, `solution` is `solution`), `data-entry-name` (the name the
- * response travels under, decision D2: the runtime of issue pci-05 writes a hidden input under
- * it), `data-pci-configuration` (one JSON attribute: `properties`, `responseIdentifier`, the
- * template and context variable identifiers, and the module facts as written, which issue
- * pci-04's frame host reads), and `role="group"` named by its Prompt; then the Prompt, when the
- * item has one; the Markup, the element a PCI is handed as `dom`, holding the transformed markup
- * and each `template` copied inert as an HTML `template`; and the Notice, an English sentence
- * that the interaction needs the page's script (decision D3, WCAG 3.3.2), which issue pci-04's
- * runtime hides. The payload holds no correct value and no template value: the bound variables'
- * values reach the PCI through the frame host, never through the page.
+ * response travels under, decision D2: the runtime of issue pci-05 writes a hidden input under it),
+ * `data-pci-configuration` (one JSON attribute: `properties`, `responseIdentifier`, and the
+ * template and context variable identifiers, which issue pci-04's frame host reads), and, when the
+ * host passes its `pci` facts (`RedactKit.host`, `PciHostFacts` in `#plate/pci/host.ts`) and routed
+ * this PCI's response, `data-pci-routes` (the classified routes, JSON), `data-pci-loader` (the AMD
+ * loader's URL) and `data-pci-entry` (the `module` attribute, when written), and `role="group"`
+ * named by its Prompt; then the Prompt, when the item has one; the Markup, the element a PCI is
+ * handed as `dom`, holding the transformed markup and each `template` copied inert as an HTML
+ * `template`; and the Notice, an English sentence that the interaction needs the page's script
+ * (decision D3, WCAG 3.3.2), which issue pci-04's runtime hides, followed by one sentence for each
+ * module the author named that the host's routes do not cover. The module facts as written
+ * (`module`, `modules`) stay on the model node, read by `parse` and handed to nothing but the
+ * dropped-module notice and the routes' matching: only the host that holds the package classifies
+ * them, and the page sees the host's routes, never an unclassified path. Without host facts the
+ * Root carries none of the three, and the Notice says the PCI cannot run here. The payload holds no
+ * correct value and no template value: the bound variables' values reach the PCI through the frame
+ * host, never through the page.
  *
  * @module
  */
@@ -54,6 +62,7 @@ import type { BodyNode } from "#plate/model/item.ts";
 import { isModelled, nullOf, trimXmlSpace } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { EmitState, Payload, PayloadNode, RenderMode } from "#plate/payload.ts";
+import type { PciHostFacts, PciModuleRoute } from "#plate/pci/host.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 
 /**
@@ -161,24 +170,40 @@ export interface PortableCustomInteraction extends ModuleInteraction<"portable-c
 /**
  * The configuration a Portable Custom Interaction (Q-16) is given, as the Root's
  * `data-pci-configuration` writes it for the frame host (issue pci-04): the `properties`, the
- * `responseIdentifier`, the template and context variable identifiers, and the module facts as
- * written. It holds no value of any variable.
+ * `responseIdentifier`, and the template and context variable identifiers. It holds no value of
+ * any variable, and no module fact: the module facts as written (`module`, `modules`) stay on the
+ * model node for the host's resolution, and reach the page only as the host's classified routes
+ * ({@link PortableCustomHost}), so an unclassified path never reaches it.
  */
 export interface PortableCustomConfiguration {
   readonly contextVariables: readonly string[];
-  readonly module: Option.Option<string>;
-  readonly modules: Option.Option<PortableCustomModules>;
   readonly properties: readonly PortableCustomProperty[];
   readonly responseIdentifier: string;
   readonly templateVariables: readonly string[];
 }
 
 /**
+ * What the host told the module of this PCI through `RedactKit.host.pci` (`PciHostFacts` in
+ * `#plate/pci/host.ts`), as the Root writes it for the frame host (issue pci-04): the URL of the
+ * AMD loader the host serves (`data-pci-loader`), the classified routes the host resolved for
+ * the PCI's response, in route order (`data-pci-routes`), and the entry module's id, the PCI's
+ * `module` attribute, when it names one (`data-pci-entry`). `dropped` names each module the author
+ * wrote (`module`, and each `qti-interaction-module`'s `id`) that no route covers, in the order
+ * written and each once, which the Notice part shows so an author sees it, not silence.
+ */
+export interface PortableCustomHost {
+  readonly dropped: readonly string[];
+  readonly entry: Option.Option<string>;
+  readonly loader: string;
+  readonly routes: readonly PciModuleRoute[];
+}
+
+/**
  * The payload node of a Portable Custom Interaction (Q-16, kind `portable-custom`): what the page
- * may know of the model node, its content copied through the payload's kit, and the name its
- * response travels under. It holds no correct value, no template value and no stored value: the
- * runtime of issue pci-05 writes the response, and the frame host of issue pci-04 hands the PCI
- * its values.
+ * may know of the model node, its content copied through the payload's kit, the name its
+ * response travels under, and what the host told the module of this PCI. It holds no correct
+ * value, no template value and no stored value: the runtime of issue pci-05 writes the response,
+ * and the frame host of issue pci-04 hands the PCI its values.
  */
 export interface PortableCustomPayload {
   readonly ariaLabel: Option.Option<string>;
@@ -190,6 +215,12 @@ export interface PortableCustomPayload {
    * `entryName(instance, response)`, which the Root carries as `data-entry-name`.
    */
   readonly formName: string;
+  /**
+   * What the host told the module of this PCI ({@link PortableCustomHost}); none when the host
+   * passed no `pci` facts, or routed nothing for this PCI's response, and then the Root carries
+   * no route, no loader and no entry, and the Notice says the PCI cannot run here.
+   */
+  readonly host: Option.Option<PortableCustomHost>;
   /**
    * The content of each HTML `template` of the markup, copied through the payload's kit, which the
    * render writes inert.
@@ -292,6 +323,9 @@ const parts = {
       "data-pci-type",
       "data-pci-status",
       "data-pci-configuration",
+      "data-pci-routes",
+      "data-pci-loader",
+      "data-pci-entry",
     ],
     tagClass: "flow-container",
   },
@@ -338,6 +372,16 @@ interface Connected {
  * plainly that the interaction cannot be answered here (WCAG 3.3.2).
  */
 const noticeText = "This interaction needs the page's script and cannot be answered here.";
+
+/**
+ * Write the sentence the Notice adds for each module the author named that the host's facts do
+ * not route ({@link PortableCustomHost.dropped}), local to this module as its other strings are.
+ *
+ * @param id The module's id as written.
+ * @returns The sentence, naming the id in quotes.
+ */
+const droppedText = (id: string): string =>
+  `The host does not serve the module ${JSON.stringify(id)} this interaction names.`;
 
 /**
  * The status a PCI is given for each render mode: an answering render is `interacting`, `review`
@@ -488,8 +532,8 @@ const identifiersOf = (
 
 /**
  * Write the configuration as the Root's `data-pci-configuration` attribute: JSON with its keys
- * in a fixed order, an absent option written as no key, `properties` as an object by dataset
- * name (a name written twice keeps the last value, as `dataset` does).
+ * in a fixed order, `properties` as an object by dataset name (a name written twice keeps the
+ * last value, as `dataset` does), and no module fact.
  *
  * @param configuration The configuration.
  * @returns The JSON text.
@@ -497,42 +541,81 @@ const identifiersOf = (
 const configurationJson = (configuration: PortableCustomConfiguration): string =>
   JSON.stringify({
     contextVariables: configuration.contextVariables,
-    ...Option.match(configuration.module, {
-      onNone: () => ({}),
-      onSome: (module) => ({ module }),
-    }),
-    ...Option.match(configuration.modules, {
-      onNone: () => ({}),
-      onSome: (modules) => ({
-        modules: {
-          modules: modules.modules.map((module) => ({
-            id: module.id,
-            ...Option.match(module.primaryPath, {
-              onNone: () => ({}),
-              onSome: (primaryPath) => ({ primaryPath }),
-            }),
-            ...Option.match(module.fallbackPath, {
-              onNone: () => ({}),
-              onSome: (fallbackPath) => ({ fallbackPath }),
-            }),
-          })),
-          ...Option.match(modules.primaryConfiguration, {
-            onNone: () => ({}),
-            onSome: (primaryConfiguration) => ({ primaryConfiguration }),
-          }),
-          ...Option.match(modules.secondaryConfiguration, {
-            onNone: () => ({}),
-            onSome: (secondaryConfiguration) => ({ secondaryConfiguration }),
-          }),
-        },
-      }),
-    }),
     properties: Object.fromEntries(
       configuration.properties.map(({ name, value }) => [name, value] as const),
     ),
     responseIdentifier: configuration.responseIdentifier,
     templateVariables: configuration.templateVariables,
   });
+
+/**
+ * Write the host's routes as the Root's `data-pci-routes` attribute: a JSON array in route order,
+ * each route `{ id, primary, fallback, waitSeconds: { primary, fallback } }` with an absent
+ * location written as no key, never as an empty string.
+ *
+ * @param routes The routes the host resolved for this PCI.
+ * @returns The JSON text.
+ */
+const routesJson = (routes: readonly PciModuleRoute[]): string =>
+  JSON.stringify(
+    routes.map((route) => ({
+      id: route.id,
+      ...Option.match(route.primary, {
+        onNone: () => ({}),
+        onSome: (primary) => ({ primary }),
+      }),
+      ...Option.match(route.fallback, {
+        onNone: () => ({}),
+        onSome: (fallback) => ({ fallback }),
+      }),
+      waitSeconds: { fallback: route.waitSeconds.fallback, primary: route.waitSeconds.primary },
+    })),
+  );
+
+/**
+ * List the module ids the author wrote: the `module` attribute, then each listed
+ * `qti-interaction-module`'s `id`, in document order and each once.
+ *
+ * @param interaction The model node.
+ * @returns The ids named.
+ */
+const namedModules = (interaction: PortableCustomInteraction): readonly string[] => [
+  ...new Set([
+    ...Option.toArray(interaction.module),
+    ...interaction.modules.pipe(
+      Option.map((modules) => modules.modules.map((module) => module.id)),
+      Option.getOrElse((): readonly string[] => []),
+    ),
+  ]),
+];
+
+/**
+ * Read what the host told the module of one PCI: the routes the facts hold for its response, the
+ * loader, the entry it names, and each named module no route covers (the dropped ones, which the
+ * Notice shows). None when the host passed no `pci` facts, or routed nothing for the response.
+ *
+ * @param interaction The model node.
+ * @param facts The host's `pci` facts, when it passed them.
+ * @returns What the Root writes of the host.
+ */
+const hostOf = (
+  interaction: PortableCustomInteraction,
+  facts: PciHostFacts | undefined,
+): Option.Option<PortableCustomHost> =>
+  Option.fromUndefinedOr(facts).pipe(
+    Option.flatMap((pci) =>
+      Option.map(Option.fromUndefinedOr(pci.modules.get(interaction.response)), (routes) => {
+        const routed = new Set(routes.map((route) => route.id));
+
+        return {
+          dropped: namedModules(interaction).filter((id) => !routed.has(id)),
+          entry: interaction.module,
+          loader: pci.loader,
+          routes,
+        };
+      }),
+    ),
+  );
 
 /**
  * Give the names the author wrote for the Root, as `authorsName` in `#plate/interactions/name.ts`
@@ -560,8 +643,10 @@ const authorsNames = (interaction: PortableCustomPayload, instance: string): Att
  *
  * - Root: the marker, the state (`data-mode`, and `data-disabled` when the author disabled every
  *   control), the author's `class`, `data-pci-type`, `data-pci-status` ({@link statusOf}),
- *   `data-entry-name` and `data-pci-configuration` ({@link configurationJson}); `role="group"`
- *   named by the Prompt through `aria-labelledby` when there is one, else the author's names.
+ *   `data-entry-name` and `data-pci-configuration` ({@link configurationJson}); with host facts,
+ *   `data-pci-routes` ({@link routesJson}), `data-pci-loader` and, when the PCI names its entry,
+ *   `data-pci-entry`, and without them none of the three; `role="group"` named by the Prompt
+ *   through `aria-labelledby` when there is one, else the author's names.
  * - Prompt: the marker and its id.
  * - Markup, Template, Notice: the marker.
  *
@@ -586,6 +671,17 @@ const connect = (interaction: PortableCustomPayload, payload: Payload): Connecte
       "data-entry-name": interaction.formName,
       "data-mode": payload.mode,
       "data-pci-configuration": configurationJson(interaction.configuration),
+      ...Option.match(interaction.host, {
+        onNone: () => ({}),
+        onSome: (host) => ({
+          ...Option.match(host.entry, {
+            onNone: () => ({}),
+            onSome: (entry) => ({ "data-pci-entry": entry }),
+          }),
+          "data-pci-loader": host.loader,
+          "data-pci-routes": routesJson(host.routes),
+        }),
+      }),
       "data-pci-status": statusOf[payload.mode],
       "data-pci-type": interaction.typeIdentifier,
       "data-slot": rows.root.slot,
@@ -761,8 +857,12 @@ export const portableCustomModule: InteractionModule<
     }),
   /**
    * Copy the model node into its payload node: its content through the kit, the configuration,
-   * and the name the response travels under. The kit's shown values, posted strings, seed and
-   * unnamed position are not read: the page shows no value of the response without script.
+   * the name the response travels under, and what the host told the module of this PCI through
+   * `kit.host.pci` ({@link hostOf}): the routes for its response, the loader, the entry, and each
+   * module the author named that the routes do not cover, which the Notice shows. The written
+   * module facts reach the payload node through nothing else: the routes replace them. The kit's
+   * shown values, posted strings, seed and unnamed position are not read: the page shows no value
+   * of the response without script.
    */
   redact: (interaction, kit) => ({
     ariaLabel: interaction.ariaLabel,
@@ -770,13 +870,12 @@ export const portableCustomModule: InteractionModule<
     class: interaction.class,
     configuration: {
       contextVariables: interaction.contextVariables,
-      module: interaction.module,
-      modules: interaction.modules,
       properties: interaction.properties,
       responseIdentifier: interaction.response,
       templateVariables: interaction.templateVariables,
     },
     formName: kit.formName(interaction.response),
+    host: hostOf(interaction, kit.host.pci),
     inertTemplates: interaction.inertTemplates.map((nodes) => kit.nodes(nodes)),
     markup: kit.nodes(interaction.markup),
     prompt: interaction.prompt.pipe(Option.map((nodes) => kit.nodes(nodes))),
@@ -838,7 +937,17 @@ export const portableCustomModule: InteractionModule<
       const notice = yield* applyPart(
         rows.notice,
         props.notice,
-        [text(noticeText)],
+        [
+          text(
+            [
+              noticeText,
+              ...interaction.host.pipe(
+                Option.map((host) => host.dropped.map(droppedText)),
+                Option.getOrElse((): readonly string[] => []),
+              ),
+            ].join(" "),
+          ),
+        ],
         replacement("notice"),
       );
 
